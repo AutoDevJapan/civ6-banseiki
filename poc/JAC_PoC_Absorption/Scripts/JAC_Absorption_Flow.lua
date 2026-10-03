@@ -861,6 +861,16 @@ function F.ResumeWorldFor(actor, id, observationToken)
   local observed = reads and reads.GetObservation and reads.GetObservation(observationToken)
   local archived = A.GetState().Archive[world.AssetID]
   if archived and archived.Kind == "ITEM" and archived.NativeWork then
+    local recovery = A.GetState().Recoveries["recovery:" .. world.ID]
+    local carrier = recovery and recovery.NativeCarrier
+    if carrier then
+      local current = carrier.Phase == "BORROW" and carrier.BorrowToken
+        or carrier.Phase == "MOVE" and carrier.MoveToken
+        or (carrier.Phase == "RETURN" or carrier.Phase == "RESTORE")
+          and carrier.ReturnToken
+      assert(recovery.ObservationToken == observationToken and current == observationToken,
+        "native work recovery publication token is stale")
+    end
     assert(observed and observed.Published == true, "native work publication is not ready")
   else
     assert(observed and type(observed.Claim) == "number"

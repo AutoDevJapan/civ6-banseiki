@@ -38,6 +38,124 @@ fn load_hero_keys(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
+fn native_carrier_ui_uses_local_actor_once_and_publishes_only_after_physical_move()
+-> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        local function event()
+          local callbacks={}
+          return {Add=function(fn) callbacks[#callbacks+1]=fn end,
+            Emit=function(...) for _,fn in ipairs(callbacks) do fn(...) end end}
+        end
+        Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),
+          LocalPlayerTurnBegin=event()}
+        PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
+        CityManager.TransferCity(CITIES[16],1)
+        WORK_CITIES={[4]=true}
+        for _,city in ipairs({CITIES[4],CITIES[16]}) do
+          local original=city.GetBuildings
+          city.GetBuildings=function(self)
+            local buildings=original(self)
+            buildings.GetGreatWorkInSlot=function(_,building,slot)
+              return building==1 and slot==0 and WORK_CITIES[city:GetX()] and 900 or -1
+            end
+            buildings.GetGreatWorkTypeFromIndex=function(_,index)
+              assert(index==900);return 4
+            end
+            buildings.GetGreatWorkSlotType=function(_,building,slot)
+              assert(building==1 and slot==0);return 1
+            end
+            return buildings
+          end
+        end
+        GameInfo.GreatWorks={[4]={GreatWorkObjectType='GREATWORKOBJECT_RELIC'}}
+        GameInfo.GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}}
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local read=false;return function()
+            if not read then read=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerOperations={MOVE_GREAT_WORK='move',PARAM_PLAYER_ONE='owner',
+          PARAM_CITY_SRC='source',PARAM_CITY_DEST='target',
+          PARAM_BUILDING_SRC='source-building',PARAM_BUILDING_DEST='target-building',
+          PARAM_GREAT_WORK_INDEX='index',PARAM_SLOT='slot'}
+        UI_REQUESTS=0
+        MOVE_EFFECT=true
+        UI={RequestPlayerOperation=function(actor,operation,params)
+          assert(actor==2 and operation=='move' and params.owner==1
+            and params.source==CITIES[4]:GetID()
+            and params.target==CITIES[16]:GetID()
+            and params['source-building']==1 and params['target-building']==1
+            and params.index==900 and params.slot==0,
+            'UI MOVE did not use local human actor with AI owner and exact slots')
+          UI_REQUESTS=UI_REQUESTS+1
+          if MOVE_EFFECT then WORK_CITIES[4],WORK_CITIES[16]=nil,true end
+          return true
+        end}
+        local carrier={Route='TO_FREE',Phase='MOVE',Borrower=1,
+          BorrowedCity=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,Index=900,
+          MoveToken='native:move:1',
+          MoveSource={Owner=1,City=CITIES[4]:GetID(),X=4,Y=0,Building=1,Slot=0},
+          MoveTarget={Owner=1,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0}}
+        local state=JAC_AbsorptionGameplay.GetState()
+        state.Transactions['carrier-ui']={ID='carrier-ui',NativeWorks={{Carrier=carrier}}}
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        "#,
+    )
+    .exec()?;
+    load_hero_keys(&lua)?;
+    lua.load(
+        r#"
+        local reads=assert(ExposedMembers.JAC_HeroReadAPI)
+        assert(reads.NativeMoveAvailable)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1 and WORK_CITIES[16] and not WORK_CITIES[4])
+        assert(reads.GetObservation('native:move:1')==nil,
+          'UI claimed physical success in the same event as dispatch')
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('native:move:1').Published
+          and not reads.GetObservation('native:move:1').Unchanged)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1,'published work sent another MOVE')
+
+        WORK_CITIES[4],WORK_CITIES[16]=true,nil
+        MOVE_EFFECT=false
+        local state=JAC_AbsorptionGameplay.GetState()
+        state.Transactions['carrier-ui'].NativeWorks[1].Carrier.MoveToken='native:move:2'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==2 and not reads.GetObservation('native:move:2'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(not reads.GetObservation('native:move:2'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('native:move:2').Unchanged
+          and WORK_CITIES[4] and not WORK_CITIES[16],
+          'true without physical movement was reported as success')
+        assert(UI_REQUESTS==2,'unchanged work retried without a saved new token')
+
+        local state=JAC_AbsorptionGameplay.GetState()
+        local carrier=state.Transactions['carrier-ui'].NativeWorks[1].Carrier
+        carrier.Phase='RETURN';carrier.Owner=3;carrier.ReturnToken='missing:return'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],3)
+        CITIES[16].monument=false
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(not reads.GetObservation('missing:return'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('missing:return').Unchanged,
+          'missing carrier building left the return token unpublished forever')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn native_work_metadata_survives_ui_only_getters() -> mlua::Result<()> {
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(lua.create_table()?)?;

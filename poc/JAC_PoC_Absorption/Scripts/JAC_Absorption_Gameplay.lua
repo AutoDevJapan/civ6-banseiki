@@ -321,7 +321,7 @@ local function NativeWorkCustodian(destination)
   return free
 end
 
-local function NativeWorkDestination(owner, source, reserved)
+local function NativeWorkDestination(owner, source, reserved, emptyCityOnly)
   assert(type(source.ObjectType) == "string" and source.ObjectType ~= "",
     "native Great Work object type unavailable")
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -334,9 +334,20 @@ local function NativeWorkDestination(owner, source, reserved)
   for row in GameInfo.GreatWork_ValidSubTypes() do
     if row.GreatWorkObjectType == source.ObjectType then valid[row.GreatWorkSlotType] = true end
   end
+  local occupiedCities = {}
+  local movableBuildings = {}
+  if emptyCityOnly then
+    for _, work in ipairs(A.OwnedGreatWorkSlots(owner)) do
+      occupiedCities[work.X .. ":" .. work.Y] = true
+    end
+    for info in GameInfo.Buildings() do
+      if info.BuildingType ~= "BUILDING_PALACE" then movableBuildings[info.Index] = true end
+    end
+  end
   for _, slot in ipairs(slots) do
     local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
-    if not reserved[key] then
+    if not reserved[key] and not occupiedCities[slot.X .. ":" .. slot.Y]
+      and (not emptyCityOnly or movableBuildings[slot.Building]) then
       local city = CityManager.GetCityAt(slot.X, slot.Y)
       assert(city and city:GetOwner() == owner and city:GetID() == slot.City
         and slot.Owner == owner, "native Great Work destination city changed")
@@ -350,6 +361,23 @@ local function NativeWorkDestination(owner, source, reserved)
     end
   end
   error("native Great Work has no compatible empty destination slot")
+end
+local function ReservedNativeSlots(state, owner, excludingTransaction, excludingRecovery)
+  local reserved = {}
+  local function Add(slot)
+    if slot and slot.Owner == owner then
+      reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
+    end
+  end
+  for id, tx in pairs(state.Transactions or {}) do
+    if id ~= excludingTransaction and tx.Status ~= "COMPLETE" then
+      for _, work in ipairs(tx.NativeWorks or {}) do Add(work.TargetSlot) end
+    end
+  end
+  for token, intent in pairs(state.Recoveries or {}) do
+    if token ~= excludingRecovery and intent.Status ~= "COMPLETE" then Add(intent.NativeTarget) end
+  end
+  return reserved
 end
 local NativeWorkAtTarget, NativeWorkAtAbsorber, NativeWorkSourceEmpty
 
@@ -896,9 +924,11 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     local nativeDealReady = DealManager and type(DealManager.EnactWorkingDeal) == "function"
       and type(DealManager.GetWorkingDeal) == "function"
       and type(DealManager.GetPossibleDealItems) == "function"
-    if destination ~= tx.To then
-      assert(nativeDealReady, "native Great Work Core deal API unavailable before city transfer: " .. id)
+    if destination < 0 then
       custodian = NativeWorkCustodian(destination)
+    elseif destination ~= tx.To then
+      assert(nativeDealReady, "native Great Work Core deal API unavailable before city transfer: " .. id)
+      custodian = destination
     elseif work.BuildingType == "BUILDING_PALACE" and nativeDealReady then
       custodian = tx.To -- escrow before the engine can replace the old capital's Palace
     end
@@ -1734,6 +1764,215 @@ local function BuildNativeWorkDeal(from, to, index, subtype, priorWorks)
   return working
 end
 
+local function NativeCarrierState(city, carrier)
+  local building
+  for info in GameInfo.Buildings() do
+    if info.Index == carrier.Building then building = info; break end
+  end
+  assert(building, "native carrier building absent")
+  local assets = CityAssets(city)
+  local built = assert(assets[building.BuildingType], "native carrier building lost")
+  built.Works[carrier.Slot] = -1 -- the one work being moved is the expected difference
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  assert(reads and reads.ReadCarrierPlots,
+    "native carrier purchased plots cannot be observed")
+  local plots = reads.ReadCarrierPlots(city:GetOwner(), city:GetID())
+  local units = {}
+  local owners, seen = {}, {}
+  for _, owner in ipairs(PlayerManager.GetAliveIDs()) do
+    if not seen[owner] then owners[#owners + 1], seen[owner] = owner, true end
+  end
+  if not seen[carrier.Owner] then owners[#owners + 1] = carrier.Owner end
+  for _, owner in ipairs(owners) do
+    if Players[owner] then
+      for _, unit in ipairs(Units(owner)) do
+        if unit:GetX() == carrier.X and unit:GetY() == carrier.Y then
+          units[#units + 1] = { Owner = owner, ID = unit:GetID(),
+            Type = GameInfo.Units[unit:GetType()].UnitType }
+        end
+      end
+    end
+  end
+  table.sort(units, function(a, b)
+    if a.Owner ~= b.Owner then return a.Owner < b.Owner end
+    return a.ID < b.ID
+  end)
+  return { Name = city:GetName(), Population = city:GetPopulation(),
+    Assets = assets, Religion = Religion(city), Loyalty = A.CityLoyalty(city),
+    Faith = R.Copy(city:GetProperty(R.CITY_FAITH_KEY)),
+    Governance = R.Copy(city:GetProperty(R.GOVERNANCE_KEY)),
+    UnitsOnCenter = units, PurchasedPlots = plots }
+end
+
+local function NativeCarrierActorReady()
+  assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer()),
+    "native Great Work carrier MOVE has no verified multiplayer actor")
+  local actor = Game.GetLocalPlayer and Game.GetLocalPlayer()
+  local player = type(actor) == "number" and Players[actor]
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  return reads and reads.NativeMoveAvailable == true
+    and player and player:IsAlive() and player:IsHuman()
+    and (not player.IsTurnActive or player:IsTurnActive())
+end
+
+local function NativeCarrierSlot(carrier, owner, id)
+  return { Owner = owner, City = id, X = carrier.X, Y = carrier.Y,
+    Building = carrier.Building, Slot = carrier.Slot }
+end
+
+local function AdvanceNativeCarrier(state, carrier)
+  local city = assert(CityManager.GetCityAt(carrier.X, carrier.Y),
+    "native Great Work carrier city disappeared")
+  local slotValue = city:GetBuildings():HasBuilding(carrier.Building)
+    and WorkInSlot(city, carrier.Building, carrier.Slot)
+  assert(slotValue ~= nil, "native Great Work carrier building disappeared")
+  if carrier.Phase == "BORROW" then
+    local expected = carrier.Route == "TO_FREE" and -1 or carrier.Index
+    assert(slotValue == expected, "native Great Work carrier changed before borrowing")
+    if city:GetOwner() == carrier.Owner then
+      if not NativeCarrierActorReady() then return false end
+      assert(city:GetID() == carrier.OriginalCity, "native Great Work carrier identity changed")
+      for _, work in ipairs(A.OwnedGreatWorkSlots(carrier.Owner)) do
+        assert(work.X ~= carrier.X or work.Y ~= carrier.Y or work.Index == carrier.Index
+          and carrier.Route == "FROM_FREE", "native Great Work carrier gained another work")
+      end
+      carrier.Before = NativeCarrierState(city, carrier)
+      assert(#carrier.Before.UnitsOnCenter == 0,
+        "native Great Work carrier city has a unit on its center")
+      Save(state)
+      CityManager.TransferCity(city, carrier.Borrower)
+      return false
+    end
+    assert(city:GetOwner() == carrier.Borrower,
+      "native Great Work carrier was borrowed by another owner")
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    if not reads or not reads.GetObservation
+      or not reads.GetObservation(carrier.BorrowToken) then return false end
+    carrier.BorrowedCity = city:GetID()
+    if carrier.Route == "TO_FREE" then
+      carrier.MoveSource = { Owner = carrier.Source.Owner, City = carrier.Source.CityID,
+        X = carrier.Source.X, Y = carrier.Source.Y,
+        Building = carrier.Source.Building, Slot = carrier.Source.Slot }
+      carrier.MoveTarget = NativeCarrierSlot(carrier, carrier.Borrower, city:GetID())
+    else
+      carrier.MoveSource = NativeCarrierSlot(carrier, carrier.Borrower, city:GetID())
+      carrier.MoveTarget = R.Copy(carrier.Target)
+    end
+    carrier.Phase, carrier.MoveAttempt = "MOVE", 1
+    carrier.MoveToken = carrier.Token .. ":move:1"
+    Save(state)
+    return false
+  end
+  if carrier.Phase == "MOVE" then
+    assert(city:GetOwner() == carrier.Borrower and city:GetID() == carrier.BorrowedCity,
+      "native Great Work borrowed carrier changed before MOVE")
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    local observed = reads and reads.GetObservation and reads.GetObservation(carrier.MoveToken)
+    if not observed then return false end
+    local locations = NativeWorkLocations(carrier.Index)
+    assert(#locations == 1, "native Great Work MOVE index is missing or duplicated")
+    SameNativeWorkIdentity(carrier.Source, locations[1])
+    if SameNativeWorkSlot(locations[1], carrier.MoveTarget) then
+      local source = assert(CityManager.GetCityAt(carrier.MoveSource.X, carrier.MoveSource.Y),
+        "native Great Work MOVE source city disappeared")
+      assert(WorkInSlot(source, carrier.MoveSource.Building, carrier.MoveSource.Slot) == -1,
+        "native Great Work MOVE source slot was not emptied")
+      carrier.Phase = "RETURN"
+      carrier.ReturnToken = carrier.Token .. ":return"
+      Save(state) -- the return intent precedes the city mutation
+      CityManager.TransferCity(city, carrier.Owner)
+      return false
+    end
+    assert(SameNativeWorkSlot(locations[1], carrier.MoveSource)
+      and WorkInSlot(city, carrier.Building, carrier.Slot)
+        == (carrier.Route == "TO_FREE" and -1 or carrier.Index),
+      "native Great Work MOVE landed in an unexpected slot")
+    if not observed.Unchanged then return false end
+    if carrier.MoveAttempt < 2 then
+      carrier.MoveAttempt = carrier.MoveAttempt + 1
+      carrier.MoveToken = carrier.Token .. ":move:" .. carrier.MoveAttempt
+      Save(state)
+      return false
+    end
+    carrier.Phase = "RESTORE"
+    carrier.ReturnToken = carrier.Token .. ":restore"
+    Save(state) -- the empty carrier can be returned without changing the work
+    CityManager.TransferCity(city, carrier.Owner)
+    return false
+  end
+  if carrier.Phase == "RESTORE" then
+    if city:GetOwner() == carrier.Borrower then
+      local locations = NativeWorkLocations(carrier.Index)
+      assert(#locations == 1 and SameNativeWorkSlot(locations[1], carrier.MoveSource),
+        "native Great Work changed before carrier rollback")
+      CityManager.TransferCity(city, carrier.Owner)
+      return false
+    end
+    assert(city:GetOwner() == carrier.Owner,
+      "native Great Work carrier rollback changed owner")
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    if not reads or not reads.GetObservation
+      or not reads.GetObservation(carrier.ReturnToken) then return false end
+    local locations = NativeWorkLocations(carrier.Index)
+    assert(#locations == 1, "native Great Work changed during carrier rollback")
+    SameNativeWorkIdentity(carrier.Source, locations[1])
+    if carrier.Route == "TO_FREE" then
+      assert(SameNativeWorkSlot(locations[1], carrier.Source)
+        and WorkInSlot(city, carrier.Building, carrier.Slot) == -1,
+        "native Great Work or empty carrier changed during rollback")
+    else
+      assert(SameNativeWorkSlot(locations[1],
+          NativeCarrierSlot(carrier, carrier.Owner, city:GetID()))
+        and WorkInSlot(city, carrier.Building, carrier.Slot) == carrier.Index,
+        "native Great Work left its Free Cities carrier during rollback")
+    end
+    assert(R.Equal(NativeCarrierState(city, carrier), carrier.Before),
+      "native Great Work carrier city changed during rollback")
+    carrier.Phase = "RESTORED"
+    Save(state)
+    error("native Great Work MOVE did not move the original index; carrier restored")
+  end
+  if carrier.Phase == "RETURN" then
+    if city:GetOwner() == carrier.Borrower then
+      local locations = NativeWorkLocations(carrier.Index)
+      assert(#locations == 1 and SameNativeWorkSlot(locations[1], carrier.MoveTarget),
+        "native Great Work left the borrowed carrier route before return")
+      CityManager.TransferCity(city, carrier.Owner)
+      return false
+    end
+    assert(city:GetOwner() == carrier.Owner,
+      "native Great Work carrier returned to another owner")
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    if not reads or not reads.GetObservation
+      or not reads.GetObservation(carrier.ReturnToken) then return false end
+    carrier.FinalSlot = NativeCarrierSlot(carrier, carrier.Owner, city:GetID())
+    local locations = NativeWorkLocations(carrier.Index)
+    assert(#locations == 1, "native Great Work carrier return index is missing or duplicated")
+    SameNativeWorkIdentity(carrier.Source, locations[1])
+    local expected = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+    assert(SameNativeWorkSlot(locations[1], expected),
+      "native Great Work missed its final reserved carrier route slot")
+    assert(WorkInSlot(city, carrier.Building, carrier.Slot)
+      == (carrier.Route == "TO_FREE" and carrier.Index or -1),
+      "native Great Work carrier return slot changed")
+    assert(R.Equal(NativeCarrierState(city, carrier), carrier.Before),
+      "native Great Work carrier city changed during custody")
+    carrier.Phase = "PROVED"
+    Save(state)
+    return true
+  end
+  assert(carrier.Phase == "PROVED", "native Great Work carrier route needs review")
+  local locations = NativeWorkLocations(carrier.Index)
+  local expected = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+  assert(#locations == 1 and SameNativeWorkSlot(locations[1], expected),
+    "proved native Great Work carrier route changed")
+  SameNativeWorkIdentity(carrier.Source, locations[1])
+  assert(city:GetOwner() == carrier.Owner,
+    "proved native Great Work carrier owner changed")
+  return true
+end
+
 local function MoveNativeWorks(state, tx)
   local reserved = {}
   for _, pending in ipairs(tx.NativeWorks or {}) do
@@ -1749,8 +1988,10 @@ local function MoveNativeWorks(state, tx)
         if not player or player:GetCities():GetCount() == 0 then
           error("JAC_ABSORPTION_WAITING_UI", 0)
         end
+        local targetReserved = ReservedNativeSlots(state, snap.Custodian, tx.ID)
+        for key in pairs(reserved) do targetReserved[key] = true end
         local ok, destination = pcall(NativeWorkDestination,
-          snap.Custodian, snap.Source, reserved)
+          snap.Custodian, snap.Source, targetReserved, snap.Destination < 0)
         if not ok then
           if tostring(destination) == "JAC_ABSORPTION_WAITING_UI"
             or tostring(destination):find("no compatible empty destination slot", 1, true) then
@@ -1759,9 +2000,42 @@ local function MoveNativeWorks(state, tx)
           error(destination)
         end
         snap.TargetSlot = destination
+        local slot = destination
+        reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
         Save(state)
       end
-      if snap.PhysicalMoved then
+      if snap.Destination < 0 then
+        assert(not snap.PhysicalMoved or snap.Carrier,
+          "native scattered work has no verified carrier history")
+        if not snap.Carrier then
+          local slot = snap.TargetSlot
+          local city = assert(CityManager.GetCityAt(slot.X, slot.Y),
+            "native Great Work Free Cities carrier disappeared")
+          assert(city:GetOwner() == snap.Custodian and city:GetID() == slot.City
+            and WorkInSlot(city, slot.Building, slot.Slot) == -1,
+            "native Great Work Free Cities carrier is not empty")
+          for _, other in ipairs(A.OwnedGreatWorkSlots(snap.Custodian)) do
+            assert(other.X ~= slot.X or other.Y ~= slot.Y,
+              "native Great Work carrier city holds another original work")
+          end
+          snap.Carrier = { Route = "TO_FREE", Phase = "BORROW", Index = snap.Source.Index,
+            Source = R.Copy(snap.Source), Owner = snap.Custodian, Borrower = tx.From,
+            OriginalCity = city:GetID(), X = slot.X, Y = slot.Y,
+            Building = slot.Building, Slot = slot.Slot,
+            Token = tx.ID .. ":carrier:" .. snap.Source.Index,
+            BorrowToken = tx.ID .. ":carrier:" .. snap.Source.Index .. ":borrow" }
+          snap.Carrier.Before = NativeCarrierState(city, snap.Carrier)
+          Save(state)
+        end
+        if not AdvanceNativeCarrier(state, snap.Carrier) then
+          error("JAC_ABSORPTION_WAITING_UI", 0)
+        end
+        snap.TargetSlot = R.Copy(snap.Carrier.FinalSlot)
+        snap.PhysicalMoved = true
+        Save(state)
+        NativeWorkAtTarget(snap)
+        NativeWorkSourceEmpty(tx, snap)
+      elseif snap.PhysicalMoved then
         NativeWorkAtTarget(snap)
         NativeWorkSourceEmpty(tx, snap)
       else
@@ -2330,60 +2604,51 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
     SameNativeWorkIdentity(source, locations[1])
     intent.NativeSource = R.Copy(source)
     Save(state) -- keep the original location even if no recipient slot is available
-    intent.NativeTarget = NativeWorkDestination(owner, source, {})
+    assert(source.BuildingType ~= "BUILDING_PALACE",
+      "native recovery Palace carrier has no verified city-preserving route")
+    intent.NativeTarget = NativeWorkDestination(owner, source,
+      ReservedNativeSlots(state, owner, nil, token))
     Save(state)
   end
-  if intent.NativePhysicalMoved then
+  if intent.NativePhysicalMoved and not intent.NativeCarrier then
     NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
       TargetSlot = intent.NativeTarget })
     NativeRecoverySourceEmpty(intent.NativeSource)
     return true
   end
-  if intent.NativeDealSubmitted then
-    local reads = ExposedMembers.JAC_HeroReadAPI
-    if not reads or not reads.GetObservation or not intent.NativeDealUI
-      or not reads.GetObservation(intent.NativeDealUI.Token) then return false end
-  end
-  local locations = NativeWorkLocations(source.Index)
-  assert(#locations == 1, "native recovery original index is missing or duplicated")
-  SameNativeWorkIdentity(source, locations[1])
-  if SameNativeWorkSlot(locations[1], intent.NativeTarget) then
-    local donor = assert(CityManager.GetCityAt(source.X, source.Y),
-      "native recovery custodian city disappeared")
-    assert(donor:GetOwner() == source.Owner and donor:GetID() == source.CityID
-      and WorkInSlot(donor, source.Building, source.Slot) == -1,
-      "native recovery left the original work in its custodian slot")
-    intent.NativePhysicalMoved = true
-    intent.NativeDealUI, intent.ObservationToken = nil, nil
+  if not intent.NativeCarrier then
+    local city = assert(CityManager.GetCityAt(source.X, source.Y),
+      "native recovery Free Cities carrier disappeared")
+    assert(city:GetOwner() == source.Owner and city:GetID() == source.CityID
+      and WorkInSlot(city, source.Building, source.Slot) == source.Index,
+      "native recovery original work left its Free Cities carrier")
+    for _, other in ipairs(A.OwnedGreatWorkSlots(source.Owner)) do
+      assert(other.Index == source.Index or other.X ~= source.X or other.Y ~= source.Y,
+        "native recovery carrier city holds another work")
+    end
+    intent.NativeCarrier = { Route = "FROM_FREE", Phase = "BORROW", Index = source.Index,
+      Source = R.Copy(source), Target = R.Copy(intent.NativeTarget),
+      Owner = source.Owner, Borrower = owner, OriginalCity = source.CityID,
+      X = source.X, Y = source.Y, Building = source.Building, Slot = source.Slot,
+      Token = token .. ":carrier:" .. source.Index,
+      BorrowToken = token .. ":carrier:" .. source.Index .. ":borrow" }
+    intent.NativeCarrier.Before = NativeCarrierState(city, intent.NativeCarrier)
     Save(state)
-    return true
   end
-  assert(SameNativeWorkSlot(locations[1], source),
-    "native recovery original index moved to an unexpected slot")
-  local city = assert(CityManager.GetCityAt(intent.NativeTarget.X, intent.NativeTarget.Y),
-    "native recovery recipient city disappeared")
-  assert(city:GetOwner() == owner and city:GetID() == intent.NativeTarget.City
-    and WorkInSlot(city, intent.NativeTarget.Building, intent.NativeTarget.Slot) == -1,
-    "native recovery reserved slot was occupied")
-  local definition = assert(GameInfo.GreatWorks[source.GreatWorkType],
-    "native recovery Great Work type unavailable")
-  BuildNativeWorkDeal(source.Owner, owner, source.Index, definition.Index)
-  intent.NativeDealSubmitted = true
-  intent.NativeDealAttempts = (intent.NativeDealAttempts or 0) + 1
-  intent.NativeDealUI = { Token = token .. ":native:" .. source.Index .. ":" .. intent.NativeDealAttempts,
-    Turn = Game.GetCurrentGameTurn(), Index = source.Index }
-  intent.ObservationToken = intent.NativeDealUI.Token
-  intent.Status = "WAITING_UI"
+  if not AdvanceNativeCarrier(state, intent.NativeCarrier) then
+    local carrier = intent.NativeCarrier
+    intent.ObservationToken = carrier.Phase == "BORROW" and carrier.BorrowToken
+      or carrier.Phase == "MOVE" and carrier.MoveToken or carrier.ReturnToken
+    intent.Status = "WAITING_UI"
+    Save(state)
+    return false
+  end
+  intent.NativePhysicalMoved, intent.ObservationToken = true, nil
   Save(state)
-  local ok, value = pcall(DealManager.EnactWorkingDeal, source.Owner, owner)
-  if not ok then
-    intent.NativeDealError = tostring(value)
-    Save(state)
-    error("native recovery deal raised; inspect original physical index: " .. intent.NativeDealError)
-  end
-  Log("native recovery deal submitted token=" .. token .. " index=" .. source.Index
-    .. " from=" .. source.Owner .. " to=" .. owner .. " return=" .. tostring(value))
-  return false
+  NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
+    TargetSlot = intent.NativeTarget })
+  NativeRecoverySourceEmpty(intent.NativeSource)
+  return true
 end
 function A.RecoverArchived(id, owner, token, original)
   assert((type(id) == "string" or type(id) == "number")

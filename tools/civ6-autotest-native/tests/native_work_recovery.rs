@@ -32,6 +32,17 @@ fn setup() -> mlua::Result<Lua> {
           GreatWorkObjectType='GREATWORKOBJECT_RELIC',Tourism=8}}
         ExposedMembers.JAC_HeroReadAPI={ReadNativeWork=function()
           return {Type=4,CreatorName=CREATOR,TurnCreated=2,CreatedByPlayer=0}
+        end,ReadCarrierPlots=function(owner,id)
+          local city=assert(Players[owner]:GetCities():FindID(id))
+          local result={}
+          for index=0,Map.GetPlotCount()-1 do
+            local plot=Map.GetPlotByIndex(index)
+            if plot.city==city:GetX() then
+              assert(plot:GetOwner()==owner)
+              result[#result+1]=index
+            end
+          end
+          return result
         end}
         for _,city in pairs(CITIES) do
           local original=city.GetBuildings
@@ -528,6 +539,127 @@ fn recovery_rejects_changed_native_provenance() -> mlua::Result<()> {
 }
 
 #[test]
+fn free_cities_palace_work_is_not_borrowed_without_a_verified_source_slot_route() -> mlua::Result<()>
+{
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        WORK_CITIES={}
+        CITIES[16].palace=true
+        CITIES[16].palaceWork=900
+        local oldBuildings=CITIES[16].GetBuildings
+        CITIES[16].GetBuildings=function(self)
+          local b=oldBuildings(self)
+          local oldWork=b.GetGreatWorkInSlot
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==0 and slot==0 then return self.palaceWork or -1 end
+            return oldWork(obj,building,slot)
+          end
+          return b
+        end
+        local source=assert(A.OwnedGreatWorkSlots(3)[1])
+        assert(source.Index==900 and source.BuildingType=='BUILDING_PALACE')
+        local state=A.GetState()
+        state.Archive.native.NativeWork=source
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        local ok,why=pcall(A.RecoverArchived,'native',2,'recovery:palace',nil)
+        assert(not ok and tostring(why):find('Palace carrier has no verified',1,true),
+          'Free Cities Palace work entered an unverified carrier route')
+        assert(TRANSFERS==0 and CITIES[16]:GetOwner()==3 and CITIES[16].palaceWork==900
+          and A.GetRoster(2).native==nil and A.GetState().Archive.native.NativeWork.Index==900,
+          'Palace rejection changed original work or owner')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn simultaneous_native_recoveries_reserve_distinct_empty_recipient_slots() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        CityManager.TransferCity(CITIES[8],3)
+        TRANSFERS=0
+        WORK_CITIES={[16]=true}
+        local oldSource=CITIES[8].GetBuildings
+        CITIES[8].GetBuildings=function(self)
+          local b=oldSource(self)
+          local oldWork=b.GetGreatWorkInSlot
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==0 then return 901 end
+            return oldWork(obj,building,slot)
+          end
+          return b
+        end
+        local oldTarget=CITIES[12].GetBuildings
+        CITIES[12].GetBuildings=function(self)
+          local b=oldTarget(self)
+          local oldSlots=b.GetNumGreatWorkSlots
+          local oldWork=b.GetGreatWorkInSlot
+          b.GetNumGreatWorkSlots=function(obj,building)
+            if building==1 then return 2 end
+            return oldSlots(obj,building)
+          end
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==1 then return -1 end
+            return oldWork(obj,building,slot)
+          end
+          return b
+        end
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
+              SlotType='GREATWORKSLOT_RELIC'},
+            {Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=1,
+              SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        local works=A.OwnedGreatWorkSlots(3)
+        assert(#works==2 and works[1].Index==900 and works[2].Index==901)
+        local state=A.GetState()
+        state.Archive.first={ID='first',Kind='ITEM',Owner=-1,NativeWork=works[1]}
+        state.Archive.second={ID='second',Kind='ITEM',Owner=-1,NativeWork=works[2]}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        local first=A.RecoverArchived('first',2,'recovery:first',nil)
+        local second=A.RecoverArchived('second',2,'recovery:second',nil)
+        assert(first.Status=='WAITING_UI' and second.Status=='WAITING_UI'
+          and first.NativeTarget.Slot==0 and second.NativeTarget.Slot==1
+          and first.NativeTarget.City==second.NativeTarget.City,
+          'concurrent native recoveries reserved the same official slot')
+        assert(TRANSFERS==2 and A.GetRoster(2).first==nil and A.GetRoster(2).second==nil,
+          'reservation completed or duplicated a recovery before physical proof')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
@@ -604,6 +736,7 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
     lua.load(
         r#"
         CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
         WORK_CITIES={[16]=true}
         local archived=A.GetState()
         archived.Archive.native.NativeWork=assert(A.OwnedGreatWorkSlots(3)[1])
@@ -626,6 +759,11 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
           assert(owner==2 and object=='GREATWORKOBJECT_RELIC')
           return {{Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0,
             SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        PUBLISHED={}
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token)
+          if PUBLISHED[token] then return {Published=true} end
         end
         DealDirection={OUTGOING=1}
         DealItemTypes={GREATWORK=2}
@@ -656,33 +794,26 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
             return {{ForType=900,IsValid=true}}
           end,
           EnactWorkingDeal=function(from,to)
-            assert(from==3 and to==2 and WORK_CITIES[16] and not WORK_CITIES[12])
             ENACT_CALLS=ENACT_CALLS+1
-            if ENACT_CALLS==2 then WORK_CITIES[16],WORK_CITIES[12]=nil,true end
-            return 1
+            error('unsafe direct recovery deal was invoked: '..from..':'..to)
           end}
         local pending=A.RecoverArchived('native',2,'recovery:native',nil)
-        assert(pending.Status=='WAITING_UI' and ENACT_CALLS==1)
+        assert(pending.Status=='WAITING_UI' and ENACT_CALLS==0 and TRANSFERS==1
+          and pending.NativeCarrier.Phase=='BORROW' and CITIES[16]:GetOwner()==2)
         assert(A.GetRoster(2).native==nil and A.Canonical(A.GetState().Archive)==before)
-        local token=assert(pending.NativeDealUI).Token
         assert(A.RecoverArchived('native',2,'recovery:native',nil).Status=='WAITING_UI')
-        assert(ENACT_CALLS==1,'unpublished recovery resent the native deal')
-        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(value)
-          if value==token then return {Published=true} end
-        end
-        local retry=A.RecoverArchived('native',2,'recovery:native',nil)
-        assert(retry.Status=='WAITING_UI' and ENACT_CALLS==2)
-        assert(A.GetRoster(2).native==nil and A.Canonical(A.GetState().Archive)==before)
-        local second=assert(retry.NativeDealUI).Token
-        assert(second~=token)
+        assert(ENACT_CALLS==0 and TRANSFERS==1,'unpublished recovery repeated a mutation')
+        PUBLISHED[pending.NativeCarrier.BorrowToken]=true
+        pending=A.RecoverArchived('native',2,'recovery:native',nil)
+        assert(pending.NativeCarrier.Phase=='MOVE' and pending.NativeCarrier.MoveSource.City==CITIES[16]:GetID()
+          and pending.NativeCarrier.MoveTarget.City==CITIES[12]:GetID())
         assert(A.RecoverArchived('native',2,'recovery:native',nil).Status=='WAITING_UI'
-          and ENACT_CALLS==2,'recovery retry ran again before new publication')
-        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(value)
-          if value==second then return {Published=true} end
-        end
-        local saved=A.GetState()
-        saved.Recoveries['recovery:native'].NativePhysicalMoved=true
-        Game:SetProperty(A.Rules.STATE_KEY,saved) -- interruption after physical proof, before roster update
+          and ENACT_CALLS==0 and TRANSFERS==1,'recovery MOVE replayed before publication')
+        WORK_CITIES[16],WORK_CITIES[12]=nil,true -- human same-owner MOVE
+        PUBLISHED[pending.NativeCarrier.MoveToken]=true
+        pending=A.RecoverArchived('native',2,'recovery:native',nil)
+        assert(pending.Status=='WAITING_UI' and pending.NativeCarrier.Phase=='RETURN'
+          and CITIES[16]:GetOwner()==3 and TRANSFERS==2)
         local originalBuildings=CITIES[16].GetBuildings
         CITIES[16].GetBuildings=function(self)
           local buildings=originalBuildings(self)
@@ -693,14 +824,15 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
           end
           return buildings
         end
+        PUBLISHED[pending.NativeCarrier.ReturnToken]=true
         local rejected,reason=pcall(A.RecoverArchived,'native',2,'recovery:native',nil)
-        assert(not rejected and tostring(reason):find('custodian slot was reused',1,true),
+        assert(not rejected and tostring(reason):find('carrier return slot changed',1,true),
           'saved physical recovery accepted a newly occupied original slot')
         assert(A.GetRoster(2).native==nil and A.Canonical(A.GetState().Archive)==before,
           'rejected recovery changed the archive or recipient roster')
         CITIES[16].GetBuildings=originalBuildings
         local completed=A.RecoverArchived('native',2,'recovery:native',nil)
-        assert(completed.Status=='COMPLETE' and ENACT_CALLS==2)
+        assert(completed.Status=='COMPLETE' and ENACT_CALLS==0 and TRANSFERS==2)
         local item=assert(A.GetRoster(2).native)
         assert(item.NativeWork.Index==900 and item.NativeWork.Owner==2)
         assert(item.City.Owner==2 and item.City.X==12 and item.City.Y==0)
@@ -710,7 +842,76 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
         assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
         assert(A.Canonical(A.GetState().Archive)==before)
         assert(A.RecoverArchived('native',2,'recovery:native',nil).Status=='COMPLETE')
-        assert(ENACT_CALLS==2,'completed recovery resent the native deal')
+        assert(ENACT_CALLS==0 and TRANSFERS==2,'completed recovery repeated a native mutation')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn unchanged_native_move_restores_empty_free_cities_carrier_before_blocking() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==3 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=3,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+            SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        PUBLISHED={}
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token) return PUBLISHED[token] end
+        DealManager={EnactWorkingDeal=function() error('unsafe direct deal invoked') end}
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='SCATTER',Destination='WORLD'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local plan={ID='native-noop',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='SCATTER'}}}
+        local tx=A.Apply(plan)
+        assert(tx.Status=='WAITING_UI' and tx.NativeWorks[1].Carrier.Phase=='BORROW'
+          and CITIES[16]:GetOwner()==1 and TRANSFERS==1)
+        PUBLISHED[tx.NativeWorks[1].Carrier.BorrowToken]={Published=true}
+        tx=A.Resume(plan.ID)
+        local carrier=assert(tx.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='MOVE' and carrier.MoveAttempt==1)
+        PUBLISHED[carrier.MoveToken]={Published=true,Unchanged=true}
+        tx=A.Resume(plan.ID)
+        carrier=assert(tx.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='MOVE' and carrier.MoveAttempt==2
+          and CITIES[16]:GetOwner()==1 and WORK_CITIES[4],
+          'first no-op moved the original work or carrier')
+        PUBLISHED[carrier.MoveToken]={Published=true,Unchanged=true}
+        tx=A.Resume(plan.ID)
+        carrier=assert(tx.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='RESTORE' and CITIES[16]:GetOwner()==3
+          and TRANSFERS==2 and WORK_CITIES[4] and not WORK_CITIES[16],
+          'second no-op did not return the empty carrier before blocking')
+        PUBLISHED[carrier.ReturnToken]={Published=true}
+        local ok,reason=pcall(A.Resume,plan.ID)
+        assert(not ok and tostring(reason):find('carrier restored',1,true),
+          'restored carrier was reported as a successful scatter')
+        assert(A.GetState().Transactions[plan.ID].Status=='BLOCKED'
+          and #A.NativeWorkLocations(900)==1
+          and A.NativeWorkLocations(900)[1].Owner==1
+          and CITIES[4]:GetOwner()==1 and CITIES[8]:GetOwner()==1
+          and A.GetState().Archive['native-work:900']==nil,
+          'failed carrier MOVE changed the donor or awarded the original work')
         "#,
     )
     .exec()
@@ -741,13 +942,19 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           assert(object=='GREATWORKOBJECT_RELIC')
           local city=owner==3 and CITIES[16] or owner==2 and CITIES[12]
           assert(city and city:GetOwner()==owner)
-          return {{Owner=owner,City=city:GetID(),X=city:GetX(),Y=0,
+          local slots={{Owner=owner,City=city:GetID(),X=city:GetX(),Y=0,
             Building=1,Slot=0,SlotType='GREATWORKSLOT_RELIC'}}
+          if owner==3 then
+            table.insert(slots,1,{Owner=owner,City=city:GetID(),X=city:GetX(),Y=0,
+              Building=0,Slot=0,SlotType='GREATWORKSLOT_RELIC'})
+          end
+          return slots
         end
         PUBLISHED={}
         ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token)
           if PUBLISHED[token] then return {Published=true} end
         end
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
         DealDirection={OUTGOING=1}
         DealItemTypes={GREATWORK=2}
         local deals={}
@@ -782,14 +989,7 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           end,
           EnactWorkingDeal=function(from,to)
             ENACT_CALLS=ENACT_CALLS+1
-            if from==1 and to==3 then
-              assert(WORK_CITIES[4] and not WORK_CITIES[16])
-              WORK_CITIES[4],WORK_CITIES[16]=nil,true
-            elseif from==3 and to==2 then
-              assert(WORK_CITIES[16] and not WORK_CITIES[12])
-              WORK_CITIES[16],WORK_CITIES[12]=nil,true
-            else error('unexpected native work deal') end
-            return 1
+            error('unsafe direct cross-owner work deal was invoked: '..from..':'..to)
           end}
         Players[1].units={}
         Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
@@ -802,28 +1002,62 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
           NativeWorks={[900]={Outcome='SCATTER'}}}
         local pending=A.Apply(PLAN)
-        assert(pending.Status=='WAITING_UI' and ENACT_CALLS==1)
-        assert(CITIES[4]:GetOwner()==1 and TRANSFERS==0 and KILLS==0)
-        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and ENACT_CALLS==1)
-        PUBLISHED[assert(A.GetState().Transactions[PLAN.ID].NativeDealUI).Token]=true
+        assert(pending.Status=='WAITING_UI' and ENACT_CALLS==0 and TRANSFERS==1)
+        assert(CITIES[16]:GetOwner()==1 and CITIES[4]:GetOwner()==1 and KILLS==0,
+          'carrier borrowing mutated donor assets before the work MOVE')
+        local carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='BORROW' and carrier.Route=='TO_FREE')
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and TRANSFERS==1)
+        PUBLISHED[carrier.BorrowToken]=true
+        pending=A.Resume(PLAN.ID)
+        carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='MOVE' and carrier.MoveSource.City==CITIES[4]:GetID()
+          and carrier.MoveTarget.City==CITIES[16]:GetID() and TRANSFERS==1,
+          'borrow publication did not prepare same-owner MOVE: phase='..carrier.Phase..
+          ' source='..tostring(carrier.MoveSource and carrier.MoveSource.City)..
+          ' target='..tostring(carrier.MoveTarget and carrier.MoveTarget.City)..
+          ' transfers='..TRANSFERS)
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and ENACT_CALLS==0)
+        WORK_CITIES[4],WORK_CITIES[16]=nil,true -- the UI same-owner MOVE's physical effect
+        PUBLISHED[carrier.MoveToken]=true
+        pending=A.Resume(PLAN.ID)
+        carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(carrier.Phase=='RETURN' and TRANSFERS==2 and CITIES[16]:GetOwner()==3)
+        PUBLISHED[carrier.ReturnToken]=true
+        PLOTS[17].owner=2
+        local changed=pcall(A.Resume,PLAN.ID)
+        assert(not changed and CITIES[4]:GetOwner()==1 and CITIES[8]:GetOwner()==1
+          and A.GetState().Archive['native-work:900']==nil,
+          'carrier purchased plot changed without stopping before donor mutation')
+        PLOTS[17].owner=3
         local complete=A.Resume(PLAN.ID)
-        assert(complete.Status=='COMPLETE' and ENACT_CALLS==1)
+        assert(complete.Status=='COMPLETE' and ENACT_CALLS==0)
         local scattered=assert(A.GetState().Archive['native-work:900'])
         assert(scattered.Owner==-1 and scattered.Outcome=='SCATTER' and scattered.City==nil)
         assert(scattered.NativeWork.Index==900 and scattered.NativeWork.Owner==3 and
           scattered.NativeWork.CreatorName=='Original creator')
         assert(scattered.NativeCustody.Owner==3 and scattered.NativeCustody.X==16 and
+          scattered.NativeCustody.City==CITIES[16]:GetID() and
           scattered.NativeCustody.Building==1 and scattered.NativeCustody.Slot==0)
         assert(CITIES[4]:GetOwner()==2 and CITIES[8]:GetOwner()==2)
         assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==3)
         local key='recovery:native-work:900'
         local reclaim=A.RecoverArchived('native-work:900',2,key,nil)
-        assert(reclaim.Status=='WAITING_UI' and ENACT_CALLS==2)
+        assert(reclaim.Status=='WAITING_UI' and ENACT_CALLS==0
+          and reclaim.NativeCarrier.Phase=='BORROW' and CITIES[16]:GetOwner()==2)
         assert(A.RecoverArchived('native-work:900',2,key,nil).Status=='WAITING_UI'
-          and ENACT_CALLS==2)
-        PUBLISHED[assert(reclaim.NativeDealUI).Token]=true
+          and ENACT_CALLS==0)
+        PUBLISHED[reclaim.NativeCarrier.BorrowToken]=true
+        reclaim=A.RecoverArchived('native-work:900',2,key,nil)
+        assert(reclaim.NativeCarrier.Phase=='MOVE' and CITIES[16]:GetOwner()==2)
+        WORK_CITIES[16],WORK_CITIES[12]=nil,true -- human same-owner MOVE
+        PUBLISHED[reclaim.NativeCarrier.MoveToken]=true
+        reclaim=A.RecoverArchived('native-work:900',2,key,nil)
+        assert(reclaim.Status=='WAITING_UI' and reclaim.NativeCarrier.Phase=='RETURN'
+          and CITIES[16]:GetOwner()==3)
+        PUBLISHED[reclaim.NativeCarrier.ReturnToken]=true
         local recovered=A.RecoverArchived('native-work:900',2,key,nil)
-        assert(recovered.Status=='COMPLETE' and ENACT_CALLS==2)
+        assert(recovered.Status=='COMPLETE' and ENACT_CALLS==0)
         local item=assert(A.GetRoster(2)['native-work:900'])
         assert(item.Owner==2 and item.Outcome=='RECOVERED' and
           item.NativeWork.Index==900 and item.NativeWork.Owner==2 and
@@ -834,7 +1068,7 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           and item.NativeCustody.Slot==0)
         assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
         assert(A.RecoverArchived('native-work:900',2,key,nil).Status=='COMPLETE'
-          and ENACT_CALLS==2)
+          and ENACT_CALLS==0)
         "#,
     )
     .exec()
