@@ -1,6 +1,7 @@
 //! Test-only SQL and Gameplay ordering. Native trait admission needs the live scenario.
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{new_lua, official, read_repo, repo_root};
-use mlua::Lua;
+use mlua::{Lua, MultiValue, Value};
 use roxmltree::Document;
 use rusqlite::Connection;
 use std::collections::BTreeSet;
@@ -58,13 +59,17 @@ fn live_admission_matrix_rejects_leaks_to_the_last_owner_and_other_persons() {
     let before = scenario["steps"][4]["code"].as_str().unwrap();
     let after = scenario["steps"][9]["code"].as_str().unwrap();
     let clean = matrix_fixture();
-    clean.load(before).eval::<String>().unwrap();
+    let result = clean.load(before).eval::<MultiValue>().unwrap();
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result.front(), Some(Value::String(_))));
     let pre_join_leak = matrix_fixture();
     pre_join_leak.load("LEAK_OWNER=21").exec().unwrap();
-    assert!(pre_join_leak.load(before).eval::<String>().is_err());
+    assert!(pre_join_leak.load(before).eval::<MultiValue>().is_err());
     let joined = matrix_fixture();
     joined.load("GRANTED=true").exec().unwrap();
-    joined.load(after).eval::<String>().unwrap();
+    let result = joined.load(after).eval::<MultiValue>().unwrap();
+    assert_eq!(result.len(), 1);
+    assert!(matches!(result.front(), Some(Value::String(_))));
     for mutation in [
         "GRANTED=true; LEAK_OWNER=21",
         "GRANTED=true; LEAK_PERSON=2",
@@ -72,7 +77,7 @@ fn live_admission_matrix_rejects_leaks_to_the_last_owner_and_other_persons() {
     ] {
         let bad = matrix_fixture();
         bad.load(mutation).exec().unwrap();
-        assert!(bad.load(after).eval::<String>().is_err(), "{mutation}");
+        assert!(bad.load(after).eval::<MultiValue>().is_err(), "{mutation}");
     }
 }
 
@@ -230,7 +235,7 @@ fn owner_modifier_is_attached_only_after_real_join_and_full_reservation() {
         .load(
             "return table.concat(ORDER,','),ATTACHED,PROPERTIES.JAC_PERSONA_LEADER_JAC_ASHINA_MORIKIYO_OWNER,PROPERTIES.JAC_PERSONA_LEADER_JAC_ASHINA_MORIKIYO_STATE",
         )
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(order, "join,reserve,attach");
     assert_eq!(attached, 1);
@@ -242,7 +247,7 @@ fn owner_modifier_is_attached_only_after_real_join_and_full_reservation() {
     assert!(rejected.load("fire(0)").exec().is_err());
     let (order, attached): (String, i64) = rejected
         .load("return table.concat(ORDER,','),ATTACHED")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(order, "join");
     assert_eq!(attached, 0);
@@ -252,7 +257,7 @@ fn owner_modifier_is_attached_only_after_real_join_and_full_reservation() {
     assert!(no_title.load("fire(0)").exec().is_err());
     let (order, attached): (String, i64) = no_title
         .load("return table.concat(ORDER,','),ATTACHED")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert_eq!(order, "join");
     assert_eq!(attached, 0);
