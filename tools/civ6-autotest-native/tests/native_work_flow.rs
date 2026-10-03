@@ -114,6 +114,13 @@ fn native_carrier_ui_uses_local_actor_once_and_publishes_only_after_physical_mov
         r#"
         local reads=assert(ExposedMembers.JAC_HeroReadAPI)
         assert(reads.NativeMoveAvailable)
+        local multiplayer=GameConfiguration.IsAnyMultiplayer
+        GameConfiguration.IsAnyMultiplayer=function() return true end
+        for _=1,3 do Events.GameCoreEventPublishComplete.Emit() end
+        assert(UI_REQUESTS==0 and WORK_CITIES[4] and not WORK_CITIES[16]
+          and not reads.GetObservation('native:move:1'),
+          'saved MOVE dispatched or published in unsupported multiplayer')
+        GameConfiguration.IsAnyMultiplayer=multiplayer
         Events.GameCoreEventPublishComplete.Emit()
         assert(UI_REQUESTS==1 and WORK_CITIES[16] and not WORK_CITIES[4])
         assert(reads.GetObservation('native:move:1')==nil,

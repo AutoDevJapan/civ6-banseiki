@@ -552,8 +552,8 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
 }
 
 #[test]
-fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload(
-) -> mlua::Result<()> {
+fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload()
+-> mlua::Result<()> {
     let lua = world()?;
     lua.load(
         r#"
@@ -871,8 +871,8 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
 }
 
 #[test]
-fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world(
-) -> mlua::Result<()> {
+fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
         r#"
@@ -1284,8 +1284,8 @@ fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
-fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected(
-) -> mlua::Result<()> {
+fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1454,8 +1454,8 @@ fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua:
 }
 
 #[test]
-fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state(
-) -> mlua::Result<()> {
+fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1685,7 +1685,9 @@ fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event()
     ))
     .map_err(mlua::Error::external)?;
     assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
-    assert!(manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>"));
+    assert!(
+        manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
+    );
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(

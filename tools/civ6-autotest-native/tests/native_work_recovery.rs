@@ -388,8 +388,8 @@ fn two_original_works_to_one_custodian_clear_only_the_completed_first_item() -> 
 }
 
 #[test]
-fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry(
-) -> mlua::Result<()> {
+fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry()
+-> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
         r#"

@@ -156,6 +156,9 @@ local function CarrierMismatch(token, reads)
 end
 
 local function ObserveNativeCarrier(carrier, reads)
+  -- A saved single-player MOVE must not bypass the gameplay borrow guard.
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() then return false end
   if not carrier or carrier.Phase == "RESTORED" then return false end
   if carrier.Phase == "PROVED" then
     if not carrier.RefreshRequested then return false end
