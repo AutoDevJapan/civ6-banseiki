@@ -612,6 +612,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-work-probe.json",
         "absorption-native-artwork-locks.json",
         "absorption-native-artwork-aged.json",
+        "absorption-native-artifact-full.json",
     ] {
         let scenario = native_scenario(name);
         for step in scenario["steps"].as_array().expect("scenario steps") {
