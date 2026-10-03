@@ -133,10 +133,10 @@ fn native_waiter_alive(_: &Value, _: &Path) -> Result<bool> {
 #[cfg(windows)]
 fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME, HANDLE},
+        Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::Threading::{
-            GetExitCodeProcess, GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
-            PROCESS_QUERY_LIMITED_INFORMATION,
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
         },
     };
     struct Owned(HANDLE);
@@ -154,19 +154,23 @@ fn native_waiter_alive(waiter: &Value, lock: &Path) -> Result<bool> {
         .or_else(|| waiter["pid"].as_u64())
         .unwrap() as u32;
     unsafe {
-        let process = Owned(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid));
+        let process = Owned(OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        ));
         if process.0.is_null() {
             if std::io::Error::last_os_error().raw_os_error() == Some(87) {
                 return Ok(false);
             }
             return Err(refused("cannot verify live queue process"));
         }
-        let mut exit = 0;
-        if GetExitCodeProcess(process.0, &mut exit) == 0 {
-            return Err(refused("cannot read live queue process status"));
-        }
-        if exit != 259 {
-            return Ok(false);
+        // A terminated process can itself return STILL_ACTIVE (259).
+        // The process object's signal state is independent of its exit code.
+        match WaitForSingleObject(process.0, 0) {
+            WAIT_OBJECT_0 => return Ok(false),
+            WAIT_TIMEOUT => {}
+            _ => return Err(refused("cannot read live queue process status")),
         }
         let mut name = [0u16; 4096];
         let mut size = name.len() as u32;
