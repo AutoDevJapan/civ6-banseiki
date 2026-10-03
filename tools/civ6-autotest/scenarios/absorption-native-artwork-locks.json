@@ -1,5 +1,5 @@
 {
-  "name": "PR96 freshly created art direct MOVE and land antiquity generation stage (artifact MOVE unverified)",
+  "name": "PR96 fresh art across two real museums and land antiquity generation (artifact MOVE unverified)",
   "judge_profile": "generic",
   "steps": [
     {
@@ -50,7 +50,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "-- Plan only one exact-city Theatre and art museum; defer archaeology museums until sites are proven.\nlocal owner=Game.GetLocalPlayer()\nlocal city=assert(Players[owner]:GetCities():GetCapitalCity())\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nlocal museumArtifact=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT).Index\nassert(not city:GetBuildings():HasBuilding(museumArtifact),'capital has mutually exclusive artifact museum')\nlocal site,present\nfor _,district in city:GetDistricts():Members() do\n if district:GetType()==theater then\n  assert(district:IsComplete(),'existing Theatre is incomplete')\n  site=assert(Map.GetPlot(district:GetX(),district:GetY()));present=true\n end\nend\nif not site then\n local plots=assert(Map.GetCityPlots():GetPurchasedPlots(city))\n local ids={};for _,index in pairs(plots) do ids[#ids+1]=index end\n table.sort(ids)\n for _,index in ipairs(ids) do local q=Map.GetPlotByIndex(index)\n  if q and q:GetOwner()==owner and Cities.GetPlotPurchaseCity(q)==city\n    and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n    and q:GetDistrictType()==-1 and q:GetImprovementType()==-1\n    and not q:IsCity() and not q:IsWater() and not q:IsMountain()\n    and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n end\nend\nassert(site,'capital has no exact-city purchased Theatre plot')\nlocal target={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),\n Plot=site:GetIndex(),TheaterPresent=present}\nExposedMembers.JAC_ArtworkPlan={Owner=owner,Fixtures={art=target}}\nprint('[JAC_ARTWORK_THEATER_PLAN] owner='..owner..' city='..target.City..' plot='..target.Plot..' present='..tostring(present))\nreturn 'one exact city Theatre plot prepared for a new Great Artist'"
+      "code": "-- Plan two distinct exact-city art museums; defer archaeology until genuine sites exist.\nlocal owner=Game.GetLocalPlayer()\nlocal player=assert(Players[owner])\nlocal capital=assert(player:GetCities():GetCapitalCity())\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nlocal museumArtifact=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT).Index\nlocal function prepare(city)\n assert(city:GetOwner()==owner,'fixture city not locally owned')\n assert(not city:GetBuildings():HasBuilding(museumArtifact),'mutually exclusive artifact museum')\n local site,present\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==theater then\n   assert(district:IsComplete(),'existing Theatre is incomplete')\n   site=assert(Map.GetPlot(district:GetX(),district:GetY()));present=true\n  end\n end\n if not site then\n  local ids={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do ids[#ids+1]=index end\n  table.sort(ids)\n  for _,index in ipairs(ids) do local q=Map.GetPlotByIndex(index)\n   if q and q:GetOwner()==owner and Cities.GetPlotPurchaseCity(q)==city\n     and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n     and q:GetDistrictType()==-1 and q:GetImprovementType()==-1\n     and not q:IsCity() and not q:IsWater() and not q:IsMountain()\n     and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,'fixture city has no purchased Theatre plot')\n local t={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plot=site:GetIndex(),TheaterPresent=present}\n print('[JAC_ARTWORK_THEATER_PLAN] owner='..owner..' city='..t.City..' plot='..t.Plot..' present='..tostring(present))\n return t\nend\nlocal cities={}\nfor _,city in player:GetCities():Members() do\n if city:GetID()~=capital:GetID() and not city:GetBuildings():HasBuilding(museumArtifact) then cities[#cities+1]=city end\nend\ntable.sort(cities,function(a,b) return a:GetID()<b:GetID() end)\nlocal target=assert(cities[1],'no second locally owned art-museum city')\nExposedMembers.JAC_ArtworkPlan={Owner=owner,Fixtures={art=prepare(capital),art_target=prepare(target)}}\nreturn 'two distinct exact-city Theatre plots prepared for source and target museums'"
     },
     {
       "action": "ui_lua",
@@ -92,6 +92,48 @@
         "type": "lua",
         "state_name": "InGame",
         "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.art\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nif not at or not b:HasBuilding(kind) or b:IsPillaged(kind)\n  or b:GetNumGreatWorkSlots(kind)~=3 then return false end\nfor slot=0,2 do\n local row=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(kind,slot)]\n if not row or row.GreatWorkSlotType~='GREATWORKSLOT_ART' then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(ExposedMembers.JAC_ArtworkPlan,'UI Theatre plan missing')\nassert(plan.Owner==Game.GetLocalPlayer(),'Theatre plan owner mismatch')\nlocal t=assert(plan.Fixtures.art_target)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'Theatre city identity changed')\nif not t.TheaterPresent then\n city:GetBuildQueue():CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_THEATER).Index,t.Plot,100)\nend\nGame:SetProperty('JAC_ARTWORK_CASE_PLAN',JAC_AbsorptionGameplay.Rules.Copy(plan))\nreturn 'requested real capital Theatre on its purchased plot'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.art_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nfor _,district in city:GetDistricts():Members() do\n local q=Map.GetPlot(district:GetX(),district:GetY())\n if district:GetType()==theater and q and q:GetIndex()==t.Plot then\n  return district:IsComplete() and not city:GetDistricts():IsPillaged(theater,t.Plot)\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.art_target\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'amphitheater city changed')\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested real amphitheater in capital Theatre'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.art_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nreturn at and b:HasBuilding(kind) and not b:IsPillaged(kind)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.art_target\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'art museum city changed')\nlocal definition=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART)\nlocal kind=definition.Index\nprint('[JAC_ARTWORK_MUSEUM_SETUP] internal='..tostring(definition.InternalOnly)..' civic='..tostring(definition.PrereqCivic)..' building='..kind)\nassert(not city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index),\n 'mutually exclusive artifact museum exists')\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested test-only art museum through real city build queue; await actual slots'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.art_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nif not at or not b:HasBuilding(kind) or b:IsPillaged(kind)\n  or b:GetNumGreatWorkSlots(kind)~=3 then return false end\nfor slot=0,2 do\n local row=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(kind,slot)]\n if not row or row.GreatWorkSlotType~='GREATWORKSLOT_ART' then return false end\nend\nreturn true"
       }
     },
     {
