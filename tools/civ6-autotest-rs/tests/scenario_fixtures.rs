@@ -325,7 +325,6 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
             disabled.iter().any(|id| id == NATIVE_SLOT_ONLY_MOD),
             "{name}"
         );
-        assert!(disabled.iter().any(|id| id == STATIC_GATE_MOD), "{name}");
         assert!(!enabled.iter().any(|id| id == NATIVE_SLOTS_MOD), "{name}");
         if name != "leader-persona-title-proxy-15km.json" {
             assert!(disabled.iter().any(|id| id == TITLE_PROXY_MOD), "{name}");
@@ -335,7 +334,7 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
 }
 
 #[test]
-fn every_other_new_game_explicitly_disables_the_static_gate() {
+fn every_other_new_game_isolates_the_static_gate_at_the_shared_selection_boundary() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
     for entry in std::fs::read_dir(folder).unwrap() {
@@ -348,14 +347,19 @@ fn every_other_new_game_explicitly_disables_the_static_gate() {
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
             count += 1;
-            assert!(
-                first["disable_ids"]
+            let strings = |key: &str| -> Vec<String> {
+                first[key]
                     .as_array()
-                    .unwrap()
-                    .iter()
-                    .any(|id| id == STATIC_GATE_MOD),
-                "{name}"
+                    .into_iter()
+                    .flatten()
+                    .map(|id| id.as_str().unwrap().to_owned())
+                    .collect()
+            };
+            let isolated = civ6_autotest_rs::scenario::isolated_disabled_mods(
+                &strings("ids"),
+                &strings("disable_ids"),
             );
+            assert!(isolated.iter().any(|id| id == STATIC_GATE_MOD), "{name}");
             assert!(
                 !first["ids"]
                     .as_array()

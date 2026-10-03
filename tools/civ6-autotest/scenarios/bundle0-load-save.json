@@ -2,7 +2,7 @@
   "name": "JAC_PoC_Bundle0 load/save",
   "judge_profile": "bundle0",
   "steps": [
-    {"action": "enable_mods", "ids": ["dfa0717e-4d0b-4370-b693-27fc6758571b"], "disable_ids": ["c678a216-58ab-4d40-a614-8f309d36ac86"]},
+    {"action": "enable_mods", "ids": ["dfa0717e-4d0b-4370-b693-27fc6758571b"]},
     {"action": "configure", "ruleset": "RULESET_EXPANSION_2", "map_size": "MAPSIZE_SMALL", "speed": "GAMESPEED_STANDARD", "seed": 620928, "players": [
       {"leader": "LEADER_CLEOPATRA", "civ": "CIVILIZATION_EGYPT", "human": true},
       {"leader": "LEADER_GILGAMESH", "civ": "CIVILIZATION_SUMERIA", "human": false}

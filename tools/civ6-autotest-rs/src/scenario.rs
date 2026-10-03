@@ -400,7 +400,26 @@ pub fn build_setup_code(players: &[Value]) -> String {
     lines.join("\n")
 }
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
+    let disabled = isolated_disabled_mods(ids, disabled);
     format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\n{}",ids.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),disabled.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),ENABLE_MODS_BODY)
+}
+
+// A diagnostic that replaces production eligibility must never leak from the
+// preceding game. Enforce this at the shared selection boundary, so generated
+// and handwritten scenarios have the same isolation without snapshot edits.
+pub const STATIC_PERSONA_GATE_ID: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
+pub fn isolated_disabled_mods(ids: &[String], disabled: &[String]) -> Vec<String> {
+    let mut result = disabled.to_vec();
+    if !ids
+        .iter()
+        .any(|id| id.eq_ignore_ascii_case(STATIC_PERSONA_GATE_ID))
+        && !result
+            .iter()
+            .any(|id| id.eq_ignore_ascii_case(STATIC_PERSONA_GATE_ID))
+    {
+        result.push(STATIC_PERSONA_GATE_ID.to_owned());
+    }
+    result
 }
 const ENABLE_MODS_BODY: &str = r###"local keep, disabled = {}, {}
 for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end

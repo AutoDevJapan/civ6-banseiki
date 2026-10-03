@@ -14,10 +14,58 @@ const OFF: u8 = 6;
 const MISSING: u8 = 7;
 
 #[test]
+fn static_gate_is_disabled_by_default_but_an_explicit_diagnostic_can_enable_it() {
+    use civ6_autotest_rs::scenario::STATIC_PERSONA_GATE_ID;
+    for (installed, opt_in, initially_enabled, expected) in [
+        (true, false, true, false),
+        (true, true, false, true),
+        (true, true, true, true),
+        (false, false, false, false),
+    ] {
+        let lua = Lua::new();
+        let definitions = lua.create_table().unwrap();
+        if installed {
+            let definition = lua.create_table().unwrap();
+            definition
+                .set("Id", STATIC_PERSONA_GATE_ID.to_uppercase())
+                .unwrap();
+            definition.set("Enabled", initially_enabled).unwrap();
+            definition
+                .set("Dependencies", lua.create_table().unwrap())
+                .unwrap();
+            definitions.set(1, definition).unwrap();
+        }
+        lua.load(include_str!("fixtures/modding_stub.lua"))
+            .call::<()>(definitions)
+            .unwrap();
+        let enabled = if opt_in {
+            vec![STATIC_PERSONA_GATE_ID.to_uppercase()]
+        } else {
+            vec![]
+        };
+        lua.load(enable_mods_code(&enabled, &[])).exec().unwrap();
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        if installed {
+            let gate: Table = mods.get(STATIC_PERSONA_GATE_ID).unwrap();
+            assert_eq!(gate.get::<bool>("Enabled").unwrap(), expected);
+            let disabled: Table = lua.globals().get("DISABLED").unwrap();
+            assert_eq!(
+                disabled.raw_len(),
+                usize::from(!opt_in && initially_enabled)
+            );
+        } else {
+            assert_eq!(mods.raw_len(), 0);
+        }
+        assert_eq!(lua.globals().get::<u32>("UPDATES").unwrap(), 1);
+    }
+}
+
+#[test]
 fn persona_runs_select_their_required_mods_after_another_diagnostic() {
     const PERSONA: &str = "91cf7b65-54bb-4f69-a452-19a65527cde2";
     const BOUNDARY: &str = "4a72b1c0-958b-4bd5-81e4-a094f86ce643";
     const ABSORPTION: &str = "61320778-2e75-4c11-9009-94101b519aba";
+    const STATIC_GATE: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
     for name in [
         "leader-persona-15km.json",
         "leader-persona-baseline-15km.json",
@@ -43,7 +91,11 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
             .iter()
             .chain(&disabled)
             .cloned()
-            .chain([BOUNDARY.to_owned(), ABSORPTION.to_owned()])
+            .chain([
+                BOUNDARY.to_owned(),
+                ABSORPTION.to_owned(),
+                STATIC_GATE.to_owned(),
+            ])
             .collect();
         let lua = Lua::new();
         let definitions = lua.create_table().unwrap();
@@ -51,7 +103,7 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
             let definition = lua.create_table().unwrap();
             definition.set("Id", id.as_str()).unwrap();
             definition.set("Enabled", true).unwrap();
-            let dependencies = if id == BOUNDARY {
+            let dependencies = if id == BOUNDARY || id == STATIC_GATE {
                 vec![PERSONA]
             } else {
                 vec![]
@@ -71,6 +123,8 @@ fn persona_runs_select_their_required_mods_after_another_diagnostic() {
             .exec()
             .unwrap();
         let mods: Table = lua.globals().get("MODS").unwrap();
+        let gate: Table = mods.get(STATIC_GATE).unwrap();
+        assert_eq!(gate.get::<bool>("Enabled").unwrap(), false, "{name}");
         let boundary: Table = mods.get(BOUNDARY).unwrap();
         let expected_boundary = matches!(
             name,
