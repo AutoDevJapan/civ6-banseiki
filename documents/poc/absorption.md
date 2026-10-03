@@ -11,7 +11,7 @@
 | absorb-flow-135 | 21bfb47 | 17/17手順・ログ5/5成功。同じindex 3を作成から10手番・移動制限10手番で都市131073枠0から都市65536枠1へ移した。元枠空・世界一件・来歴同一と保存・再読込を確認。10手番のうち8手番を検証モードで省略した |
 | absorb-flow-136 | e4c3630 | 21/49で停止。考古学博物館2棟の実枠各3個を準備し、考古学者1441813を元都市262147に生成した。所有地の実遺跡への配置と移動力公開後、発掘のCanStartOperationで「Instance does not exist」。考古学的遺物の生成・満枠・MOVE・保存照合には未到達 |
 
-134と135は画面からの直接MOVEの診断であり、作品種別ごとの吸収フロー・散逸・第三者返還・回収を完了した証拠ではない。134の遺跡生成は考古学的遺物の生成の代わりにはならない。136のエラーはCanStartOperationの呼出し箇所まで特定したが、失効した内部参照の根本原因は未確定である。次担当は、直接InitUnitした考古学者と、公式CityManagerのBUILD要求を経て都市のAddProgressで生産した個体を比較し、生産元博物館との関連を確かめる。後者は公式ProductionPanelとDebug/City.ltpの手順を使い、生産キュー・生成個体・実枠で完了を確認する。
+134と135は画面からの直接MOVEの診断であり、作品種別ごとの吸収フロー・散逸・第三者返還・回収を完了した証拠ではない。134の遺跡生成は考古学的遺物の生成の代わりにはならない。136の停止箇所はCanStartOperationの呼出しだった。公式UnitPanel.lua:615では第3引数が操作パラメータ、第4引数が可視性判定である。追加シナリオはこの順を逆にしていたため、9dd47ceで3か所を公式と同じnil,false,trueへ修正した。実Luaを使うRust回帰は旧順序への変異で失敗し、修正後は3回の要求と可否false時の要求0を確認した。修正後の実機は4回上限で未実行である。引数の誤りを修正したことと、エンジンの発掘成功は区別する。次担当はまず修正後のartifact-fullを追試し、まだ個体や博物館との関連が問題になる場合に、公式BUILD要求と都市AddProgressによる正式生産個体を比較する。
 
 総合レビュー20261004-061205-rev-absorb-flowのMustは、考古学的遺物、美術作品の制限経過後対照、最新の製品経路の3件だった。制限経過後の対照は135で確認できた。考古学的遺物と製品経路の追試は保持し、追審で扱いを確認する。本担当は実機4回で終了し、5回目を開始しない。全試験後、標準live_chainがゲームを終了し共有ロックを解放した。PRはDraftを維持する。
 
@@ -24,8 +24,11 @@
 | f7bbabf | 全workspace・全target | 1,246件成功、失敗・省略・絞り込み0件 | workspace-f7bbabf.log |
 | e4c3630 | 独立native全件 | 137件成功、失敗・省略・絞り込み0件 | native-artifact.log |
 | e4c3630 | 変更38シナリオ | 両Rust検査器の形式と全879 Lua 5.1断片の構文が成功、省略0件 | scenarios-e4c3630.log / scenarios-lua-e4c3630.log |
+| 9dd47ce | 発掘可否の引数順を修正後の全workspace・全target | 1,246件成功、失敗・省略・絞り込み0件 | workspace-9dd47ce.log |
+| 9dd47ce | 旧引数順の変異も含む独立native全件 | 138件成功、失敗・省略・絞り込み0件 | native-excavation-fixed.log |
+| 9dd47ce | 変更38シナリオ | 両Rust検査器の形式と全879 Lua 5.1断片の構文が成功、省略0件 | scenarios-9dd47ce.log / scenarios-lua-9dd47ce.log |
 
-すべてのログと候補別verification.jsonはD:/CC/Work/shepherd96-next-20261004/にある。実機成果物は共有liveのtools/civ6-autotest/artifacts/absorb-flow-133〜136/にある。検証済み候補のRust・Lua・シナリオは後続の文書・一覧修正でも変更していない。追審の結果と最終headはPRの終了コメントに記録する。
+すべてのログと候補別verification.jsonはD:/CC/Work/shepherd96-next-20261004/にある。実機成果物は共有liveのtools/civ6-autotest/artifacts/absorb-flow-133〜136/にある。9dd47ceでは発掘可否の引数順と回帰を追加したため、以前の検査をその候補の成功として付け替えない。追審の結果と最終headはPRの終了コメントに記録する。
 
 ## PR #96の検査履歴（2026-10-04以前を含む）
 
