@@ -139,6 +139,18 @@ fn field<T: FromLua>(table: &Table, key: &str) -> T {
 }
 
 #[test]
+fn persistent_gameplay_api_probe_only_records_published_members() {
+    let h = Boundary::new();
+    h.fixture();
+    h.event("JAC_BoundaryGameplayApiProbe").unwrap();
+    let result: String = h.game_property("JAC_BOUNDARY_GAMEPLAY_API_PROBE");
+    assert!(result.contains("source=persistent_gameplay|owner=0"));
+    assert!(result.contains("governors.GetGovernorPoints=function"));
+    assert!(result.contains("game.RequestPlayerOperation="));
+    assert_eq!(h.writes(), vec!["JAC_BOUNDARY_GAMEPLAY_API_PROBE"]);
+}
+
+#[test]
 fn test_native_resolution_rejects_property_only_or_wrong_native_instance() {
     let h = Boundary::new();
     h.check("SETTLED", None);

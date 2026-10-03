@@ -23,5 +23,6 @@ __pycache__/
 /tools/target/
 /tools/target-admission-bridge/
 /tools/target-native-integrate/
+/tools/target-real-admission/
 /tools/target-spy-retry/
 /tools/civ6-*-rs/target/

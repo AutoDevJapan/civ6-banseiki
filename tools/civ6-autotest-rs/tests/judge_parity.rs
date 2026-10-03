@@ -567,6 +567,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-neutralization-retry-living-read.json".to_string(),
             "leader-persona-spy-neutralization-retry-adopt.json".to_string(),
             "leader-persona-lifecycle-15km.json".to_string(),
+            "leader-persona-gameplay-api-probe-15km.json".to_string(),
         ])
     );
     for name in &actual {
