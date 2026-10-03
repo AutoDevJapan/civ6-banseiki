@@ -431,7 +431,7 @@
     },
     {
       "state_name": "JAC_Absorption_Entry",
-      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal r=assert(ExposedMembers.JAC_NativeTempleObservation.carrier,'carrier UI observation absent')\nlocal request=assert(t.Fixtures.carrier.Request,'carrier Temple request absent')\nassert(request.Stage=='Temple' and r.Token=='carrier:Temple' and type(r.Read)=='number'\n and r.Read>request.Read and r.Temple and r.Owner==t.Owner and r.ID==t.Cache.ID\n and r.X==t.Cache.X and r.Y==t.Cache.Y and r.Plot==t.Fixtures.carrier.Plot\n and r.SlotValue==-1,'fresh carrier official Temple not published')\nlocal c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y))\nassert(c:GetOwner()==t.Owner and c:GetID()==t.Cache.ID\n and c:GetBuildings():HasBuilding(t.OfficialBuilding)\n and c:GetBuildings():GetNumGreatWorkSlots(t.OfficialBuilding)==1\n and c:GetBuildings():GetGreatWorkInSlot(t.OfficialBuilding,0)==-1,\n 'official carrier relic slot changed')\nassert(t.Building~=t.OfficialBuilding,'official and custom definitions merged')\nreturn 'fresh carrier stock Temple complete with exact empty relic slot'",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal r=assert(ExposedMembers.JAC_NativeTempleObservation.carrier,'carrier UI observation absent')\nlocal request=assert(t.Fixtures.carrier.Request,'carrier Temple request absent')\nassert(request.Stage=='Temple' and r.Token=='carrier:Temple' and type(r.Read)=='number'\n and r.Read>request.Read and r.Temple and r.Owner==t.Owner and r.ID==t.Cache.ID\n and r.X==t.Cache.X and r.Y==t.Cache.Y and r.Plot==t.Fixtures.carrier.Plot\n and r.SlotCount==1 and r.SlotType=='GREATWORKSLOT_RELIC' and r.SlotValue==-1,\n 'fresh official carrier Temple slot not published')\nlocal c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y))\nassert(c:GetOwner()==t.Owner and c:GetID()==t.Cache.ID,'carrier identity changed')\nassert(t.Building~=t.OfficialBuilding,'official and custom definitions merged')\nreturn 'fresh carrier stock Temple complete with exact empty relic slot'",
       "action": "ui_lua"
     },
     {
@@ -488,7 +488,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'));local c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y));assert(c:GetOwner()==t.Owner,'returned carrier not ready');t.Cache.ID=c:GetID();Game:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t);return 'persist returned carrier city ID in Gameplay'"
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_CUSTODY_PROBE'))\nlocal c=assert(CityManager.GetCityAt(t.Cache.X,t.Cache.Y))\nassert(c:GetOwner()==t.Owner,'returned carrier not ready')\nt.Cache.ID=c:GetID()\nt.Fixtures.carrier.ID=c:GetID()\nGame:SetProperty('JAC_NATIVE_CUSTODY_PROBE',t)\nreturn 'persist returned carrier and its fresh UI fixture city ID in Gameplay'"
     },
     {
       "action": "ui_lua",
