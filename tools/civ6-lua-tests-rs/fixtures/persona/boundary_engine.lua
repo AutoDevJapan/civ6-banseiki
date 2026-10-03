@@ -12,6 +12,7 @@ Events,GameEvents={},{}
 for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted',
  'CityProductionQueueChanged','UnitOperationStarted'}) do Events[k]=event() end
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
+ 'JAC_BoundaryGameplayApiProbe',
  'JAC_BoundaryProgressSpy','JAC_BoundaryBindSpy','JAC_BoundarySpyBarrier',
  'JAC_BoundaryAdoptSpyIdentity','JAC_BoundarySaveSpyTravel','JAC_BoundaryPrepareEnemy',
  'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',

@@ -642,7 +642,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 80);
+    assert_eq!(count, 81);
 }
 
 #[test]

@@ -174,7 +174,7 @@ fn persona_inventory_preserves_all_119_original_methods() {
     for (file, expected) in expected_by_file {
         let source = repo_root().join(file);
         let text = std::fs::read_to_string(&source).unwrap();
-        let actual: BTreeSet<String> = if file.ends_with("persona_lua.rs") {
+        let mut actual: BTreeSet<String> = if file.ends_with("persona_lua.rs") {
             registered_persona_lua(&text)
         } else {
             let registered = inventory::resolve(&source, "persona");
@@ -184,6 +184,9 @@ fn persona_inventory_preserves_all_119_original_methods() {
                 .map(|name| name.rsplit("::").next().unwrap().to_owned())
                 .collect()
         };
+        if file.ends_with("persona_boundary.rs") {
+            assert!(actual.remove("persistent_gameplay_api_probe_only_records_published_members"));
+        }
         let expected: BTreeSet<String> = expected.into_iter().map(str::to_owned).collect();
         assert_eq!(actual, expected, "{}", source.display());
     }

@@ -9,6 +9,68 @@ local ENEMY_LEADER = "LEADER_JAC_ASHINA_MORIKIYO";
 local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local PRODUCTION = "JAC_BOUNDARY_SPY_PRODUCTION";
+local GAMEPLAY_API_PROBE = "JAC_BOUNDARY_GAMEPLAY_API_PROBE";
+
+-- This callback lives in AddGameplayScripts. A FireTuner GameCore state has a
+-- different lifetime and can expose methods unavailable to the gameplay VM.
+-- Inspect published members only; never call a candidate mutator.
+GameEvents.JAC_BoundaryGameplayApiProbe.Add(function(owner)
+    local player = assert(Players[owner], "probe owner missing");
+    assert(player:IsHuman() and player:IsAlive(), "probe requires its living human controller");
+    local function member_type(object, key)
+        local ok, value = pcall(function() return object and object[key]; end);
+        return ok and type(value) or "lookup_error";
+    end
+    local function raw_member_type(object, key)
+        if type(object) ~= "table" then return "not_table"; end
+        return type(rawget(object, key));
+    end
+    local function metadata(object)
+        local ok, mt = pcall(getmetatable, object);
+        if not ok then return "lookup_error"; end
+        if type(mt) ~= "table" then return type(mt); end
+        local keys = {};
+        for key in pairs(mt) do
+            if type(key) == "string" then keys[#keys + 1] = key; end
+        end
+        table.sort(keys);
+        if #keys > 80 then
+            local count = #keys;
+            while #keys > 80 do table.remove(keys); end
+            return table.concat(keys, ",") .. ",.../" .. tostring(count);
+        end
+        return table.concat(keys, ",");
+    end
+    local sections = {"source=persistent_gameplay", "owner=" .. tostring(owner)};
+    local function inspect(label, object, names, raw_only)
+        sections[#sections + 1] = label .. ".type=" .. type(object);
+        sections[#sections + 1] = label .. ".metatable=" .. metadata(object);
+        for _, name in ipairs(names) do
+            local kind = raw_only and raw_member_type(object, name) or member_type(object, name);
+            sections[#sections + 1] = label .. "." .. name .. "=" .. kind;
+        end
+    end
+    local governors = player:GetGovernors(); -- existing read-only Gameplay API
+    inspect("governors", governors, {"GetGovernorPoints", "GetGovernorPointsSpent",
+        "Appoint", "AppointGovernor", "Promote", "PromoteGovernor", "Assign", "AssignGovernor",
+        "CanEverAppointGovernor", "CanAppointGovernor", "GetGovernor", "HasGovernor"});
+    inspect("player", player, {"GetTraits", "GrantTrait", "AddTrait", "SetTrait",
+        "AttachModifierByID", "GetProperty"});
+    inspect("game", Game, {"RequestPlayerOperation", "RequestOperation", "GetProperty"});
+    -- Event registries may synthesize unknown keys through __index. rawget
+    -- reports only published table entries and never creates a fake event.
+    inspect("game_events_raw", GameEvents, {"PlayerTurnStarted", "PlayerTurnStartComplete",
+        "GovernorAppointed", "GovernorPromoted", "GovernorAssigned", "RequestPlayerOperation"}, true);
+    inspect("events_raw", Events, {"GovernorChanged", "GovernorPromoted", "GovernorAssigned",
+        "GovernorEstablished", "GovernorPointsChanged"}, true);
+    inspect("governor_manager", GovernorManager, {"Appoint", "Promote", "Assign"});
+    inspect("ui", UI, {"RequestPlayerOperation"});
+    inspect("player_operations", PlayerOperations, {"APPOINT_GOVERNOR", "PROMOTE_GOVERNOR",
+        "ASSIGN_GOVERNOR", "EXECUTE_SCRIPT"});
+    local result = table.concat(sections, "|");
+    Game:SetProperty(GAMEPLAY_API_PROBE, result);
+    print("JAC_BOUNDARY_GAMEPLAY_API_PROBE " .. result);
+end);
 local function Config(owner)
     local c = assert(Game:GetProperty(CONFIG) or Game:GetProperty(ENEMY_CONFIG), "boundary fixture not prepared");
     assert((c.attacker or c.owner) == owner and Players[owner]:IsHuman(),
