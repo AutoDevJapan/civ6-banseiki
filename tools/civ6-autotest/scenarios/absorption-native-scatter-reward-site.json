@@ -1,0 +1,85 @@
+{
+  "name": "Native scatter result acknowledgement and two-turn world reward site",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-scatter-result-absorb-flow-81-fdc2fa3696ae",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local flow=ExposedMembers.JAC_AbsorptionFlow and ExposedMembers.JAC_AbsorptionFlow.Get('native-scatter-flow')\nlocal state=ExposedMembers.JAC_Absorption and ExposedMembers.JAC_Absorption.GetState()\nlocal tx=state and state.Transactions['native-scatter-flow']\nif not flow or flow.Phase~='RESULT' or not tx or tx.Status~='COMPLETE' then return false end\nfor _,work in ipairs(tx.NativeWorks or {}) do\n if work.Source.Index==2 then\n  local slot=work.TargetSlot\n  local city=slot and CityManager.GetCityAt(slot.X,slot.Y)\n  return city and city:GetOwner()==slot.Owner and city:GetID()==slot.City and city:GetBuildings():GetGreatWorkInSlot(slot.Building,slot.Slot)==2\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(panel.Open() and not Controls.Panel:IsHidden(),'scatter result panel did not open')\nlocal view=panel.GetView()\nassert(view.phase=='RESULT' and view.visible and #view.rows>0,'scatter result rows not published')\nassert(not Controls.ConfirmButton:IsHidden() and not Controls.ConfirmButton:IsDisabled(),'scatter result acknowledgement unavailable')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human acknowledged real scatter result panel'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local f=assert(JAC_AbsorptionFlowGameplay).Get('native-scatter-flow');return f and f.Phase=='DONE' and JAC_AbsorptionFlowGameplay.GetPending(1)==nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal id='native-scatter-flow'\nlocal flow=assert(F.Get(id))\nassert(flow.Phase=='DONE' and flow.AcknowledgedTurn and F.GetPending(1)==nil,'scatter result was not acknowledged')\nlocal world=assert(F.GetWorld(id..':native-work:2'))\nassert(world.AssetID=='native-work:2' and world.Status=='WAIT_SITE','scatter world reward not queued')\nlocal tx=assert(A.GetState().Transactions[id])\nassert(tx.Status=='COMPLETE' and #A.NativeWorkLocations(2)==1 and A.NativeWorkLocations(2)[1].Owner==62,'original work changed before world reward')\nprint('[JAC_NATIVE_SCATTER_WORLD_QUEUED] status='..world.Status..' due='..tostring(world.DueTurn)..' now='..Game.GetCurrentGameTurn())\nreturn 'scatter Flow DONE; world reward awaits its scheduled turn'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 2,
+      "test_turns": 2,
+      "timeout": 1200
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nF.Tick()\nlocal world=assert(F.GetWorld('native-scatter-flow:native-work:2'))\nprint('[JAC_NATIVE_SCATTER_WORLD_AFTER_TURNS] status='..world.Status..' due='..tostring(world.DueTurn)..' now='..Game.GetCurrentGameTurn())\nreturn 'product world scheduler checked after two real turns'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 90,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local world=ExposedMembers.JAC_AbsorptionFlow and ExposedMembers.JAC_AbsorptionFlow.GetWorld('native-scatter-flow:native-work:2')\nif not world or world.Status~='WAIT_CLEAR' then return false end\nlocal plot=Map.GetPlotByIndex(world.Site)\nreturn plot and plot:GetImprovementType()==world.Improvement"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal world=assert(F.GetWorld('native-scatter-flow:native-work:2'))\nassert(world.Status=='WAIT_CLEAR' and world.Kind=='ITEM' and world.AssetID=='native-work:2','original native reward site not ready')\nlocal plot=assert(Map.GetPlotByIndex(world.Site))\nassert(plot:GetImprovementType()==world.Improvement,'native reward improvement not on actual plot')\nlocal carrier=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal work=A.NativeWorkLocations(2)\nassert(#work==1 and work[1].Owner==carrier.Free and work[1].X==carrier.X and work[1].Y==carrier.Y\n and work[1].Building==carrier.Building and work[1].Slot==carrier.Slot,'original work left Free Cities before reward')\nlocal target=assert(Game:GetProperty('JAC_NATIVE_SCATTER_FLOW')).HumanSlot\nlocal city=assert(CityManager.GetCityAt(target.X,target.Y))\nassert(city:GetOwner()==target.Owner and A.CityAssets(city).BUILDING_TEMPLE.Works[target.Slot]==-1,'human recovery Temple occupied before reward')\nprint('[JAC_NATIVE_SCATTER_REWARD_READY] site='..world.Site..' improvement='..world.Improvement..' due='..world.DueTurn)\nreturn 'two-turn original work world reward site physically ready'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-scatter-reward-ready"
+    }
+  ]
+}
