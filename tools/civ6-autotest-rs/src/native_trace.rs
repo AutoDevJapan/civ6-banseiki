@@ -293,6 +293,11 @@ mod platform {
                 ));
             }
             let identity = PinnedGameIdentity::pin(pid, start)?;
+            if !civ6_native_probe_rs::is_pinned_dx11_exe(&identity.exe) {
+                return Err(Error::input(
+                    "native observer target is not the pinned Steam DX11 executable",
+                ));
+            }
             if Instant::now() >= ready_deadline {
                 return Err(Error::input(
                     "native observer preflight exceeded the ready budget before spawn",

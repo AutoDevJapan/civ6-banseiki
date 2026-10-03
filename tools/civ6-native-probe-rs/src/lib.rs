@@ -6,6 +6,46 @@ pub const EXPECTED_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const MAX_SECONDS: u64 = 300;
 pub const MAX_ROWS: usize = 20_000;
+pub const GAME_ROOT: &str =
+    "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
+pub const PINNED_DX11_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
+
+/// Compare absolute Windows paths after resolving `.` and `..` lexically.
+/// This policy is pure so it can reject a forged process image without
+/// opening or executing a game installation during tests.
+fn normalized_windows_path(path: &std::path::Path) -> Option<String> {
+    let path = path.to_str()?.replace('\\', "/");
+    let bytes = path.as_bytes();
+    if bytes.len() < 4
+        || !bytes[0].is_ascii_alphabetic()
+        || bytes[1] != b':'
+        || bytes[2] != b'/'
+        || path[3..].contains(':')
+    {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for part in path[3..].split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            _ => parts.push(part.to_ascii_lowercase()),
+        }
+    }
+    Some(format!(
+        "{}:/{}",
+        (bytes[0] as char).to_ascii_lowercase(),
+        parts.join("/")
+    ))
+}
+
+pub fn is_pinned_dx11_exe(path: &std::path::Path) -> bool {
+    normalized_windows_path(path) == normalized_windows_path(std::path::Path::new(PINNED_DX11_EXE))
+}
+
+mod return_correlation;
 
 /// One parent/child startup contract. The parent stops waiting for ready at
 /// 10 seconds and reserves the remainder of its 20 second absolute deadline
@@ -99,5 +139,25 @@ mod tests {
         assert!(CHILD_READY < PARENT_READY);
         assert!(PARENT_READY + RESTORE + CLOSE_RESERVE <= TOTAL);
         assert!(CRITICAL_WAIT < TOTAL);
+    }
+
+    #[test]
+    fn exact_dx11_image_path_rejects_other_locations_and_relative_names() {
+        use std::path::Path;
+        assert!(is_pinned_dx11_exe(Path::new(PINNED_DX11_EXE)));
+        assert!(is_pinned_dx11_exe(Path::new("c:\\PROGRAM FILES (X86)\\Steam\\steamapps\\common\\Sid Meier's Civilization VI\\Base\\Binaries\\Win64Steam\\CivilizationVI.EXE")));
+        assert!(is_pinned_dx11_exe(Path::new("C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Other/../Win64Steam/CivilizationVI.exe")));
+        for wrong in [
+            "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/CivilizationVI.exe",
+            "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Other/CivilizationVI.exe",
+            "D:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe",
+            "CivilizationVI.exe",
+            "Base/Binaries/Win64Steam/CivilizationVI.exe",
+            "C:Base/Binaries/Win64Steam/CivilizationVI.exe",
+            "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/../Other/CivilizationVI.exe",
+            "C:/../../Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe",
+        ] {
+            assert!(!is_pinned_dx11_exe(Path::new(wrong)), "accepted {wrong}");
+        }
     }
 }

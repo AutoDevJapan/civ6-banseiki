@@ -1,13 +1,14 @@
 //! Windows x64 hardware breakpoint observer. No target memory or executable
 //! bytes are written. The only target changes are per-thread debug registers,
 //! which are snapshotted and restored before detach.
+use crate::return_correlation::{EntryInput, EntryKind, Incomplete, ReturnCorrelation};
 use crate::startup_contract::{
     CHILD_READY as ATTACH_READY_BUDGET, CRITICAL_WAIT as CRITICAL_CLOSE_BUDGET,
     RESTORE as RESTORE_BUDGET,
 };
 use crate::{
-    bool_from_al, direct_call_rva, known_path, CAN_APPOINT_RVA, CAN_EVER_RVA, EXPECTED_SHA256,
-    MAX_ROWS,
+    bool_from_al, direct_call_rva, is_pinned_dx11_exe, known_path, CAN_APPOINT_RVA, CAN_EVER_RVA,
+    EXPECTED_SHA256, GAME_ROOT, MAX_ROWS,
 };
 use civ6_native_admission_rs::{owner_fields, MemoryRead, PropertyCapture};
 use serde_json::{json, Value};
@@ -59,7 +60,6 @@ use windows_sys::Win32::{
     },
 };
 
-const GAME_ROOT: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
 const MODULE_REL: &str = "DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const EVER_FILE_OFFSET: usize = 0x2dd1d0;
 const APPOINT_FILE_OFFSET: usize = 0x2dcc20;
@@ -437,12 +437,7 @@ fn verify(config: ObserverConfig) -> Result<Verified, String> {
         return Err("game, chain and controller PIDs must differ".into());
     }
     let expected_module = Path::new(GAME_ROOT).join(MODULE_REL);
-    if !normal(&config.exe).starts_with(&(normal(Path::new(GAME_ROOT)) + "/"))
-        || config.exe.file_name().is_none_or(|n| {
-            !n.to_string_lossy()
-                .eq_ignore_ascii_case("CivilizationVI.exe")
-        })
-    {
+    if !is_pinned_dx11_exe(&config.exe) {
         return Err("target is not the exact Steam DX11 Civ6 executable".into());
     }
     let chain = process(config.chain_pid, false)?;
@@ -588,24 +583,10 @@ fn parent_pid(pid: u32) -> Result<u32, String> {
     Err(format!("process {pid} vanished from parent snapshot"))
 }
 
-#[derive(Clone)]
-struct Pending {
-    id: u64,
-    entry: &'static str,
-    return_address: u64,
-    expected_rsp: u64,
-}
-fn tail_matches(pending: &[Pending], return_address: u64, expected_rsp: u64) -> bool {
-    pending.iter().any(|p| {
-        p.entry == "can_appoint"
-            && p.return_address == return_address
-            && p.expected_rsp == expected_rsp
-    })
-}
 struct ThreadState {
     handle: Handle,
     original: Registers,
-    pending: Vec<Pending>,
+    returns: ReturnCorrelation,
     armed_sites: [Option<u64>; 4],
     property_capture: PropertyCapture,
     property_owner_id: Option<u32>,
@@ -641,7 +622,7 @@ fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
 /// an address at which this debugger installed a hardware breakpoint.
 fn classify_single_step(
     mode: ProbeMode,
-    pending: &[Pending],
+    returns: &ReturnCorrelation,
     armed_sites: &[Option<u64>; 4],
     exception_address: u64,
     context: Option<&CONTEXT>,
@@ -687,11 +668,7 @@ fn classify_single_step(
         (ProbeMode::Property, 3) => DispatchOutcome::OwnedProven(OwnedTrap::PropertyName),
         (ProbeMode::Governor, 0) => DispatchOutcome::OwnedProven(OwnedTrap::CanEver),
         (ProbeMode::Governor, 1) => DispatchOutcome::OwnedProven(OwnedTrap::CanAppoint),
-        (ProbeMode::Governor, 2 | 3)
-            if pending
-                .iter()
-                .any(|p| p.return_address == exception_address) =>
-        {
+        (ProbeMode::Governor, 2 | 3) if returns.has_site(exception_address) => {
             DispatchOutcome::OwnedProven(OwnedTrap::Return)
         }
         _ => DispatchOutcome::Ambiguous("return_breakpoint_has_no_pending_call"),
@@ -1039,7 +1016,7 @@ impl Debugger {
             ThreadState {
                 handle,
                 original,
-                pending: Vec::new(),
+                returns: ReturnCorrelation::default(),
                 armed_sites,
                 property_capture: PropertyCapture::default(),
                 property_owner_id: None,
@@ -1051,12 +1028,7 @@ impl Debugger {
         Ok(())
     }
     fn refresh_returns(state: &mut ThreadState, c: &mut CONTEXT) -> Result<(), String> {
-        let mut sites = Vec::new();
-        for item in state.pending.iter().rev() {
-            if !sites.contains(&item.return_address) {
-                sites.push(item.return_address);
-            }
-        }
+        let sites = state.returns.sites();
         if sites.len() > 2 {
             return Err("more than two distinct pending return sites".into());
         }
@@ -1076,7 +1048,7 @@ impl Debugger {
         &mut self,
         tid: u32,
         c: &mut CONTEXT,
-        entry: &'static str,
+        entry: EntryKind,
         target_rva: u64,
     ) -> Result<(), String> {
         if self.mode != ProbeMode::Governor {
@@ -1091,31 +1063,26 @@ impl Debugger {
             direct_call_rva(r, bytes, target_rva)
         });
         let expected_rsp = c.Rsp.checked_add(8).ok_or("stack pointer overflow")?;
-        let tail = entry == "can_ever"
-            && tail_matches(&self.threads[&tid].pending, return_address, expected_rsp);
-        let path = known_path(call_rva, return_rva, tail);
         let id = self.next_id;
         self.next_id += 1;
         let state = self
             .threads
             .get_mut(&tid)
             .ok_or("debug event thread missing")?;
-        let mut sites: BTreeSet<u64> = state.pending.iter().map(|p| p.return_address).collect();
-        sites.insert(return_address);
-        let armed = return_rva.is_some() && sites.len() <= 2;
-        if armed {
-            state.pending.push(Pending {
-                id,
-                entry,
-                return_address,
-                expected_rsp,
-            });
-            Self::refresh_returns(state, c)?;
-        } else {
-            c.Dr6 &= !0xf;
-            c.EFlags |= RF;
-            set_context(&state.handle, c)?;
-        }
+        let decision = state.returns.enter(EntryInput {
+            id,
+            entry,
+            return_address,
+            expected_rsp,
+            this_pointer: c.Rcx,
+            governor_index: c.Rdx as u32,
+            direct_call_verified: call_rva.is_some(),
+            return_site_valid: return_rva.is_some(),
+        });
+        Self::refresh_returns(state, c)?;
+        self.log_incomplete(tid, decision.incomplete, None, None)?;
+        let tail = decision.linked_parent.is_some();
+        let path = known_path(call_rva, return_rva, tail);
         // The addresses and ID are candidates until a GameCore getter and
         // lifecycle trace confirm the same owner on each execution path.
         // Read only the three statically identified fields, once per hit.
@@ -1123,15 +1090,26 @@ impl Debugger {
         let property_vtable = owner
             .and_then(|fields| RemoteMemory(&self.game).u64_at(fields.property_interface_address));
         self.output.row(
-            json!({"type":"entry","id":id,"thread_id":tid,"function":entry,
+            json!({"type":"entry","id":id,"thread_id":tid,"function":entry.label(),
             "function_rva":target_rva,"return_site_rva":return_rva,"caller_rva":call_rva,
-            "path_candidate":path,"tail_from_can_appoint":tail,"this":format!("0x{:016x}",c.Rcx),
-            "governor_index":c.Rdx as u32,"return_breakpoint_armed":armed,
+            "expected_rsp":format!("0x{expected_rsp:016x}"),
+            "path_candidate":path,"tail_from_can_appoint":tail,
+            "linked_tail_parent_id":decision.linked_parent,"this":format!("0x{:016x}",c.Rcx),
+            "governor_index":c.Rdx as u32,"return_breakpoint_armed":decision.armed,
             "owner_id_candidate":owner.map(|x| x.player_id),
             "player_pointer_candidate":owner.map(|x| format!("0x{:016x}",x.player_address)),
             "property_interface_candidate":owner.map(|x| format!("0x{:016x}",x.property_interface_address)),
             "property_vtable_candidate":property_vtable.map(|x| format!("0x{x:016x}"))}),
-        )
+        )?;
+        if let Some(reason) = decision.unarmed_reason {
+            self.log_incomplete(
+                tid,
+                vec![Incomplete { id, reason }],
+                Some(return_address),
+                Some(expected_rsp),
+            )?;
+        }
+        Ok(())
     }
     fn returned(&mut self, tid: u32, c: &mut CONTEXT) -> Result<(), String> {
         if self.mode != ProbeMode::Governor {
@@ -1141,24 +1119,48 @@ impl Debugger {
             .threads
             .get_mut(&tid)
             .ok_or("return event thread missing")?;
-        let mut matched = Vec::new();
-        state.pending.retain(|p| {
-            if p.return_address == c.Rip && p.expected_rsp == c.Rsp {
-                matched.push(p.clone());
-                false
-            } else {
-                true
-            }
-        });
+        let decision = state.returns.returned(c.Rip, c.Rsp);
         Self::refresh_returns(state, c)?;
-        for p in matched {
+        self.log_incomplete(tid, decision.incomplete, None, None)?;
+        if decision.unmatched {
+            self.output
+                .row(json!({"type":"return_incomplete","thread_id":tid,
+                "id":null,"reason":"return_without_matching_frame",
+                "return_address":format!("0x{:016x}",c.Rip),"rsp":format!("0x{:016x}",c.Rsp)}))?;
+        }
+        for p in decision.complete {
             let al = c.Rax as u8;
             self.output.row(
-                json!({"type":"return","id":p.id,"thread_id":tid,"function":p.entry,
-                "al":al,"bool_candidate":bool_from_al(al)}),
+                json!({"type":"return","id":p.id,"thread_id":tid,"function":p.entry.label(),
+                "al":al,"bool_candidate":bool_from_al(al),
+                "linked_tail_group_id":decision.linked_tail_group}),
             )?;
         }
         Ok(())
+    }
+    fn log_incomplete(
+        &mut self,
+        tid: u32,
+        incomplete: Vec<Incomplete>,
+        return_address: Option<u64>,
+        rsp: Option<u64>,
+    ) -> Result<(), String> {
+        for item in incomplete {
+            self.output
+                .row(json!({"type":"return_incomplete","thread_id":tid,
+                "id":item.id,"reason":item.reason,
+                "return_address":return_address.map(|v| format!("0x{v:016x}")),
+                "rsp":rsp.map(|v| format!("0x{v:016x}"))}))?;
+        }
+        Ok(())
+    }
+    fn invalidate_returns_for_exception(&mut self, tid: u32) -> Result<(), String> {
+        let incomplete = self
+            .threads
+            .get_mut(&tid)
+            .map(|state| state.returns.invalidate_for_exception())
+            .unwrap_or_default();
+        self.log_incomplete(tid, incomplete, None, None)
     }
     fn log_single_step(
         &mut self,
@@ -1320,6 +1322,7 @@ impl Debugger {
                         DispatchOutcome::Unrelated,
                         "unmatched_breakpoint",
                     )?;
+                    self.invalidate_returns_for_exception(tid)?;
                     return Ok(disposition);
                 } else if code == EXCEPTION_SINGLE_STEP {
                     let exception_address = info.ExceptionRecord.ExceptionAddress as u64;
@@ -1391,7 +1394,7 @@ impl Debugger {
                     }
                     let outcome = classify_single_step(
                         self.mode,
-                        &state.pending,
+                        &state.returns,
                         &state.armed_sites,
                         exception_address,
                         Some(&reported),
@@ -1410,6 +1413,7 @@ impl Debugger {
                                 outcome,
                                 "unmatched_single_step",
                             )?;
+                            self.invalidate_returns_for_exception(tid)?;
                             return Ok(DBG_EXCEPTION_NOT_HANDLED);
                         }
                         DispatchOutcome::Ambiguous(reason) => {
@@ -1434,12 +1438,9 @@ impl Debugger {
                         OwnedTrap::PropertyAfter => self.module_base + PROPERTY_AFTER_RVA,
                         OwnedTrap::PropertyName => self.module_base + PROPERTY_NAME_RVA,
                         OwnedTrap::Return => state
-                            .pending
-                            .iter()
-                            .find(|p| {
-                                p.return_address == exception_address || p.return_address == c.Rip
-                            })
-                            .map(|p| p.return_address)
+                            .returns
+                            .has_site(exception_address)
+                            .then_some(exception_address)
                             .ok_or("owned return site disappeared")?,
                     };
                     if c.Rip != expected {
@@ -1480,9 +1481,11 @@ impl Debugger {
                         )?;
                     }
                     match trap {
-                        OwnedTrap::CanEver => self.entry(tid, &mut c, "can_ever", CAN_EVER_RVA)?,
+                        OwnedTrap::CanEver => {
+                            self.entry(tid, &mut c, EntryKind::CanEver, CAN_EVER_RVA)?
+                        }
                         OwnedTrap::CanAppoint => {
-                            self.entry(tid, &mut c, "can_appoint", CAN_APPOINT_RVA)?
+                            self.entry(tid, &mut c, EntryKind::CanAppoint, CAN_APPOINT_RVA)?
                         }
                         OwnedTrap::Return => self.returned(tid, &mut c)?,
                         OwnedTrap::PlayerGetter
@@ -1491,6 +1494,7 @@ impl Debugger {
                         | OwnedTrap::PropertyName => self.property_hit(tid, &mut c)?,
                     }
                 } else {
+                    self.invalidate_returns_for_exception(tid)?;
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
                 }
             }
@@ -1923,6 +1927,27 @@ mod tests {
     };
 
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
+
+    #[test]
+    fn wrong_same_named_dx11_image_is_rejected_before_process_or_game_access() {
+        let wrong = Path::new(GAME_ROOT).join("Other/CivilizationVI.exe");
+        let result = verify(ObserverConfig {
+            pid: 1001,
+            created: 1,
+            exe: wrong,
+            chain_pid: 1002,
+            lock: PathBuf::from("D:/CC/Tools/civ6-live/civ6.lock"),
+            controller_pid: 1003,
+            controller_created: 1,
+            output: PathBuf::from("never-written.jsonl"),
+            seconds: 1,
+            mode: "governor".into(),
+        });
+        assert_eq!(
+            result.err().unwrap(),
+            "target is not the exact Steam DX11 Civ6 executable"
+        );
+    }
     unsafe extern "system" fn unknown_step_handler(info: *mut EXCEPTION_POINTERS) -> i32 {
         if !info.is_null() {
             let code = unsafe { (*(*info).ExceptionRecord).ExceptionCode };
@@ -1962,9 +1987,12 @@ mod tests {
     }
 
     #[inline(never)]
-    extern "C" fn fixture_target(this: u64, governor: u32) -> u8 {
+    extern "C-unwind" fn fixture_target(this: u64, governor: u32) -> u8 {
         let this = std::hint::black_box(this);
         let governor = std::hint::black_box(governor);
+        if governor == 99 {
+            panic!("fixture exits this observed call without returning");
+        }
         if this == 0x1234 && governor == 7 {
             1
         } else {
@@ -2023,6 +2051,17 @@ mod tests {
                     let a = thread::spawn(|| fixture_target(0x1234, 7));
                     let b = thread::spawn(|| fixture_target(0x1234, 8));
                     println!("PROBE_OUT:M{}{}", a.join().unwrap(), b.join().unwrap());
+                }
+                "W" => {
+                    let mut result = 0;
+                    for governor in [99, 7] {
+                        if let Ok(value) =
+                            std::panic::catch_unwind(|| fixture_target(0x1234, governor))
+                        {
+                            result = value;
+                        }
+                    }
+                    println!("PROBE_OUT:W{result}");
                 }
                 "U" => {
                     UNKNOWN_STEP_HANDLED.store(false, Ordering::SeqCst);
@@ -2175,6 +2214,17 @@ mod tests {
         }
         assert_eq!(child.command("U", "PROBE_OUT:"), "Utrue");
         assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        let active_registers = child.command("R", "PROBE_REG:");
+        let fields: Vec<_> = active_registers.split(':').collect();
+        assert_eq!(
+            u64::from_str_radix(fields[2], 16).unwrap(),
+            base + PROPERTY_AFTER_RVA
+        );
+        assert_eq!(
+            u64::from_str_radix(fields[3], 16).unwrap(),
+            base + PROPERTY_NAME_RVA
+        );
+        assert_eq!(u64::from_str_radix(fields[5], 16).unwrap() & 0xff, 0x55);
         assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
         stop_tx.send(()).unwrap();
         assert!(observer.join().unwrap().is_ok());
@@ -2344,6 +2394,62 @@ mod tests {
     #[test]
     fn entry_return_threads_and_normal_detach_restore_registers() {
         run_case(Duration::from_secs(20), true, false, false, 0, false);
+    }
+    #[test]
+    fn real_child_unwind_and_same_frame_reuse_never_assigns_old_id_a_new_al() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-return-reuse-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(child.command("W", "PROBE_OUT:"), "W1");
+        stop_tx.send(()).unwrap();
+        assert!(observer.join().unwrap().is_ok());
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|row| serde_json::from_str(row).unwrap())
+            .collect();
+        let old = rows
+            .iter()
+            .find(|r| r["type"] == "entry" && r["governor_index"] == 99)
+            .unwrap();
+        let new = rows
+            .iter()
+            .find(|r| r["type"] == "entry" && r["governor_index"] == 7)
+            .unwrap();
+        assert_eq!(old["return_site_rva"], new["return_site_rva"]);
+        assert_eq!(old["expected_rsp"], new["expected_rsp"]);
+        assert_eq!(old["thread_id"], new["thread_id"]);
+        assert!(rows
+            .iter()
+            .any(|r| r["type"] == "return_incomplete" && r["id"] == old["id"]));
+        assert!(!rows
+            .iter()
+            .any(|r| r["type"] == "return" && r["id"] == old["id"]));
+        assert!(rows
+            .iter()
+            .any(|r| r["type"] == "return" && r["id"] == new["id"] && r["bool_candidate"] == true));
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        drop(child);
+        fs::remove_file(path).unwrap();
     }
     #[test]
     fn timeout_detach_preserves_the_child_and_registers() {
@@ -2758,18 +2864,6 @@ mod tests {
         );
     }
     #[test]
-    fn tail_candidate_requires_the_same_stack_frame() {
-        let pending = [Pending {
-            id: 1,
-            entry: "can_appoint",
-            return_address: 0x1234,
-            expected_rsp: 0x2008,
-        }];
-        assert!(tail_matches(&pending, 0x1234, 0x2008));
-        assert!(!tail_matches(&pending, 0x1234, 0x3008));
-        assert!(!tail_matches(&pending, 0x5555, 0x2008));
-    }
-    #[test]
     fn single_step_requires_matching_address_context_and_our_enabled_slot() {
         let base = 0x1a49b0000;
         let ever = base + CAN_EVER_RVA;
@@ -2781,41 +2875,47 @@ mod tests {
         c.Dr1 = appoint;
         c.Dr7 = 0b0101;
         c.Dr6 = 0; // Missing status does not discard matching owned evidence.
+        let empty = ReturnCorrelation::default();
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, ever, Some(&c)),
             DispatchOutcome::OwnedProven(OwnedTrap::CanEver)
         );
         c.Rip = ever + 1;
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, ever, Some(&c)),
             DispatchOutcome::Ambiguous("exception_address_rip_disagree")
         );
         c.Rip = ever;
         c.Dr7 = 0;
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, ever, Some(&c)),
             DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
         );
         c.Dr7 = 0b0101 | (1u64 << 16);
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, ever, Some(&c)),
             DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
         );
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, ever, None),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, ever, None),
             DispatchOutcome::Ambiguous("context_unavailable")
         );
         c.Rip = base + 0x1235;
         assert_eq!(
-            classify_single_step(ProbeMode::Governor, &[], &armed, base + 0x1234, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &empty, &armed, base + 0x1234, Some(&c)),
             DispatchOutcome::Unrelated
         );
-        let pending = [Pending {
+        let mut returns = ReturnCorrelation::default();
+        returns.enter(EntryInput {
             id: 2,
-            entry: "can_ever",
+            entry: EntryKind::CanEver,
             return_address: base + 0x2500,
             expected_rsp: 0x1008,
-        }];
+            this_pointer: 0x1234,
+            governor_index: 7,
+            direct_call_verified: true,
+            return_site_valid: true,
+        });
         c.Rip = base + 0x2500;
         c.Dr2 = c.Rip;
         c.Dr7 = 0x10;
@@ -2823,7 +2923,7 @@ mod tests {
         assert_eq!(
             classify_single_step(
                 ProbeMode::Governor,
-                &pending,
+                &returns,
                 &armed_return,
                 c.Rip,
                 Some(&c)
@@ -2835,6 +2935,7 @@ mod tests {
     fn property_slots_require_matching_event_rip_register_and_enable_bit() {
         let base = 0x1a49b0000;
         let sites = ProbeMode::Property.fixed_sites(base);
+        let empty = ReturnCorrelation::default();
         let mut c: CONTEXT = unsafe { zeroed() };
         c.Dr0 = sites[0].unwrap();
         c.Dr1 = sites[1].unwrap();
@@ -2854,39 +2955,39 @@ mod tests {
             let address = sites[slot].unwrap();
             c.Rip = address;
             assert_eq!(
-                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                classify_single_step(ProbeMode::Property, &empty, &sites, address, Some(&c)),
                 DispatchOutcome::OwnedProven(trap)
             );
             c.Rip = address + 1;
             assert_eq!(
-                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                classify_single_step(ProbeMode::Property, &empty, &sites, address, Some(&c)),
                 DispatchOutcome::Ambiguous("exception_address_rip_disagree")
             );
             c.Rip = address;
             c.Dr7 &= !(1u64 << (slot * 2));
             assert_eq!(
-                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                classify_single_step(ProbeMode::Property, &empty, &sites, address, Some(&c)),
                 DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
             );
             c.Dr7 = 0x55 | (1u64 << (slot * 2 + 1));
             assert_eq!(
-                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                classify_single_step(ProbeMode::Property, &empty, &sites, address, Some(&c)),
                 DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
             );
             c.Dr7 = 0x55 | (1u64 << (16 + slot * 4));
             assert_eq!(
-                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                classify_single_step(ProbeMode::Property, &empty, &sites, address, Some(&c)),
                 DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
             );
             c.Dr7 = 0x55;
         }
         c.Rip = base + 0x1234;
         assert_eq!(
-            classify_single_step(ProbeMode::Property, &[], &sites, c.Rip, Some(&c)),
+            classify_single_step(ProbeMode::Property, &empty, &sites, c.Rip, Some(&c)),
             DispatchOutcome::Unrelated
         );
         assert_eq!(
-            classify_single_step(ProbeMode::Property, &[], &sites, sites[0].unwrap(), None),
+            classify_single_step(ProbeMode::Property, &empty, &sites, sites[0].unwrap(), None),
             DispatchOutcome::Ambiguous("context_unavailable")
         );
     }

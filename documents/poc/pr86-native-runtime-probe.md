@@ -13,7 +13,7 @@ RIP不一致・debug registerの不一致・context取得失敗は両モード�
 ## 固定した対象と境界
 
 - 観測器: `tools/civ6-native-probe-rs`。Windows x86-64でのみ実行できる読取専用CLI。Linuxでは実行不可を明示し、呼出し元の分類など共通処理だけを検査する。
-- 対象: 標準 `live_chain` の共有ロック `D:/CC/Tools/civ6-live/civ6.lock` が示す生存中のchain PID。chain実行ファイルは同ディレクトリの`live_chain.exe`と完全パスで照合する。controllerのPIDと作成時刻に加えてOS上の実親PIDを照合し、ゲームのPID・作成時刻・完全パスを固定して再照合する。
+- 対象: 標準 `live_chain` の共有ロック `D:/CC/Tools/civ6-live/civ6.lock` が示す生存中のchain PID。chain実行ファイルは同ディレクトリの`live_chain.exe`と完全パスで照合する。controllerのPIDと作成時刻に加えてOS上の実親PIDを照合し、ゲームのPID・作成時刻・完全パスを固定して再照合する。ゲーム実行ファイルは `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe` に固定する。大文字小文字と通常の `.`・`..` を正規化してから完全パスを照合し、同名でも別の場所なら親の起動前検査と子のattach前検査で拒否する。
 - GameCore: `C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll` が対象プロセスへロード済みで、SHA-256が `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c` の場合だけattachする。ASLR後のロードbaseへRVAを足す。入口の16バイトをDLLファイルと比較し、既存のコード改変がある場合は拒否する。
 - 関数入口: `CanEver`候補RVA `0x2DDDD0`、`CanAppoint`候補RVA `0x2DD820`。名前とWin64 ABIは静的解析からの候補である。実機でのRCX=this、EDX=総督Index、AL=真偽の確認が残る。
 - 操作: `DebugActiveProcess`、`DebugSetProcessKillOnExit(FALSE)`、threadごとのハードウェア実行breakpointを使う。DLLファイル・ゲームの命令・人物台帳・本体会計は書かない。debug registerを変更したthreadの元値を保存し、停止・期限切れ・guard失敗時に元のhandleでそのthreadだけを停止する。生存threadのdebug registerを再読取して元値と一致した場合だけdetachし、停止したthreadを再開する。復元時は現在のRIP・RSP・EFlags・一般registerを古いsnapshotで上書きしない。元からdebug breakpointが使用中なら拒否する。
@@ -22,7 +22,7 @@ RIP不一致・debug registerの不一致・context取得失敗は両モード�
 
 ## JSONLの読み方
 
-`identity`にゲーム実行ファイル、作成時刻、ロードbase、GameCore SHAを記録する。`ready`の後に`entry`と`return`をIDで対応付け、`stop`にdetach結果を記録する。`entry`にはthread ID、関数RVA、`this`の生ポインタ、32ビットIndex、stack由来の`return_site_rva`を別項目として保存する。直前の5バイトが対象への直接`E8`である場合だけ`caller_rva`を設定する。`0x2DD861`からの末尾分岐は新しいreturn addressを作らないため、return addressとstack位置の両方が同じ`CanAppoint`入口だけを`tail_from_can_appoint`で補助分類し、架空の直接callerを作らない。`return`にはALの生値と、0/1だった場合だけの真偽候補を保存する。戻り値を観測できない呼出しは`entry`の`return_breakpoint_armed=false`または対応する`return`欠落で分かる。ポインタからowner IDを確定しない。
+`identity`にゲーム実行ファイル、作成時刻、ロードbase、GameCore SHAを記録する。`ready`の後に`entry`と`return`をIDで対応付け、`stop`にdetach結果を記録する。`entry`にはthread ID、関数RVA、`this`の生ポインタ、32ビットIndex、stack由来の`return_site_rva`と`expected_rsp`を別項目として保存する。直前の5バイトが対象への直接`E8`である場合だけ`caller_rva`を設定する。`0x2DD861`からの末尾分岐は新しいreturn addressを作らない。直前の`CanAppoint`入口が直接呼出しとして確認済みで、戻り先・stack位置・`this`ポインタ・Indexが同じ場合だけ、`CanEver`を親IDに関連付ける。関連付けた2つのIDには同じ`linked_tail_group_id`でALの候補値を記録する。例外後の呼出し枠の再利用や未確認の重複ではALを両IDへ割り当てず、`return_incomplete`へ理由を記録する。各threadのpendingは最大64件、return停止位置は最大2つに制限する。戻り値を観測できない呼出しは`entry`の`return_breakpoint_armed=false`または`return_incomplete`で分かる。ポインタからowner IDを確定しない。
 
 `path_candidate`は既存の逆アセンブルで得た呼出し箇所との照合名であり、AI実手番の文脈を単独で証明しない。主な候補はUI getter `0xBA51E`、公式要求 `0x30DA56`と`0x2DCFFE`、AI解析領域 `0x4A8114`、未分類 `0x21B9E4`。`owner_id_candidate`と`property_interface_candidate`も実機での同一性と寿命を確定した値ではない。親のシナリオがAI実手番・公式要求・UI getterを別の区間で起動し、同じ本体関数の実呼出しと戻り値を突き合わせる。
 
@@ -49,7 +49,7 @@ runnerは開始と停止の対、名前、300秒上限、観測中のゲーム�
 
 - Windowsの専用Rust子プロセスで、標準モードの入口・戻り値、新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが実行を続け、debug registerがattach前と同値であることを確かめた。`SetThreadContext`拒否時の再試行と、永続拒否時にcontrollerが同じ子プロセスを閉じる経路も区別した。実際のWindowsハードウェアbreakpointで、テスト用`CONTEXT.Dr6`を0にした所有例外、RIP不一致とcontext取得失敗の保留、別の`SINGLE_STEP`の子側handlerへの引き渡し、期限後のready拒否を検査した。propertyモードでも所有・未所有・曖昧な例外、終了済みthreadと生存threadの後始末を検査する。いずれも修正後の実Civ6成功を示さない。
 - runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実機53のreadyは記録されたが、正常detachと30分leaseの完走は未確認。
-- 統合後はこのworktree専用の`tools/target-native-integrate`で全ワークスペースの`--all-targets`を実行し、103試験群・1516件成功、失敗0・省略0を確認した。最後にdebug registerの実行条件を照合する判定を足し、観測器の28件を再実行して成功した。Lua 5.1とWindows実子プロセスの検査を含む。全93シナリオの`--check`とRustの整形検査も通った。実Civ6でのproperty観測は未実行。
+- 今回のレビュー修正後、このworktree専用の`tools/target-native-integrate`で全ワークスペースの`--all-targets`を実行し、103試験群・1522件成功、失敗0・省略0を確認した。Lua 5.1とWindows実子プロセスの検査を含む。実ゲームの起動・attachはしていない。実機53のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
 - `tools/civ6-pe-rs`はこのworktreeにある。観測器は既知の6停止位置のファイルオフセットを固定してバイト比較し、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移す。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。
 
