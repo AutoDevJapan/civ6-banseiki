@@ -10,14 +10,16 @@ function include() end
 function event() local e={}; e.Add=function(f) e[#e+1]=f end; return e end
 Events,GameEvents={},{}
 for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted',
- 'CityProductionQueueChanged','UnitOperationStarted'}) do Events[k]=event() end
+ 'CityProductionQueueChanged','UnitOperationStarted','DiplomacyIncomingDeal'}) do Events[k]=event() end
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
  'JAC_BoundaryProgressSpy','JAC_BoundaryBindSpy','JAC_BoundarySpyBarrier',
  'JAC_BoundaryAdoptSpyIdentity','JAC_BoundarySaveSpyTravel','JAC_BoundaryPrepareEnemy',
  'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',
  'JAC_BoundaryEnemyFixtureBarrier','JAC_BoundaryConfirmEnemy',
  'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery',
- 'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryProgressCapacityBuilding'}) do GameEvents[k]=event() end
+ 'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryProgressCapacityBuilding',
+ 'JAC_BoundaryMarkCaptiveExchange','JAC_BoundaryPrepareCapacityCivic',
+ 'JAC_BoundaryProgressCapacityDistrict'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
  local r={}; for i,row in ipairs(rows) do r[i-1]=row; r[row[key]]=row; if row.Hash then r[row.Hash]=row end end
@@ -44,6 +46,7 @@ GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY=spyDef,[55]=spyDef}
 GameInfo.Civics={[spyDef.PrereqCivic]={Index=12},CIVIC_JAC_SENGOKU_DOMAIN_LAW={Index=13}}
 GameInfo.Districts={DISTRICT_GOVERNMENT={DistrictType='DISTRICT_GOVERNMENT',Index=70,Hash=700,
  PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'}}
+GameInfo.Districts[70]=GameInfo.Districts.DISTRICT_GOVERNMENT
 GameInfo.Buildings={}
 for _,row in ipairs({
  {BuildingType='BUILDING_GOV_TALL',Index=76,Hash=760},
@@ -65,7 +68,9 @@ EspionageResultTypes={SUCCESS_UNDETECTED=1,SUCCESS_MUST_ESCAPE=2,FAIL_UNDETECTED
 PlayerOperations={EXECUTE_SCRIPT=1,ASSIGN_GOVERNOR=2,APPOINT_GOVERNOR=3,
  PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
 CityOperationTypes={BUILD=81,PARAM_UNIT_TYPE='unit',PARAM_INSERT_MODE='insert',
- PARAM_BUILDING_TYPE='building',PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT=7}
+ PARAM_BUILDING_TYPE='building',PARAM_DISTRICT_TYPE='district',PARAM_X='x',PARAM_Y='y',
+ PARAM_QUEUE_DESTINATION_LOCATION='location',VALUE_REPLACE_AT=7,VALUE_EXCLUSIVE=8}
+CityOperationResults={PLOTS='plots'}
 CityProductionDirectives={TRAIN=1}
 local function members(list)
  local i=0; return function() i=i+1; if list[i] then return i,list[i] end end
@@ -78,6 +83,8 @@ function city(id,owner,x,y,name,marker)
  c.GetName=function() return c.name end
  c.GetProperty=function(_,k) if k==SETTLED then return c.marker end end
  c.GetYield=function(_,i) return i==0 and 13.5 or 8.25 end
+ c.GetBuildQueue=function() return {GetAt=function() return nil end,
+  CanProduce=function() return false end} end
  c.GetDistricts=function() return {HasDistrict=function() return false end} end
  c.GetBuildings=function() return {HasBuilding=function() return false end} end
  CITIES[#CITIES+1]=c; return c
@@ -86,12 +93,14 @@ CONTROL=city(10,0,1,0,'Control',0)
 TARGET=city(11,0,2,0,'Target',1)
 FOREIGN=city(20,1,2,1,'Foreign',0)
 BUILD_HEAD=nil; PROGRESS_CALLS=0; CAPACITY_PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
-GOV_DISTRICT_BUILT=false; GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
+GOV_DISTRICT_BUILT=false; GOV_DISTRICT_PLACED=false
+GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
 CAPTURED={[0]={},[1]={}}
 local queue={
  GetAt=function(_,index) assert(index==0); return BUILD_HEAD end,
  CanProduce=function(_,hash)
   if hash==555 then return CIVIC_COMPLETED and SPY_CAPACITY>0 end
+  if hash==700 then return GOV_CIVIC_COMPLETED and not GOV_DISTRICT_PLACED end
   if hash==760 then return GOV_DISTRICT_BUILT and not GOV_TIER1_BUILT end
   if hash==790 then return GOV_DISTRICT_BUILT and GOV_TIER1_BUILT and not GOV_SPIES_BUILT end
   return false
@@ -102,7 +111,18 @@ local queue={
   else CAPACITY_PROGRESS_CALLS=CAPACITY_PROGRESS_CALLS+1 end
  end}
 CONTROL.GetBuildQueue=function() return queue end
-CONTROL.GetDistricts=function() return {HasDistrict=function(_,index) assert(index==70); return GOV_DISTRICT_BUILT end} end
+CONTROL.GetDistricts=function() return {
+ HasDistrict=function(_,index,builtOnly)
+  assert(index==70)
+  if builtOnly then return GOV_DISTRICT_BUILT end
+  return GOV_DISTRICT_PLACED
+ end,
+ Members=function()
+  local rows={}
+  if GOV_DISTRICT_PLACED then rows[1]={GetType=function() return 70 end,
+   GetX=function() return 1 end,GetY=function() return 1 end} end
+  return members(rows)
+ end} end
 CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
  if index==76 then return GOV_TIER1_BUILT end
  if index==77 or index==78 then return false end
@@ -110,7 +130,10 @@ CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
  end} end
 function ADVANCE_TURN()
  TURN=TURN+1
- if BUILD_HEAD and BUILD_HEAD.BuildingType and CAPACITY_PROGRESS_CALLS>0 and
+ if BUILD_HEAD and BUILD_HEAD.DistrictType and CAPACITY_PROGRESS_CALLS>0 and
+  CAPACITY_COMPLETES~=false then
+  GOV_DISTRICT_BUILT=true; BUILD_HEAD=nil
+ elseif BUILD_HEAD and BUILD_HEAD.BuildingType and CAPACITY_PROGRESS_CALLS>0 and
   CAPACITY_COMPLETES~=false then
   if BUILD_HEAD.BuildingType==76 then GOV_TIER1_BUILT=true
   elseif BUILD_HEAD.BuildingType==79 then GOV_SPIES_BUILT=true; SPY_CAPACITY=SPY_CAPACITY+1 end
@@ -123,10 +146,17 @@ end
 PLOTS={}
 for _,c in ipairs(CITIES) do
  local index=c.x+c.y*10
- PLOTS[c.x..'/'..c.y]={GetIndex=function() return index end,GetProperty=function(_,k) if k==NODE then return 1 end end}
+ PLOTS[c.x..'/'..c.y]={GetIndex=function() return index end,
+  GetX=function() return c.x end,GetY=function() return c.y end,
+  GetProperty=function(_,k) if k==NODE then return 1 end end}
 end
-Map={GetPlot=function(x,y) return PLOTS[x..'/'..y] end}
-Cities={GetPlotPurchaseCity=function(plot) for _,c in ipairs(CITIES) do if Map.GetPlot(c.x,c.y)==plot then return c end end end}
+PLOTS['1/1']={GetIndex=function() return 11 end,GetX=function() return 1 end,GetY=function() return 1 end}
+Map={GetPlot=function(x,y) return PLOTS[x..'/'..y] end,
+ GetPlotByIndex=function(index) for _,plot in pairs(PLOTS) do if plot:GetIndex()==index then return plot end end end}
+Cities={GetPlotPurchaseCity=function(plot)
+ if plot==PLOTS['1/1'] then return CONTROL end
+ for _,c in ipairs(CITIES) do if Map.GetPlot(c.x,c.y)==plot then return c end end
+ end}
 GOV={assigned=TARGET,established=true,neutralized=0,base=true,type=0}
 GOV.GetType=function() return GOV.type end
 GOV.GetAssignedCity=function() return GOV.assigned end
@@ -158,7 +188,11 @@ for _,id in ipairs({0,1,62}) do
   assert(index==12); return CIVIC_COMPLETED end,
   GetCultureCost=function(_,index) assert(index==12); return 100 end,
   SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true; SPY_CAPACITY=0 end,
-  SetCivic=function(_,index,grant) assert(index==12 and grant==true); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end} end
+  SetCivic=function(_,index,grant)
+   assert(grant==true)
+   if index==13 then assert(not GOV_CIVIC_COMPLETED); GOV_CIVIC_COMPLETED=true
+   else assert(index==12); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end
+  end} end
  p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
   IsAtWarWith=function(_,other) assert(other~=id); return AT_WAR==true end,
   GetSpyCapacity=function() return CIVIC_COMPLETED and SPY_CAPACITY or 0 end,
@@ -171,16 +205,23 @@ end
 Game.GetPlayers=function() return {Players[0],Players[1]} end
 PlayerManager={GetAliveMajorIDs=function() return {0,1} end,GetFreeCitiesPlayerID=function() return 62 end}
 CityManager={GetCity=function(owner,id) for _,c in ipairs(CITIES) do if c.owner==owner and c.id==id then return c end end end,
+ GetOperationTargets=function(city,op,params)
+  assert(op==CityOperationTypes.BUILD and params.district==700)
+  return {[CityOperationResults.PLOTS]=city==CONTROL and GOV_CIVIC_COMPLETED and not GOV_DISTRICT_PLACED and {11} or {}}
+ end,
  CanStartOperation=function(city,op,params) assert(city==CONTROL and op==CityOperationTypes.BUILD and
-  (params.unit==555 or params.building==760 or params.building==790));
+  (params.unit==555 or params.building==760 or params.building==790 or
+   (params.district==700 and params.x==1 and params.y==1 and params.insert==8)));
   return BUILD_CAN_START~=false,{reason='native build result'} end,
  RequestOperation=function(city,op,params)
   assert(city==CONTROL and op==CityOperationTypes.BUILD and
-   (params.unit==555 or params.building==760 or params.building==790) and
-   params.insert==7 and params.location==0)
+   ((params.unit==555 or params.building==760 or params.building==790) and
+    params.insert==7 and params.location==0 or
+    params.district==700 and params.x==1 and params.y==1 and params.insert==8))
   BUILD_REQUESTS[#BUILD_REQUESTS+1]={city=city,op=op,params=params,selected=SELECTED_CITY}
   if BUILD_ACCEPTED~=false then
    if params.unit then BUILD_HEAD={Directive=CityProductionDirectives.TRAIN,UnitType=55}
+   elseif params.district then BUILD_HEAD={DistrictType=70}; GOV_DISTRICT_PLACED=true
    else BUILD_HEAD={BuildingType=params.building==760 and 76 or 79} end
    fire(Events.CityProductionQueueChanged,0,10) end
  end,

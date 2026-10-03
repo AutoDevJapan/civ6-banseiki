@@ -1,0 +1,14 @@
+{
+  "name": "Complete the real Government Plaza prerequisite civic in the captured game",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); assert(p.stage=='NEEDS_DOMAIN_LAW' and p.occupied==1 and p.capacity==1,'normal Government Plaza Civic prerequisite changed'); b.Queue('PREPARE_DISTRICT_CIVIC'); return 'official Civic research queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_PREPARE_DISTRICT_CIVIC' or a=='UNKNOWN_PREPARE_DISTRICT_CIVIC' or a=='REJECTED_PREPARE_DISTRICT_CIVIC' then error(a) end; return a=='ACCEPTED_PREPARE_DISTRICT_CIVIC'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); local r=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')); assert(p.districtCivicOwned and p.occupied==1 and p.capacity==1 and r.owner==0 and r.index==GameInfo.Civics['CIVIC_JAC_SENGOKU_DOMAIN_LAW'].Index and r.afterSpent==r.beforeSpent,'native Civic or official title accounting differs'); return p.stage"},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"exit_to_menu"}
+  ]
+}

@@ -395,7 +395,10 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
     EnemyReceipt(controller,params,params and params.Action);
     assert(params.Action=="PREPARE_ENEMY" or params.Action=="EVOLVE_ENEMY" or
         params.Action=="CONFIRM_ENEMY" or params.Action=="CAPTURE_ENEMY" or
-        params.Action=="BEGIN_SPY_RETRY" or params.Action=="PROGRESS_CAPACITY",
+        params.Action=="BEGIN_SPY_RETRY" or params.Action=="PROGRESS_CAPACITY" or
+        params.Action=="MARK_CAPTIVE_EXCHANGE" or
+        params.Action=="PREPARE_DISTRICT_CIVIC" or
+        params.Action=="PROGRESS_CAPACITY_DISTRICT",
         "unknown enemy fixture barrier");
     Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",
         {action=params.Action,token=params.Token,turn=params.Turn,attacker=controller});
@@ -532,6 +535,102 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         Game:SetProperty("JAC_BOUNDARY_SPY",{owner=controller,id=params.CurrentID});
     end
     print("JAC_BOUNDARY ENEMY_SPY_RETRY_ARCHIVED "..R.Serialize(retry));
+end);
+
+-- One-time test receipt for a normal native diplomacy attempt. This neither
+-- changes the captive roster nor claims that the AI accepted a trade.
+GameEvents.JAC_BoundaryMarkCaptiveExchange.Add(function(controller,params)
+    EnemyReceipt(controller,params,"MARK_CAPTIVE_EXCHANGE");
+    local c=EnemyConfig(controller);
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "failed native mission event missing before captive exchange");
+    local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),
+        "old native captive spy reference missing");
+    local travel=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+        "original native spy travel missing");
+    assert(not Game:GetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT") and
+        not Game:GetProperty(RETRY) and event.attacker==controller and
+        event.id==params.EventID and event.turn==params.EventTurn and
+        spy.owner==controller and spy.id==params.SpyID and
+        params.Captor==c.owner and type(params.NameIndex)=="number" and
+        travel.targetOwner==c.owner and travel.targetID==c.cityID,
+        "native captive exchange receipt changed or was repeated");
+    local native=NativeEnemy(c);
+    assert(native.appointed and native.base and native.neutralized==0 and
+        native.cityOwner==c.owner and native.cityID==c.cityID,
+        "native enemy Governor changed before captive exchange");
+    Game:SetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT",{
+        attacker=controller,captor=params.Captor,nameIndex=params.NameIndex,
+        spyID=params.SpyID,eventID=params.EventID,eventTurn=params.EventTurn,
+        token=params.Token,turn=Game.GetCurrentGameTurn()});
+end);
+
+GameEvents.JAC_BoundaryPrepareCapacityCivic.Add(function(controller,params)
+    EnemyReceipt(controller,params,"PREPARE_DISTRICT_CIVIC");
+    local c=EnemyConfig(controller);
+    assert(c.cityID and not Game:GetProperty(RETRY) and
+        not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC"),
+        "native capacity Civic was already prepared");
+    local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"],
+        "native Government Plaza Civic missing");
+    local player=assert(Players[controller],"capacity Civic owner missing");
+    local culture=player:GetCulture();
+    local titles=player:GetGovernors();
+    assert(params.CivicIndex==civic.Index and not culture:HasCivic(civic.Index) and
+        titles:GetGovernorPoints()==params.Total and
+        titles:GetGovernorPointsSpent()==params.Spent,
+        "native capacity Civic or title accounting changed");
+    assert(type(culture.SetCivic)=="function","native civic research API missing");
+    culture:SetCivic(civic.Index,true);
+    assert(culture:HasCivic(civic.Index) and
+        titles:GetGovernorPointsSpent()==params.Spent,
+        "normal native Civic research or title accounting failed");
+    Game:SetProperty("JAC_BOUNDARY_CAPACITY_CIVIC",{
+        owner=controller,index=civic.Index,token=params.Token,
+        beforeTotal=params.Total,beforeSpent=params.Spent,
+        afterTotal=titles:GetGovernorPoints(),
+        afterSpent=titles:GetGovernorPointsSpent(),turn=Game.GetCurrentGameTurn()});
+end);
+
+GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
+    EnemyReceipt(controller,params,"PROGRESS_CAPACITY_DISTRICT");
+    local c=EnemyConfig(controller);
+    assert(c.cityID and not Game:GetProperty(RETRY) and
+        not Game:GetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS") and
+        params.Capacity==1 and params.Occupied==1 and
+        params.DistrictType=="DISTRICT_GOVERNMENT" and
+        type(params.CityID)=="number" and type(params.PlotIndex)=="number" and
+        type(params.X)=="number" and type(params.Y)=="number",
+        "native Government Plaza progress receipt is stale");
+    local district=assert(GameInfo.Districts[params.DistrictType],
+        "native Government Plaza definition missing");
+    local plot=assert(Map.GetPlot(params.X,params.Y),
+        "native Government Plaza placement plot missing");
+    local city=assert(CityManager.GetCity(controller,params.CityID),
+        "native Government Plaza city missing");
+    local purchase=Cities.GetPlotPurchaseCity(plot);
+    assert(district.Index==params.DistrictIndex and
+        plot:GetIndex()==params.PlotIndex and
+        city:GetOwner()==controller and purchase and
+        purchase:GetOwner()==controller and purchase:GetID()==city:GetID(),
+        "native Government Plaza owner or plot changed");
+    local read=assert(ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead,
+        "UI native Government Plaza queue reader unavailable");
+    local current=assert(read(controller,params.CityID),
+        "UI native Government Plaza queue observation unavailable");
+    assert(current.owner==controller and current.cityID==params.CityID and
+        current.districtType==params.DistrictType and current.turn==params.Turn and
+        type(current.frame)=="number" and current.frame>=params.Frame and
+        type(current.publishEpoch)=="number" and
+        current.publishEpoch>=params.PublishEpoch,
+        "native Government Plaza queue changed before progress");
+    local queue=city:GetBuildQueue();
+    assert(type(queue.AddProgress)=="function","native district progress API unavailable");
+    queue:AddProgress(500);
+    Game:SetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS",{
+        owner=controller,cityID=city:GetID(),districtIndex=district.Index,
+        plot=plot:GetIndex(),x=plot:GetX(),y=plot:GetY(),
+        token=params.Token,turn=Game.GetCurrentGameTurn()});
 end);
 
 -- The UI first verifies a normal Government Plaza building BUILD request and

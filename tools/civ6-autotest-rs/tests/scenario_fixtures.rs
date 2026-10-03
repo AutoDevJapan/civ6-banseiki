@@ -214,7 +214,11 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     let names = [
         "retry-diagnose",
         "retry-captive-exchange-probe",
+        "retry-captive-exchange",
         "retry-capacity-plan",
+        "retry-capacity-civic",
+        "retry-capacity-district",
+        "retry-capacity-district-tick",
         "retry-capacity-build",
         "retry-capacity-tick",
         "retry-prepare",
@@ -255,7 +259,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             "{name}"
         );
     }
-    assert_eq!(saves, 11);
+    assert_eq!(saves, 15);
     let probe = scenario("leader-persona-spy-neutralization-retry-captive-exchange-probe.json");
     let probe_codes: Vec<_> = steps(&probe).iter().filter_map(embedded_lua).collect();
     assert!(probe_codes
@@ -266,6 +270,100 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     assert!(!probe_codes
         .iter()
         .any(|code| code.contains("Queue(") || code.contains("RequestSession")));
+    let exchange = scenario("leader-persona-spy-neutralization-retry-captive-exchange.json");
+    let exchange_steps = steps(&exchange);
+    let exchange_codes: Vec<_> = exchange_steps.iter().filter_map(embedded_lua).collect();
+    let exchange_index = |needle: &str| {
+        exchange_codes
+            .iter()
+            .position(|code| code.contains(needle))
+            .unwrap()
+    };
+    assert!(
+        exchange_index("BeginCaptiveExchange()") < exchange_index("Queue('MARK_CAPTIVE_EXCHANGE')")
+    );
+    assert!(
+        exchange_index("Queue('MARK_CAPTIVE_EXCHANGE')")
+            < exchange_index("ProposeCaptiveExchange()")
+    );
+    assert!(exchange_index("ProposeCaptiveExchange()") < exchange_index("AcceptCaptiveExchange()"));
+    assert!(exchange_index("AcceptCaptiveExchange()") < exchange_index("#d.roster.captured==0"));
+    let outcome = exchange_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step).is_some_and(|code| {
+                    code.contains("#d.roster.captured==0") && code.contains("d.spyID==655368")
+                })
+        })
+        .unwrap();
+    let save = exchange_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(outcome < save);
+    let civic = scenario("leader-persona-spy-neutralization-retry-capacity-civic.json");
+    let civic_steps = steps(&civic);
+    let civic_verified = civic_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step).is_some_and(|code| {
+                    code.contains("p.districtCivicOwned")
+                        && code.contains("r.afterSpent==r.beforeSpent")
+                })
+        })
+        .unwrap();
+    assert!(
+        civic_verified
+            < civic_steps
+                .iter()
+                .position(|step| action(step, "save"))
+                .unwrap()
+    );
+    let district = scenario("leader-persona-spy-neutralization-retry-capacity-district.json");
+    let district_codes: Vec<_> = steps(&district).iter().filter_map(embedded_lua).collect();
+    let district_index = |needle: &str| {
+        district_codes
+            .iter()
+            .position(|code| code.contains(needle))
+            .unwrap()
+    };
+    let district_build = district_codes[district_index("Queue('BUILD_CAPACITY_DISTRICT')")];
+    assert!(
+        district_build.find("p.plot and p.x and p.y").unwrap()
+            < district_build
+                .find("Queue('BUILD_CAPACITY_DISTRICT')")
+                .unwrap()
+            && district_index("Queue('BUILD_CAPACITY_DISTRICT')")
+                < district_index("Queue('PROGRESS_CAPACITY_DISTRICT')")
+    );
+    let district_tick =
+        scenario("leader-persona-spy-neutralization-retry-capacity-district-tick.json");
+    let district_tick_steps = steps(&district_tick);
+    let built = district_tick_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step).is_some_and(|code| {
+                    code.contains("o.stage=='DISTRICT_BUILT'")
+                        && code.contains("o.targetBuilt")
+                        && code.contains("o.captured==1")
+                })
+        })
+        .unwrap();
+    assert!(
+        district_tick_steps
+            .iter()
+            .position(|step| action(step, "end_turn"))
+            .unwrap()
+            < built
+            && built
+                < district_tick_steps
+                    .iter()
+                    .position(|step| action(step, "save"))
+                    .unwrap()
+    );
     let capacity_plan = scenario("leader-persona-spy-neutralization-retry-capacity-plan.json");
     let plan_codes: Vec<_> = steps(&capacity_plan)
         .iter()
