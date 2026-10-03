@@ -7,7 +7,8 @@ local CONFIG = "JAC_BOUNDARY_CONFIG";
 local ENEMY_CONFIG = "JAC_BOUNDARY_ENEMY_CONFIG";
 local ENEMY_LEADER = "LEADER_JAC_ASHINA_MORIKIYO";
 local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
-local spyProduction;
+local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
+local PRODUCTION = "JAC_BOUNDARY_SPY_PRODUCTION";
 local function Config(owner)
     local c = assert(Game:GetProperty(CONFIG) or Game:GetProperty(ENEMY_CONFIG), "boundary fixture not prepared");
     assert((c.attacker or c.owner) == owner and Players[owner]:IsHuman(),
@@ -126,7 +127,13 @@ end);
 
 GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
     local c = Config(owner);
-    assert(not spyProduction and not Game:GetProperty("JAC_BOUNDARY_SPY"), "fixture spy production already started");
+    assert(not Game:GetProperty(PRODUCTION) and not Game:GetProperty("JAC_BOUNDARY_SPY"),
+        "fixture spy production already started");
+    if c.attacker then
+        local retry=assert(Game:GetProperty(RETRY),"enemy retry was not archived");
+        assert(retry.mode=="PRODUCE" and retry.current==2 and retry.archive and
+            not retry.spyID,"enemy retry does not permit another spy production");
+    end
     local player = Players[owner];
     local unit = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
     assert(unit.PrereqCivic == SPY_CIVIC, "native spy civic differs from the Sengoku gate");
@@ -144,16 +151,17 @@ GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
     print("JAC_BOUNDARY SPY_CIVIC_AFTER " .. R.Serialize({index=civic.Index,hash=civic.Hash,
         value=culture:HasCivic(civic.Index),valueType=type(culture:HasCivic(civic.Index))}));
     local capital = assert(player:GetCities():GetCapitalCity(), "spy production capital missing");
-    spyProduction = {owner=owner, cityID=capital:GetID(), progressed=false};
+    Game:SetProperty(PRODUCTION,{owner=owner,cityID=capital:GetID(),progressed=false});
     Game:SetProperty("JAC_BOUNDARY_SPY_PREPARED", {owner=owner, cityID=capital:GetID()});
     print("JAC_BOUNDARY SPY_CIVIC_READY " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY_PREPARED")));
 end);
 
 GameEvents.JAC_BoundaryProgressSpy.Add(function(owner)
     Config(owner);
-    assert(spyProduction and spyProduction.owner == owner and not spyProduction.progressed,
+    local production=assert(Game:GetProperty(PRODUCTION),"spy production preparation missing");
+    assert(production.owner == owner and not production.progressed,
         "spy production progress was not prepared or was already added");
-    local city = assert(CityManager.GetCity(owner, spyProduction.cityID), "spy production city missing");
+    local city = assert(CityManager.GetCity(owner, production.cityID), "spy production city missing");
     local queue = city:GetBuildQueue();
     -- The visible UI already independently observed the accepted native queue.
     -- GetAt is UI-only in live 50; Gameplay performs the mutation and binds the
@@ -163,11 +171,12 @@ GameEvents.JAC_BoundaryProgressSpy.Add(function(owner)
     local before = {};
     local count = 0;
     for _,candidate in Players[owner]:GetUnits():Members() do
-        if candidate:GetType() == unit.Index then before[candidate:GetID()] = true; count = count + 1; end
+        if candidate:GetType() == unit.Index then before[#before+1]=candidate:GetID(); count = count + 1; end
     end
-    spyProduction.before = before;
-    spyProduction.beforeCount = count;
-    spyProduction.progressed = true; -- one AddProgress even if its result is unknown
+    production.before=before;
+    production.beforeCount=count;
+    production.progressed=true; -- one AddProgress even if its result is unknown
+    Game:SetProperty(PRODUCTION,production);
     -- Official Debug/City.ltp:200-204. The native queue, not a spy Property, creates the unit.
     queue:AddProgress(500);
     Game:SetProperty("JAC_BOUNDARY_SPY_PROGRESS", {owner=owner, cityID=city:GetID(), beforeCount=count});
@@ -176,20 +185,30 @@ end);
 
 GameEvents.JAC_BoundaryBindSpy.Add(function(owner)
     Config(owner);
-    assert(spyProduction and spyProduction.owner == owner and spyProduction.progressed and
+    local production=assert(Game:GetProperty(PRODUCTION),"spy production preparation missing");
+    assert(production.owner == owner and production.progressed and
         not Game:GetProperty("JAC_BOUNDARY_SPY"), "spy production was not completed once");
+    local before={};
+    for _,id in ipairs(production.before) do before[id]=true; end
     local spyType = GameInfo.Units["UNIT_SPY"].Index;
     local spy, count = nil, 0;
     for _,unit in Players[owner]:GetUnits():Members() do
         if unit:GetType() == spyType then
             count = count + 1;
-            if not spyProduction.before[unit:GetID()] then
+            if not before[unit:GetID()] then
                 assert(not spy, "native production added multiple spies"); spy = unit;
             end
         end
     end
-    assert(spy and count == spyProduction.beforeCount + 1, "native spy production did not add exactly one unit");
+    assert(spy and count == production.beforeCount + 1, "native spy production did not add exactly one unit");
     assert(spy:GetOwner() == owner, "produced native spy owner mismatch");
+    local retry=Game:GetProperty(RETRY);
+    if retry then
+        assert(retry.mode=="PRODUCE" and retry.current==2 and not retry.spyID and
+            spy:GetID()~=retry.archive.spyID,"retry production did not bind a distinct native spy");
+        retry.spyID=spy:GetID();
+        Game:SetProperty(RETRY,retry);
+    end
     Game:SetProperty("JAC_BOUNDARY_SPY", {owner=owner, id=spy:GetID()});
     print("JAC_BOUNDARY SPY_NATIVE_STATE " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
         unitType=spy:GetType(),x=spy:GetX(),y=spy:GetY()}));
@@ -202,6 +221,17 @@ GameEvents.JAC_BoundarySpyBarrier.Add(function(owner, params)
         (params.Action == "SPY_TRAVEL" or params.Action == "SPY_MISSION"), "invalid spy barrier");
     local spy = assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "spy barrier before native production");
     assert(spy.owner == owner and spy.id == params.SpyID, "spy barrier identity mismatch");
+    local retry=Game:GetProperty(RETRY);
+    if retry then
+        assert(retry.current==2 and retry.spyID==spy.id,
+            "retry barrier belongs to the archived spy");
+        if params.Action=="SPY_MISSION" then
+            assert(not retry.missionRequested,
+                "a second official mission request is forbidden in one retry");
+            retry.missionRequested=true;
+            Game:SetProperty(RETRY,retry);
+        end
+    end
     Game:SetProperty("JAC_BOUNDARY_SPY_BARRIER",
         {owner=owner, spyID=spy.id, token=params.Token, action=params.Action});
 end);
@@ -219,6 +249,14 @@ GameEvents.JAC_BoundaryAdoptSpyIdentity.Add(function(owner, params)
     local city=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
     assert(city and city:GetOwner()==params.TargetOwner and city:GetID()==params.TargetID,
         "arrived native spy destination mismatch");
+    local retry=Game:GetProperty(RETRY);
+    if retry then
+        assert(retry.current==2 and retry.spyID==params.OldID,
+            "new native spy identity does not follow the current retry");
+        retry.spyID=spy:GetID();
+        if retry.mode=="RETURN" then retry.mode="MAP"; end
+        Game:SetProperty(RETRY,retry);
+    end
     Game:SetProperty("JAC_BOUNDARY_SPY",{owner=owner,id=spy:GetID()});
     print("JAC_BOUNDARY SPY_REFERENCE_UPDATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
 end);
@@ -356,7 +394,8 @@ end);
 GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
     EnemyReceipt(controller,params,params and params.Action);
     assert(params.Action=="PREPARE_ENEMY" or params.Action=="EVOLVE_ENEMY" or
-        params.Action=="CONFIRM_ENEMY" or params.Action=="CAPTURE_ENEMY",
+        params.Action=="CONFIRM_ENEMY" or params.Action=="CAPTURE_ENEMY" or
+        params.Action=="BEGIN_SPY_RETRY",
         "unknown enemy fixture barrier");
     Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",
         {action=params.Action,token=params.Token,turn=params.Turn,attacker=controller});
@@ -406,11 +445,93 @@ end);
 
 GameEvents.JAC_BoundaryRecordEnemyMission.Add(function(controller,params)
     local c=EnemyConfig(controller);
+    local retry=Game:GetProperty(RETRY);
+    if retry then
+        assert(retry.current==2 and retry.spyID and params.MissionID~=retry.archive.eventID,
+            "archived failed native mission cannot be recorded for the retry");
+    end
     assert(c.cityID and type(params)=="table" and params.Attacker==c.attacker and
         type(params.MissionID)=="number" and params.MissionID>=0 and
         not Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"), "invalid or repeated enemy mission event");
     Game:SetProperty("JAC_BOUNDARY_ENEMY_MISSION",{attacker=params.Attacker,
         id=params.MissionID,turn=Game.GetCurrentGameTurn()});
+end);
+
+-- Archive the verified failed attempt in test-only save data before replacing
+-- any fixture pointers. Civ6's unit, mission history, Governor and counters are untouched.
+GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
+    EnemyReceipt(controller,params,"BEGIN_SPY_RETRY");
+    local c=EnemyConfig(controller);
+    assert(c.cityID and type(params)=="table" and params.Action=="BEGIN_SPY_RETRY" and
+        params.Mode and (params.Mode=="PRODUCE" or params.Mode=="RETURN" or
+        params.Mode=="MAP") and not Game:GetProperty(RETRY),
+        "enemy retry must begin once from the preserved failed attempt");
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "failed native mission event missing");
+    local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"failed native spy reference missing");
+    local travel=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+        "accepted original travel receipt missing");
+    local barrier=assert(Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER"),
+        "official original mission barrier missing");
+    local native=NativeEnemy(c);
+    local points=Players[c.owner]:GetGovernors();
+    assert(event.attacker==controller and event.id==params.EventID and
+        event.turn==params.EventTurn and spy.owner==controller and spy.id==params.SpyID and
+        travel.targetOwner==c.owner and travel.targetID==c.cityID and
+        barrier.action=="SPY_MISSION" and barrier.spyID==spy.id and
+        native.appointed and native.base and native.neutralized==0 and
+        native.cityOwner==c.owner and native.cityID==c.cityID and
+        points:GetGovernorPointsSpent()==params.Spent and
+        points:GetGovernorPoints()==params.Total and
+        type(params.Initial)=="number" and
+        params.Plot==Map.GetPlot(c.x,c.y):GetIndex() and
+        params.CompletionTurn==event.turn and
+        params.GovernorType==GameInfo.Governors[
+            GameInfo.JAC_LeaderPersonas[c.leader].GovernorType].Index and
+        GameInfo.UnitOperations[params.Operation] and
+        GameInfo.UnitOperations[params.Operation].Hash==GameInfo.UnitOperations[
+            "UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"].Hash,
+        "failed native history, Governor or official title receipt changed");
+    if params.Mode=="PRODUCE" then
+        assert(not Players[controller]:GetUnits():FindID(spy.id),
+            "old native spy is still on the map; production retry is invalid");
+    elseif params.Mode=="MAP" then
+        local current=assert(Players[controller]:GetUnits():FindID(params.CurrentID),
+            "living native map spy missing at archive");
+        assert(current:GetOwner()==controller and
+            current:GetType()==GameInfo.Units["UNIT_SPY"].Index,
+            "living native map spy identity differs at archive");
+    end
+    local archive={spyID=spy.id,eventID=event.id,eventTurn=event.turn,
+        operation=params.Operation,plot=params.Plot,initial=params.Initial,
+        escape=params.Escape,completionTurn=params.CompletionTurn,
+        travelOldID=travel.oldID,travelName=travel.name,travelLevel=travel.level,
+        targetOwner=travel.targetOwner,targetID=travel.targetID,
+        governorType=params.GovernorType,governorNeutralized=native.neutralized,
+        governorCityID=native.cityID,spent=params.Spent,total=params.Total,
+        merit=R.Property(c.leader,"MERIT") or 0,rosterOutcome=params.Outcome,
+        captiveCaptor=params.CaptiveCaptor,captiveName=params.CaptiveName,
+        captiveLevel=params.CaptiveLevel,
+        capacity=params.Capacity,occupied=params.Occupied,archivedTurn=Game.GetCurrentGameTurn()};
+    local retry={current=2,mode=params.Mode,archive=archive,
+        spyID=spy.id,
+        returnName=params.ReturnName,returnLevel=params.ReturnLevel,
+        returnTurn=params.ReturnTurn,returnX=params.ReturnX,returnY=params.ReturnY};
+    if params.Mode=="PRODUCE" then retry.spyID=nil; end
+    if params.Mode=="MAP" then retry.spyID=params.CurrentID; end
+    Game:SetProperty(RETRY,retry);
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_MISSION",nil);
+    Game:SetProperty("JAC_BOUNDARY_SPY_BARRIER",nil);
+    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",nil);
+    if params.Mode=="PRODUCE" then
+        Game:SetProperty("JAC_BOUNDARY_SPY",nil);
+        Game:SetProperty("JAC_BOUNDARY_SPY_PREPARED",nil);
+        Game:SetProperty("JAC_BOUNDARY_SPY_PROGRESS",nil);
+        Game:SetProperty(PRODUCTION,nil);
+    elseif params.Mode=="MAP" and params.CurrentID~=spy.id then
+        Game:SetProperty("JAC_BOUNDARY_SPY",{owner=controller,id=params.CurrentID});
+    end
+    print("JAC_BOUNDARY ENEMY_SPY_RETRY_ARCHIVED "..R.Serialize(retry));
 end);
 
 GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)

@@ -1,0 +1,15 @@
+{
+  "name": "Archive the real failed mission and prepare one finite legitimate retry",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"wait_for","timeout":75,"condition":{"type":"lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode~='OBSERVATION_PENDING'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local d=b.EnemyRetryDiagnosis(); assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and d.mission.turn==23,'preserved real mission checkpoint differs'); assert(d.mode=='PRODUCE' or d.mode=='RETURN' or d.mode=='MAP','native retry unavailable: '..d.mode..' '..d.outcome); b.Queue('BEGIN_SPY_RETRY'); return 'archive of failed native mission queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BEGIN_SPY_RETRY' or a=='UNKNOWN_BEGIN_SPY_RETRY' or a=='REJECTED_BEGIN_SPY_RETRY' then error(a) end; return a=='ACCEPTED_BEGIN_SPY_RETRY'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.current==2 and r.archive.eventID==0 and r.archive.spyID==655368,'failed mission archive changed'); return r.mode"},
+    {"action":"exit_to_menu"}
+  ]
+}

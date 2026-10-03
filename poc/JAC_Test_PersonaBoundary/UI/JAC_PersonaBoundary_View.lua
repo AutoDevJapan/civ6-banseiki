@@ -3,6 +3,7 @@ include("JAC_PersonaBoundaryRules");
 local R = JAC_PersonaBoundaryRules;
 local B = {};
 ExposedMembers.JAC_PersonaBoundary = B;
+local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local function Config() return assert(Game:GetProperty("JAC_BOUNDARY_CONFIG"), "fixture not prepared"); end
 local function EnemyConfig()
     local c=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG"),"enemy fixture not prepared");
@@ -86,6 +87,24 @@ local function Missions(c)
         assert(ended, "mission history exceeds the short fixture limit");
     end
     return result, success;
+end
+
+local function CheckArchivedMission(c)
+    local retry=Game:GetProperty(RETRY);
+    if not retry then return nil; end
+    local a=assert(retry.archive,"retry has no archived native failure");
+    assert(retry.current==2 and a.eventID>=0 and a.spyID>=0 and
+        a.targetOwner==c.owner and a.targetID==c.cityID and
+        a.governorNeutralized==0,"archived attempt identity changed");
+    local diplomacy=Players[c.attacker]:GetDiplomacy();
+    local native=diplomacy:GetMission(c.attacker,a.eventID);
+    assert(type(native)=="table" and native.Operation==a.operation and
+        native.PlotIndex==a.plot and native.CompletionTurn==a.completionTurn and
+        native.InitialResult==a.initial and native.EscapeResult==a.escape and
+        a.initial~=EspionageResultTypes.SUCCESS_UNDETECTED and
+        a.initial~=EspionageResultTypes.SUCCESS_MUST_ESCAPE,
+        "archived failure differs from preserved native mission history");
+    return retry;
 end
 
 local function ReadPersona(c)
@@ -215,7 +234,19 @@ function B.ReadEnemy()
     assert(type(s.native.turnsToEstablish)=="number" and s.native.turnsToEstablish>0 and
         type(s.native.turnsOnSite)=="number" and s.native.turnsOnSite>=0,
         "native Governor establishment clock unavailable");
+    s.retry=CheckArchivedMission(c);
     return s;
+end
+function B.ReadEnemyResultDiagnostic()
+    local c=EnemyConfig();
+    local snapshot=B.ReadEnemy();
+    local event=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
+    local mission=event and snapshot.missions[c.attacker.."/"..event.id];
+    Log("ENEMY_FAILED_MISSION",{turn=snapshot.turn,event=event,
+        mission=mission,governor=snapshot.native,spy=snapshot.spy,
+        roster=snapshot.spyRoster,
+        capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity()});
+    return B.EnemyProgress();
 end
 function B.CheckEnemy(phase, merit)
     local s=B.ReadEnemy(); Log("ENEMY_CHECK_"..phase,s);
@@ -364,7 +395,7 @@ end
 -- The off-map record exposes Name/Level/ReturnTurn/XLocation/YLocation, not a proven unit ID.
 ReadSpyRoster=function(owner)
     local player=assert(Players[owner], "spy roster owner missing");
-    local roster={map={},offMap={}};
+    local roster={map={},offMap={},captured={}};
     for _,unit in player:GetUnits():Members() do
         local def=GameInfo.Units[unit:GetType()];
         if def and def.Spy then
@@ -386,6 +417,25 @@ ReadSpyRoster=function(owner)
         roster.offMap[#roster.offMap+1]={name=record.Name,level=record.Level,
             returnTurn=record.ReturnTurn,x=record.XLocation,y=record.YLocation};
     end
+    -- EspionageOverview.lua enumerates every captor's roster, then filters
+    -- OwningPlayer. A captive occupies the native operative count.
+    for _,captor in ipairs(Game.GetPlayers()) do
+        local captorID=captor:GetID();
+        local diplo=captor:GetDiplomacy();
+        local held=diplo:GetNumSpiesCaptured();
+        assert(type(held)=="number" and held>=0 and held<=256,
+            "native captive spy count unavailable");
+        for i=0,held-1 do
+            local captive=assert(diplo:GetNthCapturedSpy(captorID,i),
+                "native captive spy record missing");
+            assert(type(captive.OwningPlayer)=="number" and type(captive.Name)=="string" and
+                type(captive.Level)=="number","native captive spy fields unavailable");
+            if captive.OwningPlayer==owner then
+                roster.captured[#roster.captured+1]={captor=captorID,name=captive.Name,
+                    level=captive.Level,nameIndex=captive.NameIndex};
+            end
+        end
+    end
     return roster;
 end
 
@@ -393,6 +443,161 @@ InTargetCity=function(x,y,owner,id)
     local plot=Map.GetPlot(x,y);
     local city=plot and Cities.GetPlotPurchaseCity(plot);
     return city and city:GetOwner()==owner and city:GetID()==id or false;
+end
+
+local emptyRosterSince;
+function B.EnemyRetryDiagnosis()
+    local c=EnemyConfig();
+    assert(not Game:GetProperty(RETRY),"finite enemy retry already archived");
+    local s=B.ReadEnemy();
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "preserved failed native mission event missing");
+    local reference=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),
+        "preserved failed native spy reference missing");
+    local travel=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+        "original accepted spy travel missing");
+    local mission=assert(s.missions[c.attacker.."/"..event.id],
+        "failed event has no matching native mission history");
+    assert(event.attacker==c.attacker and reference.owner==c.attacker and
+        s.spy and s.spy.id==reference.id and
+        travel.targetOwner==c.owner and travel.targetID==c.cityID and
+        mission.turn==event.turn and
+        mission.initial~=EspionageResultTypes.SUCCESS_UNDETECTED and
+        mission.initial~=EspionageResultTypes.SUCCESS_MUST_ESCAPE and
+        not s.neutralizationMission and s.native.neutralized==0,
+        "retry requires the actual failed mission with no native neutralization");
+    R.Check(s,"SETTLED");
+    local roster=assert(s.spyRoster,"native spy roster missing");
+    local occupied=#roster.map+#roster.offMap+#roster.captured;
+    local capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity();
+    assert(type(capacity)=="number" and capacity>=0,
+        "native spy capacity unavailable");
+    assert(#roster.map<=1 and #roster.offMap<=1 and #roster.captured<=1 and
+        occupied<=1,"retry requires an unambiguous original operative roster");
+    local result={spyID=reference.id,eventID=event.id,eventTurn=event.turn,
+        mission=mission,roster=roster,capacity=capacity,occupied=occupied,
+        spent=s.titles.spent,total=s.titles.total,governorType=s.native.type};
+    if #roster.map==1 then
+        local unit=roster.map[1];
+        assert(unit.name==travel.name,
+            "living map spy does not match the original operative");
+        result.mode="MAP"; result.outcome="LIVING_MAP"; result.currentID=unit.id;
+    elseif #roster.offMap==1 then
+        local unit=roster.offMap[1];
+        assert((unit.name==travel.name or
+            (unit.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
+            unit.returnTurn>=s.turn,
+            "off-map native spy differs from the original operative");
+        result.mode="RETURN"; result.outcome="LIVING_OFF_MAP";
+        result.returnName=unit.name; result.returnLevel=unit.level;
+        result.returnTurn=unit.returnTurn; result.returnX=unit.x; result.returnY=unit.y;
+    else
+        local captive=roster.captured[1];
+        assert(not s.spy.present,"spy reference is still present despite an empty map roster");
+        if captive then
+            assert(captive.name==travel.name,
+                "captured operative differs from the original spy");
+            result.outcome="CAPTURED";
+            result.captive=captive;
+        else
+            -- Arrival may temporarily expose neither a map unit nor an off-map
+            -- record. Observe for a minute before using native capacity to build.
+            local now=UI.GetElapsedTime();
+            assert(type(now)=="number","UI observation clock unavailable");
+            if not emptyRosterSince then emptyRosterSince=now; end
+            if now-emptyRosterSince<60 then
+                result.mode="OBSERVATION_PENDING";
+                result.outcome="NO_ROSTER_RECORD_YET";
+                Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
+                return result;
+            end
+            result.outcome="GONE_NO_CAPTURE_RECORD";
+        end
+        if occupied>=capacity then
+            result.mode="UNAVAILABLE_CAPACITY";
+            result.next=captive and
+                "native captive exchange or capacity increase, then reread roster" or
+                "obtain native spy capacity, then reread roster";
+        else
+            result.mode="PRODUCE";
+        end
+    end
+    Log("ENEMY_SPY_RETRY_DIAGNOSIS",result);
+    return result;
+end
+
+function B.RetryLivingSpy()
+    local c=EnemyConfig();
+    local retry=assert(CheckArchivedMission(c),"archived retry missing");
+    assert(retry.mode=="MAP" or retry.mode=="RETURN",
+        "retry is not following a living native operative");
+    local state=B.ReadEnemy();
+    R.Check(state,"SETTLED");
+    local roster=ReadSpyRoster(c.attacker);
+    Log("ENEMY_SPY_RETRY_LIVING",{retry=retry,roster=roster});
+    if #roster.offMap==1 and #roster.map==0 then
+        assert(retry.mode=="RETURN" and roster.offMap[1].level==retry.returnLevel and
+            roster.offMap[1].returnTurn==retry.returnTurn,
+            "native return record changed or belongs to another spy");
+        return "OFF_MAP_RETURN";
+    end
+    if #roster.map==0 and #roster.offMap==0 then return "ARRIVAL_UNOBSERVED"; end
+    assert(#roster.map==1 and #roster.offMap==0 and #roster.captured==0,
+        "living retry operative roster is ambiguous");
+    local unit=roster.map[1];
+    if retry.mode=="RETURN" then
+        local expected=retry.returnName=="" and GameInfo.Units["UNIT_SPY"].Name or
+            retry.returnName;
+        assert(unit.name==expected and unit.level==retry.returnLevel and
+            unit.x==retry.returnX and unit.y==retry.returnY,
+            "returned native operative differs from the off-map receipt");
+        if unit.id~=retry.spyID then
+            return "ADOPTION_REQUIRED";
+        end
+    else
+        assert(unit.id==retry.spyID,"retry map spy identity changed");
+    end
+    local city=Cities.GetPlotPurchaseCity(Map.GetPlot(unit.x,unit.y));
+    if city and city:GetOwner()==c.attacker then return "HOME_READY"; end
+    if city and city:GetOwner()==c.owner and city:GetID()==c.cityID then
+        local probe=B.Probe(c.owner,c.cityID);
+        return probe.canStart and "MISSION_READY" or "WAIT_NATIVE_READY";
+    end
+    return "WAIT_NATIVE_RETURN";
+end
+
+function B.TryAdoptReturnedSpy()
+    assert(B.RetryLivingSpy()=="ADOPTION_REQUIRED",
+        "a newly arrived native spy is required before identity adoption");
+    local roster=ReadSpyRoster(Game.GetLocalPlayer());
+    B.Queue("RETRY_ADOPT",{id=roster.map[1].id});
+    return "ADOPT_QUEUED";
+end
+
+function B.RetryProducedSpyVisible()
+    local retry=assert(Game:GetProperty(RETRY),"archived retry missing");
+    assert(retry.current==2 and retry.mode=="PRODUCE" and
+        Game:GetProperty("JAC_BOUNDARY_SPY_PROGRESS"),
+        "retry production has not received one native progress request");
+    local roster=ReadSpyRoster(Game.GetLocalPlayer());
+    assert(#roster.offMap==0 and #roster.map<=1,
+        "native production roster is ambiguous");
+    if retry.spyID then
+        assert(#roster.map==1 and roster.map[1].id==retry.spyID,
+            "bound native retry spy disappeared from the map roster");
+        return true;
+    end
+    if #roster.map==0 then return false; end
+    assert(roster.map[1].id~=retry.archive.spyID,
+        "old failed spy was mistaken for new native production");
+    return true;
+end
+
+function B.TryBindRetrySpy()
+    if not B.RetryProducedSpyVisible() then return "PRODUCTION_PENDING"; end
+    local retry=Game:GetProperty(RETRY);
+    if retry.spyID then return "BOUND"; end
+    B.Queue("BIND_SPY"); return "BIND_QUEUED";
 end
 
 local function SpyState(spy)
@@ -666,13 +871,17 @@ function B.SpyPrerequisitesReady()
         capacity=player:GetDiplomacy():GetSpyCapacity()});
     assert(player:GetCulture():HasCivic(civic.Index), "native spy prerequisite civic incomplete");
     local capacity=player:GetDiplomacy():GetSpyCapacity();
-    local existing=0;
-    for _,candidate in player:GetUnits():Members() do
-        if candidate:GetType()==unit.Index then existing=existing+1; end
-    end
-    existing=existing+player:GetDiplomacy():GetNumSpiesOffMap();
+    local roster=ReadSpyRoster(Game.GetLocalPlayer());
+    local existing=#roster.map+#roster.offMap+#roster.captured;
     Log("SPY_PRODUCTION_PREREQUISITES", {civic=unit.PrereqCivic, capacity=capacity, existing=existing});
-    assert(existing==0, "spy production fixture needs no pre-existing native spies");
+    local retry=Game:GetProperty(RETRY);
+    if retry then
+        assert(retry.current==2 and retry.mode=="PRODUCE" and retry.archive and
+            #roster.map==0 and #roster.offMap==0 and existing==#roster.captured,
+            "retry production requires a proven free native spy slot");
+    else
+        assert(existing==0, "spy production fixture needs no pre-existing native spies");
+    end
     assert(type(capacity)=="number" and capacity>existing, "native spy capacity unavailable");
     return prepared;
 end
@@ -688,14 +897,26 @@ function B.Queue(action, params)
         "a boundary frame request is already pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
     assert(action == "PREPARE" or action == "PREPARE_ENEMY" or action == "EVOLVE_ENEMY" or
-        action == "CONFIRM_ENEMY" or
+        action == "CONFIRM_ENEMY" or action == "BEGIN_SPY_RETRY" or
         action == "CAPTURE_ENEMY" or action == "SAVE_TRAVEL" or
         action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
         action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "BUILD_SPY" or
         action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
-        action == "SPY_MISSION", "unknown boundary action");
+        action == "SPY_MISSION" or action == "RETRY_ADOPT", "unknown boundary action");
+    local retry=Game:GetProperty(RETRY);
+    if retry and action=="SPY_MISSION" then
+        local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"retry spy missing");
+        assert(retry.current==2 and retry.spyID==spy.id and not retry.missionRequested and
+            not Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+            "retry native mission has already been requested or completed");
+    end
+    if retry and action=="SPY_TRAVEL" then
+        assert(retry.spyID and not Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+            "retry native travel has already been accepted");
+    end
     if action == "SPAWN_SPY" or action == "BUILD_SPY" or action == "PROGRESS_SPY" or
-        action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or action == "SPY_MISSION" then
+        action == "BIND_SPY" or action == "ADOPT_SPY" or action == "RETRY_ADOPT" or
+        action == "SPY_TRAVEL" or action == "SPY_MISSION" then
         assert(not spyQueued[action], "native spy request cannot be replayed in this session");
         spyQueued[action] = true;
     end
@@ -711,7 +932,8 @@ local function EnemySyncRequest(action,observed)
     local onStart={PREPARE_ENEMY="JAC_BoundaryPrepareEnemy",
         EVOLVE_ENEMY="JAC_BoundaryEvolveEnemy",
         CONFIRM_ENEMY="JAC_BoundaryConfirmEnemy",
-        CAPTURE_ENEMY="JAC_BoundaryCaptureEnemyRecovery"};
+        CAPTURE_ENEMY="JAC_BoundaryCaptureEnemyRecovery",
+        BEGIN_SPY_RETRY="JAC_BoundaryBeginEnemySpyRetry"};
     payload.OnStart=assert(onStart[action],"unknown enemy fixture operation");
     UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,payload);
     Log("ENEMY_SYNC_REQUEST",{action=action,token=payload.Token,
@@ -726,6 +948,21 @@ local function Submit(command)
     local action, params = command.action, command.params;
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
+    elseif action == "BEGIN_SPY_RETRY" then
+        local d=B.EnemyRetryDiagnosis();
+        assert(d.mode=="PRODUCE" or d.mode=="RETURN" or d.mode=="MAP",
+            "native retry route unavailable: "..d.mode);
+        return EnemySyncRequest(action,{Mode=d.mode,Outcome=d.outcome,
+            SpyID=d.spyID,CurrentID=d.currentID,EventID=d.eventID,EventTurn=d.eventTurn,
+            Operation=d.mission.operation,Plot=d.mission.plot,
+            Initial=d.mission.initial,Escape=d.mission.escape,
+            CompletionTurn=d.mission.turn,Spent=d.spent,Total=d.total,
+            GovernorType=d.governorType,Capacity=d.capacity,Occupied=d.occupied,
+            CaptiveCaptor=d.captive and d.captive.captor,
+            CaptiveName=d.captive and d.captive.name,
+            CaptiveLevel=d.captive and d.captive.level,
+            ReturnName=d.returnName,ReturnLevel=d.returnLevel,
+            ReturnTurn=d.returnTurn,ReturnX=d.returnX,ReturnY=d.returnY});
     elseif action == "PREPARE_ENEMY" then
         local observed=B.EnemyPreflight();
         return EnemySyncRequest(action,{GovernorIndex=observed.governorIndex,
@@ -807,6 +1044,20 @@ local function Submit(command)
             "arrived native spy does not match the accepted travel");
         return {action=action,stage="ADOPT_PENDING",before={owner=owner,id=prior.oldID},
             newID=arrived.id,targetOwner=prior.targetOwner,targetID=prior.targetID};
+    elseif action == "RETRY_ADOPT" then
+        local retry=assert(CheckArchivedMission(c),"archived retry missing");
+        assert(retry.mode=="RETURN" and retry.spyID and type(params.id)=="number",
+            "returned native spy cannot be adopted");
+        local arrived=assert(Players[owner]:GetUnits():FindID(params.id),
+            "returned native spy unit missing");
+        local city=assert(Cities.GetPlotPurchaseCity(Map.GetPlot(arrived:GetX(),arrived:GetY())),
+            "returned native spy has no city");
+        assert(arrived:GetType()==GameInfo.Units["UNIT_SPY"].Index and
+            arrived:GetID()~=retry.spyID and arrived:GetX()==retry.returnX and
+            arrived:GetY()==retry.returnY,
+            "returned native spy differs from observed off-map arrival");
+        return {action=action,stage="ADOPT_PENDING",before={owner=owner,id=retry.spyID},
+            newID=arrived:GetID(),targetOwner=city:GetOwner(),targetID=city:GetID()};
     else
         local spy=LocalSpy(); local city=assert(CityManager.GetCity(params.owner,params.city), "spy target missing");
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
@@ -1000,6 +1251,12 @@ ContextPtr:SetUpdate(function()
             elseif request.action=="CAPTURE_ENEMY" then
                 local baseline=Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY");
                 accepted=baseline and c and baseline.remaining==request.payload.Neutralized;
+            elseif request.action=="BEGIN_SPY_RETRY" then
+                local retry=Game:GetProperty(RETRY);
+                accepted=retry and retry.current==2 and retry.mode==request.payload.Mode and
+                    retry.archive and retry.archive.spyID==request.payload.SpyID and
+                    retry.archive.eventID==request.payload.EventID and
+                    Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")==nil;
             end
             B.lastAction=(accepted and "ACCEPTED_" or "REJECTED_")..request.action;
             Log("ENEMY_SYNC_ACCEPTANCE",{action=request.action,accepted=accepted,
@@ -1128,6 +1385,17 @@ Events.SpyMissionCompleted.Add(function(attacker, missionID)
     Log("MISSION_EVENT", {attacker=attacker, mission=missionID, turn=Game.GetCurrentGameTurn()});
     local c=Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG");
     if c and attacker==c.attacker and c.cityID then
+        local retry=Game:GetProperty(RETRY);
+        if retry then
+            if missionID==retry.archive.eventID then
+                Log("ARCHIVED_MISSION_EVENT_IGNORED",{attacker=attacker,id=missionID});
+                return;
+            end
+            local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
+            assert(retry.missionRequested and marker and marker.action=="SPY_MISSION" and
+                marker.spyID==retry.spyID,
+                "retry completion has no matching official mission request");
+        end
         local saved=Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION");
         if saved and saved.attacker==attacker and saved.id==missionID then
             B.enemyMissionStatus="RECORDED";

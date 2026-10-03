@@ -557,6 +557,15 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         BTreeSet::from([
             "leader-persona-property-abi-15km.json".to_string(),
             "leader-persona-spy-result-diagnostic.json".to_string(),
+            "leader-persona-spy-neutralization-retry-diagnose.json".to_string(),
+            "leader-persona-spy-neutralization-retry-prepare.json".to_string(),
+            "leader-persona-spy-neutralization-retry-produce.json".to_string(),
+            "leader-persona-spy-neutralization-retry-production-tick.json".to_string(),
+            "leader-persona-spy-neutralization-retry-production-bind.json".to_string(),
+            "leader-persona-spy-neutralization-retry-return-tick.json".to_string(),
+            "leader-persona-spy-neutralization-retry-native-ready-tick.json".to_string(),
+            "leader-persona-spy-neutralization-retry-living-read.json".to_string(),
+            "leader-persona-spy-neutralization-retry-adopt.json".to_string(),
         ])
     );
     for name in &actual {

@@ -602,6 +602,13 @@ fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
     assert_eq!(h.writes(), ["JAC_BOUNDARY_CONFIG"]);
     h.event("JAC_BoundarySpawnSpy").unwrap();
     assert_eq!(h.global::<bool>("CIVIC_COMPLETED"), true);
+    assert_eq!(
+        field::<bool>(
+            &h.game_property::<Table>("JAC_BOUNDARY_SPY_PRODUCTION"),
+            "progressed"
+        ),
+        false
+    );
     h.check("LOST", Some(12));
     assert!(h
         .game_property::<Option<Table>>("JAC_BOUNDARY_SPY")
@@ -614,6 +621,13 @@ fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
     h.frame().unwrap();
     h.event("JAC_BoundaryProgressSpy").unwrap();
     assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 1);
+    assert_eq!(
+        field::<bool>(
+            &h.game_property::<Table>("JAC_BOUNDARY_SPY_PRODUCTION"),
+            "progressed"
+        ),
+        true
+    );
     assert!(h
         .game_property::<Option<Table>>("JAC_BOUNDARY_SPY")
         .is_none());
@@ -630,7 +644,9 @@ fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
         h.writes(),
         [
             "JAC_BOUNDARY_CONFIG",
+            "JAC_BOUNDARY_SPY_PRODUCTION",
             "JAC_BOUNDARY_SPY_PREPARED",
+            "JAC_BOUNDARY_SPY_PRODUCTION",
             "JAC_BOUNDARY_SPY_PROGRESS",
             "JAC_BOUNDARY_SPY"
         ]

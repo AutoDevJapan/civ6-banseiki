@@ -16,7 +16,8 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryAdoptSpyIdentity','JAC_BoundarySaveSpyTravel','JAC_BoundaryPrepareEnemy',
  'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',
  'JAC_BoundaryEnemyFixtureBarrier','JAC_BoundaryConfirmEnemy',
- 'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery'}) do GameEvents[k]=event() end
+ 'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery',
+ 'JAC_BoundaryBeginEnemySpyRetry'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
  local r={}; for i,row in ipairs(rows) do r[i-1]=row; r[row[key]]=row; if row.Hash then r[row.Hash]=row end end
@@ -38,7 +39,7 @@ GameInfo.GovernorPromotions={BASE_TEST={Hash=7000}}
 GameInfo.JAC_PersonaSkills=collection({{LeaderType=LEADER,ModifierId=BASE}},'ModifierId')
 GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,ModifierId=NODE,CategoryType='ADMIN',RouteType='SIGNATURE'}},'NodeType')
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
-local spyDef={Index=55,Hash=555,UnitType='UNIT_SPY',PrereqCivic='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE',Spy=true}
+local spyDef={Index=55,Hash=555,UnitType='UNIT_SPY',Name='LOC_UNIT_SPY_NAME',PrereqCivic='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE',Spy=true}
 GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY=spyDef,[55]=spyDef}
 GameInfo.Civics={[spyDef.PrereqCivic]={Index=12}}
 GameInfo.GreatPersonIndividuals={[3]={GreatPersonIndividualType='GP_TEST'}}
@@ -72,6 +73,7 @@ CONTROL=city(10,0,1,0,'Control',0)
 TARGET=city(11,0,2,0,'Target',1)
 FOREIGN=city(20,1,2,1,'Foreign',0)
 BUILD_HEAD=nil; PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
+CAPTURED={[0]={},[1]={}}
 local queue={
  GetAt=function(_,index) assert(index==0); return BUILD_HEAD end,
  CanProduce=function(_,hash) return hash==555 and CIVIC_COMPLETED and SPY_CAPACITY>0 end,
@@ -80,7 +82,7 @@ CONTROL.GetBuildQueue=function() return queue end
 function ADVANCE_TURN()
  TURN=TURN+1
  if PROGRESS_CALLS==1 and BUILD_HEAD and PRODUCTION_COMPLETES~=false then
-  local spy=makeSpy(0,15); spy.x=CONTROL.x; spy.y=CONTROL.y; spy.finish=0
+  local spy=makeSpy(0,PRODUCED_SPY_ID or 15); spy.x=CONTROL.x; spy.y=CONTROL.y; spy.finish=0
   BUILD_HEAD=nil
  end
 end
@@ -105,6 +107,7 @@ CIVIC_COMPLETED=false
 Players={}
 for _,id in ipairs({0,1,62}) do
  local p={}
+ p.GetID=function() return id end
  p.IsHuman=function() return id==0 end; p.IsAlive=function() return true end
  p.IsTurnActive=function() return ACTIVE_TURN end
  p.GetGovernors=function() return {
@@ -123,9 +126,12 @@ for _,id in ipairs({0,1,62}) do
  p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
   GetSpyCapacity=function() return CIVIC_COMPLETED and SPY_CAPACITY or 0 end,
   GetNumSpiesOffMap=function() return id==0 and #OFF_MAP or 0 end,
-  GetNthOffMapSpy=function(_,owner,index) assert(owner==id); return id==0 and OFF_MAP[index+1] or nil end} end
+  GetNthOffMapSpy=function(_,owner,index) assert(owner==id); return id==0 and OFF_MAP[index+1] or nil end,
+  GetNumSpiesCaptured=function() return #(CAPTURED[id] or {}) end,
+  GetNthCapturedSpy=function(_,owner,index) assert(owner==id); return CAPTURED[id][index+1] end} end
  Players[id]=p
 end
+Game.GetPlayers=function() return {Players[0],Players[1]} end
 PlayerManager={GetAliveMajorIDs=function() return {0,1} end,GetFreeCitiesPlayerID=function() return 62 end}
 CityManager={GetCity=function(owner,id) for _,c in ipairs(CITIES) do if c.owner==owner and c.id==id then return c end end end,
  CanStartOperation=function(city,op,params) assert(city==CONTROL and op==CityOperationTypes.BUILD and params.unit==555);
@@ -156,6 +162,7 @@ end
 ContextPtr={SetHide=function() end,SetUpdate=function(_,fn) FRAME=fn end}
 MODE=InterfaceModeTypes.SELECTION
 UI={IsGameCoreBusy=function() return BUSY or false end,
+ GetElapsedTime=function() return ELAPSED or 0 end,
  RequestPlayerOperation=function(owner,op,params) REQUESTS[#REQUESTS+1]={owner=owner,op=op,params=params} end,
  DeselectAllUnits=function() SELECTED=nil end,DeselectAllCities=function() end,
  SelectCity=function(city) SELECTED_CITY=city end,GetHeadSelectedCity=function() return SELECTED_CITY end,
@@ -235,7 +242,7 @@ function ARRIVE_OFFMAP(id)
  assert(#OFF_MAP==1)
  local travelling=OFF_MAP[1]; OFF_MAP={}
  local spy=makeSpy(0,id)
- spy.name=travelling.Name; spy.level=travelling.Level
+ spy.name=travelling.Name=='' and spyDef.Name or travelling.Name; spy.level=travelling.Level
  spy.x=travelling.XLocation; spy.y=travelling.YLocation; spy.finish=0
  return spy
 end

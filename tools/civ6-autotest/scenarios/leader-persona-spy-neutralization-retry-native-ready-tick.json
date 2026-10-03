@@ -1,0 +1,14 @@
+{
+  "name": "One real turn waiting for the surviving spy's native mission eligibility",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='WAIT_NATIVE_READY','surviving spy does not need an eligibility turn'); return 'WAIT_NATIVE_READY'"},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()"},
+    {"action":"exit_to_menu"}
+  ]
+}

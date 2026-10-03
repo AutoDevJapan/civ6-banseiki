@@ -16,13 +16,13 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"
       }
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local b=ExposedMembers.JAC_PersonaBoundary; b.RecordEnemy('FAILED_MISSION_STATE'); return b.EnemyProgress()"
+      "code": "return ExposedMembers.JAC_PersonaBoundary.ReadEnemyResultDiagnostic()"
     },
     {
       "action": "exit_to_menu"

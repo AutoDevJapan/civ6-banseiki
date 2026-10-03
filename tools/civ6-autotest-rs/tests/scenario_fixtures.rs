@@ -209,6 +209,70 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
 }
 
 #[test]
+fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
+    let lua = Lua::new();
+    let names = [
+        "retry-diagnose",
+        "retry-prepare",
+        "retry-produce",
+        "retry-production-tick",
+        "retry-production-bind",
+        "retry-return-tick",
+        "retry-native-ready-tick",
+        "retry-living-read",
+        "retry-adopt",
+    ];
+    let mut saves = 0;
+    for suffix in names {
+        let name = format!("leader-persona-spy-neutralization-{suffix}.json");
+        let data = scenario(&name);
+        validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(data["strict_lua_errors"], true, "{name}");
+        let steps = steps(&data);
+        assert!(action(&steps[0], "load") && action(steps.last().unwrap(), "exit_to_menu"));
+        for step in steps {
+            assert!(!action(step, "configure") && !action(step, "start_game"));
+            assert!(!action(step, "restart_game") && !action(step, "autoplay"));
+            if action(step, "save") || action(step, "load") {
+                assert_eq!(step["name"], "JAC-Enemy-Neutralization", "{name}");
+                assert_eq!(step["exact_name"], true, "{name}");
+                assert_eq!(step["checkpoint"], true, "{name}");
+                if action(step, "save") {
+                    saves += 1;
+                }
+            }
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+        assert_eq!(
+            steps.iter().filter(|s| action(s, "end_turn")).count(),
+            usize::from(suffix.ends_with("tick")),
+            "{name}"
+        );
+    }
+    assert_eq!(saves, 9);
+    let prepare = scenario("leader-persona-spy-neutralization-retry-prepare.json");
+    let codes: Vec<_> = steps(&prepare).iter().filter_map(embedded_lua).collect();
+    assert!(codes.iter().any(|code| code.contains("d.spyID==655368")
+        && code.contains("d.eventID==0")
+        && code.contains("d.eventTurn==23")
+        && code.contains("Queue('BEGIN_SPY_RETRY')")));
+    let produce = scenario("leader-persona-spy-neutralization-retry-produce.json");
+    let codes: Vec<_> = steps(&produce).iter().filter_map(embedded_lua).collect();
+    let index = |needle: &str| codes.iter().position(|code| code.contains(needle)).unwrap();
+    assert!(index("Queue('SPAWN_SPY')") < index("Queue('BUILD_SPY')"));
+    assert!(index("Queue('BUILD_SPY')") < index("Queue('PROGRESS_SPY')"));
+    assert_eq!(
+        codes
+            .iter()
+            .filter(|code| code.contains("Queue('PROGRESS_SPY')"))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn produced_spy_comparison_uses_native_build_and_a_short_acceptance_barrier() {
     let data = scenario("leader-persona-spy-production-15km.json");
     let steps = steps(&data);
