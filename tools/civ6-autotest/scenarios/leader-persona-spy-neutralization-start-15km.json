@@ -165,6 +165,15 @@
       "timeout": 60
     },
     {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return type(ExposedMembers.JAC_LeaderPersonaNativeRead)=='function' and type(ExposedMembers.JAC_PersonaBoundary)=='table'"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "InGame",
       "code": "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); return 'enemy Join and one-title preparation queued'"
@@ -175,7 +184,30 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_PREPARE_ENEMY' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')~=nil"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local a=b.lastAction; if a=='ERROR_PREPARE_ENEMY' or a=='UNKNOWN_PREPARE_ENEMY' or a=='REJECTED_PREPARE_ENEMY' then error('enemy Join/title refused after barrier: '..a) end; return a=='ACCEPTED_PREPARE_ENEMY' and Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')~=nil"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local s=ExposedMembers.JAC_PersonaBoundary.EnemyState(); return s.personaState=='GREAT_PERSON' and not s.appointed and s.canAppoint and s.total-s.spent>=1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('EVOLVE_ENEMY'); return 'regular AI evolution preparation queued after UI title refresh'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_EVOLVE_ENEMY' or a=='UNKNOWN_EVOLVE_ENEMY' or a=='REJECTED_EVOLVE_ENEMY' then error('regular AI evolution refused after barrier: '..a) end; return a=='ACCEPTED_EVOLVE_ENEMY' and Game:GetProperty('JAC_PERSONA_LEADER_JAC_ASHINA_MORIKIYO_STATE')=='EVOLVING'"
       }
     },
     {
@@ -283,7 +315,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); local a=b.lastAction; if a=='ERROR_CONFIRM_ENEMY' then error(a) end; return c.cityID~=nil or (a~='QUEUED_CONFIRM_ENEMY' and a~='SUBMITTED_CONFIRM_ENEMY')"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); local a=b.lastAction; if a=='ERROR_CONFIRM_ENEMY' or a=='UNKNOWN_CONFIRM_ENEMY' or a=='REJECTED_CONFIRM_ENEMY' then error('enemy native confirmation refused: '..a) end; if a=='QUEUED_CONFIRM_ENEMY' or a=='DISPATCHED_CONFIRM_ENEMY' or a=='BARRIER_SENT_CONFIRM_ENEMY' then return false end; return not c.cityID or a=='ACCEPTED_CONFIRM_ENEMY'"
       }
     },
     {

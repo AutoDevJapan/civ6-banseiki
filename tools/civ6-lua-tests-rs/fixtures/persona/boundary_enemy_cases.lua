@@ -32,10 +32,29 @@ function E.setup()
   HasGovernor=function(_,hash) return hash==9001 and ENEMY_GOV~=nil end,
   GetGovernor=function(_,hash) assert(hash==9001); return ENEMY_GOV end,
   CanEverAppointGovernor=function(_,hash) return hash==9001 end,
+  CanAppointGovernor=function(_,hash)
+   return hash==9001 and ENEMY_GOV==nil and ENEMY_POINTS-ENEMY_SPENT>=1
+  end,
   GetGovernorPoints=function() return ENEMY_POINTS end,
   GetGovernorPointsSpent=function() return ENEMY_SPENT end,
   CanAssignGovernor=function(_,hash,city) return hash==9001 and city==FOREIGN and ENEMY_GOV~=nil end}
  Players[1].GetGovernors=function() return governors end
+ -- This doubles the existing product UI bridge. It reads UI-owned state even
+ -- while fireCore temporarily removes every per-type getter from Gameplay.
+ ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
+  assert(owner==1 and leader==E.leader)
+  local value={appointed=ENEMY_GOV~=nil,
+   canAppoint=ENEMY_GOV==nil and ENEMY_POINTS-ENEMY_SPENT>=1}
+  if ENEMY_GOV then
+   value.base=ENEMY_GOV.base; value.neutralized=ENEMY_GOV.neutralized
+   value.established=ENEMY_GOV.established; value.surchargePaid=0
+   if ENEMY_GOV.assigned then
+    value.cityOwner=ENEMY_GOV.assigned:GetOwner()
+    value.cityID=ENEMY_GOV.assigned:GetID()
+   end
+  end
+  return value
+ end
  local civic=false
  Players[1].GetCulture=function() return {
   HasCivic=function(_,index) assert(index==7); return civic end,
@@ -77,6 +96,21 @@ function E.setup()
  Players[2].GetDiplomacy=function() return {GetMission=function() return 0 end} end
 end
 
+function E.fireCore(name,params,controller)
+ local original=Players[1].GetGovernors
+ Players[1].GetGovernors=function()
+  return {GetGovernorPoints=function() return ENEMY_POINTS end,
+   GetGovernorPointsSpent=function() return ENEMY_SPENT end}
+ end
+ local core=Players[1]:GetGovernors()
+ assert(core.HasGovernor==nil and core.CanEverAppointGovernor==nil and
+  core.CanAppointGovernor==nil and core.GetGovernor==nil and
+  core.CanAssignGovernor==nil, 'test leaked UI-only Governor getter into Gameplay')
+ local ok,err=pcall(fire,assert(GameEvents[name]),controller or 0,params)
+ Players[1].GetGovernors=original
+ if not ok then error(err) end
+end
+
 function E.appoint(assigned)
  ENEMY_GOV={assigned=assigned and FOREIGN or nil,neutralized=0,established=false,
   onSite=0,type=1,base=true}
@@ -90,8 +124,7 @@ function E.appoint(assigned)
  ENEMY_SPENT=1
 end
 function E.bind()
- assert(ENEMY_GOV and ENEMY_GOV.assigned==FOREIGN)
- fire(GameEvents.JAC_BoundaryConfirmEnemy,0)
+ error('use the UI scalar request and synchronized Gameplay barrier to bind')
 end
 function E.settled()
  ENEMY_GOV.assigned=FOREIGN; ENEMY_GOV.established=true; ENEMY_GOV.onSite=5

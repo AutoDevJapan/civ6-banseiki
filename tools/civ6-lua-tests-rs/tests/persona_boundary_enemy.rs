@@ -42,11 +42,29 @@ impl Enemy {
     }
 
     fn prepare(&self) {
-        self.run("fire(GameEvents.JAC_BoundaryPrepareEnemy,0)");
+        self.sync("PREPARE_ENEMY", "JAC_BoundaryPrepareEnemy");
+        self.sync("EVOLVE_ENEMY", "JAC_BoundaryEvolveEnemy");
     }
 
     fn bind(&self) {
-        self.run("ENEMY_CASES.appoint(true); ENEMY_CASES.bind()");
+        self.run("ENEMY_CASES.appoint(true)");
+        self.sync("CONFIRM_ENEMY", "JAC_BoundaryConfirmEnemy");
+    }
+
+    fn capture(&self) {
+        self.sync("CAPTURE_ENEMY", "JAC_BoundaryCaptureEnemyRecovery");
+    }
+
+    fn sync(&self, action: &str, event: &str) {
+        self.run(&format!(
+            "ExposedMembers.JAC_PersonaBoundary.Queue('{action}'); FRAME(); \
+             local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='{event}'); \
+             ENEMY_CASES.fireCore('{event}',r.params); FRAME(); \
+             local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier'); \
+             ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); \
+             fire(Events.GameCoreEventPublishComplete); FRAME(); \
+             assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_{action}')"
+        ));
     }
 
     fn success(&self) {
@@ -56,7 +74,7 @@ impl Enemy {
     }
 
     fn barrier(&self) {
-        self.run("local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryEnemyBarrier'); fire(GameEvents.JAC_BoundaryEnemyBarrier,0,r.params); fire(Events.GameCoreEventPublishComplete)");
+        self.run("local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryEnemyBarrier'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyBarrier',r.params); fire(Events.GameCoreEventPublishComplete)");
     }
 }
 
@@ -69,16 +87,66 @@ fn enemy_fixture_requires_real_actor_roles_join_and_one_official_title() {
     );
     h.prepare();
     h.run("local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); assert(c.attacker==0 and c.owner==1 and c.source==2 and c.spent==0 and c.total==1); assert(Game:GetProperty('JAC_PERSONA_'..c.leader..'_STATE')=='EVOLVING'); assert(ENEMY_POINTS==1 and ENEMY_SPENT==0)");
-    h.reject("fire(GameEvents.JAC_BoundaryPrepareEnemy,0)", "fresh game");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME()",
+        "fresh independent game",
+    );
+}
+
+#[test]
+fn enemy_preflight_rejects_missing_ui_bridge_or_unjoined_candidate_before_core_write() {
+    let missing = Enemy::new();
+    missing.run("ExposedMembers.JAC_LeaderPersonaNativeRead=nil");
+    missing.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME()",
+        "product UI native Governor reader unavailable",
+    );
+    missing.run("assert(#REQUESTS==0 and ENEMY_POINTS==0 and Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')==nil)");
+
+    let other = Enemy::new();
+    other.run("local get=Players[1].GetGovernors; Players[1].GetGovernors=function() local g=get(); g.CanEverAppointGovernor=function() return true end; return g end");
+    other.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME()",
+        "another unjoined persona",
+    );
+    other.run("assert(#REQUESTS==0 and ENEMY_POINTS==0 and Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')==nil)");
+}
+
+#[test]
+fn stale_scalar_receipt_cannot_join_or_grant_a_title_in_gameplay() {
+    let h = Enemy::new();
+    h.run("ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryPrepareEnemy'); r.params.Turn=TURN-1");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryPrepareEnemy',REQUESTS[#REQUESTS].params)",
+        "stale or belongs to another actor",
+    );
+    h.run("assert(ENEMY_POINTS==0 and Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')==nil)");
+}
+
+#[test]
+fn rejected_core_prepare_is_reported_after_the_barrier_instead_of_timing_out() {
+    let h = Enemy::new();
+    h.run("ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME(); local r=REQUESTS[#REQUESTS]; local reader=ExposedMembers.JAC_LeaderPersonaNativeRead; ExposedMembers.JAC_LeaderPersonaNativeRead=function() return nil end; local ok=pcall(ENEMY_CASES.fireCore,'JAC_BoundaryPrepareEnemy',r.params); ExposedMembers.JAC_LeaderPersonaNativeRead=reader; assert(not ok and ENEMY_POINTS==0); FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='REJECTED_PREPARE_ENEMY' and Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')==nil)");
+}
+
+#[test]
+fn evolution_before_the_join_publish_event_cannot_advance_persona_state() {
+    let h = Enemy::new();
+    h.run("ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_ENEMY'); FRAME(); local r=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryPrepareEnemy',r.params); EARLY={Action='EVOLVE_ENEMY',Attacker=0,Defender=1,Source=2,Leader=ENEMY_CASES.leader,Token=r.params.Token+1,Turn=TURN,Frame=r.params.Frame+1,PublishEpoch=r.params.PublishEpoch,Total=ENEMY_POINTS,Spent=ENEMY_SPENT}");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryEvolveEnemy',EARLY)",
+        "enemy Join must complete before evolution preparation",
+    );
+    h.run("assert(Game:GetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_STATE')=='GREAT_PERSON' and not Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG').evolvedToken)");
 }
 
 #[test]
 fn cross_player_appointment_is_judged_only_after_the_synchronized_barrier() {
     let h = Enemy::new();
     h.prepare();
-    h.run("ExposedMembers.JAC_PersonaBoundary.QueueEnemy('APPOINT'); FRAME(); assert(#REQUESTS==1 and REQUESTS[1].owner==1 and REQUESTS[1].op==PlayerOperations.APPOINT_GOVERNOR); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='DISPATCHED_APPOINT'); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='BARRIER_SENT_APPOINT')");
+    h.run("BASE_REQUESTS=#REQUESTS; ExposedMembers.JAC_PersonaBoundary.QueueEnemy('APPOINT'); FRAME(); assert(#REQUESTS==BASE_REQUESTS+1 and REQUESTS[#REQUESTS].owner==1 and REQUESTS[#REQUESTS].op==PlayerOperations.APPOINT_GOVERNOR); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='DISPATCHED_APPOINT'); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='BARRIER_SENT_APPOINT')");
     h.barrier();
-    h.run("FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='REJECTED_APPOINT'); assert(ENEMY_SPENT==0 and ENEMY_GOV==nil); assert(#REQUESTS==2)");
+    h.run("FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='REJECTED_APPOINT'); assert(ENEMY_SPENT==0 and ENEMY_GOV==nil); assert(#REQUESTS==BASE_REQUESTS+2)");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.QueueEnemy('APPOINT')",
         "already attempted before load",
@@ -95,9 +163,11 @@ fn cross_player_appointment_is_judged_only_after_the_synchronized_barrier() {
 fn rejected_foreign_assignment_can_fall_back_to_the_same_native_ai_governor() {
     let h = Enemy::new();
     h.prepare();
-    h.run("ENEMY_CASES.appoint(false); assert(ExposedMembers.JAC_PersonaBoundary.TryEnemyAssignment()=='QUEUED_ASSIGN'); FRAME(); assert(REQUESTS[1].owner==1 and REQUESTS[1].op==PlayerOperations.ASSIGN_GOVERNOR and REQUESTS[1].params.city==20); FRAME()");
+    h.run("ENEMY_CASES.appoint(false); assert(ExposedMembers.JAC_PersonaBoundary.TryEnemyAssignment()=='QUEUED_ASSIGN'); FRAME(); assert(REQUESTS[#REQUESTS].owner==1 and REQUESTS[#REQUESTS].op==PlayerOperations.ASSIGN_GOVERNOR and REQUESTS[#REQUESTS].params.city==20); FRAME()");
     h.barrier();
-    h.run("FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='REJECTED_ASSIGN'); ENEMY_GOV.assigned=FOREIGN; ENEMY_CASES.bind(); local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); assert(c.cityID==20 and c.x==2 and c.y==1); assert(Game:GetProperty('JAC_PERSONA_'..c.leader..'_STATE')=='GOVERNOR')");
+    h.run("FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyLast=='REJECTED_ASSIGN'); ENEMY_GOV.assigned=FOREIGN");
+    h.sync("CONFIRM_ENEMY", "JAC_BoundaryConfirmEnemy");
+    h.run("local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); assert(c.cityID==20 and c.x==2 and c.y==1); assert(Game:GetProperty('JAC_PERSONA_'..c.leader..'_STATE')=='GOVERNOR')");
     h.run("ENEMY_CASES.settled(); ExposedMembers.JAC_PersonaBoundary.CheckEnemy('SETTLED')");
 }
 
@@ -110,7 +180,8 @@ fn missing_native_governor_or_unprepared_person_cannot_become_a_target() {
         "ExposedMembers.JAC_PersonaBoundary.ReadEnemy()",
         "native governor not appointed",
     );
-    h.run("ENEMY_CASES.appoint(true); ENEMY_CASES.bind()");
+    h.run("local c=Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG'); c.cityID=nil; c.x=nil; c.y=nil; Game:SetProperty('JAC_BOUNDARY_ENEMY_CONFIG',c)");
+    h.bind();
     h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_STATE','GREAT_PERSON')");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.CheckEnemy('SETTLED')",
@@ -142,6 +213,15 @@ fn wrong_history_or_event_id_fails_but_success_with_capture_counts() {
 }
 
 #[test]
+fn neutralized_governor_establishment_flag_is_observed_without_inventing_its_value() {
+    let h = Enemy::new();
+    h.success();
+    h.run(
+        "ENEMY_GOV.established=true; ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')",
+    );
+}
+
+#[test]
 fn enemy_native_mission_uses_one_human_spy_request_and_does_not_claim_success_early() {
     let h = Enemy::new();
     h.prepare();
@@ -154,8 +234,8 @@ fn enemy_native_mission_uses_one_human_spy_request_and_does_not_claim_success_ea
 fn attacker_completion_event_is_recorded_once_then_checked_against_native_history() {
     let h = Enemy::new();
     h.success();
-    h.run("Game:SetProperty('JAC_BOUNDARY_ENEMY_MISSION',nil); fire(Events.SpyMissionCompleted,1,0); FRAME(); assert(#REQUESTS==0); fire(Events.SpyMissionCompleted,0,0); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='OBSERVED'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.owner==0 and r.params.OnStart=='JAC_BoundaryRecordEnemyMission' and r.params.MissionID==0); fire(GameEvents.JAC_BoundaryRecordEnemyMission,0,r.params); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='RECORDED'); ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED'); assert(#REQUESTS==1)");
-    h.run("fire(Events.SpyMissionCompleted,0,0); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='RECORDED'); FRAME(); assert(#REQUESTS==1)");
+    h.run("BASE_REQUESTS=#REQUESTS; Game:SetProperty('JAC_BOUNDARY_ENEMY_MISSION',nil); fire(Events.SpyMissionCompleted,1,0); FRAME(); assert(#REQUESTS==BASE_REQUESTS); fire(Events.SpyMissionCompleted,0,0); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='OBSERVED'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.owner==0 and r.params.OnStart=='JAC_BoundaryRecordEnemyMission' and r.params.MissionID==0); fire(GameEvents.JAC_BoundaryRecordEnemyMission,0,r.params); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='RECORDED'); ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED'); assert(#REQUESTS==BASE_REQUESTS+1)");
+    h.run("fire(Events.SpyMissionCompleted,0,0); assert(ExposedMembers.JAC_PersonaBoundary.enemyMissionStatus=='RECORDED'); FRAME(); assert(#REQUESTS==BASE_REQUESTS+1)");
 }
 
 #[test]
@@ -164,10 +244,10 @@ fn finished_mission_without_completion_event_is_never_reported_as_success() {
     h.prepare();
     h.bind();
     h.run("ENEMY_CASES.settled(); local spy=makeSpy(0,15); spy.x=FOREIGN.x; spy.y=FOREIGN.y; spy.op=0; spy.finish=TURN+8; Game:SetProperty('JAC_BOUNDARY_SPY',{owner=0,id=15}); Game:SetProperty('JAC_BOUNDARY_SPY_BARRIER',{owner=0,spyID=15,action='SPY_MISSION',token=1}); assert(ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()); spy.op=-1; spy.finish=TURN");
-    for _ in 0..9 {
+    for _ in 0..12 {
         h.run("assert(not ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady())");
     }
-    h.run("assert(ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady())");
+    h.run("assert(not ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady())");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.EnemyProgress()",
         "without the attacker event",
@@ -178,7 +258,9 @@ fn finished_mission_without_completion_event_is_never_reported_as_success() {
 fn merit_stoppage_accounts_for_legitimate_skill_spending_without_counting_it_as_earnings() {
     let h = Enemy::new();
     h.success();
-    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',12); fire(GameEvents.JAC_BoundaryCaptureEnemyRecovery,0); Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,1); Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',4); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='NEUTRALIZED')");
+    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',12)");
+    h.capture();
+    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,1); Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',4); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='NEUTRALIZED')");
     h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',5)");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.EnemyProgress()",
@@ -190,7 +272,9 @@ fn merit_stoppage_accounts_for_legitimate_skill_spending_without_counting_it_as_
 fn acquired_skill_cannot_disappear_during_native_recovery() {
     let h = Enemy::new();
     h.success();
-    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,1); fire(GameEvents.JAC_BoundaryCaptureEnemyRecovery,0); Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,nil)");
+    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,1)");
+    h.capture();
+    h.run("Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_NODE_'..ENEMY_CASES.skill,nil)");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.EnemyProgress()",
         "purchased native persona skill was lost",
@@ -201,7 +285,8 @@ fn acquired_skill_cannot_disappear_during_native_recovery() {
 fn recovery_survives_view_reload_stays_unassigned_and_requires_five_native_turns() {
     let h = Enemy::new();
     h.success();
-    h.run("fire(GameEvents.JAC_BoundaryCaptureEnemyRecovery,0); assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY').merit==6); BEFORE=ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')");
+    h.capture();
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY').merit==6); BEFORE=ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')");
     exec(&h.0, &read_repo(VIEW));
     h.run("assert(ExposedMembers.JAC_PersonaBoundary.CheckEnemy('NEUTRALIZED')==BEFORE); ENEMY_CASES.neutralize(0); ExposedMembers.JAC_PersonaBoundary.CheckEnemy('RECOVERED',6); Game:SetProperty('JAC_BOUNDARY_ENEMY_BARRIER',{attacker=0,defender=1,action='REASSIGN',token=1})");
     for turn in 0..5 {

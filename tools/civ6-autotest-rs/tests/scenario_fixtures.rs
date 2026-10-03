@@ -145,6 +145,28 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
     assert!(joined
         .iter()
         .any(|code| code.contains("Queue('PREPARE_ENEMY')")));
+    let position = |needle: &str| {
+        joined
+            .iter()
+            .position(|code| code.contains(needle))
+            .unwrap_or_else(|| panic!("missing enemy setup stage: {needle}"))
+    };
+    assert!(position("Queue('PREPARE_ENEMY')") < position("Queue('EVOLVE_ENEMY')"));
+    assert!(position("Queue('EVOLVE_ENEMY')") < position("QueueEnemy('APPOINT')"));
+    let evolve_step = steps(&start)
+        .iter()
+        .position(|step| {
+            embedded_lua(step).is_some_and(|code| code.contains("Queue('EVOLVE_ENEMY')"))
+        })
+        .unwrap();
+    let first_ai_turn = steps(&start)
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    assert!(
+        evolve_step < first_ai_turn,
+        "enemy must evolve before the first AI turn"
+    );
     assert!(joined
         .iter()
         .any(|code| code.contains("QueueEnemy('APPOINT')")));

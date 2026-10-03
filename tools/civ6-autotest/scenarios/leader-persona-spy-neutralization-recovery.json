@@ -33,7 +33,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_CAPTURE_ENEMY' then error(b.lastAction) end; return Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY')~=nil"
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local a=b.lastAction; if a=='ERROR_CAPTURE_ENEMY' or a=='UNKNOWN_CAPTURE_ENEMY' or a=='REJECTED_CAPTURE_ENEMY' then error('enemy recovery capture refused: '..a) end; return a=='ACCEPTED_CAPTURE_ENEMY' and Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY')~=nil"
       }
     },
     {

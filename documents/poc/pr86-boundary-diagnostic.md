@@ -55,7 +55,7 @@
 | 収量 | `G/Base/Assets/UI/CitySupport.lua:316–331`で都市の`GetYield`を使用。fixtureは種類ごとに未丸めの値を記録する |
 | 効果の所有者 | `G/Debug/Diplomacy.ltp:397–398`は`GameEffects.GetModifierOwner`と`GetObjectsPlayerId`で効果の所有者を判別する。人物側の所有者が持つ効果を対象とし、移管後の古い都市対象を照合から捨てない |
 
-純Gameplay人物は本体の中和対象ではない。指定報告のDLL読解では、中和は都市に対応する本体総督を検索する。`StartOperationWithCityTarget`は蛮族Managerであり、スパイ開始に使わない。人物→本体Governorの対応はテストMODの`JAC_PersonaBoundaryRules.ResolveGovernor`一か所に集約した。汎用本体枠へ対応を変える場合も、ここを変更して実体・型・配置を独立して確認できる。
+純Gameplay人物は本体の中和対象ではない。指定報告のDLL読解では、中和は都市に対応する本体総督を検索する。`StartOperationWithCityTarget`は蛮族Managerであり、スパイ開始に使わない。人物→本体Governorの実体照合はテストMODのUI側`JAC_PersonaBoundary_View.lua`に限定した。Gameplayでは本体Governor用のUI getterを呼ばず、製品の既存UI読取橋と公式称号・都市・人物台帳を照合する。
 
 ## 親で確定が必要な操作
 

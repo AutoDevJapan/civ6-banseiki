@@ -14,7 +14,8 @@ for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadSc
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
  'JAC_BoundaryProgressSpy','JAC_BoundaryBindSpy','JAC_BoundarySpyBarrier',
  'JAC_BoundaryAdoptSpyIdentity','JAC_BoundarySaveSpyTravel','JAC_BoundaryPrepareEnemy',
- 'JAC_BoundaryEnemyBarrier','JAC_BoundaryConfirmEnemy',
+ 'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',
+ 'JAC_BoundaryEnemyFixtureBarrier','JAC_BoundaryConfirmEnemy',
  'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)

@@ -112,7 +112,7 @@ GameEvents.JAC_BoundaryLoseCity.Add(function(owner)
         if candidate:GetX()==c.x and candidate:GetY()==c.y then
             assert(not transferred, "ambiguous native transfer result");
             transferred=candidate;
-end;
+        end;
     end;
     assert(transferred, "native transfer result city missing");
     -- Record native source/result IDs in the same synchronized operation.
@@ -248,11 +248,34 @@ local function EnemyConfig(owner)
     return c;
 end
 
--- A separate fixture keeps the earlier human Oda/city-loss experiment intact.
--- No AI title exists between Join and PrepareEvolution: both run in one
--- synchronized callback. The static SQL gate is diagnostic, not admission logic.
-GameEvents.JAC_BoundaryPrepareEnemy.Add(function(controller)
+-- The UI owns Governor eligibility and instance methods. Gameplay only reads
+-- official title accounting, the product's existing UI native-read bridge and
+-- its own city/person ledger. Never call UI-only Governor getters here.
+local function NativeEnemy(c)
+    local read=assert(ExposedMembers.JAC_LeaderPersonaNativeRead,
+        "product UI native Governor reader unavailable");
+    local value=assert(read(c.owner,c.leader),"enemy native Governor observation unavailable");
+    assert(type(value.appointed)=="boolean" and type(value.canAppoint)=="boolean",
+        "enemy native Governor observation incomplete");
+    return value;
+end
+local function EnemyReceipt(controller,params,action)
     EnemyController(controller);
+    assert(type(params)=="table" and params.Action==action and
+        type(params.Token)=="number" and params.Token>0 and
+        type(params.Turn)=="number" and params.Turn==Game.GetCurrentGameTurn() and
+        type(params.Frame)=="number" and params.Frame>0 and
+        type(params.PublishEpoch)=="number" and params.PublishEpoch>=0 and
+        params.Attacker==controller and params.Defender==1 and
+        params.Source==2 and params.Leader==ENEMY_LEADER,
+        "enemy UI observation is stale or belongs to another actor");
+end
+
+-- A separate fixture keeps the earlier human Oda/city-loss experiment intact.
+-- UI checks the static candidate gate before this first synchronized write.
+-- No AI title is granted before the regular Join.
+GameEvents.JAC_BoundaryPrepareEnemy.Add(function(controller,params)
+    EnemyReceipt(controller,params,"PREPARE_ENEMY");
     assert(not Game:GetProperty(CONFIG) and not Game:GetProperty(ENEMY_CONFIG),
         "enemy experiment requires a fresh game");
     assert(PlayerConfigurations[1]:GetLeaderTypeName()=="LEADER_JAC_DATE_TANEMUNE" and
@@ -264,21 +287,18 @@ GameEvents.JAC_BoundaryPrepareEnemy.Add(function(controller)
     local row=assert(GameInfo.JAC_LeaderPersonas[ENEMY_LEADER], "enemy persona missing");
     assert(row.EvolutionCost==1, "enemy fixture requires cost one");
     local def=assert(GameInfo.Governors[row.GovernorType], "enemy Governor definition missing");
+    assert(params.GovernorIndex==def.Index and params.GovernorHash==def.Hash,
+        "enemy Governor definition changed after UI qualification");
     local governors=defender:GetGovernors();
-    assert(not governors:HasGovernor(def.Hash), "unjoined enemy Governor already appointed");
-    assert(governors:CanEverAppointGovernor(def.Hash), "diagnostic Date/Ashina trait gate unavailable");
-    for candidate in GameInfo.JAC_LeaderPersonas() do
-        if candidate.LeaderType~=ENEMY_LEADER then
-            local other=GameInfo.Governors[candidate.GovernorType];
-            assert(other and not governors:CanEverAppointGovernor(other.Hash),
-                "AI defender can appoint another unjoined persona");
-        end
-    end
+    local total,spent=governors:GetGovernorPoints(),governors:GetGovernorPointsSpent();
+    assert(total==params.Total and spent==params.Spent,
+        "official AI title accounting changed after UI qualification");
+    assert(not NativeEnemy({owner=1,leader=ENEMY_LEADER}).appointed,
+        "unjoined enemy Governor already appointed");
     local seam=assert(ExposedMembers.JAC_LeaderPersona, "regular persona seam missing");
     assert(seam.Join(1,2)=="JOINED", "regular enemy Join failed");
     assert(R.Property(ENEMY_LEADER,"OWNER")==1 and R.Property(ENEMY_LEADER,"SOURCE")==2 and
         R.Property(ENEMY_LEADER,"STATE")=="GREAT_PERSON", "joined enemy identity mismatch");
-    local total,spent=governors:GetGovernorPoints(),governors:GetGovernorPointsSpent();
     if total-spent<1 then
         local civics={};
         for title in GameInfo.JAC_PersonaTitleCivics() do civics[#civics+1]=title.CivicType; end
@@ -298,13 +318,48 @@ GameEvents.JAC_BoundaryPrepareEnemy.Add(function(controller)
         end
         assert(granted,"AI has no unresearched official title civic");
     end
-    assert(seam.PrepareEvolution(1,ENEMY_LEADER)=="EVOLVING" and
-        R.Property(ENEMY_LEADER,"STATE")=="EVOLVING", "regular enemy evolution preparation failed");
     Game:SetProperty(ENEMY_CONFIG,{attacker=controller,owner=1,source=2,leader=ENEMY_LEADER,
         skill=ENEMY_LEADER.."_SIGNATURE_1",total=governors:GetGovernorPoints(),
         spent=governors:GetGovernorPointsSpent(),armedTurn=Game.GetCurrentGameTurn(),
+        preflightToken=params.Token,preflightFrame=params.Frame,
+        preflightEpoch=params.PublishEpoch,preparedTurn=Game.GetCurrentGameTurn(),
         controlRequired=false,requireSkill=false});
     print("JAC_BOUNDARY ENEMY_PREPARED "..R.Serialize(Game:GetProperty(ENEMY_CONFIG)));
+end);
+
+-- The first request's publish barrier gives the UI title cache time to refresh.
+-- This still runs on human turn 0, before the defender's first native AI turn.
+GameEvents.JAC_BoundaryEvolveEnemy.Add(function(controller,params)
+    EnemyReceipt(controller,params,"EVOLVE_ENEMY");
+    local c=EnemyConfig(controller);
+    assert(c.preflightToken and not c.evolvedToken and
+        params.Token~=c.preflightToken and params.Frame>c.preflightFrame and
+        params.PublishEpoch>c.preflightEpoch and
+        c.preparedTurn==Game.GetCurrentGameTurn() and
+        R.Property(c.leader,"OWNER")==c.owner and
+        R.Property(c.leader,"STATE")=="GREAT_PERSON",
+        "enemy Join must complete before evolution preparation");
+    local gs=Players[c.owner]:GetGovernors();
+    assert(gs:GetGovernorPoints()==c.total and gs:GetGovernorPointsSpent()==c.spent and
+        params.Total==c.total and params.Spent==c.spent,
+        "official cost-one title budget changed before evolution");
+    local native=NativeEnemy(c);
+    assert(not native.appointed and native.canAppoint,
+        "product native reader does not allow the joined cost-one person");
+    local result=ExposedMembers.JAC_LeaderPersona.PrepareEvolution(c.owner,c.leader);
+    assert(result=="EVOLVING" and R.Property(c.leader,"STATE")=="EVOLVING",
+        "regular enemy evolution preparation failed");
+    c.evolvedToken=params.Token;
+    Game:SetProperty(ENEMY_CONFIG,c);
+end);
+
+GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
+    EnemyReceipt(controller,params,params and params.Action);
+    assert(params.Action=="PREPARE_ENEMY" or params.Action=="EVOLVE_ENEMY" or
+        params.Action=="CONFIRM_ENEMY" or params.Action=="CAPTURE_ENEMY",
+        "unknown enemy fixture barrier");
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",
+        {action=params.Action,token=params.Token,turn=params.Turn,attacker=controller});
 end);
 
 GameEvents.JAC_BoundaryEnemyBarrier.Add(function(controller,params)
@@ -320,20 +375,30 @@ GameEvents.JAC_BoundaryEnemyBarrier.Add(function(controller,params)
     Game:SetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS",attempts);
 end);
 
-GameEvents.JAC_BoundaryConfirmEnemy.Add(function(controller)
+GameEvents.JAC_BoundaryConfirmEnemy.Add(function(controller,params)
+    EnemyReceipt(controller,params,"CONFIRM_ENEMY");
     local c=EnemyConfig(controller);
-    local governor,def=R.ResolveGovernor(c.owner,c.leader);
+    local state=R.Property(c.leader,"STATE");
+    assert(c.evolvedToken and not c.cityID and
+        (state=="EVOLVING" or state=="GOVERNOR"),
+        "regular enemy evolution required before native binding");
+    local native=NativeEnemy(c);
+    assert(native.appointed and native.base and native.surchargePaid==0 and
+        native.cityOwner==c.owner and native.cityID==params.CityID,
+        "native UI observation does not match the joined Governor and city");
     local gs=Players[c.owner]:GetGovernors();
-    assert(governor:GetType()==def.Index and gs:GetGovernorPoints()>=c.total and
-        gs:GetGovernorPointsSpent()==c.spent+1,
+    assert(gs:GetGovernorPoints()>=c.total and gs:GetGovernorPointsSpent()==c.spent+1 and
+        params.Total==gs:GetGovernorPoints() and params.Spent==gs:GetGovernorPointsSpent(),
         "official cost-one Governor appointment or native accounting missing");
+    local city=assert(CityManager.GetCity(c.owner,params.CityID),
+        "enemy native assignment city missing in Gameplay");
+    assert(city:GetOwner()==c.owner and city:GetX()==params.X and city:GetY()==params.Y,
+        "UI/Gameplay enemy assignment city identity disagrees");
     local seam=assert(ExposedMembers.JAC_LeaderPersona,"regular persona seam missing");
     local result=seam.CompleteEvolution(c.owner,c.leader);
     assert((result=="EVOLVED" or result=="ALREADY_EVOLVED") and
         R.Property(c.leader,"STATE")=="GOVERNOR", "regular evolution did not remove the GP");
-    local assigned=assert(governor:GetAssignedCity(),"enemy Governor not natively assigned");
-    assert(assigned:GetOwner()==c.owner,"enemy Governor assigned to another player");
-    c.cityID=assigned:GetID(); c.x=assigned:GetX(); c.y=assigned:GetY();
+    c.cityID=city:GetID(); c.x=city:GetX(); c.y=city:GetY();
     c.armedTurn=Game.GetCurrentGameTurn();
     Game:SetProperty(ENEMY_CONFIG,c);
     print("JAC_BOUNDARY ENEMY_NATIVE_BOUND "..R.Serialize(c));
@@ -348,13 +413,16 @@ GameEvents.JAC_BoundaryRecordEnemyMission.Add(function(controller,params)
         id=params.MissionID,turn=Game.GetCurrentGameTurn()});
 end);
 
-GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller)
+GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)
+    EnemyReceipt(controller,params,"CAPTURE_ENEMY");
     local c=EnemyConfig(controller);
     assert(c.cityID and not Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY"),
         "recovery baseline missing target or already recorded");
-    local governor=R.ResolveGovernor(c.owner,c.leader);
-    local remaining=governor:GetNeutralizedTurns();
+    local native=NativeEnemy(c);
+    local remaining=native.neutralized;
     assert(type(remaining)=="number" and remaining>0,"native neutralization required for recovery");
+    assert(remaining==params.Neutralized and params.CityID==c.cityID,
+        "UI/Gameplay neutralization observation changed before capture");
     local nodes={};
     for node in GameInfo.JAC_PersonaTreeNodes() do
         if node.LeaderType==c.leader and R.Property(c.leader,"NODE_"..node.NodeType)==1 then

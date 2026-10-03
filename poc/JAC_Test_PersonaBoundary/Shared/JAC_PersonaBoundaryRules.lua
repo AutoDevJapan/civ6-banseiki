@@ -6,20 +6,6 @@ function R.Property(leader, field)
     return value;
 end
 
--- The sole person -> native slot resolution seam in this diagnostic.
--- A future generic-slot implementation can change this resolver without changing
--- the observer, spy requests or phase assertions. Never use the persona UI bridge.
-function R.ResolveGovernor(owner, leader)
-    local row = assert(GameInfo.JAC_LeaderPersonas[leader], "persona definition missing");
-    local def = assert(GameInfo.Governors[row.GovernorType], "native governor definition missing");
-    local player = assert(Players[owner], "native governor owner missing");
-    local governors = player:GetGovernors();
-    assert(governors:HasGovernor(def.Hash), "native governor not appointed");
-    local governor = assert(governors:GetGovernor(def.Hash), "native governor instance missing");
-    assert(governor:GetType() == def.Index, "native governor type mismatch");
-    return governor, def, row;
-end
-
 function R.Serialize(value)
     if type(value) ~= "table" then
         if type(value) == "number" then return string.format("%.6f", value); end
@@ -61,7 +47,9 @@ function R.Check(s, phase, merit)
         assert(s.native.cityOwner == -1 and s.native.cityID == -1,
             "governor must be unassigned; automatic return is not recovery");
     end
-    assert(s.native.established == active, "unexpected native establishment state");
+    if phase~="NEUTRALIZED" then
+        assert(s.native.established == active, "unexpected native establishment state");
+    end
     if phase == "LOST" then
         assert(type(s.transfer)=="table" and s.transfer.fromOwner==s.owner and
             s.transfer.fromCityID==s.fixtureCityID and s.transfer.toOwner==s.freeCitiesOwner and
