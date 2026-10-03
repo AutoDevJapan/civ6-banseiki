@@ -1,5 +1,5 @@
 {
-  "name": "Absorption product final UI publication completes two exact native work transfers",
+  "name": "Absorption product completes both original works and survives save reload",
   "judge_profile": "generic",
   "steps": [
     {
@@ -54,12 +54,63 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal tx=A.Resume(id)\nassert(tx.Status=='COMPLETE','native product absorption did not complete after final publication: '..tx.Status)\nassert(A.Verify(id,false),'completed native product absorption failed verification')\nlocal count=0\nfor _,snap in ipairs(tx.NativeWorks or {}) do\n if snap.Custodian then\n  local found=A.NativeWorkLocations(snap.Source.Index)\n  assert(#found==1,'native work index missing or duplicated after absorption')\n  local w=found[1];local slot=snap.TargetSlot\n  assert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'native work left its exact reserved official slot')\n  local source=assert(CityManager.GetCityAt(snap.Source.X,snap.Source.Y))\n  if source:GetBuildings():HasBuilding(snap.Source.Building) then\n   local assets=A.CityAssets(source)\n   if snap.Source.BuildingType~='BUILDING_PALACE' then assert(assets[snap.Source.BuildingType].Works[snap.Source.Slot]==-1,'source Temple slot reused') end\n  end\n  local record=assert(A.GetRoster(snap.Destination)[snap.ID])\n  assert(record.NativeWork.Index==w.Index and record.NativeCustody.Owner==w.Owner and record.NativeCustody.City==w.CityID and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'native work ledger differs from actual slot')\n  count=count+1\n end\nend\nassert(count==2,'both original works were not verified')\nfor _,snap in ipairs(tx.Cities or {}) do assert(CityManager.GetCityAt(snap.X,snap.Y):GetOwner()==tx.To,'old city not transferred') end\nassert(Players[tx.From]:GetCities():GetCount()==0,'old faction still owns a city')\nprint('[JAC_NATIVE_PRODUCT_COMPLETE] id='..id..' works='..count..' cities='..#tx.Cities)\nreturn 'same original Palace and returned work complete after save and reload'"
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal tx=A.Resume(id)\nassert(tx.Status=='COMPLETE','native product absorption did not complete after final publication: '..tx.Status)\nlocal verification=A.RequestVerification(id)\nassert(verification and verification.Token,'native product verification publication request absent')\nlocal count=0\nfor _,snap in ipairs(tx.NativeWorks or {}) do\n if snap.Custodian then\n  local found=A.NativeWorkLocations(snap.Source.Index)\n  assert(#found==1,'native work index missing or duplicated after absorption')\n  local w=found[1];local slot=snap.TargetSlot\n  assert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'native work left its exact reserved official slot')\n  local source=assert(CityManager.GetCityAt(snap.Source.X,snap.Source.Y))\n  if source:GetBuildings():HasBuilding(snap.Source.Building) then\n   local assets=A.CityAssets(source)\n   if snap.Source.BuildingType~='BUILDING_PALACE' then assert(assets[snap.Source.BuildingType].Works[snap.Source.Slot]==-1,'source Temple slot reused') end\n  end\n  local record=assert(A.GetRoster(snap.Destination)[snap.ID])\n  assert(record.NativeWork.Index==w.Index and record.NativeCustody.Owner==w.Owner and record.NativeCustody.City==w.CityID and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'native work ledger differs from actual slot')\n  count=count+1\n end\nend\nassert(count==2,'both original works were not verified')\nfor _,snap in ipairs(tx.Cities or {}) do assert(CityManager.GetCityAt(snap.X,snap.Y):GetOwner()==tx.To,'old city not transferred') end\nassert(Players[tx.From]:GetCities():GetCount()==0,'old faction still owns a city')\nprint('[JAC_NATIVE_PRODUCT_COMPLETE] id='..id..' works='..count..' cities='..#tx.Cities)\nreturn 'same original Palace and returned work complete after save and reload'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal request=tx.VerificationUI\nlocal reads=ExposedMembers.JAC_HeroReadAPI\nreturn request and request.Turn==Game.GetCurrentGameTurn() and reads and reads.GetObservation(request.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local id='native-product-return-probe';assert(A.GetState().Transactions[id].Status=='COMPLETE','product transaction not complete');assert(A.Verify(id,true),'published exact native product verification failed');return 'native product exact verification complete'"
     },
     {
       "action": "save",
       "timeout": 90,
       "name": "JAC-native-product-complete"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-product-complete"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal tx=assert(A.GetState().Transactions[id])\nassert(tx.Status=='COMPLETE' and Players[tx.From]:GetCities():GetCount()==0,'completed absorption changed after reload')\nlocal request=A.RequestVerification(id)\nassert(request and request.Token,'reloaded native product verification request absent')\nreturn 'completed native absorption reloaded and requested fresh UI verification'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal request=tx.VerificationUI\nlocal reads=ExposedMembers.JAC_HeroReadAPI\nreturn request and request.Turn==Game.GetCurrentGameTurn() and reads and reads.GetObservation(request.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nassert(A.Verify(id,true),'reloaded native product verification failed')\nlocal tx=assert(A.GetState().Transactions[id])\nassert(tx.Status=='COMPLETE' and Players[tx.From]:GetCities():GetCount()==0,'reloaded absorption lost completion')\nlocal count=0\nfor _,snap in ipairs(tx.NativeWorks or {}) do\n if snap.Custodian then\n  local found=A.NativeWorkLocations(snap.Source.Index)\n  assert(#found==1,'reloaded native index missing or duplicated')\n  local w=found[1];local slot=snap.TargetSlot\n  assert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'reloaded original work left its exact reserved slot')\n  local record=assert(A.GetRoster(snap.Destination)[snap.ID])\n  assert(record.NativeWork.Index==w.Index and record.NativeCustody.Owner==w.Owner and record.NativeCustody.City==w.CityID and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'reloaded original work ledger changed')\n  count=count+1\n end\nend\nassert(count==2,'two original works not retained after reload')\nprint('[JAC_NATIVE_PRODUCT_RELOADED_COMPLETE] id='..id..' works='..count..' cities='..#tx.Cities)\nreturn 'two original works and all donor cities preserved after save reload'"
     }
   ]
 }
