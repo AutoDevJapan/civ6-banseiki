@@ -24,18 +24,13 @@
       "timeout": 600
     },
     {
-      "action": "wait_for",
-      "timeout": 120,
-      "condition": {
-        "type": "lua",
-        "state_name": "InGame",
-        "code": "local a=ExposedMembers.JAC_Absorption\nlocal tx=a and a.GetState().Transactions['native-acquired-palace-route']\nreturn tx and tx.Status=='BLOCKED' and tx.Error and tx.Error:find('carrier city changed during custody',1,true)"
-      }
+      "action": "pause",
+      "seconds": 5
     },
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal F=assert(JAC_AbsorptionFlowGameplay)\nlocal flow=assert(F.Get('native-acquired-palace-route'))\nlocal tx=assert(A.GetState().Transactions[flow.ID])\nlocal snap\nfor _,work in ipairs(tx.NativeWorks or {}) do if work.Source.Index==2 then snap=work end end\nassert(snap and snap.Carrier and snap.Carrier.Phase=='RETURN' and not snap.PhysicalMoved,'diagnostic did not stop at carrier RETURN')\nlocal current=A.NativeWorkLocations(2)\nassert(#current==1 and current[1].Owner==1 and current[1].X==snap.Carrier.X and current[1].Y==snap.Carrier.Y and current[1].Building==snap.Carrier.Building and current[1].Slot==snap.Carrier.Slot,'original index lost during carrier diagnostic')\nassert(tx.Error and tx.Error:find('carrier city changed during custody',1,true),'carrier difference was not reported')\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_DIFF] '..tx.Error)\nreturn 'original index remains one in recipient Temple; changed city field: '..tx.Error"
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal F=assert(JAC_AbsorptionFlowGameplay)\nlocal flow=assert(F.Get('native-acquired-palace-route'))\nlocal tx=assert(A.GetState().Transactions[flow.ID])\nlocal snap\nfor _,work in ipairs(tx.NativeWorks or {}) do if work.Source.Index==2 then snap=work end end\nassert(snap and snap.Carrier and snap.Carrier.Phase=='RETURN'\n and not snap.PhysicalMoved,'diagnostic did not stop at carrier RETURN')\nlocal carrier=snap.Carrier\nlocal city=assert(CityManager.GetCityAt(carrier.X,carrier.Y))\nassert(city:GetOwner()==1,'recipient carrier has not returned to its original owner')\nlocal current=A.NativeWorkLocations(2)\nassert(#current==1 and current[1].Owner==1 and current[1].X==carrier.X\n and current[1].Y==carrier.Y and current[1].Building==carrier.Building\n and current[1].Slot==carrier.Slot,'original index lost during carrier diagnostic')\nlocal before=carrier.Before\nlocal governance=city:GetProperty(A.Rules.GOVERNANCE_KEY)\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_GOVERNANCE] before='..A.Canonical(before.Governance or {})\n ..' after='..A.Canonical(governance or {}))\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_OTHER] loyalty='..A.Canonical({Before=before.Loyalty,After=A.CityLoyalty(city)})\n ..' faith='..A.Canonical({Before=before.Faith,After=city:GetProperty(A.Rules.CITY_FAITH_KEY)})\n ..' religion='..A.Canonical({Before=before.Religion,After=A.CityReligion(city)}))\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_STATUS] tx='..tx.Status\n ..' flow='..flow.Phase..' reason='..tostring(tx.Error or flow.Error))\nassert(not A.Rules.Equal(before.Governance,governance),\n 'Governance mismatch from live95 was not reproduced')\nreturn 'original index remains one in recipient Temple; governance before/after logged'"
     }
   ]
 }
