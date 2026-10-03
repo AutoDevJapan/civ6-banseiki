@@ -1375,11 +1375,15 @@ impl Runner {
             self.budget(deadline, 5.0)?,
         )?)?;
         self.close_diplomacy(deadline)?;
-        self.lua(
-            "InGame",
-            "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
-            self.budget(deadline, 5.0)?,
-        )?;
+        // Test mode advances the requested real turns even if research or
+        // production notifications need attention. This is the official
+        // ActionPanel Shift+Enter operation, not a turn-number rewrite.
+        let action = if self.test_mode {
+            "if GameConfiguration.IsAnyMultiplayer() then error('forced test turns require single player') end\nlocal h = Game.GetLocalPlayer()\nif h < 0 or not Players[h] or not Players[h]:IsTurnActive() or UI.IsGameCoreBusy() then error('human turn not ready for test end turn') end\nprint('JAC_AUTOTEST_END_TURN blocker=' .. tostring(NotificationManager.GetFirstEndTurnBlocking(h)) .. ' canEnd=' .. tostring(UI.CanEndTurn()))\nUI.RequestAction(ActionTypes.ACTION_ENDTURN, { REASON = 'UserForced' })\nreturn true"
+        } else {
+            "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true"
+        };
+        self.lua("InGame", action, self.budget(deadline, 5.0)?)?;
         // A new turn number can be published before control returns to the
         // human. Match the official ActionPanel/UnitPanel readiness checks;
         // otherwise the next scenario action can run during AI processing.

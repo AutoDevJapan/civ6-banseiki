@@ -14,7 +14,7 @@ fn turn_backend() -> FakeBackend {
         if code.contains("return Game.GetCurrentGameTurn() ==") {
             return Ok("true".into());
         }
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             *turn.lock().unwrap() += 1;
             return Ok("true".into());
         }
@@ -70,13 +70,13 @@ fn test_shortened_turns_require_explicit_test_mode() {
     let step = json!({"action":"end_turn","turns":10,"test_turns":1});
     h.runner.run_step(&step).unwrap();
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         10
     );
     h.runner.test_mode = true;
     h.runner.run_step(&step).unwrap();
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         11
     );
 }
@@ -108,7 +108,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         "human turn 1->2; human turn 2->3"
     );
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         2
     );
     assert_eq!(
@@ -116,7 +116,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         "human turn 3->4"
     );
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         3
     );
 
@@ -125,7 +125,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
     let turn = Arc::new(Mutex::new(1));
     let game_turn = turn.clone();
     let fake = FakeBackend::new().lua(move |_, code| {
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             *game_turn.lock().unwrap() += 1;
             action_clock.advance(1.0);
         }
@@ -150,7 +150,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
     assert_eq!(notebook_budgets, [5.0, 4.5]);
 
     let fake = FakeBackend::new().lua(move |_, code| {
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             return Err(Error::scenario("deadline"));
         }
         Ok("1".into())
@@ -162,7 +162,7 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
         .unwrap_err();
     assert!(err.to_string().contains("deadline"));
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         1
     );
 }
@@ -187,7 +187,7 @@ fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
         if code == "return Game.GetCurrentGameTurn()" {
             return Ok(turn.lock().unwrap().to_string());
         }
-        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
             *turn.lock().unwrap() = 2;
         }
         if code.starts_with("return Game.GetCurrentGameTurn() ==") {
@@ -215,9 +215,66 @@ fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
     );
     assert_eq!(*observations.lock().unwrap(), 4);
     assert_eq!(
-        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         1
     );
+}
+
+#[test]
+fn test_test_mode_uses_official_forced_turn_once_for_a_production_blocker() {
+    for test_mode in [false, true] {
+        let state = Arc::new(Mutex::new((1_i64, Vec::<String>::new())));
+        let observed = state.clone();
+        let backend = FakeBackend::new().lua(move |_, code| {
+            if code == "return Game.GetCurrentGameTurn()" {
+                return Ok(observed.lock().unwrap().0.to_string());
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN")
+                || code.starts_with("return Game.GetCurrentGameTurn() ==")
+            {
+                let lua = mlua::Lua::new();
+                lua.load(
+                    "GameConfiguration={IsAnyMultiplayer=function() return false end}\nGame={GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end}\nPlayers={[0]={IsTurnActive=function() return true end}}\nUI={IsGameCoreBusy=function() return false end,CanEndTurn=function() return false end}\nNotificationManager={GetFirstEndTurnBlocking=function() return 7 end}\nActionTypes={ACTION_ENDTURN=1}\nprint=function() end",
+                )
+                .exec()
+                .unwrap();
+                lua.globals().set("TURN", observed.lock().unwrap().0).unwrap();
+                let shared = observed.clone();
+                let request = lua
+                    .create_function(move |_, (_, parameters): (i64, Option<mlua::Table>)| {
+                        let reason = parameters
+                            .map(|p| p.get::<String>("REASON").unwrap())
+                            .unwrap_or_default();
+                        let mut state = shared.lock().unwrap();
+                        state.1.push(reason.clone());
+                        // A production blocker rejects ordinary End Turn.
+                        if reason == "UserForced" {
+                            state.0 += 1;
+                        }
+                        Ok(())
+                    })
+                    .unwrap();
+                lua.globals()
+                    .get::<mlua::Table>("UI")
+                    .unwrap()
+                    .set("RequestAction", request)
+                    .unwrap();
+                return Ok(lua.load(code).eval::<bool>().unwrap().to_string());
+            }
+            Ok("true".into())
+        });
+        let mut h = Harness::new(json!({}), backend);
+        h.runner.test_mode = test_mode;
+        let result = h.runner.run_step(&json!({"action":"end_turn","timeout":3}));
+        let state = state.lock().unwrap();
+        if test_mode {
+            assert_eq!(result.unwrap(), "human turn 1->2");
+            assert_eq!(*state, (2, vec!["UserForced".into()]));
+        } else {
+            assert!(result.unwrap_err().to_string().contains("Timed out"));
+            assert_eq!(*state, (1, vec![String::new()]));
+        }
+    }
 }
 
 #[test]
