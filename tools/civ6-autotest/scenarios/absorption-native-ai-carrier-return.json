@@ -1,0 +1,83 @@
+{
+  "name": "Native original work and carrier city assets survive return to Free Cities",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-ai-human-actor-move-probe-absorb-flow-73-1e34fb8716d7",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage then return false end\nlocal city=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal source=CityManager.GetCityAt(stage.Source.X,stage.Source.Y)\nreturn city and city:GetOwner()==stage.Carrier.Owner\n and city:GetBuildings():HasBuilding(stage.Carrier.Building)\n and city:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==stage.Index\n and source and source:GetOwner()==stage.Source.Owner\n and source:GetBuildings():GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nlocal located=A.NativeWorkLocations(stage.Index)\nassert(#located==1 and located[1].Owner==stage.Carrier.Owner and located[1].X==stage.Carrier.X and located[1].Y==stage.Carrier.Y and located[1].Building==stage.Carrier.Building and located[1].Slot==stage.Carrier.Slot,'same-owner move did not put the original work in carrier Temple')\nlocal city=assert(CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y))\nassert(city:GetOwner()==stage.Carrier.Owner and city:GetID()==located[1].CityID,'AI carrier identity changed before Free Cities return')\nstage.BeforeReturn={CityID=city:GetID(),Population=city:GetPopulation(),Name=city:GetName(),Assets=A.CityAssets(city)}\nstage.Stage='RETURNING_FREE'\nGame:SetProperty('JAC_NATIVE_AI_MOVE_PROBE',stage)\nCityManager.TransferCity(city,stage.Carrier.Free)\nreturn 'work-holding Temple city returned to Free Cities; physical result still unproven'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage then return false end\nlocal city=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal source=CityManager.GetCityAt(stage.Source.X,stage.Source.Y)\nreturn city and city:GetOwner()==stage.Carrier.Free\n and city:GetBuildings():HasBuilding(stage.Carrier.Building)\n and city:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==stage.Index\n and source and source:GetBuildings():GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nassert(stage.Stage=='RETURNING_FREE' or stage.Stage=='FREE_CUSTODY_PROVED','carrier return intent absent')\nlocal city=assert(CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y))\nassert(city:GetOwner()==stage.Carrier.Free and city:GetBuildings():HasBuilding(stage.Carrier.Building),'Free Cities did not retain carrier Temple')\nlocal found=A.NativeWorkLocations(stage.Index)\nassert(#found==1 and found[1].Owner==stage.Carrier.Free and found[1].CityID==city:GetID()\n and found[1].X==stage.Carrier.X and found[1].Y==stage.Carrier.Y\n and found[1].Building==stage.Carrier.Building and found[1].Slot==stage.Carrier.Slot,'same original index not uniquely held in Free Cities Temple')\nlocal source=assert(CityManager.GetCityAt(stage.Source.X,stage.Source.Y))\nassert(source:GetOwner()==stage.Source.Owner,'AI original city changed owner')\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nassert(reads.ReadCity(stage.Source.Owner,stage.Source.CityID,'WORK',stage.Source.Building,stage.Source.Slot)==-1,'AI original Palace slot not empty')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(stage.Source[key]==found[1][key],'original work metadata changed: '..key) end\nassert(A.Rules.Equal(stage.Source.Effects,found[1].Effects),'original work effects changed')\nlocal after={Population=city:GetPopulation(),Name=city:GetName(),Assets=A.CityAssets(city)}\nprint('[JAC_NATIVE_AI_CARRIER_RETURN_SIDE_EFFECTS] before='..A.Canonical(stage.BeforeReturn)..' after='..A.Canonical(after))\nassert(A.Rules.Equal(stage.BeforeReturn.Assets,after.Assets),'carrier districts/buildings/works changed during return to Free Cities')\nassert(stage.BeforeReturn.Population==after.Population,'carrier population changed during return to Free Cities')\nstage.Stage='FREE_CUSTODY_PROVED';stage.Carrier.FreeCity=city:GetID()\nGame:SetProperty('JAC_NATIVE_AI_MOVE_PROBE',stage)\nprint('[JAC_NATIVE_AI_CITY_MEDIATED_CUSTODY] '..A.Canonical(stage))\nreturn 'same original work and carrier assets survived return to Free Cities'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-ai-city-mediated-custody"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-ai-city-mediated-custody"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage then return false end\nlocal city=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal source=CityManager.GetCityAt(stage.Source.X,stage.Source.Y)\nreturn city and city:GetOwner()==stage.Carrier.Free\n and city:GetBuildings():HasBuilding(stage.Carrier.Building)\n and city:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==stage.Index\n and source and source:GetBuildings():GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nassert(stage.Stage=='RETURNING_FREE' or stage.Stage=='FREE_CUSTODY_PROVED','carrier return intent absent')\nlocal city=assert(CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y))\nassert(city:GetOwner()==stage.Carrier.Free and city:GetBuildings():HasBuilding(stage.Carrier.Building),'Free Cities did not retain carrier Temple')\nlocal found=A.NativeWorkLocations(stage.Index)\nassert(#found==1 and found[1].Owner==stage.Carrier.Free and found[1].CityID==city:GetID()\n and found[1].X==stage.Carrier.X and found[1].Y==stage.Carrier.Y\n and found[1].Building==stage.Carrier.Building and found[1].Slot==stage.Carrier.Slot,'same original index not uniquely held in Free Cities Temple')\nlocal source=assert(CityManager.GetCityAt(stage.Source.X,stage.Source.Y))\nassert(source:GetOwner()==stage.Source.Owner,'AI original city changed owner')\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nassert(reads.ReadCity(stage.Source.Owner,stage.Source.CityID,'WORK',stage.Source.Building,stage.Source.Slot)==-1,'AI original Palace slot not empty')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(stage.Source[key]==found[1][key],'original work metadata changed: '..key) end\nassert(A.Rules.Equal(stage.Source.Effects,found[1].Effects),'original work effects changed')\nlocal after={Population=city:GetPopulation(),Name=city:GetName(),Assets=A.CityAssets(city)}\nprint('[JAC_NATIVE_AI_CARRIER_RETURN_SIDE_EFFECTS] before='..A.Canonical(stage.BeforeReturn)..' after='..A.Canonical(after))\nassert(A.Rules.Equal(stage.BeforeReturn.Assets,after.Assets),'carrier districts/buildings/works changed during return to Free Cities')\nassert(stage.BeforeReturn.Population==after.Population,'carrier population changed during return to Free Cities')\nstage.Stage='FREE_CUSTODY_PROVED';stage.Carrier.FreeCity=city:GetID()\nGame:SetProperty('JAC_NATIVE_AI_MOVE_PROBE',stage)\nprint('[JAC_NATIVE_AI_CITY_MEDIATED_CUSTODY] '..A.Canonical(stage))\nreturn 'same original work and carrier assets survived return to Free Cities'"
+    }
+  ]
+}
