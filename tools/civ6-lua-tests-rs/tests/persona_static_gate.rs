@@ -120,7 +120,7 @@ fn test_official_schema_closes_exactly_22_production_personas_without_granting_t
         db.execute_batch(&read_repo(sql)).unwrap();
     }
     assert_eq!(count(&db, "SELECT COUNT(*) FROM JAC_LeaderPersonas"), 22);
-    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType IS NULL"), 22);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"), 22);
     let before_fk = count(&db, "SELECT COUNT(*) FROM pragma_foreign_key_check");
     db.execute_batch(&read_repo(SQL)).unwrap();
     assert_eq!(count(&db, "SELECT COUNT(*) FROM Types WHERE Type='TRAIT_JAC_TEST_ALL_PERSONAS_CLOSED' AND Kind='KIND_TRAIT'"), 1);

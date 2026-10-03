@@ -85,7 +85,13 @@ pub trait Backend: Send {
     fn single_process(&mut self, _settle: f64) -> Result<Option<(u32, f64)>> {
         Err(Error::input("backend has no Civ VI process"))
     }
-    fn start_native_trace(&mut self, _output: &Path, _name: &str, _seconds: u64) -> Result<()> {
+    fn start_native_trace(
+        &mut self,
+        _output: &Path,
+        _name: &str,
+        _seconds: u64,
+        _mode: &str,
+    ) -> Result<()> {
         Err(Error::input(
             "backend cannot start native governor observation",
         ))
@@ -168,11 +174,17 @@ mod native_trace_step_tests {
 
     struct TraceBackend(Arc<Mutex<Vec<String>>>);
     impl Backend for TraceBackend {
-        fn start_native_trace(&mut self, _: &Path, name: &str, seconds: u64) -> Result<()> {
+        fn start_native_trace(
+            &mut self,
+            _: &Path,
+            name: &str,
+            seconds: u64,
+            mode: &str,
+        ) -> Result<()> {
             self.0
                 .lock()
                 .unwrap()
-                .push(format!("start:{name}:{seconds}"));
+                .push(format!("start:{name}:{seconds}:{mode}"));
             Ok(())
         }
         fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
@@ -204,7 +216,10 @@ mod native_trace_step_tests {
             .run_step(&json!({"action":"stop_native_governor_trace"}))
             .unwrap();
         assert!(detail.contains("fixture.jsonl"));
-        assert_eq!(*calls.lock().unwrap(), ["start:governor:25", "stop"]);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:governor:25:governor", "stop"]
+        );
     }
 }
 
@@ -319,7 +334,13 @@ impl Backend for SystemBackend {
     fn single_process(&mut self, settle: f64) -> Result<Option<(u32, f64)>> {
         crate::restart::single_civ_process(settle)
     }
-    fn start_native_trace(&mut self, output: &Path, name: &str, seconds: u64) -> Result<()> {
+    fn start_native_trace(
+        &mut self,
+        output: &Path,
+        name: &str,
+        seconds: u64,
+        mode: &str,
+    ) -> Result<()> {
         if self.native_trace.is_some() {
             return Err(Error::scenario("native governor trace already active"));
         }
@@ -340,6 +361,7 @@ impl Backend for SystemBackend {
             output,
             name,
             seconds,
+            mode,
             Box::new(crate::restart::terminate_civ_process),
         )?);
         Ok(())
@@ -1581,6 +1603,7 @@ impl Runner {
                     &self.output,
                     text(step, "name"),
                     step["max_seconds"].as_u64().unwrap(),
+                    step["mode"].as_str().unwrap_or("governor"),
                 )?;
                 Ok(format!(
                     "native governor observer ready; artifact {}.jsonl",

@@ -546,7 +546,16 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".json"))
         .collect();
-    assert_eq!(actual, expected);
+    // Preserve the historical 92-scenario inventory. Task853 adds one finite
+    // read-only ABI probe without rewriting that baseline.
+    assert_eq!(expected.difference(&actual).count(), 0);
+    assert_eq!(
+        actual
+            .difference(&expected)
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["leader-persona-property-abi-15km.json".to_string()])
+    );
     for name in &actual {
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(folder.join(name)).unwrap()).unwrap();

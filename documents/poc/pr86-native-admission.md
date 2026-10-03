@@ -37,7 +37,7 @@ Win64の呼出し規約と命令から、**このビルドの観測可能な入�
 
 1. **状態の所有者**: 同期Gameplayの `Game:SetProperty` 台帳を唯一の正本にする。現行の加入は `poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua:55-104` で実Great Personの生成後に `OWNER`、`EVOLUTION_COST`、`STATE=GREAT_PERSON` を保存する。費用予約は同 `:117-141` が称号獲得数−使用済み数と他人物の未払い予約を検査し、`STATE=EVOLVING` に遷移する。UIのLua値、非同期ログ、別スレッドから同じLua VMを呼ぶ方式を資格の入力にしない。
 2. **論理述語 `CanEver(playerID, govIndex)`**: 22人物のGovernor Indexだけに限定して、総督Indexから世界共通の人物IDを引く。加入前と他の所有者は偽。加入後も `GREAT_PERSON` の段階では偽とし、当該所有者の実Great Personが存在し、費用全額を公式残高から予約済みの `EVOLVING` 段階で真にする。任命済みの `GOVERNOR` は同じ所有者の実Governorを確認して真を維持する。その他の公式Governorは元の判定に渡す。静的gateだけを維持しても加入後を開けないため、22人物に限り本体の特性判定結果をこの同期資格で置き換える構成を調べる。
-3. **予約と正式会計**: Join直後に開くとAIが費用2/3の人物を1称号だけで先取りし得る。`EVOLVING` は費用全額の予約が成立した後に限る。現在の `PrepareEvolution` は人物別 `native.canAppoint` を遷移前に確認するため、資格を `EVOLVING` で開く案とそのままでは循環する。実装時はGameplay内で実人物・所有者・公式残高・予約を先に検査して遷移し、その**後**に本体の人物別資格と任命可否を読む。人間のUIだけでなく、AI所有者も同期Gameplayで人物ID順に同じ予約を確定する必要がある。その処理が本体AIの総督分析より先に走るかは未測定であり、遅ければ本体の同期操作入口に移す。APPOINTを1回、費用2/3では効果なしの公式PROMOTEを1/2回だけ実行し、公式 `GetGovernorPointsSpent` と実Promotionから未払いを復元する。Gameplayの功績購入、5ターン定着、忠誠8、活動不能と回復の判定をUIの擬似総督へ移さない。
+3. **予約と正式会計**: Join直後に開くとAIが費用2/3の人物を1称号だけで先取りし得る。`EVOLVING` は費用全額の予約が成立した後に限る。変更前の `PrepareEvolution` は人物別 `native.canAppoint` を遷移前に確認していたため、資格を `EVOLVING` で開く案と循環していた。task853ではGameplay内で実人物・所有者・公式残高・予約を先に検査して遷移する順序へ直した。人間のUIだけでなく、AI所有者も同期Gameplayで人物ID順に同じ予約を確定する必要がある。その処理が本体AIの総督分析より先に走るかは未測定であり、遅ければ本体の同期操作入口に移す。APPOINTを1回、費用2/3では効果なしの公式PROMOTEを1/2回だけ実行し、公式 `GetGovernorPointsSpent` と実Promotionから未払いを復元する。Gameplayの功績購入、5ターン定着、忠誠8、活動不能と回復の判定をUIの擬似総督へ移さない。
 4. **本体との同期接続**: `CanEver` が参照する所有者Playerから本体Player propertyへ到達できることが静的に分かった（下記）。費用1の最初の橋は、同期Gameplayで確定したPlayer側の入場許可を同じ所有者の本体propertyから読む候補を優先して測る。Game property台帳の `OWNER` や `STATE` をPlayer側へ複製して二重正本にしない。許可を派生値として持つなら、加入・予約・取消し・実Great Person死亡・完了・読込の各確定点で台帳から更新し、再構築前は閉じる。既存のGame propertyを本体から直接読む案も残すが、UIスレッドの読取とGameplay更新の競合は未測定である。両案とも実在のC++アクセサの完全ABI・値寿命・同期を証明する前にRustから呼ばない。
 5. **保存・複数端末**: 同じ保存データのGame propertyからロード直後、最初のUI読取とAI判断より前に資格を得る。総督Index対応はそのゲームの定義から再構築し、古いポインタやプロセス固有のアドレスを保存しない。操作順・人物順を固定し、時刻・UIフレーム・乱数・端末固有値を判定に混ぜない。もし本体側にキャッシュが必要なら、Gameplayと同じ同期確定点で更新し、保存読込時に同じデータから再構築する。複数端末で各確定点の台帳、資格484組、称号使用済み数、実総督と保存ハッシュを照合する。
 
@@ -106,6 +106,26 @@ llvm-objdump -d --no-show-raw-insn --start-address=0x1804a80ea --stop-address=0x
 ### 費用未払い時のAssign境界
 
 資格が開いてAPPOINTが通っても、費用2/3の追加PROMOTE前に公式Governor実体ができる。UIの `CanAssignGovernor` はwrapper `0x710090` →本体 `0xBA350` → `0x2DDB30` →末尾分岐 `0x2DD880` を通る。一方、公式ASSIGN操作側の分岐候補は `0x30EC0F` で本体 `0x2DDBB0` を確認し、真なら `0x30EC24` で配置処理候補 `0x2DF340` へ進む。両者は同一の入口ではない。したがってUIを隠すだけで途中の配置・定着・効果を防げるとは言えない。費用2/3を扱う次段階では、未払いの実総督に対してUI判定と操作側判定の双方が拒否することをobserverと本体結果で測る。公式PROMOTE、Spent、活動不能とスパイの実体をpropertyで偽造しない。
+
+## task853の実装候補と実機待ちの境界（2026-10-03）
+
+人物MODのSQLは、22人にだけ所有者へ付与しない有効な `TRAIT_JAC_PERSONA_ADMISSION_CLOSED` を設定した。sidecarが存在しなければ未加入の本体AI任命は閉じる。Gameplayの `PrepareEvolution` は、実Great Person・所有者・公式の獲得数と使用済み数・他人物の未払い予約を先に検査して `EVOLVING` を確定し、その後に本体任命可否を読む。人間の画面も予約前の `CanAppointGovernor` を要求しなくなった。AIは自分の手番のGameplayで人物ID順に同じ予約を行う。任命と昇進は従来の公式操作で1/2/3称号を払い、功績・定着・中和の規則を変更しない。sidecarが不在または本体が拒否したときは予約状態の人物と称号を保持し、公式任命を発行しない。
+
+`tools/civ6-native-admission-rs` は、本体のGovernor Index 22件を実行中の `GameInfo` から受け取る判定器を実装した。対象以外の総督は元の判定を使う。対象人物は未加入・所有者不一致・実体欠落・残高不足・他人物との予約重複で拒否する。`EVOLVING` は全額予約と実Great Personを必要とし、途中の実Governorは配置を拒否する。`GOVERNOR` は実任命、基礎昇進、必要な追加昇進がすべてある場合だけ、公式の配置判定へ通す。過去の人物の公式支払いと進化中の観測値を合わせて使用済み称号と照合し、合わないときは未払い予約を減らさない。任命前に偉人が失われた場合は、次の手番まで二度観測してからその人物の未払い予約だけを解除する。入力の `Snapshot` はGame propertyの加入台帳と本体の人物・総督・称号を同期して読み取る**契約**である。現時点では実Civ6からその値を作る安全なadapterと、本体の戻り値を変えるsidecarは未接続であり、加入後の本体任命はまだ成立しない。AIが費用2/3の公式PROMOTEを順に払い直す操作経路も未実装なので、AI予約の検査を支払い完了の証明に読み替えない。Rust試験のJSON保存・読込は判定器の直列化の試験で、実ゲームの保存・読込の証明ではない。
+
+既存の `civ6-native-probe-rs` に所有者ポインタ・ID・Player propertyインターフェースの読取を追加した。静的な実命令 `0x2DDDEC/0x2DDDFD` と `0x6EDC76` を根拠に、synthetic Windows子プロセスで `+0x70`、`+0xD8`、`+0x528` を読み、Playerオブジェクトの入替え後に古いポインタを再使用しない試験を通した。シナリオが指定する `mode=property` では、`0x6EDC76`、文字列キー `0x15339`、property getter前後 `0x1535E/0x15361` の4点だけをhardware breakpointで観測する。試験用の2キーに限り、同一スレッドのPlayer getterからproperty getterまで一致した場合に戻りポインタの先頭16 byteを記録する。値のタグ・長さ・所有権や別スレッドからの安全性はまだ不明であり、16 byteを数値や文字列と断定しない。RVAとfile offsetは `civ6-pe-rs`、命令境界はLLVMで照合した。観測器のcleanupは登録済みthreadの元handleだけを再利用し、debug registerを変更していないthreadを停止対象から外した。これは実機53の `SuspendThread: Access is denied` に対する候補修正で、実機での解消は未確認である。
+
+親担当がこのブランチを実機実行器へ取り込んだ後の**次の1コマンド**は次のとおり。`live_chain` が共有ロック、起動、attach、停止を管理する。こちらのwriterは実機へ接続しない。
+
+```powershell
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-property-abi-15km.json --stop-on-failure
+```
+
+シナリオ `tools/civ6-autotest/scenarios/leader-persona-property-abi-15km.json` は9手順。実ゲームの `GameInfo` から22人のIndexを出し、試験用のPlayer数値・文字列をGameplayで設定・読取・更新・削除し、公式 `CanEver` の484組もLua側で照合する。実行器は開始時にidentityのmodeを照合し、停止後に正常detach、所有者0、2種類の異なるkey ID、初期・更新・削除の値ポインタと先頭16 byteの変化を検査する。どれか欠測なら失敗する。得られた同一Playerのポインタ、getter返値、スレッドと順序を比較し、型と寿命が確定してからruntime adapterと本体判定の上書きを接続する。保存直後とロード直後、AI実手番での読取順、費用2/3途中のASSIGN拒否、スパイ中和・回復は残る実機Mustである。
+
+取込候補単体は `tools/target-admission-bridge` で103試験群・1501件成功していた。今回の統合後はこのworktree専用の `tools/target-native-integrate` で `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets -q` を実行し、103試験群・1516件成功、失敗0・省略0を確認した。最後にdebug registerの実行条件を照合する判定を足し、観測器の28件を再実行して成功した。Lua 5.1の73人物ケース、SQLの22件gate、Windowsの専用子プロセスでの所有・未所有・曖昧な例外とthread復元を含む。`cargo fmt --manifest-path tools/Cargo.toml --all -- --check`、`git diff --check`、全93シナリオの `civ6-autotest --check` も成功した。予約重複、偉人喪失後の予約残り、ABI観測の欠測は取込候補で修正済み。共有Git indexへの書込みは親担当が行う。
+
+統合前の実機55では、敵AI1の費用1について実Great Personと公式称号1、予約後の本体任命・配置、使用済み称号1、進化完了時の偉人消失まで確認した。最後の都市状態は初回定着中だった。この実績は今回の静的閉鎖gateとnative判定器を接続した後の実機成功を示さない。実機56の後続ロードは保存名の書換えで失敗し、保存・読込の修正は別担当が進めている。未加入21AIを含む全113ケース、費用2/3の追加昇進、資格の本体adapterと戻り値への接続、propertyの型・寿命・スレッド安全性、配置拒否、保存・読込、複数端末、スパイ中和と回復はMustとして残る。
 
 ### 追加した読取コマンド
 

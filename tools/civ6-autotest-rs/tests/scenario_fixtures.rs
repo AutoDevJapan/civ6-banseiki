@@ -495,6 +495,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         if !name.ends_with(".json")
             || name == "leader-persona-static-gate-15km.json"
             || name == "leader-persona-native-trace-15km.json"
+            || name == "leader-persona-property-abi-15km.json"
         {
             continue;
         }
@@ -535,6 +536,52 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         }
     }
     assert_eq!(count, 80);
+}
+
+#[test]
+fn property_abi_probe_is_a_single_scoped_read_only_diagnostic() {
+    let data = scenario("leader-persona-property-abi-15km.json");
+    let s = steps(&data);
+    assert_eq!(s.len(), 9);
+    let enabled = s[0]["ids"].as_array().unwrap();
+    let disabled = s[0]["disable_ids"].as_array().unwrap();
+    assert!(enabled.iter().any(|id| id == STATIC_GATE_MOD));
+    let ids = |rows: &[Value]| {
+        rows.iter()
+            .map(|id| id.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let isolated =
+        civ6_autotest_rs::scenario::isolated_disabled_mods(&ids(enabled), &ids(disabled));
+    assert!(isolated.iter().any(|id| id == ENEMY_GATE_MOD));
+    assert_eq!(
+        s.iter()
+            .filter(|step| action(step, "start_native_governor_trace"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        s.iter()
+            .find(|step| action(step, "start_native_governor_trace"))
+            .unwrap()["mode"],
+        "property"
+    );
+    assert_eq!(
+        s.iter()
+            .filter(|step| action(step, "stop_native_governor_trace"))
+            .count(),
+        1
+    );
+    assert!(!s.iter().any(|step| action(step, "end_turn")));
+    let code = s
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(code.contains("JAC_ACCESSOR_853_NUMBER"));
+    assert!(code.contains("JAC_ACCESSOR_853_TEXT"));
+    assert!(!code.contains("ChangeGovernorPoints"));
+    assert!(!code.contains("JAC_PERSONA_"));
 }
 
 #[test]

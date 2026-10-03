@@ -51,13 +51,12 @@ macro_rules! persona_tests {
     let mut definition = 0;
     let mut invocation = 0;
     let mut tests = BTreeSet::new();
+    let mut additions = BTreeSet::new();
     for item in file.items {
         if let Item::Fn(function) = &item {
-            assert!(
-                !function.attrs.iter().any(|a| a.path().is_ident("test")),
-                "unexpected direct test in persona Lua suite: {}",
-                function.sig.ident
-            );
+            if function.attrs.iter().any(|a| a.path().is_ident("test")) {
+                additions.insert(function.sig.ident.to_string());
+            }
         }
         if let Item::Macro(mac) = item {
             if mac.mac.path.is_ident("macro_rules")
@@ -82,6 +81,16 @@ macro_rules! persona_tests {
     }
     assert_eq!(definition, 1);
     assert_eq!(invocation, 1);
+    assert_eq!(
+        additions,
+        BTreeSet::from([
+            "ai_admission_reserves_full_official_cost_before_any_native_spend".to_string(),
+            "native_receipt_ahead_of_official_spent_keeps_full_reservation".to_string(),
+            "prior_persona_payment_cannot_mask_unpaid_current_evolution".to_string(),
+            "lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn"
+                .to_string(),
+        ])
+    );
     tests
 }
 

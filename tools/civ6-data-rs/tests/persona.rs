@@ -659,11 +659,19 @@ fn test_titles_come_only_from_15_sengoku_civics_and_only_persona_governors_exist
     ] {
         assert_eq!(count(&db, &format!("SELECT COUNT(*) FROM {table} WHERE GovernorType IN (SELECT GovernorType FROM JAC_PersonaDisabledGovernors)")), 0, "{table}");
     }
-    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType IS NOT NULL"), 0);
+    // The production gate is unattached: a missing native sidecar leaves every
+    // persona closed, including after save/load, without granting a fake trait.
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"), 22);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM Governors WHERE GovernorType NOT IN (SELECT GovernorType FROM JAC_LeaderPersonas) AND TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"), 0);
     assert_eq!(
-        count(&db, "SELECT COUNT(*) FROM Kinds WHERE Kind='KIND_TRAIT'"),
+        count(
+            &db,
+            "SELECT COUNT(*) FROM Traits WHERE TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"
+        ),
         1
     );
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM LeaderTraits WHERE TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"), 0);
+    assert_eq!(count(&db, "SELECT COUNT(*) FROM CivilizationTraits WHERE TraitType='TRAIT_JAC_PERSONA_ADMISSION_CLOSED'"), 0);
 }
 
 #[test]

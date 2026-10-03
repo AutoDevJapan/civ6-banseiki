@@ -23,6 +23,9 @@ struct Rows {
 
 static ROWS: LazyLock<Rows> = LazyLock::new(|| {
     let db = official::official_db();
+    // The archived official snapshot predates Agendas.xml InsertOrIgnore.
+    db.execute_batch("INSERT OR IGNORE INTO Kinds (Kind) VALUES ('KIND_TRAIT');")
+        .unwrap();
     for path in [
         "poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql",
         "poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql",
@@ -267,3 +270,23 @@ persona_tests!(
     test_unit_panel_uses_the_leader_portrait_and_preserves_other_units,
     test_governor_details_preserve_native_refresh_then_set_the_leader_portrait,
 );
+
+#[test]
+fn ai_admission_reserves_full_official_cost_before_any_native_spend() {
+    run_case("test_ai_admission_reserves_full_official_cost_before_any_native_spend");
+}
+
+#[test]
+fn native_receipt_ahead_of_official_spent_keeps_full_reservation() {
+    run_case("test_native_receipt_ahead_of_official_spent_keeps_full_reservation");
+}
+
+#[test]
+fn prior_persona_payment_cannot_mask_unpaid_current_evolution() {
+    run_case("test_prior_persona_payment_cannot_mask_unpaid_current_evolution");
+}
+
+#[test]
+fn lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn() {
+    run_case("test_lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn");
+}

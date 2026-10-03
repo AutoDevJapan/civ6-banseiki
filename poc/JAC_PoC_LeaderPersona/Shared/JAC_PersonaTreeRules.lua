@@ -5,16 +5,34 @@ function Rules.Key(leader, field) return "JAC_PERSONA_" .. leader .. "_" .. fiel
 function Rules.Get(leader, field) return Game:GetProperty(Rules.Key(leader, field)); end
 function Rules.Merit(leader) return Rules.Get(leader, "MERIT") or 0; end
 function Rules.ReservedAppointments(owner)
-    local reserved = 0;
+    local reserved, fullCost, observedPaid, completedPaid = 0, 0, 0, 0;
     for person in GameInfo.JAC_LeaderPersonas() do
-        if Rules.Get(person.LeaderType, "OWNER") == owner and Rules.Get(person.LeaderType, "STATE") == "EVOLVING" then
+        if Rules.Get(person.LeaderType, "OWNER") == owner then
             local cost = Rules.Get(person.LeaderType, "EVOLUTION_COST") or person.EvolutionCost;
-            local native = Rules.NativeGovernor(owner, person.LeaderType);
-            local paid = native and native.appointed and (1 + (native.surchargePaid or 0)) or 0;
-            reserved = reserved + math.max(0, cost - paid);
+            local state = Rules.Get(person.LeaderType, "STATE");
+            if state == "GOVERNOR" then
+                completedPaid = completedPaid + cost;
+            elseif state == "EVOLVING" then
+                local native = Rules.NativeGovernor(owner, person.LeaderType);
+                local paid = native and native.appointed and native.base and
+                    type(native.surchargePaid) == "number" and native.surchargePaid >= 0 and
+                    native.surchargePaid % 1 == 0 and (1 + native.surchargePaid) or 0;
+                if paid < 0 or paid > cost then paid = 0; end
+                fullCost = fullCost + cost;
+                observedPaid = observedPaid + paid;
+                reserved = reserved + math.max(0, cost - paid);
+            end
         end
     end
-    return reserved;
+    -- Earlier completed people and other title users cannot be mistaken for
+    -- the payment of a current person. Until the official and native totals
+    -- agree exactly, reserve every pending person's full cost.
+    local player = Players[owner];
+    local governors = player and player:GetGovernors();
+    local spent = governors and type(governors.GetGovernorPointsSpent) == "function" and
+        governors:GetGovernorPointsSpent();
+    if type(spent) ~= "number" or spent ~= completedPaid + observedPaid then return fullCost, true; end
+    return reserved, false;
 end
 function Rules.Owned(node) return Rules.Get(node.LeaderType, "NODE_" .. node.NodeType) == 1; end
 function Rules.Nodes(leader, category)

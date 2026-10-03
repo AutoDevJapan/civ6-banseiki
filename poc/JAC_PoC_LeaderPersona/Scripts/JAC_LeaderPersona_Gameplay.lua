@@ -133,9 +133,10 @@ local function PrepareEvolution(owner, leader)
     if AvailableTitles(p) - Rules.ReservedAppointments(owner) < cost then
         return Finish(owner, "NO_TITLE");
     end
-    if not native.canAppoint then return Finish(owner, "NATIVE_NOT_APPOINTABLE"); end
-    -- The surcharge is the required count, not a synthetic balance deduction.
-    -- Its paid portion is read from the engine's own Governor promotions.
+    -- The static native trait is closed until this reservation commits. A
+    -- pre-transition CanAppointGovernor check would make admission circular.
+    -- The surcharge is the required count, not a synthetic balance deduction;
+    -- its paid portion is read from the engine's own Governor promotions.
     Set(leader, "EVOLUTION_SURCHARGE", cost - 1);
     Set(leader, "STATE", "EVOLVING");
     return Finish(owner, "EVOLVING");
@@ -167,7 +168,29 @@ local function Reconcile()
     for row in GameInfo.JAC_LeaderPersonas() do
         local owner = Get(row.LeaderType, "OWNER");
         if owner ~= nil and Get(row.LeaderType, "STATE") == "EVOLVING" then
-            CompleteEvolution(owner, row.LeaderType);
+            local native = NativeGovernor(owner, row);
+            local unit, ready = FindPerson(owner, row);
+            if native and not native.appointed and ready and not unit then
+                local turn = Game.GetCurrentGameTurn();
+                local first = Get(row.LeaderType, "MISSING_SINCE_TURN");
+                if first == nil then
+                    Set(row.LeaderType, "MISSING_SINCE_TURN", turn);
+                elseif turn > first then
+                    -- No native appointment or title was consumed. Release
+                    -- only this person's unpaid reservation after a second
+                    -- synchronized observation; keep the ownership record.
+                    Set(row.LeaderType, "STATE", "GREAT_PERSON");
+                    Set(row.LeaderType, "EVOLUTION_SURCHARGE", nil);
+                    Set(row.LeaderType, "UNIT", nil);
+                    Set(row.LeaderType, "MISSING_SINCE_TURN", nil);
+                    Finish(owner, "PERSON_MISSING");
+                end
+            else
+                if Get(row.LeaderType, "MISSING_SINCE_TURN") ~= nil then
+                    Set(row.LeaderType, "MISSING_SINCE_TURN", nil);
+                end
+                CompleteEvolution(owner, row.LeaderType);
+            end
         end
     end
 end
@@ -382,6 +405,19 @@ OnPlayerTurnStarted = function(owner)
     local p = Player(owner, true);
     if not p then return; end
     local turn = Game.GetCurrentGameTurn();
+    -- Reserve only from the official title balance, in stable person order.
+    -- Whether this callback precedes native AI governor analysis needs the
+    -- parent-owned live trace; the static trait remains closed without a bridge.
+    if not p:IsHuman() then
+        local candidates = {};
+        for row in GameInfo.JAC_LeaderPersonas() do
+            if Get(row.LeaderType, "OWNER") == owner and Get(row.LeaderType, "STATE") == "GREAT_PERSON" then
+                table.insert(candidates, row.LeaderType);
+            end
+        end
+        table.sort(candidates);
+        for _,leader in ipairs(candidates) do PrepareEvolution(owner, leader); end
+    end
     for row in GameInfo.JAC_LeaderPersonas() do
         local leader = row.LeaderType;
         if Get(leader, "OWNER") == owner and Get(leader, "STATE") == "GOVERNOR" then

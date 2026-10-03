@@ -123,12 +123,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 {
                     return Err(fail("max_seconds must be 1..300".into()));
                 }
-                if step
-                    .as_object()
-                    .unwrap()
-                    .keys()
-                    .any(|k| !["action", "name", "max_seconds", "timeout"].contains(&k.as_str()))
+                if step.get("mode").is_some()
+                    && !matches!(step["mode"].as_str(), Some("governor" | "property"))
                 {
+                    return Err(fail("trace mode must be governor or property".into()));
+                }
+                if step.as_object().unwrap().keys().any(|k| {
+                    !["action", "name", "max_seconds", "mode", "timeout"].contains(&k.as_str())
+                }) {
                     return Err(fail("unexpected trace start field".into()));
                 }
                 trace_open = true;
@@ -639,6 +641,11 @@ mod native_trace_tests {
             step["max_seconds"] = json!(bad);
             assert!(validate_scenario(&scenario(vec![step, stop.clone()])).is_err());
         }
+        let mut property = start.clone();
+        property["mode"] = json!("property");
+        assert!(validate_scenario(&scenario(vec![property.clone(), stop.clone()])).is_ok());
+        property["mode"] = json!("unknown");
+        assert!(validate_scenario(&scenario(vec![property, stop.clone()])).is_err());
         let mut bad = start;
         bad["name"] = json!("../outside");
         assert!(validate_scenario(&scenario(vec![bad, stop])).is_err());

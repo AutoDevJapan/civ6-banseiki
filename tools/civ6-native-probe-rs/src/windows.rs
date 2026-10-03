@@ -9,6 +9,7 @@ use crate::{
     bool_from_al, direct_call_rva, known_path, CAN_APPOINT_RVA, CAN_EVER_RVA, EXPECTED_SHA256,
     MAX_ROWS,
 };
+use civ6_native_admission_rs::{owner_fields, MemoryRead, PropertyCapture};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -62,6 +63,12 @@ const GAME_ROOT: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier
 const MODULE_REL: &str = "DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const EVER_FILE_OFFSET: usize = 0x2dd1d0;
 const APPOINT_FILE_OFFSET: usize = 0x2dcc20;
+const PLAYER_GETTER_RVA: u64 = 0x6e_dc76;
+const PROPERTY_NAME_RVA: u64 = 0x1_5339;
+const PROPERTY_BEFORE_RVA: u64 = 0x1_535e;
+const PROPERTY_AFTER_RVA: u64 = 0x1_5361;
+const ACCESSOR_NUMBER: &str = "JAC_ACCESSOR_853_NUMBER";
+const ACCESSOR_TEXT: &str = "JAC_ACCESSOR_853_TEXT";
 const DEBUG_CONTEXT: u32 =
     CONTEXT_DEBUG_REGISTERS_AMD64 | CONTEXT_CONTROL_AMD64 | CONTEXT_INTEGER_AMD64;
 const RF: u32 = 1 << 16;
@@ -174,6 +181,7 @@ pub struct ObserverConfig {
     pub controller_created: u64,
     pub output: PathBuf,
     pub seconds: u64,
+    pub mode: String,
 }
 
 struct Handle(HANDLE);
@@ -374,12 +382,26 @@ fn read_exact<const N: usize>(handle: &Handle, address: u64) -> Result<[u8; N], 
     }
     Ok(bytes)
 }
+
+struct RemoteMemory<'a>(&'a Handle);
+impl MemoryRead for RemoteMemory<'_> {
+    fn u64_at(&self, address: u64) -> Option<u64> {
+        Some(u64::from_le_bytes(read_exact::<8>(self.0, address).ok()?))
+    }
+    fn u32_at(&self, address: u64) -> Option<u32> {
+        Some(u32::from_le_bytes(read_exact::<4>(self.0, address).ok()?))
+    }
+}
 fn verify_entry_bytes(game: &Handle, module: &Module) -> Result<(), String> {
     let mut file = File::open(&module.path).map_err(|e| e.to_string())?;
     use std::io::{Seek, SeekFrom};
     for (rva, offset) in [
         (CAN_EVER_RVA, EVER_FILE_OFFSET),
         (CAN_APPOINT_RVA, APPOINT_FILE_OFFSET),
+        (PLAYER_GETTER_RVA, 0x6ed076),
+        (PROPERTY_NAME_RVA, 0x14739),
+        (PROPERTY_BEFORE_RVA, 0x1475e),
+        (PROPERTY_AFTER_RVA, 0x14761),
     ] {
         if rva + 16 > module.size {
             return Err("GameCore module too small for target RVA".into());
@@ -585,12 +607,20 @@ struct ThreadState {
     original: Registers,
     pending: Vec<Pending>,
     armed_sites: [Option<u64>; 4],
+    property_capture: PropertyCapture,
+    property_owner_id: Option<u32>,
+    property_name: Option<&'static str>,
+    property_value_name: Option<&'static str>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OwnedTrap {
     CanEver,
     CanAppoint,
     Return,
+    PlayerGetter,
+    PropertyBefore,
+    PropertyAfter,
+    PropertyName,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DispatchOutcome {
@@ -610,6 +640,7 @@ fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
 /// useful diagnostic evidence, but it is not a prerequisite for recognizing
 /// an address at which this debugger installed a hardware breakpoint.
 fn classify_single_step(
+    mode: ProbeMode,
     pending: &[Pending],
     armed_sites: &[Option<u64>; 4],
     exception_address: u64,
@@ -640,19 +671,67 @@ fn classify_single_step(
         2 => context.Dr2,
         _ => context.Dr3,
     };
-    if actual_dr != exception_address || context.Dr7 & (1u64 << (slot * 2)) == 0 {
+    let enable = 1u64 << (slot * 2);
+    let enable_pair = 3u64 << (slot * 2);
+    let condition = 0xfu64 << (16 + slot * 4);
+    if actual_dr != exception_address
+        || context.Dr7 & enable_pair != enable
+        || context.Dr7 & condition != 0
+    {
         return DispatchOutcome::Ambiguous("armed_debug_registers_disagree");
     }
-    match slot {
-        0 => DispatchOutcome::OwnedProven(OwnedTrap::CanEver),
-        1 => DispatchOutcome::OwnedProven(OwnedTrap::CanAppoint),
-        _ if pending
-            .iter()
-            .any(|p| p.return_address == exception_address) =>
+    match (mode, slot) {
+        (ProbeMode::Property, 0) => DispatchOutcome::OwnedProven(OwnedTrap::PlayerGetter),
+        (ProbeMode::Property, 1) => DispatchOutcome::OwnedProven(OwnedTrap::PropertyBefore),
+        (ProbeMode::Property, 2) => DispatchOutcome::OwnedProven(OwnedTrap::PropertyAfter),
+        (ProbeMode::Property, 3) => DispatchOutcome::OwnedProven(OwnedTrap::PropertyName),
+        (ProbeMode::Governor, 0) => DispatchOutcome::OwnedProven(OwnedTrap::CanEver),
+        (ProbeMode::Governor, 1) => DispatchOutcome::OwnedProven(OwnedTrap::CanAppoint),
+        (ProbeMode::Governor, 2 | 3)
+            if pending
+                .iter()
+                .any(|p| p.return_address == exception_address) =>
         {
             DispatchOutcome::OwnedProven(OwnedTrap::Return)
         }
         _ => DispatchOutcome::Ambiguous("return_breakpoint_has_no_pending_call"),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProbeMode {
+    Governor,
+    Property,
+}
+impl ProbeMode {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "governor" => Ok(Self::Governor),
+            "property" => Ok(Self::Property),
+            _ => Err("--mode must be governor or property".into()),
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::Governor => "governor",
+            Self::Property => "property",
+        }
+    }
+    fn fixed_sites(self, base: u64) -> [Option<u64>; 4] {
+        match self {
+            Self::Governor => [
+                Some(base + CAN_EVER_RVA),
+                Some(base + CAN_APPOINT_RVA),
+                None,
+                None,
+            ],
+            Self::Property => [
+                Some(base + PLAYER_GETTER_RVA),
+                Some(base + PROPERTY_BEFORE_RVA),
+                Some(base + PROPERTY_AFTER_RVA),
+                Some(base + PROPERTY_NAME_RVA),
+            ],
+        }
     }
 }
 struct Jsonl {
@@ -825,8 +904,12 @@ struct Debugger {
     game: Handle,
     module_base: u64,
     module_size: u64,
+    mode: ProbeMode,
     threads: BTreeMap<u32, ThreadState>,
-    held: BTreeMap<u32, Handle>,
+    // Only threads whose debug registers we changed need suspension. Reuse
+    // their already opened handles; reopening can be denied later even while
+    // the original handle still has THREAD_SUSPEND_RESUME access.
+    held: BTreeSet<u32>,
     cleanup_event: Option<(DEBUG_EVENT, i32)>,
     cleanup_gate: Option<CleanupGate>,
     critical: bool,
@@ -863,6 +946,7 @@ impl Debugger {
         module_base: u64,
         module_size: u64,
         output: Jsonl,
+        mode: ProbeMode,
     ) -> Result<Self, String> {
         if unsafe { DebugActiveProcess(pid) } == 0 {
             return Err(win_error("DebugActiveProcess"));
@@ -887,8 +971,9 @@ impl Debugger {
             game,
             module_base,
             module_size,
+            mode,
             threads: BTreeMap::new(),
-            held: BTreeMap::new(),
+            held: BTreeSet::new(),
             cleanup_event: None,
             cleanup_gate: None,
             critical: false,
@@ -925,27 +1010,44 @@ impl Debugger {
         if c.Dr7 & 0xff != 0 {
             return Err(format!("thread {tid} already uses hardware breakpoints"));
         }
-        c.Dr0 = self.module_base + CAN_EVER_RVA;
-        c.Dr1 = self.module_base + CAN_APPOINT_RVA;
-        c.Dr2 = 0;
-        c.Dr3 = 0;
+        let armed_sites = self.mode.fixed_sites(self.module_base);
+        match self.mode {
+            ProbeMode::Governor => {
+                c.Dr0 = self.module_base + CAN_EVER_RVA;
+                c.Dr1 = self.module_base + CAN_APPOINT_RVA;
+                c.Dr2 = 0;
+                c.Dr3 = 0;
+            }
+            ProbeMode::Property => {
+                c.Dr0 = self.module_base + PLAYER_GETTER_RVA;
+                c.Dr1 = self.module_base + PROPERTY_BEFORE_RVA;
+                c.Dr2 = self.module_base + PROPERTY_AFTER_RVA;
+                c.Dr3 = self.module_base + PROPERTY_NAME_RVA;
+            }
+        }
         c.Dr6 &= !0xf;
-        c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16)) | 0b0101;
-        set_context(&handle, &c)?;
+        c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16))
+            | if self.mode == ProbeMode::Property {
+                0b01010101
+            } else {
+                0b0101
+            };
+        // Track the original registers before asking Windows to install ours.
+        // Even an OS error after a partial write must enter the restore gate.
         self.threads.insert(
             tid,
             ThreadState {
                 handle,
                 original,
                 pending: Vec::new(),
-                armed_sites: [
-                    Some(self.module_base + CAN_EVER_RVA),
-                    Some(self.module_base + CAN_APPOINT_RVA),
-                    None,
-                    None,
-                ],
+                armed_sites,
+                property_capture: PropertyCapture::default(),
+                property_owner_id: None,
+                property_name: None,
+                property_value_name: None,
             },
         );
+        set_context(&self.threads[&tid].handle, &c)?;
         Ok(())
     }
     fn refresh_returns(state: &mut ThreadState, c: &mut CONTEXT) -> Result<(), String> {
@@ -977,6 +1079,9 @@ impl Debugger {
         entry: &'static str,
         target_rva: u64,
     ) -> Result<(), String> {
+        if self.mode != ProbeMode::Governor {
+            return Err("governor return trap cannot be armed in property mode".into());
+        }
         let return_address = u64::from_le_bytes(read_exact::<8>(&self.game, c.Rsp)?);
         let return_rva = return_address
             .checked_sub(self.module_base)
@@ -1011,14 +1116,27 @@ impl Debugger {
             c.EFlags |= RF;
             set_context(&state.handle, c)?;
         }
+        // The addresses and ID are candidates until a GameCore getter and
+        // lifecycle trace confirm the same owner on each execution path.
+        // Read only the three statically identified fields, once per hit.
+        let owner = owner_fields(&RemoteMemory(&self.game), c.Rcx);
+        let property_vtable = owner
+            .and_then(|fields| RemoteMemory(&self.game).u64_at(fields.property_interface_address));
         self.output.row(
             json!({"type":"entry","id":id,"thread_id":tid,"function":entry,
             "function_rva":target_rva,"return_site_rva":return_rva,"caller_rva":call_rva,
             "path_candidate":path,"tail_from_can_appoint":tail,"this":format!("0x{:016x}",c.Rcx),
-            "governor_index":c.Rdx as u32,"return_breakpoint_armed":armed}),
+            "governor_index":c.Rdx as u32,"return_breakpoint_armed":armed,
+            "owner_id_candidate":owner.map(|x| x.player_id),
+            "player_pointer_candidate":owner.map(|x| format!("0x{:016x}",x.player_address)),
+            "property_interface_candidate":owner.map(|x| format!("0x{:016x}",x.property_interface_address)),
+            "property_vtable_candidate":property_vtable.map(|x| format!("0x{x:016x}"))}),
         )
     }
     fn returned(&mut self, tid: u32, c: &mut CONTEXT) -> Result<(), String> {
+        if self.mode != ProbeMode::Governor {
+            return Err("governor return trap cannot be rearmed in property mode".into());
+        }
         let state = self
             .threads
             .get_mut(&tid)
@@ -1064,6 +1182,76 @@ impl Debugger {
             "dispatch":match outcome { DispatchOutcome::OwnedProven(_) => "owned_proven", DispatchOutcome::Unrelated => "unrelated", DispatchOutcome::Ambiguous(_) => "ambiguous" },
             "reason":reason,
         }))
+    }
+    fn property_hit(&mut self, tid: u32, c: &mut CONTEXT) -> Result<(), String> {
+        if self.mode != ProbeMode::Property {
+            return Err("property breakpoint received in governor mode".into());
+        }
+        let rva = c
+            .Rip
+            .checked_sub(self.module_base)
+            .ok_or("property hit before module")?;
+        let state = self
+            .threads
+            .get_mut(&tid)
+            .ok_or("property event thread missing")?;
+        let event = if rva == PLAYER_GETTER_RVA {
+            state.property_capture.player_getter(c.Rax);
+            state.property_name = None;
+            state.property_value_name = None;
+            let memory = RemoteMemory(&self.game);
+            let owner_id = c.Rax.checked_add(0xd8).and_then(|at| memory.u32_at(at));
+            state.property_owner_id = owner_id;
+            let property_vtable = c.Rax.checked_add(0x528).and_then(|at| memory.u64_at(at));
+            json!({"type":"player_getter","thread_id":tid,
+                "owner_id_candidate":owner_id,
+                "player_pointer_candidate":(c.Rax != 0).then(|| format!("0x{:016x}",c.Rax)),
+                "property_interface_candidate":c.Rax.checked_add(0x528)
+                    .filter(|_| c.Rax != 0).map(|p| format!("0x{p:016x}")),
+                "property_vtable_candidate":property_vtable.map(|p| format!("0x{p:016x}"))})
+        } else if rva == PROPERTY_NAME_RVA {
+            let name = read_exact::<24>(&self.game, c.Rax).ok().and_then(|raw| {
+                let len = raw.iter().position(|byte| *byte == 0)?;
+                match std::str::from_utf8(&raw[..len]).ok()? {
+                    ACCESSOR_NUMBER => Some(ACCESSOR_NUMBER),
+                    ACCESSOR_TEXT => Some(ACCESSOR_TEXT),
+                    _ => None,
+                }
+            });
+            state.property_name = name;
+            json!({"type":"property_name","thread_id":tid,"key_name_candidate":name})
+        } else if rva == PROPERTY_BEFORE_RVA {
+            let matched = state.property_capture.before_value(c.Rcx, c.Rdx as u32);
+            state.property_value_name = if matched {
+                state.property_name.take()
+            } else {
+                None
+            };
+            json!({"type":"property_before","thread_id":tid,
+                "owner_id_candidate":state.property_owner_id,
+                "property_interface_candidate":format!("0x{:016x}",c.Rcx),
+                "key_id_candidate":c.Rdx as u32,"player_getter_matched":matched,
+                "key_name_candidate":state.property_value_name})
+        } else if rva == PROPERTY_AFTER_RVA {
+            let key = state.property_capture.after_value();
+            let name = state.property_value_name.take();
+            let bytes = name
+                .and_then(|_| (c.Rax != 0).then_some(c.Rax))
+                .and_then(|pointer| read_exact::<16>(&self.game, pointer).ok())
+                .map(|raw| raw.iter().map(|b| format!("{b:02x}")).collect::<String>());
+            json!({"type":"property_after","thread_id":tid,
+                "owner_id_candidate":state.property_owner_id,
+                "key_id_candidate":key,
+                "key_name_candidate":name,
+                "value_pointer_candidate":(c.Rax != 0).then(|| format!("0x{:016x}",c.Rax)),
+                "value_first_16_bytes_candidate":bytes})
+        } else {
+            return Err("unknown property-mode breakpoint".into());
+        };
+        c.Dr6 &= !0xf;
+        c.EFlags |= RF;
+        set_context(&state.handle, c)?;
+        self.output.row(event)
     }
     fn handle_event(&mut self, event: &DEBUG_EVENT) -> Result<i32, String> {
         self.last_attach_breakpoint_owned = false;
@@ -1137,8 +1325,10 @@ impl Debugger {
                     let exception_address = info.ExceptionRecord.ExceptionAddress as u64;
                     let first_chance = info.dwFirstChance != 0;
                     let Some(state) = self.threads.get(&tid) else {
-                        let outcome = if exception_address == self.module_base + CAN_EVER_RVA
-                            || exception_address == self.module_base + CAN_APPOINT_RVA
+                        let outcome = if self
+                            .mode
+                            .fixed_sites(self.module_base)
+                            .contains(&Some(exception_address))
                         {
                             DispatchOutcome::Ambiguous("thread_not_registered_at_target")
                         } else {
@@ -1200,6 +1390,7 @@ impl Debugger {
                         reported.Rip = reported.Rip.wrapping_add(1);
                     }
                     let outcome = classify_single_step(
+                        self.mode,
                         &state.pending,
                         &state.armed_sites,
                         exception_address,
@@ -1238,6 +1429,10 @@ impl Debugger {
                     let expected = match trap {
                         OwnedTrap::CanEver => self.module_base + CAN_EVER_RVA,
                         OwnedTrap::CanAppoint => self.module_base + CAN_APPOINT_RVA,
+                        OwnedTrap::PlayerGetter => self.module_base + PLAYER_GETTER_RVA,
+                        OwnedTrap::PropertyBefore => self.module_base + PROPERTY_BEFORE_RVA,
+                        OwnedTrap::PropertyAfter => self.module_base + PROPERTY_AFTER_RVA,
+                        OwnedTrap::PropertyName => self.module_base + PROPERTY_NAME_RVA,
                         OwnedTrap::Return => state
                             .pending
                             .iter()
@@ -1267,6 +1462,10 @@ impl Debugger {
                         OwnedTrap::CanEver => 1,
                         OwnedTrap::CanAppoint => 2,
                         OwnedTrap::Return => 0xc,
+                        OwnedTrap::PlayerGetter => 1,
+                        OwnedTrap::PropertyBefore => 2,
+                        OwnedTrap::PropertyAfter => 4,
+                        OwnedTrap::PropertyName => 8,
                     };
                     if c.Dr6 & expected_bit == 0 {
                         self.log_single_step(
@@ -1286,6 +1485,10 @@ impl Debugger {
                             self.entry(tid, &mut c, "can_appoint", CAN_APPOINT_RVA)?
                         }
                         OwnedTrap::Return => self.returned(tid, &mut c)?,
+                        OwnedTrap::PlayerGetter
+                        | OwnedTrap::PropertyBefore
+                        | OwnedTrap::PropertyAfter
+                        | OwnedTrap::PropertyName => self.property_hit(tid, &mut c)?,
                     }
                 } else {
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
@@ -1535,22 +1738,18 @@ impl CleanupOps for Debugger {
         for _ in 0..64 {
             let ids = thread_ids(self.pid)?;
             let additions: Vec<u32> = ids
-                .difference(&self.held.keys().copied().collect())
+                .iter()
                 .copied()
+                .filter(|tid| self.threads.contains_key(tid) && !self.held.contains(tid))
                 .collect();
             if additions.is_empty() {
                 return Ok(());
             }
             for tid in additions {
-                let handle = match thread_handle(tid) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        if !thread_ids(self.pid)?.contains(&tid) {
-                            continue;
-                        }
-                        return Err(format!("thread {tid} cannot be opened for cleanup: {e}"));
-                    }
-                };
+                // Each installed breakpoint is paired with this handle and an
+                // original register snapshot. Reopening by TID can fail or
+                // pick up a different thread after the original exits.
+                let handle = &self.threads[&tid].handle;
                 if unsafe { SuspendThread(handle.0) } == u32::MAX {
                     let suspend_error = win_error("SuspendThread");
                     let thread_wait = unsafe { WaitForSingleObject(handle.0, 0) };
@@ -1563,7 +1762,7 @@ impl CleanupOps for Debugger {
                         SuspendFailureState::Unknown => return Err(format!("thread {tid} liveness was unconfirmed after suspension failure (thread wait {thread_wait}, game wait {game_wait}): {suspend_error}")),
                     }
                 } else {
-                    self.held.insert(tid, handle);
+                    self.held.insert(tid);
                 }
             }
         }
@@ -1575,10 +1774,8 @@ impl CleanupOps for Debugger {
             self.restore_faults -= 1;
             return Err("injected SetThreadContext refusal".into());
         }
-        let ids = thread_ids(self.pid)?;
-        if ids.iter().any(|tid| !self.held.contains_key(tid)) {
-            return Err("a new target thread appeared while restoring debug registers".into());
-        }
+        // The saved HANDLE identifies every thread whose registers we wrote,
+        // even if its TID has since been recycled.
         for (tid, state) in &self.threads {
             match unsafe { WaitForSingleObject(state.handle.0, 0) } {
                 WAIT_OBJECT_0 => continue,
@@ -1590,7 +1787,7 @@ impl CleanupOps for Debugger {
                     ))
                 }
             }
-            if !self.held.contains_key(tid) {
+            if !self.held.contains(tid) {
                 return Err(format!(
                     "live thread {tid} was not suspended for restoration"
                 ));
@@ -1624,9 +1821,9 @@ impl CleanupOps for Debugger {
         Ok(())
     }
     fn resume(&mut self) -> Result<(), String> {
-        let tids: Vec<u32> = self.held.keys().copied().collect();
+        let tids: Vec<u32> = self.held.iter().copied().collect();
         for tid in tids {
-            let handle = &self.held[&tid];
+            let handle = &self.threads[&tid].handle;
             if unsafe { ResumeThread(handle.0) } == u32::MAX {
                 if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
                     return Err(format!(
@@ -1649,6 +1846,7 @@ impl Drop for Debugger {
 }
 
 pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
+    let mode = ProbeMode::parse(&config.mode)?;
     let verified = verify(config)?;
     let output = Jsonl::new(&verified.config.output)?;
     let mut debugger = Debugger::attach(
@@ -1657,13 +1855,14 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         verified.module.base,
         verified.module.size,
         output,
+        mode,
     )?;
     debugger
         .output
         .row(json!({"type":"identity","game_pid":verified.config.pid,
         "game_created_filetime":verified.config.created,"game_exe":verified.config.exe,
         "module_path":verified.module.path,"module_base":format!("0x{:016x}",verified.module.base),
-        "module_sha256":EXPECTED_SHA256,"abi":"candidate_only"}))?;
+        "module_sha256":EXPECTED_SHA256,"abi":"candidate_only","mode":mode.label()}))?;
     let (tx, rx) = mpsc::channel();
     let close_ack = Arc::clone(&debugger.close_ack);
     thread::spawn(move || {
@@ -1710,6 +1909,7 @@ mod tests {
     use super::*;
     use std::{
         io::{BufReader, BufWriter},
+        os::windows::process::CommandExt,
         process::{Child, ChildStdin, ChildStdout, Command, Stdio},
         sync::{
             atomic::{AtomicBool, Ordering},
@@ -1732,6 +1932,33 @@ mod tests {
             }
         }
         EXCEPTION_CONTINUE_SEARCH
+    }
+
+    #[test]
+    fn synthetic_owner_fields_use_read_process_memory_and_current_lifetime() {
+        let game = process(std::process::id(), true).unwrap();
+        let mut governors = Box::new([0u8; 0x78]);
+        let mut player_a = Box::new([0u8; 0x530]);
+        let mut player_b = Box::new([0u8; 0x530]);
+        player_a[0xd8..0xdc].copy_from_slice(&2u32.to_le_bytes());
+        player_b[0xd8..0xdc].copy_from_slice(&7u32.to_le_bytes());
+        governors[0x70..0x78].copy_from_slice(&(player_a.as_ptr() as u64).to_le_bytes());
+        let address = governors.as_ptr() as u64;
+        let first = owner_fields(&RemoteMemory(&game), address).unwrap();
+        assert_eq!(first.player_id, 2);
+        assert_eq!(
+            first.property_interface_address,
+            player_a.as_ptr() as u64 + 0x528
+        );
+        governors[0x70..0x78].copy_from_slice(&(player_b.as_ptr() as u64).to_le_bytes());
+        let second = owner_fields(&RemoteMemory(&game), address).unwrap();
+        assert_eq!(second.player_id, 7);
+        assert_eq!(
+            second.property_interface_address,
+            player_b.as_ptr() as u64 + 0x528
+        );
+        governors[0x70..0x78].fill(0);
+        assert_eq!(owner_fields(&RemoteMemory(&game), address), None);
     }
 
     #[inline(never)]
@@ -1774,6 +2001,12 @@ mod tests {
         if std::env::var_os("PR86_PROBE_TEST_CHILD").is_none() {
             return;
         }
+        let mut governors = Box::new([0u8; 0x78]);
+        let mut player_a = Box::new([0u8; 0x530]);
+        let mut player_b = Box::new([0u8; 0x530]);
+        player_a[0xd8..0xdc].copy_from_slice(&2u32.to_le_bytes());
+        player_b[0xd8..0xdc].copy_from_slice(&7u32.to_le_bytes());
+        governors[0x70..0x78].copy_from_slice(&(player_a.as_ptr() as u64).to_le_bytes());
         let main_tid = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
         let baseline = child_registers(main_tid, true);
         println!(
@@ -1803,6 +2036,16 @@ mod tests {
                     println!("PROBE_OUT:U{}", UNKNOWN_STEP_HANDLED.load(Ordering::SeqCst));
                 }
                 "R" => println!("PROBE_REG:{}", child_registers(main_tid, false)),
+                "O" => println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64),
+                "P" => {
+                    governors[0x70..0x78]
+                        .copy_from_slice(&(player_b.as_ptr() as u64).to_le_bytes());
+                    println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64);
+                }
+                "N" => {
+                    governors[0x70..0x78].fill(0);
+                    println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64);
+                }
                 "X" => break,
                 _ => panic!("invalid fixture command"),
             }
@@ -1826,6 +2069,7 @@ mod tests {
                     "--nocapture",
                 ])
                 .env("PR86_PROBE_TEST_CHILD", "1")
+                .creation_flags(0x0800_0000)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -1882,6 +2126,87 @@ mod tests {
         }
     }
 
+    #[test]
+    fn synthetic_child_owner_data_and_lifetime_are_read_without_stale_pointers() {
+        let mut child = Fixture::start();
+        let game = process(child.child.id(), true).unwrap();
+        let address = u64::from_str_radix(&child.command("O", "PROBE_OWNER:"), 16).unwrap();
+        let first = owner_fields(&RemoteMemory(&game), address).unwrap();
+        assert_eq!(first.player_id, 2);
+        assert_eq!(
+            first.property_interface_address,
+            first.player_address + 0x528
+        );
+        assert_eq!(
+            address,
+            u64::from_str_radix(&child.command("P", "PROBE_OWNER:"), 16).unwrap()
+        );
+        let second = owner_fields(&RemoteMemory(&game), address).unwrap();
+        assert_eq!(second.player_id, 7);
+        assert_ne!(first.player_address, second.player_address);
+        child.command("N", "PROBE_OWNER:");
+        assert_eq!(owner_fields(&RemoteMemory(&game), address), None);
+    }
+
+    #[test]
+    fn property_mode_four_breakpoints_restore_after_synthetic_child_hit() {
+        let mut child = Fixture::start();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-property-mode-{}-{}.jsonl",
+            std::process::id(),
+            child.child.id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - PLAYER_GETTER_RVA;
+        let pid = child.child.id();
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Property).unwrap();
+            debugger.zero_context_dr6_for_test = true;
+            debugger.run(stop_rx, Duration::from_secs(3), || Ok(()))
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(15));
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(child.command("U", "PROBE_OUT:"), "Utrue");
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
+        stop_tx.send(()).unwrap();
+        assert!(observer.join().unwrap().is_ok());
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        let trace = fs::read_to_string(&path).unwrap();
+        assert!(trace.contains("\"type\":\"player_getter\""));
+        let rows: Vec<Value> = trace
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(rows.iter().any(|row| row["type"] == "debug_exception"
+            && row["owned_breakpoint"] == true
+            && row["dr6"] == "0x0000000000000000"
+            && row["exception_address"] == format!("0x{:016x}", child.entry)));
+        assert!(rows
+            .iter()
+            .any(|row| row["type"] == "debug_exception" && row["dispatch"] == "unrelated"));
+        assert!(!rows
+            .iter()
+            .any(|row| row["type"] == "entry" || row["type"] == "return"));
+        let getter_threads: BTreeSet<_> = rows
+            .iter()
+            .filter(|row| row["type"] == "player_getter")
+            .map(|row| row["thread_id"].as_u64().unwrap())
+            .collect();
+        assert!(
+            getter_threads.len() >= 2,
+            "exited worker threads were not observed"
+        );
+        fs::remove_file(path).unwrap();
+    }
+
     fn run_case(
         timeout: Duration,
         trigger: bool,
@@ -1913,7 +2238,8 @@ mod tests {
         let fail_in_observer = Arc::clone(&fail);
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
-            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
             debugger.restore_faults = restore_faults;
             debugger.zero_context_dr6_for_test = mask_dr6;
             let result = debugger.run(stop_rx, timeout, || {
@@ -2041,21 +2367,26 @@ mod tests {
         // STATUS_SINGLE_STEP to the child, which has no handler for it.
         run_case(Duration::from_secs(20), true, false, false, 0, true);
     }
-    fn run_ambiguous_real_child_case(context_failure: bool) {
+    fn run_ambiguous_real_child_case(mode: ProbeMode, context_failure: bool) {
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path =
             std::env::temp_dir().join(format!("pr86-ambiguous-{}-{pid}.jsonl", std::process::id()));
         let _ = fs::remove_file(&path);
         let output = Jsonl::new(&path).unwrap();
-        let base = child.entry - CAN_EVER_RVA;
+        let base = child.entry
+            - if mode == ProbeMode::Property {
+                PLAYER_GETTER_RVA
+            } else {
+                CAN_EVER_RVA
+            };
         let signal = Arc::new(AtomicBool::new(false));
         let observed_signal = Arc::clone(&signal);
         let (ack_tx, ack_rx) = mpsc::channel();
         let (stop_tx, stop_rx) = mpsc::channel();
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
-            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            let mut debugger = Debugger::attach(pid, game, base, 0x800000, output, mode).unwrap();
             debugger.critical_signal = Some(observed_signal);
             debugger.force_context_failure = context_failure;
             debugger.force_reported_rip_mismatch = !context_failure;
@@ -2113,20 +2444,22 @@ mod tests {
         assert!(rows
             .iter()
             .any(|r| r["type"] == "critical_cleanup" && r["ambiguous_exception"] == true));
-        assert!(!rows
-            .iter()
-            .any(|r| r["type"] == "entry" || r["type"] == "return"));
+        assert!(!rows.iter().any(|r| {
+            r["type"] == "entry" || r["type"] == "return" || r["type"] == "player_getter"
+        }));
         drop(stop_tx);
         drop(child);
         fs::remove_file(path).unwrap();
     }
     #[test]
     fn rip_mismatch_on_real_hardware_event_requires_same_child_close() {
-        run_ambiguous_real_child_case(false);
+        run_ambiguous_real_child_case(ProbeMode::Governor, false);
+        run_ambiguous_real_child_case(ProbeMode::Property, false);
     }
     #[test]
     fn unreadable_context_on_real_hardware_event_requires_same_child_close() {
-        run_ambiguous_real_child_case(true);
+        run_ambiguous_real_child_case(ProbeMode::Governor, true);
+        run_ambiguous_real_child_case(ProbeMode::Property, true);
     }
     #[test]
     fn late_real_windows_attach_breakpoint_never_announces_ready() {
@@ -2142,7 +2475,8 @@ mod tests {
         let (_stop_tx, stop_rx) = mpsc::channel();
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
-            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
             debugger.force_initial_breakpoint_late = true;
             let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
             (result, debugger.attached)
@@ -2177,7 +2511,8 @@ mod tests {
         let (stop_tx, stop_rx) = mpsc::channel();
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
-            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
             debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
         });
         let started = Instant::now();
@@ -2447,27 +2782,32 @@ mod tests {
         c.Dr7 = 0b0101;
         c.Dr6 = 0; // Missing status does not discard matching owned evidence.
         assert_eq!(
-            classify_single_step(&[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
             DispatchOutcome::OwnedProven(OwnedTrap::CanEver)
         );
         c.Rip = ever + 1;
         assert_eq!(
-            classify_single_step(&[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
             DispatchOutcome::Ambiguous("exception_address_rip_disagree")
         );
         c.Rip = ever;
         c.Dr7 = 0;
         assert_eq!(
-            classify_single_step(&[], &armed, ever, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
+            DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
+        );
+        c.Dr7 = 0b0101 | (1u64 << 16);
+        assert_eq!(
+            classify_single_step(ProbeMode::Governor, &[], &armed, ever, Some(&c)),
             DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
         );
         assert_eq!(
-            classify_single_step(&[], &armed, ever, None),
+            classify_single_step(ProbeMode::Governor, &[], &armed, ever, None),
             DispatchOutcome::Ambiguous("context_unavailable")
         );
         c.Rip = base + 0x1235;
         assert_eq!(
-            classify_single_step(&[], &armed, base + 0x1234, Some(&c)),
+            classify_single_step(ProbeMode::Governor, &[], &armed, base + 0x1234, Some(&c)),
             DispatchOutcome::Unrelated
         );
         let pending = [Pending {
@@ -2481,8 +2821,73 @@ mod tests {
         c.Dr7 = 0x10;
         let armed_return = [Some(ever), Some(appoint), Some(c.Rip), None];
         assert_eq!(
-            classify_single_step(&pending, &armed_return, c.Rip, Some(&c)),
+            classify_single_step(
+                ProbeMode::Governor,
+                &pending,
+                &armed_return,
+                c.Rip,
+                Some(&c)
+            ),
             DispatchOutcome::OwnedProven(OwnedTrap::Return)
+        );
+    }
+    #[test]
+    fn property_slots_require_matching_event_rip_register_and_enable_bit() {
+        let base = 0x1a49b0000;
+        let sites = ProbeMode::Property.fixed_sites(base);
+        let mut c: CONTEXT = unsafe { zeroed() };
+        c.Dr0 = sites[0].unwrap();
+        c.Dr1 = sites[1].unwrap();
+        c.Dr2 = sites[2].unwrap();
+        c.Dr3 = sites[3].unwrap();
+        c.Dr7 = 0x55;
+        c.Dr6 = 0;
+        for (slot, trap) in [
+            OwnedTrap::PlayerGetter,
+            OwnedTrap::PropertyBefore,
+            OwnedTrap::PropertyAfter,
+            OwnedTrap::PropertyName,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let address = sites[slot].unwrap();
+            c.Rip = address;
+            assert_eq!(
+                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                DispatchOutcome::OwnedProven(trap)
+            );
+            c.Rip = address + 1;
+            assert_eq!(
+                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                DispatchOutcome::Ambiguous("exception_address_rip_disagree")
+            );
+            c.Rip = address;
+            c.Dr7 &= !(1u64 << (slot * 2));
+            assert_eq!(
+                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
+            );
+            c.Dr7 = 0x55 | (1u64 << (slot * 2 + 1));
+            assert_eq!(
+                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
+            );
+            c.Dr7 = 0x55 | (1u64 << (16 + slot * 4));
+            assert_eq!(
+                classify_single_step(ProbeMode::Property, &[], &sites, address, Some(&c)),
+                DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
+            );
+            c.Dr7 = 0x55;
+        }
+        c.Rip = base + 0x1234;
+        assert_eq!(
+            classify_single_step(ProbeMode::Property, &[], &sites, c.Rip, Some(&c)),
+            DispatchOutcome::Unrelated
+        );
+        assert_eq!(
+            classify_single_step(ProbeMode::Property, &[], &sites, sites[0].unwrap(), None),
+            DispatchOutcome::Ambiguous("context_unavailable")
         );
     }
     #[test]
@@ -2520,7 +2925,8 @@ mod tests {
         let (stop_tx, stop_rx) = mpsc::channel();
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
-            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
             debugger.restore_faults = usize::MAX;
             debugger.critical_signal = Some(observer_signal);
             let mut gate = CleanupGate::new();

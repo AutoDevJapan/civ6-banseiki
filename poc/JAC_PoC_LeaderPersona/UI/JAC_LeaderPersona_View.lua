@@ -94,7 +94,9 @@ function JAC_AppointLeader(leader)
     -- Other evolving people retain their unpaid reservations. A missing title
     -- delays this step without recording payment or destroying the Great Person.
     local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
-    if available - (JAC_PersonaTreeRules.ReservedAppointments(owner) - remaining) < 1 then return false; end
+    local reserved, full = JAC_PersonaTreeRules.ReservedAppointments(owner);
+    local ownReserved = full and (surcharge + 1) or remaining;
+    if available - (reserved - ownReserved) < 1 then return false; end
     if native.appointed then
         if not native.canPromote or native.surchargePaid >= surcharge then return false; end
         local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. (native.surchargePaid + 1)];
@@ -158,7 +160,7 @@ function JAC_RefreshPersonas()
                 JAC_PersonaTreeRules.ReservedAppointments(owner));
             local native = state == "GREAT_PERSON" and JAC_PersonaTreeRules.NativeGovernor(owner, leader);
             local noTitle = state == "GREAT_PERSON" and
-                (available < cost or not native or not native.canAppoint);
+                (available < cost or not native or native.appointed);
             view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost));
             view.Evolve:SetDisabled(not Active() or noTitle or state == "EVOLVING");
             view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost, available));

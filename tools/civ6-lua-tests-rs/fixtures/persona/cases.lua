@@ -869,16 +869,79 @@ function CASES.test_native_type_rejection_keeps_person_and_titles_without_reserv
     local governor=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[DATE].GovernorType]
     NATIVE_APPOINTABLE[0][governor.Hash]=false
     yes(Players[0]:GetGovernors():CanAppoint())
-    eq('NATIVE_NOT_APPOINTABLE',api.PrepareEvolution(0,DATE))
-    eq('GREAT_PERSON',prop('STATE')); eq(nil,prop('EVOLUTION_SURCHARGE'))
+    -- The previously expected precheck was circular: admission is opened only
+    -- after the full official balance is reserved. A closed native gate cannot
+    -- issue APPOINT or spend even if the state is pending.
+    eq('EVOLVING',api.PrepareEvolution(0,DATE))
+    eq('EVOLVING',prop('STATE')); eq(1,prop('EVOLUTION_SURCHARGE'))
     eq(2,Players[0].points); eq(0,Players[0].spent); eq(0,DESTROYS)
     JAC_RefreshPersonas(); yes(VIEWS[1].disabled)
-    reload(); eq('NATIVE_NOT_APPOINTABLE',ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,DATE))
+    no(JAC_AppointLeader(DATE)); eq(0,#REQUESTS)
+    reload(); eq('EVOLVING',ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,DATE))
+    no(JAC_AppointLeader(DATE)); eq(0,#REQUESTS)
     NATIVE_APPOINTABLE[0][governor.Hash]=true
-    JAC_RefreshPersonas(); no(VIEWS[1].disabled)
-    JAC_EvolveLeader(DATE); DRAIN()
+    yes(JAC_AppointLeader(DATE)); DRAIN()
     eq('GOVERNOR',prop('STATE')); eq(2,Players[0].points)
     eq(2,Players[0].spent); eq(1,DESTROYS)
+end
+
+function CASES.test_ai_admission_reserves_full_official_cost_before_any_native_spend()
+    join(); Players[0].human=false
+    local governor=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[DATE].GovernorType]
+    NATIVE_APPOINTABLE[0][governor.Hash]=false
+    Players[0].points=1
+    ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(0)
+    eq('GREAT_PERSON',prop('STATE')); eq(0,Players[0].spent)
+    Players[0].points=2
+    ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(0)
+    eq('EVOLVING',prop('STATE')); eq(1,prop('EVOLUTION_SURCHARGE'))
+    no(JAC_AppointLeader(DATE)); eq(0,#REQUESTS)
+    reload(); ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(0)
+    eq('EVOLVING',prop('STATE')); eq(0,Players[0].spent)
+end
+
+function CASES.test_native_receipt_ahead_of_official_spent_keeps_full_reservation()
+    join(); Players[0].points=3
+    eq('EVOLVING',ExposedMembers.JAC_LeaderPersona.PrepareEvolution(0,DATE))
+    eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+    NEWGOV(0,DATE,false)
+    eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+    Players[0].spent=1
+    eq(1,JAC_PersonaTreeRules.ReservedAppointments(0))
+end
+
+function CASES.test_prior_persona_payment_cannot_mask_unpaid_current_evolution()
+    local api=ExposedMembers.JAC_LeaderPersona
+    join(); Players[0].points=4
+    eq('EVOLVING',api.PrepareEvolution(0,DATE))
+    NEWGOV(0,DATE); Players[0].spent=2
+    eq('EVOLVED',api.CompleteEvolution(0,DATE))
+    eq('JOINED',api.Join(0,2))
+    eq('EVOLVING',api.PrepareEvolution(0,HOJO))
+    eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+    NEWGOV(0,HOJO,false)
+    eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+    Players[0].spent=3
+    eq(1,JAC_PersonaTreeRules.ReservedAppointments(0))
+end
+
+function CASES.test_lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn()
+    local api=ExposedMembers.JAC_LeaderPersona
+    join(); eq('JOINED',api.Join(0,2)); Players[0].points=4
+    eq('EVOLVING',api.PrepareEvolution(0,DATE))
+    eq('EVOLVING',api.PrepareEvolution(0,HOJO))
+    eq(4,JAC_PersonaTreeRules.ReservedAppointments(0))
+    NATIVE_UNITS[0][1]=nil
+    api.Reconcile(); eq('EVOLVING',prop('STATE'))
+    eq(1,prop('MISSING_SINCE_TURN'))
+    reload(); TURN=2; ExposedMembers.JAC_LeaderPersona.Reconcile()
+    eq('GREAT_PERSON',prop('STATE')); eq(nil,prop('EVOLUTION_SURCHARGE'))
+    eq(nil,prop('MISSING_SINCE_TURN'))
+    eq('EVOLVING',prop('STATE',HOJO))
+    eq(2,JAC_PersonaTreeRules.ReservedAppointments(0))
+    yes(JAC_AppointLeader(HOJO)); DRAIN()
+    eq('GOVERNOR',prop('STATE',HOJO))
+    eq(2,Players[0].spent); eq(4,Players[0].points)
 end
 
 function CASES.test_pending_evolution_rechecks_native_type_before_requesting_appointment()

@@ -108,6 +108,16 @@ SELECT GovernorType, Name, 'LOC_JAC_PERSONA_' || substr(LeaderType,12) || '_DESC
        8, 100, 0, 'GOVERNOR_EDUCATOR', 'GovernorNormal_Educator', 'GovernorSelected_Educator'
 FROM JAC_LeaderPersonas;
 
+-- The native sidecar may open a persona only after synchronized admission.
+-- A valid but unattached trait keeps all 22 closed if the sidecar is absent.
+-- It is never assigned through LeaderTraits or CivilizationTraits.
+INSERT INTO Types (Type, Kind)
+VALUES ('TRAIT_JAC_PERSONA_ADMISSION_CLOSED', 'KIND_TRAIT');
+INSERT INTO Traits (TraitType, Name, Description)
+VALUES ('TRAIT_JAC_PERSONA_ADMISSION_CLOSED', 'LOC_JAC_PERSONA_CLASS', 'LOC_JAC_PERSONA_CLASS');
+UPDATE Governors SET TraitType = 'TRAIT_JAC_PERSONA_ADMISSION_CLOSED'
+WHERE GovernorType IN (SELECT GovernorType FROM JAC_LeaderPersonas);
+
 CREATE TABLE JAC_PersonaSkills (
     LeaderType TEXT NOT NULL REFERENCES JAC_LeaderPersonas(LeaderType),
     Slot INTEGER NOT NULL CHECK (Slot = 0),

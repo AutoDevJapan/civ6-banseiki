@@ -11,6 +11,7 @@ mod platform {
     use super::*;
     use serde_json::Value;
     use std::{
+        collections::{BTreeMap, BTreeSet},
         ffi::OsString,
         io::{BufRead, BufReader, Read, Write},
         os::windows::{
@@ -145,6 +146,81 @@ mod platform {
         Line(String),
         Closed,
     }
+
+    fn property_evidence(path: &Path) -> Result<()> {
+        let file = std::fs::File::open(path)?;
+        let mut mode_seen = false;
+        let mut owner_seen = false;
+        let mut reads: BTreeMap<String, Vec<(u64, Option<String>, bool)>> = BTreeMap::new();
+        for line in BufReader::new(file).lines() {
+            let row: Value = serde_json::from_str(&line?)?;
+            if row["type"] == "identity" && row["mode"] == "property" {
+                mode_seen = true;
+            }
+            if row["type"] == "player_getter"
+                && row["owner_id_candidate"] == 0
+                && row["property_vtable_candidate"].as_str().is_some()
+            {
+                owner_seen = true;
+            }
+            if row["type"] == "property_after" && row["owner_id_candidate"] == 0 {
+                if let (Some(name), Some(key)) = (
+                    row["key_name_candidate"].as_str(),
+                    row["key_id_candidate"].as_u64(),
+                ) {
+                    if matches!(name, "JAC_ACCESSOR_853_NUMBER" | "JAC_ACCESSOR_853_TEXT") {
+                        reads.entry(name.into()).or_default().push((
+                            key,
+                            row["value_first_16_bytes_candidate"]
+                                .as_str()
+                                .map(str::to_owned),
+                            row["value_pointer_candidate"].as_str().is_some(),
+                        ));
+                    }
+                }
+            }
+        }
+        if !mode_seen || !owner_seen {
+            return Err(Error::input(
+                "property trace has no verified mode or owner-0 getter",
+            ));
+        }
+        let mut key_ids = BTreeSet::new();
+        for name in ["JAC_ACCESSOR_853_NUMBER", "JAC_ACCESSOR_853_TEXT"] {
+            let Some(events) = reads.get(name) else {
+                return Err(Error::input(format!("property trace missed {name}")));
+            };
+            let stable_ids: BTreeSet<_> = events.iter().map(|(id, _, _)| *id).collect();
+            let observed_values: BTreeSet<_> = events
+                .iter()
+                .filter(|(_, _, pointer)| *pointer)
+                .filter_map(|(_, bytes, _)| bytes.as_ref())
+                .collect();
+            if stable_ids.len() != 1
+                || observed_values.len() < 2
+                || !events.last().is_some_and(|(_, _, pointer)| !pointer)
+            {
+                return Err(Error::input(format!(
+                    "property trace lacks stable read/update/delete evidence for {name}"
+                )));
+            }
+            key_ids.extend(stable_ids);
+        }
+        if key_ids.len() != 2 {
+            return Err(Error::input(
+                "property trace number and text resolved to the same key ID",
+            ));
+        }
+        Ok(())
+    }
+
+    fn trace_mode_matches(path: &Path, mode: &str) -> bool {
+        std::fs::File::open(path)
+            .ok()
+            .and_then(|file| BufReader::new(file).lines().next()?.ok())
+            .and_then(|line| serde_json::from_str::<Value>(&line).ok())
+            .is_some_and(|row| row["type"] == "identity" && row["mode"] == mode)
+    }
     impl Phase {
         fn terminal(self) -> bool {
             matches!(self, Self::Detached | Self::TargetExited | Self::Unresolved)
@@ -156,6 +232,7 @@ mod platform {
         messages: Receiver<ObserverMessage>,
         reader_closed: bool,
         output: PathBuf,
+        mode: String,
         identity: PinnedGameIdentity,
         phase: Phase,
         failure: Option<String>,
@@ -174,8 +251,14 @@ mod platform {
             output: &Path,
             name: &str,
             seconds: u64,
+            mode: &str,
             close_owned_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
+            if !matches!(mode, "governor" | "property") {
+                return Err(Error::input(
+                    "native trace mode must be governor or property",
+                ));
+            }
             let started = Instant::now();
             let ready_deadline = started + READY_BUDGET;
             let total_deadline = started + STARTUP_TOTAL;
@@ -238,6 +321,8 @@ mod platform {
                 .arg(&trace)
                 .arg("--max-seconds")
                 .arg(seconds.to_string())
+                .arg("--mode")
+                .arg(mode)
                 .creation_flags(CREATE_NO_WINDOW)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -256,6 +341,7 @@ mod platform {
                 messages: rx,
                 reader_closed: false,
                 output: trace,
+                mode: mode.to_owned(),
                 identity,
                 phase: Phase::Attaching,
                 failure: None,
@@ -290,6 +376,11 @@ mod platform {
             });
             match session.wait_ready(ready_deadline) {
                 Ok(()) => {
+                    if !trace_mode_matches(&session.output, mode) {
+                        return Err(session.abort_start(
+                            "observer identity mode does not match the requested trace mode",
+                        ));
+                    }
                     session.phase = Phase::Ready;
                     session.stop_deadline = None;
                     Ok(session)
@@ -584,6 +675,9 @@ mod platform {
                     "observer did not record a successful terminal detach",
                 ));
             }
+            if self.mode == "property" {
+                property_evidence(&self.output)?;
+            }
             if self.phase == Phase::TargetExited {
                 return Err(Error::input(
                     "owned Civ6 exited before a confirmed normal detach",
@@ -613,6 +707,50 @@ mod platform {
             Arc,
         };
         use windows_sys::Win32::System::Threading::{TerminateProcess, PROCESS_TERMINATE};
+
+        #[test]
+        fn property_trace_requires_named_owner_reads_updates_and_deletes() {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("property.jsonl");
+            let mut rows = vec![
+                serde_json::json!({"type":"identity","mode":"property"}),
+                serde_json::json!({"type":"player_getter","owner_id_candidate":0,
+                    "property_vtable_candidate":"0x1000"}),
+            ];
+            for (name, id) in [
+                ("JAC_ACCESSOR_853_NUMBER", 17),
+                ("JAC_ACCESSOR_853_TEXT", 23),
+            ] {
+                for bytes in [Some("11".repeat(16)), Some("22".repeat(16)), None] {
+                    rows.push(serde_json::json!({"type":"property_after",
+                        "owner_id_candidate":0,"key_name_candidate":name,"key_id_candidate":id,
+                        "value_pointer_candidate":bytes.as_ref().map(|_| "0x2000"),
+                        "value_first_16_bytes_candidate":bytes}));
+                }
+            }
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n",
+                )
+                .unwrap();
+            };
+            write(&rows);
+            assert!(property_evidence(&path).is_ok());
+            assert!(trace_mode_matches(&path, "property"));
+            rows[0]["mode"] = serde_json::json!("governor");
+            write(&rows);
+            assert!(property_evidence(&path).is_err());
+            assert!(!trace_mode_matches(&path, "property"));
+            rows[0]["mode"] = serde_json::json!("property");
+            rows.pop(); // missing text deletion
+            write(&rows);
+            assert!(property_evidence(&path).is_err());
+        }
 
         #[test]
         fn fixture_observer_worker() {
@@ -657,6 +795,7 @@ mod platform {
                     messages: rx,
                     reader_closed: true,
                     output: PathBuf::from("fixture.jsonl"),
+                    mode: "governor".into(),
                     identity,
                     phase: Phase::Ready,
                     failure: None,
@@ -785,7 +924,7 @@ mod platform {
             ))
             .unwrap();
             assert!(first
-                .wait_ready(Instant::now() + Duration::from_millis(100))
+                .wait_ready(Instant::now() + Duration::from_secs(3))
                 .is_ok());
             assert_eq!(first.phase, Phase::Attaching); // start() performs the Ready transition.
             first.phase = Phase::Unresolved;
@@ -817,17 +956,14 @@ mod platform {
             );
             session.phase = Phase::Attaching;
             let pid = session.identity.pid;
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(100));
-                let _ = tx.send(ObserverMessage::Line(
-                    serde_json::json!({"ready":true,"pid":pid}).to_string(),
-                ));
-                std::thread::sleep(Duration::from_millis(25));
-                let _ = tx.send(ObserverMessage::Line(serde_json::json!({"critical_cleanup":true,"pid":pid,"reason":"late restore failure"}).to_string()));
-            });
             let ready_error = session
-                .wait_ready(Instant::now() + Duration::from_millis(80))
+                .wait_ready(Instant::now() - Duration::from_millis(1))
                 .unwrap_err();
+            tx.send(ObserverMessage::Line(
+                serde_json::json!({"ready":true,"pid":pid}).to_string(),
+            ))
+            .unwrap();
+            tx.send(ObserverMessage::Line(serde_json::json!({"critical_cleanup":true,"pid":pid,"reason":"late restore failure"}).to_string())).unwrap();
             let result = session.abort_start(&ready_error.to_string());
             assert!(result.to_string().contains("ready handshake timed out"));
             assert_eq!(closes.load(Ordering::SeqCst), 1);
@@ -863,22 +999,19 @@ mod platform {
             );
             session.phase = Phase::Attaching;
             let pid = session.identity.pid;
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(230));
-                let _ = tx.send(ObserverMessage::Line(
-                    serde_json::json!({"critical_cleanup":true,"pid":pid,"reason":"too late"})
-                        .to_string(),
-                ));
-            });
             let ready_error = session
                 .wait_ready(Instant::now() + Duration::from_millis(40))
                 .unwrap_err();
             let result = session.abort_start(&ready_error.to_string());
+            tx.send(ObserverMessage::Line(
+                serde_json::json!({"critical_cleanup":true,"pid":pid,"reason":"too late"})
+                    .to_string(),
+            ))
+            .unwrap();
             assert!(result.to_string().contains("critical_cleanup"));
             assert_eq!(closes.load(Ordering::SeqCst), 1);
             assert_eq!(session.phase, Phase::Unresolved);
             drop(session);
-            std::thread::sleep(Duration::from_millis(220));
         }
         #[test]
         fn terminal_detach_record_requires_exact_json_state() {
@@ -965,6 +1098,7 @@ impl Session {
         _: &Path,
         _: &str,
         _: u64,
+        _: &str,
         _: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
     ) -> Result<Self> {
         Err(Error::input(
