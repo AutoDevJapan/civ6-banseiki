@@ -136,17 +136,30 @@ fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::
         r#"
         local A=TEST_ABSORPTION
         local F=assert(TEST_FLOW)
+        local work=assert(A.OwnedGreatWorkSlots(1)[1])
+        local roster=A.GetRoster(1)
+        roster['native-work:1007']={ID='native-work:1007',Kind='ITEM',Owner=1,
+          Outcome='RECOVERED',NativeWork=A.Rules.Copy(work),
+          NativeCustody={Owner=1,City=work.CityID,X=work.X,Y=work.Y,
+            Building=work.Building,Slot=work.Slot},City={Owner=1,X=work.X,Y=work.Y}}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
         for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
         local plan={ID='native-pending',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
+        local corrupted=A.Rules.Copy(roster)
+        corrupted['native-work:1007'].NativeWork.CreatorName='forged creator'
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,corrupted)
+        assert(not pcall(F.Begin,plan),'changed creator was accepted for a tracked work')
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
         local flow=F.Begin(plan)
         assert(flow.Phase=='CHOICE' and flow.Phase1Complete)
-        local native,previous=nil,nil
+        local native,previous,count=nil,nil,0
         for _,entry in ipairs(flow.Entries) do
           assert(not previous or previous<entry.ID,'inventory lost stable-ID order')
           previous=entry.ID
-          if entry.ID=='native-work:1007' then native=entry end
+          if entry.ID=='native-work:1007' then native=entry;count=count+1 end
         end
-        assert(native and native.Kind=='ITEM' and native.NativeWork.Index==1007)
+        assert(count==1 and native and native.Kind=='ITEM' and native.NativeWork.Index==1007,
+          'recovered work was duplicated or rejected in the next absorption')
         assert(native.EscapeOutcome==nil)
         assert(native.NativeWork.Owner==1 and native.NativeWork.X==4)
         assert(native.Rolls.P1_ESCAPE and native.Rolls.P1_ESCAPE.Label)

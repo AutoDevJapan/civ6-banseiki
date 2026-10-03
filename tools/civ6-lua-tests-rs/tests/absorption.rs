@@ -414,6 +414,9 @@ impl Harness {
             let rows = json_to_lua(&lua, &Json::Array(outcomes()));
             lua.globals().set("OUTCOMES", rows.clone()).unwrap();
             lua.load(&engine).call::<MultiValue>(rows).unwrap();
+            lua.load("PlayerManager.GetAliveIDs=function() local ids={} for _,player in ipairs(PlayerManager.GetAlive()) do ids[#ids+1]=player:GetID() end return ids end")
+                .exec()
+                .unwrap();
         }
         // Frozen historical fragments expect the old game-core table name.
         // This test-only alias is installed after loading the real module;

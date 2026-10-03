@@ -113,6 +113,13 @@ fn ordinary_city_transfer_requires_one_original_work_in_its_saved_slot() -> mlua
         end
         assert(tx.Status=='COMPLETE','ordinary native transfer did not finish')
         assert(A.Verify(PLAN.ID,true))
+        local record=assert(A.GetRoster(2)['native-work:900'])
+        local current=assert(CityManager.GetCityAt(4,0))
+        assert(record.NativeWork.Owner==2 and record.NativeWork.CityID==current:GetID()
+          and record.NativeCustody.Owner==2 and record.NativeCustody.City==current:GetID()
+          and record.NativeCustody.Building==1 and record.NativeCustody.Slot==0
+          and record.City.Owner==2 and record.City.X==4,
+          'ordinary native transfer retained its previous custody location')
         WORK_CITIES={[12]=true}
         local same,why=pcall(A.Verify,PLAN.ID,false)
         assert(not same and tostring(why):find('changed its saved physical slot',1,true),
@@ -190,7 +197,7 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
             {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}}
           local i=0;return function() i=i+1;return rows[i] end
         end
-        PLAN={ID='native-external',From=1,To=2,Mode='MERGER',
+        PLAN={ID='native-external',From=1,To=2,Mode='MERGER',FlowPolicy=true,
           EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
           NativeWorks={[900]={Outcome='RETURN',ReturnOwner=3}}}
         local published=ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots
@@ -202,6 +209,7 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
         assert(ENACT_CALLS==0 and TRANSFERS==0 and KILLS==0 and WORK_CITIES[4],
           'missing external slot mutated donor before Prepare completed')
         ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=published
+        CURRENT_TURN=CURRENT_TURN+1 -- the product Flow keeps this frozen intent across turns
         local tx=A.Resume(PLAN.ID)
         assert(tx.Status=='WAITING_UI' and ENACT_CALLS==1)
         assert(CITIES[4]:GetOwner()==1 and TRANSFERS==0 and KILLS==0,
@@ -314,6 +322,45 @@ fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> ml
 }
 
 #[test]
+fn human_world_reward_accepts_published_native_work_token_after_physical_move() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        local state=A.GetState()
+        local source=assert(state.Archive.native.NativeWork)
+        WORK_CITIES={[12]=true}
+        state.Recoveries['recovery:world:native']={ID='native',Owner=2,
+          Status='WAITING_UI',NativeSource=A.Rules.Copy(source),NativePhysicalMoved=true,
+          NativeTarget={Owner=2,City=CITIES[12]:GetID(),X=12,Y=0,Building=1,Slot=0},
+          NativeDealUI={Token='native:published'},ObservationToken='native:published'}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows={},World={
+          ['world:native']={ID='world:native',AssetID='native',Kind='ITEM',
+            Status='CLAIMED',Recipient=2,WaitingFor='native:published'}}})
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return nil end
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local F=assert(JAC_AbsorptionFlowGameplay)
+        assert(not pcall(F.ResumeWorldFor,2,'world:native','native:published'),
+          'unpublished native reward was accepted')
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token)
+          if token=='native:published' then return {Published=true} end
+        end
+        local world=F.ResumeWorldFor(2,'world:native','native:published')
+        assert(world.Status=='COMPLETE' and F.GetWorld('world:native').Status=='COMPLETE')
+        local item=assert(A.GetRoster(2).native)
+        assert(item.NativeWork.Index==900 and item.NativeCustody.Owner==2)
+        assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once() -> mlua::Result<()>
 {
     let lua = setup()?;
@@ -396,6 +443,25 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
         ExposedMembers.JAC_HeroReadAPI.GetObservation=function(value)
           if value==second then return {Published=true} end
         end
+        local saved=A.GetState()
+        saved.Recoveries['recovery:native'].NativePhysicalMoved=true
+        Game:SetProperty(A.Rules.STATE_KEY,saved) -- interruption after physical proof, before roster update
+        local originalBuildings=CITIES[16].GetBuildings
+        CITIES[16].GetBuildings=function(self)
+          local buildings=originalBuildings(self)
+          local originalWork=buildings.GetGreatWorkInSlot
+          buildings.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==0 then return 901 end
+            return originalWork(obj,building,slot)
+          end
+          return buildings
+        end
+        local rejected,reason=pcall(A.RecoverArchived,'native',2,'recovery:native',nil)
+        assert(not rejected and tostring(reason):find('custodian slot was reused',1,true),
+          'saved physical recovery accepted a newly occupied original slot')
+        assert(A.GetRoster(2).native==nil and A.Canonical(A.GetState().Archive)==before,
+          'rejected recovery changed the archive or recipient roster')
+        CITIES[16].GetBuildings=originalBuildings
         local completed=A.RecoverArchived('native',2,'recovery:native',nil)
         assert(completed.Status=='COMPLETE' and ENACT_CALLS==2)
         local item=assert(A.GetRoster(2).native)

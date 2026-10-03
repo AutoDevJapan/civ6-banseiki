@@ -351,7 +351,7 @@ local function NativeWorkDestination(owner, source, reserved)
   end
   error("native Great Work has no compatible empty destination slot")
 end
-local NativeWorkAtTarget, NativeWorkSourceEmpty
+local NativeWorkAtTarget, NativeWorkAtAbsorber, NativeWorkSourceEmpty
 
 -- Read-only game-core probe. The UI's MOVE_GREAT_WORK request proves only the
 -- normal same-owner drag operation; native setters need real runtime evidence.
@@ -904,9 +904,12 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     assert(asset.Kind == "ITEM" and asset.Owner == tx.From
       and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
       "native Great Work roster identity mismatch: " .. id)
+    if asset.NativeWork then SameNativeWorkIdentity(asset.NativeWork, work) end
     asset.NativeWork, asset.Type = R.Copy(work), work.ObjectType or "NATIVE_GREAT_WORK"
     asset.Name = asset.Name or work.Name or work.GreatWorkType or id
     asset.City = { Owner = tx.From, X = work.X, Y = work.Y }
+    asset.NativeCustody = { Owner = tx.From, City = work.CityID,
+      X = work.X, Y = work.Y, Building = work.Building, Slot = work.Slot }
     tx.SourceRoster[id] = asset
     generatedDecisions[id] = decision
     tx.NativeWorks[#tx.NativeWorks + 1] = { ID = id, Source = R.Copy(work),
@@ -1399,7 +1402,7 @@ local function StageHero(state, tx, snap)
   end
 end
 
-local function MovedAssets(tx)
+local function MovedAssets(tx, normalCommitted)
   local sourceNow = GetRoster(tx.From)
   assert((tx.SourceRosterMoved and next(sourceNow) == nil) or
     (not tx.SourceRosterMoved and R.Equal(sourceNow, tx.OriginalSourceRoster)),
@@ -1415,14 +1418,21 @@ local function MovedAssets(tx)
     record.Owner, record.Outcome = decision.Owner, decision.Outcome
     local native = nativeByID[id]
     local physical
-    if record.NativeWork and native and native.Custodian then
-      assert(native.PhysicalMoved, "external native work has not moved before roster update")
-      physical = NativeWorkAtTarget(native)
-      record.NativeWork = R.Copy(physical)
-      record.NativeCustody = { Owner = physical.Owner, City = physical.CityID,
-        X = physical.X, Y = physical.Y, Building = physical.Building, Slot = physical.Slot }
-    elseif record.NativeWork and decision.Owner == tx.To then
-      record.NativeWork.Owner = tx.To
+    if record.NativeWork and native then
+      if native.Custodian then
+        assert(native.PhysicalMoved, "external native work has not moved before roster update")
+        physical = NativeWorkAtTarget(native)
+      elseif normalCommitted then
+        physical = NativeWorkAtAbsorber(tx, native)
+      else
+        record.NativeWork.Owner = tx.To -- projection for the pre-transfer conflict check
+      end
+      if physical then
+        record.NativeWork = R.Copy(physical)
+        record.NativeCustody = { Owner = physical.Owner, City = physical.CityID,
+          X = physical.X, Y = physical.Y, Building = physical.Building, Slot = physical.Slot }
+        record.City = { Owner = physical.Owner, X = physical.X, Y = physical.Y }
+      end
     end
     if record.Kind == "ITEM" and record.City and decision.Owner ~= tx.To then
       record.FormerCity = R.Copy(tx.SourceRoster[id].City or record.City)
@@ -1516,16 +1526,7 @@ local function Verify(tx, state, exactUnits)
       NativeWorkSourceEmpty(tx, snap)
       externalNative[snap.Source.Index] = true
     else
-      local locations = NativeWorkLocations(snap.Source.Index)
-      assert(#locations == 1, "transferred native Great Work index is missing or duplicated: " .. snap.ID)
-      work = locations[1]
-      local city = assert(CityManager.GetCityAt(snap.Source.X, snap.Source.Y),
-        "transferred native Great Work source city disappeared: " .. snap.ID)
-      assert(city:GetOwner() == tx.To and work.Owner == tx.To
-        and work.CityID == city:GetID() and work.X == snap.Source.X
-        and work.Y == snap.Source.Y and work.Building == snap.Source.Building
-        and work.Slot == snap.Source.Slot,
-        "transferred native Great Work changed its saved physical slot: " .. snap.ID)
+      work = NativeWorkAtAbsorber(tx, snap)
     end
     SameNativeWorkIdentity(snap.Source, work)
     assert(not snap.Source.GreatWorkType or not work.GreatWorkType
@@ -1589,7 +1590,7 @@ local function Verify(tx, state, exactUnits)
     end
   end
   for _, index in ipairs(tx.Plots) do assert(Map.GetPlotByIndex(index):GetOwner() == tx.To, "territory transfer failed: " .. index) end
-  local rosters, archive = MovedAssets(tx)
+  local rosters, archive = MovedAssets(tx, true)
   for id, result in pairs(tx.HeroResults or {}) do
     local decision = assert(tx.Decisions[id], "native Hero decision missing")
     assert(result.Outcome == decision.Outcome
@@ -1640,6 +1641,26 @@ NativeWorkAtTarget = function(snap)
   assert(SameNativeWorkSlot(found[1], snap.TargetSlot),
     "native Great Work is not in its reserved physical destination: " .. snap.ID)
   return found[1]
+end
+NativeWorkAtAbsorber = function(tx, snap)
+  local found = NativeWorkLocations(snap.Source.Index)
+  assert(#found > 0, "transferred native Great Work index absent from absorber: " .. snap.ID)
+  assert(#found == 1, "transferred native Great Work index is duplicated: " .. snap.ID)
+  local work = found[1]
+  SameNativeWorkIdentity(snap.Source, work)
+  local city = assert(CityManager.GetCityAt(snap.Source.X, snap.Source.Y),
+    "transferred native Great Work source city disappeared: " .. snap.ID)
+  assert(city:GetOwner() == tx.To and work.Owner == tx.To,
+    "transferred native Great Work index absent from absorber: " .. snap.ID)
+  -- The engine can remove a conquered capital's Palace and place its work in
+  -- the recipient capital. Other source buildings retain their original slot.
+  if snap.Source.BuildingType ~= "BUILDING_PALACE" then
+    assert(work.CityID == city:GetID() and work.X == snap.Source.X
+      and work.Y == snap.Source.Y and work.Building == snap.Source.Building
+      and work.Slot == snap.Source.Slot,
+      "transferred native Great Work changed its saved physical slot: " .. snap.ID)
+  end
+  return work
 end
 NativeWorkSourceEmpty = function(tx, snap)
   local source = snap.Source
@@ -1796,7 +1817,7 @@ local function Execute(state, tx)
   local hasHeroes = false
   for _, snap in ipairs(tx.Units) do if snap.Hero and snap.KeepUnit then hasHeroes = true end end
   if hasHeroes and not tx.UnitMapFrozen then
-    MovedAssets(tx) -- check concurrent roster conflicts before any native escrow/city change
+    MovedAssets(tx, false) -- check concurrent roster conflicts before any native escrow/city change
     local ready = true
     for _, snap in ipairs(tx.Units) do
       if snap.KeepUnit and not snap.Hero then
@@ -1821,7 +1842,7 @@ local function Execute(state, tx)
   end
   for _, snap in ipairs(tx.Cities) do PlanProperties(snap, tx, cityRebinders, false) end
   Save(state)
-  MovedAssets(tx) -- detect newly conflicting destination IDs before donor deletion
+  MovedAssets(tx, false) -- detect newly conflicting destination IDs before donor deletion
   local ready = true
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit then
@@ -1920,7 +1941,7 @@ local function Execute(state, tx)
       end
       tx.AwaitingFinalUI = nil
   end
-  local rosters, archive = MovedAssets(tx)
+  local rosters, archive = MovedAssets(tx, true)
   for _, owner in ipairs(R.Keys(rosters)) do Players[owner]:SetProperty(R.ROSTER_KEY, R.Copy(rosters[owner])) end
   Players[tx.From]:SetProperty(R.ROSTER_KEY, nil)
   tx.SourceRosterMoved = true
@@ -2263,6 +2284,13 @@ local function RecoveredNativeWork(source, owner)
   end
   return found
 end
+local function NativeRecoverySourceEmpty(source)
+  local city = CityManager.GetCityAt(source.X, source.Y)
+  if city and city:GetBuildings():HasBuilding(source.Building) then
+    assert(WorkInSlot(city, source.Building, source.Slot) == -1,
+      "native recovery custodian slot was reused")
+  end
+end
 local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
   if not intent.NativeTarget then
     local already = NativeWorkLocations(source.Index)
@@ -2285,6 +2313,7 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
   if intent.NativePhysicalMoved then
     NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
       TargetSlot = intent.NativeTarget })
+    NativeRecoverySourceEmpty(intent.NativeSource)
     return true
   end
   if intent.NativeDealSubmitted then

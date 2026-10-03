@@ -201,17 +201,38 @@ local function Inventory(plan)
   end
   for _, work in ipairs(A.OwnedGreatWorkSlots(plan.From)) do
     local id = "native-work:" .. tostring(work.Index)
-    assert(not found[id] and not roster[id], "native Great Work identity collision")
-    entries[#entries + 1] = {
-      ID = id, Kind = "ITEM", Name = work.Name or work.GreatWorkType or id,
-      Portrait = work.GreatWorkType and "ICON_" .. work.GreatWorkType,
-      AllowedActions = R.Copy(CHOICES.ITEM),
-      Source = { ID = id, Kind = "ITEM", Owner = plan.From,
-        Type = work.ObjectType or "NATIVE_GREAT_WORK", NativeWork = R.Copy(work) },
-      NativeWork = R.Copy(work),
-      Abilities = work.Effects and #work.Effects > 0 and R.Copy(work.Effects)
-        or work.ObjectType and { work.ObjectType } or nil,
-    }
+    if found[id] then
+      local record = assert(roster[id], "native Great Work identity collides with a unit")
+      assert(record.Kind == "ITEM" and record.Owner == plan.From
+        and record.NativeWork and record.NativeWork.Index == work.Index,
+        "tracked native Great Work roster identity mismatch")
+      for _, key in ipairs({ "GreatWorkType", "ObjectType", "CreatorName",
+          "TurnCreated", "CreatedByPlayer" }) do
+        assert(record.NativeWork[key] == nil or record.NativeWork[key] == work[key],
+          "tracked native Great Work metadata changed: " .. key)
+      end
+      assert(record.NativeWork.Effects == nil or R.Equal(record.NativeWork.Effects, work.Effects),
+        "tracked native Great Work effects changed")
+      local entry
+      for _, candidate in ipairs(entries) do if candidate.ID == id then entry = candidate; break end end
+      assert(entry and entry.Kind == "ITEM", "tracked native Great Work inventory entry missing")
+      entry.NativeWork = R.Copy(work)
+      entry.Source.NativeWork = R.Copy(work)
+      entry.Source.City = { Owner = plan.From, X = work.X, Y = work.Y }
+      entry.Source.NativeCustody = { Owner = plan.From, City = work.CityID,
+        X = work.X, Y = work.Y, Building = work.Building, Slot = work.Slot }
+    else
+      entries[#entries + 1] = {
+        ID = id, Kind = "ITEM", Name = work.Name or work.GreatWorkType or id,
+        Portrait = work.GreatWorkType and "ICON_" .. work.GreatWorkType,
+        AllowedActions = R.Copy(CHOICES.ITEM),
+        Source = { ID = id, Kind = "ITEM", Owner = plan.From,
+          Type = work.ObjectType or "NATIVE_GREAT_WORK", NativeWork = R.Copy(work) },
+        NativeWork = R.Copy(work),
+        Abilities = work.Effects and #work.Effects > 0 and R.Copy(work.Effects)
+          or work.ObjectType and { work.ObjectType } or nil,
+      }
+    end
     found[id] = true
   end
   -- Native claim-only Heroes can outlive their Unit. Keep the same generated
@@ -838,8 +859,13 @@ function F.ResumeWorldFor(actor, id, observationToken)
     and type(observationToken) == "string", "world recovery token is not pending")
   local reads = ExposedMembers.JAC_HeroReadAPI
   local observed = reads and reads.GetObservation and reads.GetObservation(observationToken)
-  assert(observed and type(observed.Claim) == "number"
-    and type(observed.Origin) == "table", "Hero publication is not ready")
+  local archived = A.GetState().Archive[world.AssetID]
+  if archived and archived.Kind == "ITEM" and archived.NativeWork then
+    assert(observed and observed.Published == true, "native work publication is not ready")
+  else
+    assert(observed and type(observed.Claim) == "number"
+      and type(observed.Origin) == "table", "Hero publication is not ready")
+  end
   ClaimWorld(state, world, actor)
   return R.Copy(world)
 end
