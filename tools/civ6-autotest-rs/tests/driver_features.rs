@@ -221,7 +221,7 @@ fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
 }
 
 #[test]
-fn test_test_mode_uses_official_forced_turn_once_for_a_production_blocker() {
+fn test_test_mode_preserves_normal_end_turn_when_production_is_blocked() {
     for test_mode in [false, true] {
         let state = Arc::new(Mutex::new((1_i64, Vec::<String>::new())));
         let observed = state.clone();
@@ -267,13 +267,8 @@ fn test_test_mode_uses_official_forced_turn_once_for_a_production_blocker() {
         h.runner.test_mode = test_mode;
         let result = h.runner.run_step(&json!({"action":"end_turn","timeout":3}));
         let state = state.lock().unwrap();
-        if test_mode {
-            assert_eq!(result.unwrap(), "human turn 1->2");
-            assert_eq!(*state, (2, vec!["UserForced".into()]));
-        } else {
-            assert!(result.unwrap_err().to_string().contains("Timed out"));
-            assert_eq!(*state, (1, vec![String::new()]));
-        }
+        assert!(result.unwrap_err().to_string().contains("Timed out"));
+        assert_eq!(*state, (1, vec![String::new()]));
     }
 }
 
@@ -348,6 +343,64 @@ fn test_live_lease_writes_an_unpassed_result_with_requeue_exit_code() {
     assert_eq!(result["completed_steps"], 0);
     assert_eq!(result["failure"], "1/1 ui_lua: CIV6_LEASE_YIELD");
     assert!(h.calls().is_empty());
+}
+
+#[test]
+fn test_waiter_appearing_during_a_multi_turn_step_is_seen_before_its_end() {
+    let root = tempfile::tempdir().unwrap();
+    let lock = root.path().join("civ6.lock");
+    std::fs::write(
+        &lock,
+        json!({"chain_pid":7,"live_chain":true,"acquired_at":1000}).to_string(),
+    )
+    .unwrap();
+    let queue = root.path().join("queue");
+    std::fs::create_dir(&queue).unwrap();
+    let clock = Arc::new(ManualClock::default());
+    let action_clock = clock.clone();
+    let mut backend = turn_backend();
+    let mut normal = backend.on_lua;
+    let mut actions = 0;
+    backend.on_lua = Box::new(move |state, code| {
+        let result = normal(state, code);
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
+            actions += 1;
+            if actions == 1 {
+                action_clock.advance(1.0);
+                std::fs::write(
+                    queue.join("new-waiter.json"),
+                    json!({"chain_pid":8,"live_chain":true,"since":1001}).to_string(),
+                )
+                .unwrap();
+            } else {
+                action_clock.advance(600.0);
+            }
+        }
+        result
+    });
+    let lease_clock = clock.clone();
+    let read_lock = lock.clone();
+    backend.on_lease = Box::new(move || {
+        civ6_autotest_rs::live_lease::directory_budget(
+            &read_lock,
+            7,
+            1000.0 + lease_clock.at(),
+            |_| Ok(true),
+        )
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock;
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn","turns":5,"timeout":3000}))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
+        4
+    );
+    let record: serde_json::Value = serde_json::from_slice(&std::fs::read(lock).unwrap()).unwrap();
+    assert!(record.get("competitor_since").is_none());
 }
 
 #[test]
