@@ -57,6 +57,7 @@ type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
 
 pub struct FakeBackend {
+    pub on_lease: Box<dyn Fn() -> Result<Option<f64>> + Send>,
     pub calls: Calls,
     pub timeouts: Arc<Mutex<Vec<f64>>>,
     pub events: Arc<Mutex<Vec<String>>>,
@@ -77,6 +78,7 @@ pub struct FakeBackend {
 impl FakeBackend {
     pub fn new() -> Self {
         Self {
+            on_lease: Box::new(|| Ok(None)),
             calls: Arc::new(Mutex::new(Vec::new())),
             timeouts: Arc::new(Mutex::new(Vec::new())),
             events: Arc::new(Mutex::new(Vec::new())),
@@ -122,6 +124,9 @@ impl FakeBackend {
     }
 }
 impl Backend for FakeBackend {
+    fn live_lease_budget(&self) -> Result<Option<f64>> {
+        (self.on_lease)()
+    }
     fn connect(&mut self, _: u16, _: f64) -> Result<()> {
         self.events.lock().unwrap().push("connect".into());
         Ok(())

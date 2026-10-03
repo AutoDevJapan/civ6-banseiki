@@ -1,6 +1,6 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error};
+use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error, ErrorKind};
 use serde_json::json;
 use std::{
     collections::VecDeque,
@@ -192,14 +192,14 @@ fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
         }
         if code.starts_with("return Game.GetCurrentGameTurn() ==") {
             let mut seen = seen.lock().unwrap();
-            let (active, busy) = [(false, true), (true, true), (false, false), (true, false)]
+            let (active, busy, processing, player) = [(true, false, false, 1000), (false, true, false, 0), (true, true, false, 0), (false, false, false, 0), (true, false, true, 0), (true, false, false, 0)]
                 .get(*seen)
                 .copied()
                 .unwrap();
             *seen += 1;
             let lua = mlua::Lua::new();
             lua.load(format!(
-                "Game={{GetCurrentGameTurn=function() return {} end,GetLocalPlayer=function() return 0 end}}\nPlayers={{[0]={{IsTurnActive=function() return {active} end}}}}\nUI={{IsGameCoreBusy=function() return {busy} end}}",
+                "PlayerTypes={{OBSERVER=1000}}\nGame={{GetCurrentGameTurn=function() return {} end,GetLocalPlayer=function() return {player} end}}\nPlayers={{[0]={{IsTurnActive=function() return {active} end}},[1000]={{IsTurnActive=function() return {active} end}}}}\nUI={{IsGameCoreBusy=function() return {busy} end,IsProcessingMessages=function() return {processing} end}}",
                 *turn.lock().unwrap()
             ))
             .exec()
@@ -213,7 +213,7 @@ fn test_end_turn_waits_for_active_human_and_idle_core_after_turn_increment() {
         h.runner.run_step(&json!({"action":"end_turn"})).unwrap(),
         "human turn 1->2"
     );
-    assert_eq!(*observations.lock().unwrap(), 4);
+    assert_eq!(*observations.lock().unwrap(), 6);
     assert_eq!(
         h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
         1
@@ -234,7 +234,7 @@ fn test_test_mode_uses_official_forced_turn_once_for_a_production_blocker() {
             {
                 let lua = mlua::Lua::new();
                 lua.load(
-                    "GameConfiguration={IsAnyMultiplayer=function() return false end}\nGame={GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end}\nPlayers={[0]={IsTurnActive=function() return true end}}\nUI={IsGameCoreBusy=function() return false end,CanEndTurn=function() return false end}\nNotificationManager={GetFirstEndTurnBlocking=function() return 7 end}\nActionTypes={ACTION_ENDTURN=1}\nprint=function() end",
+                    "PlayerTypes={OBSERVER=1000}\nGameConfiguration={IsAnyMultiplayer=function() return false end}\nGame={GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end}\nPlayers={[0]={IsTurnActive=function() return true end}}\nUI={IsGameCoreBusy=function() return false end,IsProcessingMessages=function() return false end,CanEndTurn=function() return false end}\nNotificationManager={GetFirstEndTurnBlocking=function() return 7 end}\nActionTypes={ACTION_ENDTURN=1}\nprint=function() end",
                 )
                 .exec()
                 .unwrap();
@@ -275,6 +275,79 @@ fn test_test_mode_uses_official_forced_turn_once_for_a_production_blocker() {
             assert_eq!(*state, (1, vec![String::new()]));
         }
     }
+}
+
+#[test]
+fn test_live_lease_stops_inside_a_multi_turn_step_before_another_operation() {
+    let clock = Arc::new(ManualClock::default());
+    let operation_clock = clock.clone();
+    let mut backend = turn_backend();
+    let mut normal = backend.on_lua;
+    backend.on_lua = Box::new(move |state, code| {
+        let result = normal(state, code);
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN") {
+            operation_clock.advance(2.0);
+        }
+        result
+    });
+    let lease_clock = clock.clone();
+    backend.on_lease = Box::new(move || {
+        let now = lease_clock.at();
+        civ6_autotest_rs::live_lease::record_budget(
+            &json!({"chain_pid":7,"live_chain":true,"acquired_at":0,"competitor_since":0}),
+            7,
+            1799.0 + now,
+        )
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock;
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn","turns":5,"timeout":3000}))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN"),
+        1
+    );
+    assert_eq!(*h.timeouts.lock().unwrap().last().unwrap(), 1.0);
+}
+
+#[test]
+fn test_live_lease_is_not_retried_as_a_tuner_timeout() {
+    let mut backend = FakeBackend::new();
+    backend.on_lease = Box::new(|| Err(Error::new(ErrorKind::LiveLease, "yield")));
+    let mut h = Harness::new(json!({}), backend);
+    assert_eq!(
+        h.runner.states(20.0).unwrap_err().kind,
+        ErrorKind::LiveLease
+    );
+    assert!(h.calls().is_empty());
+    assert_eq!(
+        h.runner.lua("InGame", "mutate()", 20.0).unwrap_err().kind,
+        ErrorKind::LiveLease
+    );
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn test_live_lease_writes_an_unpassed_result_with_requeue_exit_code() {
+    let mut backend = FakeBackend::new();
+    backend.on_lease = Box::new(|| Err(Error::new(ErrorKind::LiveLease, "CIV6_LEASE_YIELD")));
+    let mut h = Harness::new(
+        json!({"name":"lease boundary","steps":[{"action":"ui_lua","state_name":"InGame","code":"mutate()"}]}),
+        backend,
+    );
+    h.runner.auto_restart = false;
+    h.runner.output = h.root.path().join("lease-run");
+    assert_eq!(h.runner.run().unwrap(), 75);
+    let result: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(h.runner.output.join("result.json")).unwrap())
+            .unwrap();
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["completed_steps"], 0);
+    assert_eq!(result["failure"], "1/1 ui_lua: CIV6_LEASE_YIELD");
+    assert!(h.calls().is_empty());
 }
 
 #[test]

@@ -10,6 +10,7 @@ pub enum ErrorKind {
     Capture,
     Io,
     Interrupted,
+    LiveLease,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

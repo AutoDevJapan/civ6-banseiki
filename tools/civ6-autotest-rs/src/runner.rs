@@ -15,6 +15,9 @@ use std::{
 };
 
 pub trait Backend: Send {
+    fn live_lease_budget(&self) -> Result<Option<f64>> {
+        Ok(None)
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
     }
@@ -159,6 +162,9 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn live_lease_budget(&self) -> Result<Option<f64>> {
+        crate::live_lease::environment_budget()
+    }
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
             .launch_floor
@@ -427,11 +433,12 @@ impl Runner {
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
         crate::time::check_interrupt()?;
+        let lease = self.backend.live_lease_budget()?;
         let v = deadline - self.clock.now();
         if v <= 0.0 {
             Err(Error::scenario("Step deadline expired"))
         } else {
-            Ok(v)
+            Ok(lease.map_or(v, |lease| v.min(lease)))
         }
     }
     fn budget(&self, deadline: f64, cap: f64) -> Result<f64> {
@@ -464,12 +471,20 @@ impl Runner {
         self.backend.require_single_process()?;
         let deadline = self.clock.now() + timeout;
         let fetch = |this: &mut Self| -> Result<Vec<String>> {
-            let remaining = this.remaining(deadline).map_err(|_| {
-                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+            let remaining = this.remaining(deadline).map_err(|e| {
+                if e.kind == ErrorKind::LiveLease {
+                    e
+                } else {
+                    Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+                }
             })?;
             this.backend.connect(this.port, remaining)?;
-            let remaining = this.remaining(deadline).map_err(|_| {
-                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+            let remaining = this.remaining(deadline).map_err(|e| {
+                if e.kind == ErrorKind::LiveLease {
+                    e
+                } else {
+                    Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
+                }
             })?;
             this.backend.list_states(remaining)
         };
@@ -484,8 +499,12 @@ impl Runner {
     pub fn lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
         let deadline = self.clock.now() + timeout;
         self.states(self.remaining(deadline)?)?;
-        let remaining = self.remaining(deadline).map_err(|_| {
-            Error::tuner("FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です")
+        let remaining = self.remaining(deadline).map_err(|e| {
+            if e.kind == ErrorKind::LiveLease {
+                e
+            } else {
+                Error::tuner("FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です")
+            }
         })?;
         self.backend.connect(self.port, remaining)?;
         // Connecting can consume the last budget; never mutate after it expired.
@@ -799,6 +818,10 @@ pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
     ),
 ];
 pub const AUTOPLAY_STATUS_CODE:&str="return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
+const HUMAN_TURN_READY: &str = "Game.GetLocalPlayer() >= 0 and Game.GetLocalPlayer() ~= PlayerTypes.OBSERVER and Players[Game.GetLocalPlayer()] ~= nil and Players[Game.GetLocalPlayer()]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages()";
+fn ready_turn_code(turn: i64) -> String {
+    format!("return Game.GetCurrentGameTurn() == {turn} and {HUMAN_TURN_READY}")
+}
 
 #[derive(Default)]
 struct StartupAttempt {
@@ -1379,7 +1402,12 @@ impl Runner {
         // production notifications need attention. This is the official
         // ActionPanel Shift+Enter operation, not a turn-number rewrite.
         let action = if self.test_mode {
-            "if GameConfiguration.IsAnyMultiplayer() then error('forced test turns require single player') end\nlocal h = Game.GetLocalPlayer()\nif h < 0 or not Players[h] or not Players[h]:IsTurnActive() or UI.IsGameCoreBusy() then error('human turn not ready for test end turn') end\nprint('JAC_AUTOTEST_END_TURN blocker=' .. tostring(NotificationManager.GetFirstEndTurnBlocking(h)) .. ' canEnd=' .. tostring(UI.CanEndTurn()))\nUI.RequestAction(ActionTypes.ACTION_ENDTURN, { REASON = 'UserForced' })\nreturn true"
+            self.wait(
+                &json!({"type":"lua","state_name":"InGame","code":ready_turn_code(start)}),
+                self.remaining(deadline)?,
+                true,
+            )?;
+            "if GameConfiguration.IsAnyMultiplayer() then error('forced test turns require single player') end\nlocal h = Game.GetLocalPlayer()\nif h < 0 or h == PlayerTypes.OBSERVER or not Players[h] or not Players[h]:IsTurnActive() or UI.IsGameCoreBusy() or UI.IsProcessingMessages() then error('human turn not ready for test end turn') end\nprint('JAC_AUTOTEST_END_TURN blocker=' .. tostring(NotificationManager.GetFirstEndTurnBlocking(h)) .. ' canEnd=' .. tostring(UI.CanEndTurn()))\nUI.RequestAction(ActionTypes.ACTION_ENDTURN, { REASON = 'UserForced' })\nreturn true"
         } else {
             "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true"
         };
@@ -1387,7 +1415,11 @@ impl Runner {
         // A new turn number can be published before control returns to the
         // human. Match the official ActionPanel/UnitPanel readiness checks;
         // otherwise the next scenario action can run during AI processing.
-        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0 and Players[Game.GetLocalPlayer()] ~= nil and Players[Game.GetLocalPlayer()]:IsTurnActive() and not UI.IsGameCoreBusy()",start+1)}),self.remaining(deadline)?,true)?;
+        self.wait(
+            &json!({"type":"lua","state_name":"InGame","code":ready_turn_code(start+1)}),
+            self.remaining(deadline)?,
+            true,
+        )?;
         self.dismiss_advisor(deadline)?;
         self.remaining(deadline)?;
         Ok(format!("human turn {start}->{}", start + 1))
@@ -2406,7 +2438,11 @@ impl Runner {
                         return Err(e);
                     }
                     self.log(&action, "FAIL", &e.to_string())?;
-                    return Ok(1);
+                    return Ok(if e.kind == ErrorKind::LiveLease {
+                        75
+                    } else {
+                        1
+                    });
                 }
             }
         }

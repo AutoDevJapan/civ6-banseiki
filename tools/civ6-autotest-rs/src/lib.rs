@@ -3,6 +3,7 @@ pub mod capture;
 pub mod click;
 pub mod error;
 pub mod judge;
+pub mod live_lease;
 pub mod metrics;
 pub mod restart;
 pub mod runner;
