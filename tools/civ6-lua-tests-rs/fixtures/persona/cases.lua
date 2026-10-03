@@ -831,6 +831,27 @@ function CASES.test_no_city_failed_spawn_and_retry()
     CITIES[0][1]=city; FAIL_SPAWN=true
     eq('SPAWN_FAILED',api.Join(0,1)); eq(nil,prop('STATE'))
     FAIL_SPAWN=false; join(); eq(2,SPAWNS)
+
+    -- Execute the product Join for an AI owner; the enemy fixture's stub
+    -- alone cannot prove that a matching Great Person is actually created.
+    RESET_TEST(); LOAD_CONTEXTS()
+    api=ExposedMembers.JAC_LeaderPersona
+    Players[1].human=false
+    FAIL_SPAWN=true
+    eq('SPAWN_FAILED',api.Join(1,0)); eq(nil,prop('OWNER',ODA))
+    eq(0,count(NATIVE_UNITS[1])); eq(0,count(NATIVE_UNITS[0]))
+    FAIL_SPAWN=false
+    eq('JOINED',api.Join(1,0)); eq(2,SPAWNS)
+    eq(1,prop('OWNER',ODA)); eq(0,prop('SOURCE',ODA))
+    eq('GREAT_PERSON',prop('STATE',ODA))
+    local person=assert(Players[1]:GetUnits():FindID(prop('UNIT',ODA)))
+    local individual=GameInfo.GreatPersonIndividuals[GameInfo.JAC_LeaderPersonas[ODA].PersonType]
+    eq(1,person:GetOwner()); eq(individual.Index,person:GetGreatPerson():GetIndividual())
+    eq(1,count(NATIVE_UNITS[1])); eq(0,count(NATIVE_UNITS[0]))
+    eq('ALREADY_JOINED',api.Join(1,0)); eq(2,SPAWNS)
+    reload()
+    eq(person:GetID(),prop('UNIT',ODA))
+    eq(individual.Index,Players[1]:GetUnits():FindID(prop('UNIT',ODA)):GetGreatPerson():GetIndividual())
 end
 
 function CASES.test_evolution_requires_ownership_person_and_native_title()
