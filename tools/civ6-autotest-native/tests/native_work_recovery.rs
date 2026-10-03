@@ -87,6 +87,42 @@ fn native_location_scan_detects_missing_and_duplicate_original_indexes() -> mlua
 }
 
 #[test]
+fn ordinary_city_transfer_requires_one_original_work_in_its_saved_slot() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        PLAN={ID='native-ordinary',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT'}
+        WORK_CITIES={[4]=true,[16]=true}
+        local accepted,reason=pcall(A.Apply,PLAN)
+        assert(not accepted and tostring(reason):find('not unique at the donor source',1,true),
+          'ordinary native transfer allowed a duplicate index in another faction: '..tostring(reason))
+        assert(CITIES[4]:GetOwner()==1 and A.GetState().Transactions[PLAN.ID]==nil)
+        WORK_CITIES={[4]=true}
+        local tx=A.Apply(PLAN)
+        if tx.Status=='WAITING_UI' then
+          ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+          tx=A.Resume(PLAN.ID)
+        end
+        assert(tx.Status=='COMPLETE','ordinary native transfer did not finish')
+        assert(A.Verify(PLAN.ID,true))
+        WORK_CITIES={[12]=true}
+        local same,why=pcall(A.Verify,PLAN.ID,false)
+        assert(not same and tostring(why):find('changed its saved physical slot',1,true),
+          'later-turn verification accepted the original work in another city')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_retry()
 -> mlua::Result<()> {
     let lua = setup()?;
@@ -159,13 +195,14 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
           NativeWorks={[900]={Outcome='RETURN',ReturnOwner=3}}}
         local published=ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots
         ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function() return {} end
-        local possible,reason=pcall(A.Apply,PLAN)
-        assert(not possible and tostring(reason):find('no compatible empty destination slot',1,true))
+        local waiting=A.Apply(PLAN)
+        assert(waiting.Status=='WAITING_UI' and waiting.NativeWorks[1].Source.Index==900
+          and waiting.NativeWorks[1].Custodian==3 and waiting.NativeWorks[1].TargetSlot==nil,
+          'missing slot lost the saved work location or move intent')
         assert(ENACT_CALLS==0 and TRANSFERS==0 and KILLS==0 and WORK_CITIES[4],
           'missing external slot mutated donor before Prepare completed')
-        assert(A.GetState().Transactions[PLAN.ID]==nil)
         ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=published
-        local tx=A.Apply(PLAN)
+        local tx=A.Resume(PLAN.ID)
         assert(tx.Status=='WAITING_UI' and ENACT_CALLS==1)
         assert(CITIES[4]:GetOwner()==1 and TRANSFERS==0 and KILLS==0,
           'donor was mutated before native work proof')
@@ -188,6 +225,22 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
         ExposedMembers.JAC_HeroReadAPI.GetObservation=function(value)
           if value==second then return {Published=true} end
         end
+        local originalBuildings=CITIES[4].GetBuildings
+        CITIES[4].GetBuildings=function(self)
+          local buildings=originalBuildings(self)
+          local originalWork=buildings.GetGreatWorkInSlot
+          buildings.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==0 then return 901 end
+            return originalWork(obj,building,slot)
+          end
+          return buildings
+        end
+        local rejected,reason=pcall(A.Resume,PLAN.ID)
+        assert(not rejected and tostring(reason):find('donor slot was reused',1,true),
+          'a new work in the saved source slot was accepted')
+        assert(TRANSFERS==0 and CITIES[4]:GetOwner()==1,
+          'donor city changed despite its source slot being reused')
+        CITIES[4].GetBuildings=originalBuildings
         local ok,result=pcall(A.Resume,PLAN.ID)
         assert(ENACT_CALLS==2,'confirmed native work was enacted again')
         local current=A.GetState().Transactions[PLAN.ID]
@@ -348,6 +401,9 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
         local item=assert(A.GetRoster(2).native)
         assert(item.NativeWork.Index==900 and item.NativeWork.Owner==2)
         assert(item.City.Owner==2 and item.City.X==12 and item.City.Y==0)
+        assert(item.NativeCustody.Owner==2 and item.NativeCustody.City==CITIES[12]:GetID()
+          and item.NativeCustody.X==12 and item.NativeCustody.Building==1
+          and item.NativeCustody.Slot==0)
         assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
         assert(A.Canonical(A.GetState().Archive)==before)
         assert(A.RecoverArchived('native',2,'recovery:native',nil).Status=='COMPLETE')
@@ -470,6 +526,9 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           item.NativeWork.Index==900 and item.NativeWork.Owner==2 and
           item.NativeWork.CreatorName=='Original creator')
         assert(item.City.Owner==2 and item.City.X==12 and item.City.Y==0)
+        assert(item.NativeCustody.Owner==2 and item.NativeCustody.City==CITIES[12]:GetID()
+          and item.NativeCustody.X==12 and item.NativeCustody.Building==1
+          and item.NativeCustody.Slot==0)
         assert(#A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2)
         assert(A.RecoverArchived('native-work:900',2,key,nil).Status=='COMPLETE'
           and ENACT_CALLS==2)

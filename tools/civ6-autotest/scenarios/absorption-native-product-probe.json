@@ -418,6 +418,30 @@
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
       "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal tx=A.Resume('native-product-return-probe')\nprint('[JAC_NATIVE_PRODUCT_RESUME] status='..tostring(tx.Status)..' awaiting='..tostring(tx.AwaitingPreparation)..' nativeDeal='..tostring(tx.NativeDealUI and tx.NativeDealUI.Token)..' error='..tostring(tx.Error))\nassert(tx.Status=='WAITING_UI' or tx.Status=='COMPLETE','product did not make safe progress')\nreturn 'product resumed to '..tostring(tx.Status)"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-before-proof"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe'];local reads=ExposedMembers.JAC_HeroReadAPI;return tx and tx.NativeDealUI and reads and reads.GetObservation(tx.NativeDealUI.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal before=assert(A.GetState().Transactions[id])\nlocal snap=assert(before.NativeWorks[2] or before.NativeWorks[1])\nfor _,work in ipairs(before.NativeWorks) do if work.Custodian then snap=work;break end end\nassert(snap.Custodian and snap.TargetSlot and snap.DealSubmitted,'external native work intent absent')\nlocal tx=A.Resume(id)\nlocal found=A.NativeWorkLocations(snap.Source.Index)\nassert(#found==1,'product deal original index missing or duplicated')\nlocal w=found[1]\nlocal slot=snap.TargetSlot\nassert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'product deal missed its exact reserved official slot')\nlocal city=assert(CityManager.GetCityAt(snap.Source.X,snap.Source.Y))\nlocal assets=A.CityAssets(city)\nassert(assets[snap.Source.BuildingType].Works[snap.Source.Slot]==-1,'product deal source slot not empty')\nlocal moved\nfor _,work in ipairs(tx.NativeWorks or {}) do if work.Source.Index==snap.Source.Index then moved=work;break end end\nassert(moved and moved.PhysicalMoved,'physical native work was not accepted by product')\nprint('[JAC_NATIVE_PRODUCT_PHYSICAL] index='..w.Index..' owner='..w.Owner..' city='..w.CityID..' building='..w.Building..' slot='..w.Slot..' tx='..tx.Status..' sourceOwner='..city:GetOwner())\nreturn 'product physical return verified; transaction '..tx.Status"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-after-proof"
     }
   ]
 }
