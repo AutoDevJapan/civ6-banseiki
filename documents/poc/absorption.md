@@ -15,7 +15,17 @@
 
 総合レビュー20261004-061205-rev-absorb-flowのMustは、考古学的遺物、美術作品の制限経過後対照、最新の製品経路の3件だった。制限経過後の対照は135で確認できた。考古学的遺物と製品経路の追試は保持し、追審で扱いを確認する。本担当は実機4回で終了し、5回目を開始しない。全試験後、標準live_chainがゲームを終了し共有ロックを解放した。PRはDraftを維持する。
 
-追加2シナリオにより全件一覧の検査が一度失敗したため、f7bbabfで一覧を101件へ更新した。対象の23検査は修正後に成功した。変更38シナリオの形式と全Lua 5.1断片の構文、独立native137件はe4c3630で成功した。f7bbabfの全workspace1,246件も成功し、失敗・省略・絞り込みは0件だった。追審はこの担当の終了記録に記載する。記録はD:/CC/Work/shepherd96-next-20261004/、実機成果物は共有liveのtools/civ6-autotest/artifacts/absorb-flow-133〜136/にある。
+検査の候補と証跡を次の表で固定する。e4c3630の一覧不備はf7bbabfで修正し、対象検査だけでなく全workspaceを再実行した。後続の検証文書とは検査対象を区別する。
+
+| 候補 | 検査 | 結果 | 証跡ログ |
+| --- | --- | --- | --- |
+| e4c3630 | 全workspace | 新2シナリオが固定一覧にないため、一覧検査1件で失敗。全件成功とは扱わない | workspace-e4c3630.log |
+| f7bbabf | 固定一覧を101件に修正後の対象検査 | 23件成功、失敗・省略・絞り込み0件 | inventory-fixed.log |
+| f7bbabf | 全workspace・全target | 1,246件成功、失敗・省略・絞り込み0件 | workspace-f7bbabf.log |
+| e4c3630 | 独立native全件 | 137件成功、失敗・省略・絞り込み0件 | native-artifact.log |
+| e4c3630 | 変更38シナリオ | 両Rust検査器の形式と全879 Lua 5.1断片の構文が成功、省略0件 | scenarios-e4c3630.log / scenarios-lua-e4c3630.log |
+
+すべてのログと候補別verification.jsonはD:/CC/Work/shepherd96-next-20261004/にある。実機成果物は共有liveのtools/civ6-autotest/artifacts/absorb-flow-133〜136/にある。検証済み候補のRust・Lua・シナリオは後続の文書・一覧修正でも変更していない。追審の結果と最終headはPRの終了コメントに記録する。
 
 ## PR #96の検査履歴（2026-10-04以前を含む）
 
