@@ -121,9 +121,42 @@
       }
     },
     {
+      "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal t=plan.Fixtures.artifact_source\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==plan.Owner and city:GetID()==t.City)\nlocal unit=assert(UnitManager.InitUnit(plan.Owner,assert(GameInfo.Units.UNIT_ARCHAEOLOGIST).Index,t.X,t.Y),'archaeologist creation failed')\nGame:SetProperty('JAC_ARTIFACT_EXCAVATOR',{Owner=plan.Owner,Unit=unit:GetID(),City=t.City,Completed=0})\nprint('[JAC_ARTIFACT_EXCAVATOR_CREATED] owner='..plan.Owner..' unit='..unit:GetID()..' city='..t.City)\nreturn 'real archaeologist created at the exact source archaeology museum'",
-      "action": "ui_lua"
+      "code": "local plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal t=assert(plan.Fixtures.artifact_source)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==plan.Owner and city:GetID()==t.City,'production source city changed')\nassert(city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index),'production museum missing')\nlocal units={}\nfor _,unit in Players[plan.Owner]:GetUnits():Members() do units[tostring(unit:GetID())]=true end\nGame:SetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE',{Owner=plan.Owner,City=t.City,X=t.X,Y=t.Y,Units=units})\nreturn 'captured existing unit IDs before official city production'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'production source city changed')\nlocal row=assert(GameInfo.Units.UNIT_ARCHAEOLOGIST)\nprint('[JAC_ARTIFACT_PRODUCTION_REQUEST] owner='..t.Owner..' city='..t.City..' hash='..row.Hash..' canTrain='..tostring(row.CanTrain)..' prerequisite='..tostring(row.PrereqCivic))\nlocal params={}\nparams[CityOperationTypes.PARAM_UNIT_TYPE]=row.Hash\nparams[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT\nparams[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0\nCityManager.RequestOperation(city,CityOperationTypes.BUILD,params)\nreturn 'official BUILD request dispatched; production queue still unproven'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nreturn city and city:GetOwner()==t.Owner and city:GetID()==t.City\n and city:GetBuildQueue():GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'production source city changed')\nassert(city:GetBuildQueue():GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,'official archaeologist BUILD not active')\ncity:GetBuildQueue():AddProgress(1000)\nreturn 'advanced active official production; wait for a newly published unit'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nif not t then return false end\nlocal count=0\nfor _,unit in Players[t.Owner]:GetUnits():Members() do\n if unit:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(unit:GetID())]\n  and unit:GetX()==t.X and unit:GetY()==t.Y then count=count+1 end\nend\nreturn count==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal unit,count=nil,0\nfor _,candidate in Players[t.Owner]:GetUnits():Members() do\n if candidate:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(candidate:GetID())]\n  and candidate:GetX()==t.X and candidate:GetY()==t.Y then unit=candidate;count=count+1 end\nend\nassert(count==1 and unit,'one newly produced source-city archaeologist required')\nGame:SetProperty('JAC_ARTIFACT_EXCAVATOR',{Owner=t.Owner,Unit=unit:GetID(),City=t.City,Completed=0,Produced=true})\nprint('[JAC_ARTIFACT_EXCAVATOR_PRODUCED] owner='..t.Owner..' unit='..unit:GetID()..' city='..t.City)\nreturn 'bound the actual newly produced archaeologist; no direct InitUnit fixture'"
     },
     {
       "state_name": "InGame",

@@ -802,6 +802,87 @@ fn excavation_checks_use_operation_parameters_before_visibility_flags() -> mlua:
 }
 
 #[test]
+fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit() -> mlua::Result<()>
+{
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let code = |marker: &str| {
+        steps
+            .iter()
+            .find_map(|s| s["code"].as_str().filter(|text| text.contains(marker)))
+            .expect("production step")
+    };
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        REQUESTS=0;PROGRESS=0;HASH=0;OWNER=1;CITY=10
+        local baseline={Owner=1,City=10,X=4,Y=5,Units={['7']=true}}
+        PROPS={JAC_ARTIFACT_PRODUCTION_BASELINE=baseline}
+        Game={GetProperty=function(_,key) return PROPS[key] end,
+          SetProperty=function(_,key,value) PROPS[key]=value end}
+        GameInfo={Units={UNIT_ARCHAEOLOGIST={Index=3,Hash=2468,CanTrain=false}}}
+        CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,
+          PARAM_QUEUE_DESTINATION_LOCATION=3,VALUE_REPLACE_AT=4,BUILD=5}
+        local queue={GetCurrentProductionTypeHash=function() return HASH end,
+          AddProgress=function(_,value) assert(value==1000);PROGRESS=PROGRESS+1 end}
+        local city={GetOwner=function() return OWNER end,GetID=function() return CITY end,
+          GetBuildQueue=function() return queue end}
+        CityManager={GetCityAt=function(x,y) assert(x==4 and y==5);return city end,
+          RequestOperation=function(c,kind,p)
+            assert(c==city and kind==5 and p[1]==2468 and p[2]==4 and p[3]==0)
+            REQUESTS=REQUESTS+1
+          end}
+        UNITS={}
+        Players={[1]={GetUnits=function() return {Members=function()
+          local i=0;return function() i=i+1;if UNITS[i] then return i,UNITS[i] end end
+        end} end}}
+        function makeUnit(id,x,y,kind)
+          return {GetID=function() return id end,GetX=function() return x end,
+            GetY=function() return y end,GetType=function() return kind end}
+        end
+        "#,
+    )
+    .exec()?;
+    let request = code("JAC_ARTIFACT_PRODUCTION_REQUEST");
+    let progress = code("advanced active official production");
+    let bind = code("JAC_ARTIFACT_EXCAVATOR_PRODUCED");
+    lua.load(request).exec()?;
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert!(lua.load(progress).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
+    lua.load("HASH=2468").exec()?;
+    lua.load(progress).exec()?;
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 1);
+    for units in [
+        "{}",
+        "{makeUnit(7,4,5,3)}",
+        "{makeUnit(8,40,5,3)}",
+        "{makeUnit(8,4,5,9)}",
+        "{makeUnit(8,4,5,3),makeUnit(9,4,5,3)}",
+    ] {
+        lua.load(format!("UNITS={units}")).exec()?;
+        assert!(
+            lua.load(bind).exec().is_err(),
+            "bound invalid units {units}"
+        );
+        assert!(
+            lua.load("return PROPS.JAC_ARTIFACT_EXCAVATOR==nil")
+                .eval::<bool>()?
+        );
+    }
+    lua.load("UNITS={makeUnit(7,4,5,3),makeUnit(8,4,5,3)}")
+        .exec()?;
+    lua.load(bind).exec()?;
+    assert!(lua.load("local p=PROPS.JAC_ARTIFACT_EXCAVATOR;return p.Unit==8 and p.City==10 and p.Produced==true").eval::<bool>()?);
+    lua.load("OWNER=2").exec()?;
+    assert!(lua.load(request).exec().is_err());
+    assert!(lua.load(progress).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 1);
+    Ok(())
+}
+
+#[test]
 fn artist_activation_uses_the_published_command_hash_without_an_enum_alias() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artwork-locks.json");
     let code = scenario["steps"]
