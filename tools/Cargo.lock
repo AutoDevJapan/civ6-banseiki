@@ -320,6 +320,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "civ6-pe-rs"
+version = "0.1.0"
+
+[[package]]
 name = "civ6-reports-rs"
 version = "0.1.0"
 dependencies = [
