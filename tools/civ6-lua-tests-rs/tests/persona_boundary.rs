@@ -363,6 +363,12 @@ fn test_native_spy_travel_is_sent_once_from_an_ordinary_frame() {
     );
     assert_eq!(h.global::<i64>("MODE"), 1);
     h.frame().unwrap();
+    assert_eq!(
+        field::<String>(&h.b(), "lastAction"),
+        "BARRIER_SENT_SPY_TRAVEL"
+    );
+    h.call_global("ACK_BARRIER", ());
+    h.frame().unwrap();
     assert_eq!(field::<String>(&h.b(), "lastAction"), "REJECTED_SPY_TRAVEL");
     assert_eq!(requests.raw_len(), 1);
     let params = h.0.create_table().unwrap();
@@ -462,6 +468,8 @@ fn test_native_mission_request_is_not_itself_evidence_of_neutralization() {
     assert!(field::<Option<Table>>(&request, "params").is_none());
     assert_eq!(field::<i64>(&request, "selected"), 15);
     assert_eq!(field::<i64>(&request, "mode"), 3);
+    h.frame().unwrap();
+    h.call_global("ACK_BARRIER", ());
     h.frame().unwrap();
     assert_eq!(
         field::<String>(&h.b(), "lastAction"),
@@ -591,17 +599,41 @@ fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
     );
     h.check("LOST", Some(12));
     assert_eq!(h.writes(), ["JAC_BOUNDARY_CONFIG"]);
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    assert_eq!(h.global::<i64>("SPY_CAPACITY"), 1);
-    h.global::<Table>("BUILD_QUEUE")
-        .set("building", 555)
-        .unwrap();
-    h.event("JAC_BoundaryFinishSpy").unwrap();
+    h.event("JAC_BoundarySpawnSpy").unwrap();
+    assert_eq!(h.global::<bool>("CIVIC_COMPLETED"), true);
+    h.check("LOST", Some(12));
+    assert!(h
+        .game_property::<Option<Table>>("JAC_BOUNDARY_SPY")
+        .is_none());
+    h.queue("BUILD_SPY", 1, 20);
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(field::<String>(&h.b(), "lastAction"), "READY_BUILD_SPY");
+    h.queue("PROGRESS_SPY", 1, 20);
+    h.frame().unwrap();
+    h.event("JAC_BoundaryProgressSpy").unwrap();
+    assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 1);
+    assert!(h
+        .game_property::<Option<Table>>("JAC_BOUNDARY_SPY")
+        .is_none());
+    h.call_global("ADVANCE_TURN", ());
+    h.queue("BIND_SPY", 1, 20);
+    h.frame().unwrap();
+    h.event("JAC_BoundaryBindSpy").unwrap();
     assert_eq!(
         field::<i64>(&h.game_property::<Table>("JAC_BOUNDARY_SPY"), "id"),
         15
     );
-    assert_eq!(h.writes(), ["JAC_BOUNDARY_CONFIG", "JAC_BOUNDARY_SPY"]);
+    assert_eq!(h.global::<Table>("BUILD_REQUESTS").raw_len(), 1);
+    assert_eq!(
+        h.writes(),
+        [
+            "JAC_BOUNDARY_CONFIG",
+            "JAC_BOUNDARY_SPY_PREPARED",
+            "JAC_BOUNDARY_SPY_PROGRESS",
+            "JAC_BOUNDARY_SPY"
+        ]
+    );
 }
 
 const PERSONA_MOD: &str = "poc/JAC_PoC_LeaderPersona";

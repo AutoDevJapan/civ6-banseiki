@@ -4,6 +4,8 @@ include("JAC_PersonaBoundaryRules");
 local R = JAC_PersonaBoundaryRules;
 local LEADER = "LEADER_JAC_ODA_NOBUHIDE";
 local CONFIG = "JAC_BOUNDARY_CONFIG";
+local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
+local spyProduction;
 local function Config(owner)
     local c = assert(Game:GetProperty(CONFIG), "boundary fixture not prepared");
     assert(c.owner == owner and Players[owner]:IsHuman(), "fixture operation requires its human owner");
@@ -114,54 +116,94 @@ GameEvents.JAC_BoundaryLoseCity.Add(function(owner)
     print("JAC_BOUNDARY TRANSFER_RETURN " .. R.Serialize(ReadGameplay()));
 end);
 
-GameEvents.JAC_BoundaryUnlockSpy.Add(function(owner)
-    local player = assert(Players[owner], "spy owner missing");
-    assert(player:IsHuman() and player:IsAlive(), "spy fixture requires a living human owner");
+GameEvents.JAC_BoundarySpawnSpy.Add(function(owner)
+    local c = Config(owner);
+    assert(not spyProduction and not Game:GetProperty("JAC_BOUNDARY_SPY"), "fixture spy production already started");
+    local player = Players[owner];
+    local unit = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    assert(unit.PrereqCivic == SPY_CIVIC, "native spy civic differs from the Sengoku gate");
+    local civic = assert(GameInfo.Civics[SPY_CIVIC], "native spy civic missing");
     local culture = player:GetCulture();
-    local spy = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
-    local civic = assert(GameInfo.Civics[assert(spy.PrereqCivic, "native spy prerequisite missing")],
-        "native spy civic missing");
     if not culture:HasCivic(civic.Index) then
-        -- Sengoku Unlocks/Cascade move both UNIT_SPY and CIVIC_GRANT_SPY to
-        -- the configured espionage civic. Read the loaded unit definition.
-        -- Progress is the native completion path used by the test-only fixture.
         culture:SetCulturalProgress(civic.Index, culture:GetCultureCost(civic.Index));
     end
-    assert(culture:HasCivic(civic.Index), "native spy civic did not complete");
-    print("JAC_BOUNDARY SPY_CIVIC_COMPLETED " .. R.Serialize({owner=owner,
-        civic=civic.CivicType}));
+    assert(culture:HasCivic(civic.Index), "native spy civic was not completed");
+    local capital = assert(player:GetCities():GetCapitalCity(), "spy production capital missing");
+    spyProduction = {owner=owner, cityID=capital:GetID(), progressed=false};
+    Game:SetProperty("JAC_BOUNDARY_SPY_PREPARED", {owner=owner, cityID=capital:GetID()});
+    print("JAC_BOUNDARY SPY_CIVIC_READY " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY_PREPARED")));
 end);
 
-GameEvents.JAC_BoundaryFinishSpy.Add(function(owner)
-    local player = assert(Players[owner], "spy owner missing");
-    assert(player:IsHuman() and player:IsAlive(), "spy fixture requires a living human owner");
-    assert(not Game:GetProperty("JAC_BOUNDARY_SPY"), "fixture spy already recorded");
-    local capital = assert(player:GetCities():GetCapitalCity(), "production city missing");
-    local unitType = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
-    local queue = assert(capital:GetBuildQueue(), "native production queue missing");
-    assert(queue:CurrentlyBuilding() == unitType.Hash, "native spy build was not accepted");
-    local cost, progress = queue:GetUnitCost(unitType.Index), queue:GetUnitProgress(unitType.Index);
-    assert(type(cost) == "number" and cost > 0 and type(progress) == "number" and progress < cost,
-        "native spy production cost/progress invalid");
+GameEvents.JAC_BoundaryProgressSpy.Add(function(owner)
+    Config(owner);
+    assert(spyProduction and spyProduction.owner == owner and not spyProduction.progressed,
+        "spy production progress was not prepared or was already added");
+    local city = assert(CityManager.GetCity(owner, spyProduction.cityID), "spy production city missing");
+    local queue = city:GetBuildQueue();
+    local head = assert(queue:GetAt(0), "native city has no current spy production");
+    local unit = head.UnitType and GameInfo.Units[head.UnitType];
+    assert(unit and unit.UnitType == "UNIT_SPY", "native city is producing a different item");
     local before = {};
-    for _,unit in player:GetUnits():Members() do before[unit:GetID()] = true; end
-    -- Debug/City.ltp:103-107 advances the current native build queue.
-    -- The queued item came from ProductionPanel.lua:293-301, not InitUnit.
-    local added = math.ceil(cost - progress) + 1;
-    print("JAC_BOUNDARY SPY_PRODUCTION_PROGRESS " .. R.Serialize({owner=owner,
-        city=capital:GetID(), building=queue:CurrentlyBuilding(), cost=cost, progress=progress, added=added}));
-    queue:AddProgress(added);
-    local spy;
-    for _,unit in player:GetUnits():Members() do
-        if not before[unit:GetID()] and unit:GetType() == unitType.Index then
-            assert(not spy, "multiple newly produced native spies"); spy = unit;
+    local count = 0;
+    for _,candidate in Players[owner]:GetUnits():Members() do
+        if candidate:GetType() == unit.Index then before[candidate:GetID()] = true; count = count + 1; end
+    end
+    spyProduction.before = before;
+    spyProduction.beforeCount = count;
+    spyProduction.progressed = true; -- one AddProgress even if its result is unknown
+    -- Official Debug/City.ltp:200-204. The native queue, not a spy Property, creates the unit.
+    queue:AddProgress(500);
+    Game:SetProperty("JAC_BOUNDARY_SPY_PROGRESS", {owner=owner, cityID=city:GetID(), beforeCount=count});
+    print("JAC_BOUNDARY SPY_PRODUCTION_PROGRESS " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY_PROGRESS")));
+end);
+
+GameEvents.JAC_BoundaryBindSpy.Add(function(owner)
+    Config(owner);
+    assert(spyProduction and spyProduction.owner == owner and spyProduction.progressed and
+        not Game:GetProperty("JAC_BOUNDARY_SPY"), "spy production was not completed once");
+    local spyType = GameInfo.Units["UNIT_SPY"].Index;
+    local spy, count = nil, 0;
+    for _,unit in Players[owner]:GetUnits():Members() do
+        if unit:GetType() == spyType then
+            count = count + 1;
+            if not spyProduction.before[unit:GetID()] then
+                assert(not spy, "native production added multiple spies"); spy = unit;
+            end
         end
     end
-    assert(spy, "native production did not add exactly one spy to the owner roster");
-    print("JAC_BOUNDARY SPY_PRODUCED " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
-        unitType=spy:GetType(),sourceCity=capital:GetID(),sourceX=capital:GetX(),sourceY=capital:GetY(),
-        x=spy:GetX(),y=spy:GetY()}));
+    assert(spy and count == spyProduction.beforeCount + 1, "native spy production did not add exactly one unit");
+    assert(spy:GetOwner() == owner, "produced native spy owner mismatch");
     Game:SetProperty("JAC_BOUNDARY_SPY", {owner=owner, id=spy:GetID()});
+    print("JAC_BOUNDARY SPY_NATIVE_STATE " .. R.Serialize({owner=spy:GetOwner(),id=spy:GetID(),
+        unitType=spy:GetType(),x=spy:GetX(),y=spy:GetY()}));
+    print("JAC_BOUNDARY SPY_CREATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
+end);
+
+GameEvents.JAC_BoundarySpyBarrier.Add(function(owner, params)
+    Config(owner);
+    assert(type(params) == "table" and type(params.Token) == "number" and
+        (params.Action == "SPY_TRAVEL" or params.Action == "SPY_MISSION"), "invalid spy barrier");
+    local spy = assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "spy barrier before native production");
+    assert(spy.owner == owner and spy.id == params.SpyID, "spy barrier identity mismatch");
+    Game:SetProperty("JAC_BOUNDARY_SPY_BARRIER",
+        {owner=owner, spyID=spy.id, token=params.Token, action=params.Action});
+end);
+
+GameEvents.JAC_BoundaryAdoptSpyIdentity.Add(function(owner, params)
+    Config(owner);
+    assert(type(params)=="table" and type(params.OldID)=="number" and
+        type(params.NewID)=="number" and type(params.TargetOwner)=="number" and
+        type(params.TargetID)=="number", "invalid native spy identity update");
+    local old=assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "diagnostic spy reference missing");
+    assert(old.owner==owner and old.id==params.OldID, "diagnostic spy reference changed");
+    local spy=assert(Players[owner]:GetUnits():FindID(params.NewID), "arrived native spy missing");
+    assert(spy:GetOwner()==owner and spy:GetID()==params.NewID and
+        spy:GetType()==GameInfo.Units["UNIT_SPY"].Index, "arrived native spy identity mismatch");
+    local city=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
+    assert(city and city:GetOwner()==params.TargetOwner and city:GetID()==params.TargetID,
+        "arrived native spy destination mismatch");
+    Game:SetProperty("JAC_BOUNDARY_SPY",{owner=owner,id=spy:GetID()});
+    print("JAC_BOUNDARY SPY_REFERENCE_UPDATED " .. R.Serialize(Game:GetProperty("JAC_BOUNDARY_SPY")));
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;

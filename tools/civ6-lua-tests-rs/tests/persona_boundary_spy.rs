@@ -1,11 +1,22 @@
 //! New spy acceptance cases live apart from the fixed 119-method PR86 parity inventory.
 //! These execute the shipped Lua under mlua's Lua 5.1 engine, not the Civ6 runtime.
 
-use civ6_lua_tests_rs::strict::{FromLua, TableExt};
+use civ6_lua_tests_rs::strict::{FromLua, FromLuaMulti, TableExt};
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::{Function, IntoLuaMulti, Lua, MultiValue, Table};
 
 struct SpyHarness(Lua);
+
+fn table_call(function: &Function, args: impl IntoLuaMulti) -> mlua::Result<Table> {
+    Table::from_results(function.call::<MultiValue>(args)?)
+}
+
+fn optional_table_call(
+    function: &Function,
+    args: impl IntoLuaMulti,
+) -> mlua::Result<Option<Table>> {
+    Option::<Table>::from_results(function.call::<MultiValue>(args)?)
+}
 
 impl SpyHarness {
     fn new() -> Self {
@@ -21,11 +32,11 @@ impl SpyHarness {
         );
         exec(
             &lua,
-            &read_repo("poc/JAC_Test_PersonaBoundary/Scripts/JAC_PersonaBoundary_Fixture.lua"),
+            &read_repo("poc/JAC_Test_PersonaBoundary/UI/JAC_PersonaBoundary_View.lua"),
         );
         exec(
             &lua,
-            &read_repo("poc/JAC_Test_PersonaBoundary/UI/JAC_PersonaBoundary_View.lua"),
+            &read_repo("poc/JAC_Test_PersonaBoundary/Scripts/JAC_PersonaBoundary_Fixture.lua"),
         );
         Self(lua)
     }
@@ -75,213 +86,32 @@ impl SpyHarness {
         self.global::<Table>("UNIT_REQUESTS").raw_len()
     }
 
+    fn call(&self, name: &str, args: impl IntoLuaMulti) {
+        self.global::<Function>(name).call::<()>(args).unwrap();
+    }
+
     fn event(&self, name: &str) -> mlua::Result<()> {
-        let events: Table = self.global("GameEvents");
-        let event: Table = events.strict_get(name).unwrap();
+        let event: Table = self.global::<Table>("GameEvents").strict_get(name).unwrap();
         self.global::<Function>("fire").call((event, 0))
     }
 
-    fn production(&self) -> Table {
-        self.b()
-            .strict_get::<Function>("SpyProduction")
-            .unwrap()
-            .call(())
-            .unwrap()
+    fn city_queue_event(&self) {
+        let event: Table = self
+            .global::<Table>("Events")
+            .strict_get("CityProductionQueueChanged")
+            .unwrap();
+        self.global::<Function>("fire")
+            .call::<()>((event, 0, 10))
+            .unwrap();
     }
-}
 
-#[test]
-fn configured_spy_prerequisite_works_without_the_legacy_civic() {
-    let h = SpyHarness::new();
-    let info: Table = h.global("GameInfo");
-    info.strict_get::<Table>("Civics")
-        .unwrap()
-        .set("CIVIC_DIPLOMATIC_SERVICE", mlua::Value::Nil)
-        .unwrap();
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    let state = h.production();
-    assert!(state.strict_get::<bool>("civic").unwrap());
-    assert_eq!(state.strict_get::<i64>("capacity").unwrap(), 1);
-    assert_eq!(
-        state.strict_get::<String>("civicType").unwrap(),
-        "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE"
-    );
-}
+    fn barrier(&self) {
+        self.call("ACK_BARRIER", ());
+    }
 
-#[test]
-fn official_build_is_accepted_before_progress_and_registers_only_new_native_spy() {
-    let h = SpyHarness::new();
-    h.case("no_persona_config", ());
-    assert_eq!(h.production().strict_get::<i64>("capacity").unwrap(), 0);
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_UNLOCK", Option::<Table>::None))
-        .unwrap();
-    h.frame().unwrap();
-    let requests: Table = h.global("REQUESTS");
-    assert_eq!(requests.raw_len(), 1);
-    let unlock: Table = requests.strict_get(1).unwrap();
-    let params: Table = unlock.strict_get("params").unwrap();
-    assert_eq!(
-        params.strict_get::<String>("OnStart").unwrap(),
-        "JAC_BoundaryUnlockSpy"
-    );
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    let unlocked = h.production();
-    assert!(unlocked.strict_get::<bool>("civic").unwrap());
-    assert_eq!(unlocked.strict_get::<i64>("capacity").unwrap(), 1);
-    assert_eq!(unlocked.strict_get::<Table>("spies").unwrap().raw_len(), 0);
-
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_BUILD", Option::<Table>::None))
-        .unwrap();
-    h.frame().unwrap();
-    assert_eq!(h.action(), "DISPATCHED_SPY_BUILD");
-    let city_requests: Table = h.global("CITY_REQUESTS");
-    assert_eq!(city_requests.raw_len(), 1);
-    let build: Table = city_requests.strict_get(1).unwrap();
-    assert_eq!(build.strict_get::<i64>("op").unwrap(), 3);
-    let params: Table = build.strict_get("params").unwrap();
-    assert_eq!(params.strict_get::<i64>("unit").unwrap(), 555);
-    assert_eq!(params.strict_get::<String>("insert").unwrap(), "replace");
-    assert_eq!(params.strict_get::<i64>("location").unwrap(), 0);
-    h.set("BUSY", true);
-    h.frame().unwrap();
-    assert_eq!(h.action(), "DISPATCHED_SPY_BUILD");
-    h.set("BUSY", false);
-    h.frame().unwrap();
-    assert_eq!(h.action(), "ACCEPTED_SPY_BUILD");
-    assert_eq!(h.production().strict_get::<i64>("building").unwrap(), 555);
-
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_FINISH", Option::<Table>::None))
-        .unwrap();
-    h.frame().unwrap();
-    assert_eq!(requests.raw_len(), 2);
-    let finish: Table = requests.strict_get(2).unwrap();
-    let params: Table = finish.strict_get("params").unwrap();
-    assert_eq!(
-        params.strict_get::<String>("OnStart").unwrap(),
-        "JAC_BoundaryFinishSpy"
-    );
-    h.event("JAC_BoundaryFinishSpy").unwrap();
-    let logs: Vec<String> = h
-        .global::<Table>("LOGS")
-        .strict_sequence_values()
-        .collect::<mlua::Result<_>>()
-        .unwrap();
-    assert!(logs.iter().any(|line| line.contains("SPY_PRODUCED")
-        && line.contains("sourceCity=10")
-        && line.contains("id=15")));
-    let roster: Table = h.production().strict_get("spies").unwrap();
-    assert_eq!(roster.raw_len(), 1);
-    let spy: Table = roster.strict_get(1).unwrap();
-    assert_eq!(spy.strict_get::<i64>("id").unwrap(), 15);
-    assert_eq!(spy.strict_get::<i64>("cityID").unwrap(), 10);
-    assert_eq!(spy.strict_get::<i64>("operation").unwrap(), -1);
-    assert_eq!(spy.strict_get::<i64>("endTurn").unwrap(), 0);
-    let game: Table = h.global("Game");
-    let info: Table = game
-        .strict_get::<Function>("GetProperty")
-        .unwrap()
-        .call((game, "JAC_BOUNDARY_SPY"))
-        .unwrap();
-    assert_eq!(info.strict_get::<i64>("id").unwrap(), 15);
-    let writes: Table = h.global("WRITES");
-    assert_eq!(writes.raw_len(), 1);
-    assert_eq!(writes.strict_get::<String>(1).unwrap(), "JAC_BOUNDARY_SPY");
-    h.set("REQUEST_EFFECT", "travel");
-    h.queue("SPY_TRAVEL");
-    h.frame().unwrap();
-    h.frame().unwrap();
-    assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
-    assert_eq!(h.requests(), 1);
-}
-
-#[test]
-fn production_refusal_and_unobserved_completion_cannot_be_reported_as_a_spy() {
-    let h = SpyHarness::new();
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_BUILD", Option::<Table>::None))
-        .unwrap();
-    let error = h.frame().expect_err("no capacity must refuse before BUILD");
-    assert!(error.to_string().contains("capacity unavailable"));
-    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 0);
-
-    let h = SpyHarness::new();
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    h.set("CAN_PRODUCE", false);
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_BUILD", Option::<Table>::None))
-        .unwrap();
-    let error = h
-        .frame()
-        .expect_err("native production refusal must stop BUILD");
-    assert!(error.to_string().contains("production refused"));
-    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 0);
-
-    let h = SpyHarness::new();
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    h.set("BUILD_ACCEPT", false);
-    h.b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_BUILD", Option::<Table>::None))
-        .unwrap();
-    h.frame().unwrap();
-    h.frame().unwrap();
-    assert_eq!(h.action(), "REJECTED_SPY_BUILD");
-    assert_eq!(h.global::<Table>("CITY_REQUESTS").raw_len(), 1);
-    let error = h
-        .b()
-        .strict_get::<Function>("Queue")
-        .unwrap()
-        .call::<()>(("SPY_BUILD", Option::<Table>::None))
-        .expect_err("unknown native result must not replay");
-    assert!(error.to_string().contains("cannot be replayed"));
-
-    let h = SpyHarness::new();
-    h.event("JAC_BoundaryUnlockSpy").unwrap();
-    h.global::<Table>("BUILD_QUEUE")
-        .set("building", 555)
-        .unwrap();
-    h.case("production_without_unit", ());
-    let error = h
-        .event("JAC_BoundaryFinishSpy")
-        .expect_err("progress without a new roster member must refuse");
-    assert!(error.to_string().contains("did not add exactly one spy"));
-    assert_eq!(
-        h.production()
-            .strict_get::<Table>("spies")
-            .unwrap()
-            .raw_len(),
-        0
-    );
-    assert_eq!(h.global::<Table>("WRITES").raw_len(), 0);
-}
-
-#[test]
-fn another_native_mission_cannot_satisfy_a_travel_request() {
-    let h = SpyHarness::new();
-    h.case("spy_home", (0, 15));
-    h.set("REQUEST_EFFECT", "mission");
-    h.queue("SPY_TRAVEL");
-    h.frame().unwrap();
-    h.frame().unwrap();
-    assert_eq!(h.action(), "REJECTED_SPY_TRAVEL");
-    assert_eq!(h.requests(), 1);
-    let spy = self_spy(&h);
-    assert_eq!(spy.strict_get::<i64>("operation").unwrap(), 0);
-    assert_eq!(spy.strict_get::<i64>("endTurn").unwrap(), 13);
+    fn adoption(&self) {
+        self.call("ACK_ADOPTION", ());
+    }
 }
 
 #[test]
@@ -297,38 +127,56 @@ fn accepted_travel_is_observed_on_first_nonbusy_frame() {
     assert_eq!(h.action(), "DISPATCHED_SPY_TRAVEL");
     h.set("BUSY", false);
     h.frame().unwrap();
+    assert_eq!(h.action(), "BARRIER_SENT_SPY_TRAVEL");
+    h.barrier();
+    h.frame().unwrap();
     assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
     let spy: Table = self_spy(&h);
-    assert_eq!(spy.strict_get::<i64>("operation").unwrap(), 1);
-    assert_eq!(spy.strict_get::<i64>("endTurn").unwrap(), 8);
+    assert_eq!(spy.strict_get::<bool>("present").unwrap(), false);
+    let read = h.b().strict_get::<Function>("Read").unwrap();
+    let roster: Table = table_call(&read, ())
+        .unwrap()
+        .strict_get("spyRoster")
+        .unwrap();
+    let off_map: Table = roster.strict_get("offMap").unwrap();
+    assert_eq!(off_map.raw_len(), 1);
+    let record: Table = off_map.strict_get(1).unwrap();
+    assert_eq!(record.strict_get::<i64>("returnTurn").unwrap(), 8);
     assert_eq!(h.requests(), 1);
     let writes: Table = h.global("WRITES");
-    assert_eq!(writes.raw_len(), 1);
+    assert_eq!(writes.raw_len(), 2);
     assert_eq!(writes.strict_get::<String>(1).unwrap(), "JAC_BOUNDARY_SPY");
+    assert_eq!(
+        writes.strict_get::<String>(2).unwrap(),
+        "JAC_BOUNDARY_SPY_BARRIER"
+    );
 }
 
 fn self_spy(h: &SpyHarness) -> Table {
-    let state: Table = h
-        .b()
-        .strict_get::<Function>("Read")
-        .unwrap()
-        .call(())
-        .unwrap();
+    let read = h.b().strict_get::<Function>("Read").unwrap();
+    let state = table_call(&read, ()).unwrap();
     state.strict_get("spy").unwrap()
 }
 
 #[test]
-fn travel_requires_real_destination_or_active_native_assignment() {
+fn travel_requires_matching_native_roster_destination_and_future_return() {
     for (effect, accepted) in [
         ("arrive", true),
+        ("different_spy_offmap", false),
+        ("different_level_offmap", false),
+        ("wrong_destination_offmap", false),
+        ("expired_offmap", false),
+        ("multi_offmap", false),
         ("wrong_arrive", false),
-        ("empty_arrive", false),
+        ("none", false),
     ] {
         let h = SpyHarness::new();
         h.case("spy_home", (0, 15));
         h.set("REQUEST_EFFECT", effect);
         h.queue("SPY_TRAVEL");
         h.frame().unwrap();
+        h.frame().unwrap();
+        h.barrier();
         h.frame().unwrap();
         assert_eq!(
             h.action(),
@@ -340,6 +188,9 @@ fn travel_requires_real_destination_or_active_native_assignment() {
             "{effect}"
         );
         assert_eq!(h.requests(), 1);
+        if effect == "arrive" {
+            assert_eq!(self_spy(&h).strict_get::<i64>("endTurn").unwrap(), 0);
+        }
     }
 }
 
@@ -373,22 +224,234 @@ fn travel_chooser_refuses_a_spy_outside_its_home_city() {
 
 #[test]
 fn mission_assignment_does_not_claim_governor_neutralization() {
+    for effect in ["mission", "mission_hash"] {
+        let h = SpyHarness::new();
+        h.case("spy", (0, 15));
+        h.case("target_governor", ());
+        h.set("REQUEST_EFFECT", effect);
+        h.queue("SPY_MISSION");
+        h.frame().unwrap();
+        h.frame().unwrap();
+        h.barrier();
+        h.frame().unwrap();
+        assert_eq!(h.action(), "ACCEPTED_SPY_MISSION", "{effect}");
+        let error = h
+            .b()
+            .strict_get::<Function>("Check")
+            .unwrap()
+            .call::<MultiValue>(("NEUTRALIZED", Option::<i64>::None))
+            .expect_err("request acceptance is not neutralization");
+        assert!(error
+            .to_string()
+            .contains("neutralization was not observed"));
+        assert_eq!(h.requests(), 1);
+    }
+}
+
+#[test]
+fn travel_waits_for_the_synchronized_barrier_before_reading_off_map_state() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.set("REQUEST_EFFECT", "travel");
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "BARRIER_SENT_SPY_TRAVEL");
+    h.frame().unwrap();
+    assert_eq!(h.action(), "BARRIER_SENT_SPY_TRAVEL");
+    assert_eq!(h.requests(), 1);
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
+}
+
+#[test]
+fn immediate_arrival_with_new_unit_id_adopts_only_the_diagnostic_reference() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.set("REQUEST_EFFECT", "arrive_new_id");
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ADOPT_PENDING_SPY_TRAVEL");
+    let game: Table = h.global("Game");
+    let get = game.strict_get::<Function>("GetProperty").unwrap();
+    let old = table_call(&get, (game.clone(), "JAC_BOUNDARY_SPY")).unwrap();
+    assert_eq!(old.strict_get::<i64>("id").unwrap(), 15);
+    h.frame().unwrap();
+    h.adoption();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
+    assert_eq!(self_spy(&h).strict_get::<i64>("id").unwrap(), 16);
+    assert_eq!(h.requests(), 1);
+}
+
+#[test]
+fn off_map_arrival_with_new_id_can_be_bound_after_native_observation() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.set("REQUEST_EFFECT", "travel");
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_SPY_TRAVEL");
+    h.call("ARRIVE_OFFMAP", (16,));
+    h.queue("ADOPT_SPY");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    h.adoption();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "ACCEPTED_ADOPT_SPY");
+    assert_eq!(self_spy(&h).strict_get::<i64>("id").unwrap(), 16);
+}
+
+#[test]
+fn travel_refuses_ambiguous_native_spies_before_request() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.call("makeSpy", (0, 16));
+    h.queue("SPY_TRAVEL");
+    assert!(h.frame().is_err());
+    assert_eq!(h.requests(), 0);
+
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    let record = h.0.create_table().unwrap();
+    record.set("Name", "Existing Spy").unwrap();
+    record.set("Level", 1).unwrap();
+    record.set("ReturnTurn", 10).unwrap();
+    record.set("XLocation", 2).unwrap();
+    record.set("YLocation", 1).unwrap();
+    h.global::<Table>("OFF_MAP").set(1, record).unwrap();
+    h.queue("SPY_TRAVEL");
+    assert!(h.frame().is_err());
+    assert_eq!(h.requests(), 0);
+}
+
+#[test]
+fn operation_started_event_alone_cannot_accept_an_unchanged_roster() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.call("START_NATIVE", (0, 15, 991));
+    h.frame().unwrap();
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_SPY_TRAVEL");
+    assert_eq!(h.requests(), 1);
+}
+
+fn prepare_spy_build(h: &SpyHarness) {
+    h.event("JAC_BoundarySpawnSpy").unwrap();
+    let ready = h
+        .b()
+        .strict_get::<Function>("SpyPrerequisitesReady")
+        .unwrap();
+    table_call(&ready, ()).unwrap();
+    h.queue("BUILD_SPY");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "READY_BUILD_SPY");
+    assert_eq!(h.global::<Table>("BUILD_REQUESTS").raw_len(), 1);
+}
+
+#[test]
+fn native_civic_build_and_one_turn_progress_create_exactly_one_spy() {
+    let h = SpyHarness::new();
+    prepare_spy_build(&h);
+    h.queue("PROGRESS_SPY");
+    h.frame().unwrap();
+    h.event("JAC_BoundaryProgressSpy").unwrap();
+    assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 1);
+    h.call("ADVANCE_TURN", ());
+    h.queue("BIND_SPY");
+    h.frame().unwrap();
+    h.event("JAC_BoundaryBindSpy").unwrap();
+    assert_eq!(self_spy(&h).strict_get::<i64>("id").unwrap(), 15);
+    assert_eq!(h.global::<Table>("UNIT_REQUESTS").raw_len(), 0);
+    let request: Table = h.global::<Table>("BUILD_REQUESTS").strict_get(1).unwrap();
+    let selected: Table = request.strict_get("selected").unwrap();
+    assert_eq!(selected.strict_get::<i64>("id").unwrap(), 10);
+}
+
+#[test]
+fn spy_capacity_and_native_build_refusal_prevent_progress() {
+    for flag in ["SPY_CAPACITY", "BUILD_CAN_START"] {
+        let h = SpyHarness::new();
+        h.event("JAC_BoundarySpawnSpy").unwrap();
+        if flag == "SPY_CAPACITY" {
+            h.set(flag, 0_i64);
+        } else {
+            h.set(flag, false);
+        }
+        h.queue("BUILD_SPY");
+        assert!(h.frame().is_err(), "{flag}");
+        assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 0);
+        assert_eq!(h.global::<Table>("BUILD_REQUESTS").raw_len(), 0);
+    }
+}
+
+#[test]
+fn wrong_spy_civic_or_unaccepted_city_queue_cannot_start_production() {
+    let h = SpyHarness::new();
+    let units: Table = h.global::<Table>("GameInfo").strict_get("Units").unwrap();
+    units
+        .strict_get::<Table>("UNIT_SPY")
+        .unwrap()
+        .set("PrereqCivic", "CIVIC_WRONG")
+        .unwrap();
+    assert!(h.event("JAC_BoundarySpawnSpy").is_err());
+    assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 0);
+
+    let h = SpyHarness::new();
+    h.event("JAC_BoundarySpawnSpy").unwrap();
+    h.set("BUILD_ACCEPTED", false);
+    h.queue("BUILD_SPY");
+    h.frame().unwrap();
+    h.city_queue_event();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_BUILD_SPY");
+    assert_eq!(h.global::<i64>("PROGRESS_CALLS"), 0);
+}
+
+#[test]
+fn wrong_native_mission_type_is_rejected_even_with_future_end_turn() {
     let h = SpyHarness::new();
     h.case("spy", (0, 15));
     h.case("target_governor", ());
-    h.set("REQUEST_EFFECT", "mission");
+    h.set("REQUEST_EFFECT", "mission_wrong");
     h.queue("SPY_MISSION");
     h.frame().unwrap();
     h.frame().unwrap();
-    assert_eq!(h.action(), "ACCEPTED_SPY_MISSION");
-    let error = h
-        .b()
-        .strict_get::<Function>("Check")
-        .unwrap()
-        .call::<MultiValue>(("NEUTRALIZED", Option::<i64>::None))
-        .expect_err("request acceptance is not neutralization");
-    assert!(error
-        .to_string()
-        .contains("neutralization was not observed"));
-    assert_eq!(h.requests(), 1);
+    h.barrier();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_SPY_MISSION");
+}
+
+#[test]
+fn missing_or_multiple_produced_spies_never_bind_a_diagnostic_id() {
+    for duplicate in [false, true] {
+        let h = SpyHarness::new();
+        prepare_spy_build(&h);
+        h.queue("PROGRESS_SPY");
+        h.frame().unwrap();
+        h.event("JAC_BoundaryProgressSpy").unwrap();
+        if !duplicate {
+            h.set("PRODUCTION_COMPLETES", false);
+        }
+        h.call("ADVANCE_TURN", ());
+        if duplicate {
+            h.call("makeSpy", (0, 16));
+        }
+        assert!(h.event("JAC_BoundaryBindSpy").is_err());
+        let game: Table = h.global("Game");
+        let get = game.strict_get::<Function>("GetProperty").unwrap();
+        let spy = optional_table_call(&get, (game.clone(), "JAC_BOUNDARY_SPY")).unwrap();
+        assert!(spy.is_none());
+    }
 }

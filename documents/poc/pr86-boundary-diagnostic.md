@@ -13,15 +13,12 @@
 | シナリオ | 確かめること | 実機の状態 |
 |---|---|---|
 | `leader-persona-city-loss-15km.json`（54手順） | 織田信秀を正規加入・費用1で進化、非首都へ配置、5ターン定着、実ターンの功績で固有技能を取得。本体で自由都市へ移し、旧都市と残った都市の効果・功績停止、保存読込の一致を検査する | leaderperson-41で起動を含む55手順成功、ログ判定6件成功。実ターンを省略していない |
-| `leader-persona-spy-access-15km.json`（50手順） | 人物技能までの既存手順の後、正式にSpy枠を開放して都市で生産する。生産と派遣を別々の非busy frameで確認し、本体一覧・任務・終了ターン・所在を記録する | 生産経路への改訂版は未実機。実機44では旧直接生成Spyの派遣が拒否された。人物中和の成功ではない |
-| `leader-persona-spy-production-15km.json`（19手順） | 人物の加入・進化・技能待機をせず、同じ地図で社会制度の正式進捗、都市のSpy生産、派遣受理だけを独立して比較する | 未実機。RustでLuaとシナリオの形式を検査するが、Civ6での受理は未証明 |
+| `leader-persona-spy-access-15km.json`（50手順） | C12の正式制度と本体スパイ枠を満たし、首都で`UNIT_SPY`を指定生産する。1実ターン後の本体ユニット1個増を確かめ、公式UIから一度派遣する。同期barrier後に地図上とoffMapの両一覧を照合する | 改訂版は未実機。実機44は旧generic生成版で42/44手順後に停止した。直後の地図上unitが不変だったが、offMapと同期ACKを未確認なので拒否確定ではない。実機42の12ターン観測も旧生成版の結果 |
 | `leader-persona-spy-recovery.json`（50手順） | **既に本体中和を観測したfixtureからだけ**継続。中和中に保存し、同ターンの読込結果を照合。残存期間を毎ターン読み、回復後未配置、再配置後0〜4ターンの無効、5ターン後の再発効を検査する | 前提の実中和と敵スパイ操作が未確定。単独で新ゲームを開始しない |
 
-独立fixtureは既存の日本15kmマップと22勢力を使う。人物診断の対象都市は人間の勢力の非首都、比較対象は首都と他の自都市である。人物所有者・偉人生成・称号獲得・進化・技能取得は既存の正式処理を通す。功績、人物状態、活動不能期間、都市の所有者をPropertyへ書いて結果を作らない。診断用の設定と生産で得たスパイIDだけを、同期したGameplay操作から保存する。
+独立fixtureは既存の日本15kmマップと22勢力を使う。対象都市は人間の勢力の非首都、比較対象は首都と他の自都市である。人物所有者・偉人生成・称号獲得・進化・技能取得は既存の正式処理を通す。功績、人物状態、活動不能期間、都市の所有者をPropertyへ書いて結果を作らない。診断用の設定、生産準備・進捗・barrierの印、本体から確認したスパイIDだけを同期Gameplay操作から保存し、印そのものを成功の証拠にはしない。
 
-実機44では直接生成したSpyが本体一覧にID `655368`、所在 `131/30` として現れ、外国都市への正規問い合わせはtrueだった。通常UI frameで選択と派遣要求を一度実行したが、次の非busy frameでも任務`-1`・終了ターン`0`、所在は自国都市のままで、43/44手順で失敗した。直接生成で諜報の内部登録が欠けた可能性はあるが、原因とは確定していない。新しい短いシナリオは、正式生産したSpyの本体一覧、出身都市、ID、任務、終了ターンを同じ派遣経路で比較する。
-
-加入・進化・技能取得の要求、総督配置、スパイ派遣と任務開始は、テストMODの`ContextPtr:SetUpdate`から一度だけ送る。スパイ要求は本体の選択ユニットIDと諜報モードを照合してから送り、次の非busy frameで本体状態を読む。要求が戻っただけでは受理としない。FireTunerは待ち行列へ要求を置く入口に限る。結果不明・拒否・例外の操作を自動で再送しない。人間以外のスパイの要求は明示的に拒否する。
+加入・進化・技能取得の要求、総督配置、スパイ派遣と任務開始は、テストMODの`ContextPtr:SetUpdate`から一度だけ送る。スパイ要求は本体の選択ユニットIDと諜報モードを照合してから送り、別の`EXECUTE_SCRIPT`操作によるGameplay barrierと本体キャッシュの公開を待つ。barrier前は応答不明とし、処理後に本体一覧が不変なら不受理とする。要求が戻っただけでは受理としない。FireTunerは待ち行列へ要求を置く入口に限る。結果不明・拒否・例外の操作を自動で再送しない。人間以外のスパイの要求は明示的に拒否する。
 
 ## 同時に記録する一次観測
 
@@ -48,8 +45,8 @@
 | 操作・観測 | 一次根拠と適用範囲 |
 |---|---|
 | 本体による都市喪失 | `G/Debug/City.ltp:275–278`は選択した都市を`CityManager.TransferCityToFreeCities(pCity)`へ渡す。診断はこの本体移管を同期Gameplayから呼び、所有者が`PlayerManager.GetFreeCitiesPlayerID()`に変わったことを別に読む。既存暗殺者のGameplay使用例もあるが、この人物総督の喪失を成功と推定する根拠にはしない |
-| スパイ生産 | `G/Base/Assets/Gameplay/Data/Civics.xml:401–402,482–485,581–583`で外交官制度は公式Spy枠を付与する。テストfixtureは`SetCulturalProgress`で同制度を完了し、実容量を読む。`G/Base/Assets/UI/Panels/ProductionPanel.lua:293–301,2119–2126,2885–2898`に従って都市の`CanProduce`と`CityManager.RequestOperation(BUILD)`を使い、キュー受理を次の非busy frameで確認する。`G/Debug/City.ltp:103–107`の`AddProgress`と`G/Base/Assets/UI/CitySupport.lua:236–250`の本体原価・進捗を使い、生産前後の所有ユニット一覧から新しいSpy IDを特定する。直接生成の旧実機44と比較するための未実機経路である |
-| スパイ派遣 | `G/Base/Assets/UI/Panels/UnitPanel.lua:4091–4096`は`UI.SelectUnit`で本体ユニットを選択する。`G/Base/Assets/UI/Choosers/EspionageChooser.lua:630–643,738–765`は選択中のスパイが起きていて、自国都市にいる場合に`SPY_TRAVEL_TO_CITY`を選ぶ。同605–618行はX/Y付きの`SPY_TRAVEL_NEW_CITY`を問い合わせ、同じ引数で一度要求して選択モードへ戻す。同`G/Base/Assets/UI/PartialScreens/EspionageOverview.lua:659–677`では任務`-1`は割当待ち。fixtureは次の非busy frameで任務・終了ターン・所在を読み、`-1`/終了ターン0を受理としない |
+| スパイ生成 | 旧fixtureの汎用`InitUnitValidAdjacentHex`は実機44で型`UNIT_SPY`のunitを作ったが、諜報派遣は証明できなかった。新fixtureは`JAC_Sengoku_Unlocks.sql:18`のC12を本体の`SetCulturalProgress`で完了し、`JAC_Sengoku_Cascade.sql:32`が移した公式`CIVIC_GRANT_SPY`による枠を読み直す。`G/Base/Assets/UI/Panels/ProductionPanel.lua:293–301,2885–2898`の`CityOperationTypes.BUILD`で首都の0番へ`UNIT_SPY`を指定し、同期Gameplayから`G/Debug/City.ltp:200–204`の`AddProgress(500)`を一度だけ使う。完成前後の本体ユニット一覧で増分1個を同定する。`SET_PRODUCTION`という操作名は公式UIに見つからず、同UIが使う`BUILD`を採用した |
+| スパイ派遣 | `G/Base/Assets/UI/Panels/UnitPanel.lua:4091–4096`は`UI.SelectUnit`で本体ユニットを選択する。`G/Base/Assets/UI/Choosers/EspionageChooser.lua:630–643,738–765`は自国都市にいる選択中スパイの派遣モードを選ぶ。同605–618行はX/Y付きで一度だけ派遣要求を送る。`G/Base/Assets/UI/PartialScreens/EspionageOverview.lua:72–145,733–765`は地図上のunitと移動中のoffMapを別一覧として扱い、後者に名前・階級・目的地座標・ReturnTurnを持つ。fixtureは派遣前に地図上1人とoffMap 0件を確認し、barrier後にoffMapの唯一の増分、目的都市、将来のReturnTurnを照合する。即時到着は目的都市の本体unitを独立照合し、終了ターン0でも受理する。offMapには一次資料で確かめたunit IDがないため、同名だけで判定しない |
 | 中和任務の可否と開始 | 同Chooserの234行で`UnitManager.CanStartOperation(spy, operation.Hash, cityPlot, false, true)`。`G/Base/Assets/UI/Popups/EspionagePopup.lua:474`で`UnitManager.RequestOperation(spy, operation.Hash)`。fixtureも通常のUI frameからこの要求を送る |
 | 期間と確率 | `G/DLC/Expansion2/Data/Expansion1_UnitOperations.xml:12`は中和任務8ターン。`G/Base/Assets/UI/EspionageSupport.lua:27–42`は実所要時間と確率を本体から読む。fixtureは確率・任務期間を書き換えない |
 | 任務履歴 | `G/Base/Assets/UI/Popups/EspionagePopup.lua:376–383,624`の完了イベントと履歴取得。`G/Base/Assets/UI/PartialScreens/EspionageOverview.lua:279`の`CompletionTurn`。敵側の履歴が読めない場合は「取得不能」を記録し、中和の照合に成功した扱いにしない |
@@ -70,7 +67,5 @@
 ## 検査と進捗
 
 現在の検査と実機結果は[担当の進捗](pr86-boundary-progress.md)へ記録した。98889d3の指定Rustワークスペース全96対象・1,405件が成功し、失敗・ignored・filtered outは0件、Luaを全件実行した。変更10シナリオの形式とXML・MOD構成も成功した。Lua検査は独立した本体入力を使い、実総督の欠落、任務の失敗・別都市・古い履歴、捕獲を伴う成功、旧都市の残留効果、功績変動、自動復帰、読込での再読取り、通常frameからの一回の要求を検査する。これはMODの診断コードの回帰検査であり、Civ6の成功の代わりではない。
-
-今回の生産経路では、RustのLua 5.1検査で正式生産要求・非busy frameでのキュー受理・生産後の本体一覧とID・派遣要求を実行した。資格不足、正式生産の拒否、生産進捗後にSpyが増えない場合は失敗する。関連するRust検査はSpy 7件、境界24件、119件対応表2件、静的境界8件、MOD選択16件、シナリオ45件が成功し、ignoredは0件だった。新旧Spyシナリオの`--check`も成功した。実機では正式生産Spyの派遣、中和、回復をまだ確認していない。
 
 ToDo324/407の未観測項目は親が追跡する。この担当からオーナーへの仕様質問や実機依頼は送らない。

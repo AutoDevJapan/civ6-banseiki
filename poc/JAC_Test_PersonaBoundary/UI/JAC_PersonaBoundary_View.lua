@@ -9,6 +9,7 @@ local function Log(label, value)
     local text = "JAC_BOUNDARY " .. label .. " " .. R.Serialize(value);
     print(text); return text;
 end
+local ReadSpyRoster;
 
 local function Missions(c)
     local result, success = {}, false;
@@ -146,6 +147,7 @@ function B.Read()
     s.missions, s.neutralizationMission = Missions(c);
     local spyInfo = Game:GetProperty("JAC_BOUNDARY_SPY");
     if spyInfo then
+        s.spyRoster=ReadSpyRoster(spyInfo.owner);
         local spy = Players[spyInfo.owner]:GetUnits():FindID(spyInfo.id);
         s.spy = {owner=spyInfo.owner, id=spyInfo.id, present=spy~=nil};
         if spy then
@@ -171,28 +173,49 @@ local function LocalSpy()
     return spy;
 end
 
-function B.SpyProduction()
-    local owner = Game.GetLocalPlayer();
-    local player = assert(Players[owner], "local spy owner missing");
-    local unitType = assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
-    local civic = assert(GameInfo.Civics[assert(unitType.PrereqCivic, "native spy prerequisite missing")],
-        "native spy civic missing");
-    local capital = assert(player:GetCities():GetCapitalCity(), "native production city missing");
-    local queue = assert(capital:GetBuildQueue(), "native production queue missing");
-    local spies = {};
-    for _,unit in player:GetUnits():Members() do if unit:GetType() == unitType.Index then
-        local city = Cities.GetPlotPurchaseCity(Map.GetPlot(unit:GetX(),unit:GetY()));
-        spies[#spies+1] = {owner=unit:GetOwner(), id=unit:GetID(), x=unit:GetX(), y=unit:GetY(),
-            cityOwner=city and city:GetOwner() or -1, cityID=city and city:GetID() or -1,
-            operation=unit:GetSpyOperation(), endTurn=unit:GetSpyOperationEndTurn()};
-    end end
-    table.sort(spies, function(a,b) return a.id < b.id; end);
-    local result = {owner=owner, civic=player:GetCulture():HasCivic(civic.Index), civicType=civic.CivicType,
-        capacity=player:GetDiplomacy():GetSpyCapacity(), spies=spies,
-        city=capital:GetID(), building=queue:CurrentlyBuilding(),
-        cost=queue:GetUnitCost(unitType.Index), progress=queue:GetUnitProgress(unitType.Index)};
-    Log("SPY_PRODUCTION_ROSTER", result);
-    return result;
+local function NativeOperation(value)
+    if type(value) ~= "number" or value == -1 then return nil; end
+    local found=GameInfo.UnitOperations[value];
+    if found then return found; end
+    for operation in GameInfo.UnitOperations() do
+        if operation.Index == value or operation.Hash == value then return operation; end
+    end
+    return nil;
+end
+
+-- EspionageOverview.lua:72-145 reads map units and off-map travel separately.
+-- The off-map record exposes Name/Level/ReturnTurn/XLocation/YLocation, not a proven unit ID.
+ReadSpyRoster=function(owner)
+    local player=assert(Players[owner], "spy roster owner missing");
+    local roster={map={},offMap={}};
+    for _,unit in player:GetUnits():Members() do
+        local def=GameInfo.Units[unit:GetType()];
+        if def and def.Spy then
+            local experience=assert(unit:GetExperience(), "native spy experience unavailable");
+            roster.map[#roster.map+1]={id=unit:GetID(),owner=unit:GetOwner(),name=unit:GetName(),
+                level=experience:GetLevel(),x=unit:GetX(),y=unit:GetY(),
+                operation=unit:GetSpyOperation(),endTurn=unit:GetSpyOperationEndTurn()};
+        end
+    end
+    table.sort(roster.map,function(a,b) return a.id<b.id; end);
+    local diplomacy=player:GetDiplomacy();
+    local count=diplomacy:GetNumSpiesOffMap();
+    assert(type(count)=="number" and count>=0 and count<=256, "native off-map spy count unavailable");
+    for i=0,count-1 do
+        local record=assert(diplomacy:GetNthOffMapSpy(owner,i), "native off-map spy record missing");
+        assert(type(record.Name)=="string" and type(record.Level)=="number" and
+            type(record.ReturnTurn)=="number" and type(record.XLocation)=="number" and
+            type(record.YLocation)=="number", "native off-map spy fields unavailable");
+        roster.offMap[#roster.offMap+1]={name=record.Name,level=record.Level,
+            returnTurn=record.ReturnTurn,x=record.XLocation,y=record.YLocation};
+    end
+    return roster;
+end
+
+local function InTargetCity(x,y,owner,id)
+    local plot=Map.GetPlot(x,y);
+    local city=plot and Cities.GetPlotPurchaseCity(plot);
+    return city and city:GetOwner()==owner and city:GetID()==id or false;
 end
 
 local function SpyState(spy)
@@ -264,17 +287,45 @@ function B.Probe(cityOwner, cityID)
     Log("SPY_PROBE", probe); return probe;
 end
 
-local pending, verification;
+local pending, verification, buildPending, travelReference;
 local spyQueued = {};
+local operationStarts = {};
+local barrierToken = 0;
 B.lastAction = "IDLE";
+function B.SpyPrerequisitesReady()
+    local prepared=assert(Game:GetProperty("JAC_BOUNDARY_SPY_PREPARED"), "native spy civic preparation missing");
+    local player=Players[Game.GetLocalPlayer()];
+    assert(prepared.owner == Game.GetLocalPlayer(), "native spy production owner mismatch");
+    local unit=assert(GameInfo.Units["UNIT_SPY"], "native spy definition missing");
+    local civic=assert(GameInfo.Civics[unit.PrereqCivic], "native spy civic missing");
+    assert(player:GetCulture():HasCivic(civic.Index), "native spy prerequisite civic incomplete");
+    local capacity=player:GetDiplomacy():GetSpyCapacity();
+    local existing=0;
+    for _,candidate in player:GetUnits():Members() do
+        if candidate:GetType()==unit.Index then existing=existing+1; end
+    end
+    existing=existing+player:GetDiplomacy():GetNumSpiesOffMap();
+    Log("SPY_PRODUCTION_PREREQUISITES", {civic=unit.PrereqCivic, capacity=capacity, existing=existing});
+    assert(existing==0, "spy production fixture needs no pre-existing native spies");
+    assert(type(capacity)=="number" and capacity>existing, "native spy capacity unavailable");
+    return prepared;
+end
+
+local function SpyBuildReady(owner, cityID)
+    local city=assert(CityManager.GetCity(owner,cityID), "spy production city missing");
+    local head=city:GetBuildQueue():GetAt(0);
+    local unit=head and head.UnitType and GameInfo.Units[head.UnitType];
+    return unit and unit.UnitType=="UNIT_SPY" or false;
+end
 function B.Queue(action, params)
-    assert(not pending and not verification, "a boundary frame request is already pending");
+    assert(not pending and not verification and not buildPending, "a boundary frame request is already pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
     assert(action == "PREPARE" or action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
-        action == "LOSE_CITY" or action == "SPY_UNLOCK" or action == "SPY_BUILD" or
-        action == "SPY_FINISH" or action == "SPY_TRAVEL" or action == "SPY_MISSION", "unknown boundary action");
-    if action == "SPY_UNLOCK" or action == "SPY_BUILD" or action == "SPY_FINISH" or
-        action == "SPY_TRAVEL" or action == "SPY_MISSION" then
+        action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "BUILD_SPY" or
+        action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
+        action == "SPY_MISSION", "unknown boundary action");
+    if action == "SPAWN_SPY" or action == "BUILD_SPY" or action == "PROGRESS_SPY" or
+        action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or action == "SPY_MISSION" then
         assert(not spyQueued[action], "native spy request cannot be replayed in this session");
         spyQueued[action] = true;
     end
@@ -287,35 +338,8 @@ local function Submit(command)
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
     end
-    if action == "SPY_UNLOCK" or action == "SPY_FINISH" then
-        UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart=action == "SPY_UNLOCK" and "JAC_BoundaryUnlockSpy" or "JAC_BoundaryFinishSpy"});
-        return;
-    end
-    if action == "SPY_BUILD" then
-        local state = B.SpyProduction();
-        local unitType = GameInfo.Units["UNIT_SPY"];
-        local city = assert(CityManager.GetCity(owner,state.city), "native production city changed");
-        local queue = city:GetBuildQueue();
-        assert(state.civic and state.capacity > #state.spies, "official spy capacity unavailable");
-        local build = {UnitType=unitType.Hash,
-            MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION};
-        local canProduce, reasons = queue:CanProduce(build, false, true);
-        Log("SPY_BUILD_QUERY", {owner=owner, city=city:GetID(), unit=unitType.Hash,
-            canProduce=canProduce, reasons=reasons or {}, capacity=state.capacity, spies=#state.spies});
-        assert(canProduce, "native production refused UNIT_SPY");
-        -- ProductionPanel.lua:293-301,2885-2898: replace the current slot.
-        local params = {[CityOperationTypes.PARAM_UNIT_TYPE]=unitType.Hash,
-            [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,
-            [CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0};
-        CityManager.RequestOperation(city, CityOperationTypes.BUILD, params);
-        return {action=action, cityOwner=owner, cityID=city:GetID(), building=unitType.Hash};
-    end
-    local c;
-    if action ~= "SPY_TRAVEL" and action ~= "SPY_MISSION" then
-        c=Config();
-        assert(c.owner == owner, "fixture is owned by another player");
-    end
+    local c=Config();
+    assert(c.owner == owner, "fixture is owned by another player");
     if action == "EVOLVE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_LeaderPersonaEvolve", Leader=c.leader});
     elseif action == "BUY" then
@@ -328,30 +352,66 @@ local function Submit(command)
         assert(governor:GetNeutralizedTurns() == 0 and Players[owner]:GetGovernors():CanAssignGovernor(def.Hash,city), "native assignment unavailable");
         UI.RequestPlayerOperation(owner,PlayerOperations.ASSIGN_GOVERNOR,
             {[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index,[PlayerOperations.PARAM_PLAYER_ONE]=owner,[PlayerOperations.PARAM_CITY_DEST]=c.cityID});
-    elseif action == "LOSE_CITY" then
-        B.Check("SETTLED");
+    elseif action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "PROGRESS_SPY" or action == "BIND_SPY" then
+        if action == "LOSE_CITY" then B.Check("SETTLED"); end
+        local events={LOSE_CITY="JAC_BoundaryLoseCity",SPAWN_SPY="JAC_BoundarySpawnSpy",
+            PROGRESS_SPY="JAC_BoundaryProgressSpy",BIND_SPY="JAC_BoundaryBindSpy"};
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart="JAC_BoundaryLoseCity"});
+            {OnStart=events[action]});
+    elseif action == "BUILD_SPY" then
+        local prepared=B.SpyPrerequisitesReady();
+        local city=assert(CityManager.GetCity(owner,prepared.cityID), "spy production capital missing");
+        local spy=GameInfo.Units["UNIT_SPY"];
+        UI.DeselectAllCities(); UI.SelectCity(city);
+        local selected=UI.GetHeadSelectedCity();
+        assert(selected and selected:GetOwner()==owner and selected:GetID()==city:GetID(),
+            "official UI did not select the spy production city");
+        local canProduce, reasons=city:GetBuildQueue():CanProduce(spy.Hash,false,true);
+        Log("SPY_CAN_PRODUCE", {ok=canProduce,reasons=reasons or {}});
+        assert(canProduce, "native city refuses spy production");
+        -- Official ProductionPanel.lua:293-301,2885-2898 uses BUILD with replace-at-zero.
+        local arguments={[CityOperationTypes.PARAM_UNIT_TYPE]=spy.Hash,
+            [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,
+            [CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0};
+        local canStart, result=CityManager.CanStartOperation(city,CityOperationTypes.BUILD,arguments,true);
+        Log("SPY_BUILD_QUERY", {ok=canStart,result=result or {}});
+        assert(canStart, "native spy BUILD operation refused");
+        buildPending={owner=owner,cityID=city:GetID(),seen=false};
+        CityManager.RequestOperation(city,CityOperationTypes.BUILD,arguments);
+    elseif action == "ADOPT_SPY" then
+        local prior=assert(travelReference, "accepted spy travel reference missing");
+        local roster=ReadSpyRoster(owner);
+        assert(#roster.offMap==0 and #roster.map==1, "arrived native spy roster is ambiguous");
+        local arrived=roster.map[1];
+        assert(arrived.name==prior.name and arrived.level==prior.level and
+            InTargetCity(arrived.x,arrived.y,prior.targetOwner,prior.targetID),
+            "arrived native spy does not match the accepted travel");
+        assert(arrived.id~=prior.oldID, "native spy still has its original ID");
+        return {action=action,stage="ADOPT_PENDING",before={owner=owner,id=prior.oldID},
+            newID=arrived.id,targetOwner=prior.targetOwner,targetID=prior.targetID};
     else
         local spy=LocalSpy(); local city=assert(CityManager.GetCity(params.owner,params.city), "spy target missing");
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
         local plot=Map.GetPlot(city:GetX(),city:GetY());
         if action == "SPY_TRAVEL" then
             SelectSpy(spy, InterfaceModeTypes.SPY_TRAVEL_TO_CITY);
+            local roster=ReadSpyRoster(owner);
+            assert(#roster.map==1 and roster.map[1].id==spy:GetID() and #roster.offMap==0,
+                "spy travel needs one native map spy and no pre-existing off-map spy");
             local before=SpyState(spy);
             assert(before.operation == -1, "native spy is already assigned before travel");
-            local operation=assert(GameInfo.UnitOperations["UNITOPERATION_SPY_TRAVEL_NEW_CITY"],
-                "native travel operation missing");
             local arguments={[UnitOperationTypes.PARAM_X]=city:GetX(),[UnitOperationTypes.PARAM_Y]=city:GetY()};
             local ok, result=UnitManager.CanStartOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,plot,arguments);
             Log("SPY_TRAVEL_QUERY", {ok=ok, result=result or {}});
             assert(ok, "native spy travel refused");
+            local cursor=#operationStarts;
             UnitManager.RequestOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,arguments);
             -- EspionageChooser.lua:615-618 returns to selection after the single request.
             UI.SetInterfaceMode(InterfaceModeTypes.SELECTION);
-            return {action=action, before=before, expectedOperation=operation.Index,
-                targetOwner=params.owner, targetID=params.city,
-                targetX=city:GetX(), targetY=city:GetY()};
+            return {action=action, before=before, targetOwner=params.owner, targetID=params.city,
+                targetX=city:GetX(),targetY=city:GetY(),
+                expectedHash=UnitOperationTypes.SPY_TRAVEL_NEW_CITY, startCursor=cursor,
+                beforeRoster=roster, stage="DISPATCHED"};
         else
             local probe=B.Probe(params.owner,params.city);
             assert(probe.canStart and #probe.nativeTarget == 1, "native neutralize operation refused or target governor absent");
@@ -361,65 +421,141 @@ local function Submit(command)
             local before=SpyState(spy);
             assert(before.operation == -1, "native spy is already assigned before mission");
             local operation=GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
+            local cursor=#operationStarts;
             UnitManager.RequestOperation(spy,operation.Hash);
-            return {action=action, before=before, expectedOperation=operation.Index};
+            return {action=action, before=before, expectedHash=operation.Hash,
+                startCursor=cursor, stage="DISPATCHED"};
         end
     end
 end
 
 local function VerifySpyRequest(request)
-    if request.action == "SPY_BUILD" then
-        local state = B.SpyProduction();
-        local accepted = state.owner == request.cityOwner and state.city == request.cityID and
-            state.building == request.building;
-        Log("SPY_BUILD_ACCEPTANCE", {accepted=accepted, owner=state.owner,
-            city=state.city, building=state.building, expected=request.building,
-            capacity=state.capacity, spies=state.spies});
-        return accepted;
+    local afterRoster=ReadSpyRoster(request.before.owner);
+    local after, nativeOperation, accepted, arrived, newID = nil,nil,false,false,nil;
+    local acknowledged=false;
+    for i=request.startCursor+1,#operationStarts do
+        local event=operationStarts[i];
+        local operation=NativeOperation(event.operation);
+        if event.owner==request.before.owner and event.id==request.before.id and
+            (event.operation==request.expectedHash or (operation and operation.Hash==request.expectedHash)) then
+            acknowledged=true; break;
+        end
     end
-    local spy=LocalSpy();
-    local after=SpyState(spy);
-    local nativeOperation=GameInfo.UnitOperations[after.operation];
-    local active=after.operation ~= -1 and nativeOperation ~= nil and after.endTurn > after.turn;
-    local arrived=false;
-    if request.action == "SPY_TRAVEL" and (after.x ~= request.before.x or after.y ~= request.before.y) and
-        after.x == request.targetX and after.y == request.targetY then
-        local city=Cities.GetPlotPurchaseCity(Map.GetPlot(after.x,after.y));
-        arrived=city and city:GetOwner()==request.targetOwner and city:GetID()==request.targetID or false;
-    end
-    local accepted;
     if request.action == "SPY_TRAVEL" then
-        -- EspionageOverview.lua:659-677 treats -1 as awaiting assignment.
-        -- A returned RequestOperation with -1/endTurn 0 is an early refusal.
-        accepted=(after.operation ~= -1 or after.endTurn ~= 0) and
-            ((active and after.operation == request.expectedOperation) or arrived);
+        local source=request.beforeRoster.map[1];
+        if #afterRoster.offMap==1 and #afterRoster.map<=1 then
+            local travelling=afterRoster.offMap[1];
+            local mapID=#afterRoster.map==1 and afterRoster.map[1].id or request.before.id;
+            accepted=mapID==request.before.id and travelling.name==source.name and
+                travelling.level==source.level and travelling.returnTurn>Game.GetCurrentGameTurn() and
+                travelling.x==request.targetX and travelling.y==request.targetY and
+                InTargetCity(travelling.x,travelling.y,request.targetOwner,request.targetID);
+        elseif #afterRoster.offMap==0 and #afterRoster.map==1 then
+            local unit=afterRoster.map[1];
+            arrived=unit.name==source.name and unit.level==source.level and
+                (unit.x~=source.x or unit.y~=source.y) and
+                InTargetCity(unit.x,unit.y,request.targetOwner,request.targetID);
+            accepted=arrived;
+            if arrived and unit.id~=source.id then newID=unit.id; end
+        end
     else
-        accepted=active and after.operation == request.expectedOperation;
+        for _,unit in ipairs(afterRoster.map) do
+            if unit.id==request.before.id then after=unit; break; end
+        end
+        nativeOperation=after and NativeOperation(after.operation);
+        accepted=after and nativeOperation and nativeOperation.Hash==request.expectedHash and
+            after.endTurn>Game.GetCurrentGameTurn() or false;
     end
-    Log("SPY_ACCEPTANCE", {action=request.action, accepted=accepted, before=request.before,
-        after=after, nativeOperation=nativeOperation and nativeOperation.OperationType or "",
-        arrived=arrived, expectedOperation=request.expectedOperation,
+    local status=accepted and "ACCEPTED" or "REJECTED";
+    Log("SPY_ACCEPTANCE", {action=request.action, accepted=accepted, before=request.beforeRoster or request.before,
+        after=afterRoster, nativeOperation=nativeOperation and nativeOperation.OperationType or "",
+        arrived=arrived, acknowledged=acknowledged, barrier=request.token, status=status,
         targetOwner=request.targetOwner, targetID=request.targetID});
-    return accepted;
+    local reference;
+    if accepted and request.action=="SPY_TRAVEL" then
+        local source=request.beforeRoster.map[1];
+        reference={oldID=source.id,name=source.name,level=source.level,
+            targetOwner=request.targetOwner,targetID=request.targetID};
+    end
+    return status,newID,reference;
 end
 
 ContextPtr:SetHide(false);
 ContextPtr:SetUpdate(function()
     if UI.IsGameCoreBusy() then return; end
     if verification then
-        local request=verification; verification=nil;
-        local ok, accepted=pcall(VerifySpyRequest, request);
-        B.lastAction=(ok and accepted and "ACCEPTED_" or "REJECTED_")..request.action;
-        if not ok then Log("SPY_ACCEPTANCE_UNAVAILABLE", {action=request.action, error=tostring(accepted)}); end
+        local request=verification;
+        if request.stage == "ADOPT_PENDING" then
+            request.stage="ADOPT_SENT";
+            local ok,err=pcall(UI.RequestPlayerOperation,request.before.owner,PlayerOperations.EXECUTE_SCRIPT,
+                {OnStart="JAC_BoundaryAdoptSpyIdentity",OldID=request.before.id,NewID=request.newID,
+                    TargetOwner=request.targetOwner,TargetID=request.targetID});
+            B.lastAction=(ok and "ADOPT_SENT_" or "UNKNOWN_")..request.action;
+            if not ok then
+                Log("SPY_REFERENCE_UNAVAILABLE", {action=request.action,error=tostring(err)});
+                verification=nil;
+            end
+            return;
+        end
+        if request.stage == "ADOPT_SENT" then
+            if request.published then
+                B.lastAction="ACCEPTED_"..request.action;
+                verification=nil;
+            end
+            return;
+        end
+        if request.stage == "DISPATCHED" then
+            barrierToken=barrierToken+1;
+            request.token=barrierToken;
+            request.stage="BARRIER_SENT";
+            local ok,err=pcall(UI.RequestPlayerOperation,request.before.owner,PlayerOperations.EXECUTE_SCRIPT,
+                {OnStart="JAC_BoundarySpyBarrier",Token=request.token,SpyID=request.before.id,Action=request.action});
+            B.lastAction=(ok and "BARRIER_SENT_" or "UNKNOWN_")..request.action;
+            if not ok then
+                Log("SPY_BARRIER_UNAVAILABLE", {action=request.action,error=tostring(err)});
+                verification=nil;
+            end
+            return;
+        end
+        if not request.published then return; end
+        verification=nil;
+        local ok, status, newID, reference=pcall(VerifySpyRequest, request);
+        if ok and reference then travelReference=reference; end
+        if ok and status=="ACCEPTED" and newID then
+            verification={action=request.action,stage="ADOPT_PENDING",before=request.before,
+                newID=newID,targetOwner=request.targetOwner,targetID=request.targetID};
+            B.lastAction="ADOPT_PENDING_"..request.action;
+        else
+            B.lastAction=(ok and status or "UNKNOWN").."_"..request.action;
+        end
+        if not ok then Log("SPY_ACCEPTANCE_UNAVAILABLE", {action=request.action, error=tostring(status)}); end
+        return;
+    end
+    if buildPending and buildPending.seen then
+        local request=buildPending; buildPending=nil;
+        local ok,ready=pcall(SpyBuildReady,request.owner,request.cityID);
+        B.lastAction=(ok and ready and "READY_" or "REJECTED_").."BUILD_SPY";
+        Log("SPY_BUILD_ACCEPTANCE", {ok=ok,ready=ok and ready or false,
+            error=not ok and tostring(ready) or "",cityID=request.cityID});
         return;
     end
     if not pending then return; end
     local command=pending; pending=nil;
     local ok, result=pcall(Submit, command);
+    if not ok and command.action=="BUILD_SPY" then buildPending=nil; end
     if ok and result then verification=result; end
     B.lastAction=(ok and (result and "DISPATCHED_" or "SUBMITTED_") or "ERROR_")..command.action;
     Log("FRAME_REQUEST", {action=command.action, ok=ok, error=not ok and tostring(result) or ""});
     if not ok then error(result); end -- no replay of an operation after an unknown result
+end);
+
+Events.CityProductionQueueChanged.Add(function(owner,cityID)
+    if buildPending and buildPending.owner==owner and buildPending.cityID==cityID then
+        buildPending.seen=true;
+    end
+end);
+Events.UnitOperationStarted.Add(function(owner,id,operation)
+    operationStarts[#operationStarts+1]={owner=owner,id=id,operation=operation};
 end);
 
 local last;
@@ -431,7 +567,21 @@ local function Observe(label)
     local serialized=R.Serialize(value);
     if serialized ~= last then last=serialized; Log(label,value); end
 end
-Events.GameCoreEventPublishComplete.Add(function() Observe("PUBLISH"); end);
+Events.GameCoreEventPublishComplete.Add(function()
+    if verification and verification.stage=="ADOPT_SENT" then
+        local reference=Game:GetProperty("JAC_BOUNDARY_SPY");
+        if reference and reference.owner==verification.before.owner and reference.id==verification.newID then
+            verification.published=true;
+        end
+    elseif verification and verification.stage=="BARRIER_SENT" then
+        local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
+        if marker and marker.owner==verification.before.owner and marker.spyID==verification.before.id and
+            marker.token==verification.token and marker.action==verification.action then
+            verification.published=true;
+        end
+    end
+    Observe("PUBLISH");
+end);
 Events.LocalPlayerTurnBegin.Add(function() Observe("TURN"); end);
 Events.LoadScreenClose.Add(function() last=nil; Observe("LOAD"); end);
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
