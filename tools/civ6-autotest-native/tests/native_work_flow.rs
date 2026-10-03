@@ -150,6 +150,33 @@ fn native_carrier_ui_uses_local_actor_once_and_publishes_only_after_physical_mov
         Events.GameCoreEventPublishComplete.Emit()
         assert(reads.GetObservation('missing:return').Unchanged,
           'missing carrier building left the return token unpublished forever')
+
+        CITIES[16].monument=true
+        WORK_CITIES[16]=nil
+        local state=JAC_AbsorptionGameplay.GetState()
+        local carrier=state.Transactions['carrier-ui'].NativeWorks[1].Carrier
+        carrier.Route,carrier.Phase,carrier.Owner='TO_OWNER','BORROW',2
+        carrier.BorrowToken='owner:borrow'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],1)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:borrow').Published,
+          'empty recipient-owned carrier was not published after borrowing')
+
+        WORK_CITIES[16]=true
+        carrier.Phase,carrier.ReturnToken='RETURN','owner:return'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],2)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:return').Published,
+          'work-bearing recipient carrier was not published after return')
+
+        WORK_CITIES[16]=nil
+        carrier.Phase,carrier.ReturnToken='RESTORE','owner:restore'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:restore').Published,
+          'empty recipient carrier rollback was not published')
         "#,
     )
     .exec()

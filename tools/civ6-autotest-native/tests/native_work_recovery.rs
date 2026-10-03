@@ -798,7 +798,7 @@ fn recovery_does_not_reserve_a_slot_inside_another_borrowed_carrier() -> mlua::R
 }
 
 #[test]
-fn recovered_original_work_can_be_absorbed_from_its_new_owner() -> mlua::Result<()> {
+fn recovered_original_work_can_be_absorbed_twice_with_completed_provenance() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
         r#"
@@ -837,6 +837,33 @@ fn recovered_original_work_can_be_absorbed_from_its_new_owner() -> mlua::Result<
           'recovery identity was dropped in the next absorption')
         assert(A.GetState().Archive['native-work:900'].Owner==-1,
           'historical scatter archive was overwritten')
+        local inherited=assert(A.GetRoster(1)['native-work:900'])
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{['native-work:900']=A.Rules.Copy(inherited)})
+        Players[1].units={}
+        local again={ID='reabsorb-recovered-twice',From=1,To=0,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          Assets={['native-work:900']='TRANSFER'}}
+        local history=A.GetState()
+        local first=assert(history.Transactions[plan.ID])
+        history.Transactions[plan.ID]=nil
+        Game:SetProperty(A.Rules.STATE_KEY,history)
+        local forged,why=pcall(A.Apply,again)
+        assert(not forged and tostring(why):find('asset ID collision',1,true)
+          and CITIES[16]:GetOwner()==1,
+          'unproven intermediate owner was accepted as recovered history')
+        history.Transactions[plan.ID]=first
+        Game:SetProperty(A.Rules.STATE_KEY,history)
+        local accepted,nextResult=pcall(A.Apply,again)
+        assert(accepted and nextResult.Status=='COMPLETE',
+          'second absorption of recovered original failed: '..tostring(nextResult))
+        local twice=A.NativeWorkLocations(900)
+        assert(#twice==1 and twice[1].Owner==0 and twice[1].X==16
+          and CITIES[16]:GetOwner()==0,
+          'second absorption lost or duplicated the same recovered original')
+        assert(A.GetRoster(0)['native-work:900'].RecoveryToken=='recovery:world:900',
+          'second absorption dropped the original recovery identity')
+        assert(A.GetState().Archive['native-work:900'].Owner==-1,
+          'second absorption overwrote historical scatter record')
         "#,
     )
     .exec()

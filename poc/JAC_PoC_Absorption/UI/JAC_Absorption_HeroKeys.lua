@@ -178,7 +178,7 @@ local function ObserveNativeCarrier(carrier, reads)
   local work = city:GetBuildings():GetGreatWorkInSlot(carrier.Building, carrier.Slot)
   if carrier.Phase == "BORROW" then
     if city:GetOwner() == carrier.Borrower
-      and work == (carrier.Route == "TO_FREE" and -1 or carrier.Index) then
+      and work == (carrier.Route == "FROM_FREE" and carrier.Index or -1) then
       reads.MarkPublished(carrier.BorrowToken)
       return true
     end
@@ -193,9 +193,10 @@ local function ObserveNativeCarrier(carrier, reads)
     return CarrierMismatch(carrier.BorrowToken, reads)
   end
   if carrier.Phase == "RETURN" or carrier.Phase == "RESTORE" then
+    local forward = carrier.Route ~= "FROM_FREE"
     local expected = carrier.Phase == "RETURN"
-      and (carrier.Route == "TO_FREE" and carrier.Index or -1)
-      or (carrier.Route == "TO_FREE" and -1 or carrier.Index)
+      and (forward and carrier.Index or -1)
+      or (forward and -1 or carrier.Index)
     if city:GetOwner() == carrier.Owner
       and work == expected then
       reads.MarkPublished(carrier.ReturnToken)

@@ -420,10 +420,31 @@ local function RecoveredArchiveOwnedByDonor(state, id, original, donor)
   local recovery = token and state.Recoveries and state.Recoveries[token]
   if not (type(original) == "table" and original.ID == id and original.Owner == donor
     and recovery and recovery.Status == "COMPLETE" and recovery.ID == id
-    and recovery.Owner == donor and recovery.Record
-    and recovery.Record.RecoveryToken == token and archived.Kind == original.Kind) then
+    and type(recovery.Owner) == "number" and recovery.Record
+    and recovery.Record.ID == id and recovery.Record.Owner == recovery.Owner
+    and recovery.Record.RecoveryToken == token and archived.Kind == original.Kind
+    and recovery.Record.Kind == archived.Kind) then
     return false
   end
+  local reached, queue = { [recovery.Owner] = true }, { recovery.Owner }
+  local nextOwner = 1
+  while queue[nextOwner] and not reached[donor] do
+    local owner = queue[nextOwner]
+    for _, tx in pairs(state.Transactions or {}) do
+      local source = tx.SourceRoster and tx.SourceRoster[id]
+      local decision = tx.Decisions and tx.Decisions[id]
+      if tx.Status == "COMPLETE" and tx.SourceRosterMoved and tx.From == owner
+        and source and source.ID == id and source.Owner == owner
+        and source.RecoveryToken == token and decision
+        and type(decision.Owner) == "number" and decision.Owner >= 0
+        and not reached[decision.Owner] then
+        reached[decision.Owner] = true
+        queue[#queue + 1] = decision.Owner
+      end
+    end
+    nextOwner = nextOwner + 1
+  end
+  if not reached[donor] then return false end
   if archived.NativeWork then
     if not original.NativeWork or original.NativeWork.Index ~= archived.NativeWork.Index then
       return false
