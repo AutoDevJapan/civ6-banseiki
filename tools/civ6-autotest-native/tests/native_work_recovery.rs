@@ -925,6 +925,73 @@ fn borrowed_carrier_skips_occupied_centers_and_waits_without_an_empty_city() -> 
 }
 
 #[test]
+fn reserved_carrier_rechecks_a_new_center_unit_and_resumes_after_reload() -> mlua::Result<()> {
+    let lua = occupied_carrier_candidates(false)?;
+    lua.load(
+        r#"
+        local tx=A.Apply(PLAN)
+        local carrier=assert(tx.NativeWorks[1].Carrier)
+        assert(carrier.X==18 and carrier.Phase=='BORROW' and not carrier.BorrowIssued)
+        local buildings=CITIES[18].GetBuildings
+        CITIES[18].GetBuildings=function(self)
+          local result=buildings(self)
+          result.GetGreatWorkInSlot=function(_,building,slot)
+            return WORK_CITIES[18] and building==1 and slot==0 and 900 or -1
+          end
+          return result
+        end
+        UNIT(2,203,'UNIT_WARRIOR',18)
+        ExposedMembers.JAC_HeroReadAPI.NativeMoveAvailable=true
+        local ok,reason=pcall(A.Resume,PLAN.ID)
+        assert(not ok and tostring(reason):find('unit on its center',1,true),
+          'a unit entering the reserved city did not stop its ownership transfer')
+        local blocked=A.GetState().Transactions[PLAN.ID]
+        assert(blocked.Status=='BLOCKED' and not blocked.NativeWorks[1].Carrier.BorrowIssued
+          and TRANSFERS==0 and KILLS==0 and CITIES[18]:GetOwner()==2
+          and CITIES[4]:GetOwner()==1 and CITIES[8]:GetOwner()==1
+          and #A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==1,
+          'the late center blocker changed a work, city, or unit')
+        Game.props=A.Rules.Copy(Game.props)
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        A=JAC_AbsorptionGameplay or ExposedMembers.JAC_Absorption
+        assert(not pcall(A.Resume,PLAN.ID) and TRANSFERS==0,
+          'reload bypassed the late center blocker')
+        local unit=assert(Players[2].units[203]);unit.x=19
+        PUBLISHED={}
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function(token)
+          if PUBLISHED[token] then return {Published=true} end
+        end
+        local pending=A.Resume(PLAN.ID)
+        local carrier=assert(pending.NativeWorks[1].Carrier)
+        assert(pending.Status=='WAITING_UI' and carrier.BorrowIssued and TRANSFERS==1
+          and CITIES[18]:GetOwner()==1 and Players[2].units[203]==unit and KILLS==0,
+          'the saved route could not resume after the blocker left')
+        PUBLISHED[carrier.BorrowToken]=true
+        pending=A.Resume(PLAN.ID);carrier=pending.NativeWorks[1].Carrier
+        assert(carrier.Phase=='MOVE' and carrier.MoveTarget.X==18)
+        WORK_CITIES[4],WORK_CITIES[18]=nil,true
+        PUBLISHED[carrier.MoveToken]=true
+        pending=A.Resume(PLAN.ID);carrier=pending.NativeWorks[1].Carrier
+        assert(carrier.Phase=='RETURN' and TRANSFERS==2 and CITIES[18]:GetOwner()==2)
+        PUBLISHED[carrier.ReturnToken]=true
+        assert(A.Resume(PLAN.ID).Status=='COMPLETE')
+        local work=A.NativeWorkLocations(900)
+        assert(#work==1 and work[1].Owner==2 and work[1].X==18
+          and CITIES[4]:GetOwner()==0 and CITIES[8]:GetOwner()==0)
+        assert(A.Resume(PLAN.ID).Status=='COMPLETE' and TRANSFERS==4
+          and Players[2].units[203]==unit and unit.x==19 and KILLS==0,
+          'completion replay changed the original unit or transferred cities twice')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
