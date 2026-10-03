@@ -146,7 +146,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,false,nil,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
       "action": "ui_lua"
     },
     {
@@ -193,7 +193,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,false,nil,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
       "action": "ui_lua"
     },
     {
@@ -240,7 +240,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,false,nil,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
       "action": "ui_lua"
     },
     {

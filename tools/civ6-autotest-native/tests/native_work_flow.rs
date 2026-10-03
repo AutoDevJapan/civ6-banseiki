@@ -630,6 +630,63 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
 }
 
 #[test]
+fn excavation_checks_use_operation_parameters_before_visibility_flags() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let codes: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .filter(|code| code.contains("JAC_ARTIFACT_EXCAVATE_CHECK"))
+        .collect();
+    assert_eq!(codes.len(), 3);
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local unit={}
+        Game={GetProperty=function() return {Owner=1,Unit=77} end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end} end}}
+        GameInfo={UnitOperations={UNITOPERATION_EXCAVATE={Hash=2468}}}
+        UnitOperationResults={FAILURE_REASONS=2}
+        Locale={Lookup=function(value) return value end}
+        CAN_EXCAVATE=true;REQUESTS=0
+        UnitManager={CanStartOperation=function(u,hash,params,visible,results)
+          assert(u==unit and hash==2468)
+          assert(params==nil and visible==false and results==true,'wrong operation argument order')
+          return CAN_EXCAVATE, {[2]={'BLOCKED'}} end,
+          RequestOperation=function(u,hash)
+            assert(u==unit and hash==2468);REQUESTS=REQUESTS+1 end}
+        "#,
+    )
+    .exec()?;
+    for code in &codes {
+        lua.load(*code).exec()?;
+    }
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 3);
+    lua.load("REQUESTS=0").exec()?;
+    let old_call = codes[0].replace("unit,hash,nil,false,true", "unit,hash,false,nil,true");
+    assert!(
+        lua.load(&old_call)
+            .exec()
+            .expect_err("old argument order accepted")
+            .to_string()
+            .contains("wrong operation argument order")
+    );
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    lua.load("CAN_EXCAVATE=false;REQUESTS=0").exec()?;
+    for code in codes {
+        let error = lua
+            .load(code)
+            .exec()
+            .expect_err("rejected excavation dispatched");
+        assert!(error.to_string().contains("BLOCKED"));
+    }
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    Ok(())
+}
+
+#[test]
 fn artist_activation_uses_the_published_command_hash_without_an_enum_alias() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artwork-locks.json");
     let code = scenario["steps"]
