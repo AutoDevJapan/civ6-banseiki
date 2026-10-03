@@ -404,6 +404,20 @@
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
       "code": "local data=assert(ExposedMembers.JAC_NativeProductRecipient)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal found=A.NativeWorkLocations(data.Index)\nassert(#found==1 and found[1].Owner==data.Donor,'deal work not uniquely held by AI donor')\nlocal plan={ID='native-product-return-probe',From=data.Donor,To=data.Absorber,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',NativeWorks={[data.Index]={Outcome='RETURN',ReturnOwner=data.Owner}}}\nGame:SetProperty('JAC_NATIVE_PRODUCT_PLAN',plan)\nlocal tx=A.Apply(plan)\nprint('[JAC_NATIVE_PRODUCT_APPLY] status='..tostring(tx.Status)..' awaiting='..tostring(tx.AwaitingPreparation)..' id='..tx.ID)\nreturn 'product Apply returned '..tostring(tx.Status)"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe'];local reads=ExposedMembers.JAC_HeroReadAPI;return tx and tx.SourceReadyToken and reads and reads.GetObservation(tx.SourceReadyToken)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal tx=A.Resume('native-product-return-probe')\nprint('[JAC_NATIVE_PRODUCT_RESUME] status='..tostring(tx.Status)..' awaiting='..tostring(tx.AwaitingPreparation)..' nativeDeal='..tostring(tx.NativeDealUI and tx.NativeDealUI.Token)..' error='..tostring(tx.Error))\nassert(tx.Status=='WAITING_UI' or tx.Status=='COMPLETE','product did not make safe progress')\nreturn 'product resumed to '..tostring(tx.Status)"
     }
   ]
 }
