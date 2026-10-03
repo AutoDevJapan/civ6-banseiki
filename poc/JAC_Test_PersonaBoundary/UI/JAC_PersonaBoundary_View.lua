@@ -477,9 +477,9 @@ function B.EnemyRetryDiagnosis()
     local capacity=Players[c.attacker]:GetDiplomacy():GetSpyCapacity();
     assert(type(capacity)=="number" and capacity>=0,
         "native spy capacity unavailable");
-    local observationKey=R.Serialize({config=c,turn=s.turn,event=event,
-        spy=reference,travel=travel,mission=mission,capacity=capacity,
-        titles=s.titles,native=s.native});
+    local observationKey=R.Serialize({attacker=c.attacker,defender=c.owner,
+        source=c.source,leader=c.leader,cityID=c.cityID,x=c.x,y=c.y,
+        event=event,spy=reference,travel=travel,mission=mission});
     if emptyRosterObservation and emptyRosterObservation.key~=observationKey then
         emptyRosterObservation=nil;
     end

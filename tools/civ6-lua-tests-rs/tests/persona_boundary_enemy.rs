@@ -415,6 +415,13 @@ fn ui_load_resets_empty_window_even_if_the_lua_context_survives() {
 }
 
 #[test]
+fn normal_turn_and_governor_progress_do_not_restart_an_empty_roster_window() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); TURN=TURN+1; ENEMY_GOV.onSite=ENEMY_GOV.onSite+1; ENEMY_POINTS=ENEMY_POINTS+1; ELAPSED=59.999; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=60; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='PRODUCE'); assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil)");
+}
+
+#[test]
 fn changed_failed_receipt_or_rewound_ui_clock_starts_a_new_empty_window() {
     let h = Enemy::new();
     h.failed();
