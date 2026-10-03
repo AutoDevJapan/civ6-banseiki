@@ -396,6 +396,15 @@ mod platform {
                         (self.close_owned_game)(self.identity.pid, self.identity.restart_start)
                     {
                         self.close_error = Some(e.to_string());
+                    } else if let Some(stdin) = self.stdin.as_mut() {
+                        if let Err(e) = stdin
+                            .write_all(b"game_close_requested\n")
+                            .and_then(|_| stdin.flush())
+                        {
+                            self.close_error = Some(format!(
+                                "cannot acknowledge owned game closure to observer: {e}"
+                            ));
+                        }
                     }
                 }
                 Err(e) => self.close_error = Some(e.to_string()),
@@ -459,7 +468,7 @@ mod platform {
                 .get_or_insert_with(|| Instant::now() + STARTUP_TOTAL);
             if !self.stop_sent && self.child.try_wait()?.is_none() {
                 self.stop_sent = true;
-                if let Some(mut stdin) = self.stdin.take() {
+                if let Some(stdin) = self.stdin.as_mut() {
                     match stdin.write_all(b"stop\n").and_then(|_| stdin.flush()) {
                         Ok(()) => {}
                         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}

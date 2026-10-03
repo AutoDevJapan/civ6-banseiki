@@ -6,7 +6,9 @@
 
 親の`leaderperson-53/eligibility-ui.jsonl`には、ゲームPID `71856`、作成FILETIME `134354995302818060`、GameCoreロードbase `0x1a49b0000`、DLL SHA-256 `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`のidentityと、141 threadのreadyだけがある。`entry`と`return`は0件。2026-10-03 20:14:31.824 JSTのWindows Application Error 1000は、GameCore内RVA `0x2DDDD0`の`0x80000004`（`SINGLE_STEP`）でCiv6が失敗したと報告した。最初のUI Lua判定は接続切断で停止した。後続の`critical_cleanup`はthread `7180`の`SuspendThread`がAccessDeniedを返した記録であり、初発の例外と同じ原因とは扱わない。`stop`行の`detached=true/result=error`は実験成功を示さない。
 
-旧dispatchはthread contextのDR6 bitとRIPが同時に一致しないと`SINGLE_STEP`を未処理で渡した。一方、実機53ではRIP・DR6・DR7を記録していないため、どちらが一致しなかったかは確定できない。修正ではWindowsの例外レコードの`ExceptionAddress`と設定済みbreakpointのアドレスを照合する。所有している例外はDR6 bitが0でも処理し、contextのRIPが予想と異なる場合は引数を解釈せず診断を残して観測を失敗にする。所有不明の`SINGLE_STEP`はRIP・DR6・DR7・例外アドレス・first chanceをJSONLに記録してから未処理で渡す。
+旧dispatchはthread contextのDR6 bitとRIPが同時に一致しないと`SINGLE_STEP`を未処理で渡した。一方、実機53ではRIP・DR6・DR7を記録していないため、どちらが一致しなかったかは確定できない。修正では`OwnedProven`・`Unrelated`・`Ambiguous`を分ける。登録済みthreadに自分が設定したDR0〜DR3のアドレス・enable bitがあり、例外アドレスとRIPも同じslotに一致した場合だけ`OwnedProven`とする。DR6 bitだけが0でもこの所有判定は失わない。未所有の`SINGLE_STEP`はRIP・DR6・DR7・例外アドレス・first chanceをJSONLに記録して元の例外handlerへ渡す。
+
+RIP不一致・debug registerの不一致・context取得失敗は`Ambiguous`である。ABIを読まず、通常の復元→detach→ゲーム再開には進めない。pendingの例外を保ったまま`critical_cleanup`を親へ通知し、同じゲームの終了要求に成功した旨を親から受け取ってから終了イベントを処理する。終了前にその例外を`DBG_CONTINUE`で処理済みにしない。元のdebug registerは可能なら戻すが、復元成功を曖昧な例外の正常終了と混同しない。
 
 ## 固定した対象と境界
 
@@ -28,7 +30,7 @@
 
 Rust runnerのシナリオに次を追加できる。observer実行時には`CIV6_LIVE_CHAIN_PID`と`CIV6_LIVE_LOCK_PATH`が必須で、共有ロックの一致がなければ開始しない。`civ6-native-probe.exe`はrunner実行ファイルと同じディレクトリに配置する。runnerはゲームのprocess handleを保持し、渡された作成時刻とOSから読み直したFILETIMEを既存runnerと同じ式でUnix時刻へ変換して照合する。許容差は0秒。不一致ならobserverを起動しない。保持した同じPID・FILETIME・実行ファイルパスをobserverの引数と、失敗時の終了対象に使う。
 
-起動前に単一の絶対期限を定める。親の**起動全体は20秒**、ready待ちは最初の10秒、子のattach ready待ちは8秒、復元再試行は6秒、親による同一ゲームの終了要求に最後の2秒を確保する。これらは`civ6-native-probe-rs::startup_contract`の共通定数で管理する。通常の停止はその要求時から別の20秒期限とし、`stop`とDropが共有する。共有ロックの残りが起動20秒に足りなければ起動前に拒否する。readyを得られず停止へ移った場合、遅れて届いたreadyを成功に変えない。
+起動前に単一の絶対期限を定める。親の**起動全体は20秒**、ready待ちは最初の10秒、子のattach ready待ちは8秒、復元再試行は6秒、親による同一ゲームの終了要求に最後の2秒を確保する。これらは`civ6-native-probe-rs::startup_contract`の共通定数で管理する。子は初回Windows breakpointを受け取る時点とready通知の直前にも8秒期限を確認する。通常の停止はその要求時から別の20秒期限とし、`stop`とDropが共有する。共有ロックの残りが起動20秒に足りなければ起動前に拒否する。readyを得られず停止へ移った場合、遅れて届いたreadyを成功に変えない。
 
 生命周期は`attaching → ready → stopping → detached`を正常経路とする。ready待ち失敗やOS異常は`stopping → critical → target_exited`へ進む。子が終了しても標準出力の終端まで重大エラー通知を読み、JSONL末尾の`stop/detached=true/result=ok`と終了コードを照合できなければ正常終了にしない。期限内にdetachも同一ゲームの終了も確認できない場合は`unresolved`で失敗する。runnerのエラー時とDropも同じ期限を使い、終了要求を重複しない。observer自身もcontrollerの生存を監視する。
 
@@ -43,7 +45,7 @@ runnerは開始と停止の対、名前、300秒上限、観測中のゲーム�
 
 ## 独立検査と限界
 
-- Windowsの専用Rust子プロセスで、入口のRCX/EDX、ALのtrue/false、attach後の新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが同じ関数を実行でき、debug registerがattach前と同値であることを子プロセス側から確かめた。`SetThreadContext`拒否を注入した試験では再試行後の復元と、永続拒否時の重大エラー通知からcontrollerが専用子プロセスを終了する経路を区別した。さらに実際のWindowsハードウェアbreakpointで、観測用DR6を0にした場合も入口と戻り値を記録して子が生存すること、別の実`SINGLE_STEP`は子の例外handlerが受け取ることを確認した。修正後の実Civ6では未検査。
+- Windowsの専用Rust子プロセスで、入口のRCX/EDX、ALのtrue/false、attach後の新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが同じ関数を実行でき、debug registerがattach前と同値であることを子プロセス側から確かめた。`SetThreadContext`拒否を注入した試験では再試行後の復元と、永続拒否時の重大エラー通知からcontrollerが専用子プロセスを終了する経路を区別した。さらに実際のWindowsハードウェアbreakpointで、テスト用`CONTEXT.Dr6`を0にしても入口・戻り値・復元を確認した。RIP不一致とcontext取得失敗を実子のbreakpointで注入した場合は、親役が子を閉じるまで通常detachへ進まない。別の実`SINGLE_STEP`は子の例外handlerが受け取り、期限後の初回attach breakpointはreadyを通知しない。いずれも修正後の実Civ6成功を示すものではない。
 - runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実ゲームのready handshakeと30分leaseは未検査。
 - このworktree専用の`CARGO_TARGET_DIR`で`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`が成功した。Lua 5.1の検査を含み、表示された検査は省略0件だった。最後のprocess-handle権限とDLL debug event handleの修正後に、観測器単体の`--all-targets`も再実行して成功した。
 - `tools/civ6-pe-rs`は別worktreeの読取専用PE調査器で、今回のworktreeにはない。今回のツールは既知の2入口のファイルオフセットを固定してバイト比較するだけで、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移し、この観測器から参照する。
@@ -51,4 +53,4 @@ runnerは開始と停止の対、名前、300秒上限、観測中のゲーム�
 
 前提と元の静的解析は、親担当のworktreeにある`documents/poc/pr86-native-admission.md`と[枠診断](native-slots-diagnostic.md)に記録されている。SSOT 4・9・16の挙動は変更していない。
 
-Windows APIの根拠はMicrosoftの[稼働中プロセスへのattachとdetach](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-a-running-process)、[終了時のdetach設定](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit)、[debug eventで受け取るhandleの扱い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-waitfordebugeventex)、[例外レコードのアドレスとfirst chance](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-exception_debug_info)に従う。DR6のbitの意味は[Intelのプロセッサ文書](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developers-manual.pdf)を参照したが、実機53でWindowsが返したDR6の値は不明である。
+Windows APIの根拠はMicrosoftの[稼働中プロセスへのattachとdetach](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-a-running-process)、[終了時のdetach設定](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit)、[debug eventで受け取るhandleの扱い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-waitfordebugeventex)、[例外レコードのアドレスとfirst chance](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-exception_debug_info)、[続行状態による例外処理の違い](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent)に従う。DR6のbitの意味は[Intelのプロセッサ文書](https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developers-manual.pdf)を参照したが、実機53でWindowsが返したDR6の値は不明である。

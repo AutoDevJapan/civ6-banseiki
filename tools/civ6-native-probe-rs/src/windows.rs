@@ -19,7 +19,11 @@ use std::{
     mem::{size_of, zeroed},
     os::windows::ffi::OsStringExt,
     path::{Path, PathBuf},
-    sync::mpsc::{self, Receiver},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver},
+        Arc,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -73,14 +77,28 @@ fn announce_critical_and_wait_for_owned_game(
     reason: &str,
     mut pending: Option<(DEBUG_EVENT, i32)>,
     debug_attached: bool,
+    close_ack: Option<&AtomicBool>,
+    already_announced: bool,
 ) -> Result<(), String> {
-    println!(
-        "{}",
-        json!({"critical_cleanup":true,"pid":pid,"reason":reason,"game_close_required":true})
-    );
-    let _ = std::io::stdout().flush();
+    if !already_announced {
+        println!(
+            "{}",
+            json!({"critical_cleanup":true,"pid":pid,"reason":reason,"game_close_required":true})
+        );
+        let _ = std::io::stdout().flush();
+    }
     let deadline = Instant::now() + CRITICAL_CLOSE_BUDGET;
     while Instant::now() < deadline {
+        if matches!(alive(game), Ok(false)) {
+            return Ok(());
+        }
+        // An ambiguous exception must remain pending until the controller has
+        // successfully requested termination of this pinned game. This avoids
+        // treating an application exception as handled while normal play runs.
+        if close_ack.is_some_and(|ack| !ack.load(Ordering::SeqCst)) {
+            thread::sleep(Duration::from_millis(50));
+            continue;
+        }
         // The controller can terminate a suspended debuggee, but Windows may
         // withhold process exit notification until the outstanding debug event
         // has been continued. Keep the debugger attached and all manually held
@@ -116,7 +134,9 @@ fn announce_critical_and_wait_for_owned_game(
             }
             let status = if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT {
                 let code = unsafe { event.u.Exception.ExceptionRecord.ExceptionCode };
-                if code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT {
+                if close_ack.is_some() {
+                    DBG_EXCEPTION_NOT_HANDLED
+                } else if code == EXCEPTION_SINGLE_STEP || code == EXCEPTION_BREAKPOINT {
                     DBG_CONTINUE
                 } else {
                     DBG_EXCEPTION_NOT_HANDLED
@@ -564,13 +584,19 @@ struct ThreadState {
     handle: Handle,
     original: Registers,
     pending: Vec<Pending>,
+    armed_sites: [Option<u64>; 4],
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OwnedTrap {
     CanEver,
     CanAppoint,
     Return,
-    Unknown,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DispatchOutcome {
+    OwnedProven(OwnedTrap),
+    Unrelated,
+    Ambiguous(&'static str),
 }
 fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
     if !*initial_seen && first_chance {
@@ -585,21 +611,49 @@ fn breakpoint_disposition(initial_seen: &mut bool, first_chance: bool) -> i32 {
 /// an address at which this debugger installed a hardware breakpoint.
 fn classify_single_step(
     pending: &[Pending],
-    base: u64,
+    armed_sites: &[Option<u64>; 4],
     exception_address: u64,
-    rip: u64,
-) -> OwnedTrap {
-    let at = |address: u64| exception_address == address || rip == address;
-    if at(base + CAN_EVER_RVA) {
-        return OwnedTrap::CanEver;
+    context: Option<&CONTEXT>,
+) -> DispatchOutcome {
+    let event_slot = armed_sites
+        .iter()
+        .position(|address| *address == Some(exception_address));
+    let Some(context) = context else {
+        return DispatchOutcome::Ambiguous("context_unavailable");
+    };
+    let rip_slot = armed_sites
+        .iter()
+        .position(|address| *address == Some(context.Rip));
+    let Some(slot) = event_slot else {
+        return if rip_slot.is_some() {
+            DispatchOutcome::Ambiguous("exception_address_rip_disagree")
+        } else {
+            DispatchOutcome::Unrelated
+        };
+    };
+    if rip_slot != Some(slot) {
+        return DispatchOutcome::Ambiguous("exception_address_rip_disagree");
     }
-    if at(base + CAN_APPOINT_RVA) {
-        return OwnedTrap::CanAppoint;
+    let actual_dr = match slot {
+        0 => context.Dr0,
+        1 => context.Dr1,
+        2 => context.Dr2,
+        _ => context.Dr3,
+    };
+    if actual_dr != exception_address || context.Dr7 & (1u64 << (slot * 2)) == 0 {
+        return DispatchOutcome::Ambiguous("armed_debug_registers_disagree");
     }
-    if pending.iter().any(|p| at(p.return_address)) {
-        return OwnedTrap::Return;
+    match slot {
+        0 => DispatchOutcome::OwnedProven(OwnedTrap::CanEver),
+        1 => DispatchOutcome::OwnedProven(OwnedTrap::CanAppoint),
+        _ if pending
+            .iter()
+            .any(|p| p.return_address == exception_address) =>
+        {
+            DispatchOutcome::OwnedProven(OwnedTrap::Return)
+        }
+        _ => DispatchOutcome::Ambiguous("return_breakpoint_has_no_pending_call"),
     }
-    OwnedTrap::Unknown
 }
 struct Jsonl {
     writer: BufWriter<File>,
@@ -784,13 +838,25 @@ struct Debugger {
     next_id: u64,
     attached: bool,
     ready: bool,
+    attach_ready_deadline: Option<Instant>,
     initial_breakpoint_seen: bool,
     last_attach_breakpoint_owned: bool,
-    last_single_step_owned: bool,
+    last_dispatch: DispatchOutcome,
+    close_ack: Arc<AtomicBool>,
     #[cfg(test)]
-    mask_observed_dr6: bool,
+    zero_context_dr6_for_test: bool,
+    #[cfg(test)]
+    force_context_failure: bool,
+    #[cfg(test)]
+    force_reported_rip_mismatch: bool,
+    #[cfg(test)]
+    force_initial_breakpoint_late: bool,
 }
 impl Debugger {
+    fn attach_deadline_expired(&self) -> bool {
+        self.attach_ready_deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+    }
     fn attach(
         pid: u32,
         game: Handle,
@@ -810,7 +876,7 @@ impl Debugger {
                 AttachAbortOutcome::Detached => format!("{error}; debugger detached before exit"),
                 AttachAbortOutcome::GameExited => format!("{error}; owned game already exited"),
                 AttachAbortOutcome::KillDisabledWithoutDetach => format!("{error}; explicit detach was not confirmed, but kill-on-exit is now disabled; no breakpoints were installed"),
-                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true) {
+                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true, None, false) {
                     Ok(()) => format!("{error}; critical_cleanup: controller closed the owned game"),
                     Err(critical) => critical,
                 },
@@ -834,11 +900,19 @@ impl Debugger {
             next_id: 1,
             attached: true,
             ready: false,
+            attach_ready_deadline: None,
             initial_breakpoint_seen: false,
             last_attach_breakpoint_owned: false,
-            last_single_step_owned: false,
+            last_dispatch: DispatchOutcome::Unrelated,
+            close_ack: Arc::new(AtomicBool::new(false)),
             #[cfg(test)]
-            mask_observed_dr6: false,
+            zero_context_dr6_for_test: false,
+            #[cfg(test)]
+            force_context_failure: false,
+            #[cfg(test)]
+            force_reported_rip_mismatch: false,
+            #[cfg(test)]
+            force_initial_breakpoint_late: false,
         })
     }
     fn add_thread(&mut self, tid: u32) -> Result<(), String> {
@@ -864,6 +938,12 @@ impl Debugger {
                 handle,
                 original,
                 pending: Vec::new(),
+                armed_sites: [
+                    Some(self.module_base + CAN_EVER_RVA),
+                    Some(self.module_base + CAN_APPOINT_RVA),
+                    None,
+                    None,
+                ],
             },
         );
         Ok(())
@@ -885,7 +965,10 @@ impl Debugger {
             | if sites.len() > 1 { 0x40 } else { 0 };
         c.Dr6 &= !0xf;
         c.EFlags |= RF;
-        set_context(&state.handle, c)
+        set_context(&state.handle, c)?;
+        state.armed_sites[2] = sites.first().copied();
+        state.armed_sites[3] = sites.get(1).copied();
+        Ok(())
     }
     fn entry(
         &mut self,
@@ -967,7 +1050,7 @@ impl Debugger {
         exception_address: u64,
         context: Option<&CONTEXT>,
         observed_dr6: Option<u64>,
-        owned: bool,
+        outcome: DispatchOutcome,
         reason: &str,
     ) -> Result<(), String> {
         self.output.row(json!({
@@ -977,12 +1060,14 @@ impl Debugger {
             "rip":context.map(|c| format!("0x{:016x}",c.Rip)),
             "dr6":observed_dr6.map(|v| format!("0x{v:016x}")),
             "dr7":context.map(|c| format!("0x{:016x}",c.Dr7)),
-            "owned_breakpoint":owned, "reason":reason,
+            "owned_breakpoint":matches!(outcome,DispatchOutcome::OwnedProven(_)),
+            "dispatch":match outcome { DispatchOutcome::OwnedProven(_) => "owned_proven", DispatchOutcome::Unrelated => "unrelated", DispatchOutcome::Ambiguous(_) => "ambiguous" },
+            "reason":reason,
         }))
     }
     fn handle_event(&mut self, event: &DEBUG_EVENT) -> Result<i32, String> {
         self.last_attach_breakpoint_owned = false;
-        self.last_single_step_owned = false;
+        self.last_dispatch = DispatchOutcome::Unrelated;
         let tid = event.dwThreadId;
         match event.dwDebugEventCode {
             CREATE_PROCESS_DEBUG_EVENT => {
@@ -1022,6 +1107,14 @@ impl Debugger {
                     );
                     if disposition == DBG_CONTINUE {
                         self.last_attach_breakpoint_owned = true;
+                        #[cfg(test)]
+                        if self.force_initial_breakpoint_late {
+                            self.attach_ready_deadline =
+                                Some(Instant::now() - Duration::from_millis(1));
+                        }
+                        if self.attach_deadline_expired() {
+                            return Err("initial debugger breakpoint arrived after the attach ready deadline".into());
+                        }
                         self.ready = true;
                         return Ok(DBG_CONTINUE);
                     }
@@ -1036,7 +1129,7 @@ impl Debugger {
                         info.ExceptionRecord.ExceptionAddress as u64,
                         c.as_ref(),
                         c.as_ref().map(|v| v.Dr6),
-                        false,
+                        DispatchOutcome::Unrelated,
                         "unmatched_breakpoint",
                     )?;
                     return Ok(disposition);
@@ -1044,6 +1137,14 @@ impl Debugger {
                     let exception_address = info.ExceptionRecord.ExceptionAddress as u64;
                     let first_chance = info.dwFirstChance != 0;
                     let Some(state) = self.threads.get(&tid) else {
+                        let outcome = if exception_address == self.module_base + CAN_EVER_RVA
+                            || exception_address == self.module_base + CAN_APPOINT_RVA
+                        {
+                            DispatchOutcome::Ambiguous("thread_not_registered_at_target")
+                        } else {
+                            DispatchOutcome::Unrelated
+                        };
+                        self.last_dispatch = outcome;
                         self.log_single_step(
                             tid,
                             code,
@@ -1051,21 +1152,28 @@ impl Debugger {
                             exception_address,
                             None,
                             None,
-                            false,
+                            outcome,
                             "thread_not_registered",
                         )?;
-                        return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                        return if matches!(outcome, DispatchOutcome::Ambiguous(_)) {
+                            Err("single-step at target on an unregistered thread".into())
+                        } else {
+                            Ok(DBG_EXCEPTION_NOT_HANDLED)
+                        };
                     };
-                    let mut c = match context(&state.handle) {
+                    #[cfg(test)]
+                    let context_result = if self.force_context_failure {
+                        Err("injected GetThreadContext failure".into())
+                    } else {
+                        context(&state.handle)
+                    };
+                    #[cfg(not(test))]
+                    let context_result = context(&state.handle);
+                    let mut c = match context_result {
                         Ok(c) => c,
                         Err(e) => {
-                            let owned = classify_single_step(
-                                &state.pending,
-                                self.module_base,
-                                exception_address,
-                                0,
-                            ) != OwnedTrap::Unknown;
-                            self.last_single_step_owned = owned;
+                            let outcome = DispatchOutcome::Ambiguous("context_unavailable");
+                            self.last_dispatch = outcome;
                             self.log_single_step(
                                 tid,
                                 code,
@@ -1073,36 +1181,60 @@ impl Debugger {
                                 exception_address,
                                 None,
                                 None,
-                                owned,
+                                outcome,
                                 "context_unavailable",
                             )?;
                             return Err(format!("GetThreadContext at single-step: {e}"));
                         }
                     };
                     #[cfg(test)]
-                    let observed_dr6 = if self.mask_observed_dr6 { 0 } else { c.Dr6 };
-                    #[cfg(not(test))]
-                    let observed_dr6 = c.Dr6;
-                    let trap = classify_single_step(
-                        &state.pending,
-                        self.module_base,
-                        exception_address,
-                        c.Rip,
-                    );
-                    self.last_single_step_owned = trap != OwnedTrap::Unknown;
-                    if trap == OwnedTrap::Unknown {
-                        self.log_single_step(
-                            tid,
-                            code,
-                            first_chance,
-                            exception_address,
-                            Some(&c),
-                            Some(observed_dr6),
-                            false,
-                            "unmatched_single_step",
-                        )?;
-                        return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                    if self.zero_context_dr6_for_test {
+                        c.Dr6 = 0;
                     }
+                    #[cfg(test)]
+                    let mut reported = c;
+                    #[cfg(not(test))]
+                    let reported = c;
+                    #[cfg(test)]
+                    if self.force_reported_rip_mismatch {
+                        reported.Rip = reported.Rip.wrapping_add(1);
+                    }
+                    let outcome = classify_single_step(
+                        &state.pending,
+                        &state.armed_sites,
+                        exception_address,
+                        Some(&reported),
+                    );
+                    self.last_dispatch = outcome;
+                    let trap = match outcome {
+                        DispatchOutcome::OwnedProven(trap) => trap,
+                        DispatchOutcome::Unrelated => {
+                            self.log_single_step(
+                                tid,
+                                code,
+                                first_chance,
+                                exception_address,
+                                Some(&reported),
+                                Some(reported.Dr6),
+                                outcome,
+                                "unmatched_single_step",
+                            )?;
+                            return Ok(DBG_EXCEPTION_NOT_HANDLED);
+                        }
+                        DispatchOutcome::Ambiguous(reason) => {
+                            self.log_single_step(
+                                tid,
+                                code,
+                                first_chance,
+                                exception_address,
+                                Some(&reported),
+                                Some(reported.Dr6),
+                                outcome,
+                                reason,
+                            )?;
+                            return Err(format!("ambiguous single-step: {reason}; refusing normal detach or ABI interpretation"));
+                        }
+                    };
                     let expected = match trap {
                         OwnedTrap::CanEver => self.module_base + CAN_EVER_RVA,
                         OwnedTrap::CanAppoint => self.module_base + CAN_APPOINT_RVA,
@@ -1114,17 +1246,19 @@ impl Debugger {
                             })
                             .map(|p| p.return_address)
                             .ok_or("owned return site disappeared")?,
-                        OwnedTrap::Unknown => unreachable!(),
                     };
                     if c.Rip != expected {
+                        let outcome =
+                            DispatchOutcome::Ambiguous("live_rip_disagrees_after_qualification");
+                        self.last_dispatch = outcome;
                         self.log_single_step(
                             tid,
                             code,
                             first_chance,
                             exception_address,
                             Some(&c),
-                            Some(observed_dr6),
-                            true,
+                            Some(c.Dr6),
+                            outcome,
                             "owned_address_context_rip_mismatch",
                         )?;
                         return Err(format!("owned hardware breakpoint at 0x{expected:x} has context RIP 0x{:x}; refusing to interpret ABI",c.Rip));
@@ -1133,17 +1267,16 @@ impl Debugger {
                         OwnedTrap::CanEver => 1,
                         OwnedTrap::CanAppoint => 2,
                         OwnedTrap::Return => 0xc,
-                        OwnedTrap::Unknown => 0,
                     };
-                    if observed_dr6 & expected_bit == 0 {
+                    if c.Dr6 & expected_bit == 0 {
                         self.log_single_step(
                             tid,
                             code,
                             first_chance,
                             exception_address,
                             Some(&c),
-                            Some(observed_dr6),
-                            true,
+                            Some(c.Dr6),
+                            outcome,
                             "owned_address_without_dr6_status",
                         )?;
                     }
@@ -1153,7 +1286,6 @@ impl Debugger {
                             self.entry(tid, &mut c, "can_appoint", CAN_APPOINT_RVA)?
                         }
                         OwnedTrap::Return => self.returned(tid, &mut c)?,
-                        OwnedTrap::Unknown => unreachable!(),
                     }
                 } else {
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
@@ -1176,7 +1308,7 @@ impl Debugger {
             };
         }
         if info.ExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP {
-            return if self.last_single_step_owned {
+            return if matches!(self.last_dispatch, DispatchOutcome::OwnedProven(_)) {
                 DBG_CONTINUE
             } else {
                 DBG_EXCEPTION_NOT_HANDLED
@@ -1225,6 +1357,8 @@ impl Debugger {
             &reason,
             self.cleanup_event.take(),
             self.attached,
+            None,
+            false,
         ) {
             Ok(()) => {
                 self.attached = false;
@@ -1234,6 +1368,50 @@ impl Debugger {
             Err(critical) => Err(critical),
         }
     }
+    fn critical_ambiguous_exception(
+        &mut self,
+        event: &DEBUG_EVENT,
+        reason: &str,
+    ) -> Result<(), String> {
+        self.critical = true;
+        self.cleanup_event = Some((*event, DBG_EXCEPTION_NOT_HANDLED));
+        let message = format!("ambiguous debug exception: {reason}; normal detach is forbidden");
+        let _ = self.output.row(json!({"type":"critical_cleanup","game_pid":self.pid,"reason":message,"game_close_required":true,"ambiguous_exception":true}));
+        #[cfg(test)]
+        if let Some(signal) = &self.critical_signal {
+            signal.store(true, Ordering::SeqCst);
+        }
+        println!(
+            "{}",
+            json!({"critical_cleanup":true,"pid":self.pid,"reason":message,"game_close_required":true})
+        );
+        let _ = std::io::stdout().flush();
+        // Debug registers are restored when possible while the exception stays
+        // pending. A failed restoration never transitions to normal detach.
+        let restore_deadline = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < restore_deadline && !matches!(alive(&self.game), Ok(false)) {
+            if self.freeze().and_then(|_| self.restore_verified()).is_ok() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        match announce_critical_and_wait_for_owned_game(
+            &self.game,
+            self.pid,
+            &message,
+            self.cleanup_event.take(),
+            self.attached,
+            Some(&self.close_ack),
+            true,
+        ) {
+            Ok(()) => {
+                self.attached = false;
+                self.held.clear();
+                Err(format!("{message}; controller closed the owned game"))
+            }
+            Err(e) => Err(e),
+        }
+    }
     fn run(
         &mut self,
         stop: Receiver<()>,
@@ -1241,7 +1419,14 @@ impl Debugger {
         mut guard: impl FnMut() -> Result<(), String>,
     ) -> Result<(), String> {
         let started = Instant::now();
+        self.attach_ready_deadline = Some(started + ATTACH_READY_BUDGET);
         loop {
+            if self.attach_deadline_expired() {
+                let cleanup = self.cleanup(None);
+                return Err(format!(
+                    "debugger attach handshake timed out before ready; detach: {cleanup:?}"
+                ));
+            }
             if stop.try_recv().is_ok() || started.elapsed() >= budget {
                 self.cleanup(None)?;
                 return Ok(());
@@ -1262,6 +1447,10 @@ impl Debugger {
             let status = match self.handle_event(&event) {
                 Ok(status) => status,
                 Err(e) => {
+                    if matches!(self.last_dispatch, DispatchOutcome::Ambiguous(_)) {
+                        let critical = self.critical_ambiguous_exception(&event, &e);
+                        return Err(format!("{e}; critical cleanup: {critical:?}"));
+                    }
                     let status = self.status_after_error(&event);
                     let cleanup = self.cleanup(Some((&event, status)));
                     return Err(format!("{e}; detach: {cleanup:?}"));
@@ -1280,6 +1469,10 @@ impl Debugger {
                 return Err(format!("{error}; detach: {cleanup:?}"));
             }
             if self.ready {
+                if self.attach_deadline_expired() {
+                    let cleanup = self.cleanup(None);
+                    return Err(format!("debugger attach handshake expired before ready notification; detach: {cleanup:?}"));
+                }
                 self.output
                     .row(json!({"type":"ready","thread_count":self.threads.len()}))?;
                 println!("{}", json!({"ready":true,"pid":self.pid}));
@@ -1287,12 +1480,6 @@ impl Debugger {
                 self.ready = false;
                 // The attach breakpoint is the only point at which ready is sent.
                 break;
-            }
-            if started.elapsed() > ATTACH_READY_BUDGET {
-                let cleanup = self.cleanup(None);
-                return Err(format!(
-                    "debugger attach handshake timed out; detach: {cleanup:?}"
-                ));
             }
         }
         loop {
@@ -1316,6 +1503,10 @@ impl Debugger {
             let status = match self.handle_event(&event) {
                 Ok(v) => v,
                 Err(e) => {
+                    if matches!(self.last_dispatch, DispatchOutcome::Ambiguous(_)) {
+                        let critical = self.critical_ambiguous_exception(&event, &e);
+                        return Err(format!("{e}; critical cleanup: {critical:?}"));
+                    }
                     let status = self.status_after_error(&event);
                     let cleanup = self.cleanup(Some((&event, status)));
                     return Err(format!("{e}; detach: {cleanup:?}"));
@@ -1474,9 +1665,17 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         "module_path":verified.module.path,"module_base":format!("0x{:016x}",verified.module.base),
         "module_sha256":EXPECTED_SHA256,"abi":"candidate_only"}))?;
     let (tx, rx) = mpsc::channel();
+    let close_ack = Arc::clone(&debugger.close_ack);
     thread::spawn(move || {
-        let mut line = String::new();
-        let _ = std::io::stdin().lock().read_line(&mut line);
+        for line in std::io::stdin().lock().lines() {
+            match line.as_deref() {
+                Ok("stop") => {
+                    let _ = tx.send(());
+                }
+                Ok("game_close_requested") => close_ack.store(true, Ordering::SeqCst),
+                _ => {}
+            }
+        }
         let _ = tx.send(());
     });
     let game_guard = exact_process(
@@ -1716,7 +1915,7 @@ mod tests {
             let game = process(pid, true).unwrap();
             let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
             debugger.restore_faults = restore_faults;
-            debugger.mask_observed_dr6 = mask_dr6;
+            debugger.zero_context_dr6_for_test = mask_dr6;
             let result = debugger.run(stop_rx, timeout, || {
                 if fail_in_observer.load(Ordering::SeqCst) {
                     Err("fixture guard lost".into())
@@ -1841,6 +2040,128 @@ mod tests {
         // The old dispatcher required DR6.B0 and would forward this real
         // STATUS_SINGLE_STEP to the child, which has no handler for it.
         run_case(Duration::from_secs(20), true, false, false, 0, true);
+    }
+    fn run_ambiguous_real_child_case(context_failure: bool) {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path =
+            std::env::temp_dir().join(format!("pr86-ambiguous-{}-{pid}.jsonl", std::process::id()));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let signal = Arc::new(AtomicBool::new(false));
+        let observed_signal = Arc::clone(&signal);
+        let (ack_tx, ack_rx) = mpsc::channel();
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            debugger.critical_signal = Some(observed_signal);
+            debugger.force_context_failure = context_failure;
+            debugger.force_reported_rip_mismatch = !context_failure;
+            ack_tx.send(Arc::clone(&debugger.close_ack)).unwrap();
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (result, debugger.critical, debugger.cleanup_gate.is_some())
+        });
+        let close_ack = ack_rx.recv().unwrap();
+        let start = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "fixture observer did not become ready"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        writeln!(child.input, "T").unwrap();
+        child.input.flush().unwrap();
+        while !signal.load(Ordering::SeqCst) {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "ambiguous exception did not enter critical cleanup"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            child.child.try_wait().unwrap().is_none(),
+            "the pending exception was released before owned-game closure"
+        );
+        thread::sleep(Duration::from_millis(100));
+        assert!(
+            child.child.try_wait().unwrap().is_none(),
+            "critical cleanup resumed normal execution before closure ack"
+        );
+        child.child.kill().unwrap();
+        close_ack.store(true, Ordering::SeqCst); // Controller acknowledged closing this owned Rust child.
+        child.child.wait().unwrap();
+        let (result, critical, normal_cleanup_gate) = observer.join().unwrap();
+        assert!(result.unwrap_err().contains("ambiguous debug exception"));
+        assert!(critical);
+        assert!(
+            !normal_cleanup_gate,
+            "ambiguous exception entered normal detach gate"
+        );
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|s| serde_json::from_str(s).unwrap())
+            .collect();
+        assert!(rows.iter().any(|r| r["type"] == "debug_exception"
+            && r["dispatch"] == "ambiguous"
+            && r["code"] == "0x80000004"
+            && r["first_chance"] == true
+            && r["exception_address"] == format!("0x{:016x}", child.entry)));
+        assert!(rows
+            .iter()
+            .any(|r| r["type"] == "critical_cleanup" && r["ambiguous_exception"] == true));
+        assert!(!rows
+            .iter()
+            .any(|r| r["type"] == "entry" || r["type"] == "return"));
+        drop(stop_tx);
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+    #[test]
+    fn rip_mismatch_on_real_hardware_event_requires_same_child_close() {
+        run_ambiguous_real_child_case(false);
+    }
+    #[test]
+    fn unreadable_context_on_real_hardware_event_requires_same_child_close() {
+        run_ambiguous_real_child_case(true);
+    }
+    #[test]
+    fn late_real_windows_attach_breakpoint_never_announces_ready() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-late-attach-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger = Debugger::attach(pid, game, base, 0x500000, output).unwrap();
+            debugger.force_initial_breakpoint_late = true;
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (result, debugger.attached)
+        });
+        let (result, attached) = observer.join().unwrap();
+        assert!(result
+            .unwrap_err()
+            .contains("initial debugger breakpoint arrived after"));
+        assert!(!attached);
+        let rows: Vec<Value> = fs::read_to_string(&path)
+            .unwrap()
+            .lines()
+            .map(|s| serde_json::from_str(s).unwrap())
+            .collect();
+        assert!(!rows.iter().any(|r| r["type"] == "ready"));
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        drop(child);
+        fs::remove_file(path).unwrap();
     }
     #[test]
     fn unrelated_real_single_step_reaches_the_child_exception_handler() {
@@ -2114,19 +2435,40 @@ mod tests {
         assert!(!tail_matches(&pending, 0x5555, 0x2008));
     }
     #[test]
-    fn exception_address_identifies_our_breakpoint_when_reported_rip_differs() {
+    fn single_step_requires_matching_address_context_and_our_enabled_slot() {
         let base = 0x1a49b0000;
+        let ever = base + CAN_EVER_RVA;
+        let appoint = base + CAN_APPOINT_RVA;
+        let armed = [Some(ever), Some(appoint), None, None];
+        let mut c: CONTEXT = unsafe { zeroed() };
+        c.Rip = ever;
+        c.Dr0 = ever;
+        c.Dr1 = appoint;
+        c.Dr7 = 0b0101;
+        c.Dr6 = 0; // Missing status does not discard matching owned evidence.
         assert_eq!(
-            classify_single_step(&[], base, base + CAN_EVER_RVA, base + CAN_EVER_RVA + 1),
-            OwnedTrap::CanEver
+            classify_single_step(&[], &armed, ever, Some(&c)),
+            DispatchOutcome::OwnedProven(OwnedTrap::CanEver)
+        );
+        c.Rip = ever + 1;
+        assert_eq!(
+            classify_single_step(&[], &armed, ever, Some(&c)),
+            DispatchOutcome::Ambiguous("exception_address_rip_disagree")
+        );
+        c.Rip = ever;
+        c.Dr7 = 0;
+        assert_eq!(
+            classify_single_step(&[], &armed, ever, Some(&c)),
+            DispatchOutcome::Ambiguous("armed_debug_registers_disagree")
         );
         assert_eq!(
-            classify_single_step(&[], base, base + CAN_APPOINT_RVA, 0),
-            OwnedTrap::CanAppoint
+            classify_single_step(&[], &armed, ever, None),
+            DispatchOutcome::Ambiguous("context_unavailable")
         );
+        c.Rip = base + 0x1235;
         assert_eq!(
-            classify_single_step(&[], base, base + 0x1234, base + 0x1235),
-            OwnedTrap::Unknown
+            classify_single_step(&[], &armed, base + 0x1234, Some(&c)),
+            DispatchOutcome::Unrelated
         );
         let pending = [Pending {
             id: 2,
@@ -2134,9 +2476,13 @@ mod tests {
             return_address: base + 0x2500,
             expected_rsp: 0x1008,
         }];
+        c.Rip = base + 0x2500;
+        c.Dr2 = c.Rip;
+        c.Dr7 = 0x10;
+        let armed_return = [Some(ever), Some(appoint), Some(c.Rip), None];
         assert_eq!(
-            classify_single_step(&pending, base, base + 0x2500, base + 0x2501),
-            OwnedTrap::Return
+            classify_single_step(&pending, &armed_return, c.Rip, Some(&c)),
+            DispatchOutcome::OwnedProven(OwnedTrap::Return)
         );
     }
     #[test]
