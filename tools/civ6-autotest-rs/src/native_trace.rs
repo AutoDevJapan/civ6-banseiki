@@ -228,8 +228,24 @@ mod platform {
         let mut summary = None;
         for line in BufReader::new(file).lines() {
             let row: Value = serde_json::from_str(&line?)?;
-            if row["type"] == "identity" && row["mode"] == "lifecycle" {
-                identity = true;
+            if row["type"] == "identity"
+                && row["mode"] == "lifecycle"
+                && row["schema_version"] == civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION
+            {
+                identity = row["attach_ntdll_disk_sha256"]
+                    .as_str()
+                    .is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+                    && row["attach_ntdll_image_size"]
+                        .as_u64()
+                        .is_some_and(|n| n > 0)
+                    && row["attach_ntdll_pe_timestamp"].as_u64().is_some()
+                    && row["attach_ntdll_remote_bytes_read"] == false
+                    && row["attach_ntdll_export_rvas"]["DbgBreakPoint"]
+                        .as_u64()
+                        .is_some()
+                    && row["attach_ntdll_export_rvas"]["DbgUiRemoteBreakin"]
+                        .as_u64()
+                        .is_some();
             }
             if row["type"] == "debug_exception"
                 && row["mode"] == "lifecycle"
@@ -279,7 +295,11 @@ mod platform {
             .ok()
             .and_then(|file| BufReader::new(file).lines().next()?.ok())
             .and_then(|line| serde_json::from_str::<Value>(&line).ok())
-            .is_some_and(|row| row["type"] == "identity" && row["mode"] == mode)
+            .is_some_and(|row| {
+                row["type"] == "identity"
+                    && row["mode"] == mode
+                    && row["schema_version"] == civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION
+            })
     }
     impl Phase {
         fn terminal(self) -> bool {
@@ -699,6 +719,14 @@ mod platform {
             let Some(row) = last else {
                 return Ok(TerminalProof::Missing);
             };
+            if row["type"] != "stop"
+                || row["schema_version"] != civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION
+            {
+                return Ok(match process_exit {
+                    Some(exit_code) => TerminalProof::TargetExited { exit_code },
+                    None => TerminalProof::Missing,
+                });
+            }
             if process_exit.is_some()
                 || row["terminal_kind"] == "target_exited"
                 || row["target_exited"] == true
@@ -710,8 +738,7 @@ mod platform {
                 });
                 return Ok(TerminalProof::TargetExited { exit_code: code });
             }
-            if row["type"] == "stop"
-                && row["terminal_kind"] == "detached"
+            if row["terminal_kind"] == "detached"
                 && row["detached"] == true
                 && row["target_exited"] == false
             {
@@ -828,7 +855,8 @@ mod platform {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join("property.jsonl");
             let mut rows = vec![
-                serde_json::json!({"type":"identity","mode":"property"}),
+                serde_json::json!({"type":"identity","mode":"property",
+                    "schema_version":civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION}),
                 serde_json::json!({"type":"player_getter","owner_id_candidate":0,
                     "property_vtable_candidate":"0x1000"}),
             ];
@@ -857,6 +885,11 @@ mod platform {
             write(&rows);
             assert!(property_evidence(&path).is_ok());
             assert!(trace_mode_matches(&path, "property"));
+            rows[0]["schema_version"] = serde_json::json!(0);
+            write(&rows);
+            assert!(!trace_mode_matches(&path, "property"));
+            rows[0]["schema_version"] =
+                serde_json::json!(civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION);
             rows[0]["mode"] = serde_json::json!("governor");
             write(&rows);
             assert!(property_evidence(&path).is_err());
@@ -872,7 +905,12 @@ mod platform {
             let directory = tempfile::tempdir().unwrap();
             let path = directory.path().join("lifecycle.jsonl");
             let mut rows = vec![
-                serde_json::json!({"type":"identity","mode":"lifecycle"}),
+                serde_json::json!({"type":"identity","mode":"lifecycle",
+                    "schema_version":civ6_native_probe_rs::NATIVE_TRACE_SCHEMA_VERSION,
+                    "attach_ntdll_disk_sha256":"a".repeat(64),
+                    "attach_ntdll_image_size":4096,"attach_ntdll_pe_timestamp":1,
+                    "attach_ntdll_remote_bytes_read":false,
+                    "attach_ntdll_export_rvas":{"DbgBreakPoint":1,"DbgUiRemoteBreakin":2}}),
                 serde_json::json!({"type":"thread_status","thread_id":7,
                     "future_exception_delivery":"unknown"}),
                 serde_json::json!({"type":"debug_exception","mode":"lifecycle",
@@ -1208,15 +1246,27 @@ mod platform {
                     TerminalProof::Missing,
                 ),
                 (
+                    "{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
+                    TerminalProof::Missing,
+                ),
+                (
+                    "{\"type\":\"stop\",\"schema_version\":2,\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
+                    TerminalProof::Missing,
+                ),
+                (
+                    "{\"type\":\"stop\",\"schema_version\":2,\"terminal_kind\":\"target_exited\",\"detached\":false,\"target_exited\":true,\"process_exit_code\":1,\"result\":\"error\"}\n",
+                    TerminalProof::Missing,
+                ),
+                (
                     "{\"type\":\"entry\",\"detached\":true,\"result\":\"ok\"}\n",
                     TerminalProof::Missing,
                 ),
                 (
-                    "{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"error\"}\n",
+                    "{\"type\":\"stop\",\"schema_version\":1,\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"error\"}\n",
                     TerminalProof::Detached { observer_ok: false },
                 ),
                 (
-                    "{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
+                    "{\"type\":\"stop\",\"schema_version\":1,\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}\n",
                     TerminalProof::Detached { observer_ok: true },
                 ),
                 (
@@ -1224,7 +1274,7 @@ mod platform {
                     TerminalProof::TargetExited { exit_code: Some(0) },
                 ),
                 (
-                    "{\"type\":\"stop\",\"terminal_kind\":\"target_exited\",\"detached\":false,\"target_exited\":true,\"process_exit_code\":3221225477,\"result\":\"error\"}\n",
+                    "{\"type\":\"stop\",\"schema_version\":1,\"terminal_kind\":\"target_exited\",\"detached\":false,\"target_exited\":true,\"process_exit_code\":3221225477,\"result\":\"error\"}\n",
                     TerminalProof::TargetExited { exit_code: Some(3221225477) },
                 ),
             ] {
@@ -1259,7 +1309,7 @@ mod platform {
                     session.identity.pid
                 ));
                 std::fs::write(&path, format!(
-                    "{{\"type\":\"process_exit\",\"exit_code\":{code}}}\n{{\"type\":\"stop\",\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}}\n"
+                    "{{\"type\":\"process_exit\",\"exit_code\":{code}}}\n{{\"type\":\"stop\",\"schema_version\":1,\"terminal_kind\":\"detached\",\"detached\":true,\"target_exited\":false,\"result\":\"ok\"}}\n"
                 )).unwrap();
                 session.output = path.clone();
                 session.child.wait().unwrap();

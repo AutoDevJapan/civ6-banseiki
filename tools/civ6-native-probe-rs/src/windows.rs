@@ -29,6 +29,7 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use windows_sys::Wdk::System::Threading::ThreadQuerySetWin32StartAddress;
 use windows_sys::Win32::{
     Foundation::{
         CloseHandle, DBG_CONTINUE, DBG_EXCEPTION_NOT_HANDLED, EXCEPTION_BREAKPOINT,
@@ -53,11 +54,12 @@ use windows_sys::Win32::{
         },
         LibraryLoader::{GetModuleHandleW, GetProcAddress},
         Threading::{
-            GetProcessIdOfThread, GetProcessTimes, GetThreadId, OpenProcess, OpenThread,
-            QueryFullProcessImageNameW, ResumeThread, SuspendThread, WaitForSingleObject,
-            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_VM_READ,
-            THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION, THREAD_QUERY_LIMITED_INFORMATION,
-            THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME, THREAD_SYNCHRONIZE,
+            GetExitCodeProcess, GetProcessIdOfThread, GetProcessTimes, GetThreadId, OpenProcess,
+            OpenThread, QueryFullProcessImageNameW, ResumeThread, SuspendThread,
+            WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+            PROCESS_VM_READ, THREAD_GET_CONTEXT, THREAD_QUERY_INFORMATION,
+            THREAD_QUERY_LIMITED_INFORMATION, THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
+            THREAD_SYNCHRONIZE,
         },
     },
 };
@@ -112,6 +114,93 @@ const THREAD_RIGHTS: u32 = THREAD_GET_CONTEXT
     | THREAD_QUERY_INFORMATION
     | THREAD_SYNCHRONIZE;
 const LIFECYCLE_THREAD_ROW_LIMIT: usize = 1024;
+type NtQueryThreadFn =
+    unsafe extern "system" fn(HANDLE, i32, *mut std::ffi::c_void, u32, *mut u32) -> i32;
+#[derive(Clone, Copy, Debug)]
+struct Win32StartQuery {
+    address: Option<u64>,
+    status: i32,
+    returned_len: u32,
+}
+#[derive(Clone, Copy, Debug, Default)]
+struct ThreadOriginObservation {
+    rip: Option<u64>,
+    win32_start: Option<u64>,
+}
+fn query_win32_start(handle: &Handle, query: NtQueryThreadFn) -> Win32StartQuery {
+    let mut address: *mut std::ffi::c_void = std::ptr::null_mut();
+    let mut returned_len = 0u32;
+    let expected_len = size_of::<*mut std::ffi::c_void>() as u32;
+    let status = unsafe {
+        query(
+            handle.0,
+            ThreadQuerySetWin32StartAddress,
+            &mut address as *mut _ as *mut _,
+            expected_len,
+            &mut returned_len,
+        )
+    };
+    Win32StartQuery {
+        address: (status == 0 && returned_len == expected_len && !address.is_null())
+            .then_some(address as u64),
+        status,
+        returned_len,
+    }
+}
+fn inspect_thread_origin(pid: u32, tid: u32, query: NtQueryThreadFn) -> ThreadOriginObservation {
+    (|| {
+        let handle = Handle::new(
+            unsafe {
+                OpenThread(
+                    THREAD_GET_CONTEXT
+                        | THREAD_QUERY_INFORMATION
+                        | THREAD_QUERY_LIMITED_INFORMATION
+                        | THREAD_SYNCHRONIZE,
+                    0,
+                    tid,
+                )
+            },
+            "OpenThread(attach origin)",
+        )
+        .ok()?;
+        if unsafe { GetThreadId(handle.0) } != tid
+            || unsafe { GetProcessIdOfThread(handle.0) } != pid
+            || unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_TIMEOUT
+        {
+            return None;
+        }
+        Some(ThreadOriginObservation {
+            rip: context(&handle).ok().map(|c| c.Rip),
+            win32_start: query_win32_start(&handle, query).address,
+        })
+    })()
+    .unwrap_or_default()
+}
+#[derive(Clone, Copy, Debug)]
+struct CriticalExit {
+    code: Option<u32>,
+    source: &'static str,
+}
+fn queried_exit_code(game: &Handle) -> CriticalExit {
+    let mut code = 0u32;
+    if unsafe { GetExitCodeProcess(game.0, &mut code) } != 0 {
+        CriticalExit {
+            code: Some(code),
+            source: "GetExitCodeProcess",
+        }
+    } else {
+        CriticalExit {
+            code: None,
+            source: "unknown",
+        }
+    }
+}
+fn critical_exit_from_debug_event(event: &DEBUG_EVENT) -> Option<CriticalExit> {
+    (event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT).then(|| CriticalExit {
+        code: Some(unsafe { event.u.ExitProcess.dwExitCode }),
+        source: "exit_process_debug_event",
+    })
+}
 
 fn announce_critical_and_wait_for_owned_game(
     game: &Handle,
@@ -121,8 +210,9 @@ fn announce_critical_and_wait_for_owned_game(
     debug_attached: bool,
     close_ack: Option<&AtomicBool>,
     mut attach_origin: Option<&mut AttachOrigin>,
+    query_thread_start: Option<NtQueryThreadFn>,
     already_announced: bool,
-) -> Result<(), String> {
+) -> Result<CriticalExit, String> {
     if !already_announced {
         println!(
             "{}",
@@ -133,7 +223,7 @@ fn announce_critical_and_wait_for_owned_game(
     let deadline = Instant::now() + CRITICAL_CLOSE_BUDGET;
     while Instant::now() < deadline {
         if matches!(alive(game), Ok(false)) {
-            return Ok(());
+            return Ok(queried_exit_code(game));
         }
         // An ambiguous exception must remain pending until the controller has
         // successfully requested termination of this pinned game. This avoids
@@ -191,10 +281,14 @@ fn announce_critical_and_wait_for_owned_game(
                 let info = unsafe { event.u.Exception };
                 let proven = info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT
                     && attach_origin.as_deref_mut().is_some_and(|origin| {
+                        let observed = query_thread_start
+                            .map(|query| inspect_thread_origin(pid, event.dwThreadId, query))
+                            .unwrap_or_default();
                         origin.classify(
                             event.dwThreadId,
                             info.ExceptionRecord.ExceptionAddress as u64,
                             info.dwFirstChance != 0,
+                            observed,
                         ) == BreakpointOrigin::SystemAttach
                     });
                 if proven {
@@ -205,19 +299,19 @@ fn announce_critical_and_wait_for_owned_game(
             } else {
                 DBG_CONTINUE
             };
-            let exited = event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT;
+            let exit = critical_exit_from_debug_event(&event);
             if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
                 pending = Some((event, status));
                 continue;
             }
-            if exited {
-                return Ok(());
+            if let Some(exit) = exit {
+                return Ok(exit);
             }
         } else {
             thread::sleep(Duration::from_millis(50));
         }
         match alive(game) {
-            Ok(false) => return Ok(()),
+            Ok(false) => return Ok(queried_exit_code(game)),
             Ok(true) | Err(_) => {}
         }
     }
@@ -368,6 +462,48 @@ struct Module {
     size: u64,
     path: PathBuf,
 }
+struct NtdllEvidence {
+    path: PathBuf,
+    disk_sha256: String,
+    disk_len: u64,
+    pe_timestamp: u32,
+    image_size: u32,
+    local_base: u64,
+    remote_base: u64,
+    breakpoint_rva: u64,
+    breakin_rva: u64,
+    query_rva: u64,
+}
+fn pe_image_metadata(path: &Path) -> Result<(u64, u32, u32), String> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = File::open(path).map_err(|e| format!("PE image unavailable: {e}"))?;
+    let file_len = file.metadata().map_err(|e| e.to_string())?.len();
+    let mut dos = [0u8; 64];
+    file.read_exact(&mut dos).map_err(|e| e.to_string())?;
+    if &dos[..2] != b"MZ" {
+        return Err("NTDLL disk image lacks an MZ header".into());
+    }
+    let pe_offset = u32::from_le_bytes(dos[0x3c..0x40].try_into().unwrap()) as u64;
+    if pe_offset > 1_048_576 || pe_offset + 84 > file_len {
+        return Err("NTDLL PE header offset is invalid".into());
+    }
+    file.seek(SeekFrom::Start(pe_offset))
+        .map_err(|e| e.to_string())?;
+    let mut pe = [0u8; 84];
+    file.read_exact(&mut pe).map_err(|e| e.to_string())?;
+    if &pe[..4] != b"PE\0\0"
+        || u16::from_le_bytes(pe[4..6].try_into().unwrap()) != 0x8664
+        || u16::from_le_bytes(pe[24..26].try_into().unwrap()) != 0x20b
+    {
+        return Err("NTDLL is not the expected x64 PE image".into());
+    }
+    let timestamp = u32::from_le_bytes(pe[8..12].try_into().unwrap());
+    let image_size = u32::from_le_bytes(pe[80..84].try_into().unwrap());
+    if image_size == 0 {
+        return Err("NTDLL PE SizeOfImage is zero".into());
+    }
+    Ok((file_len, timestamp, image_size))
+}
 fn module_named(pid: u32, module_name: &str) -> Result<Module, String> {
     let snapshot = Handle::new(
         unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) },
@@ -414,12 +550,19 @@ fn local_export_rva(module: &Module, handle: HANDLE, name: &[u8]) -> Result<u64,
         .filter(|rva| *rva < module.size)
         .ok_or("ntdll export resolved outside its local module".into())
 }
-fn resolve_attach_origin(pid: u32) -> Result<AttachOrigin, String> {
+fn resolve_attach_origin(
+    pid: u32,
+) -> Result<(AttachOrigin, NtQueryThreadFn, NtdllEvidence), String> {
     let local = module_named(std::process::id(), "ntdll.dll")?;
     let remote = module_named(pid, "ntdll.dll")?;
     if !same_path(&local.path, &remote.path) || local.size != remote.size {
         return Err("local and target 64-bit ntdll module metadata differ".into());
     }
+    let (disk_len, pe_timestamp, image_size) = pe_image_metadata(&local.path)?;
+    if local.size != u64::from(image_size) || remote.size != u64::from(image_size) {
+        return Err("local or target NTDLL image size differs from its x64 PE header".into());
+    }
+    let disk_sha256 = sha256(&local.path)?;
     let name: Vec<u16> = "ntdll.dll"
         .encode_utf16()
         .chain(std::iter::once(0))
@@ -430,31 +573,49 @@ fn resolve_attach_origin(pid: u32) -> Result<AttachOrigin, String> {
     }
     let breakpoint_rva = local_export_rva(&local, handle, b"DbgBreakPoint\0")?;
     let breakin_rva = local_export_rva(&local, handle, b"DbgUiRemoteBreakin\0")?;
+    let query_rva = local_export_rva(&local, handle, b"NtQueryInformationThread\0")?;
+    let query: NtQueryThreadFn = unsafe { std::mem::transmute((local.base + query_rva) as usize) };
     if unsafe { std::ptr::read((local.base + breakpoint_rva) as *const u8) } != 0xcc {
         return Err("local ntdll DbgBreakPoint is not an INT3 instruction".into());
     }
     if breakpoint_rva >= remote.size || breakin_rva >= remote.size {
         return Err("target ntdll export RVA exceeds its module size".into());
     }
-    Ok(AttachOrigin::new(
-        remote
-            .base
-            .checked_add(breakpoint_rva)
-            .ok_or("ntdll address overflow")?,
-        remote
-            .base
-            .checked_add(breakin_rva)
-            .ok_or("ntdll address overflow")?,
+    let evidence = NtdllEvidence {
+        path: remote.path,
+        disk_sha256,
+        disk_len,
+        pe_timestamp,
+        image_size,
+        local_base: local.base,
+        remote_base: remote.base,
+        breakpoint_rva,
+        breakin_rva,
+        query_rva,
+    };
+    Ok((
+        AttachOrigin::new(
+            remote
+                .base
+                .checked_add(breakpoint_rva)
+                .ok_or("ntdll address overflow")?,
+            remote
+                .base
+                .checked_add(breakin_rva)
+                .ok_or("ntdll address overflow")?,
+        ),
+        query,
+        evidence,
     ))
 }
 fn sha256(path: &Path) -> Result<String, String> {
-    let mut input = File::open(path).map_err(|e| format!("GameCore file unavailable: {e}"))?;
+    let mut input = File::open(path).map_err(|e| format!("module file unavailable: {e}"))?;
     let mut hasher = Sha256::new();
     let mut buf = [0u8; 65536];
     loop {
         let n = input
             .read(&mut buf)
-            .map_err(|e| format!("GameCore read failed: {e}"))?;
+            .map_err(|e| format!("module read failed: {e}"))?;
         if n == 0 {
             break;
         }
@@ -768,12 +929,23 @@ impl AttachOrigin {
             self.uncertain = true;
         }
     }
-    fn classify(&mut self, tid: u32, address: u64, first_chance: bool) -> BreakpointOrigin {
+    fn classify(
+        &mut self,
+        tid: u32,
+        address: u64,
+        first_chance: bool,
+        observed: ThreadOriginObservation,
+    ) -> BreakpointOrigin {
+        let rip_matches = observed.rip.is_some_and(|rip| {
+            rip == self.breakpoint_address || self.breakpoint_address.checked_add(1) == Some(rip)
+        });
         if !self.accepted
             && !self.uncertain
             && first_chance
             && self.breakin_thread == Some(tid)
             && address == self.breakpoint_address
+            && observed.win32_start == Some(self.breakin_start)
+            && rip_matches
         {
             self.accepted = true;
             BreakpointOrigin::SystemAttach
@@ -894,6 +1066,7 @@ struct LifecycleEvidence {
     exception_events: usize,
     application_exception_events: usize,
     exit_code: Option<u32>,
+    exit_code_source: Option<&'static str>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TerminalKind {
@@ -1099,6 +1272,8 @@ struct Debugger {
     ready: bool,
     attach_ready_deadline: Option<Instant>,
     attach_origin: AttachOrigin,
+    query_thread_start: NtQueryThreadFn,
+    ntdll_evidence: NtdllEvidence,
     last_attach_breakpoint_owned: bool,
     last_dispatch: DispatchOutcome,
     close_ack: Arc<AtomicBool>,
@@ -1112,8 +1287,22 @@ struct Debugger {
     force_initial_breakpoint_late: bool,
 }
 impl Debugger {
-    fn classify_attach_breakpoint(&mut self, tid: u32, address: u64, first_chance: bool) -> bool {
-        let owned = self.attach_origin.classify(tid, address, first_chance)
+    fn record_critical_exit(&mut self, exit: CriticalExit) {
+        self.lifecycle.exit_code = exit.code;
+        self.lifecycle.exit_code_source = Some(exit.source);
+        let _ = self.output.row(json!({"type":"target_exit_observed",
+            "exit_code":exit.code,"source":exit.source}));
+    }
+    fn classify_attach_breakpoint(
+        &mut self,
+        tid: u32,
+        address: u64,
+        first_chance: bool,
+        observed: ThreadOriginObservation,
+    ) -> bool {
+        let owned = self
+            .attach_origin
+            .classify(tid, address, first_chance, observed)
             == BreakpointOrigin::SystemAttach;
         self.last_attach_breakpoint_owned = owned;
         owned
@@ -1157,7 +1346,7 @@ impl Debugger {
         }
         // Refuse an attach that cannot distinguish the OS breakpoint from an
         // application's own breakpoint using supported module/thread metadata.
-        let mut attach_origin = resolve_attach_origin(pid)?;
+        let (mut attach_origin, query_thread_start, ntdll_evidence) = resolve_attach_origin(pid)?;
         if unsafe { DebugActiveProcess(pid) } == 0 {
             return Err(win_error("DebugActiveProcess"));
         }
@@ -1170,8 +1359,8 @@ impl Debugger {
                 AttachAbortOutcome::Detached => format!("{error}; debugger detached before exit"),
                 AttachAbortOutcome::GameExited => format!("{error}; owned game already exited"),
                 AttachAbortOutcome::KillDisabledWithoutDetach => format!("{error}; explicit detach was not confirmed, but kill-on-exit is now disabled; no breakpoints were installed"),
-                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true, None, Some(&mut attach_origin), false) {
-                    Ok(()) => format!("{error}; critical_cleanup: controller closed the owned game"),
+                AttachAbortOutcome::Critical => match announce_critical_and_wait_for_owned_game(&game, pid, &error, None, true, None, Some(&mut attach_origin), Some(query_thread_start), false) {
+                    Ok(exit) => format!("{error}; critical_cleanup: controller closed the owned game; exit code {:?} from {}", exit.code, exit.source),
                     Err(critical) => critical,
                 },
             });
@@ -1201,6 +1390,8 @@ impl Debugger {
             ready: false,
             attach_ready_deadline: None,
             attach_origin,
+            query_thread_start,
+            ntdll_evidence,
             last_attach_breakpoint_owned: false,
             last_dispatch: DispatchOutcome::Unrelated,
             close_ack: Arc::new(AtomicBool::new(false)),
@@ -1219,13 +1410,14 @@ impl Debugger {
         tid: u32,
         source: &'static str,
         start_address: Option<u64>,
-    ) -> Result<(), String> {
+    ) -> Result<ThreadOriginObservation, String> {
+        let mut observed = ThreadOriginObservation::default();
         self.lifecycle.thread_events += 1;
         if self.lifecycle.thread_ids.len() < LIFECYCLE_THREAD_ROW_LIMIT {
             self.lifecycle.thread_ids.insert(tid);
         }
         if self.lifecycle.thread_events > LIFECYCLE_THREAD_ROW_LIMIT {
-            return Ok(());
+            return Ok(observed);
         }
         let mut row = json!({"type":"thread_status","thread_id":tid,"source":source,
             "start_address_candidate":start_address.map(|v| format!("0x{v:016x}")),
@@ -1235,7 +1427,10 @@ impl Debugger {
         let handle = Handle::new(
             unsafe {
                 OpenThread(
-                    THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION | THREAD_SYNCHRONIZE,
+                    THREAD_GET_CONTEXT
+                        | THREAD_QUERY_INFORMATION
+                        | THREAD_QUERY_LIMITED_INFORMATION
+                        | THREAD_SYNCHRONIZE,
                     0,
                     tid,
                 )
@@ -1264,8 +1459,23 @@ impl Debugger {
                     _ => "unknown",
                 });
                 if identity_matched && wait == WAIT_TIMEOUT {
+                    if source == "exception_debug_event"
+                        || start_address == Some(self.attach_origin.breakin_start)
+                    {
+                        let query = query_win32_start(&handle, self.query_thread_start);
+                        row["win32_start_query_status"] =
+                            json!(format!("0x{:08x}", query.status as u32));
+                        row["win32_start_query_returned_len"] = json!(query.returned_len);
+                        row["win32_start_address"] =
+                            json!(query.address.map(|v| format!("0x{v:016x}")));
+                        observed.win32_start = query.address;
+                        if query.address.is_none() {
+                            self.lifecycle.unknown_thread_status += 1;
+                        }
+                    }
                     match context(&handle) {
                         Ok(c) => {
+                            observed.rip = Some(c.Rip);
                             row["context"] = json!("read_at_debug_event");
                             row["rip"] = json!(format!("0x{:016x}", c.Rip));
                             row["dr"] = json!([c.Dr0, c.Dr1, c.Dr2, c.Dr3]);
@@ -1284,7 +1494,8 @@ impl Debugger {
             }
         }
         self.stamp(&mut row);
-        self.output.row(row)
+        self.output.row(row)?;
+        Ok(observed)
     }
     fn add_thread(
         &mut self,
@@ -1293,7 +1504,9 @@ impl Debugger {
         start_address: Option<u64>,
     ) -> Result<(), String> {
         if self.mode == ProbeMode::Lifecycle {
-            return self.lifecycle_thread_event(tid, source, start_address);
+            return self
+                .lifecycle_thread_event(tid, source, start_address)
+                .map(|_| ());
         }
         if self.threads.contains_key(&tid) {
             return Ok(());
@@ -1621,6 +1834,7 @@ impl Debugger {
             EXIT_PROCESS_DEBUG_EVENT => {
                 let code = unsafe { event.u.ExitProcess.dwExitCode };
                 self.lifecycle.exit_code = Some(code);
+                self.lifecycle.exit_code_source = Some("exit_process_debug_event");
                 if self.mode == ProbeMode::Lifecycle {
                     let mut row = json!({"type":"process_exit","thread_id":tid,"exit_code":code});
                     self.stamp(&mut row);
@@ -1638,12 +1852,14 @@ impl Debugger {
                 let code = info.ExceptionRecord.ExceptionCode;
                 if self.mode == ProbeMode::Lifecycle {
                     self.lifecycle.exception_events += 1;
-                    self.lifecycle_thread_event(tid, "exception_debug_event", None)?;
+                    let observed =
+                        self.lifecycle_thread_event(tid, "exception_debug_event", None)?;
                     let initial = code == EXCEPTION_BREAKPOINT
                         && self.classify_attach_breakpoint(
                             tid,
                             info.ExceptionRecord.ExceptionAddress as u64,
                             info.dwFirstChance != 0,
+                            observed,
                         );
                     if !initial {
                         self.lifecycle.application_exception_events += 1;
@@ -1652,6 +1868,8 @@ impl Debugger {
                         "thread_id":tid,"code":format!("0x{code:08x}"),
                         "first_chance":info.dwFirstChance != 0,
                         "exception_address":format!("0x{:016x}", info.ExceptionRecord.ExceptionAddress as u64),
+                        "stopped_rip":observed.rip.map(|v| format!("0x{v:016x}")),
+                        "verified_win32_start":observed.win32_start.map(|v| format!("0x{v:016x}")),
                         "disposition":if initial { "proven_attach_breakpoint" } else { "application_handler" },
                         "attach_origin_proven":initial} );
                     self.stamp(&mut row);
@@ -1663,10 +1881,12 @@ impl Debugger {
                     return Ok(DBG_EXCEPTION_NOT_HANDLED);
                 }
                 if code == EXCEPTION_BREAKPOINT {
+                    let observed = inspect_thread_origin(self.pid, tid, self.query_thread_start);
                     let initial = self.classify_attach_breakpoint(
                         tid,
                         info.ExceptionRecord.ExceptionAddress as u64,
                         info.dwFirstChance != 0,
+                        observed,
                     );
                     if initial {
                         self.mark_attach_ready()?;
@@ -1906,6 +2126,8 @@ impl Debugger {
             Ok(()) => Ok(()),
             Err(reason) => {
                 if matches!(alive(&self.game), Ok(false)) {
+                    let exit = queried_exit_code(&self.game);
+                    self.record_critical_exit(exit);
                     self.attached = false;
                     self.terminal = TerminalKind::TargetExited;
                     self.held.clear();
@@ -1931,9 +2153,11 @@ impl Debugger {
             self.attached,
             None,
             Some(&mut self.attach_origin),
+            Some(self.query_thread_start),
             false,
         ) {
-            Ok(()) => {
+            Ok(exit) => {
+                self.record_critical_exit(exit);
                 self.attached = false;
                 self.terminal = TerminalKind::TargetExited;
                 self.held.clear();
@@ -1977,9 +2201,11 @@ impl Debugger {
             self.attached,
             Some(&self.close_ack),
             Some(&mut self.attach_origin),
+            Some(self.query_thread_start),
             true,
         ) {
-            Ok(()) => {
+            Ok(exit) => {
+                self.record_critical_exit(exit);
                 self.attached = false;
                 self.terminal = TerminalKind::TargetExited;
                 self.held.clear();
@@ -2246,13 +2472,26 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         output,
         mode,
     )?;
-    let mut identity = json!({"type":"identity","game_pid":verified.config.pid,
+    let mut identity = json!({"type":"identity","schema_version":crate::NATIVE_TRACE_SCHEMA_VERSION,
+        "game_pid":verified.config.pid,
         "game_created_filetime":verified.config.created,"game_exe":verified.config.exe,
         "module_path":verified.module.path,"module_base":format!("0x{:016x}",verified.module.base),
         "module_sha256":EXPECTED_SHA256,"abi":"not_observed","mode":mode.label(),
         "attach_breakpoint_address":format!("0x{:016x}", debugger.attach_origin.breakpoint_address),
         "attach_breakin_start":format!("0x{:016x}", debugger.attach_origin.breakin_start),
-        "attach_origin_source":"local_and_target_ntdll_module_metadata_and_exports"});
+        "attach_origin_source":"local_and_target_ntdll_module_metadata_and_exports",
+        "attach_ntdll_disk_path":debugger.ntdll_evidence.path,
+        "attach_ntdll_disk_sha256":debugger.ntdll_evidence.disk_sha256,
+        "attach_ntdll_disk_length":debugger.ntdll_evidence.disk_len,
+        "attach_ntdll_pe_timestamp":debugger.ntdll_evidence.pe_timestamp,
+        "attach_ntdll_image_size":debugger.ntdll_evidence.image_size,
+        "attach_ntdll_local_base":format!("0x{:016x}", debugger.ntdll_evidence.local_base),
+        "attach_ntdll_remote_base":format!("0x{:016x}", debugger.ntdll_evidence.remote_base),
+        "attach_ntdll_export_rvas":{
+            "DbgBreakPoint":debugger.ntdll_evidence.breakpoint_rva,
+            "DbgUiRemoteBreakin":debugger.ntdll_evidence.breakin_rva,
+            "NtQueryInformationThread":debugger.ntdll_evidence.query_rva},
+        "attach_ntdll_remote_bytes_read":false});
     debugger.stamp(&mut identity);
     debugger.output.row(identity)?;
     let (tx, rx) = mpsc::channel();
@@ -2301,15 +2540,17 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
         "exception_events":debugger.lifecycle.exception_events,
         "application_exception_events":debugger.lifecycle.application_exception_events,
         "process_exit_code":debugger.lifecycle.exit_code,
+        "process_exit_code_source":debugger.lifecycle.exit_code_source,
         "hardware_breakpoints_installed":0,"debug_register_writes":0,
         "future_exception_delivery":"unknown"});
     debugger.stamp(&mut summary);
     debugger.output.row(summary)?;
-    let mut stop_row = json!({"type":"stop",
+    let mut stop_row = json!({"type":"stop","schema_version":crate::NATIVE_TRACE_SCHEMA_VERSION,
         "terminal_kind":debugger.terminal.label(),
         "detached":debugger.terminal == TerminalKind::Detached,
         "target_exited":debugger.terminal == TerminalKind::TargetExited,
         "process_exit_code":debugger.lifecycle.exit_code,
+        "process_exit_code_source":debugger.lifecycle.exit_code_source,
         "result":result.as_ref().map(|_| "ok").unwrap_or("error")});
     debugger.stamp(&mut stop_row);
     debugger.output.row(stop_row)?;
@@ -2332,7 +2573,7 @@ mod tests {
     use windows_sys::Win32::System::Diagnostics::Debug::{
         AddVectoredExceptionHandler, RaiseException, RemoveVectoredExceptionHandler,
         EXCEPTION_CONTINUE_EXECUTION, EXCEPTION_CONTINUE_SEARCH, EXCEPTION_DEBUG_INFO,
-        EXCEPTION_POINTERS, EXCEPTION_RECORD,
+        EXCEPTION_POINTERS, EXCEPTION_RECORD, EXIT_PROCESS_DEBUG_INFO,
     };
 
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
@@ -2804,6 +3045,34 @@ mod tests {
                 row["type"] == "debug_exception" && row["disposition"] == "proven_attach_breakpoint"
             })
             .unwrap();
+        let stopped = rows
+            .iter()
+            .find(|row| {
+                row["type"] == "thread_status"
+                    && row["source"] == "exception_debug_event"
+                    && row["thread_id"] == attach["thread_id"]
+            })
+            .unwrap();
+        assert_eq!(stopped["win32_start_query_status"], "0x00000000");
+        assert_eq!(
+            stopped["win32_start_query_returned_len"],
+            size_of::<usize>() as u64
+        );
+        assert_eq!(
+            stopped["win32_start_address"],
+            format!("0x{:016x}", origin.breakin_start)
+        );
+        let rip = u64::from_str_radix(
+            stopped["rip"].as_str().unwrap().trim_start_matches("0x"),
+            16,
+        )
+        .unwrap();
+        assert!(rip == origin.breakpoint_address || rip == origin.breakpoint_address + 1);
+        assert_eq!(attach["stopped_rip"], stopped["rip"]);
+        assert_eq!(
+            attach["verified_win32_start"],
+            stopped["win32_start_address"]
+        );
         assert!(rows.iter().any(|row| row["type"] == "debug_exception"
             && row["disposition"] == "application_handler"
             && row["thread_id"] == u32::MAX
@@ -2903,6 +3172,37 @@ mod tests {
             .any(|row| row["type"] == "debug_exception" && row["code"] == "0x80000004"));
         drop(child);
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn critical_pump_preserves_exit_event_and_signaled_child_codes() {
+        let mut event = DEBUG_EVENT::default();
+        event.dwDebugEventCode = EXIT_PROCESS_DEBUG_EVENT;
+        event.u.ExitProcess = EXIT_PROCESS_DEBUG_INFO {
+            dwExitCode: 0xc0000005,
+        };
+        let observed = critical_exit_from_debug_event(&event).unwrap();
+        assert_eq!(observed.code, Some(0xc0000005));
+        assert_eq!(observed.source, "exit_process_debug_event");
+
+        let mut child = Fixture::start();
+        let game = process(child.child.id(), false).unwrap();
+        child.child.kill().unwrap();
+        child.child.wait().unwrap();
+        let observed = announce_critical_and_wait_for_owned_game(
+            &game,
+            child.child.id(),
+            "synthetic close",
+            None,
+            false,
+            None,
+            None,
+            None,
+            true,
+        )
+        .unwrap();
+        assert!(observed.code.is_some());
+        assert_eq!(observed.source, "GetExitCodeProcess");
     }
 
     fn run_case(
@@ -3641,53 +3941,163 @@ mod tests {
     }
     #[test]
     fn application_breakpoint_before_attach_never_consumes_ready() {
+        let verified = ThreadOriginObservation {
+            rip: Some(0x1001),
+            win32_start: Some(0x2000),
+        };
         let mut origin = AttachOrigin::new(0x1000, 0x2000);
         origin.note_thread_start(11, Some(0x3000));
         assert_eq!(
-            origin.classify(11, 0x1000, true),
+            origin.classify(11, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
         assert_eq!(
-            origin.classify(11, 0x4000, true),
+            origin.classify(11, 0x4000, true, verified),
             BreakpointOrigin::Application
         );
         assert!(!origin.accepted);
         origin.note_thread_start(22, Some(0x2000));
         assert_eq!(
-            origin.classify(11, 0x1000, true),
+            origin.classify(11, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
         assert_eq!(
-            origin.classify(22, 0x1000, false),
+            origin.classify(22, 0x1000, false, verified),
             BreakpointOrigin::Application
         );
         assert_eq!(
-            origin.classify(22, 0x1000, true),
+            origin.classify(22, 0x1000, true, ThreadOriginObservation::default()),
+            BreakpointOrigin::Application
+        );
+        assert_eq!(
+            origin.classify(
+                22,
+                0x1000,
+                true,
+                ThreadOriginObservation {
+                    win32_start: Some(0x3000),
+                    ..verified
+                }
+            ),
+            BreakpointOrigin::Application
+        );
+        assert_eq!(
+            origin.classify(
+                22,
+                0x1000,
+                true,
+                ThreadOriginObservation {
+                    rip: Some(0x1002),
+                    ..verified
+                }
+            ),
+            BreakpointOrigin::Application
+        );
+        assert!(!origin.accepted);
+        assert_eq!(
+            origin.classify(22, 0x1000, true, verified),
             BreakpointOrigin::SystemAttach
         );
         assert_eq!(
-            origin.classify(22, 0x1000, true),
+            origin.classify(22, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
         let mut ambiguous = AttachOrigin::new(0x1000, 0x2000);
         ambiguous.note_thread_start(22, Some(0x2000));
         ambiguous.note_thread_start(33, Some(0x2000));
         assert_eq!(
-            ambiguous.classify(22, 0x1000, true),
+            ambiguous.classify(22, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
         let mut exited = AttachOrigin::new(0x1000, 0x2000);
         exited.note_thread_start(22, Some(0x2000));
         exited.note_thread_exit(22);
         assert_eq!(
-            exited.classify(22, 0x1000, true),
+            exited.classify(22, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
+        let mut adjusted_rip = AttachOrigin::new(0x1000, 0x2000);
+        adjusted_rip.note_thread_start(22, Some(0x2000));
+        assert_eq!(
+            adjusted_rip.classify(
+                22,
+                0x1000,
+                true,
+                ThreadOriginObservation {
+                    rip: Some(0x1000),
+                    ..verified
+                }
+            ),
+            BreakpointOrigin::SystemAttach
+        );
+    }
+    #[test]
+    fn unavailable_or_malformed_win32_start_query_never_supplies_provenance() {
+        unsafe extern "system" fn unavailable(
+            _: HANDLE,
+            class: i32,
+            out: *mut std::ffi::c_void,
+            _: u32,
+            returned: *mut u32,
+        ) -> i32 {
+            assert_eq!(class, ThreadQuerySetWin32StartAddress);
+            unsafe {
+                *(out as *mut usize) = 0x2000;
+                *returned = size_of::<usize>() as u32;
+            }
+            -1
+        }
+        unsafe extern "system" fn malformed(
+            _: HANDLE,
+            _: i32,
+            out: *mut std::ffi::c_void,
+            _: u32,
+            returned: *mut u32,
+        ) -> i32 {
+            unsafe {
+                *(out as *mut usize) = 0x2000;
+                *returned = 0;
+            }
+            0
+        }
+        let tid = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+        let handle = Handle::new(
+            unsafe { OpenThread(THREAD_QUERY_INFORMATION, 0, tid) },
+            "OpenThread(test)",
+        )
+        .unwrap();
+        let failed = query_win32_start(&handle, unavailable);
+        assert_eq!(failed.status, -1);
+        assert_eq!(failed.address, None);
+        let short = query_win32_start(&handle, malformed);
+        assert_eq!(short.returned_len, 0);
+        assert_eq!(short.address, None);
     }
     #[test]
     fn fixture_parent_pid_is_the_spawning_test_process() {
         let child = Fixture::start();
         assert_eq!(parent_pid(child.child.id()).unwrap(), std::process::id());
+    }
+    #[test]
+    fn ntdll_origin_records_disk_pe_and_target_module_evidence() {
+        let child = Fixture::start();
+        let (origin, _, evidence) = resolve_attach_origin(child.child.id()).unwrap();
+        let remote = module_named(child.child.id(), "ntdll.dll").unwrap();
+        let (disk_len, timestamp, image_size) = pe_image_metadata(&evidence.path).unwrap();
+        assert!(same_path(&remote.path, &evidence.path));
+        assert_eq!(evidence.remote_base, remote.base);
+        assert_eq!(evidence.image_size, image_size);
+        assert_eq!(remote.size, u64::from(image_size));
+        assert_eq!(evidence.disk_len, disk_len);
+        assert_eq!(evidence.pe_timestamp, timestamp);
+        assert_eq!(evidence.disk_sha256.len(), 64);
+        assert_eq!(evidence.disk_sha256, sha256(&evidence.path).unwrap());
+        assert_eq!(
+            origin.breakpoint_address,
+            remote.base + evidence.breakpoint_rva
+        );
+        assert_eq!(origin.breakin_start, remote.base + evidence.breakin_rva);
+        assert!(evidence.query_rva < u64::from(image_size));
     }
     #[test]
     fn permanent_context_refusal_reports_critical_until_controller_closes_child() {
