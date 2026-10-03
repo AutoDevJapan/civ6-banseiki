@@ -660,6 +660,71 @@ fn simultaneous_native_recoveries_reserve_distinct_empty_recipient_slots() -> ml
 }
 
 #[test]
+fn simultaneous_scatter_flows_do_not_borrow_two_slots_in_the_same_free_city() -> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[16],3)
+        TRANSFERS=0
+        local oldBuildings=CITIES[16].GetBuildings
+        CITIES[16].GetBuildings=function(self)
+          local b=oldBuildings(self)
+          local oldSlots=b.GetNumGreatWorkSlots
+          local oldWork=b.GetGreatWorkInSlot
+          b.GetNumGreatWorkSlots=function(obj,building)
+            if building==1 then return 2 end
+            return oldSlots(obj,building)
+          end
+          b.GetGreatWorkInSlot=function(obj,building,slot)
+            if building==1 and slot==1 then return -1 end
+            return oldWork(obj,building,slot)
+          end
+          return b
+        end
+        GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+        GameInfo.GreatWorks[4].Index=4
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local once=false;return function()
+            if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function(owner,object)
+          assert(owner==3 and object=='GREATWORKOBJECT_RELIC')
+          return {{Owner=3,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,
+              SlotType='GREATWORKSLOT_RELIC'},
+            {Owner=3,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=1,
+              SlotType='GREATWORKSLOT_RELIC'}}
+        end
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='SCATTER',Destination='WORLD'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local state=A.GetState()
+        state.Transactions.other={ID='other',From=0,To=3,Status='WAITING_UI',
+          NativeWorks={{Destination=-1,TargetSlot={Owner=3,City=CITIES[16]:GetID(),
+            X=16,Y=0,Building=1,Slot=0}}}}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        local plan={ID='second-scatter',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
+          NativeWorks={[900]={Outcome='SCATTER'}}}
+        local waiting=A.Apply(plan)
+        assert(waiting.Status=='WAITING_UI' and waiting.NativeWorks[1].Source.Index==900
+          and waiting.NativeWorks[1].Custodian==3 and not waiting.NativeWorks[1].TargetSlot,
+          'second Flow reserved another slot in the already borrowed city')
+        assert(TRANSFERS==0 and CITIES[16]:GetOwner()==3 and CITIES[4]:GetOwner()==1
+          and #A.NativeWorkLocations(900)==1,
+          'second Flow mutated its donor or the carrier before a separate city was available')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
 fn recovery_requires_the_original_index_and_records_its_actual_city_once() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(
@@ -831,6 +896,29 @@ fn free_cities_native_recovery_reconciles_before_retry_and_updates_roster_once()
         assert(A.GetRoster(2).native==nil and A.Canonical(A.GetState().Archive)==before,
           'rejected recovery changed the archive or recipient roster')
         CITIES[16].GetBuildings=originalBuildings
+        local originalSet=Players[2].SetProperty
+        local stopped=false
+        Players[2].SetProperty=function(self,key,value)
+          if key==A.Rules.ROSTER_KEY and not stopped then
+            stopped=true;error('staged after carrier recovery proof')
+          end
+          return originalSet(self,key,value)
+        end
+        local advanced,why=pcall(A.RecoverArchived,'native',2,'recovery:native',nil)
+        assert(not advanced and tostring(why):find('staged after carrier recovery proof',1,true)
+          and A.GetState().Recoveries['recovery:native'].NativeCarrier.Phase=='PROVED',
+          'test did not interrupt after recovery proof before roster update')
+        Players[2].SetProperty=originalSet
+        local originalRead=ExposedMembers.JAC_HeroReadAPI.ReadNativeWork
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function(owner,id,index)
+          if owner==2 and id==CITIES[12]:GetID() then error('UI city cache is not ready') end
+          return originalRead(owner,id,index)
+        end
+        local waiting=A.RecoverArchived('native',2,'recovery:native',nil)
+        assert(waiting.Status=='WAITING_UI' and waiting.NativeCarrier.RefreshRequested
+          and waiting.ObservationToken==waiting.NativeCarrier.ReturnToken,
+          'stale recovery UI cache became BLOCKED after physical proof')
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=originalRead
         local completed=A.RecoverArchived('native',2,'recovery:native',nil)
         assert(completed.Status=='COMPLETE' and ENACT_CALLS==0 and TRANSFERS==2)
         local item=assert(A.GetRoster(2).native)
@@ -1043,6 +1131,29 @@ fn scattered_native_work_keeps_original_index_through_free_cities_and_recovery()
           and A.GetState().Archive['native-work:900']==nil,
           'carrier purchased plot changed without stopping before donor mutation')
         PLOTS[17].owner=3
+        local transfer=CityManager.TransferCity
+        local stopped=false
+        CityManager.TransferCity=function(city,owner)
+          if city==CITIES[4] and not stopped then
+            stopped=true;error('staged after carrier proof')
+          end
+          return transfer(city,owner)
+        end
+        local advanced,why=pcall(A.Resume,PLAN.ID)
+        assert(not advanced and tostring(why):find('staged after carrier proof',1,true)
+          and A.GetState().Transactions[PLAN.ID].NativeWorks[1].Carrier.Phase=='PROVED',
+          'test did not interrupt after carrier proof and before donor city transfer')
+        local originalRead=ExposedMembers.JAC_HeroReadAPI.ReadNativeWork
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function(owner,id,index)
+          if owner==3 and id==CITIES[16]:GetID() then error('UI city cache is not ready') end
+          return originalRead(owner,id,index)
+        end
+        local waiting=A.Resume(PLAN.ID)
+        assert(waiting.Status=='WAITING_UI' and waiting.AwaitingFinalUI
+          and waiting.NativeWorks[1].Carrier.RefreshRequested,
+          'stale UI cache after proved carrier became permanent BLOCKED')
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=originalRead
+        PUBLISHED[PLAN.ID..':final']=true
         local complete=A.Resume(PLAN.ID)
         assert(complete.Status=='COMPLETE' and ENACT_CALLS==0)
         local scattered=assert(A.GetState().Archive['native-work:900'])

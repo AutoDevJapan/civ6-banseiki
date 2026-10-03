@@ -321,7 +321,7 @@ local function NativeWorkCustodian(destination)
   return free
 end
 
-local function NativeWorkDestination(owner, source, reserved, emptyCityOnly)
+local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, reservedCities)
   assert(type(source.ObjectType) == "string" and source.ObjectType ~= "",
     "native Great Work object type unavailable")
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -347,6 +347,7 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly)
   for _, slot in ipairs(slots) do
     local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
     if not reserved[key] and not occupiedCities[slot.X .. ":" .. slot.Y]
+      and not (reservedCities and reservedCities[slot.X .. ":" .. slot.Y])
       and (not emptyCityOnly or movableBuildings[slot.Building]) then
       local city = CityManager.GetCityAt(slot.X, slot.Y)
       assert(city and city:GetOwner() == owner and city:GetID() == slot.City
@@ -376,6 +377,25 @@ local function ReservedNativeSlots(state, owner, excludingTransaction, excluding
   end
   for token, intent in pairs(state.Recoveries or {}) do
     if token ~= excludingRecovery and intent.Status ~= "COMPLETE" then Add(intent.NativeTarget) end
+  end
+  return reserved
+end
+local function ReservedNativeCarrierCities(state, excludingTransaction)
+  local reserved = {}
+  local function Add(slot)
+    if slot then reserved[slot.X .. ":" .. slot.Y] = true end
+  end
+  for id, tx in pairs(state.Transactions or {}) do
+    if id ~= excludingTransaction and tx.Status ~= "COMPLETE" then
+      for _, work in ipairs(tx.NativeWorks or {}) do
+        if work.Destination and work.Destination < 0 then
+          Add(work.Carrier or work.TargetSlot)
+        end
+      end
+    end
+  end
+  for _, intent in pairs(state.Recoveries or {}) do
+    if intent.Status ~= "COMPLETE" then Add(intent.NativeCarrier) end
   end
   return reserved
 end
@@ -1977,15 +1997,29 @@ local function AdvanceNativeCarrier(state, carrier)
   SameNativeWorkIdentity(carrier.Source, locations[1])
   assert(city:GetOwner() == carrier.Owner,
     "proved native Great Work carrier owner changed")
+  if carrier.RefreshRequested then
+    carrier.RefreshRequested = nil
+    Save(state)
+  end
   return true
+end
+
+local function NativeCarrierUIStale(err)
+  local message = tostring(err)
+  return message:find("UI city cache is not ready", 1, true)
+    or message:find("native carrier city is not published", 1, true)
 end
 
 local function MoveNativeWorks(state, tx)
   local reserved = {}
+  local reservedCities = ReservedNativeCarrierCities(state, tx.ID)
   for _, pending in ipairs(tx.NativeWorks or {}) do
     if pending.TargetSlot then
       local slot = pending.TargetSlot
       reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
+      if pending.Destination and pending.Destination < 0 then
+        reservedCities[slot.X .. ":" .. slot.Y] = true
+      end
     end
   end
   for _, snap in ipairs(tx.NativeWorks or {}) do
@@ -1998,7 +2032,8 @@ local function MoveNativeWorks(state, tx)
         local targetReserved = ReservedNativeSlots(state, snap.Custodian, tx.ID)
         for key in pairs(reserved) do targetReserved[key] = true end
         local ok, destination = pcall(NativeWorkDestination,
-          snap.Custodian, snap.Source, targetReserved, snap.Destination < 0)
+          snap.Custodian, snap.Source, targetReserved, snap.Destination < 0,
+          reservedCities)
         if not ok then
           if tostring(destination) == "JAC_ABSORPTION_WAITING_UI"
             or tostring(destination):find("no compatible empty destination slot", 1, true) then
@@ -2009,6 +2044,7 @@ local function MoveNativeWorks(state, tx)
         snap.TargetSlot = destination
         local slot = destination
         reserved[slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot] = true
+        if snap.Destination < 0 then reservedCities[slot.X .. ":" .. slot.Y] = true end
         Save(state)
       end
       if snap.Destination < 0 then
@@ -2034,7 +2070,17 @@ local function MoveNativeWorks(state, tx)
           snap.Carrier.Before = NativeCarrierState(city, snap.Carrier)
           Save(state)
         end
-        if not AdvanceNativeCarrier(state, snap.Carrier) then
+        local ready, advanced = pcall(AdvanceNativeCarrier, state, snap.Carrier)
+        if not ready then
+          if NativeCarrierUIStale(advanced) then
+            snap.Carrier.RefreshRequested = snap.Carrier.Phase == "PROVED"
+            tx.AwaitingFinalUI = true
+            Save(state)
+            error("JAC_ABSORPTION_WAITING_UI", 0)
+          end
+          error(advanced)
+        end
+        if not advanced then
           error("JAC_ABSORPTION_WAITING_UI", 0)
         end
         snap.TargetSlot = R.Copy(snap.Carrier.FinalSlot)
@@ -2642,7 +2688,12 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
     intent.NativeCarrier.Before = NativeCarrierState(city, intent.NativeCarrier)
     Save(state)
   end
-  if not AdvanceNativeCarrier(state, intent.NativeCarrier) then
+  local ready, advanced = pcall(AdvanceNativeCarrier, state, intent.NativeCarrier)
+  if not ready and NativeCarrierUIStale(advanced) then
+    intent.NativeCarrier.RefreshRequested = intent.NativeCarrier.Phase == "PROVED"
+    advanced = false
+  elseif not ready then error(advanced) end
+  if not advanced then
     local carrier = intent.NativeCarrier
     intent.ObservationToken = carrier.Phase == "BORROW" and carrier.BorrowToken
       or carrier.Phase == "MOVE" and carrier.MoveToken or carrier.ReturnToken

@@ -926,7 +926,11 @@ function F.Tick()
         end
       end
     elseif world.Status == "BLOCKED" and world.Recipient ~= nil then
-      if HasSurvivingCity(world.Recipient) and Players[world.Recipient]:IsMajor() then
+      local recovery = A.GetState().Recoveries["recovery:" .. world.ID]
+      local restored = recovery and recovery.NativeCarrier
+        and recovery.NativeCarrier.Phase == "RESTORED"
+      if not restored and HasSurvivingCity(world.Recipient)
+        and Players[world.Recipient]:IsMajor() then
         world.Status, world.Error = "CLAIMED", nil
         Save(state)
         ClaimWorld(state, world, world.Recipient)

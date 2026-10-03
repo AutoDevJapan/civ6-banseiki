@@ -156,7 +156,19 @@ local function CarrierMismatch(token, reads)
 end
 
 local function ObserveNativeCarrier(carrier, reads)
-  if not carrier or carrier.Phase == "PROVED" or carrier.Phase == "RESTORED" then return false end
+  if not carrier or carrier.Phase == "RESTORED" then return false end
+  if carrier.Phase == "PROVED" then
+    if not carrier.RefreshRequested then return false end
+    local slot = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+    local current = slot and CityManager.GetCityAt(slot.X, slot.Y)
+    if current and current:GetOwner() == slot.Owner and current:GetID() == slot.City
+      and current:GetBuildings():HasBuilding(slot.Building)
+      and current:GetBuildings():GetGreatWorkInSlot(slot.Building, slot.Slot) == carrier.Index then
+      reads.MarkPublished(carrier.ReturnToken)
+      return true
+    end
+    return CarrierMismatch(carrier.ReturnToken, reads)
+  end
   local token = carrier.Phase == "BORROW" and carrier.BorrowToken
     or carrier.Phase == "MOVE" and carrier.MoveToken or carrier.ReturnToken
   local city = CityManager.GetCityAt(carrier.X, carrier.Y)
