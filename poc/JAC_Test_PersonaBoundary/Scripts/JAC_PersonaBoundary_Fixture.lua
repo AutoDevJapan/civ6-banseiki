@@ -126,7 +126,7 @@ GameEvents.JAC_BoundaryUnlockSpy.Add(function(owner)
     end
     assert(culture:HasCivic(civic.Index), "native spy civic did not complete");
     print("JAC_BOUNDARY SPY_CIVIC_COMPLETED " .. R.Serialize({owner=owner,
-        civic=civic.CivicType, capacity=Players[owner]:GetDiplomacy():GetSpyCapacity()}));
+        civic=civic.CivicType}));
 end);
 
 GameEvents.JAC_BoundaryFinishSpy.Add(function(owner)

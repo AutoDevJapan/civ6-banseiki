@@ -339,6 +339,8 @@ local function Submit(command)
             SelectSpy(spy, InterfaceModeTypes.SPY_TRAVEL_TO_CITY);
             local before=SpyState(spy);
             assert(before.operation == -1, "native spy is already assigned before travel");
+            local operation=assert(GameInfo.UnitOperations["UNITOPERATION_SPY_TRAVEL_NEW_CITY"],
+                "native travel operation missing");
             local arguments={[UnitOperationTypes.PARAM_X]=city:GetX(),[UnitOperationTypes.PARAM_Y]=city:GetY()};
             local ok, result=UnitManager.CanStartOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,plot,arguments);
             Log("SPY_TRAVEL_QUERY", {ok=ok, result=result or {}});
@@ -346,7 +348,8 @@ local function Submit(command)
             UnitManager.RequestOperation(spy,UnitOperationTypes.SPY_TRAVEL_NEW_CITY,arguments);
             -- EspionageChooser.lua:615-618 returns to selection after the single request.
             UI.SetInterfaceMode(InterfaceModeTypes.SELECTION);
-            return {action=action, before=before, targetOwner=params.owner, targetID=params.city,
+            return {action=action, before=before, expectedOperation=operation.Index,
+                targetOwner=params.owner, targetID=params.city,
                 targetX=city:GetX(), targetY=city:GetY()};
         else
             local probe=B.Probe(params.owner,params.city);
@@ -378,7 +381,8 @@ local function VerifySpyRequest(request)
     local nativeOperation=GameInfo.UnitOperations[after.operation];
     local active=after.operation ~= -1 and nativeOperation ~= nil and after.endTurn > after.turn;
     local arrived=false;
-    if request.action == "SPY_TRAVEL" and (after.x ~= request.before.x or after.y ~= request.before.y) then
+    if request.action == "SPY_TRAVEL" and (after.x ~= request.before.x or after.y ~= request.before.y) and
+        after.x == request.targetX and after.y == request.targetY then
         local city=Cities.GetPlotPurchaseCity(Map.GetPlot(after.x,after.y));
         arrived=city and city:GetOwner()==request.targetOwner and city:GetID()==request.targetID or false;
     end
@@ -386,13 +390,15 @@ local function VerifySpyRequest(request)
     if request.action == "SPY_TRAVEL" then
         -- EspionageOverview.lua:659-677 treats -1 as awaiting assignment.
         -- A returned RequestOperation with -1/endTurn 0 is an early refusal.
-        accepted=(after.operation ~= -1 or after.endTurn ~= 0) and (active or arrived);
+        accepted=(after.operation ~= -1 or after.endTurn ~= 0) and
+            ((active and after.operation == request.expectedOperation) or arrived);
     else
         accepted=active and after.operation == request.expectedOperation;
     end
     Log("SPY_ACCEPTANCE", {action=request.action, accepted=accepted, before=request.before,
         after=after, nativeOperation=nativeOperation and nativeOperation.OperationType or "",
-        arrived=arrived, targetOwner=request.targetOwner, targetID=request.targetID});
+        arrived=arrived, expectedOperation=request.expectedOperation,
+        targetOwner=request.targetOwner, targetID=request.targetID});
     return accepted;
 end
 

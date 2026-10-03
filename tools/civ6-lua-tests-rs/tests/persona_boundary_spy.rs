@@ -154,7 +154,7 @@ fn official_build_is_accepted_before_progress_and_registers_only_new_native_spy(
     h.event("JAC_BoundaryFinishSpy").unwrap();
     let logs: Vec<String> = h
         .global::<Table>("LOGS")
-        .sequence_values()
+        .strict_sequence_values()
         .collect::<mlua::Result<_>>()
         .unwrap();
     assert!(logs.iter().any(|line| line.contains("SPY_PRODUCED")
@@ -249,6 +249,21 @@ fn production_refusal_and_unobserved_completion_cannot_be_reported_as_a_spy() {
         0
     );
     assert_eq!(h.global::<Table>("WRITES").raw_len(), 0);
+}
+
+#[test]
+fn another_native_mission_cannot_satisfy_a_travel_request() {
+    let h = SpyHarness::new();
+    h.case("spy_home", (0, 15));
+    h.set("REQUEST_EFFECT", "mission");
+    h.queue("SPY_TRAVEL");
+    h.frame().unwrap();
+    h.frame().unwrap();
+    assert_eq!(h.action(), "REJECTED_SPY_TRAVEL");
+    assert_eq!(h.requests(), 1);
+    let spy = self_spy(&h);
+    assert_eq!(spy.strict_get::<i64>("operation").unwrap(), 0);
+    assert_eq!(spy.strict_get::<i64>("endTurn").unwrap(), 13);
 }
 
 #[test]
