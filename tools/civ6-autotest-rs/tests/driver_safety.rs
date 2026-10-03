@@ -1045,6 +1045,49 @@ fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
 }
 
 #[test]
+fn natural_disaster_report_releases_turn_playback_only_when_visible() {
+    for hidden in [false, true] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let state = Arc::new(Mutex::new((false, 0_usize)));
+        backend.on_states = Box::new(|_| Ok(vec!["InGame".into(), "NaturalDisasterPopup".into()]));
+        let state_for_lua = state.clone();
+        backend.on_lua = Box::new(move |name, code, _| {
+            if name == "NaturalDisasterPopup" {
+                let closed = state_for_lua.lock().unwrap().1 > 0;
+                let lua = mlua::Lua::new();
+                lua.load(format!(
+                    "hidden={}; closes=0; ContextPtr={{IsHidden=function() return hidden end}}; \
+                     OnClose=function() if hidden then error('hidden report closed') end \
+                     closes=closes+1; hidden=true end",
+                    hidden || closed
+                ))
+                .exec()
+                .unwrap();
+                let result: bool = lua.load(code).eval().unwrap();
+                state_for_lua.lock().unwrap().1 += lua.globals().get::<usize>("closes").unwrap();
+                return Ok(result.to_string());
+            }
+            if code == "return Game.GetCurrentGameTurn()" {
+                return Ok("7".into());
+            }
+            if code.contains("ACTION_ENDTURN") {
+                state_for_lua.lock().unwrap().0 = true;
+            }
+            if code.contains("== 8") {
+                let (sent, closes) = *state_for_lua.lock().unwrap();
+                return Ok((sent && (hidden || closes == 1)).to_string());
+            }
+            Ok("true".into())
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        assert_eq!(runner.end_turn(10.0, None).unwrap(), "human turn 7->8");
+        assert_eq!(*state.lock().unwrap(), (true, usize::from(!hidden)));
+        assert_eq!(lua_count(&f, "ACTION_ENDTURN"), 1);
+    }
+}
+
+#[test]
 fn test_end_turn_closes_successive_ai_statements_without_repeating_action() {
     let f = Fixture::new();
     let mut backend = f.backend();

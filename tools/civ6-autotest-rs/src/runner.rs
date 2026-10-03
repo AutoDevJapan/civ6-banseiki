@@ -798,7 +798,7 @@ if not title or title:GetText() ~= Locale.Lookup('TXT_KEY_MY2K_ADDITION_CONNECTI
 InputHandler(KeyEvents.KeyUp, Keys.VK_ESCAPE, 0)
 return true
 "#;
-pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
+pub const POPUP_CLOSERS: [(&str, &str, &str); 6] = [
     (
         "DiplomacyDealView",
         "OnLocalPlayerTurnEnd()",
@@ -815,6 +815,13 @@ pub const POPUP_CLOSERS: [(&str, &str, &str); 5] = [
         "JAC_SengokuDarkPolicy",
         "OnClose()",
         "dark-age policy choice",
+    ),
+    // The official Close handler releases the disaster's GameCore playback
+    // event and popup lock. Hiding the context alone leaves the turn paused.
+    (
+        "NaturalDisasterPopup",
+        "OnClose()",
+        "natural disaster report",
     ),
 ];
 pub const AUTOPLAY_STATUS_CODE:&str="return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
