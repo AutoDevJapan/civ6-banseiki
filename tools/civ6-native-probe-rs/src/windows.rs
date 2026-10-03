@@ -936,9 +936,9 @@ impl AttachOrigin {
         first_chance: bool,
         observed: ThreadOriginObservation,
     ) -> BreakpointOrigin {
-        let rip_matches = observed.rip.is_some_and(|rip| {
-            rip == self.breakpoint_address || self.breakpoint_address.checked_add(1) == Some(rip)
-        });
+        let rip_matches = observed
+            .rip
+            .is_some_and(|rip| self.breakpoint_address.checked_add(1) == Some(rip));
         if !self.accepted
             && !self.uncertain
             && first_chance
@@ -3067,7 +3067,7 @@ mod tests {
             16,
         )
         .unwrap();
-        assert!(rip == origin.breakpoint_address || rip == origin.breakpoint_address + 1);
+        assert_eq!(rip, origin.breakpoint_address + 1);
         assert_eq!(attach["stopped_rip"], stopped["rip"]);
         assert_eq!(
             attach["verified_win32_start"],
@@ -4028,8 +4028,9 @@ mod tests {
                     ..verified
                 }
             ),
-            BreakpointOrigin::SystemAttach
+            BreakpointOrigin::Application
         );
+        assert!(!adjusted_rip.accepted);
     }
     #[test]
     fn unavailable_or_malformed_win32_start_query_never_supplies_provenance() {
