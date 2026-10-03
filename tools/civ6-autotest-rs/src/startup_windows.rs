@@ -18,15 +18,18 @@ use windows_sys::Win32::{
     System::{
         Diagnostics::{
             Debug::{
-                MiniDumpFilterModulePaths, MiniDumpNormal, MiniDumpWithThreadInfo,
-                MiniDumpWriteDump,
+                MiniDumpFilterModulePaths, MiniDumpNormal, MiniDumpWithHandleData,
+                MiniDumpWithThreadInfo, MiniDumpWriteDump,
             },
             ToolHelp::{
                 CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
                 TH32CS_SNAPPROCESS,
             },
         },
-        Threading::{GetProcessTimes, OpenProcess, WaitForSingleObject},
+        Threading::{
+            GetProcessTimes, OpenProcess, WaitForSingleObject, PROCESS_DUP_HANDLE,
+            PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+        },
     },
     UI::{
         Input::KeyboardAndMouse::{keybd_event, GetAsyncKeyState},
@@ -617,6 +620,31 @@ fn worker(
         other=>Ok(other.unwrap_or_else(|e|json!({"operation":kind,"status":"unavailable","complete":false,"reason":e.to_string()})))}
 }
 
+fn write_startup_dump(handle: HANDLE, pid: u32, file: &File) -> Result<()> {
+    // Thread stacks identify the wait path. Handle data identifies the waited-on
+    // object's type when the handle is still live, without copying process memory.
+    if unsafe {
+        MiniDumpWriteDump(
+            handle,
+            pid,
+            file.as_raw_handle(),
+            MiniDumpNormal
+                | MiniDumpWithThreadInfo
+                | MiniDumpWithHandleData
+                | MiniDumpFilterModulePaths,
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+        )
+    } == 0
+    {
+        return Err(Error::input("native minidump collection failed"));
+    }
+    Ok(())
+}
+
+const STARTUP_DUMP_ACCESS: u32 = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_DUP_HANDLE;
+
 pub fn collect_diagnostics(
     game: GameProcess,
     output: &Path,
@@ -806,23 +834,9 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
             Ok(())
         }
         "dump" => {
-            let handle = pinned(game, 0x410)?; // QUERY_INFORMATION | VM_READ, no termination rights
+            let handle = pinned(game, STARTUP_DUMP_ACCESS)?; // no termination rights
             let file = OpenOptions::new().write(true).create_new(true).open(path)?;
-            if unsafe {
-                MiniDumpWriteDump(
-                    handle.0,
-                    game.pid,
-                    file.as_raw_handle(),
-                    MiniDumpNormal | MiniDumpWithThreadInfo | MiniDumpFilterModulePaths,
-                    ptr::null(),
-                    ptr::null(),
-                    ptr::null(),
-                )
-            } == 0
-            {
-                return Err(Error::input("native minidump collection failed"));
-            }
-            Ok(())
+            write_startup_dump(handle.0, game.pid, &file)
         }
         "screenshot" => {
             let _handle = pinned(game, 0x1000)?;
@@ -841,6 +855,45 @@ pub fn diagnostic_worker(args: &[String]) -> Result<()> {
 #[cfg(test)]
 mod supervision_tests {
     use super::*;
+    #[test]
+    fn startup_dump_records_live_handle_descriptors() {
+        let child = OwnedChild(
+            fixture_command()
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap(),
+        );
+        std::thread::sleep(Duration::from_millis(100));
+        let handle = open_process(child.0.id(), STARTUP_DUMP_ACCESS).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("startup.dmp");
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        write_startup_dump(handle.0, child.0.id(), &file).unwrap();
+        drop(file);
+
+        let bytes = fs::read(path).unwrap();
+        assert_eq!(&bytes[..4], b"MDMP");
+        let number = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+        let directory = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let handle_stream = (0..number).find_map(|index| {
+            let entry = directory + index * 12;
+            (u32::from_le_bytes(bytes[entry..entry + 4].try_into().unwrap()) == 12).then(|| {
+                let size = u32::from_le_bytes(bytes[entry + 4..entry + 8].try_into().unwrap());
+                let offset =
+                    u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap()) as usize;
+                (size, offset)
+            })
+        });
+        let (size, offset) = handle_stream.expect("handle data stream missing from startup dump");
+        assert!(size >= 16);
+        let count = u32::from_le_bytes(bytes[offset + 8..offset + 12].try_into().unwrap());
+        assert!(count > 0, "dump contains no handle descriptors");
+    }
+
     fn fixture_command() -> Command {
         let mut command = Command::new(std::env::current_exe().unwrap());
         command
