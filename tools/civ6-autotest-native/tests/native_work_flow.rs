@@ -417,6 +417,7 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
     for name in [
         "absorption-native-custody.json",
         "absorption-native-deal.json",
+        "absorption-native-product-probe.json",
         "absorption-native-work-probe.json",
     ] {
         let scenario = native_scenario(name);

@@ -51,6 +51,36 @@ local function PublishHeroKeys()
         TurnCreated = buildings:GetTurnFromIndex(index),
         CreatedByPlayer = uiGame.GetGreatWorkPlayer(index) }
     end
+    reads.FindCompatibleNativeSlots = function(owner, objectType)
+      assert(type(owner) == "number" and type(objectType) == "string", "native slot query requires owner and type")
+      local player = assert(uiPlayers[owner], "native slot owner is not published")
+      local compatible, slots = {}, {}
+      for row in GameInfo.GreatWork_ValidSubTypes() do
+        if row.GreatWorkObjectType == objectType then compatible[row.GreatWorkSlotType] = true end
+      end
+      for _, city in player:GetCities():Members() do
+        local buildings = city:GetBuildings()
+        for building in GameInfo.Buildings() do
+          if buildings:HasBuilding(building.Index)
+            and (not buildings.IsPillaged or not buildings:IsPillaged(building.Index)) then
+            for slot = 0, buildings:GetNumGreatWorkSlots(building.Index) - 1 do
+              local slotInfo = GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(building.Index, slot)]
+              if slotInfo and compatible[slotInfo.GreatWorkSlotType]
+                and buildings:GetGreatWorkInSlot(building.Index, slot) == -1 then
+                slots[#slots + 1] = { Owner = owner, City = city:GetID(), X = city:GetX(), Y = city:GetY(),
+                  Building = building.Index, Slot = slot, SlotType = slotInfo.GreatWorkSlotType }
+              end
+            end
+          end
+        end
+      end
+      table.sort(slots, function(a, b)
+        if a.City ~= b.City then return a.City < b.City end
+        if a.Building ~= b.Building then return a.Building < b.Building end
+        return a.Slot < b.Slot
+      end)
+      return slots
+    end
     reads.ReadCity = function(owner, id, method, building, slot, extra)
       local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
       if method == "RELIGIONS" then
@@ -124,6 +154,10 @@ local function ObservePendingHeroes()
       reads.MarkPublished(tx.ID .. ":final")
       if automatic then pendingPublication = true end
     end
+    if tx.NativeDealUI and tx.NativeDealUI.Token then
+      reads.MarkPublished(tx.NativeDealUI.Token)
+      if automatic then pendingPublication = true end
+    end
     for _, snap in ipairs(tx.Units or {}) do
       local intent = snap.HeroSpawnIntent
       if intent and intent.AwaitingUI then
@@ -142,6 +176,12 @@ local function ObservePendingHeroes()
     end
   end
   for token, intent in pairs(state and state.Recoveries or {}) do
+    if intent.NativeDealUI and intent.NativeDealUI.Token then
+      reads.MarkPublished(intent.NativeDealUI.Token)
+      local world = flowAPI and flowAPI.GetWorld((token:gsub("^recovery:", "")))
+      if world and world.Status == "CLAIMED"
+        and world.WaitingFor == intent.NativeDealUI.Token then pendingPublication = true end
+    end
     if intent.AwaitingUI and intent.ObservationToken and intent.HeroClass then
       reads.Observe(intent.ObservationToken, intent.HeroClass)
       local value = reads.GetObservation(intent.ObservationToken)

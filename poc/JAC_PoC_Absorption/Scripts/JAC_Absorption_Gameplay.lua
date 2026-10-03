@@ -275,6 +275,84 @@ local function OwnedGreatWorks(owner)
 end
 A.OwnedGreatWorks = OwnedGreatWorks
 
+local function NativeWorkLocations(index)
+  assert(type(index) == "number" and index >= 0 and index == math.floor(index),
+    "native Great Work index required")
+  local owners, seen, found = {}, {}, {}
+  for _, owner in ipairs(PlayerManager.GetAliveIDs()) do
+    if not seen[owner] then owners[#owners + 1], seen[owner] = owner, true end
+  end
+  local free = PlayerManager.GetFreeCitiesPlayerID and PlayerManager.GetFreeCitiesPlayerID()
+  if type(free) == "number" and free >= 0 and Players[free] and not seen[free] then
+    owners[#owners + 1] = free
+  end
+  table.sort(owners)
+  for _, owner in ipairs(owners) do
+    for _, work in ipairs(A.OwnedGreatWorkSlots(owner)) do
+      if work.Index == index then found[#found + 1] = work end
+    end
+  end
+  return found
+end
+A.NativeWorkLocations = NativeWorkLocations
+
+local function SameNativeWorkIdentity(source, current)
+  for _, key in ipairs({ "Index", "GreatWorkType", "ObjectType", "CreatorName",
+      "TurnCreated", "CreatedByPlayer" }) do
+    if source[key] ~= nil then
+      assert(source[key] == current[key], "native Great Work metadata changed: " .. key)
+    end
+  end
+  if source.Effects ~= nil then
+    assert(R.Equal(source.Effects, current.Effects), "native Great Work effects changed")
+  end
+end
+
+local function SameNativeWorkSlot(work, slot)
+  return work.Owner == slot.Owner and work.CityID == (slot.City or slot.CityID)
+    and work.X == slot.X and work.Y == slot.Y
+    and work.Building == slot.Building and work.Slot == slot.Slot
+end
+
+local function NativeWorkCustodian(destination)
+  if destination >= 0 then return destination end
+  local free = PlayerManager.GetFreeCitiesPlayerID and PlayerManager.GetFreeCitiesPlayerID()
+  assert(type(free) == "number" and free >= 0, "Free Cities custody owner unavailable")
+  return free
+end
+
+local function NativeWorkDestination(owner, source, reserved)
+  assert(type(source.ObjectType) == "string" and source.ObjectType ~= "",
+    "native Great Work object type unavailable")
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  assert(reads and type(reads.FindCompatibleNativeSlots) == "function",
+    "native Great Work destination slot reader unavailable")
+  local ok, slots = pcall(reads.FindCompatibleNativeSlots, owner, source.ObjectType)
+  if not ok then error("JAC_ABSORPTION_WAITING_UI", 0) end
+  assert(type(slots) == "table", "native Great Work destination slot list unavailable")
+  local valid = {}
+  for row in GameInfo.GreatWork_ValidSubTypes() do
+    if row.GreatWorkObjectType == source.ObjectType then valid[row.GreatWorkSlotType] = true end
+  end
+  for _, slot in ipairs(slots) do
+    local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
+    if not reserved[key] then
+      local city = CityManager.GetCityAt(slot.X, slot.Y)
+      assert(city and city:GetOwner() == owner and city:GetID() == slot.City
+        and slot.Owner == owner, "native Great Work destination city changed")
+      assert(city:GetBuildings():HasBuilding(slot.Building)
+        and type(slot.Slot) == "number" and slot.Slot >= 0
+        and slot.Slot < WorkSlots(city, slot.Building)
+        and WorkInSlot(city, slot.Building, slot.Slot) == -1
+        and valid[slot.SlotType], "native Great Work destination slot changed")
+      reserved[key] = true
+      return R.Copy(slot)
+    end
+  end
+  error("native Great Work has no compatible empty destination slot")
+end
+local NativeWorkAtTarget
+
 -- Read-only game-core probe. The UI's MOVE_GREAT_WORK request proves only the
 -- normal same-owner drag operation; native setters need real runtime evidence.
 function A.NativeWorkCapabilities(owner)
@@ -805,16 +883,26 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       end
     end
   end
-  local seenNative = {}
+  local seenNative, reservedNativeSlots = {}, {}
   for _, work in ipairs(A.OwnedGreatWorkSlots(plan.From)) do
     local id = "native-work:" .. work.Index
     seenNative[id] = true
     local decision = Decision((plan.NativeWorks or {})[work.Index] or "TRANSFER")
     local destination = DestinationOwner("ITEM", decision.Outcome, decision, tx)
-    -- A donor city must still be transferred. A non-absorber disposition must
-    -- move the original work out of its native slot before that city changes owner.
-    assert(destination == tx.To,
-      "native Great Work needs a verified physical move before city transfer: " .. id)
+    local custodian, targetSlot
+    if destination ~= tx.To then
+      assert(DealManager and type(DealManager.EnactWorkingDeal) == "function"
+        and type(DealManager.GetWorkingDeal) == "function"
+        and type(DealManager.GetPossibleDealItems) == "function",
+        "native Great Work Core deal API unavailable before city transfer: " .. id)
+      custodian = NativeWorkCustodian(destination)
+      assert(Players[custodian] and Players[custodian]:GetCities():GetCount() > 0,
+        "native Great Work physical custodian has no city: " .. id)
+      local locations = NativeWorkLocations(work.Index)
+      assert(#locations == 1 and SameNativeWorkSlot(locations[1], work),
+        "native Great Work is not unique at the donor source: " .. id)
+      targetSlot = NativeWorkDestination(custodian, work, reservedNativeSlots)
+    end
     local asset = tx.SourceRoster[id] or { ID = id, Kind = "ITEM", Owner = tx.From }
     assert(asset.Kind == "ITEM" and asset.Owner == tx.From
       and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
@@ -825,7 +913,8 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     tx.SourceRoster[id] = asset
     generatedDecisions[id] = decision
     tx.NativeWorks[#tx.NativeWorks + 1] = { ID = id, Source = R.Copy(work),
-      Outcome = decision.Outcome, Destination = destination }
+      Outcome = decision.Outcome, Destination = destination,
+      Custodian = custodian, TargetSlot = targetSlot }
   end
   for id, asset in pairs(tx.SourceRoster) do
     assert(not asset.NativeWork or seenNative[id],
@@ -1320,18 +1409,30 @@ local function MovedAssets(tx)
     "source roster changed during absorption; review new assets before clearing")
   -- Merge into current data: city hooks or a failed attempt may have added/updated unrelated assets.
   local rosters, archive = { [tx.To] = GetRoster(tx.To) }, {}
+  local nativeByID = {}
+  for _, snap in ipairs(tx.NativeWorks or {}) do nativeByID[snap.ID] = snap end
   for _, id in ipairs(R.Keys(tx.SourceRoster)) do
     local record = R.Rebind(tx.SourceRoster[id], tx)
     local decision = tx.Decisions[id]
     record.OriginalOwner = record.OriginalOwner or tx.From
     record.Owner, record.Outcome = decision.Owner, decision.Outcome
-    if record.NativeWork and decision.Owner == tx.To then
+    local native = nativeByID[id]
+    local physical
+    if record.NativeWork and native and native.Custodian then
+      assert(native.PhysicalMoved, "external native work has not moved before roster update")
+      physical = NativeWorkAtTarget(native)
+      record.NativeWork = R.Copy(physical)
+      record.NativeCustody = { Owner = physical.Owner, City = physical.CityID,
+        X = physical.X, Y = physical.Y, Building = physical.Building, Slot = physical.Slot }
+    elseif record.NativeWork and decision.Owner == tx.To then
       record.NativeWork.Owner = tx.To
     end
     if record.Kind == "ITEM" and record.City and decision.Owner ~= tx.To then
       record.FormerCity = R.Copy(tx.SourceRoster[id].City or record.City)
       if decision.Owner < 0 then
         record.City = nil -- scattered: no live vault still claims this item
+      elseif physical then
+        record.City = { Owner = physical.Owner, X = physical.X, Y = physical.Y }
       else
         local capital = assert(Players[decision.Owner]:GetCities():GetCapitalCity(),
           "returned item has no recipient vault city")
@@ -1411,9 +1512,17 @@ local function Verify(tx, state, exactUnits)
   local greatWorks = OwnedGreatWorks(tx.To)
   local nativeSlots = {}
   for _, work in ipairs(A.OwnedGreatWorkSlots(tx.To)) do nativeSlots[work.Index] = work end
+  local externalNative = {}
   for _, snap in ipairs(tx.NativeWorks or {}) do
-    local work = assert(nativeSlots[snap.Source.Index],
-      "transferred native Great Work index absent from absorber: " .. snap.ID)
+    local work
+    if snap.Custodian then
+      assert(snap.PhysicalMoved, "external native Great Work was not physically transferred")
+      work = NativeWorkAtTarget(snap)
+      externalNative[snap.Source.Index] = true
+    else
+      work = assert(nativeSlots[snap.Source.Index],
+        "transferred native Great Work index absent from absorber: " .. snap.ID)
+    end
     assert(not snap.Source.GreatWorkType or not work.GreatWorkType
       or work.GreatWorkType == snap.Source.GreatWorkType,
       "native Great Work type changed during city transfer: " .. snap.ID)
@@ -1436,6 +1545,16 @@ local function Verify(tx, state, exactUnits)
     if exactUnits then
       assert(city:GetName() == snap.Name, "city name changed")
       local expected = R.Copy(snap.Assets)
+      for _, moved in ipairs(tx.NativeWorks or {}) do
+        if moved.Custodian and moved.Source.X == snap.X and moved.Source.Y == snap.Y
+          and moved.Source.BuildingType ~= "BUILDING_PALACE" then
+          local building = assert(expected[moved.Source.BuildingType],
+            "external native work source building disappeared from snapshot")
+          assert(building.Works[moved.Source.Slot] == moved.Source.Index,
+            "external native work source slot changed in snapshot")
+          building.Works[moved.Source.Slot] = -1
+        end
+      end
       if snap.AssetCoverageVersion == 2 then expected.Districts = RecordedDistricts(snap.Assets)
       else current.Districts, expected.Districts = nil, nil end
       assert(R.Equal(current, expected), "city buildings/Great Works changed")
@@ -1443,7 +1562,9 @@ local function Verify(tx, state, exactUnits)
       for buildingType, original in pairs(snap.Assets) do
         assert(current[buildingType], "transferred city building lost: " .. buildingType)
         for _, work in pairs(original.Works or {}) do
-          if work and work >= 0 then assert(greatWorks[work], "transferred Great Work lost: " .. work) end
+          if work and work >= 0 and not externalNative[work] then
+            assert(greatWorks[work], "transferred Great Work lost: " .. work)
+          end
         end
       end
     end
@@ -1458,7 +1579,9 @@ local function Verify(tx, state, exactUnits)
       assert(A.CityLoyalty(city) == governance.ImmediateTarget,
         "native city loyalty differs from applied policy")
     end
-    for _, work in ipairs(snap.PalaceWorks or {}) do assert(greatWorks[work], "Palace Great Work lost: " .. work) end
+    for _, work in ipairs(snap.PalaceWorks or {}) do
+      if not externalNative[work] then assert(greatWorks[work], "Palace Great Work lost: " .. work) end
+    end
   end
   for _, index in ipairs(tx.Plots) do assert(Map.GetPlotByIndex(index):GetOwner() == tx.To, "territory transfer failed: " .. index) end
   local rosters, archive = MovedAssets(tx)
@@ -1505,7 +1628,103 @@ local function RestoreTransferred(state, tx, unit, snap, coreOnly)
     Save(state)
   end
 end
+NativeWorkAtTarget = function(snap)
+  local found = NativeWorkLocations(snap.Source.Index)
+  assert(#found == 1, "native Great Work index is missing or duplicated: " .. snap.ID)
+  SameNativeWorkIdentity(snap.Source, found[1])
+  assert(SameNativeWorkSlot(found[1], snap.TargetSlot),
+    "native Great Work is not in its reserved physical destination: " .. snap.ID)
+  return found[1]
+end
+
+local function BuildNativeWorkDeal(from, to, index, subtype)
+  assert(DealManager and type(DealManager.EnactWorkingDeal) == "function",
+    "native Great Work Core deal enactment unavailable")
+  local working = assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING, from, to),
+    "native Great Work working deal unavailable")
+  local count = working:GetItemCount()
+  assert(count == 0 or count == 1, "native Great Work working deal contains another item")
+  if count == 0 then
+    local available = DealManager.GetPossibleDealItems(from, to, DealItemTypes.GREATWORK, working)
+    local candidate
+    for _, possible in ipairs(available or {}) do
+      if possible.ForType == index then candidate = possible end
+    end
+    assert(candidate and candidate.IsValid, "native Great Work is not a valid deal item")
+    local item = assert(working:AddItemOfType(DealItemTypes.GREATWORK, from),
+      "native Great Work deal item could not be added")
+    item:SetSubType(subtype)
+    item:SetValueType(index)
+  else
+    assert(type(working.FindItemsByType) == "function",
+      "native Great Work existing deal item cannot be identified")
+    local items = working:FindItemsByType(DealItemTypes.GREATWORK, subtype, from)
+    assert(items and #items == 1 and items[1]:GetValueType() == index,
+      "native Great Work working deal differs from saved intent")
+  end
+  working:Validate()
+  assert(working:IsValid(), "native Great Work deal did not validate")
+  return working
+end
+
+local function MoveNativeWorks(state, tx)
+  for _, snap in ipairs(tx.NativeWorks or {}) do
+    if snap.Custodian then
+      if snap.PhysicalMoved then
+        NativeWorkAtTarget(snap)
+      else
+        local reads = ExposedMembers.JAC_HeroReadAPI
+        if snap.DealSubmitted and (not tx.NativeDealUI or not reads
+          or not reads.GetObservation or not reads.GetObservation(tx.NativeDealUI.Token)) then
+          error("JAC_ABSORPTION_WAITING_UI", 0)
+        end
+        local locations = NativeWorkLocations(snap.Source.Index)
+        assert(#locations == 1, "native Great Work index is missing or duplicated: " .. snap.ID)
+        SameNativeWorkIdentity(snap.Source, locations[1])
+        if SameNativeWorkSlot(locations[1], snap.TargetSlot) then
+          local source = assert(CityManager.GetCityAt(snap.Source.X, snap.Source.Y),
+            "native Great Work source city disappeared")
+          assert(source:GetOwner() == tx.From and source:GetID() == snap.Source.CityID
+            and WorkInSlot(source, snap.Source.Building, snap.Source.Slot) == -1,
+            "native Great Work source slot was not emptied")
+          snap.PhysicalMoved, tx.NativeDealUI = true, nil
+          Save(state)
+        else
+          assert(SameNativeWorkSlot(locations[1], snap.Source),
+            "native Great Work moved to an unexpected owner or slot: " .. snap.ID)
+          local city = assert(CityManager.GetCityAt(snap.TargetSlot.X, snap.TargetSlot.Y),
+            "native Great Work recipient city disappeared")
+          assert(city:GetOwner() == snap.Custodian and city:GetID() == snap.TargetSlot.City
+            and city:GetBuildings():HasBuilding(snap.TargetSlot.Building)
+            and snap.TargetSlot.Slot < WorkSlots(city, snap.TargetSlot.Building)
+            and WorkInSlot(city, snap.TargetSlot.Building, snap.TargetSlot.Slot) == -1,
+            "native Great Work reserved destination changed before deal")
+          local definition = assert(GameInfo.GreatWorks[snap.Source.GreatWorkType],
+            "native Great Work type unavailable for deal")
+          BuildNativeWorkDeal(tx.From, snap.Custodian,
+            snap.Source.Index, definition.Index)
+          snap.DealSubmitted = true
+          snap.DealAttempts = (snap.DealAttempts or 0) + 1
+          tx.NativeDealUI = { Token = tx.ID .. ":native:" .. snap.Source.Index .. ":" .. snap.DealAttempts,
+            Index = snap.Source.Index, Turn = Game.GetCurrentGameTurn() }
+          Save(state) -- the intent survives a crash after the native call
+          local ok, value = pcall(DealManager.EnactWorkingDeal, tx.From, snap.Custodian)
+          if not ok then
+            snap.DealError = tostring(value)
+            Save(state)
+            error("native Great Work deal raised; inspect original physical index: " .. snap.DealError)
+          end
+          Log("native deal submitted id=" .. tx.ID .. " index=" .. snap.Source.Index
+            .. " from=" .. tx.From .. " to=" .. snap.Custodian .. " return=" .. tostring(value))
+          error("JAC_ABSORPTION_WAITING_UI", 0)
+        end
+      end
+    end
+  end
+end
+
 local function Execute(state, tx)
+  MoveNativeWorks(state, tx) -- no unit deletion or city transfer precedes external-work proof
   -- Ordinary units can be staged without affecting ownership. Native heroes require their origin city.
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit and not snap.Hero then
@@ -2000,6 +2219,75 @@ local function RecoveredNativeWork(source, owner)
   end
   return found
 end
+local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
+  if not intent.NativeTarget then
+    local already = NativeWorkLocations(source.Index)
+    if #already == 1 and already[1].Owner == owner then
+      SameNativeWorkIdentity(source, already[1])
+      return true -- an existing caller may have moved the original work already
+    end
+  end
+  if source.Owner == owner then return true end
+  if not intent.NativeTarget then
+    local locations = NativeWorkLocations(source.Index)
+    assert(#locations == 1 and SameNativeWorkSlot(locations[1], source),
+      "native recovery original index is not at its saved custodian")
+    SameNativeWorkIdentity(source, locations[1])
+    intent.NativeSource = R.Copy(source)
+    intent.NativeTarget = NativeWorkDestination(owner, source, {})
+    Save(state)
+  end
+  if intent.NativePhysicalMoved then
+    NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
+      TargetSlot = intent.NativeTarget })
+    return true
+  end
+  if intent.NativeDealSubmitted then
+    local reads = ExposedMembers.JAC_HeroReadAPI
+    if not reads or not reads.GetObservation or not intent.NativeDealUI
+      or not reads.GetObservation(intent.NativeDealUI.Token) then return false end
+  end
+  local locations = NativeWorkLocations(source.Index)
+  assert(#locations == 1, "native recovery original index is missing or duplicated")
+  SameNativeWorkIdentity(source, locations[1])
+  if SameNativeWorkSlot(locations[1], intent.NativeTarget) then
+    local donor = assert(CityManager.GetCityAt(source.X, source.Y),
+      "native recovery custodian city disappeared")
+    assert(donor:GetOwner() == source.Owner and donor:GetID() == source.CityID
+      and WorkInSlot(donor, source.Building, source.Slot) == -1,
+      "native recovery left the original work in its custodian slot")
+    intent.NativePhysicalMoved = true
+    intent.NativeDealUI, intent.ObservationToken = nil, nil
+    Save(state)
+    return true
+  end
+  assert(SameNativeWorkSlot(locations[1], source),
+    "native recovery original index moved to an unexpected slot")
+  local city = assert(CityManager.GetCityAt(intent.NativeTarget.X, intent.NativeTarget.Y),
+    "native recovery recipient city disappeared")
+  assert(city:GetOwner() == owner and city:GetID() == intent.NativeTarget.City
+    and WorkInSlot(city, intent.NativeTarget.Building, intent.NativeTarget.Slot) == -1,
+    "native recovery reserved slot was occupied")
+  local definition = assert(GameInfo.GreatWorks[source.GreatWorkType],
+    "native recovery Great Work type unavailable")
+  BuildNativeWorkDeal(source.Owner, owner, source.Index, definition.Index)
+  intent.NativeDealSubmitted = true
+  intent.NativeDealAttempts = (intent.NativeDealAttempts or 0) + 1
+  intent.NativeDealUI = { Token = token .. ":native:" .. source.Index .. ":" .. intent.NativeDealAttempts,
+    Turn = Game.GetCurrentGameTurn(), Index = source.Index }
+  intent.ObservationToken = intent.NativeDealUI.Token
+  intent.Status = "WAITING_UI"
+  Save(state)
+  local ok, value = pcall(DealManager.EnactWorkingDeal, source.Owner, owner)
+  if not ok then
+    intent.NativeDealError = tostring(value)
+    Save(state)
+    error("native recovery deal raised; inspect original physical index: " .. intent.NativeDealError)
+  end
+  Log("native recovery deal submitted token=" .. token .. " index=" .. source.Index
+    .. " from=" .. source.Owner .. " to=" .. owner .. " return=" .. tostring(value))
+  return false
+end
 function A.RecoverArchived(id, owner, token, original)
   assert((type(id) == "string" or type(id) == "number")
     and type(token) == "string" and type(owner) == "number",
@@ -2028,6 +2316,11 @@ function A.RecoverArchived(id, owner, token, original)
     Save(state)
   end
   local archived = assert(state.Archive[id], "recovery archive lost")
+  if archived.Kind == "ITEM" and archived.NativeWork then
+    if not RecoverNativeWorkByDeal(state, intent, archived.NativeWork, owner, token) then
+      return R.Copy(intent)
+    end
+  end
   local record = R.Copy(archived)
   record.Owner, record.Outcome, record.RecoveredTurn = owner, "RECOVERED", intent.Turn
   record.RecoveryToken = token

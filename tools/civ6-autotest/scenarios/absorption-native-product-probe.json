@@ -1,0 +1,409 @@
+{
+  "name": "Absorption product native work handoff probe after verified official deal",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:GetCities():GetCount()>0 and ExposedMembers.JAC_Absorption~=nil",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "action": "wait_for",
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "code": "-- UI owns district/slot getters; Gameplay receives detached, freshly read observations.\nlocal F={Serial=0}\nExposedMembers.JAC_NativeDealTempleObservation={}\nlocal function identity(city)\n return {Owner=city:GetOwner(),ID=city:GetID(),X=city:GetX(),Y=city:GetY()}\nend\nlocal function sameCity(city,target)\n return city and city:GetOwner()==target.Owner and city:GetID()==target.ID and city:GetX()==target.X and city:GetY()==target.Y\nend\nlocal holy=assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index\nlocal shrine=assert(GameInfo.Buildings.BUILDING_SHRINE).Index\nlocal temple=assert(GameInfo.Buildings.BUILDING_TEMPLE).Index\nfunction F.Plan(city,label)\n local target=identity(city)\n local site\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and sameCity(district:GetCity(),target) then\n   assert(not site,'multiple Holy Sites for fixture city')\n   site=Map.GetPlot(district:GetX(),district:GetY())\n   assert(district:IsComplete() and not city:GetDistricts():IsPillaged(holy,site:GetIndex()),\n    label..': existing Holy Site is incomplete or pillaged; refusing duplicate construction')\n  end\n end\n if not site then\n  local plots=assert(Map.GetCityPlots():GetPurchasedPlots(city),'fixture purchased plots unavailable')\n  local candidates={}\n  for _,index in pairs(plots) do candidates[#candidates+1]=index end\n  table.sort(candidates)\n  for _,index in ipairs(candidates) do\n   local q=Map.GetPlotByIndex(index)\n   if q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target)\n    and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n    and q:GetDistrictType()==-1 and q:GetImprovementType()==-1 and not q:IsCity()\n    and not q:IsWater() and not q:IsMountain() and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,label..': no Holy Site or empty plot purchased by this exact city; carrier preparation is incomplete')\n assert(site:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(site),target),\n  label..': Holy Site plot belongs to another city')\n target.Plot=site:GetIndex()\n print('[JAC_NATIVE_TEMPLE_PLAN] fixture='..label..' owner='..target.Owner..' city='..target.ID..' plot='..target.Plot)\n return target\nend\nfunction F.Read(label,token)\n local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\n local target=assert(t.Fixtures[label],'unknown temple fixture')\n local city=CityManager.GetCityAt(target.X,target.Y)\n assert(sameCity(city,target),label..': fixture city identity changed')\n local q=assert(Map.GetPlotByIndex(target.Plot))\n assert(q:GetOwner()==target.Owner and sameCity(Cities.GetPlotPurchaseCity(q),target),\n  label..': fixture plot purchase city changed')\n local complete=false\n local present=false\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==holy and Map.GetPlot(district:GetX(),district:GetY()):GetIndex()==target.Plot then\n   assert(sameCity(district:GetCity(),target),label..': Holy Site belongs to another city')\n   assert(q:GetDistrictType()==holy,label..': district/plot type mismatch')\n   present=true\n   complete=district:IsComplete() and not city:GetDistricts():IsPillaged(holy,target.Plot)\n  end\n end\n local buildings=city:GetBuildings()\n local at={}\n for _,kind in ipairs(buildings:GetBuildingsAtLocation(target.Plot)) do\n  local row=assert(GameInfo.Buildings[kind],'unknown fixture building')\n  at[row.Index]=true\n end\n local function built(index)\n  return buildings:HasBuilding(index) and at[index]==true and not buildings:IsPillaged(index)\n end\n local shrineReady=complete and built(shrine)\n local templeReady=shrineReady and built(temple)\n local count,slotType,slotValue\n if templeReady then\n  count=buildings:GetNumGreatWorkSlots(temple)\n  if count==1 then\n   slotType=assert(GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(temple,0)]).GreatWorkSlotType\n   slotValue=buildings:GetGreatWorkInSlot(temple,0)\n  end\n  assert(count==1 and slotType=='GREATWORKSLOT_RELIC',label..': completed Temple lacks exact stock relic slot 0')\n end\n F.Serial=F.Serial+1\n local observed={Token=token,Read=F.Serial,Owner=target.Owner,ID=target.ID,X=target.X,Y=target.Y,Plot=target.Plot,\n  Holy=complete,Shrine=shrineReady,Temple=templeReady,HolyPresent=present,\n  ShrinePresent=buildings:HasBuilding(shrine),TemplePresent=buildings:HasBuilding(temple),\n  SlotCount=count,SlotType=slotType,SlotValue=slotValue}\n ExposedMembers.JAC_NativeDealTempleObservation[label]=observed\n return observed\nend\nfunction F.Observe(label,stage)\n return F.Read(label,label..':'..stage)\nend\nfunction F.Ready(label,stage)\n local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE')).Fixtures[label]\n local request=assert(target.Request,label..': temple stage not requested')\n assert(request.Stage==stage,label..': wrong temple publication stage')\n local r=F.Read(label,request.Token)\n assert(r.Token==request.Token and r.Read>request.Read,label..': stale temple observation')\n if not r[stage] then return false end\n print('[JAC_NATIVE_TEMPLE_READY] fixture='..label..' stage='..stage..' token='..r.Token..' read='..r.Read..' city='..r.ID..' plot='..r.Plot)\n return true\nend\nExposedMembers.JAC_NativeDealTempleFixture=F\nlocal p=Players[Game.GetLocalPlayer()]\nlocal cap=assert(p:GetCities():GetCapitalCity(),'deal source capital absent')\nlocal target\nfor _,other in ipairs(PlayerManager.GetAliveMajors()) do\n if other:GetID()~=p:GetID() and not other:IsHuman() then target=other:GetID();break end\nend\nassert(target,'AI deal target absent')\nlocal other=assert(Players[target])\nlocal dest=assert(other:GetCities():GetCapitalCity(),'AI capital absent')\nlocal source=F.Plan(cap,'source')\nlocal destination=F.Plan(dest,'target')\nExposedMembers.JAC_NativeDealTemplePlan={\n Owner=p:GetID(),Target=target,Source=identity(cap),Destination=identity(dest),\n OfficialBuilding=temple,Fixtures={source=source,target=destination}}\nreturn 'planned source and AI target Temples on plots purchased by their exact cities'",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local plan=assert(ExposedMembers.JAC_NativeDealTemplePlan,'UI deal temple plan missing')\nlocal source=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal target=assert(CityManager.GetCityAt(plan.Destination.X,plan.Destination.Y))\nassert(source:GetOwner()==plan.Owner and source:GetID()==plan.Source.ID,'deal source city changed')\nassert(target:GetOwner()==plan.Target and target:GetID()==plan.Destination.ID,'deal target city changed')\nlocal saved=JAC_AbsorptionGameplay.Rules.Copy(plan)\nlocal free=assert(PlayerManager.GetFreeCitiesPlayerID(),'Gameplay Free Cities ID API missing')\nassert(type(free)=='number' and free>=0,'invalid Free Cities ID')\nsaved.FreeCity=free\nGame:SetProperty('JAC_NATIVE_DEAL_PROBE',saved)\nreturn 'persist detached native deal temple plan in Gameplay'",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "ui_lua",
+      "code": "-- Mutations run in Gameplay; never enumerate UI-only city district members here.\nlocal function requestTemple(label,stage)\n local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\n local target=assert(t.Fixtures[label])\n local token=label..':'..stage\n local r=assert(ExposedMembers.JAC_NativeDealTempleObservation[label],label..': UI temple observation missing')\n assert(r.Token==token and r.Owner==target.Owner and r.ID==target.ID and r.X==target.X and r.Y==target.Y and r.Plot==target.Plot,\n  label..': mismatched temple observation')\n assert(type(r.Read)=='number' and (not target.Request or r.Read>target.Request.Read),label..': stale UI temple observation')\n assert(not target.Request or target.Request.Stage~=stage,label..': duplicate temple request')\n assert(stage=='Holy' or stage=='Shrine' or stage=='Temple','unknown temple stage')\n if stage~='Holy' then assert(r.Holy,label..': completed exact-city Holy Site not published') end\n if stage=='Temple' then assert(r.Shrine,label..': completed shrine not published') end\n local city=assert(CityManager.GetCityAt(target.X,target.Y))\n assert(city:GetOwner()==target.Owner and city:GetID()==target.ID,label..': Gameplay city identity changed')\n assert(r[stage] or not r[stage..'Present'],\n  label..': existing '..stage..' is incomplete, pillaged, or in another plot; refusing duplicate construction')\n target.Request={Stage=stage,Token=token,Read=r.Read}\n Game:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\n if not r[stage] then\n  local queue=city:GetBuildQueue()\n  local ok,value=pcall(function()\n   if stage=='Holy' then\n    queue:CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_HOLY_SITE).Index,target.Plot,100)\n   else\n    local kind=stage=='Shrine' and 'BUILDING_SHRINE' or 'BUILDING_TEMPLE'\n    queue:CreateIncompleteBuilding(assert(GameInfo.Buildings[kind]).Index,target.Plot,100)\n   end\n  end)\n  assert(ok,label..':'..stage..' request failed: '..tostring(value))\n end\n print('[JAC_NATIVE_TEMPLE_REQUEST] fixture='..label..' stage='..stage..' token='..token..' beforeRead='..r.Read..' city='..target.ID..' plot='..target.Plot..' alreadyComplete='..tostring(r[stage]))\n return 'requested '..label..' '..stage..'; fresh UI publication required'\nend\nExposedMembers.JAC_NativeDealTempleRequest=requestTemple",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('source','Holy');return 'observed source Holy city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('source','Holy')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('source','Holy')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('source','Shrine');return 'observed source Shrine city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('source','Shrine')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('source','Shrine')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('source','Temple');return 'observed source Temple city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('source','Temple')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('source','Temple')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('target','Holy');return 'observed target Holy city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('target','Holy')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('target','Holy')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('target','Shrine');return 'observed target Shrine city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('target','Shrine')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('target','Shrine')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('target','Temple');return 'observed target Temple city '..r.ID"
+    },
+    {
+      "action": "ui_lua",
+      "code": "return assert(ExposedMembers.JAC_NativeDealTempleRequest)('target','Temple')",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return assert(ExposedMembers.JAC_NativeDealTempleFixture).Ready('target','Temple')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal city=assert(CityManager.GetCityAt(t.Destination.X,t.Destination.Y))\nassert(city:GetOwner()==t.Target and city:GetID()==t.Destination.ID,\n 'AI target capital changed before Palace grant')\nlocal palace=assert(GameInfo.Buildings.BUILDING_PALACE).Index\nlocal buildings=city:GetBuildings()\nassert(buildings:HasBuilding(palace) and buildings:GetNumGreatWorkSlots(palace)==1 and\n buildings:GetGreatWorkInSlot(palace,0)==-1,\n 'AI target Palace must have exactly one empty slot')\nlocal temple=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('target','ai-palace:before')\nassert(temple.Temple and temple.SlotValue==-1,'AI target Temple slot occupied before Palace grant')\nExposedMembers.JAC_NativeDealTargetPalace={Owner=t.Target,City=city:GetID(),\n X=city:GetX(),Y=city:GetY(),Building=palace,Slot=0}\nreturn 'planned AI target Palace relic so only its Temple relic slot remains empty'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal palace=assert(ExposedMembers.JAC_NativeDealTargetPalace)\nassert(palace.Owner==t.Target and palace.City==t.Destination.ID and\n palace.X==t.Destination.X and palace.Y==t.Destination.Y,\n 'AI Palace observation changed before official grant')\nlocal player=Players[t.Target]\nlocal before={}\nfor _,work in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(t.Target)) do\n before[work.Index]=true\nend\nt.TargetBefore=before\nGame:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\nplayer:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\nreturn 'granted one official relic to AI target with Palace slot first'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal palace=assert(ExposedMembers.JAC_NativeDealTargetPalace)\nlocal city=assert(CityManager.GetCityAt(palace.X,palace.Y))\nassert(city:GetOwner()==t.Target and city:GetID()==palace.City)\nlocal index=city:GetBuildings():GetGreatWorkInSlot(palace.Building,0)\nlocal temple=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('target','ai-palace:publication')\nif not (type(index)=='number' and index>=0 and not t.TargetBefore[index]) then return false end\nassert(temple.Temple and temple.SlotValue==-1,\n 'AI target Temple was filled before donor deal')\nExposedMembers.JAC_NativeDealTargetPalaceIndex=index\nprint('[JAC_NATIVE_DEAL_AI_PALACE] index='..index..' owner='..t.Target..\n ' city='..palace.City..' building='..palace.Building..' slot=0')\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('source','grant');return 'observed source Temple slot '..tostring(r.SlotValue)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Observe('target','grant');return 'observed target Temple slot '..tostring(r.SlotValue)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal city=assert(CityManager.GetCityAt(t.Source.X,t.Source.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.Source.ID,\n 'Palace fixture city changed')\nlocal palace=assert(GameInfo.Buildings.BUILDING_PALACE).Index\nlocal buildings=city:GetBuildings()\nassert(buildings:HasBuilding(palace) and buildings:GetNumGreatWorkSlots(palace)==1,\n 'source capital lacks the exact one-slot Palace')\nassert(buildings:GetGreatWorkInSlot(palace,0)==-1,\n 'source Palace slot must be empty before the first relic grant')\nExposedMembers.JAC_NativeDealPalacePlan={Owner=t.Owner,City=t.Source.ID,\n X=t.Source.X,Y=t.Source.Y,Building=palace,Slot=0}\nreturn 'planned one empty capital Palace slot before official relic grants'"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal observations=assert(ExposedMembers.JAC_NativeDealTempleObservation)\nlocal source=assert(observations.source,'deal source UI observation absent')\nlocal target=assert(observations.target,'deal target UI observation absent')\nlocal sourceRequest=assert(t.Fixtures.source.Request)\nlocal targetRequest=assert(t.Fixtures.target.Request)\nassert(sourceRequest.Stage=='Temple' and source.Token=='source:grant' and\n source.Read>sourceRequest.Read and source.Temple and source.SlotValue==-1,\n 'deal source Temple observation stale or occupied')\nassert(targetRequest.Stage=='Temple' and target.Token=='target:grant' and\n target.Read>targetRequest.Read and target.Temple and target.SlotValue==-1,\n 'deal target Temple observation stale or occupied')\nassert(source.Owner==t.Owner and source.ID==t.Source.ID and\n source.X==t.Source.X and source.Y==t.Source.Y and\n source.Plot==t.Fixtures.source.Plot and\n target.Owner==t.Target and target.ID==t.Destination.ID and\n target.X==t.Destination.X and target.Y==t.Destination.Y and\n target.Plot==t.Fixtures.target.Plot,'deal temple city changed')\nlocal palace=assert(ExposedMembers.JAC_NativeDealPalacePlan,'UI Palace plan absent')\nassert(palace.Owner==t.Owner and palace.City==t.Source.ID and\n palace.X==t.Source.X and palace.Y==t.Source.Y and palace.Slot==0,\n 'detached Palace plan changed')\nt.Palace=JAC_AbsorptionGameplay.Rules.Copy(palace)\nlocal p=Players[t.Owner]\nlocal before={}\nfor _,work in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(t.Owner)) do before[work.Index]=true end\nt.Before=before\nGame:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\nGame:SetProperty('JAC_NATIVE_DEAL_SLOT',{Owner=target.Owner,City=target.ID,X=target.X,Y=target.Y,Building=t.OfficialBuilding,Slot=0})\nGame:SetProperty('JAC_NATIVE_DEAL_OWNER',t.Owner)\nGame:SetProperty('JAC_NATIVE_DEAL_TARGET',t.Target)\nlocal diplomacy=p:GetDiplomacy()\nif not diplomacy:HasMet(t.Target) then diplomacy:SetHasMet(t.Target) end\np:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\nreturn 'granted relic after exact-city source and AI target stock Temples published'",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal palace=assert(t.Palace)\nlocal city=assert(CityManager.GetCityAt(palace.X,palace.Y))\nassert(city:GetOwner()==palace.Owner and city:GetID()==palace.City,\n 'Palace identity changed after relic grant')\nlocal palaceIndex=city:GetBuildings():GetGreatWorkInSlot(palace.Building,palace.Slot)\nlocal source=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('source','grant:first-publication')\nlocal templeIndex=source.SlotValue\nlocal inPalace=type(palaceIndex)=='number' and palaceIndex>=0 and not t.Before[palaceIndex]\nlocal inTemple=type(templeIndex)=='number' and templeIndex>=0 and not t.Before[templeIndex]\nassert(not (inPalace and inTemple),'one modifier created two relics')\nif not inPalace and not inTemple then return false end\nlocal index=inPalace and palaceIndex or templeIndex\nlocal location=inPalace and 'PALACE' or 'TEMPLE'\nExposedMembers.JAC_NativeDealFirstGrant={Index=index,Location=location,Owner=t.Owner,City=t.Source.ID,\n X=t.Source.X,Y=t.Source.Y,Building=inPalace and palace.Building or t.OfficialBuilding,Slot=0}\nprint('[JAC_NATIVE_FIRST_GRANT] index='..index..' location='..location)\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal first=assert(ExposedMembers.JAC_NativeDealFirstGrant,'first relic location not published')\nassert(type(first.Index)=='number' and first.Index>=0 and\n first.Owner==t.Owner and first.City==t.Source.ID and\n first.X==t.Source.X and first.Y==t.Source.Y and not t.Before[first.Index],\n 'first relic identity changed before Temple preparation')\nlocal actual={}\nfor _,work in ipairs(JAC_AbsorptionGameplay.OwnedGreatWorkSlots(t.Owner)) do\n if not t.Before[work.Index] then actual[#actual+1]=work end\nend\nassert(#actual==1 and actual[1].Index==first.Index and\n actual[1].Owner==t.Owner and actual[1].CityID==t.Source.ID and\n actual[1].X==t.Source.X and actual[1].Y==t.Source.Y and\n actual[1].Building==first.Building and actual[1].Slot==first.Slot,\n 'first relic physical slot differs from UI observation')\nt.FirstGrant=JAC_AbsorptionGameplay.Rules.Copy(first)\nif first.Location=='PALACE' then\n assert(first.Building==t.Palace.Building and first.Slot==0,\n  'first relic did not fill the reserved Palace slot')\n t.Before[first.Index]=true\n Game:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\n Players[t.Owner]:AttachModifierByID('GOODY_CULTURE_GRANT_ONE_RELIC')\n return 'Palace relic excluded; second official modifier granted Temple relic'\nend\nassert(first.Location=='TEMPLE' and first.Building==t.OfficialBuilding and first.Slot==0,\n 'first relic is not in a supported official source slot')\nGame:SetProperty('JAC_NATIVE_DEAL_PROBE',t)\nreturn 'first relic already occupies the source Temple; no second modifier'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 20,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal r=assert(ExposedMembers.JAC_NativeDealTempleFixture).Read('source','grant:publication')\nreturn r.Temple and type(r.SlotValue)=='number' and r.SlotValue>=0 and not t.Before[r.SlotValue]"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "code": "\nfunction ExposedMembers.JAC_NativeDealLocations(index)\n local found={}\n local owners=PlayerManager.GetAliveIDs()\n local state=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\n local free=assert(state.FreeCity,'Gameplay Free Cities ID not published')\n assert(type(free)=='number' and free>=0,'invalid Free Cities ID')\n local hasFree=false;for _,owner in ipairs(owners) do if owner==free then hasFree=true end end\n assert(Players[free] and Players[free].GetCities,\n  'Free Cities player unavailable in UI global deal scan')\n if not hasFree then owners[#owners+1]=free end\n for _,owner in ipairs(owners) do\n  for _,city in Players[owner]:GetCities():Members() do\n   local buildings=city:GetBuildings()\n   for b in GameInfo.Buildings() do\n    if buildings:HasBuilding(b.Index) then\n     for slot=0,buildings:GetNumGreatWorkSlots(b.Index)-1 do\n      if buildings:GetGreatWorkInSlot(b.Index,slot)==index then found[#found+1]={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=b.Index,Slot=slot} end\n     end\n    end\n   end\n  end\n end\n return found\nend\nlocal t=assert(Game:GetProperty('JAC_NATIVE_DEAL_PROBE'))\nlocal F=assert(ExposedMembers.JAC_NativeDealTempleFixture)\nlocal source=F.Read('source','deal:source')\nlocal target=F.Read('target','deal:target')\nassert(source.Temple and target.Temple,'deal stock Temples lost before inspection')\nassert(target.SlotValue==-1,'deal target exact official slot occupied')\nlocal owner=t.Owner\nlocal p=Players[owner]\nlocal works={}\nfor _,city in p:GetCities():Members() do\n for b in GameInfo.Buildings() do\n  if city:GetBuildings():HasBuilding(b.Index) then\n   for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do\n    local w=city:GetBuildings():GetGreatWorkInSlot(b.Index,slot)\n    if w and w>=0 and not t.Before[w] then\n     works[#works+1]={Index=w,City=city:GetID(),Building=b.Index,Slot=slot,\n       X=city:GetX(),Y=city:GetY(),Type=city:GetBuildings():GetGreatWorkTypeFromIndex(w)}\n    end\n   end\n  end\n end\nend\nassert(#works==1,'expected exactly one newly granted native relic, got '..#works)\nlocal work=works[1]\nassert(work.City==source.ID and work.X==source.X and work.Y==source.Y and\n work.Building==t.OfficialBuilding and work.Slot==0 and work.Index==source.SlotValue,\n 'new relic is not in exact source Temple slot')\nlocal data={Owner=owner,Work=work,Outgoing=DealDirection.OUTGOING,\n GreatWork=DealItemTypes.GREATWORK,Free=t.FreeCity}\nExposedMembers.JAC_NativeDealData=function() return data end\nlocal locations=ExposedMembers.JAC_NativeDealLocations(work.Index)\nassert(#locations==1 and locations[1].Owner==owner and locations[1].City==work.City and\n locations[1].X==work.X and locations[1].Y==work.Y and\n locations[1].Building==work.Building and locations[1].Slot==work.Slot,\n 'deal source index must be unique at exact source slot')\nlocal expected=assert(Game:GetProperty('JAC_NATIVE_DEAL_SLOT'))\nassert(expected.Owner==target.Owner and expected.City==target.ID and\n expected.X==target.X and expected.Y==target.Y and\n expected.Building==t.OfficialBuilding and expected.Slot==0,\n 'deal reserved target changed')\nprint('[JAC_NATIVE_DEAL_SETUP] owner='..owner..' target='..t.Target..' work='..work.Index..\n ' enact='..type(DealManager and DealManager.EnactWorkingDeal))\nreturn 'actual native relic located in exact source slot '..work.Index",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData());local target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'));assert(d.Owner==Game.GetLocalPlayer(),'native deal owner must be local');local manager=assert(DealManager,'DealManager is unavailable in UI');local working=manager.GetWorkingDeal and manager.GetWorkingDeal(d.Outgoing,d.Owner,target);local options=manager.GetPossibleDealItems and manager.GetPossibleDealItems(d.Owner,target,d.GreatWork,working);local candidate;for _,entry in ipairs(options or {}) do if entry.ForType==d.Work.Index then candidate=entry end end;print('[JAC_NATIVE_DEAL_API] target='..target..' working='..tostring(working~=nil)..' possible='..tostring(candidate~=nil)..' valid='..tostring(candidate and candidate.IsValid)..' enact='..type(manager.EnactWorkingDeal)..' send='..type(manager.SendWorkingDeal));assert(candidate and candidate.IsValid,'native great work is not a valid deal item');local deal=assert(working,'native working deal missing');local item=assert(deal:AddItemOfType(d.GreatWork,d.Owner));item:SetSubType(d.Work.Type);item:SetValueType(d.Work.Index);local validation=deal:Validate();print('[JAC_NATIVE_DEAL_VALID] result='..tostring(validation)..' isValid='..tostring(deal:IsValid()));assert(deal:IsValid(),'native deal invalid');return 'valid native working deal assembled; official proposal and physical proof follow'",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData())\nlocal target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'))\nlocal manager=assert(DealManager)\nlocal deal=assert(manager.GetWorkingDeal(d.Outgoing,d.Owner,target))\nassert(deal:IsValid(),'outgoing native work deal invalid before proposal')\nassert(DealProposalAction and DealProposalAction.PROPOSED and\n DealProposalAction.ACCEPTED,'official proposal action IDs missing')\nlocal state={Owner=d.Owner,Target=target,Index=d.Work.Index,Responses={},Events=0}\nExposedMembers.JAC_NativeDealProposalProbe=state\nif Events.DiplomacyIncomingDeal and Events.DiplomacyIncomingDeal.Add then\n Events.DiplomacyIncomingDeal.Add(function(from,to,action)\n  if from==target and to==d.Owner then\n   state.Responses[#state.Responses+1]=action\n   print('[JAC_NATIVE_DEAL_RESPONSE] from='..from..' to='..to..' action='..tostring(action))\n  end\n end)\n state.IncomingEventAvailable=true\nend\nif LuaEvents and LuaEvents.DiploPopup_DealUpdated and LuaEvents.DiploPopup_DealUpdated.Add then\n LuaEvents.DiploPopup_DealUpdated.Add(function(other,action)\n  if other==target then print('[JAC_NATIVE_DEAL_POPUP_UPDATE] action='..tostring(action)) end\n end)\n state.PopupEventAvailable=true\nend\nlocal pending=type(manager.HasPendingDeal)=='function' and manager.HasPendingDeal(d.Owner,target) or nil\nprint('[JAC_NATIVE_DEAL_PROPOSE_BEFORE] pending='..tostring(pending)..' event='..\n tostring(state.IncomingEventAvailable)..' popup='..tostring(state.PopupEventAvailable))\nlocal ok,value=pcall(manager.SendWorkingDeal,DealProposalAction.PROPOSED,d.Owner,target)\nstate.Proposal={OK=ok,Value=tostring(value)}\nprint('[JAC_NATIVE_DEAL_PROPOSED] ok='..tostring(ok)..' value='..tostring(value))\nreturn 'submitted official PROPOSED action; no physical transfer claimed'"
+    },
+    {
+      "action": "pause",
+      "seconds": 6
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=assert(ExposedMembers.JAC_NativeDealProposalProbe)\nlocal manager=assert(DealManager)\nlocal pending=type(manager.HasPendingDeal)=='function' and manager.HasPendingDeal(s.Owner,s.Target) or nil\nlocal incoming=manager.GetWorkingDeal and manager.GetWorkingDeal(DealDirection.INCOMING,s.Owner,s.Target)\nlocal outgoing=manager.GetWorkingDeal and manager.GetWorkingDeal(DealDirection.OUTGOING,s.Owner,s.Target)\nlocal equalOK,equal=pcall(function() return manager.AreWorkingDealsEqual(s.Owner,s.Target) end)\nlocal action=s.Responses[#s.Responses]\nlocal name='none'\nfor key,value in pairs(DealProposalAction) do if value==action then name=key end end\nprint('[JAC_NATIVE_DEAL_AFTER_PROPOSAL] response='..name..'/'..tostring(action)..\n ' count='..#s.Responses..' pending='..tostring(pending)..\n ' incoming='..tostring(incoming~=nil)..' outgoing='..tostring(outgoing~=nil)..\n ' equalOK='..tostring(equalOK)..' equal='..tostring(equal))\nlocal locations=ExposedMembers.JAC_NativeDealLocations(s.Index)\nassert(#locations==1,'proposal changed native work index count before acceptance')\ns.AlreadyAtTarget=locations[1].Owner==s.Target\ns.LastResponse=action\ns.WorkingEqual=equalOK and equal==true\nreturn 'proposal response='..name..' pending='..tostring(pending)..\n ' workingEqual='..tostring(s.WorkingEqual)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local s=assert(ExposedMembers.JAC_NativeDealProposalProbe)\nif s.AlreadyAtTarget then return 'proposal already moved the native work; acceptance skipped' end\nlocal action=s.LastResponse\nlocal approved=action==DealProposalAction.ACCEPTED or\n action==DealProposalAction.PROPOSED or action==DealProposalAction.ADJUSTED\nif not approved or not s.WorkingEqual then\n print('[JAC_NATIVE_DEAL_ACCEPT_SKIPPED] response='..tostring(action)..\n  ' equal='..tostring(s.WorkingEqual))\n return 'no equal accepted proposal; physical result remains unproven'\nend\nlocal ok,value=pcall(DealManager.SendWorkingDeal,DealProposalAction.ACCEPTED,s.Owner,s.Target)\ns.Acceptance={OK=ok,Value=tostring(value)}\nprint('[JAC_NATIVE_DEAL_ACCEPTED_DISPATCH] ok='..tostring(ok)..' value='..tostring(value))\nreturn 'submitted official ACCEPTED after equal response; physical result still unproven'"
+    },
+    {
+      "action": "pause",
+      "seconds": 6
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "\nlocal d=assert(ExposedMembers.JAC_NativeDealData())\nlocal target=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'))\nlocal locations=ExposedMembers.JAC_NativeDealLocations(d.Work.Index)\nlocal source=assert(CityManager.GetCityAt(d.Work.X,d.Work.Y))\nassert(source:GetOwner()==d.Owner and source:GetID()==d.Work.City,'deal source city changed')\nlocal sourceWork=source:GetBuildings():GetGreatWorkInSlot(d.Work.Building,d.Work.Slot)\nprint('[JAC_NATIVE_DEAL_PHYSICAL] index='..d.Work.Index..' source='..tostring(sourceWork)..' count='..#locations..' owner='..tostring(locations[1] and locations[1].Owner))\nassert(#locations==1,'deal index must remain in exactly one physical slot')\nlocal found=locations[1]\nif found.Owner~=target then\n assert(found.Owner==d.Owner and found.City==d.Work.City and found.X==d.Work.X and found.Y==d.Work.Y and found.Building==d.Work.Building and found.Slot==d.Work.Slot and sourceWork==d.Work.Index,'deal moved native index to an unexpected location')\n return false\nend\nassert(sourceWork==-1,'deal retained the source work')\nlocal city=assert(CityManager.GetCityAt(found.X,found.Y))\nassert(city:GetOwner()==target and city:GetID()==found.City)\nassert(city:GetBuildings():GetGreatWorkInSlot(found.Building,found.Slot)==d.Work.Index,'target exact physical index changed')\nprint('[JAC_NATIVE_DEAL_DESTINATION] owner='..target..' city='..found.City..' building='..found.Building..' slot='..found.Slot..' index='..d.Work.Index)\nlocal expected=assert(Game:GetProperty('JAC_NATIVE_DEAL_SLOT'))\nlocal found=locations[1]\nassert(found.Owner==expected.Owner and found.City==expected.City and found.X==expected.X and found.Y==expected.Y and found.Building==expected.Building and found.Slot==expected.Slot,'deal ignored reserved destination slot')\nreturn true\n"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "code": "local d=ExposedMembers.JAC_NativeDealData();local target=Game:GetProperty('JAC_NATIVE_DEAL_TARGET');local owner=Game.GetGreatWorkPlayer(d.Work.Index);print('[JAC_NATIVE_DEAL_RESULT] index='..d.Work.Index..' createdBy='..tostring(owner));local found;for _,city in Players[target]:GetCities():Members() do for b in GameInfo.Buildings() do if city:GetBuildings():HasBuilding(b.Index) then for slot=0,city:GetBuildings():GetNumGreatWorkSlots(b.Index)-1 do if city:GetBuildings():GetGreatWorkInSlot(b.Index,slot)==d.Work.Index then found={City=city:GetID(),Building=b.Index,Slot=slot} end end end end end;assert(found,'native work not physically transferred to target');local locations=ExposedMembers.JAC_NativeDealLocations(d.Work.Index);assert(#locations==1 and locations[1].Owner==target and locations[1].City==found.City and locations[1].Building==found.Building and locations[1].Slot==found.Slot,'deal target index duplicated or at wrong exact slot');local expected=assert(Game:GetProperty('JAC_NATIVE_DEAL_SLOT'));local exact=locations[1];assert(exact.Owner==expected.Owner and exact.City==expected.City and exact.X==expected.X and exact.Y==expected.Y and exact.Building==expected.Building and exact.Slot==expected.Slot,'deal ignored reserved destination slot');local src=assert(CityManager.GetCityAt(d.Work.X,d.Work.Y));assert(src:GetOwner()==d.Owner and src:GetID()==d.Work.City and src:GetBuildings():GetGreatWorkInSlot(d.Work.Building,d.Work.Slot)==-1,'deal source slot not empty');return 'same native index now belongs to another real faction'",
+      "state_name": "InGame"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local d=assert(ExposedMembers.JAC_NativeDealData())\nlocal donor=assert(Game:GetProperty('JAC_NATIVE_DEAL_TARGET'))\nlocal def=assert(GameInfo.GreatWorks[d.Work.Type])\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nlocal winner\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n local owner=player:GetID()\n if owner~=donor and owner~=d.Owner and not player:IsHuman() then\n  local slots=reads.FindCompatibleNativeSlots(owner,def.GreatWorkObjectType)\n  if #slots>0 then winner={Owner=owner,Slot=slots[1],Index=d.Work.Index,Donor=donor,Absorber=d.Owner};break end\n end\nend\nassert(winner,'no third-party official slot for product return')\nExposedMembers.JAC_NativeProductRecipient=winner\nprint('[JAC_NATIVE_PRODUCT_RECIPIENT] '..assert(ExposedMembers.JAC_Absorption).Canonical(winner))\nreturn 'third-party compatible slot observed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local data=assert(ExposedMembers.JAC_NativeProductRecipient)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal found=A.NativeWorkLocations(data.Index)\nassert(#found==1 and found[1].Owner==data.Donor,'deal work not uniquely held by AI donor')\nlocal plan={ID='native-product-return-probe',From=data.Donor,To=data.Absorber,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',NativeWorks={[data.Index]={Outcome='RETURN',ReturnOwner=data.Owner}}}\nGame:SetProperty('JAC_NATIVE_PRODUCT_PLAN',plan)\nlocal tx=A.Apply(plan)\nprint('[JAC_NATIVE_PRODUCT_APPLY] status='..tostring(tx.Status)..' awaiting='..tostring(tx.AwaitingPreparation)..' id='..tx.ID)\nreturn 'product Apply returned '..tostring(tx.Status)"
+    }
+  ]
+}
