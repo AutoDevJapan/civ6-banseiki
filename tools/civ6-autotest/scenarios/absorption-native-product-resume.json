@@ -1,0 +1,41 @@
+{
+  "name": "Absorption product native work saved physical state resumes without duplicate deal",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-after-proof-absorb-flow-53-544855b25449",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal before=assert(A.GetState().Transactions[id])\nassert(before.Status=='WAITING_UI','saved product state was not waiting')\nlocal external\nfor _,work in ipairs(before.NativeWorks or {}) do if work.Custodian then external=work;break end end\nassert(external and external.PhysicalMoved and external.TargetSlot,'saved work physical proof absent')\nlocal tx=A.Resume(id)\nlocal found=A.NativeWorkLocations(external.Source.Index)\nassert(#found==1,'resumed product work index missing or duplicated')\nlocal w=found[1];local slot=external.TargetSlot\nassert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'resumed product work left reserved slot')\nlocal source=assert(CityManager.GetCityAt(external.Source.X,external.Source.Y))\nlocal assets=A.CityAssets(source)\nassert(assets[external.Source.BuildingType].Works[external.Source.Slot]==-1,'resumed product original source slot reused')\nlocal transferred=0\nfor _,city in ipairs(tx.Cities or {}) do local current=CityManager.GetCityAt(city.X,city.Y);if current and current:GetOwner()==tx.To then transferred=transferred+1 end end\nprint('[JAC_NATIVE_PRODUCT_LOADED_RESUME] status='..tx.Status..' sourceOwner='..source:GetOwner()..' transferred='..transferred..'/'..#tx.Cities..' finalUI='..tostring(tx.AwaitingFinalUI)..' index='..w.Index)\nif tx.Status=='COMPLETE' then assert(A.Verify(id,false),'completed product verification failed') end\nreturn 'saved product state resumed to '..tx.Status"
+    }
+  ]
+}
