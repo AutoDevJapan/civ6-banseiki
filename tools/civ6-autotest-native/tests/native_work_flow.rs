@@ -846,6 +846,10 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
     let request = code("JAC_ARTIFACT_PRODUCTION_REQUEST");
     let progress = code("advanced active official production");
     let bind = code("JAC_ARTIFACT_EXCAVATOR_PRODUCED");
+    assert!(lua.load(request).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    lua.load("GameInfo.Units.UNIT_ARCHAEOLOGIST.CanTrain=true")
+        .exec()?;
     lua.load(request).exec()?;
     assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
     assert!(lua.load(progress).exec().is_err());

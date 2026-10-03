@@ -17,10 +17,135 @@
       ]
     },
     {
-      "name": "JAC-artwork-land-sites-stage-absorb-flow-134-c0845da3455a",
-      "timeout": 600,
-      "action": "load",
-      "exact_name": true
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);GameConfiguration.SetValue('JAC_ABSORPTION_ARTIFACT_TEST',1);assert(GameConfiguration.GetValue('JAC_ABSORPTION_ARTIFACT_TEST')==1,'archaeology test opt-in not saved');return 'fresh archaeology test game explicitly configured'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
     },
     {
       "action": "wait_for",
@@ -33,7 +158,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local owner=Game.GetLocalPlayer()\nlocal player=assert(Players[owner])\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nlocal museumArt=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART).Index\nlocal function prepare(city)\n assert(city:GetOwner()==owner,'fixture city not locally owned')\n assert(not city:GetBuildings():HasBuilding(museumArt),'mutually exclusive artifact museum')\n local site,present\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==theater then\n   assert(district:IsComplete(),'existing Theatre is incomplete')\n   site=assert(Map.GetPlot(district:GetX(),district:GetY()));present=true\n  end\n end\n if not site then\n  local ids={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do ids[#ids+1]=index end\n  table.sort(ids)\n  for _,index in ipairs(ids) do local q=Map.GetPlotByIndex(index)\n   if q and q:GetOwner()==owner and Cities.GetPlotPurchaseCity(q)==city\n     and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n     and q:GetDistrictType()==-1 and q:GetImprovementType()==-1\n     and not q:IsCity() and not q:IsWater() and not q:IsMountain()\n     and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,'fixture city has no purchased Theatre plot')\n local t={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plot=site:GetIndex(),TheaterPresent=present}\n print('[JAC_ARTWORK_THEATER_PLAN] owner='..owner..' city='..t.City..' plot='..t.Plot..' present='..tostring(present))\n return t\nend\nlocal cities={}\nfor _,city in player:GetCities():Members() do\n local art=city:GetBuildings():HasBuilding(museumArt)\n print('[JAC_ARTIFACT_CITY_CANDIDATE] city='..city:GetID()..' artMuseum='..tostring(art))\n if not art then cities[#cities+1]=city end\nend\ntable.sort(cities,function(a,b) return a:GetID()<b:GetID() end)\nassert(#cities>=2,'two distinct locally owned cities without art museums required; count='..#cities)\nlocal plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nplan.Fixtures.artifact_source=prepare(cities[1])\nplan.Fixtures.artifact_target=prepare(cities[2])\nExposedMembers.JAC_ArtworkPlan=plan\nreturn 'two exact archaeology museum cities selected without replacing art originals'",
+      "code": "local owner=Game.GetLocalPlayer()\nlocal player=assert(Players[owner])\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nlocal museumArt=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART).Index\nlocal function prepare(city)\n assert(city:GetOwner()==owner,'fixture city not locally owned')\n assert(not city:GetBuildings():HasBuilding(museumArt),'mutually exclusive artifact museum')\n local site,present\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==theater then\n   assert(district:IsComplete(),'existing Theatre is incomplete')\n   site=assert(Map.GetPlot(district:GetX(),district:GetY()));present=true\n  end\n end\n if not site then\n  local ids={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do ids[#ids+1]=index end\n  table.sort(ids)\n  for _,index in ipairs(ids) do local q=Map.GetPlotByIndex(index)\n   if q and q:GetOwner()==owner and Cities.GetPlotPurchaseCity(q)==city\n     and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n     and q:GetDistrictType()==-1 and q:GetImprovementType()==-1\n     and not q:IsCity() and not q:IsWater() and not q:IsMountain()\n     and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,'fixture city has no purchased Theatre plot')\n local t={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plot=site:GetIndex(),TheaterPresent=present}\n print('[JAC_ARTWORK_THEATER_PLAN] owner='..owner..' city='..t.City..' plot='..t.Plot..' present='..tostring(present))\n return t\nend\nlocal cities={}\nfor _,city in player:GetCities():Members() do\n local art=city:GetBuildings():HasBuilding(museumArt)\n print('[JAC_ARTIFACT_CITY_CANDIDATE] city='..city:GetID()..' artMuseum='..tostring(art))\n if not art then cities[#cities+1]=city end\nend\ntable.sort(cities,function(a,b) return a:GetID()<b:GetID() end)\nassert(#cities>=2,'two distinct locally owned cities without art museums required; count='..#cities)\nlocal plan={Owner=owner,Fixtures={}}\nplan.Fixtures.artifact_source=prepare(cities[1])\nplan.Fixtures.artifact_target=prepare(cities[2])\nExposedMembers.JAC_ArtworkPlan=plan\nreturn 'two exact archaeology museum cities selected without replacing art originals'",
       "action": "ui_lua"
     },
     {
@@ -123,12 +248,26 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
+      "code": "-- Civics.xml defines this retained engine modifier; BlackDeathScenario uses AttachModifierByID.\n-- This is site preparation only, never an artifact-work or carrier success claim.\nlocal key='CIVIC_GENERATE_LAND_ANTIQUITIES'\nlocal row=assert(GameInfo.Modifiers[key],key..' removed from active Gameplay database')\nassert(row.ModifierType=='MODIFIER_GAME_TRIGGER_MECHANIC','land antiquity modifier changed type')\nassert(not Game:GetProperty('JAC_ARTWORK_LAND_TRIGGER'),'land antiquity trigger already attempted')\nlocal resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal function count()\n local sites,records=0,0\n for index=0,Map.GetPlotCount()-1 do\n  local q=Map.GetPlotByIndex(index)\n  if q and q:GetResourceType()==resource then\n   sites=sites+1\n   if Game.GetArtifactAtPlot then\n    local ok,value=pcall(Game.GetArtifactAtPlot,index)\n    if ok and value then records=records+1 end\n   end\n  end\n end\n return sites,records\nend\nlocal before,records=count()\nlocal player=assert(Players[Game.GetLocalPlayer()])\nassert(type(player.AttachModifierByID)=='function','official AttachModifierByID absent')\nplayer:AttachModifierByID(key)\nGame:SetProperty('JAC_ARTWORK_LAND_TRIGGER',{Modifier=key,Before=before,BeforeRecords=records,\n Turn=Game.GetCurrentGameTurn()})\nprint('[JAC_ARTWORK_LAND_TRIGGER] modifier='..key..' beforeSites='..before..' beforeRecords='..records)\nreturn 'existing land antiquity mechanic attached once; await actual map records'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local count=0\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index\n  and q:GetOwner()==Game.GetLocalPlayer() and not q:IsWater() and not q:IsImpassable()\n  and Game.GetArtifactAtPlot(index) then count=count+1 end\nend\nreturn count>=3"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
       "code": "local plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal t=assert(plan.Fixtures.artifact_source)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==plan.Owner and city:GetID()==t.City,'production source city changed')\nassert(city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index),'production museum missing')\nlocal units={}\nfor _,unit in Players[plan.Owner]:GetUnits():Members() do units[tostring(unit:GetID())]=true end\nGame:SetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE',{Owner=plan.Owner,City=t.City,X=t.X,Y=t.Y,Units=units})\nreturn 'captured existing unit IDs before official city production'"
     },
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'production source city changed')\nlocal row=assert(GameInfo.Units.UNIT_ARCHAEOLOGIST)\nprint('[JAC_ARTIFACT_PRODUCTION_REQUEST] owner='..t.Owner..' city='..t.City..' hash='..row.Hash..' canTrain='..tostring(row.CanTrain)..' prerequisite='..tostring(row.PrereqCivic))\nlocal params={}\nparams[CityOperationTypes.PARAM_UNIT_TYPE]=row.Hash\nparams[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT\nparams[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0\nCityManager.RequestOperation(city,CityOperationTypes.BUILD,params)\nreturn 'official BUILD request dispatched; production queue still unproven'"
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'production source city changed')\nlocal row=assert(GameInfo.Units.UNIT_ARCHAEOLOGIST)\nassert(row.CanTrain==true or row.CanTrain==1,'explicit archaeology test database action did not enable production')\nprint('[JAC_ARTIFACT_PRODUCTION_REQUEST] owner='..t.Owner..' city='..t.City..' hash='..row.Hash..' canTrain='..tostring(row.CanTrain)..' prerequisite='..tostring(row.PrereqCivic))\nlocal params={}\nparams[CityOperationTypes.PARAM_UNIT_TYPE]=row.Hash\nparams[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT\nparams[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0\nCityManager.RequestOperation(city,CityOperationTypes.BUILD,params)\nreturn 'official BUILD request dispatched; production queue still unproven'"
     },
     {
       "action": "wait_for",
