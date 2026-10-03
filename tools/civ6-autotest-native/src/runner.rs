@@ -1483,17 +1483,21 @@ mod tests {
         assert_eq!(boundary_steps.len(), 75);
         assert_eq!(&boundary_steps[..27], &ordinary_steps[..27]);
         assert_eq!(boundary_steps[27]["state_name"], "InGame");
-        assert!(boundary_steps[27]["code"]
-            .as_str()
-            .unwrap()
-            .contains(":source-ready:"));
+        assert!(
+            boundary_steps[27]["code"]
+                .as_str()
+                .unwrap()
+                .contains(":source-ready:")
+        );
         assert_eq!(boundary_steps[28], ordinary_steps[27]);
         assert_eq!(boundary_steps[29], ordinary_steps[28]);
         assert_eq!(boundary_steps[32]["state_name"], "InGame");
-        assert!(boundary_steps[32]["code"]
-            .as_str()
-            .unwrap()
-            .contains("JAC_ReturnBoundaryOriginalObservation=nil"));
+        assert!(
+            boundary_steps[32]["code"]
+                .as_str()
+                .unwrap()
+                .contains("JAC_ReturnBoundaryOriginalObservation=nil")
+        );
         assert_eq!(boundary_steps[37]["state_name"], "JAC_AbsorptionFlow");
         assert!(
             boundary_steps[37]["code"]
