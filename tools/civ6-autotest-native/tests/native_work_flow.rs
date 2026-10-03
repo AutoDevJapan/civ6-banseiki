@@ -562,6 +562,9 @@ fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
         "absorption-native-acquired-carrier-resume.json",
         "absorption-native-acquired-result-final.json",
         "absorption-return-boundary.json",
+        "absorption-japan.json",
+        "absorption-japan-recall-continuation.json",
+        "absorption-hero-recall.json",
         "absorption-native-bridge-probe.json",
         "absorption-native-ai-same-owner-move.json",
         "absorption-native-ai-carrier-return.json",
@@ -593,6 +596,18 @@ fn acquired_palace_result_proof_is_identical_after_reload() {
     assert_eq!(steps[10]["action"], "ui_lua");
     assert_eq!(steps[15]["action"], "ui_lua");
     assert_eq!(steps[10]["code"], steps[15]["code"]);
+}
+
+#[test]
+fn japanese_recall_continuation_keeps_every_remaining_original_check() {
+    let original = native_scenario("absorption-japan.json");
+    let continued = native_scenario("absorption-japan-recall-continuation.json");
+    let original_steps = original["steps"].as_array().expect("original steps");
+    let continued_steps = continued["steps"].as_array().expect("continued steps");
+    assert_eq!(original_steps.len(), 127);
+    assert_eq!(continued_steps.len(), 29);
+    assert_eq!(continued_steps[1]["exact_name"], true);
+    assert_eq!(&continued_steps[2..], &original_steps[100..]);
 }
 
 // This fixture tests the scenario's physical oracle, not engine API availability.

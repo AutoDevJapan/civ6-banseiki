@@ -907,7 +907,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.EraBefore,'global era boundary not processed')\nA.BeginHeroRecall('japan-ai-recall:1','japan-live-absorption','live:hero')\nreturn 'actual AI recall intent saved before the owner turn'\n"
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_RECALL_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.EraBefore,'global era boundary not processed')\nlocal alive={}\nfor _,unit in Players[e.Owner]:GetUnits():Members() do\n if unit.IsHero and unit:IsHero() and unit:GetHeroClassType()==e.Class then\n  local person=unit:GetProperty(A.Rules.PERSON_KEY)\n  assert(not person or person.ID=='live:hero','same Hero class belongs to another person')\n  alive[#alive+1]=unit\n end\nend\nassert(#alive<=1,'ambiguous AI Hero instances after era wait')\nfor _,unit in ipairs(alive) do UnitManager.Kill(unit) end\nfor _,unit in Players[e.Owner]:GetUnits():Members() do\n assert(not unit.IsHero or not unit:IsHero() or unit:GetHeroClassType()~=e.Class,\n  'controlled Hero remains alive before official recall')\nend\nprint('[JAC_ABSORPTION_POST_ERA_HERO_RETIRED] count='..#alive)\nA.BeginHeroRecall('japan-ai-recall:1','japan-live-absorption','live:hero')\nreturn 'actual AI recall intent saved before the owner turn'\n"
     },
     {
       "action": "ui_lua",
