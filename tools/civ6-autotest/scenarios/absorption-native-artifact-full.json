@@ -251,12 +251,16 @@
       "code": "-- Civics.xml defines this retained engine modifier; BlackDeathScenario uses AttachModifierByID.\n-- This is site preparation only, never an artifact-work or carrier success claim.\nlocal key='CIVIC_GENERATE_LAND_ANTIQUITIES'\nlocal row=assert(GameInfo.Modifiers[key],key..' removed from active Gameplay database')\nassert(row.ModifierType=='MODIFIER_GAME_TRIGGER_MECHANIC','land antiquity modifier changed type')\nassert(not Game:GetProperty('JAC_ARTWORK_LAND_TRIGGER'),'land antiquity trigger already attempted')\nlocal resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal function count()\n local sites,records=0,0\n for index=0,Map.GetPlotCount()-1 do\n  local q=Map.GetPlotByIndex(index)\n  if q and q:GetResourceType()==resource then\n   sites=sites+1\n   if Game.GetArtifactAtPlot then\n    local ok,value=pcall(Game.GetArtifactAtPlot,index)\n    if ok and value then records=records+1 end\n   end\n  end\n end\n return sites,records\nend\nlocal before,records=count()\nlocal player=assert(Players[Game.GetLocalPlayer()])\nassert(type(player.AttachModifierByID)=='function','official AttachModifierByID absent')\nplayer:AttachModifierByID(key)\nGame:SetProperty('JAC_ARTWORK_LAND_TRIGGER',{Modifier=key,Before=before,BeforeRecords=records,\n Turn=Game.GetCurrentGameTurn()})\nprint('[JAC_ARTWORK_LAND_TRIGGER] modifier='..key..' beforeSites='..before..' beforeRecords='..records)\nreturn 'existing land antiquity mechanic attached once; await actual map records'"
     },
     {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
       "action": "wait_for",
       "timeout": 60,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local count=0\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index\n  and q:GetOwner()==Game.GetLocalPlayer() and not q:IsWater() and not q:IsImpassable()\n  and Game.GetArtifactAtPlot(index) then count=count+1 end\nend\nreturn count>=3"
+        "code": "local total,records,count,owned=0,0,0,0\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index then\n  total=total+1\n  local artifact=Game.GetArtifactAtPlot(index)\n  if artifact then records=records+1 end\n  if q:GetOwner()==Game.GetLocalPlayer() then owned=owned+1 end\n  local units=Map.GetUnitsAt(q)\n  if artifact and (q:GetOwner()==Game.GetLocalPlayer() or q:GetOwner()==-1)\n   and not q:IsWater() and not q:IsImpassable() and (not units or units:GetCount()==0) then count=count+1 end\n end\nend\nlocal report=total..':'..records..':'..count..':'..owned\nif ExposedMembers.JAC_ArtifactSiteCounts~=report then\n ExposedMembers.JAC_ArtifactSiteCounts=report\n print('[JAC_ARTIFACT_SITE_COUNTS] total='..total..' records='..records..' eligible='..count..' owned='..owned)\nend\nreturn count>=3"
       }
     },
     {
@@ -299,7 +303,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and q:GetOwner()==owner and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied owned genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
       "action": "ui_lua"
     },
     {
@@ -346,7 +350,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and q:GetOwner()==owner and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied owned genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
       "action": "ui_lua"
     },
     {
@@ -393,7 +397,7 @@
     },
     {
       "state_name": "InGame",
-      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and q:GetOwner()==owner and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied owned genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
       "action": "ui_lua"
     },
     {

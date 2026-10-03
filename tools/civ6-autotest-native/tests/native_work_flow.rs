@@ -887,6 +887,46 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
 }
 
 #[test]
+fn excavation_fixture_selects_recorded_unoccupied_local_or_neutral_land() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let codes: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .filter(|code| code.contains("no unoccupied local-or-neutral genuine land antiquity site"))
+        .collect();
+    assert_eq!(codes.len(), 3);
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
+        Game={GetLocalPlayer=function() return 1 end,
+          GetArtifactAtPlot=function(index) return index~=1 and {} or nil end}
+        ExposedMembers={}
+        local owners={2,-1,-1,-1,-1}
+        Map={GetPlotCount=function() return 5 end,GetPlotByIndex=function(index)
+          return {GetResourceType=function() return 9 end,
+            GetOwner=function() return owners[index+1] end,
+            IsWater=function() return index==2 end,IsImpassable=function() return false end,
+            GetIndex=function() return index end,GetX=function() return index end,
+            GetY=function() return 4 end}
+          end,GetUnitsAt=function(q) return {GetCount=function()
+            return q:GetIndex()==3 and 1 or 0 end} end}
+        "#,
+    )
+    .exec()?;
+    for code in codes {
+        lua.load(code).exec()?;
+        assert!(
+            lua.load("return ExposedMembers.JAC_ArtifactSite.Plot==4")
+                .eval::<bool>()?
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn artist_activation_uses_the_published_command_hash_without_an_enum_alias() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artwork-locks.json");
     let code = scenario["steps"]
