@@ -941,12 +941,30 @@ fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -
         DealManager={GetWorkingDeal=function() error('unsafe Core working deal opened') end,
           GetPossibleDealItems=function() error('unsafe Core deal queried') end,
           EnactWorkingDeal=function() error('unsafe Core deal enacted') end}
+        PRIOR_GOVERNANCE={ID='previous-flow',From=3,To=2,FrictionPerTurn=0,
+          FrictionApplied=0,FrictionTurns=0,ImmediateApplied=true}
+        CITIES[16]:SetProperty(A.Rules.GOVERNANCE_KEY,A.Rules.Copy(PRIOR_GOVERNANCE))
+        local transfer=CityManager.TransferCity
+        CityManager.TransferCity=function(city,owner)
+          transfer(city,owner)
+          if city==CITIES[16] and owner==2 then
+            city:SetProperty(A.Rules.GOVERNANCE_KEY,nil)
+          end
+        end
         TRANSFERS=0
         local plan={ID='returned-by-carrier',From=1,To=0,Mode='MERGER',
           EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',
           Assets={['native-work:900']={Outcome='RETURN',ReturnOwner=2}},
           NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
-        local pending=A.Apply(plan)
+        local active=A.Rules.Copy(PRIOR_GOVERNANCE)
+        active.FrictionPerTurn,active.FrictionTurns,active.Turn=-2,2,Game.GetCurrentGameTurn()
+        CITIES[16]:SetProperty(A.Rules.GOVERNANCE_KEY,active)
+        local waiting=A.Apply(plan)
+        assert(waiting.Status=='WAITING_UI' and not waiting.NativeWorks[1].TargetSlot
+          and TRANSFERS==0 and CITIES[16]:GetOwner()==2,
+          'city with active absorption friction was borrowed before its policy finished')
+        CITIES[16]:SetProperty(A.Rules.GOVERNANCE_KEY,A.Rules.Copy(PRIOR_GOVERNANCE))
+        local pending=A.Resume(plan.ID)
         local carrier=assert(pending.NativeWorks[1].Carrier)
         assert(pending.Status=='WAITING_UI' and carrier.Route=='TO_OWNER'
           and carrier.Phase=='BORROW' and pending.NativeWorks[1].NativeRoute=='CARRIER'
@@ -964,6 +982,14 @@ fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -
         carrier=assert(pending.NativeWorks[1].Carrier)
         assert(carrier.Phase=='RETURN' and TRANSFERS==2 and CITIES[16]:GetOwner()==2)
         PUBLISHED[carrier.ReturnToken]=true
+        local unrelated={ID='another-flow',To=2}
+        CITIES[16]:SetProperty(A.Rules.GOVERNANCE_KEY,unrelated)
+        local accepted,reason=pcall(A.Resume,plan.ID)
+        assert(not accepted and tostring(reason):find('governance was replaced',1,true)
+          and A.Rules.Equal(CITIES[16]:GetProperty(A.Rules.GOVERNANCE_KEY),unrelated)
+          and CITIES[4]:GetOwner()==1,
+          'recipient city governance was overwritten before finishing custody')
+        CITIES[16]:SetProperty(A.Rules.GOVERNANCE_KEY,nil)
         local completed=A.Resume(plan.ID)
         assert(completed.Status=='COMPLETE' and CITIES[4]:GetOwner()==0
           and CITIES[8]:GetOwner()==0,'donor absorption did not complete after carrier proof')
@@ -975,6 +1001,8 @@ fn previously_moved_work_returns_by_recipient_city_carrier_without_core_deal() -
         assert(returned.NativeOwnerMoves==2 and returned.Outcome=='RETURN'
           and returned.NativeCustody.City==work[1].CityID,
           'return history or custody does not match the physical original')
+        assert(A.Rules.Equal(CITIES[16]:GetProperty(A.Rules.GOVERNANCE_KEY),PRIOR_GOVERNANCE),
+          'temporary carrier ownership erased the recipient city governance')
         assert(A.Verify(plan.ID,true))
         "#,
     )

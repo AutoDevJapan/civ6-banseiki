@@ -320,6 +320,15 @@ local function NativeWorkCustodian(destination)
   assert(type(free) == "number" and free >= 0, "Free Cities custody owner unavailable")
   return free
 end
+local function ActiveNativeCarrierFriction(city)
+  local governance = city:GetProperty(R.GOVERNANCE_KEY)
+  return governance and governance.To == city:GetOwner()
+    and type(governance.FrictionPerTurn) == "number"
+    and governance.FrictionPerTurn ~= 0
+    and (governance.FrictionApplied or 0) < (governance.FrictionTurns or 0)
+    and (not governance.Turn
+      or Game.GetCurrentGameTurn() <= governance.Turn + governance.FrictionTurns)
+end
 
 local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, reservedCities,
     avoidCapital)
@@ -348,11 +357,12 @@ local function NativeWorkDestination(owner, source, reserved, emptyCityOnly, res
   end
   for _, slot in ipairs(slots) do
     local key = slot.Owner .. ":" .. slot.City .. ":" .. slot.Building .. ":" .. slot.Slot
+    local city = CityManager.GetCityAt(slot.X, slot.Y)
     if not reserved[key] and not occupiedCities[slot.X .. ":" .. slot.Y]
       and not (reservedCities and reservedCities[slot.X .. ":" .. slot.Y])
       and not (capital and slot.X == capital:GetX() and slot.Y == capital:GetY())
+      and not (avoidCapital and city and ActiveNativeCarrierFriction(city))
       and (not emptyCityOnly or movableBuildings[slot.Building]) then
-      local city = CityManager.GetCityAt(slot.X, slot.Y)
       assert(city and city:GetOwner() == owner and city:GetID() == slot.City
         and slot.Owner == owner, "native Great Work destination city changed")
       assert(city:GetBuildings():HasBuilding(slot.Building)
@@ -1875,6 +1885,19 @@ local function AssertNativeCarrierRestored(city, carrier, phase)
       "native Great Work carrier city changed during " .. phase .. ": " .. key)
   end
 end
+local function RestoreNativeCarrierGovernance(state, city, carrier)
+  local before = assert(carrier.Before, "native carrier baseline is missing").Governance
+  local current = city:GetProperty(R.GOVERNANCE_KEY)
+  if R.Equal(current, before) then return end
+  -- Civ VI can drop our city property when the borrowed city returns. Restore
+  -- only that missing property; never overwrite another flow's new governance.
+  assert(current == nil and before ~= nil,
+    "native carrier governance was replaced by another change")
+  city:SetProperty(R.GOVERNANCE_KEY, R.Copy(before))
+  assert(R.Equal(city:GetProperty(R.GOVERNANCE_KEY), before),
+    "native carrier governance restoration failed")
+  Save(state)
+end
 
 local function NativeCarrierActorReady()
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
@@ -1911,6 +1934,7 @@ local function AdvanceNativeCarrier(state, carrier)
     assert(slotValue == expected, "native Great Work carrier changed before borrowing")
     if city:GetOwner() == carrier.Owner then
       if not NativeCarrierActorReady() then return false end
+      if carrier.Route == "TO_OWNER" and ActiveNativeCarrierFriction(city) then return false end
       assert(city:GetID() == carrier.OriginalCity, "native Great Work carrier identity changed")
       for _, work in ipairs(A.OwnedGreatWorkSlots(carrier.Owner)) do
         assert(work.X ~= carrier.X or work.Y ~= carrier.Y or work.Index == carrier.Index
@@ -2009,6 +2033,7 @@ local function AdvanceNativeCarrier(state, carrier)
         and WorkInSlot(city, carrier.Building, carrier.Slot) == carrier.Index,
         "native Great Work left its Free Cities carrier during rollback")
     end
+    RestoreNativeCarrierGovernance(state, city, carrier)
     AssertNativeCarrierRestored(city, carrier, "rollback")
     carrier.Phase = "RESTORED"
     Save(state)
@@ -2038,6 +2063,7 @@ local function AdvanceNativeCarrier(state, carrier)
     assert(WorkInSlot(city, carrier.Building, carrier.Slot)
       == (carrier.Route == "FROM_FREE" and -1 or carrier.Index),
       "native Great Work carrier return slot changed")
+    RestoreNativeCarrierGovernance(state, city, carrier)
     AssertNativeCarrierRestored(city, carrier, "custody")
     carrier.Phase = "PROVED"
     Save(state)
