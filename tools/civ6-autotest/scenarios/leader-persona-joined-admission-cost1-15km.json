@@ -179,7 +179,7 @@
       "action": "wait_for",
       "condition": {
         "type": "lua",
-        "code": "local r=Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'); return r and r.phase=='CLOSED' and r.pairs==484 and Players[0]:GetProperty(853304)==false and Players[1]:GetProperty(853304)==false",
+        "code": "local r=Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'); return r and r.phase=='CLOSED' and r.pairs==484 and Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==1 and Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==1 and Players[0]:GetProperty(853304)==false and Players[1]:GetProperty(853304)==false",
         "state_name": "InGame"
       },
       "timeout": 60
