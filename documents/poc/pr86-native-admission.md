@@ -30,7 +30,7 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-assign-calibrat
 
 ### Bの具体的な実装契約（A実測と1447確定後）
 
-1. mode 6の `901000+Index` は全額予約中のEVOLVINGにも真となる**任命**資格であり、配置資格へ共用しない。paid専用キー候補は `903000+Index`。現行のmanifest `900000+Index`、allow `901000+Index`、reset `902000` と衝突しないことを全runtime定義・保存初期化で検査する。番号はまだ製品へ公開しない。
+1. mode 6の `901000+Index` は全額予約中のEVOLVINGにも真となる**任命**資格であり、配置資格へ共用しない。`903000+Index` は任命の閉鎖に使う。配置の候補は対応表 `904000+Index`、本人の支払済みbool `905000+Index`、閉鎖 `906000+Index`、所有者失効 `907000` とする。全runtime定義・保存初期化で既存範囲との衝突を検査し、同じowner・人物Index・Core receiver・session・ticket・typed false ACKで公開する。番号は未実装で、まだ製品へ公開しない。
 2. 同期Gameplayの正本から、同じactor・人物・runtime Index・保存された費用、実Governor、base、必要なTITLE_1/TITLE_2、公式Spentと人物別の全支払の会計一致を確認してpaidを作る。予約残高、UI cache、EVOLVING/GOVERNORという文字列だけを全支払の証明にしない。未払い時は偉人と支払済みの実Governorを保持する。追加称号や完了stateを偽造しない。
 3. producerは任命資格とは独立してpaid falseを最初に公開し、manifest/owner/Index/世代の確定と閉鎖値のCore自然getterによる確認後、全支払の確定点で最後にtrueを公開する。死亡・取消・所有者変更・保存読込・実体欠落・会計不一致では最初に閉じる。1399/1447の初期化/reload、receiver切替、closed ACK、manifest競合の契約へ合流し、全22人のproducerを複製しない。
 4. consumerにはactor×Indexのpaid用128bit cellを追加し、同一Core receiver・session・入口で一度採番したticket・派生paidを一体でCAS更新する。manifest/owner/resetにも同じ世代照合を要求する。UI receiver・不正型・flags・欠損・旧世代・古いtrueの遅延復帰は閉鎖。資格consumerと同じ受信先切替/取消で両cellを閉じ、任命allow trueからpaid trueを導出しない。未確定の1447のatomic形式を別実装で固定しない。

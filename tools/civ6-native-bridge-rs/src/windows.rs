@@ -3394,13 +3394,43 @@ mod tests {
         true
     }
 
+    struct SyntheticCallers {
+        phase: Arc<AtomicU32>,
+        workers: Vec<std::thread::JoinHandle<u32>>,
+    }
+
+    impl SyntheticCallers {
+        fn stop_and_join(&mut self) -> Result<u32, &'static str> {
+            self.phase.store(3, Ordering::Release);
+            let mut calls = 0;
+            let mut failed = false;
+            for worker in self.workers.drain(..) {
+                match worker.join() {
+                    Ok(count) => calls += count,
+                    Err(_) => failed = true,
+                }
+            }
+            if failed {
+                Err("synthetic caller panicked")
+            } else {
+                Ok(calls)
+            }
+        }
+    }
+
+    impl Drop for SyntheticCallers {
+        fn drop(&mut self) {
+            // The trace is declared before this guard and remains alive through
+            // worker collection, including while the test body is unwinding.
+            let _ = self.stop_and_join();
+            let _ = unsafe { uninstall() };
+        }
+    }
+
     fn spawn_synthetic_callers(
         phase: &Arc<AtomicU32>,
         call: impl Fn(u32) + Send + Sync + 'static,
-    ) -> (
-        Vec<std::thread::JoinHandle<u32>>,
-        std::sync::mpsc::Receiver<(u32, u32)>,
-    ) {
+    ) -> (SyntheticCallers, std::sync::mpsc::Receiver<(u32, u32)>) {
         let call = Arc::new(call);
         let (send, progress) = std::sync::mpsc::channel();
         let workers = (0..4)
@@ -3411,7 +3441,7 @@ mod tests {
                 std::thread::spawn(move || {
                     let mut last_phase = u32::MAX;
                     let mut calls = 0;
-                    loop {
+                    while calls < 1_000_000 {
                         let current = phase.load(Ordering::Acquire);
                         if current == 3 {
                             break;
@@ -3428,7 +3458,13 @@ mod tests {
                 })
             })
             .collect();
-        (workers, progress)
+        (
+            SyntheticCallers {
+                phase: Arc::clone(phase),
+                workers,
+            },
+            progress,
+        )
     }
 
     #[test]
@@ -3614,7 +3650,8 @@ mod tests {
         assert!(!paused.is_null() && thread_id != 0);
         let phase = Arc::new(AtomicU32::new(0));
         let address = target as usize;
-        let (workers, progress) = spawn_synthetic_callers(&phase, move |_| {
+        let mut trace = Box::new(PropertyTrace::default());
+        let (mut workers, progress) = spawn_synthetic_callers(&phase, move |_| {
             let first: extern "system" fn(usize, u32) -> u32 =
                 unsafe { std::mem::transmute(address) };
             let second: extern "system" fn(usize) -> u32 =
@@ -3623,7 +3660,6 @@ mod tests {
             assert_eq!(second(argument), expected);
         });
         let before_hook = wait_for_synthetic_phase(&progress, 0);
-        let mut trace = Box::new(PropertyTrace::default());
         unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
         phase.store(1, Ordering::Release);
         let during_hook = wait_for_synthetic_phase(&progress, 1);
@@ -3640,8 +3676,7 @@ mod tests {
         unsafe { uninstall() }.unwrap();
         phase.store(2, Ordering::Release);
         let after_restore = wait_for_synthetic_phase(&progress, 2);
-        phase.store(3, Ordering::Release);
-        assert!(workers.into_iter().map(|w| w.join().unwrap()).sum::<u32>() > 0);
+        assert!(workers.stop_and_join().unwrap() > 0);
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) },
             PROPERTY_PROLOGUE
@@ -4681,7 +4716,7 @@ mod tests {
         unsafe { install_at(target, trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
         let phase = Arc::new(AtomicU32::new(1));
         let address = target as usize;
-        let (callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
+        let (mut callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
             let f: extern "system" fn(usize, u32) -> u32 = unsafe { std::mem::transmute(address) };
             assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
         });
@@ -4689,14 +4724,7 @@ mod tests {
         unsafe { uninstall() }.unwrap();
         phase.store(2, Ordering::Release);
         let after_restore = wait_for_synthetic_phase(&progress, 2);
-        phase.store(3, Ordering::Release);
-        assert!(
-            callers
-                .into_iter()
-                .map(|thread| thread.join().unwrap())
-                .sum::<u32>()
-                > 0
-        );
+        assert!(callers.stop_and_join().unwrap() > 0);
         assert!(trace.next.load(Ordering::Acquire) > 0);
         assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
         if trace.dropped.load(Ordering::Acquire) == 0 {
@@ -4713,6 +4741,48 @@ mod tests {
             "each caller must execute while the hook is installed"
         );
         assert!(after_restore, "each caller must execute after restoration");
+    }
+
+    #[test]
+    fn synthetic_caller_guard_joins_and_restores_before_trace_drop_on_panic() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let target = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!target.is_null());
+        let bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0xc8, 0x31, 0xd0, 0xc3,
+        ];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let mut trace = Box::new(SharedTrace::default());
+        unsafe { install_at(target, trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
+        let phase = Arc::new(AtomicU32::new(1));
+        let address = target as usize;
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let (_callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
+                let f: extern "system" fn(usize, u32) -> u32 =
+                    unsafe { std::mem::transmute(address) };
+                assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
+            });
+            assert!(wait_for_synthetic_phase(&progress, 1));
+            panic!("injected test-body failure after every worker entered the hook");
+        }));
+        assert!(panic.is_err());
+        assert_eq!(phase.load(Ordering::Acquire), 3);
+        assert_eq!(
+            Arc::strong_count(&phase),
+            1,
+            "no worker may retain the phase"
+        );
+        assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
+        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
     }
 
     #[test]
