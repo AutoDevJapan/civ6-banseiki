@@ -80,6 +80,11 @@ impl Enemy {
         self.run("ENEMY_CASES.settled(); ENEMY_CASES.mission(EspionageResultTypes.FAIL_UNDETECTED,12,0,4); CIVIC_COMPLETED=true; local spy=makeSpy(0,15); spy.x=FOREIGN.x; spy.y=FOREIGN.y; Game:SetProperty('JAC_BOUNDARY_SPY',{owner=0,id=15}); Game:SetProperty('JAC_BOUNDARY_SPY_TRAVEL',{oldID=14,name='Spy 15',level=1,targetOwner=1,targetID=20}); Game:SetProperty('JAC_BOUNDARY_SPY_BARRIER',{owner=0,spyID=15,action='SPY_MISSION',token=1}); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='FAILED')");
     }
 
+    fn captured_district(&self) {
+        self.failed();
+        self.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; GOV_CIVIC_COMPLETED=true");
+    }
+
     fn captured_deal(&self) {
         self.failed();
         self.run(r#"
@@ -1042,11 +1047,80 @@ fn official_domain_law_and_owned_plot_build_the_government_plaza_before_tier_one
         "PROGRESS_CAPACITY_DISTRICT",
         "JAC_BoundaryProgressCapacityDistrict",
     );
-    h.run("local r=Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS'); assert(r.plot==11 and r.cityID==10 and r.districtIndex==70 and r.memberKey==1 and r.acceptedNonce>0 and CAPACITY_PROGRESS_CALLS==1 and not GOV_DISTRICT_BUILT); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome().stage=='PROGRESS_PENDING'); ADVANCE_TURN(); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome(); assert(o.stage=='DISTRICT_BUILT' and o.targetBuilt and o.plot==11 and o.memberKey==r.memberKey and o.acceptedNonce==r.acceptedNonce and o.turn>o.progressTurn and o.captured==1 and o.capacity==1); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_TIER1')");
+    h.run("local r=Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS'); assert(r.plot==11 and r.cityID==10 and r.cityOwner==0 and r.districtIndex==70 and r.districtID==991 and r.memberKey==1 and r.memberKey~=r.districtID and r.acceptedNonce>0 and CAPACITY_PROGRESS_CALLS==1 and not GOV_DISTRICT_BUILT); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome().stage=='PROGRESS_PENDING'); ADVANCE_TURN(); local o=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome(); assert(o.stage=='DISTRICT_BUILT' and o.targetBuilt and o.owner==0 and o.cityOwner==0 and o.cityID==10 and o.districtID==r.districtID and o.plot==11 and o.memberKey==r.memberKey and o.acceptedNonce==r.acceptedNonce and o.turn>o.progressTurn and o.captured==1 and o.capacity==1); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='BUILD_TIER1')");
     h.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
         "stale",
     );
+}
+
+#[test]
+fn native_district_instance_owner_city_and_id_are_required_at_build_acceptance() {
+    for mutation in [
+        "GOV_DISTRICT_OWNER=1",
+        "GOV_DISTRICT_CITY=TARGET",
+        "GOV_DISTRICT_CITY=FOREIGN",
+        "GOV_DISTRICT_ID=nil",
+        "GOV_DISTRICT_MISSING_GETTER='GetOwner'",
+        "GOV_DISTRICT_MISSING_GETTER='GetCity'",
+        "GOV_DISTRICT_MISSING_GETTER='GetID'",
+    ] {
+        let h = Enemy::new();
+        h.captured_district();
+        h.run(&format!("ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); {mutation}; FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='REJECTED_BUILD_CAPACITY_DISTRICT' and #BUILD_REQUESTS==1 and CAPACITY_PROGRESS_CALLS==0)"));
+        h.reject(
+            "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY_DISTRICT')",
+            "BUILD acceptance is missing",
+        );
+    }
+}
+
+#[test]
+fn native_district_instance_change_before_core_progress_denies_add_progress() {
+    for mutation in [
+        "GOV_DISTRICT_OWNER=1",
+        "GOV_DISTRICT_CITY=TARGET",
+        "GOV_DISTRICT_CITY=FOREIGN",
+        "GOV_DISTRICT_ID=992",
+        "GOV_DISTRICT_MEMBER_KEY=2",
+        "GOV_DISTRICT_MISSING_GETTER='GetCity'",
+    ] {
+        let h = Enemy::new();
+        h.captured_district();
+        h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY_DISTRICT'); local q=ExposedMembers.JAC_PersonaBoundary.ReadCapacityQueue(0,10); assert(q.districtOwner==0 and q.districtCityOwner==0 and q.districtCityID==10 and q.districtID==991 and q.memberKey==1 and q.acceptedNonce>0); ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_CAPACITY_DISTRICT'); FRAME()");
+        h.run(mutation);
+        h.reject(
+            "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
+            "queue changed before progress",
+        );
+        h.run("assert(CAPACITY_PROGRESS_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS')==nil)");
+    }
+}
+
+#[test]
+fn native_district_instance_change_after_turn_denies_completion() {
+    for mutation in [
+        "GOV_DISTRICT_OWNER=1",
+        "GOV_DISTRICT_CITY=TARGET",
+        "GOV_DISTRICT_CITY=FOREIGN",
+        "GOV_DISTRICT_ID=992",
+        "GOV_DISTRICT_MEMBER_KEY=2",
+        "GOV_DISTRICT_MISSING_GETTER='GetID'",
+    ] {
+        let h = Enemy::new();
+        h.captured_district();
+        h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BUILD_CAPACITY_DISTRICT'); FRAME(); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='READY_BUILD_CAPACITY_DISTRICT')");
+        h.sync(
+            "PROGRESS_CAPACITY_DISTRICT",
+            "JAC_BoundaryProgressCapacityDistrict",
+        );
+        h.run(&format!("ADVANCE_TURN(); {mutation}"));
+        h.reject(
+            "ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityDistrictOutcome()",
+            "district identity changed after progress",
+        );
+        h.run("assert(CAPACITY_PROGRESS_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS').districtID==991)");
+    }
 }
 
 #[test]

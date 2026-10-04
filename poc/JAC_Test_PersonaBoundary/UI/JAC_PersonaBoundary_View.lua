@@ -1109,11 +1109,55 @@ function B.CaptiveCapacityOutcome()
     return result;
 end
 
+local function NativeCapacityDistrictSnapshot(city,districtType)
+    local placed,count=nil,0;
+    local cityOwner,cityID=city:GetOwner(),city:GetID();
+    for memberKey,instance in city:GetDistricts():Members() do
+        local row=GameInfo.Districts[instance:GetType()];
+        if row and row.DistrictType==districtType then
+            count=count+1;
+            if type(memberKey)~="number" or type(instance.GetOwner)~="function" or
+                type(instance.GetCity)~="function" or type(instance.GetID)~="function" then
+                return nil;
+            end
+            local associatedCity=instance:GetCity();
+            if not associatedCity or type(associatedCity.GetOwner)~="function" or
+                type(associatedCity.GetID)~="function" then return nil; end
+            local owner,associatedOwner=instance:GetOwner(),associatedCity:GetOwner();
+            local associatedID,districtID=associatedCity:GetID(),instance:GetID();
+            local x,y=instance:GetX(),instance:GetY();
+            local plot=type(x)=="number" and type(y)=="number" and Map.GetPlot(x,y);
+            local purchase=plot and Cities.GetPlotPurchaseCity(plot);
+            if type(cityOwner)~="number" or type(cityID)~="number" or
+                type(districtID)~="number" or districtID<0 or
+                owner~=cityOwner or associatedOwner~=cityOwner or
+                associatedID~=cityID or not plot or not purchase or
+                purchase:GetOwner()~=cityOwner or purchase:GetID()~=cityID then
+                return nil;
+            end
+            placed={owner=owner,cityOwner=associatedOwner,cityID=associatedID,
+                districtID=districtID,memberKey=memberKey,plot=plot:GetIndex(),
+                x=x,y=y,districtType=row.DistrictType};
+        end
+    end
+    return count==1 and placed or nil;
+end
+
+local function SameCapacityDistrict(actual,expected)
+    return actual and expected and actual.owner==expected.owner and
+        actual.cityOwner==expected.cityOwner and actual.cityID==expected.cityID and
+        actual.districtID==expected.districtID and
+        actual.memberKey==expected.memberKey and actual.plot==expected.plot and
+        actual.x==expected.x and actual.y==expected.y and
+        actual.districtType==expected.districtType;
+end
+
 function B.CaptiveCapacityDistrictOutcome()
     local c=EnemyConfig();
     local receipt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS"),
         "native Government Plaza progress receipt missing");
     assert(receipt.owner==c.attacker and type(receipt.memberKey)=="number" and
+        type(receipt.districtID)=="number" and receipt.districtID>=0 and
         type(receipt.acceptedNonce)=="number" and receipt.acceptedNonce>0 and
         receipt.districtIndex==GameInfo.Districts["DISTRICT_GOVERNMENT"].Index,
         "native Government Plaza progress identity changed");
@@ -1129,23 +1173,19 @@ function B.CaptiveCapacityDistrictOutcome()
     local d=B.EnemyRetryDiagnosis();
     assert(d.outcome=="CAPTURED" and d.occupied==1 and d.capacity==1 and
         #d.roster.captured==1,"native captive capacity changed before district completion");
-    local districts=city:GetDistricts();
-    local built=districts:HasDistrict(receipt.districtIndex,true);
-    local atPlot=false;
-    for memberKey,district in districts:Members() do
-        if district:GetType()==receipt.districtIndex and
-            district:GetX()==receipt.x and district:GetY()==receipt.y then
-            assert(not atPlot,"native Government Plaza district duplicated");
-            assert(memberKey==receipt.memberKey,
-                "native Government Plaza district identity changed after progress");
-            atPlot=true;
-        end
-    end
-    local stage=built and atPlot and "DISTRICT_BUILT" or
-        built and "DISTRICT_PLOT_MISMATCH" or "PROGRESS_PENDING";
+    local placed=NativeCapacityDistrictSnapshot(city,"DISTRICT_GOVERNMENT");
+    assert(SameCapacityDistrict(placed,{owner=receipt.owner,
+        cityOwner=receipt.cityOwner,cityID=receipt.cityID,
+        districtID=receipt.districtID,memberKey=receipt.memberKey,
+        plot=receipt.plot,x=receipt.x,y=receipt.y,
+        districtType="DISTRICT_GOVERNMENT"}),
+        "native Government Plaza district identity changed after progress");
+    local built=city:GetDistricts():HasDistrict(receipt.districtIndex,true);
+    local stage=built and "DISTRICT_BUILT" or "PROGRESS_PENDING";
     local result={stage=stage,cityID=city:GetID(),plot=receipt.plot,
-        x=receipt.x,y=receipt.y,targetBuilt=built and atPlot,
-        memberKey=receipt.memberKey,acceptedNonce=receipt.acceptedNonce,
+        x=receipt.x,y=receipt.y,targetBuilt=built,
+        owner=placed.owner,cityOwner=placed.cityOwner,districtID=placed.districtID,
+        memberKey=placed.memberKey,acceptedNonce=receipt.acceptedNonce,
         capacity=d.capacity,occupied=d.occupied,captured=#d.roster.captured,
         turn=Game.GetCurrentGameTurn(),progressTurn=receipt.turn};
     Log("ENEMY_CAPTIVE_DISTRICT_OUTCOME",{result=result,roster=d.roster});
@@ -1540,33 +1580,15 @@ local function CapacityBuildReady(owner,cityID,buildingType)
     local row=head and head.BuildingType and GameInfo.Buildings[head.BuildingType];
     return row and row.BuildingType==buildingType or false;
 end
-local function NativePlacedCapacityDistrict(city,districtType)
-    local placed,count=nil,0;
-    for memberKey,instance in city:GetDistricts():Members() do
-        local row=GameInfo.Districts[instance:GetType()];
-        if row and row.DistrictType==districtType then
-            count=count+1;
-            local x,y=instance:GetX(),instance:GetY();
-            local plot=type(x)=="number" and type(y)=="number" and Map.GetPlot(x,y);
-            local purchase=plot and Cities.GetPlotPurchaseCity(plot);
-            if type(memberKey)~="number" or not plot or not purchase or
-                purchase:GetOwner()~=city:GetOwner() or purchase:GetID()~=city:GetID() then
-                return nil;
-            end
-            placed={memberKey=memberKey,plot=plot:GetIndex(),x=x,y=y,
-                districtType=row.DistrictType};
-        end
-    end
-    return count==1 and placed or nil;
-end
 local function CapacityDistrictBuildReady(owner,cityID,districtType,request)
     local city=assert(CityManager.GetCity(owner,cityID),"capacity district city missing");
     local head=city:GetBuildQueue():GetAt(0);
     local row=head and head.DistrictType and GameInfo.Districts[head.DistrictType];
-    local placed=NativePlacedCapacityDistrict(city,districtType);
+    local placed=NativeCapacityDistrictSnapshot(city,districtType);
     local ready=city:GetOwner()==owner and row and row.DistrictType==districtType and
-        placed and placed.plot==request.plot and placed.x==request.x and
-        placed.y==request.y;
+        placed and placed.owner==owner and placed.cityOwner==owner and
+        placed.cityID==cityID and placed.districtType==districtType and
+        placed.plot==request.plot and placed.x==request.x and placed.y==request.y;
     return ready or false,placed;
 end
 -- Gameplay GetAt was nil in live 50. Gameplay can call this UI-owned read
@@ -1582,16 +1604,17 @@ function B.ReadCapacityQueue(owner,cityID)
         districtType=district and district.DistrictType or "",
         turn=Game.GetCurrentGameTurn(),frame=frameSerial,publishEpoch=publishEpoch};
     if district then
-        local placed=NativePlacedCapacityDistrict(city,district.DistrictType);
+        local placed=NativeCapacityDistrictSnapshot(city,district.DistrictType);
         if placed then
+            result.districtOwner=placed.owner;
+            result.districtCityOwner=placed.cityOwner;
+            result.districtCityID=placed.cityID;
+            result.districtID=placed.districtID;
             result.districtPlot=placed.plot;
             result.districtX=placed.x; result.districtY=placed.y;
             result.memberKey=placed.memberKey;
             local accepted=capacityDistrictReady;
-            if accepted and accepted.cityID==cityID and
-                accepted.districtType==district.DistrictType and
-                accepted.plot==placed.plot and accepted.x==placed.x and
-                accepted.y==placed.y and accepted.memberKey==placed.memberKey and
+            if SameCapacityDistrict(placed,accepted) and
                 accepted.turn==result.turn then
                 result.acceptedNonce=accepted.nonce;
             end
@@ -1659,8 +1682,11 @@ function B.Queue(action, params)
                 capacityDistrictReady.turn==Game.GetCurrentGameTurn(),
                 "native district BUILD acceptance is missing in this UI turn");
             local observed=B.ReadCapacityQueue(Game.GetLocalPlayer(),plan.cityID);
-            assert(observed.districtPlot==capacityDistrictReady.plot and
-                observed.memberKey==capacityDistrictReady.memberKey and
+            assert(SameCapacityDistrict({owner=observed.districtOwner,
+                cityOwner=observed.districtCityOwner,cityID=observed.districtCityID,
+                districtID=observed.districtID,memberKey=observed.memberKey,
+                plot=observed.districtPlot,x=observed.districtX,y=observed.districtY,
+                districtType=observed.districtType},capacityDistrictReady) and
                 observed.acceptedNonce==capacityDistrictReady.nonce,
                 "native district placement changed after accepted BUILD");
         else
@@ -1724,8 +1750,11 @@ local function Submit(command)
             ready.turn==Game.GetCurrentGameTurn(),
             "native Government Plaza queue changed before progress");
         local observed=B.ReadCapacityQueue(owner,ready.cityID);
-        assert(observed.districtPlot==ready.plot and
-            observed.memberKey==ready.memberKey and
+        assert(SameCapacityDistrict({owner=observed.districtOwner,
+            cityOwner=observed.districtCityOwner,cityID=observed.districtCityID,
+            districtID=observed.districtID,memberKey=observed.memberKey,
+            plot=observed.districtPlot,x=observed.districtX,y=observed.districtY,
+            districtType=observed.districtType},ready) and
             observed.acceptedNonce==ready.nonce,
             "native district placement changed before progress request");
         local district=assert(GameInfo.Districts["DISTRICT_GOVERNMENT"],
@@ -1733,7 +1762,8 @@ local function Submit(command)
         return EnemySyncRequest(action,{CityID=ready.cityID,
             DistrictIndex=district.Index,DistrictType=district.DistrictType,
             PlotIndex=ready.plot,X=ready.x,Y=ready.y,
-            MemberKey=ready.memberKey,AcceptedNonce=ready.nonce,
+            DistrictID=ready.districtID,MemberKey=ready.memberKey,
+            AcceptedNonce=ready.nonce,
             Capacity=plan.capacity,Occupied=plan.occupied});
     elseif action == "PROGRESS_CAPACITY" then
         local plan=B.CaptiveCapacityPlan();
@@ -2140,7 +2170,9 @@ ContextPtr:SetUpdate(function()
                 accepted=marker and marker.token==request.token and
                     marker.cityID==request.payload.CityID and
                     marker.plot==request.payload.PlotIndex and
-                    marker.districtIndex==request.payload.DistrictIndex;
+                    marker.districtIndex==request.payload.DistrictIndex and
+                    marker.districtID==request.payload.DistrictID and
+                    marker.memberKey==request.payload.MemberKey;
             end
             B.lastAction=(accepted and "ACCEPTED_" or "REJECTED_")..request.action;
             Log("ENEMY_SYNC_ACCEPTANCE",{action=request.action,accepted=accepted,
@@ -2208,10 +2240,9 @@ ContextPtr:SetUpdate(function()
         end
         if action=="BUILD_CAPACITY_DISTRICT" and ok and ready then
             barrierToken=barrierToken+1;
-            capacityDistrictReady={cityID=request.cityID,plot=request.plot,
-                x=request.x,y=request.y,districtType=request.districtType,
-                memberKey=placed.memberKey,nonce=barrierToken,
-                turn=Game.GetCurrentGameTurn()};
+            capacityDistrictReady=placed;
+            capacityDistrictReady.nonce=barrierToken;
+            capacityDistrictReady.turn=Game.GetCurrentGameTurn();
         end
         B.lastAction=(ok and ready and "READY_" or "REJECTED_")..action;
         Log(action=="BUILD_CAPACITY_DISTRICT" and "CAPACITY_DISTRICT_BUILD_ACCEPTANCE" or

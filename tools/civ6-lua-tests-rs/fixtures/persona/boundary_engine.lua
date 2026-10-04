@@ -95,6 +95,9 @@ FOREIGN=city(20,1,2,1,'Foreign',0)
 BUILD_HEAD=nil; PROGRESS_CALLS=0; CAPACITY_PROGRESS_CALLS=0; BUILD_REQUESTS={}; SPY_CAPACITY=1
 GOV_DISTRICT_BUILT=false; GOV_DISTRICT_PLACED=false
 GOV_DISTRICT_X=1; GOV_DISTRICT_Y=1
+GOV_DISTRICT_OWNER=0; GOV_DISTRICT_CITY=CONTROL
+GOV_DISTRICT_ID=991; GOV_DISTRICT_MEMBER_KEY=1
+GOV_DISTRICT_MISSING_GETTER=nil
 GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
 CAPTURED={[0]={},[1]={}}
 local queue={
@@ -119,11 +122,19 @@ CONTROL.GetDistricts=function() return {
   return GOV_DISTRICT_PLACED
  end,
  Members=function()
-  local rows={}
-  if GOV_DISTRICT_PLACED then rows[1]={GetType=function() return 70 end,
+  local instance={GetType=function() return 70 end,
+   GetOwner=function() return GOV_DISTRICT_OWNER end,
+   GetCity=function() return GOV_DISTRICT_CITY end,
+   GetID=function() return GOV_DISTRICT_ID end,
    GetX=function() return GOV_DISTRICT_X end,
-   GetY=function() return GOV_DISTRICT_Y end} end
-  return members(rows)
+   GetY=function() return GOV_DISTRICT_Y end}
+  if GOV_DISTRICT_MISSING_GETTER then instance[GOV_DISTRICT_MISSING_GETTER]=nil end
+  local returned=false
+  return function()
+   if GOV_DISTRICT_PLACED and not returned then
+    returned=true; return GOV_DISTRICT_MEMBER_KEY,instance
+   end
+  end
  end} end
 CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
  if index==76 then return GOV_TIER1_BUILT end

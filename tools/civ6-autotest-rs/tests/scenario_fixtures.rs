@@ -348,6 +348,11 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 && embedded_lua(step).is_some_and(|code| {
                     code.contains("o.stage=='DISTRICT_BUILT'")
                         && code.contains("o.targetBuilt")
+                        && code.contains("o.owner==r.owner")
+                        && code.contains("o.cityOwner==r.cityOwner")
+                        && code.contains("o.cityID==r.cityID")
+                        && code.contains("o.districtID==r.districtID")
+                        && code.contains("o.plot==r.plot")
                         && code.contains("o.memberKey==r.memberKey")
                         && code.contains("o.acceptedNonce==r.acceptedNonce")
                         && code.contains("o.captured==1")
