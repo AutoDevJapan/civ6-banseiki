@@ -948,6 +948,42 @@ fn committed_six_type_cases_equal_their_current_template_and_saved_input() {
 }
 
 #[test]
+fn kept_recovery_city_allows_same_owner_plot_membership_only_and_borrowed_city_stays_exact()
+-> mlua::Result<()> {
+    let lua = model("artifact", "artifact")?;
+    let data = scenario("return");
+    let helper = data["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|s| {
+            s["code"]
+                .as_str()
+                .filter(|code| code.contains("function H.Kept"))
+        })
+        .unwrap();
+    lua.load(helper).exec()?;
+    lua.load(r#"
+        local A=JAC_AbsorptionGameplay
+        local H=ExposedMembers.JAC_TypeChecks
+        local before={Owner=2,X=4,Y=5,Population=3,Assets={museum={Works={[0]=-1}}},
+          PurchasedPlots={8,9},UnitsOnCenter={},Governance={ID='original'}}
+        CURRENT=A.Rules.Copy(before);CURRENT.PurchasedPlots={8};PLOT_OWNER=2
+        H.City=function() return A.Rules.Copy(CURRENT) end
+        CityManager.GetCityAt=function() return {} end
+        Map.GetPlotByIndex=function() return {GetOwner=function() return PLOT_OWNER end} end
+        H.Kept(before,900)
+        assert(not pcall(H.Restored,before,900),'borrowed city accepted a changed purchased-plot set')
+        PLOT_OWNER=3
+        assert(not pcall(H.Kept,before,900),'recovery city lost real territory ownership')
+        PLOT_OWNER=2;CURRENT.Population=4
+        assert(not pcall(H.Kept,before,900),'same-owner membership exception hid population change')
+        CURRENT.Population=3;CURRENT.Assets.museum.Works[0]=901
+        assert(not pcall(H.Kept,before,900),'same-owner membership exception hid another original work')
+    "#).exec()
+}
+
+#[test]
 fn native_intent_waits_only_for_actual_city_cache_readiness_and_one_original() -> mlua::Result<()> {
     for name in ["city-owner-transfer", "return", "scatter"] {
         let lua = model("artifact", "artifact")?;
