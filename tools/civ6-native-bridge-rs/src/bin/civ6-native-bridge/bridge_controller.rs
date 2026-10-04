@@ -978,6 +978,7 @@ pub fn run() -> Result<(), String> {
             "observed_calls":observed_calls,
             "filtered_calls":filtered_calls,
             "getter_calls_seen":u64::from(observed_calls) + u64::from(filtered_calls),
+            "counter_scope":"snapshot_observation_not_complete_call_history",
             "in_flight":in_flight,
             "snapshot_stable":true,
             "quiescence_proven":false,

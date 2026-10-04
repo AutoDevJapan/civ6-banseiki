@@ -36,6 +36,7 @@ mod platform {
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
+        let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
         for line in BufReader::new(std::fs::File::open(path)?).lines() {
             let row: Value = serde_json::from_str(&line?)?;
@@ -107,6 +108,9 @@ mod platform {
                         && row["read_state"].as_u64().is_some_and(|n| n <= 2) =>
                 {
                     let returned = row["returned"].as_str().unwrap();
+                    if mode == BridgeMode::PropertyScoped {
+                        scoped_keys.insert(row["key_id"].as_u64().unwrap());
+                    }
                     if row["read_state"] == 0 {
                         if returned != "0x0000000000000000"
                             || !row["tag"].is_null()
@@ -194,6 +198,17 @@ mod platform {
                 "native property raw collection is partial: {entries} rows, {dropped} dropped; inspect {}",
                 path.display()
             )));
+        }
+        if mode == BridgeMode::PropertyScoped
+            && scoped_keys
+                != std::collections::BTreeSet::from([
+                    u64::from(civ6_native_bridge_rs::PROPERTY_TEST_VALUE_KEY_ID),
+                    u64::from(civ6_native_bridge_rs::PROPERTY_TEST_PHASE_KEY_ID),
+                ])
+        {
+            return Err(Error::input(
+                "native property collection did not observe both scoped keys",
+            ));
         }
         Ok(entries)
     }
@@ -786,6 +801,7 @@ mod platform {
             for (index, field, value) in [
                 (0, "scope_key_ids", json!([853271, 853270])),
                 (3, "key_id", json!(583956078)),
+                (4, "key_id", json!(853271)),
                 (5, "filtered_calls", json!(119999)),
                 (5, "getter_calls_seen", json!(120001)),
             ] {
