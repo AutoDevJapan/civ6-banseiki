@@ -84,6 +84,44 @@ fn property_observer_scene_is_bounded_and_all_embedded_lua_parses() {
 }
 
 #[test]
+fn numeric_property_scene_uses_only_fixed_numeric_test_keys() {
+    let data = scenario("leader-persona-property-numeric-observer-15km.json");
+    validate_scenario(&data).unwrap();
+    let actions = steps(&data);
+    assert_eq!(actions.len(), 23);
+    let start = actions
+        .iter()
+        .position(|s| action(s, "start_native_property_trace"))
+        .unwrap();
+    let stop = actions
+        .iter()
+        .position(|s| action(s, "stop_native_property_trace"))
+        .unwrap();
+    assert_eq!(actions[start]["scope"], "numeric_test_keys_853271_853272");
+    assert!(start < stop && actions[start]["max_seconds"] == 90);
+    assert!(actions[start + 1..stop].iter().all(
+        |s| !["save", "load", "end_turn", "autoplay"].contains(&s["action"].as_str().unwrap())
+    ));
+    let lua = Lua::new();
+    let sources = actions.iter().filter_map(embedded_lua).collect::<Vec<_>>();
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("JAC_PropertyObserverNumericStep")));
+    assert!(sources
+        .iter()
+        .all(|s| !s.contains("'JAC_TEST853_VALUE'") && !s.contains("'JAC_TEST853_PHASE'")));
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("Game:GetProperty(853271)")));
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("Game:GetProperty(853272)")));
+    for source in sources {
+        compile_lua(&lua, source);
+    }
+}
+
+#[test]
 fn persona_boundary_scenarios_validate_without_operating_the_game() {
     let lua = Lua::new();
     for name in [
@@ -886,7 +924,11 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             } else {
                 assert!(isolated.iter().any(|id| id == TRAIT_GRANT_MOD), "{name}");
             }
-            if name == "leader-persona-property-observer-15km.json" {
+            if matches!(
+                name.as_str(),
+                "leader-persona-property-observer-15km.json"
+                    | "leader-persona-property-numeric-observer-15km.json"
+            ) {
                 assert!(
                     strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
                     "{name}"
@@ -911,7 +953,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 85);
+    assert_eq!(count, 86);
 }
 
 #[test]

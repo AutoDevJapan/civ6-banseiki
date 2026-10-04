@@ -25,7 +25,9 @@ pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
-const PROPERTY_TRACE_VERSION: u32 = 1;
+const PROPERTY_TRACE_VERSION: u32 = 2;
+pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
+pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
 const CODE_PAGE: usize = 4096;
 const RELAY_OFFSET: usize = 0;
 const TRAMPOLINE_OFFSET: usize = 32;
@@ -55,34 +57,39 @@ use crate::MAX_ACTIVE_SECONDS;
 pub enum BridgeMode {
     CanEver = 0,
     Property = 1,
+    PropertyScoped = 2,
 }
 
 impl BridgeMode {
+    pub const fn is_property(self) -> bool {
+        matches!(self, Self::Property | Self::PropertyScoped)
+    }
+
     pub const fn rva(self) -> usize {
         match self {
             Self::CanEver => PINNED_CAN_EVER_RVA,
-            Self::Property => PINNED_PROPERTY_GET_RVA,
+            Self::Property | Self::PropertyScoped => PINNED_PROPERTY_GET_RVA,
         }
     }
 
     const fn file_offset(self) -> u64 {
         match self {
             Self::CanEver => PINNED_CAN_EVER_FILE_OFFSET,
-            Self::Property => PINNED_PROPERTY_GET_FILE_OFFSET,
+            Self::Property | Self::PropertyScoped => PINNED_PROPERTY_GET_FILE_OFFSET,
         }
     }
 
     const fn prologue(self) -> &'static [u8] {
         match self {
             Self::CanEver => &PINNED_PROLOGUE,
-            Self::Property => &PROPERTY_PROLOGUE,
+            Self::Property | Self::PropertyScoped => &PROPERTY_PROLOGUE,
         }
     }
 
     pub const fn trace_size(self) -> usize {
         match self {
             Self::CanEver => std::mem::size_of::<SharedTrace>(),
-            Self::Property => std::mem::size_of::<PropertyTrace>(),
+            Self::Property | Self::PropertyScoped => std::mem::size_of::<PropertyTrace>(),
         }
     }
 }
@@ -119,6 +126,12 @@ impl BridgeConfig {
         let mut config = Self::new(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::Property as u32;
         config.trace_size = BridgeMode::Property.trace_size() as u32;
+        config
+    }
+
+    pub fn for_property_scoped(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::for_property(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::PropertyScoped as u32;
         config
     }
 }
@@ -236,6 +249,8 @@ pub struct PropertyTrace {
     pub next: AtomicU32,
     pub dropped: AtomicU32,
     pub in_flight: AtomicU32,
+    pub filtered: AtomicU32,
+    pub scope: u32,
     pub reserved: u32,
     pub rows: [PropertyRow; TRACE_CAPACITY],
 }
@@ -248,9 +263,19 @@ impl Default for PropertyTrace {
             next: AtomicU32::new(0),
             dropped: AtomicU32::new(0),
             in_flight: AtomicU32::new(0),
+            filtered: AtomicU32::new(0),
+            scope: 0,
             reserved: 0,
             rows: std::array::from_fn(|_| PropertyRow::default()),
         }
+    }
+}
+
+impl PropertyTrace {
+    pub fn scoped() -> Self {
+        let mut trace = Self::default();
+        trace.scope = BridgeMode::PropertyScoped as u32;
+        trace
     }
 }
 
@@ -318,6 +343,13 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         return;
     }
     let trace = unsafe { &*trace };
+    if trace.scope == BridgeMode::PropertyScoped as u32
+        && key_id != PROPERTY_TEST_VALUE_KEY_ID
+        && key_id != PROPERTY_TEST_PHASE_KEY_ID
+    {
+        trace.filtered.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
     if slot >= TRACE_CAPACITY {
@@ -625,6 +657,7 @@ unsafe fn install_property_hotpatch(
     target: *mut u8,
     trace: *mut PropertyTrace,
     expected: [u8; 8],
+    mode: BridgeMode,
 ) -> Result<(), &'static str> {
     if target.is_null()
         || trace.is_null()
@@ -694,7 +727,7 @@ unsafe fn install_property_hotpatch(
     let mut patched = original;
     patched[..2].copy_from_slice(&PROPERTY_SHORT_JUMP);
     *guard = Some(Hook {
-        mode: BridgeMode::Property,
+        mode,
         target,
         original,
         patched,
@@ -805,7 +838,14 @@ unsafe fn install_property_at(
     {
         return Err("property trace mapping version mismatch");
     }
-    unsafe { install_property_hotpatch(target, trace, expected) }
+    let mode = if unsafe { (*trace).scope } == BridgeMode::PropertyScoped as u32 {
+        BridgeMode::PropertyScoped
+    } else if unsafe { (*trace).scope } == 0 {
+        BridgeMode::Property
+    } else {
+        return Err("invalid property trace scope");
+    };
+    unsafe { install_property_hotpatch(target, trace, expected, mode) }
 }
 
 unsafe fn uninstall() -> Result<(), &'static str> {
@@ -819,7 +859,7 @@ unsafe fn uninstall() -> Result<(), &'static str> {
                 u64::from_le_bytes(hook.original),
             )
         }?,
-        BridgeMode::Property => {
+        BridgeMode::Property | BridgeMode::PropertyScoped => {
             let first: [u8; 2] = hook.original[..2]
                 .try_into()
                 .map_err(|_| "property entry width")?;
@@ -952,7 +992,7 @@ fn pinned_gamecore(path: &Path, mode: BridgeMode) -> Option<[u8; 8]> {
     if format!("{:x}", hash.finalize()) != PINNED_GAMECORE_SHA256 {
         return None;
     }
-    if mode == BridgeMode::Property {
+    if mode.is_property() {
         file.seek(SeekFrom::Start(
             PINNED_PROPERTY_GET_FILE_OFFSET - PROPERTY_PREFIX_LEN as u64,
         ))
@@ -976,7 +1016,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1)
+        || !matches!(config.mode, 0 | 1 | 2)
         || config.trace_size as usize
             != if config.mode == 0 {
                 BridgeMode::CanEver.trace_size()
@@ -1002,10 +1042,11 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if module.is_null() || !module_path(module).is_some_and(|path| same_file(&path, GAMECORE)) {
         return BridgeStatus::GameCoreIdentity;
     }
-    let mode = if config.mode == 0 {
-        BridgeMode::CanEver
-    } else {
-        BridgeMode::Property
+    let mode = match config.mode {
+        0 => BridgeMode::CanEver,
+        1 => BridgeMode::Property,
+        2 => BridgeMode::PropertyScoped,
+        _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
         return BridgeStatus::GameCoreIdentity;
@@ -1017,7 +1058,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if unsafe { ptr::read(entry.cast::<[u8; 8]>()) } != disk_bytes {
         return BridgeStatus::EntryBytes;
     }
-    if mode == BridgeMode::Property {
+    if mode.is_property() {
         if (entry as usize & (CODE_PAGE - 1)) < PROPERTY_PREFIX_LEN {
             return BridgeStatus::EntryBytes;
         }
@@ -1043,9 +1084,18 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             unsafe { ptr::write(trace, SharedTrace::default()) };
             unsafe { install_at(entry, trace, disk_bytes) }
         }
-        BridgeMode::Property => {
+        BridgeMode::Property | BridgeMode::PropertyScoped => {
             let trace = config.trace_address as *mut PropertyTrace;
-            unsafe { ptr::write(trace, PropertyTrace::default()) };
+            unsafe {
+                ptr::write(
+                    trace,
+                    if mode == BridgeMode::PropertyScoped {
+                        PropertyTrace::scoped()
+                    } else {
+                        PropertyTrace::default()
+                    },
+                )
+            };
             unsafe { install_property_at(entry, trace, disk_bytes) }
         }
     };
@@ -1216,7 +1266,7 @@ mod tests {
     fn property_trampoline_calls_original_once_and_preserves_pointer_or_missing() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         assert_eq!(std::mem::size_of::<PropertyRow>(), 48);
-        assert_eq!(std::mem::offset_of!(PropertyTrace, rows), 24);
+        assert_eq!(std::mem::offset_of!(PropertyTrace, rows), 32);
         let page = unsafe {
             VirtualAlloc(
                 null_mut(),
@@ -1326,6 +1376,67 @@ mod tests {
         assert_eq!(
             unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) }[0],
             0xe9
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn numeric_scope_ignores_large_unrelated_getter_traffic_before_reserving_rows() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        let prefix = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN)
+        };
+        let bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let mut value = [0u8; 24];
+        value[..2].copy_from_slice(&2u16.to_le_bytes());
+        value[8..16].copy_from_slice(&(PROPERTY_TEST_VALUE_KEY_ID as u64).to_le_bytes());
+        let mut property = [0u64; 9];
+        property[8] = value.as_ptr() as u64;
+        let f: extern "system" fn(usize, u32) -> usize = unsafe { std::mem::transmute(target) };
+        let mut trace = Box::new(PropertyTrace::scoped());
+        unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
+        for _ in 0..120_000 {
+            assert_eq!(
+                f(property.as_ptr() as usize, 583_956_078),
+                value.as_ptr() as usize
+            );
+        }
+        assert_eq!(
+            f(property.as_ptr() as usize, PROPERTY_TEST_VALUE_KEY_ID),
+            value.as_ptr() as usize
+        );
+        assert_eq!(
+            f(property.as_ptr() as usize, PROPERTY_TEST_PHASE_KEY_ID),
+            value.as_ptr() as usize
+        );
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(trace.filtered.load(Ordering::Acquire), 120_000);
+        assert_eq!(trace.dropped.load(Ordering::Acquire), 0);
+        assert_eq!(trace.next.load(Ordering::Acquire), 2);
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(
+            rows.iter().map(|r| r.key_id).collect::<Vec<_>>(),
+            [PROPERTY_TEST_VALUE_KEY_ID, PROPERTY_TEST_PHASE_KEY_ID]
+        );
+        assert!(rows
+            .iter()
+            .all(|r| r.tag == 2 && r.payload == PROPERTY_TEST_VALUE_KEY_ID as u64));
+        assert_eq!(
+            unsafe { ptr::read(target.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
         );
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
@@ -1526,7 +1637,7 @@ mod tests {
             BridgeInstall((&mut property as *mut BridgeConfig).cast()),
             BridgeStatus::InvalidInput as u32
         );
-        property.mode = 2;
+        property.mode = 3;
         assert_eq!(
             BridgeInstall((&mut property as *mut BridgeConfig).cast()),
             BridgeStatus::InvalidInput as u32

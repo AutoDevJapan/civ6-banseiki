@@ -153,8 +153,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         (1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&n)
                     })
                     || step.as_object().unwrap().keys().any(|k| {
-                        !["action", "name", "max_seconds", "timeout"].contains(&k.as_str())
+                        !["action", "name", "max_seconds", "timeout", "scope"].contains(&k.as_str())
                     })
+                    || (action == "start_native_can_ever_trace" && step.get("scope").is_some())
+                    || (action == "start_native_property_trace"
+                        && step
+                            .get("scope")
+                            .is_some_and(|v| v != "numeric_test_keys_853271_853272"))
                 {
                     return Err(fail("invalid bounded native CanEver bridge start".into()));
                 }
@@ -852,5 +857,24 @@ mod native_trace_tests {
             bad["max_seconds"] = json!(duration);
             assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
         }
+        let mut scoped = start.clone();
+        scoped["scope"] = json!("numeric_test_keys_853271_853272");
+        assert!(validate_scenario(&scenario(vec![scoped.clone(), stop.clone()])).is_ok());
+        for value in [
+            json!("numeric_test_keys_853271"),
+            json!("all"),
+            json!(853271),
+            json!(null),
+        ] {
+            let mut bad = scoped.clone();
+            bad["scope"] = value;
+            assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
+        }
+        scoped["action"] = json!("start_native_can_ever_trace");
+        assert!(validate_scenario(&scenario(vec![
+            scoped,
+            json!({"action":"stop_native_can_ever_trace"})
+        ]))
+        .is_err());
     }
 }

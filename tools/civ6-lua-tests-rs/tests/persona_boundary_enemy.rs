@@ -1,6 +1,7 @@
 //! Lua 5.1 checks for the test-only cross-player neutralization fixture.
 //! Engine doubles validate guards and observations, not a live Civ6 outcome.
 use civ6_data_rs::{cascade, Repository};
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::Lua;
 use rusqlite::Connection;
@@ -1400,14 +1401,26 @@ fn capacity_civic_scene_uses_one_real_turn_and_read_only_resume_before_save() {
     h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==13 and grant); SETTER_CALLS=(SETTER_CALLS or 0)+1 end; return culture end");
     h.run(scene_lua(&scene, 2));
     h.civic_complete_queued(true);
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("local a=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT'); assert(a and a.owner==0 and a.index==13 and a.token==SETTER_PARAMS.Token and a.turn==TURN and a.beforeSpent==1 and a.sequence==a.token and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')==nil); ADVANCE_TURN(); GOV_CIVIC_COMPLETED=true");
     assert_eq!(scene["steps"][4]["action"], "end_turn");
     assert_eq!(scene["steps"][4]["turns"], 1);
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 6));
     h.civic_resume_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 7)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 7))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 8));
     h.run(scene_lua(&scene, 9));
     assert_eq!(scene["steps"][10]["action"], "save");
@@ -1424,12 +1437,24 @@ fn capacity_civic_scene_immediate_ownership_still_uses_the_fresh_turn_read() {
     h.run(
         "assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_PREPARE_DISTRICT_CIVIC')",
     );
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("ADVANCE_TURN()");
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 6));
     h.civic_resume_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 7)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 7))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 8));
     h.run(scene_lua(&scene, 9));
     h.run("local a=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT'); local r=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_READ'); assert(a.turn==TURN-1 and r.action=='RESUME_CAPACITY_CIVIC_READ' and r.turn==TURN and r.token~=a.token)");
@@ -1443,9 +1468,17 @@ fn capacity_civic_scene_fails_before_save_if_still_pending_after_the_real_turn()
     h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==13 and grant); SETTER_CALLS=(SETTER_CALLS or 0)+1 end; return culture end");
     h.run(scene_lua(&scene, 2));
     h.civic_complete_queued(true);
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("ADVANCE_TURN()");
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 6));
     h.civic_resume_complete_queued();
     h.reject(scene_lua(&scene, 7), "PENDING_RESUME_CAPACITY_CIVIC_READ");
@@ -1533,13 +1566,17 @@ fn capacity_government_plan_exposes_official_tier_and_change_gates() {
     h.run("assert(GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
     let scene = capacity_government_scene("plan");
     h.run("CONTROL.id=65536");
-    let observation: String = h.0.load(scene_lua(&scene, 2)).eval().unwrap();
+    let observation: String = h.0.load(scene_lua(&scene, 2)).strict_eval().unwrap();
     assert!(observation.contains("TIER1_GOVERNMENT_BLOCKED"));
     assert!(observation.contains("NO_CIVIC_COMPLETED_THIS_TURN"));
     h.run(scene_lua(&scene, 3));
     h.run("FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryCapacityGovernmentProbe'); ENEMY_CASES.fireCore('JAC_BoundaryCapacityGovernmentProbe',r.params); FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME()");
-    assert!(h.0.load(scene_lua(&scene, 4)).eval::<bool>().unwrap());
-    let core: String = h.0.load(scene_lua(&scene, 5)).eval().unwrap();
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 4))
+        .strict_eval::<bool>()
+        .unwrap());
+    let core: String = h.0.load(scene_lua(&scene, 5)).strict_eval().unwrap();
     assert!(core.contains("gameplayStatus=OBSERVED getter=function index=0"));
 }
 
@@ -1550,12 +1587,24 @@ fn capacity_tier_one_government_change_is_one_official_request_with_core_and_ui_
     h.capacity_government_ready();
     h.run(scene_lua(&scene, 2));
     h.capacity_government_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     assert_eq!(scene["steps"][4]["action"], "end_turn");
     h.run("ADVANCE_TURN()");
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.capacity_government_complete_next_turn();
-    assert!(h.0.load(scene_lua(&scene, 6)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 6))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 7));
     assert_eq!(scene["steps"][8]["action"], "save");
     h.run("local intents=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')); local intent=assert(intents.Tier1); local read=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_READ')); local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); local d=ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_CHANGE_CAPACITY_GOVERNMENT' and intent.status=='PREPARED' and intent.targetGovernment=='GOVERNMENT_OLIGARCHY' and intent.beforeGovernment==0 and intent.beforeSpent==1 and read.status=='OBSERVED' and read.governmentType=='GOVERNMENT_OLIGARCHY' and read.governmentTier=='Tier1' and read.spent==intent.beforeSpent and read.turn==intent.turn+1 and read.originalToken==intent.token and p.stage=='BUILD_TIER1' and d.spyID==655368 and d.captive.captor==1 and d.captive.nameIndex==-1 and GOV_REQUEST_CALLS==1)");
@@ -1573,11 +1622,23 @@ fn capacity_tier_two_government_requires_its_real_civic_and_tier_one_building() 
     h.run("GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_TIER1_BUILT=true; GOV_CURRENT=1; GOV_TIER2_CIVIC_COMPLETED=false; GOV_CIVIC_COMPLETED_THIS_TURN=false; local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='NEEDS_TIER2_CIVIC' and p.government.target.governmentType=='GOVERNMENT_MERCHANT_REPUBLIC' and p.government.target.civicType=='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS' and p.governmentRequirement=='Tier2'); GOV_TIER2_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true; p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='NEEDS_TIER2_GOVERNMENT' and p.government.stage=='READY_CHANGE')");
     h.run(scene_lua(&scene, 2));
     h.capacity_government_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("ADVANCE_TURN()");
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.capacity_government_complete_next_turn();
-    assert!(h.0.load(scene_lua(&scene, 6)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 6))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 7));
     h.run("local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_CHANGE_CAPACITY_GOVERNMENT' and p.stage=='BUILD_SPIES' and p.buildingType=='BUILDING_GOV_SPIES' and p.capacity==1 and p.occupied==1 and GOV_REQUEST_CALLS==1)");
 }
@@ -1607,13 +1668,25 @@ fn capacity_tier_two_civic_scene_preserves_domain_law_and_never_replays_the_sett
     h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==14 and grant); TIER2_SETTER_CALLS=(TIER2_SETTER_CALLS or 0)+1 end; return culture end");
     h.run(scene_lua(&scene, 2));
     h.tier2_civic_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("local a=assert(Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT')); assert(a.owner==0 and a.index==14 and a.civicType=='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS' and a.targetGovernment=='GOVERNMENT_MERCHANT_REPUBLIC' and a.beforeSpent==1 and TIER2_SETTER_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC')==nil); ADVANCE_TURN(); GOV_TIER2_CIVIC_COMPLETED=true");
     assert_eq!(scene["steps"][4]["action"], "end_turn");
-    assert!(h.0.load(scene_lua(&scene, 5)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 6));
     h.tier2_civic_complete_next_turn();
-    assert!(h.0.load(scene_lua(&scene, 7)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 7))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run(scene_lua(&scene, 8));
     assert_eq!(scene["steps"][9]["action"], "save");
     h.run("local domain=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT'); local tier2=Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT'); assert(domain.index==13 and domain.token==ORIGINAL_DOMAIN_TOKEN and tier2.index==14 and TIER2_SETTER_CALLS==1); ENEMY_CASES.fireCore('JAC_BoundaryPrepareTier2CapacityCivic',TIER2_SETTER_PARAMS); assert(TIER2_SETTER_CALLS==1)");
@@ -1628,7 +1701,11 @@ fn capacity_tier_two_civic_scene_stops_before_save_when_native_read_is_pending()
     h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==14 and grant); TIER2_SETTER_CALLS=(TIER2_SETTER_CALLS or 0)+1 end; return culture end");
     h.run(scene_lua(&scene, 2));
     h.tier2_civic_complete_queued();
-    assert!(h.0.load(scene_lua(&scene, 3)).eval::<bool>().unwrap());
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
     h.run("ADVANCE_TURN()");
     h.run(scene_lua(&scene, 6));
     h.tier2_civic_complete_next_turn();

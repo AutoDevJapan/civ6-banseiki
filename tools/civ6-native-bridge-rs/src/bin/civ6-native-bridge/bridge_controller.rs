@@ -1,6 +1,7 @@
 use civ6_native_bridge_rs::{
     BridgeConfig, BridgeMode, BridgeStatus, PropertyTrace, SharedTrace, GAMECORE, GAME_EXE,
-    MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256,
+    MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PROPERTY_TEST_PHASE_KEY_ID,
+    PROPERTY_TEST_VALUE_KEY_ID,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -194,7 +195,7 @@ struct Args {
 
 fn args(raw: &[String]) -> Result<Args, String> {
     if raw.len() != 8 && raw.len() != 10 {
-        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property]".into());
+        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property|property-scoped]".into());
     }
     let mut fields = std::collections::BTreeMap::new();
     for pair in raw.chunks_exact(2) {
@@ -230,6 +231,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
     let mode = match fields.get("--mode").copied().unwrap_or("can-ever") {
         "can-ever" => BridgeMode::CanEver,
         "property" => BridgeMode::Property,
+        "property-scoped" => BridgeMode::PropertyScoped,
         _ => return Err("invalid bridge mode".into()),
     };
     if pid == 0
@@ -569,7 +571,9 @@ fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
     let (offset, prologue): (u64, &[u8]) = match mode {
         BridgeMode::CanEver => (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE),
-        BridgeMode::Property => (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE),
+        BridgeMode::Property | BridgeMode::PropertyScoped => {
+            (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE)
+        }
     };
     file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("pinned entry seek: {e}"))?;
@@ -662,7 +666,7 @@ fn read_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrac
         )
     };
     read_remote(game, address, bytes)?;
-    if snapshot.magic != 0x4a41_4350 || snapshot.version != 1 {
+    if snapshot.magic != 0x4a41_4350 || snapshot.version != 2 {
         return Err("property trace version differs".into());
     }
     Ok(snapshot)
@@ -736,7 +740,7 @@ pub fn run() -> Result<(), String> {
     }
     let target = pinned_target(parsed.pid, &game, parsed.mode)?;
     let original = pinned_entry_bytes(&game, target, parsed.mode)?;
-    let original_prefix = if parsed.mode == BridgeMode::Property {
+    let original_prefix = if parsed.mode.is_property() {
         Some(pinned_property_prefix(&game, target)?)
     } else {
         None
@@ -749,7 +753,8 @@ pub fn run() -> Result<(), String> {
     let mut writer = BufWriter::new(output);
     let mut identity = json!({"kind":"identity","pid":parsed.pid,"created_filetime":parsed.created,
             "gamecore_sha256":PINNED_GAMECORE_SHA256,"mode":match parsed.mode {
-                BridgeMode::CanEver => "can-ever", BridgeMode::Property => "property"},
+                BridgeMode::CanEver => "can-ever", BridgeMode::Property => "property",
+                BridgeMode::PropertyScoped => "property-scoped"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration});
@@ -757,6 +762,10 @@ pub fn run() -> Result<(), String> {
         identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
     } else {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
+        if parsed.mode == BridgeMode::PropertyScoped {
+            identity["scope_key_ids"] =
+                json!([PROPERTY_TEST_VALUE_KEY_ID, PROPERTY_TEST_PHASE_KEY_ID]);
+        }
     }
     write_json(&mut writer, identity)?;
     // All remotely executing or writing operations are below this point.
@@ -786,6 +795,9 @@ pub fn run() -> Result<(), String> {
             BridgeMode::Property => {
                 BridgeConfig::for_property(parsed.pid, parsed.created, trace_remote as u64)
             }
+            BridgeMode::PropertyScoped => {
+                BridgeConfig::for_property_scoped(parsed.pid, parsed.created, trace_remote as u64)
+            }
         };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
@@ -812,7 +824,7 @@ pub fn run() -> Result<(), String> {
                     .into(),
             );
         }
-        let installed_prefix = if parsed.mode == BridgeMode::Property {
+        let installed_prefix = if parsed.mode.is_property() {
             let mut prefix = [0u8; PROPERTY_PREFIX_LEN];
             read_remote(&game, target - PROPERTY_PREFIX_LEN, &mut prefix)?;
             let mut entry = [0u8; 8];
@@ -886,7 +898,7 @@ pub fn run() -> Result<(), String> {
                 "entry_restored":true,
                 "prefix_retained_until_exit":installed_prefix.is_some()}),
         )?;
-        let (row_count, dropped, in_flight, observed_calls) = match parsed.mode {
+        let (row_count, dropped, in_flight, observed_calls, filtered_calls) = match parsed.mode {
             BridgeMode::CanEver => {
                 let snapshot = drained_trace(&game, trace_remote)?;
                 let rows = snapshot.complete_rows().map_err(str::to_string)?;
@@ -914,10 +926,17 @@ pub fn run() -> Result<(), String> {
                         .in_flight
                         .load(std::sync::atomic::Ordering::Acquire),
                     snapshot.next.load(std::sync::atomic::Ordering::Acquire),
+                    0,
                 )
             }
-            BridgeMode::Property => {
+            BridgeMode::Property | BridgeMode::PropertyScoped => {
                 let snapshot = drained_property_trace(&game, trace_remote)?;
+                if snapshot.scope != parsed.mode as u32
+                    || (parsed.mode == BridgeMode::Property
+                        && snapshot.filtered.load(std::sync::atomic::Ordering::Acquire) != 0)
+                {
+                    return Err("property trace scope differs from controller mode".into());
+                }
                 let rows = snapshot.snapshot_rows().map_err(str::to_string)?;
                 for row in &rows {
                     let copied = row.read_state == 1;
@@ -939,14 +958,15 @@ pub fn run() -> Result<(), String> {
                         .in_flight
                         .load(std::sync::atomic::Ordering::Acquire),
                     snapshot.next.load(std::sync::atomic::Ordering::Acquire),
+                    snapshot.filtered.load(std::sync::atomic::Ordering::Acquire),
                 )
             }
         };
         let result = if control_error.is_some() {
             "error"
-        } else if parsed.mode == BridgeMode::Property && dropped != 0 {
+        } else if parsed.mode.is_property() && dropped != 0 {
             "partial_raw"
-        } else if parsed.mode == BridgeMode::Property {
+        } else if parsed.mode.is_property() {
             "raw_collected"
         } else {
             "ok"
@@ -956,10 +976,12 @@ pub fn run() -> Result<(), String> {
             json!({"kind":"stop","rows":row_count,
             "dropped":dropped,
             "observed_calls":observed_calls,
+            "filtered_calls":filtered_calls,
+            "getter_calls_seen":u64::from(observed_calls) + u64::from(filtered_calls),
             "in_flight":in_flight,
             "snapshot_stable":true,
             "quiescence_proven":false,
-            "classification":if parsed.mode == BridgeMode::Property {"raw_collection"} else {"can_ever_entry"},
+            "classification":if parsed.mode.is_property() {"raw_collection"} else {"can_ever_entry"},
             "prefix_retained_until_exit":installed_prefix.is_some(),
             "result":result}),
         )?;
@@ -1253,6 +1275,8 @@ mod tests {
         assert_eq!(args(&valid).unwrap().mode, BridgeMode::Property);
         valid[9] = "unknown".into();
         assert!(args(&valid).is_err());
+        valid[9] = "property-scoped".into();
+        assert_eq!(args(&valid).unwrap().mode, BridgeMode::PropertyScoped);
     }
 
     #[test]

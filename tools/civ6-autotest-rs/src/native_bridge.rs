@@ -49,14 +49,20 @@ mod platform {
                     if row["pid"] == pid
                         && row["created_filetime"] == created
                         && row["mode"]
-                            == if mode == BridgeMode::CanEver {
-                                "can-ever"
-                            } else {
-                                "property"
+                            == match mode {
+                                BridgeMode::CanEver => "can-ever",
+                                BridgeMode::Property => "property",
+                                BridgeMode::PropertyScoped => "property-scoped",
                             }
                         && row["entry_rva"] == mode.rva()
                         && (mode == BridgeMode::CanEver
                             || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
+                        && (mode != BridgeMode::PropertyScoped
+                            || row["scope_key_ids"]
+                                == serde_json::json!([
+                                    civ6_native_bridge_rs::PROPERTY_TEST_VALUE_KEY_ID,
+                                    civ6_native_bridge_rs::PROPERTY_TEST_PHASE_KEY_ID,
+                                ]))
                         && row["gamecore_sha256"]
                             == civ6_native_bridge_rs::PINNED_GAMECORE_SHA256 =>
                 {
@@ -66,7 +72,7 @@ mod platform {
                 Some("uninstall")
                     if row["status"] == 0
                         && row["entry_restored"] == true
-                        && row["prefix_retained_until_exit"] == (mode == BridgeMode::Property) =>
+                        && row["prefix_retained_until_exit"] == mode.is_property() =>
                 {
                     restored += 1
                 }
@@ -77,7 +83,7 @@ mod platform {
                     entries += 1
                 }
                 Some("property_get")
-                    if mode == BridgeMode::Property
+                    if mode.is_property()
                         && row["sequence"].as_u64() == Some(entries as u64 + 1)
                         && row["property"]
                             .as_str()
@@ -85,7 +91,16 @@ mod platform {
                         && row["returned"]
                             .as_str()
                             .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
-                        && row["key_id"].as_u64().is_some_and(|n| n <= u32::MAX as u64)
+                        && row["key_id"].as_u64().is_some_and(|n| {
+                            n <= u32::MAX as u64
+                                && (mode != BridgeMode::PropertyScoped
+                                    || n == u64::from(
+                                        civ6_native_bridge_rs::PROPERTY_TEST_VALUE_KEY_ID,
+                                    )
+                                    || n == u64::from(
+                                        civ6_native_bridge_rs::PROPERTY_TEST_PHASE_KEY_ID,
+                                    ))
+                        })
                         && row["thread_id"]
                             .as_u64()
                             .is_some_and(|n| n > 0 && n <= u32::MAX as u64)
@@ -137,6 +152,16 @@ mod platform {
                             row["classification"] == "raw_collection"
                                 && row["prefix_retained_until_exit"] == true
                                 && row["quiescence_proven"] == false
+                                && (mode != BridgeMode::PropertyScoped
+                                    || row["filtered_calls"].as_u64().is_some_and(|filtered| {
+                                        row["getter_calls_seen"].as_u64()
+                                            == Some(
+                                                filtered
+                                                    + row["observed_calls"]
+                                                        .as_u64()
+                                                        .unwrap_or(u64::MAX),
+                                            )
+                                    }))
                                 && row["dropped"]
                                     .as_u64()
                                     .is_some_and(|n| n <= u32::MAX as u64)
@@ -147,7 +172,7 @@ mod platform {
                                 })
                         }) =>
                 {
-                    if mode == BridgeMode::Property {
+                    if mode.is_property() {
                         partial_dropped = row["dropped"].as_u64();
                     }
                     stopped += 1
@@ -339,6 +364,7 @@ mod platform {
             let mode = match mode {
                 "can-ever" => BridgeMode::CanEver,
                 "property" => BridgeMode::Property,
+                "property-scoped" => BridgeMode::PropertyScoped,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
             };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
@@ -369,10 +395,10 @@ mod platform {
                     "--out",
                     &artifact.to_string_lossy(),
                     "--mode",
-                    if mode == BridgeMode::Property {
-                        "property"
-                    } else {
-                        "can-ever"
+                    match mode {
+                        BridgeMode::CanEver => "can-ever",
+                        BridgeMode::Property => "property",
+                        BridgeMode::PropertyScoped => "property-scoped",
                     },
                 ])
                 .stdin(Stdio::piped())
@@ -714,6 +740,60 @@ mod platform {
                 write(&bad);
                 assert!(
                     terminal_artifact(&path, 7, 123, BridgeMode::Property).is_err(),
+                    "{field}"
+                );
+            }
+        }
+
+        #[test]
+        fn scoped_numeric_artifact_rejects_other_keys_and_inconsistent_filter_counts() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("scoped.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"property-scoped","entry_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
+                    "scope_key_ids":[853271,853272],"prefix_bytes":"[cc, cc, cc, cc, cc]",
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":true}),
+                json!({"kind":"property_get","sequence":1,"property":"0x0000000000001000",
+                    "key_id":853271,"returned":"0x0000000000000000","thread_id":4,
+                    "read_state":0,"tag":null,"payload8":null,"flags14":null}),
+                json!({"kind":"property_get","sequence":2,"property":"0x0000000000001000",
+                    "key_id":853272,"returned":"0x0000000000002000","thread_id":4,
+                    "read_state":1,"tag":2,"payload8":"0x00000000000d0517","flags14":0}),
+                json!({"kind":"stop","result":"raw_collected","rows":2,"dropped":0,
+                    "observed_calls":2,"filtered_calls":120000,"getter_calls_seen":120002,
+                    "in_flight":0,"snapshot_stable":true,"quiescence_proven":false,
+                    "classification":"raw_collection","prefix_retained_until_exit":true}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::PropertyScoped).unwrap(),
+                2
+            );
+            for (index, field, value) in [
+                (0, "scope_key_ids", json!([853271, 853270])),
+                (3, "key_id", json!(583956078)),
+                (5, "filtered_calls", json!(119999)),
+                (5, "getter_calls_seen", json!(120001)),
+            ] {
+                let mut bad = rows.to_vec();
+                bad[index][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::PropertyScoped).is_err(),
                     "{field}"
                 );
             }

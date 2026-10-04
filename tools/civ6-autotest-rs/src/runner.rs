@@ -314,6 +314,54 @@ mod native_trace_step_tests {
             ["start:values:120:property", "stop"]
         );
     }
+
+    #[test]
+    fn runner_dispatches_fixed_numeric_scope() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-numeric-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        runner
+            .run_step(&json!({"action":"start_native_property_trace",
+            "name":"numeric","max_seconds":90,"scope":"numeric_test_keys_853271_853272"}))
+            .unwrap();
+        runner
+            .run_step(&json!({"action":"stop_native_property_trace"}))
+            .unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:numeric:90:property-scoped", "stop"]
+        );
+    }
+
+    #[test]
+    fn direct_dispatch_rejects_invalid_scope_without_starting_a_bridge() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-invalid-scope-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        for action in ["start_native_property_trace", "start_native_can_ever_trace"] {
+            assert!(runner
+                .run_step(&json!({"action":action,"name":"bad",
+                "max_seconds":90,"scope":"unbounded"}))
+                .is_err());
+        }
+        assert!(calls.lock().unwrap().is_empty());
+    }
 }
 
 #[derive(Default)]
@@ -1928,10 +1976,15 @@ impl Runner {
         match action {
             "start_native_can_ever_trace" | "start_native_property_trace" => {
                 self.remaining(deadline)?;
-                let mode = if action == "start_native_property_trace" {
-                    "property"
-                } else {
-                    "can-ever"
+                let mode = match (action, step.get("scope")) {
+                    ("start_native_can_ever_trace", None) => "can-ever",
+                    ("start_native_property_trace", None) => "property",
+                    ("start_native_property_trace", Some(scope))
+                        if scope == "numeric_test_keys_853271_853272" =>
+                    {
+                        "property-scoped"
+                    }
+                    _ => return Err(Error::scenario("invalid native bridge scope")),
                 };
                 self.backend.start_native_bridge(
                     &self.output,
