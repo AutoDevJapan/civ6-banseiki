@@ -178,7 +178,22 @@ fn native_carrier_ui_uses_local_actor_once_and_publishes_only_after_physical_mov
         assert(reads.GetObservation('owner:return').Published,
           'work-bearing recipient carrier was not published after return')
 
+        for _,route in ipairs({'TO_OWNER','TO_FREE','FROM_FREE'}) do
+          carrier.Route,carrier.Phase,carrier.RefreshRequested=route,'PROVED',true
+          carrier.ReturnToken='proved:refresh:'..route
+          local slot={Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0}
+          carrier.FinalSlot=route~='FROM_FREE' and slot or nil
+          carrier.Target=route=='FROM_FREE' and slot or nil
+          Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+          Events.GameCoreEventPublishComplete.Emit()
+          local observed=assert(reads.GetObservation(carrier.ReturnToken),
+            'proved carrier did not refresh from its saved final physical slot: '..route)
+          assert(observed.Published and not observed.Unchanged,
+            'proved final slot was mistaken for a carrier mismatch: '..route)
+        end
+
         WORK_CITIES[16]=nil
+        carrier.Route='TO_OWNER'
         carrier.Phase,carrier.ReturnToken='RESTORE','owner:restore'
         Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
         Events.GameCoreEventPublishComplete.Emit()

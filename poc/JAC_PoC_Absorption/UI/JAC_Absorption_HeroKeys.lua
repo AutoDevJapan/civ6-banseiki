@@ -162,7 +162,7 @@ local function ObserveNativeCarrier(carrier, reads)
   if not carrier or carrier.Phase == "RESTORED" then return false end
   if carrier.Phase == "PROVED" then
     if not carrier.RefreshRequested then return false end
-    local slot = carrier.Route == "TO_FREE" and carrier.FinalSlot or carrier.Target
+    local slot = carrier.Route == "FROM_FREE" and carrier.Target or carrier.FinalSlot
     local current = slot and CityManager.GetCityAt(slot.X, slot.Y)
     if current and current:GetOwner() == slot.Owner and current:GetID() == slot.City
       and current:GetBuildings():HasBuilding(slot.Building)
