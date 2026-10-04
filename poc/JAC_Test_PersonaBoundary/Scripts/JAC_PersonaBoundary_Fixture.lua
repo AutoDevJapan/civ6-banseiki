@@ -326,7 +326,7 @@ GameEvents.JAC_BoundaryAdoptSpyIdentity.Add(function(owner, params)
         type(params.TargetID)=="number", "invalid native spy identity update");
     local old=assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "diagnostic spy reference missing");
     assert(old.owner==owner and old.id==params.OldID, "diagnostic spy reference changed");
-    local spy=assert(Players[owner]:GetUnits():FindID(params.NewID), "arrived native spy missing");
+    local spy=assert(R.FindSpy(owner,params.NewID), "arrived native spy missing");
     assert(spy:GetOwner()==owner and spy:GetID()==params.NewID and
         spy:GetType()==GameInfo.Units["UNIT_SPY"].Index, "arrived native spy identity mismatch");
     local city=Cities.GetPlotPurchaseCity(Map.GetPlot(spy:GetX(),spy:GetY()));
@@ -623,10 +623,10 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             "UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"].Hash,
         "failed native history, Governor or official title receipt changed");
     if params.Mode=="PRODUCE" then
-        assert(not Players[controller]:GetUnits():FindID(spy.id),
+        assert(not R.FindSpy(controller,spy.id),
             "old native spy is still on the map; production retry is invalid");
     elseif params.Mode=="MAP" then
-        local current=assert(Players[controller]:GetUnits():FindID(params.CurrentID),
+        local current=assert(R.FindSpy(controller,params.CurrentID),
             "living native map spy missing at archive");
         assert(current:GetOwner()==controller and
             current:GetType()==GameInfo.Units["UNIT_SPY"].Index,
