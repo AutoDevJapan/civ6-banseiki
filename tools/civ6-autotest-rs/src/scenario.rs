@@ -106,6 +106,20 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             Ok(())
         };
+        if let Some(flag) = step.get("preserve_diplomacy_session") {
+            if action != "ui_lua" || !flag.is_boolean() {
+                return Err(fail(
+                    "preserve_diplomacy_session needs a boolean ui_lua flag".into(),
+                ));
+            }
+        }
+        if let Some(flag) = step["condition"].get("preserve_diplomacy_session") {
+            if action != "wait_for" || step["condition"]["type"] != "lua" || !flag.is_boolean() {
+                return Err(fail(
+                    "preserve_diplomacy_session needs a boolean Lua wait flag".into(),
+                ));
+            }
+        }
         match action {
             "start_native_governor_trace" => {
                 if trace_open {

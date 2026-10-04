@@ -748,19 +748,42 @@ function B.BeginCaptiveExchange()
         item:SetLocked(true);
         local observed=ExactCaptiveDealItem(deal,captor,c.attacker,d.captive.nameIndex);
         assert(observed and observed:IsLocked(),"native captive deal item changed before session");
+        captiveExchange={attacker=c.attacker,captor=captor,nameIndex=d.captive.nameIndex,
+            captiveName=d.captive.name,captiveLevel=d.captive.level,
+            itemID=itemID,spyID=d.spyID,eventID=d.eventID,eventTurn=d.eventTurn,
+            sessionRequested=true,proposed=false,finalSent=false};
         DiplomacyManager.RequestSession(c.attacker,captor,"MAKE_DEAL");
     end);
     if not ok then
+        captiveExchange=nil;
         RemovePreparedCaptiveItem(item,captor,c.attacker);
         error(err);
     end
-    captiveExchange={attacker=c.attacker,captor=captor,nameIndex=d.captive.nameIndex,
-        captiveName=d.captive.name,captiveLevel=d.captive.level,
-        itemID=itemID,spyID=d.spyID,eventID=d.eventID,eventTurn=d.eventTurn,
-        sessionRequested=true,proposed=false,finalSent=false};
     Log("ENEMY_CAPTIVE_EXCHANGE_SESSION",captiveExchange);
     return "SESSION_REQUESTED";
 end
+
+-- DiplomacyDealView's captive tooltip asks Locale.Lookup for a nil name when
+-- the native captive has NameIndex=-1. Return a display key only while our
+-- exact, locked native captive item is present; never replace its value type.
+function B.MissingCaptiveDealTooltipKey()
+    local x=captiveExchange;
+    if not x or x.closed or not x.sessionRequested or x.nameIndex~=-1 then return nil; end
+    local deal=DealManager.GetWorkingDeal(DealDirection.OUTGOING,x.attacker,x.captor);
+    local item=deal and ExactCaptiveDealItem(deal,x.captor,x.attacker,x.nameIndex);
+    if not item or item:GetID()~=x.itemID or not item:IsLocked() or
+        type(item.GetValueTypeNameID)~="function" or
+        item:GetValueTypeNameID()~=nil then return nil; end
+    local roster=ReadSpyRoster(x.attacker);
+    if #roster.captured~=1 or roster.captured[1].captor~=x.captor or
+        roster.captured[1].nameIndex~=x.nameIndex or
+        roster.captured[1].name~=x.captiveName or
+        roster.captured[1].level~=x.captiveLevel then return nil; end
+    local spy=GameInfo.Units["UNIT_SPY"];
+    return spy and spy.Name or nil;
+end
+ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=
+    B.MissingCaptiveDealTooltipKey;
 
 local function CaptiveExchangeSession()
     local x=assert(captiveExchange,"native captive exchange session missing");
@@ -769,6 +792,9 @@ local function CaptiveExchangeSession()
     local info=assert(DiplomacyManager.GetSessionInfo(id),
         "native captive diplomacy session info missing");
     assert(info.FromPlayer==x.attacker,"native captive deal was not initiated by the attacker");
+    assert(x.sessionID==nil or x.sessionID==id,
+        "native captive diplomacy session identity changed");
+    x.sessionID=id;
     return id;
 end
 
@@ -856,6 +882,9 @@ function B.CaptiveExchangeState()
     if d.mode=="MAP" then
         local unit=assert(Players[x.attacker]:GetUnits():FindID(d.currentID),
             "returned native map spy missing");
+        assert(unit:GetX()~=-9999 and unit:GetY()~=-9999 and
+            Map.GetPlot(unit:GetX(),unit:GetY()),
+            "returned native map spy has no real plot");
         ready=MapSpyNativeRouteReady(unit,EnemyConfig());
     end
     return {stage=d.mode=="RETURN" and "RETURNED_OFF_MAP" or
@@ -928,8 +957,9 @@ function B.CloseCaptiveExchangeSession()
         stage=="DEAL_INVALID" or stage=="DEAL_VALIDATION_UNKNOWN" or
         stage=="FINAL_REFUSED",
         "native captive deal is not in a classified terminal state");
-    local id=DiplomacyManager.FindOpenSessionID(x.attacker,x.captor);
+    local id=CaptiveExchangeSession();
     if id then DiplomacyManager.CloseSession(id); end
+    x.closed=true;
     Log("ENEMY_CAPTIVE_EXCHANGE_SESSION_CLOSED",{stage=stage,sessionID=id});
     return stage;
 end

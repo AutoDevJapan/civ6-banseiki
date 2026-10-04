@@ -354,6 +354,35 @@ fn test_wait_still_fails_when_nothing_was_open_or_retries_run_out() {
 }
 
 #[test]
+fn expected_captive_session_is_preserved_during_ingame_timeout() {
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "DiplomacyDealView".into(),
+                "DiplomacyActionView".into(),
+            ])
+        })
+        .lua(|state, _| {
+            assert_eq!(state, "InGame", "expected native deal session was closed");
+            Err(Error::unknown(
+                "FireTuner response timed out after 0/8 bytes",
+            ))
+        });
+    let mut h = Harness::new(json!({}), fake);
+    let step = json!({"action":"wait_for","timeout":60,"condition":{
+        "type":"lua","state_name":"InGame","code":"return false",
+        "preserve_diplomacy_session":true
+    }});
+    assert_eq!(
+        h.runner.run_step(&step).unwrap_err().kind,
+        ErrorKind::LuaResponseUnknown
+    );
+    assert!(h.calls().iter().all(|(state, _)| state == "InGame"));
+    assert!(!h.log().contains("ingame_unblock"));
+}
+
+#[test]
 fn test_ui_lua_is_never_replayed_after_it_may_have_run() {
     let fake = FakeBackend::new().lua(|state, _| {
         if state == "DiplomacyActionView" {

@@ -726,7 +726,12 @@ impl Runner {
                 Ok(false) => {}
                 Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                 Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
-                    if !self.unblock_ingame(text(condition, "state_name"), end, unblocked)? {
+                    if !self.unblock_ingame(
+                        text(condition, "state_name"),
+                        end,
+                        unblocked,
+                        condition["preserve_diplomacy_session"] == true,
+                    )? {
                         return Err(e);
                     }
                     unblocked += 1;
@@ -762,11 +767,22 @@ impl Runner {
             }
         }
     }
-    pub fn unblock_ingame(&mut self, state: &str, deadline: f64, attempts: usize) -> Result<bool> {
+    pub fn unblock_ingame(
+        &mut self,
+        state: &str,
+        deadline: f64,
+        attempts: usize,
+        preserve_diplomacy_session: bool,
+    ) -> Result<bool> {
         if !state_name_eq(state, "InGame") || attempts >= 3 {
             return Ok(false);
         }
         self.disconnect();
+        if preserve_diplomacy_session {
+            // A scenario expecting a native deal session may reconnect for a
+            // read, but must never close the very view it is waiting for.
+            return Ok(true);
+        }
         let end = deadline.min(self.clock.now() + 10.0);
         let closed = match self.close_diplomacy_once(end) {
             Ok(v) => v,
@@ -1748,7 +1764,12 @@ impl Runner {
                             return Err(e)
                         }
                         Err(e) if retryable(&e) => {
-                            if !self.unblock_ingame(text(step, "state_name"), deadline, attempts)? {
+                            if !self.unblock_ingame(
+                                text(step, "state_name"),
+                                deadline,
+                                attempts,
+                                step["preserve_diplomacy_session"] == true,
+                            )? {
                                 return Err(e);
                             }
                             attempts += 1;
@@ -2350,7 +2371,7 @@ impl Runner {
                     Ok(_) => break,
                     Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                     Err(e) if retryable(&e) => {
-                        if !self.unblock_ingame("InGame", deadline, attempts)? { return Err(e); }
+                        if !self.unblock_ingame("InGame", deadline, attempts, false)? { return Err(e); }
                         attempts += 1;
                     }
                     Err(e) => return Err(e),

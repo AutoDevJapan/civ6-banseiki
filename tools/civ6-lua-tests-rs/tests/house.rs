@@ -55,6 +55,12 @@ fn load_texts(language: &str) -> BTreeMap<String, String> {
             "{1_Name}を習得しました！",
             "{1_Era}の最初の社会制度。",
         ),
+        "ru_RU" => (
+            "Объединительные походы",
+            "Тэнка Фубу и широкие походы",
+            "Вы открыли {1_Name}!",
+            "Первый общественный институт эпохи {1_Era}.",
+        ),
         _ => panic!("unknown test language {language}"),
     };
     let mut texts = BTreeMap::new();
@@ -65,6 +71,10 @@ fn load_texts(language: &str) -> BTreeMap<String, String> {
     texts.insert(
         "LOC_NOTIFICATION_CIVIC_DISCOVERED_SUMMARY".into(),
         notification.into(),
+    );
+    texts.insert(
+        "LOC_UNIT_SPY_NAME".into(),
+        format!("spy localized for {language}"),
     );
     texts.insert("LOC_MOMENT_TEST".into(), moment.into());
     let xml = read_repo("poc/JAC_PoC_SengokuTrees/Text/JAC_Sengoku_Text.xml");
@@ -206,6 +216,53 @@ fn test_install_shadows_the_context_global_without_writing_the_engine_table() {
             .unwrap(),
         s.texts[&format!("{DESC}_HOUSE")]
     );
+}
+
+#[test]
+fn unnamed_native_captive_tooltip_uses_only_diplomacy_deal_context() {
+    for language in ["en_US", "ja_JP", "ru_RU"] {
+        let lua = new_lua();
+        let texts = load_texts(language);
+        House::init(
+            &lua,
+            &texts,
+            sources(),
+            Some("CIVILIZATION_JAC_ODA"),
+            language,
+        );
+        exec(&lua, "ExposedMembers={JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=function() return 'LOC_UNIT_SPY_NAME' end}; include('JAC_HouseNames'); JAC_InstallHouseNames('DiplomacyDealView')");
+        assert_eq!(
+            lua.load("return Locale.Lookup(nil)")
+                .strict_eval::<String>()
+                .unwrap(),
+            texts["LOC_UNIT_SPY_NAME"]
+        );
+        for code in [
+            "ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=function() return nil end; return Locale.Lookup(nil)",
+            "return Locale.Lookup(nil,'extra')",
+            "return Locale.ToUpper(nil)",
+            "return Locale.ConvertTextKey(nil)",
+        ] {
+            assert!(lua.load(code).strict_eval::<String>().is_err(), "{code}");
+        }
+        assert_eq!(
+            lua.load("return Locale.Lookup('LOC_UNIT_SPY_NAME')")
+                .strict_eval::<String>()
+                .unwrap(),
+            texts["LOC_UNIT_SPY_NAME"]
+        );
+        exec(&lua, "JAC_InstallHouseNames('DiplomacyDealView')");
+        assert!(lua
+            .load("return Locale.Lookup(nil)")
+            .strict_eval::<String>()
+            .is_err());
+    }
+    let other = House::new(Some("CIVILIZATION_JAC_ODA"), "en_US", "ExposedMembers={JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=function() return 'LOC_UNIT_SPY_NAME' end}");
+    assert!(other
+        .lua
+        .load("return Locale.Lookup(nil)")
+        .strict_eval::<String>()
+        .is_err());
 }
 #[test]
 fn test_owner_sees_house_names_for_keys_arguments_and_upper_case() {

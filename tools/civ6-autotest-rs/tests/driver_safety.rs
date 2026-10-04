@@ -1,5 +1,31 @@
 mod support_safety;
 
+#[test]
+fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
+    let valid = [
+        serde_json::json!({"action":"ui_lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":true}),
+        serde_json::json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":false}}),
+    ];
+    for step in valid {
+        validate_scenario(&json!({"name":"preserved session","steps":[step]})).unwrap();
+    }
+    let invalid = [
+        json!({"action":"ui_lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":"true"}),
+        json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":1}}),
+        json!({"action":"wait_for","preserve_diplomacy_session":true,"condition":{"type":"lua","state_name":"InGame","code":"return true"}}),
+        json!({"action":"pause","seconds":1,"preserve_diplomacy_session":true}),
+        json!({"action":"wait_for","condition":{"type":"state","name":"InGame","preserve_diplomacy_session":true}}),
+    ];
+    for step in invalid {
+        assert!(
+            validate_scenario(&json!({"name":"bad preservation","steps":[step]}))
+                .unwrap_err()
+                .message
+                .contains("preserve_diplomacy_session")
+        );
+    }
+}
+
 use civ6_autotest_rs::{
     judge,
     runner::{AutoplayOptions, Runner, LOADSCREEN_READY},
