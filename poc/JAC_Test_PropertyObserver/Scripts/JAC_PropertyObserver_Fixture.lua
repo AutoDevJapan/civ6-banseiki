@@ -26,9 +26,12 @@ local function Step(owner, params, key, phase)
     assert(Game:GetProperty(key) == value and Players[owner]:GetProperty(key) == value,
         "official Gameplay property read disagrees with the write");
     Game:SetProperty(phase, params.Phase);
+    -- The native getter can return zero values for a removed numeric key.
+    -- Assigning first normalizes that result to nil before passing it onward.
+    local gameValue = Game:GetProperty(key);
+    local playerValue = Players[owner]:GetProperty(key);
     print("JAC_PROPERTY_OBSERVER key=" .. tostring(key) .. " phase=" .. params.Phase ..
-        " game=" .. tostring(Game:GetProperty(key)) .. " player=" ..
-        tostring(Players[owner]:GetProperty(key)));
+        " game=" .. tostring(gameValue) .. " player=" .. tostring(playerValue));
 end
 
 GameEvents.JAC_PropertyObserverStep.Add(function(owner, params)

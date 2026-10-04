@@ -31,7 +31,10 @@ fn exact_game_and_player_values_and_removal_are_read_back() {
             local values = {}
             return {
                 IsHuman = function() return human end,
-                GetProperty = function(_, key) return values[key] end,
+                GetProperty = function(_, key)
+                    if values[key] == nil then return end;
+                    return values[key];
+                end,
                 SetProperty = function(_, key, value) values[key] = value end,
             }
         end
