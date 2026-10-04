@@ -38,11 +38,17 @@ mod platform {
     }
 
     fn terminal_artifact(path: &Path, pid: u32, created: u64, mode: BridgeMode) -> Result<usize> {
+        let dual = matches!(
+            mode,
+            BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+        );
         let mut identity = 0usize;
         let mut installed = 0usize;
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
+        let mut assign_ui = std::collections::BTreeSet::new();
+        let mut assign_update = std::collections::BTreeSet::new();
         let mut joined_calibrations = 0usize;
         let mut joined_properties = 0usize;
         let mut joined_positive = false;
@@ -50,6 +56,7 @@ mod platform {
         let mut joined_true_property_receivers = std::collections::BTreeSet::new();
         let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
+        let mut production_bindings = std::collections::BTreeSet::new();
         let mut calibrated_owners = std::collections::BTreeSet::new();
         let mut admission_values = std::collections::BTreeSet::new();
         let mut admission_threads = std::collections::BTreeSet::new();
@@ -73,12 +80,14 @@ mod platform {
                                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                                 BridgeMode::JoinedAdmission => "joined-admission",
+                                BridgeMode::ProductionAdmission => "production-admission",
                                 BridgeMode::PromotionCall => "promotion-call",
+                                BridgeMode::AssignCalibration => "assign-calibration",
                             }
                         && row["entry_rva"] == mode.rva()
                         && (matches!(
                             mode,
-                            BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::PromotionCall
+                            BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::PromotionCall | BridgeMode::AssignCalibration
                         ) || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
                         && (mode != BridgeMode::PromotionCall
                             || (row["original_callee_rva"] == civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA
@@ -92,6 +101,17 @@ mod platform {
                                     == serde_json::json!([
                                         civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID
                                     ])))
+                        && (mode != BridgeMode::ProductionAdmission
+                            || (row["property_rva"]
+                                == civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA
+                                && row["scope_key_ranges"]
+                                    == serde_json::json!([
+                                        [900000, 900255],
+                                        [901000, 901255],
+                                        [903000, 903255]
+                                    ])
+                                && row["reset_key_id"]
+                                    == civ6_native_bridge_rs::PRODUCTION_RESET_KEY))
                         && (mode != BridgeMode::PropertyScoped
                             || row["scope_key_ids"]
                                 == serde_json::json!([
@@ -112,8 +132,7 @@ mod platform {
                 Some("uninstall")
                     if row["status"] == 0
                         && row["entry_restored"] == true
-                        && row["prefix_retained_until_exit"]
-                            == (mode.is_property() || mode == BridgeMode::JoinedAdmission) =>
+                        && row["prefix_retained_until_exit"] == (mode.is_property() || dual) =>
                 {
                     restored += 1
                 }
@@ -138,9 +157,11 @@ mod platform {
                 Some("calibration")
                     if matches!(
                         mode,
-                        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission
+                        BridgeMode::CanEverCalibration
+                            | BridgeMode::JoinedAdmission
+                            | BridgeMode::ProductionAdmission
                     ) && row["sequence"].as_u64()
-                        == Some(if mode == BridgeMode::JoinedAdmission {
+                        == Some(if dual {
                             joined_calibrations as u64 + 1
                         } else {
                             entries as u64 + 1
@@ -152,10 +173,17 @@ mod platform {
                             .and_then(|player| player.checked_add(0x528))
                             == hex_address(&row["property_receiver"])
                         && row["original_al"].as_u64().is_some_and(|n| n <= 1)
-                        && (mode != BridgeMode::JoinedAdmission
-                            || row["effective_al"].as_u64().is_some_and(|n| n <= 1)) =>
+                        && (!dual || row["effective_al"].as_u64().is_some_and(|n| n <= 1)) =>
                 {
-                    if mode == BridgeMode::JoinedAdmission {
+                    if mode == BridgeMode::ProductionAdmission {
+                        if let (Some(owner), Some(receiver)) = (
+                            row["player_id"].as_u64(),
+                            hex_address(&row["property_receiver"]),
+                        ) {
+                            production_bindings.insert((owner, receiver));
+                        }
+                    }
+                    if dual {
                         joined_calibrations += 1;
                         if row["player_id"] == 0
                             && row["governor_index"] == 4
@@ -178,10 +206,74 @@ mod platform {
                     }
                     entries += 1
                 }
+                Some("assign_calibration")
+                    if mode == BridgeMode::AssignCalibration
+                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                        && row["thread_id"].as_u64().is_some_and(|n| n > 0)
+                        && row["read_flags"].as_u64().is_some_and(|n| n <= 7)
+                        && [
+                            "governors_this",
+                            "governor_pointer",
+                            "city_pointer",
+                            "reason_pointer",
+                            "player_address",
+                            "original_rax",
+                        ]
+                        .into_iter()
+                        .all(|key| hex_address(&row[key]).is_some())
+                        && row["original_al"].as_u64().is_some_and(|n| n <= 255)
+                        && row["effective_al"] == row["original_al"]
+                        && hex_address(&row["original_rax"]).map(|n| n & 255)
+                            == row["original_al"].as_u64()
+                        && [
+                            "player_id",
+                            "governor_index",
+                            "city_a8",
+                            "city_c0",
+                            "city_c4",
+                            "city_d8",
+                        ]
+                        .into_iter()
+                        .all(|key| row[key].as_u64().is_some_and(|n| n <= u32::MAX as u64)) =>
+                {
+                    if row["read_flags"] == 7
+                        && row["player_id"] == 0
+                        && row["governor_index"] == 4
+                        && row["city_d8"] == 0
+                        && row["original_al"].as_u64().is_some_and(|n| n <= 1)
+                        && [
+                            "governors_this",
+                            "governor_pointer",
+                            "city_pointer",
+                            "player_address",
+                        ]
+                        .into_iter()
+                        .all(|key| hex_address(&row[key]).is_some_and(|n| n != 0))
+                    {
+                        let pair = (
+                            hex_address(&row["governors_this"]),
+                            hex_address(&row["governor_pointer"]),
+                            hex_address(&row["city_pointer"]),
+                            hex_address(&row["player_address"]),
+                            row["city_a8"].as_u64(),
+                            row["city_c0"].as_u64(),
+                            row["city_c4"].as_u64(),
+                        );
+                        if row["return_site_rva"] == 0xba3e2 {
+                            assign_ui.insert(pair);
+                        }
+                        if row["return_site_rva"] == 0x2dd375
+                            && row["reason_pointer"] == "0x0000000000000000"
+                        {
+                            assign_update.insert(pair);
+                        }
+                    }
+                    entries += 1;
+                }
                 Some("property_get")
-                    if (mode.is_property() || mode == BridgeMode::JoinedAdmission)
+                    if (mode.is_property() || dual)
                         && row["sequence"].as_u64()
-                            == Some(if mode == BridgeMode::JoinedAdmission {
+                            == Some(if dual {
                                 joined_properties as u64 + 1
                             } else {
                                 entries as u64 + 1
@@ -207,6 +299,11 @@ mod platform {
                                         | BridgeMode::JoinedAdmission
                                 ) || n
                                     == u64::from(civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID))
+                                && (mode != BridgeMode::ProductionAdmission
+                                    || n == u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                                    || (900000..900256).contains(&n)
+                                    || (901000..901256).contains(&n)
+                                    || (903000..903256).contains(&n))
                         })
                         && row["thread_id"]
                             .as_u64()
@@ -275,7 +372,39 @@ mod platform {
                     {
                         return Err(Error::input("invalid unreadable property row"));
                     }
-                    if mode == BridgeMode::JoinedAdmission {
+                    if mode == BridgeMode::ProductionAdmission {
+                        let key = row["key_id"].as_u64().unwrap();
+                        let cell_index = if (900000..900256).contains(&key) {
+                            Some(key - 900000)
+                        } else if (901000..901256).contains(&key) {
+                            Some(key - 901000)
+                        } else {
+                            None
+                        };
+                        let malformed = row["read_state"] == 1
+                            && (row["tag"] != 1
+                                || row["flags14"] != 0
+                                || !matches!(
+                                    row["payload8"].as_str(),
+                                    Some("0x0000000000000000" | "0x0000000000000001")
+                                ));
+                        if let Some(index) = cell_index.filter(|_| malformed) {
+                            // Captured immediately after applying this raw observation,
+                            // by the native consumer for this same receiver/owner/index.
+                            if row["denial_checked"] != true
+                                || row["denial_index"] != index
+                                || !row["denial_owner"].as_u64().is_some_and(|owner| {
+                                    owner < 64
+                                        && hex_address(&row["property"]).is_some_and(|receiver| {
+                                            production_bindings.contains(&(owner, receiver))
+                                        })
+                                })
+                            {
+                                return Err(Error::input("malformed production property lacks same-cell native closure proof"));
+                            }
+                        }
+                    }
+                    if dual {
                         joined_properties += 1;
                     }
                     entries += 1;
@@ -284,7 +413,7 @@ mod platform {
                     if row["rows"] == entries
                         && row["in_flight"] == 0
                         && row["snapshot_stable"] == true
-                        && (mode != BridgeMode::PromotionCall
+                        && (!matches!(mode, BridgeMode::PromotionCall | BridgeMode::AssignCalibration)
                             || (row["quiescence_proven"] == false
                                 && row["counter_scope"] == "snapshot_observation_not_complete_call_history"))
                         && row["observed_calls"].as_u64().is_some_and(|n| {
@@ -295,22 +424,32 @@ mod platform {
                             BridgeMode::CanEver
                                 | BridgeMode::CanEverCalibration
                                 | BridgeMode::JoinedAdmission
+                                | BridgeMode::ProductionAdmission
                                 | BridgeMode::PromotionCall
+                                | BridgeMode::AssignCalibration
                         ) {
                             row["result"] == "ok"
-                                && row["dropped"] == 0
+                                && (row["dropped"] == 0
+                                    || (mode == BridgeMode::ProductionAdmission
+                                        && row["counter_scope"]
+                                            == "bounded_prefix_samples_not_complete_call_history"
+                                        && row["calibration_sample_limit"] == 1024
+                                        && row["property_sample_limit"] == 4096))
                                 && row["classification"]
                                     == if mode == BridgeMode::CanEver {
                                         "can_ever_entry"
+                                    } else if mode == BridgeMode::AssignCalibration {
+                                        "assign_calibration"
                                     } else if mode == BridgeMode::JoinedAdmission {
                                         "joined_admission"
+                                    } else if mode == BridgeMode::ProductionAdmission {
+                                        "production_admission"
                                     } else if mode == BridgeMode::PromotionCall {
                                         "promotion_call_entry_only"
                                     } else {
                                         "can_ever_calibration"
                                     }
-                                && row["prefix_retained_until_exit"]
-                                    == (mode == BridgeMode::JoinedAdmission)
+                                && row["prefix_retained_until_exit"] == dual
                         } else {
                             row["classification"] == "raw_collection"
                                 && row["prefix_retained_until_exit"] == true
@@ -361,6 +500,11 @@ mod platform {
                 path.display()
             )));
         }
+        if mode == BridgeMode::AssignCalibration && assign_ui.is_disjoint(&assign_update) {
+            return Err(Error::input(
+                "native assignment UI/update pointer ABI evidence missing",
+            ));
+        }
         if mode == BridgeMode::PropertyScoped
             && scoped_keys
                 != std::collections::BTreeSet::from([
@@ -410,6 +554,13 @@ mod platform {
         {
             return Err(Error::input(
                 "joined native positive is not bound to a Core getter true",
+            ));
+        }
+        if mode == BridgeMode::ProductionAdmission
+            && (joined_calibrations == 0 || joined_properties == 0)
+        {
+            return Err(Error::input(
+                "production admission observed no Core getter or owner",
             ));
         }
         Ok(entries)
@@ -585,7 +736,9 @@ mod platform {
                 "can-ever-calibration" => BridgeMode::CanEverCalibration,
                 "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
                 "joined-admission" => BridgeMode::JoinedAdmission,
+                "production-admission" => BridgeMode::ProductionAdmission,
                 "promotion-call" => BridgeMode::PromotionCall,
+                "assign-calibration" => BridgeMode::AssignCalibration,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
             };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
@@ -623,7 +776,9 @@ mod platform {
                         BridgeMode::CanEverCalibration => "can-ever-calibration",
                         BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                         BridgeMode::JoinedAdmission => "joined-admission",
+                        BridgeMode::ProductionAdmission => "production-admission",
                         BridgeMode::PromotionCall => "promotion-call",
+                        BridgeMode::AssignCalibration => "assign-calibration",
                     },
                 ])
                 .stdin(Stdio::piped())
@@ -1152,6 +1307,81 @@ mod platform {
         }
 
         #[test]
+        fn assignment_terminal_requires_matching_ui_update_pointers_and_unchanged_original() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("assign.jsonl");
+            let call = json!({"kind":"assign_calibration","sequence":1,"thread_id":11,"read_flags":7,
+                "governors_this":"0x0000000000001000","governor_pointer":"0x0000000000003000",
+                "city_pointer":"0x0000000000004000","reason_pointer":"0x0000000000000000",
+                "player_address":"0x0000000000002000","player_id":0,"governor_index":4,
+                "city_a8":19,"city_c0":17,"city_c4":29,"city_d8":0,"return_site_rva":0xba3e2,
+                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1});
+            let mut update = call.clone();
+            update["sequence"] = json!(2);
+            update["return_site_rva"] = json!(0x2dd375);
+            let rows = vec![
+                json!({"kind":"identity","pid":7,"created_filetime":123,"mode":"assign-calibration",
+                    "entry_rva":civ6_native_bridge_rs::PINNED_CAN_ASSIGN_RVA,
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,"prefix_retained_until_exit":false}),
+                call,
+                update,
+                json!({"kind":"stop","result":"ok","rows":2,"observed_calls":2,"dropped":0,
+                    "in_flight":0,"snapshot_stable":true,"classification":"assign_calibration",
+                    "quiescence_proven":false,"counter_scope":"snapshot_observation_not_complete_call_history",
+                    "prefix_retained_until_exit":false}),
+            ];
+            let write = |r: &[Value]| {
+                std::fs::write(
+                    &path,
+                    r.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
+                2
+            );
+            for (index, field, value) in [
+                (3, "original_rax", json!("0xaabbccdd00000000")),
+                (3, "effective_al", json!(0)),
+                (3, "governor_pointer", json!(4)),
+                (4, "governor_pointer", json!("0x0000000000003008")),
+                (4, "read_flags", json!(3)),
+                (4, "city_a8", json!(20)),
+                (4, "reason_pointer", json!("0x0000000000007777")),
+                (4, "return_site_rva", json!(0x2dd370)),
+                (5, "dropped", json!(1)),
+                (5, "quiescence_proven", json!(true)),
+                (5, "counter_scope", json!("complete_call_history")),
+                (2, "entry_restored", json!(false)),
+                (0, "entry_rva", json!(0x2dddd0)),
+            ] {
+                let mut bad = rows.clone();
+                bad[index][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err(),
+                    "{field}"
+                );
+            }
+            for field in ["quiescence_proven", "counter_scope"] {
+                let mut bad = rows.clone();
+                bad[5].as_object_mut().unwrap().remove(field);
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err(),
+                    "missing {field}"
+                );
+            }
+        }
+
+        #[test]
         fn admission_property_requires_typed_false_true_and_distinct_threads() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("admission-property.jsonl");
@@ -1270,6 +1500,95 @@ mod platform {
             bad[4]["effective_al"] = json!(0);
             write(&bad);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::JoinedAdmission).is_err());
+        }
+
+        #[test]
+        fn production_terminal_accepts_invalid_raw_value_as_denial_evidence_only() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("production.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"production-admission","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
+                    "property_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
+                    "scope_key_ranges":[[900000,900255],[901000,901255],[903000,903255]],
+                    "reset_key_id":902000,"prefix_bytes":"[cc, cc, cc, cc, cc]",
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":true}),
+                json!({"kind":"calibration","sequence":1,"governor_index":77,
+                    "thread_id":11,"owner_read_state":1,"governors_this":"0x0000000000001000",
+                    "player_address":"0x0000000000002000","player_id":2,
+                    "property_receiver":"0x0000000000002528",
+                    "original_al":0,"effective_al":0}),
+                json!({"kind":"property_get","sequence":1,"property":"0x0000000000002528",
+                    "key_id":901077,"returned":"0x0000000000006000","thread_id":12,
+                    "read_state":1,"tag":2,"payload8":"0x0000000000000001","flags14":0}),
+                json!({"kind":"stop","result":"ok","rows":2,"dropped":0,
+                    "observed_calls":2,"filtered_calls":0,"getter_calls_seen":2,
+                    "in_flight":0,"snapshot_stable":true,"classification":"production_admission",
+                    "prefix_retained_until_exit":true}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap();
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                true
+            );
+            let mut verified = rows.to_vec();
+            verified[4]["denial_checked"] = json!(true);
+            verified[4]["denial_owner"] = json!(2);
+            verified[4]["denial_index"] = json!(77);
+            write(&verified);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
+                2
+            );
+            for (field, value) in [
+                ("denial_checked", json!(false)),
+                ("denial_index", json!(78)),
+                ("denial_owner", json!(64)),
+                ("denial_owner", json!(1)),
+            ] {
+                let mut bad = verified.clone();
+                bad[4][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                    "{field}"
+                );
+            }
+            let mut sampled = verified.clone();
+            sampled[5]["dropped"] = json!(80);
+            sampled[5]["observed_calls"] = json!(82);
+            sampled[5]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
+            sampled[5]["calibration_sample_limit"] = json!(1024);
+            sampled[5]["property_sample_limit"] = json!(4096);
+            write(&sampled);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
+                2
+            );
+            sampled[5]["counter_scope"] = json!("complete_history");
+            write(&sampled);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
+            let mut foreign = rows.to_vec();
+            foreign[4]["key_id"] = json!(853304);
+            write(&foreign);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
+            let mut unverified = rows.to_vec();
+            unverified[2]["entry_restored"] = json!(false);
+            write(&unverified);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
         }
     }
 }

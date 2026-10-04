@@ -92,6 +92,41 @@ fn single_use_observers_require_a_real_process_restart_before_reuse() {
 }
 
 #[test]
+fn production_admission_and_private_property_observers_share_process_lifetime() {
+    let modes = [
+        ("start_native_property_trace", "stop_native_property_trace"),
+        (
+            "start_native_joined_admission",
+            "stop_native_joined_admission",
+        ),
+        (
+            "start_native_production_admission",
+            "stop_native_production_admission",
+        ),
+    ];
+    for (first, first_stop) in modes {
+        for (second, second_stop) in modes {
+            let mut scene = serde_json::json!({"name":"shared property lifetime","steps":[
+                {"action":first,"name":"first","max_seconds":120},
+                {"action":first_stop},
+                {"action":second,"name":"second","max_seconds":120},
+                {"action":second_stop}
+            ]});
+            let error = validate_scenario(&scene).unwrap_err().to_string();
+            assert!(
+                error.contains("single-use until restart_game"),
+                "{first}->{second}: {error}"
+            );
+            scene["steps"]
+                .as_array_mut()
+                .unwrap()
+                .insert(2, serde_json::json!({"action":"restart_game"}));
+            validate_scenario(&scene).unwrap();
+        }
+    }
+}
+
+#[test]
 fn calibration_keeps_private_appointment_checks_and_closes_the_previous_hook() {
     let scene = calibration();
     validate_scenario(&scene).unwrap();

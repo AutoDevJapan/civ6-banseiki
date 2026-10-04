@@ -22,17 +22,31 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetProcessTimes,
 };
 
+#[path = "windows/assignment.rs"]
+mod assignment;
+use assignment::{
+    assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
+    ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
+};
+pub use assignment::{AssignCalibrationObservation, AssignCalibrationTrace, PINNED_CAN_ASSIGN_RVA};
+
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
-const PROPERTY_TRACE_VERSION: u32 = 2;
+const PROPERTY_TRACE_VERSION: u32 = 3;
 const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
-const CALIBRATION_TRACE_VERSION: u32 = 2;
-pub const CALIBRATION_CAPACITY: usize = 512;
+const CALIBRATION_TRACE_VERSION: u32 = 4;
+pub const CALIBRATION_CAPACITY: usize = 1024;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
 pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
+pub const PRODUCTION_MANIFEST_BASE: u32 = 900_000;
+pub const PRODUCTION_ALLOW_BASE: u32 = 901_000;
+pub const PRODUCTION_RESET_KEY: u32 = 902_000;
+pub const PRODUCTION_CLOSE_BASE: u32 = 903_000;
+pub const PRODUCTION_INDEX_LIMIT: usize = 256;
+pub const PRODUCTION_OWNER_LIMIT: usize = 64;
 const CODE_PAGE: usize = 4096;
 const RELAY_OFFSET: usize = 0;
 const TRAMPOLINE_OFFSET: usize = 32;
@@ -89,7 +103,8 @@ pub enum BridgeMode {
     CanEverCalibration = 3,
     PropertyAdmissionScoped = 4,
     JoinedAdmission = 5,
-    // 6 and 7 are reserved for production admission and assignment.
+    ProductionAdmission = 6,
+    AssignCalibration = 7,
     PromotionCall = 8,
 }
 
@@ -103,7 +118,11 @@ impl BridgeMode {
 
     pub const fn rva(self) -> usize {
         match self {
-            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => PINNED_CAN_EVER_RVA,
+            Self::CanEver
+            | Self::CanEverCalibration
+            | Self::JoinedAdmission
+            | Self::ProductionAdmission => PINNED_CAN_EVER_RVA,
+            Self::AssignCalibration => PINNED_CAN_ASSIGN_RVA,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_RVA
             }
@@ -113,9 +132,11 @@ impl BridgeMode {
 
     const fn file_offset(self) -> u64 {
         match self {
-            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => {
-                PINNED_CAN_EVER_FILE_OFFSET
-            }
+            Self::CanEver
+            | Self::CanEverCalibration
+            | Self::JoinedAdmission
+            | Self::ProductionAdmission => PINNED_CAN_EVER_FILE_OFFSET,
+            Self::AssignCalibration => ASSIGN_FILE_OFFSET,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_FILE_OFFSET
             }
@@ -125,7 +146,11 @@ impl BridgeMode {
 
     const fn prologue(self) -> &'static [u8] {
         match self {
-            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => &PINNED_PROLOGUE,
+            Self::CanEver
+            | Self::CanEverCalibration
+            | Self::JoinedAdmission
+            | Self::ProductionAdmission => &PINNED_PROLOGUE,
+            Self::AssignCalibration => &PINNED_PROLOGUE,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 &PROPERTY_PROLOGUE
             }
@@ -135,9 +160,10 @@ impl BridgeMode {
 
     pub const fn trace_size(self) -> usize {
         match self {
+            Self::AssignCalibration => std::mem::size_of::<AssignCalibrationTrace>(),
             Self::CanEver => std::mem::size_of::<SharedTrace>(),
             Self::CanEverCalibration => std::mem::size_of::<CalibrationTrace>(),
-            Self::JoinedAdmission => std::mem::size_of::<JoinedTrace>(),
+            Self::JoinedAdmission | Self::ProductionAdmission => std::mem::size_of::<JoinedTrace>(),
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 std::mem::size_of::<PropertyTrace>()
             }
@@ -204,6 +230,17 @@ impl BridgeConfig {
         config
     }
 
+    pub fn for_assign_calibration(
+        game_pid: u32,
+        created_filetime: u64,
+        trace_address: u64,
+    ) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::AssignCalibration as u32;
+        config.trace_size = BridgeMode::AssignCalibration.trace_size() as u32;
+        config
+    }
+
     pub fn for_joined(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
         let mut config = Self::new(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::JoinedAdmission as u32;
@@ -211,6 +248,11 @@ impl BridgeConfig {
         config
     }
 
+    pub fn for_production(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::for_joined(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::ProductionAdmission as u32;
+        config
+    }
     pub fn for_promotion_call(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
         let mut config = Self::new(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::PromotionCall as u32;
@@ -487,11 +529,16 @@ impl CalibrationTrace {
         if self.in_flight.load(Ordering::Acquire) != 0 {
             return Err("calibration calls remain in flight");
         }
-        if self.dropped.load(Ordering::Acquire) != 0 {
+        if self.reserved != BridgeMode::ProductionAdmission as u32
+            && self.dropped.load(Ordering::Acquire) != 0
+        {
             return Err("calibration capacity exceeded");
         }
-        let next = self.next.load(Ordering::Acquire) as usize;
-        if next > CALIBRATION_CAPACITY {
+        let observed = self.next.load(Ordering::Acquire) as usize;
+        let next = observed.min(CALIBRATION_CAPACITY);
+        if observed.saturating_sub(CALIBRATION_CAPACITY)
+            != self.dropped.load(Ordering::Acquire) as usize
+        {
             return Err("calibration sequence exceeded capacity");
         }
         let mut rows = Vec::with_capacity(next);
@@ -687,6 +734,366 @@ fn joined_deactivate() {
     JOINED_RECEIVER_PERMISSION.store(joined_word(0, session, 0, false));
 }
 
+// A bounded, keyed cache for the normal 22-person route. The private Ashina
+// word above is deliberately independent. One cell is owned by each
+// (owner, GameInfo Index, manifest/permission) tuple; each cell retains the
+// same receiver/session/ticket/bit atomic layout as the private gate.
+const PRODUCT_CELL_COUNT: usize = PRODUCTION_OWNER_LIMIT * PRODUCTION_INDEX_LIMIT;
+const PRODUCT_SESSION_MAX: u32 = (1 << 27) - 1;
+static PRODUCT_OWNERS: [AtomicJoinedWord; PRODUCTION_OWNER_LIMIT] =
+    [const { AtomicJoinedWord::new() }; PRODUCTION_OWNER_LIMIT];
+static PRODUCT_MANIFEST: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_PERMISSION: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_CLOSURE: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_CLOSED_ACK: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_SESSION: AtomicU32 = AtomicU32::new(0);
+static PRODUCT_NEXT_TICKET: AtomicU32 = AtomicU32::new(0);
+static PRODUCT_ACTIVE: AtomicBool = AtomicBool::new(false);
+static PRODUCT_EXHAUSTED: AtomicBool = AtomicBool::new(false);
+
+fn product_cell(owner: usize, index: usize, manifest: bool) -> &'static AtomicJoinedWord {
+    let offset = owner * PRODUCTION_INDEX_LIMIT + index;
+    if manifest {
+        &PRODUCT_MANIFEST[offset]
+    } else {
+        &PRODUCT_PERMISSION[offset]
+    }
+}
+
+fn product_next_ticket() -> Option<u32> {
+    match PRODUCT_NEXT_TICKET.fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+        old.checked_add(1).filter(|next| *next <= JOINED_TICKET_MAX)
+    }) {
+        Ok(old) => Some(old + 1),
+        Err(_) => {
+            PRODUCT_EXHAUSTED.store(true, Ordering::Release);
+            None
+        }
+    }
+}
+
+fn product_activate() -> bool {
+    let Ok(session) = PRODUCT_SESSION.fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+        old.checked_add(1)
+            .filter(|next| *next <= PRODUCT_SESSION_MAX)
+    }) else {
+        return false;
+    };
+    let session = session + 1;
+    PRODUCT_NEXT_TICKET.store(0, Ordering::Release);
+    for owner in &PRODUCT_OWNERS {
+        owner.store(joined_word(0, session, 0, false));
+    }
+    PRODUCT_EXHAUSTED.store(false, Ordering::Release);
+    PRODUCT_ACTIVE.store(true, Ordering::Release);
+    true
+}
+
+fn product_deactivate() {
+    PRODUCT_ACTIVE.store(false, Ordering::Release);
+}
+
+fn product_bind(owner: usize, receiver: u64, session: u32, ticket: u32) {
+    if owner >= PRODUCTION_OWNER_LIMIT || receiver == 0 || receiver & 7 != 0 || ticket == 0 {
+        return;
+    }
+    if !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+        || PRODUCT_SESSION.load(Ordering::Acquire) != session
+    {
+        return;
+    }
+    // Reuse by another owner closes its earlier binding before it may be read
+    // as this owner's source. Old in-flight binds carry smaller tickets.
+    for (other_id, other) in PRODUCT_OWNERS.iter().enumerate() {
+        if other_id == owner {
+            continue;
+        }
+        loop {
+            let current = other.load();
+            if joined_session(current) != session
+                || joined_receiver(current) != receiver
+                || joined_ticket(current) >= ticket
+            {
+                break;
+            }
+            if other
+                .compare_exchange(current, joined_word(0, session, ticket, false))
+                .is_ok()
+            {
+                break;
+            }
+        }
+    }
+    let target = &PRODUCT_OWNERS[owner];
+    loop {
+        let current = target.load();
+        if joined_session(current) != session
+            || joined_ticket(current) >= ticket
+            || joined_receiver(current) == receiver
+            || !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        {
+            return;
+        }
+        if target
+            .compare_exchange(current, joined_word(receiver, session, ticket, false))
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
+fn product_key(key: u32) -> Option<(usize, bool)> {
+    if (PRODUCTION_MANIFEST_BASE..PRODUCTION_MANIFEST_BASE + PRODUCTION_INDEX_LIMIT as u32)
+        .contains(&key)
+    {
+        Some(((key - PRODUCTION_MANIFEST_BASE) as usize, true))
+    } else if (PRODUCTION_ALLOW_BASE..PRODUCTION_ALLOW_BASE + PRODUCTION_INDEX_LIMIT as u32)
+        .contains(&key)
+    {
+        Some(((key - PRODUCTION_ALLOW_BASE) as usize, false))
+    } else {
+        None
+    }
+}
+
+fn product_close_index(key: u32) -> Option<usize> {
+    (PRODUCTION_CLOSE_BASE..PRODUCTION_CLOSE_BASE + PRODUCTION_INDEX_LIMIT as u32)
+        .contains(&key)
+        .then(|| (key - PRODUCTION_CLOSE_BASE) as usize)
+}
+
+fn product_publish_word(
+    cell: &AtomicJoinedWord,
+    receiver: u64,
+    session: u32,
+    ticket: u32,
+    bit: bool,
+) {
+    loop {
+        if !PRODUCT_ACTIVE.load(Ordering::Acquire)
+            || PRODUCT_SESSION.load(Ordering::Acquire) != session
+            || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+        {
+            return;
+        }
+        let current = cell.load();
+        if joined_session(current) == session && joined_ticket(current) >= ticket {
+            return;
+        }
+        if cell
+            .compare_exchange(current, joined_word(receiver, session, ticket, bit))
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
+fn product_property_begin(receiver: u64, key: u32) -> u64 {
+    if (product_key(key).is_none()
+        && product_close_index(key).is_none()
+        && key != PRODUCTION_RESET_KEY)
+        || receiver == 0
+        || !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+    {
+        return 0;
+    }
+    let session = PRODUCT_SESSION.load(Ordering::Acquire);
+    let mut found = None;
+    for (owner, binding) in PRODUCT_OWNERS.iter().enumerate() {
+        let current = binding.load();
+        if joined_session(current) == session && joined_receiver(current) == receiver {
+            if found.is_some() {
+                return 0;
+            }
+            found = Some(owner);
+        }
+    }
+    let Some(owner) = found else {
+        return 0;
+    };
+    let Some(ticket) = product_next_ticket() else {
+        return 0;
+    };
+    let binding = PRODUCT_OWNERS[owner].load();
+    if !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+        || PRODUCT_SESSION.load(Ordering::Acquire) != session
+        || joined_session(binding) != session
+        || joined_receiver(binding) != receiver
+        || joined_ticket(binding) >= ticket
+    {
+        return 0;
+    }
+    // Closure happens at entry, independent of the getter's stale/raw return.
+    if key == PRODUCTION_RESET_KEY {
+        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+    } else if let Some(index) = product_close_index(key) {
+        product_publish_word(
+            &PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index],
+            receiver,
+            session,
+            ticket,
+            false,
+        );
+    }
+    (u64::from(session) << 37) | ((owner as u64) << 31) | u64::from(ticket)
+}
+
+fn product_observe_property(
+    receiver: u64,
+    key: u32,
+    token: u64,
+    state: u32,
+    tag: u32,
+    payload: u64,
+    flags: u32,
+) {
+    let cell_key = product_key(key);
+    if cell_key.is_none() && product_close_index(key).is_none() && key != PRODUCTION_RESET_KEY {
+        return;
+    }
+    if token == 0
+        || !PRODUCT_ACTIVE.load(Ordering::Acquire)
+        || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+    {
+        return;
+    }
+    let session = (token >> 37) as u32;
+    let owner = ((token >> 31) & 63) as usize;
+    let ticket = (token as u32) & JOINED_TICKET_MAX;
+    if session != PRODUCT_SESSION.load(Ordering::Acquire) || ticket == 0 {
+        return;
+    }
+    let binding = PRODUCT_OWNERS[owner].load();
+    if joined_session(binding) != session
+        || joined_receiver(binding) != receiver
+        || joined_ticket(binding) >= ticket
+    {
+        return;
+    }
+    if product_close_index(key).is_some() {
+        return;
+    }
+    if key == PRODUCTION_RESET_KEY {
+        // The reset is a closure even if its raw value is malformed/missing.
+        // It advances the binding threshold rather than clearing 512 cells.
+        let owner_word = &PRODUCT_OWNERS[owner];
+        loop {
+            let current = owner_word.load();
+            if joined_session(current) != session
+                || joined_receiver(current) != receiver
+                || joined_ticket(current) >= ticket
+            {
+                return;
+            }
+            if owner_word
+                .compare_exchange(current, joined_word(receiver, session, ticket, false))
+                .is_ok()
+            {
+                return;
+            }
+        }
+    }
+    let (index, manifest) = cell_key.expect("validated production property key");
+    let offset = owner * PRODUCTION_INDEX_LIMIT + index;
+    let closure = PRODUCT_CLOSURE[offset].load();
+    if joined_receiver(closure) != receiver
+        || joined_session(closure) != session
+        || joined_ticket(closure) <= joined_ticket(binding)
+        || ticket <= joined_ticket(closure)
+    {
+        return;
+    }
+    let valid_bool = state == 1 && tag == 1 && flags == 0 && payload <= 1;
+    if !manifest && valid_bool && payload == 0 {
+        product_publish_word(&PRODUCT_CLOSED_ACK[offset], receiver, session, ticket, true);
+    }
+    let ack = PRODUCT_CLOSED_ACK[offset].load();
+    let closed_ack = joined_receiver(ack) == receiver
+        && joined_session(ack) == session
+        && joined_ticket(ack) > joined_ticket(closure)
+        && joined_permitted(ack);
+    let permit = valid_bool && payload == 1 && closed_ack;
+    product_publish_word(
+        product_cell(owner, index, manifest),
+        receiver,
+        session,
+        ticket,
+        permit,
+    );
+}
+fn product_index_known(index: usize, session: u32) -> bool {
+    index < PRODUCTION_INDEX_LIMIT
+        && (0..PRODUCTION_OWNER_LIMIT).any(|owner| {
+            let manifest = product_cell(owner, index, true).load();
+            let closure = PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load();
+            (joined_session(manifest) == session && joined_receiver(manifest) != 0)
+                || (joined_session(closure) == session && joined_receiver(closure) != 0)
+        })
+}
+
+// None means a non-persona governor: preserve GameCore's own result.
+// Some(false) means a manifested persona with no current positive permission.
+fn product_permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
+    if index >= PRODUCTION_INDEX_LIMIT || !PRODUCT_ACTIVE.load(Ordering::Acquire) {
+        return None;
+    }
+    let active_session = PRODUCT_SESSION.load(Ordering::Acquire);
+    if session != active_session || owner >= PRODUCTION_OWNER_LIMIT {
+        return product_index_known(index, active_session).then_some(false);
+    }
+    let binding = PRODUCT_OWNERS[owner].load();
+    if receiver == 0 || joined_receiver(binding) != receiver || joined_session(binding) != session {
+        return product_index_known(index, session).then_some(false);
+    }
+    for (other, row) in PRODUCT_OWNERS.iter().enumerate() {
+        if other != owner && joined_receiver(row.load()) == receiver {
+            return Some(false);
+        }
+    }
+    let closure = PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load();
+    let manifest = product_cell(owner, index, true).load();
+    if joined_receiver(manifest) != receiver || joined_session(manifest) != session {
+        return product_index_known(index, session).then_some(false);
+    }
+    if PRODUCT_EXHAUSTED.load(Ordering::Acquire) {
+        return Some(false);
+    }
+    if joined_ticket(manifest) <= joined_ticket(binding)
+        || !joined_permitted(manifest)
+        || joined_session(closure) != session
+        || joined_receiver(closure) != receiver
+        || joined_ticket(closure) <= joined_ticket(binding)
+        || joined_ticket(manifest) <= joined_ticket(closure)
+    {
+        return Some(false);
+    }
+    let permission = product_cell(owner, index, false).load();
+    let allowed = joined_receiver(permission) == receiver
+        && joined_session(permission) == session
+        && joined_ticket(permission) > joined_ticket(manifest)
+        && joined_permitted(permission);
+    // A concurrent reset/rebind cannot be combined with a prior true cell.
+    let final_binding = PRODUCT_OWNERS[owner].load();
+    Some(
+        allowed
+            && final_binding == binding
+            && product_cell(owner, index, true).load() == manifest
+            && product_cell(owner, index, false).load() == permission
+            && PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load() == closure
+            && PRODUCT_ACTIVE.load(Ordering::Acquire)
+            && !PRODUCT_EXHAUSTED.load(Ordering::Acquire),
+    )
+}
+
 #[cfg(test)]
 static JOINED_TEST_BIND_RECEIVER: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
@@ -732,6 +1139,9 @@ fn joined_bind(receiver: u64, session: u32, ticket: u32) {
 // Returns a session/ticket token only for the one numeric Core property and
 // the currently bound receiver. This runs before the original getter once.
 unsafe extern "system" fn joined_property_begin(property: u64, key: u32) -> u64 {
+    if PRODUCT_ACTIVE.load(Ordering::Acquire) {
+        return product_property_begin(property, key);
+    }
     if key != ASHINA_ADMISSION_KEY_ID
         || !JOINED_ACTIVE.load(Ordering::Acquire)
         || JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
@@ -793,18 +1203,27 @@ fn joined_observe_property(
 // No Lua/C++ calls, allocation, formatting or lock acquisition in the hook.
 // The original function receives its saved argument registers immediately after
 // this bounded copy. A failed copy is recorded, never treated as permission.
+const _: () = assert!(std::mem::size_of::<CalibrationRow>() <= 0x58);
 unsafe extern "system" fn calibration_begin(
     governors_this: u64,
     governor_index: u32,
     return_address: u64,
+    scratch: *mut CalibrationRow,
 ) -> *const CalibrationRow {
     if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index != 4 {
         return null_mut();
     }
-    let session = joined_session(JOINED_RECEIVER_PERMISSION.load());
+    let production = PRODUCT_ACTIVE.load(Ordering::Acquire);
+    let session = if production {
+        PRODUCT_SESSION.load(Ordering::Acquire)
+    } else {
+        joined_session(JOINED_RECEIVER_PERMISSION.load())
+    };
     // One order for the whole observation, before reading its owner pointer.
     // A compare-exchange retry keeps this order and cannot become newer work.
-    let bind_ticket = if JOINED_ACTIVE.load(Ordering::Acquire) {
+    let bind_ticket = if production {
+        product_next_ticket().unwrap_or(0)
+    } else if JOINED_ACTIVE.load(Ordering::Acquire) {
         joined_next_ticket().unwrap_or(0)
     } else {
         0
@@ -815,13 +1234,24 @@ unsafe extern "system" fn calibration_begin(
     }
     let trace = unsafe { &*trace };
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
-    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
-    if slot >= CALIBRATION_CAPACITY {
-        trace.dropped.fetch_add(1, Ordering::Relaxed);
-        trace.in_flight.fetch_sub(1, Ordering::Release);
-        return null_mut();
-    }
-    let row = &trace.rows[slot];
+    let row = if production {
+        // A per-call stack object carries the decision even after the prefix
+        // observation sample fills. Never use shared telemetry as authority.
+        if scratch.is_null() {
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+            return null_mut();
+        }
+        unsafe { ptr::write(scratch, CalibrationRow::default()) };
+        unsafe { &*scratch }
+    } else {
+        let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+        if slot >= CALIBRATION_CAPACITY {
+            trace.dropped.fetch_add(1, Ordering::Relaxed);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+            return null_mut();
+        }
+        &trace.rows[slot]
+    };
     row.joined_session.store(session, Ordering::Relaxed);
     row.governor_index.store(governor_index, Ordering::Relaxed);
     row.governors_this.store(governors_this, Ordering::Relaxed);
@@ -862,6 +1292,17 @@ unsafe extern "system" fn calibration_begin(
             bind_ticket,
         );
     }
+    if production
+        && (governor_index as usize) < PRODUCTION_INDEX_LIMIT
+        && row.owner_read_state.load(Ordering::Relaxed) == 1
+    {
+        product_bind(
+            row.player_id.load(Ordering::Relaxed) as usize,
+            row.property_receiver.load(Ordering::Relaxed),
+            session,
+            bind_ticket,
+        );
+    }
     row as *const CalibrationRow
 }
 
@@ -869,8 +1310,35 @@ unsafe extern "system" fn calibration_end(
     row: *const CalibrationRow,
     original_rax: u64,
     governor_index: u32,
+    governors_this: u64,
 ) -> u64 {
     if row.is_null() {
+        if PRODUCT_ACTIVE.load(Ordering::Acquire)
+            && (governor_index as usize) < PRODUCTION_INDEX_LIMIT
+        {
+            let player = governors_this
+                .checked_add(0x70)
+                .and_then(copy_current::<8>)
+                .map(u64::from_le_bytes);
+            if let Some(player) = player.filter(|player| *player != 0) {
+                let owner = player
+                    .checked_add(0xd8)
+                    .and_then(copy_current::<4>)
+                    .map(u32::from_le_bytes);
+                if let (Some(owner), Some(receiver)) = (owner, player.checked_add(0x528)) {
+                    if product_permission(
+                        owner as usize,
+                        governor_index as usize,
+                        receiver,
+                        PRODUCT_SESSION.load(Ordering::Acquire),
+                    )
+                    .is_some()
+                    {
+                        return original_rax & !0xff;
+                    }
+                }
+            }
+        }
         return if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index == 4 {
             original_rax & !0xff
         } else {
@@ -892,13 +1360,48 @@ unsafe extern "system" fn calibration_end(
             && joined_receiver(admission) == receiver
             && joined_permitted(admission);
         result = (original_rax & !0xff) | u64::from(permitted);
+    } else if PRODUCT_ACTIVE.load(Ordering::Acquire) {
+        if let Some(permitted) = product_permission(
+            row.player_id.load(Ordering::Relaxed) as usize,
+            row.governor_index.load(Ordering::Relaxed) as usize,
+            row.property_receiver.load(Ordering::Relaxed),
+            row.joined_session.load(Ordering::Relaxed),
+        ) {
+            result = (original_rax & !0xff) | u64::from(permitted);
+        }
     }
     row.effective_al
         .store((result & 0xff) as u32, Ordering::Relaxed);
     row.sequence.store(1, Ordering::Release);
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if !trace.is_null() {
-        unsafe { &*trace }.in_flight.fetch_sub(1, Ordering::Release);
+        let trace = unsafe { &*trace };
+        if trace.reserved == BridgeMode::ProductionAdmission as u32 {
+            let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+            if slot < CALIBRATION_CAPACITY {
+                let target = &trace.rows[slot];
+                macro_rules! copy_field {
+                    ($($field:ident),*) => { $(target.$field.store(row.$field.load(Ordering::Relaxed), Ordering::Relaxed);)* };
+                }
+                copy_field!(
+                    governor_index,
+                    thread_id,
+                    owner_read_state,
+                    governors_this,
+                    return_address,
+                    player_address,
+                    player_id,
+                    original_al,
+                    effective_al,
+                    property_receiver,
+                    joined_session
+                );
+                target.sequence.store(1, Ordering::Release);
+            } else {
+                trace.dropped.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        trace.in_flight.fetch_sub(1, Ordering::Release);
     }
     result
 }
@@ -952,21 +1455,31 @@ impl Default for PropertyTrace {
 impl PropertyTrace {
     pub const VERSION: u32 = PROPERTY_TRACE_VERSION;
     pub fn scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::PropertyScoped as u32;
-        trace
+        Self {
+            scope: BridgeMode::PropertyScoped as u32,
+            ..Self::default()
+        }
     }
 
     pub fn admission_scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::PropertyAdmissionScoped as u32;
-        trace
+        Self {
+            scope: BridgeMode::PropertyAdmissionScoped as u32,
+            ..Self::default()
+        }
     }
 
     pub fn joined_scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::JoinedAdmission as u32;
-        trace
+        Self {
+            scope: BridgeMode::JoinedAdmission as u32,
+            ..Self::default()
+        }
+    }
+
+    pub fn production_scoped() -> Self {
+        Self {
+            scope: BridgeMode::ProductionAdmission as u32,
+            ..Self::default()
+        }
     }
 }
 
@@ -981,11 +1494,16 @@ pub struct PropertyValueTrace {
     pub tag: u16,
     pub payload: u64,
     pub flags: u32,
+    pub denial_owner: u32,
+    pub denial_index: u32,
+    pub denial_checked: u32,
 }
 
 impl PropertyTrace {
     pub fn complete_rows(&self) -> Result<Vec<PropertyValueTrace>, &'static str> {
-        if self.dropped.load(Ordering::Acquire) != 0 {
+        if self.scope != BridgeMode::ProductionAdmission as u32
+            && self.dropped.load(Ordering::Acquire) != 0
+        {
             return Err("property getter trace capacity exceeded");
         }
         self.snapshot_rows()
@@ -1018,6 +1536,9 @@ impl PropertyTrace {
                 tag: row.tag.load(Ordering::Relaxed) as u16,
                 payload: row.payload.load(Ordering::Relaxed),
                 flags: row.flags.load(Ordering::Relaxed),
+                denial_owner: (row.tag.load(Ordering::Relaxed) >> 25) & 63,
+                denial_index: (row.tag.load(Ordering::Relaxed) >> 17) & 255,
+                denial_checked: (row.tag.load(Ordering::Relaxed) >> 16) & 1,
             });
         }
         Ok(rows)
@@ -1035,6 +1556,8 @@ static JOINED_TEST_PAUSED: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static JOINED_TEST_RELEASE: AtomicBool = AtomicBool::new(false);
 
+#[cfg(test)]
+static PROPERTY_TEST_RAW_MUTATE_RETURNED: AtomicU64 = AtomicU64::new(0);
 unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
     let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
@@ -1057,16 +1580,43 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         || ((trace.scope == BridgeMode::PropertyAdmissionScoped as u32
             || trace.scope == BridgeMode::JoinedAdmission as u32)
             && key_id != ASHINA_ADMISSION_KEY_ID)
+        || (trace.scope == BridgeMode::ProductionAdmission as u32
+            && product_key(key_id).is_none()
+            && product_close_index(key_id).is_none()
+            && key_id != PRODUCTION_RESET_KEY)
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
         return;
     }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
-    if slot >= TRACE_CAPACITY {
+    if slot >= TRACE_CAPACITY && trace.scope != BridgeMode::ProductionAdmission as u32 {
         if trace.scope == BridgeMode::JoinedAdmission as u32 {
             joined_observe_property(property, key_id, token, 0, 0, 0, 0);
         }
+        trace.dropped.fetch_add(1, Ordering::Relaxed);
+        trace.in_flight.fetch_sub(1, Ordering::Release);
+        return;
+    }
+    // One synchronous copy of borrowed native storage. Authority and telemetry
+    // consume exactly these same bytes, even if the source is then replaced.
+    let (state, tag, payload, flags) = match copy_current::<24>(returned) {
+        Some(bytes) => (
+            1,
+            u16::from_le_bytes(bytes[0..2].try_into().unwrap()) as u32,
+            u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            u32::from_le_bytes(bytes[20..24].try_into().unwrap()),
+        ),
+        None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
+    };
+    if trace.scope == BridgeMode::ProductionAdmission as u32 {
+        product_observe_property(property, key_id, token, state, tag, payload, flags);
+    }
+    #[cfg(test)]
+    if returned != 0 && returned == PROPERTY_TEST_RAW_MUTATE_RETURNED.load(Ordering::Acquire) {
+        unsafe { ((returned + 8) as *mut u64).write_unaligned(0) };
+    }
+    if slot >= TRACE_CAPACITY {
         trace.dropped.fetch_add(1, Ordering::Relaxed);
         trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
@@ -1077,57 +1627,29 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     row.returned.store(returned, Ordering::Relaxed);
     row.thread_id
         .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
-    if returned == 0 {
-        row.read_state.store(0, Ordering::Relaxed);
-    } else {
-        let mut bytes = [0u8; 24];
-        let mut read = 0usize;
-        let ok = unsafe {
-            ReadProcessMemory(
-                GetCurrentProcess(),
-                returned as *const c_void,
-                bytes.as_mut_ptr().cast(),
-                bytes.len(),
-                &mut read,
-            )
-        } != 0
-            && read == bytes.len();
-        if ok {
-            row.tag.store(
-                u16::from_le_bytes([bytes[0], bytes[1]]) as u32,
-                Ordering::Relaxed,
-            );
-            row.payload.store(
-                u64::from_le_bytes([
-                    bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
-                    bytes[15],
-                ]),
-                Ordering::Relaxed,
-            );
-            row.flags.store(
-                u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
-                Ordering::Relaxed,
-            );
-            row.read_state.store(1, Ordering::Relaxed);
-        } else {
-            row.read_state.store(2, Ordering::Relaxed);
-        }
-    }
+    row.read_state.store(state, Ordering::Relaxed);
+    row.tag.store(tag, Ordering::Relaxed);
+    row.payload.store(payload, Ordering::Relaxed);
+    row.flags.store(flags, Ordering::Relaxed);
     if trace.scope == BridgeMode::JoinedAdmission as u32 {
-        joined_observe_property(
-            property,
-            key_id,
-            token,
-            row.read_state.load(Ordering::Relaxed),
-            row.tag.load(Ordering::Relaxed),
-            row.payload.load(Ordering::Relaxed),
-            row.flags.load(Ordering::Relaxed),
-        );
+        joined_observe_property(property, key_id, token, state, tag, payload, flags);
+    }
+    if trace.scope == BridgeMode::ProductionAdmission as u32 && token != 0 {
+        if let Some((index, _)) = product_key(key_id) {
+            let owner = ((token >> 31) & 63) as usize;
+            let session = (token >> 37) as u32;
+            // The native tag is u16; its unused high half stores the closure
+            // proof without enlarging the original 48-byte diagnostic row.
+            let denied = product_permission(owner, index, property, session) == Some(false);
+            row.tag.store(
+                tag | ((owner as u32) << 25) | ((index as u32) << 17) | (u32::from(denied) << 16),
+                Ordering::Relaxed,
+            );
+        }
     }
     row.sequence.store(1, Ordering::Release);
     trace.in_flight.fetch_sub(1, Ordering::Release);
 }
-
 // Win64 entry: RCX=property, EDX=key. .seh_* emits pdata/xdata for this
 // nonleaf frame. The pinned 0x99F5C0 getter has no covering pdata entry and
 // only leaf instructions; the allocated trampoline is a MOV plus direct JMP.
@@ -1251,8 +1773,8 @@ global_asm!(
     ".globl calibration_gateway",
     ".seh_proc calibration_gateway",
     "calibration_gateway:",
-    "sub rsp, 0xd8",
-    ".seh_stackalloc 0xd8",
+    "sub rsp, 0x138",
+    ".seh_stackalloc 0x138",
     ".seh_endprologue",
     "mov qword ptr [rsp + 0x20], rcx",
     "mov qword ptr [rsp + 0x28], rdx",
@@ -1267,7 +1789,8 @@ global_asm!(
     "movdqu xmmword ptr [rsp + 0xa0], xmm3",
     "movdqu xmmword ptr [rsp + 0xb0], xmm4",
     "movdqu xmmword ptr [rsp + 0xc0], xmm5",
-    "mov r8, qword ptr [rsp + 0xd8]",
+    "mov r8, qword ptr [rsp + 0x138]",
+    "lea r9, [rsp + 0xe0]",
     "call {begin}",
     "mov qword ptr [rsp + 0x58], rax",
     "mov rcx, qword ptr [rsp + 0x20]",
@@ -1288,8 +1811,9 @@ global_asm!(
     "mov rcx, qword ptr [rsp + 0x58]",
     "mov rdx, rax",
     "mov r8d, dword ptr [rsp + 0x28]",
+    "mov r9, qword ptr [rsp + 0x20]",
     "call {end}",
-    "add rsp, 0xd8",
+    "add rsp, 0x138",
     "ret",
     ".seh_endproc",
     begin = sym calibration_begin,
@@ -1426,6 +1950,9 @@ unsafe impl Send for PromotionHook {}
 static PROMOTION_HOOK: Mutex<Option<PromotionHook>> = Mutex::new(None);
 static PROMOTION_USED: AtomicBool = AtomicBool::new(false);
 static PROPERTY_USED: AtomicBool = AtomicBool::new(false);
+// An entry-restored snapshot does not prove old relay entrants are gone.
+// Never redirect a delayed assignment callback to a second trace mapping.
+static ASSIGN_USED: AtomicBool = AtomicBool::new(false);
 
 fn promotion_operand(call: usize, to: usize) -> Option<u32> {
     let operand = call.checked_add(1)?;
@@ -1747,7 +2274,10 @@ unsafe fn install_property_hotpatch(
     {
         return Err("unaligned or missing property hook input");
     }
-    let lock = if mode == BridgeMode::JoinedAdmission {
+    let lock = if matches!(
+        mode,
+        BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+    ) {
         &JOINED_PROPERTY_HOOK
     } else {
         &HOOK
@@ -1857,10 +2387,11 @@ unsafe fn install_hook(
     )
     .ok_or("trampoline return out of range")?;
     let gateway = match mode {
+        BridgeMode::AssignCalibration => assign_calibration_gateway as *const () as usize,
         BridgeMode::CanEver => bridge_gateway as *const () as usize,
-        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
-            calibration_gateway as *const () as usize
-        }
+        BridgeMode::CanEverCalibration
+        | BridgeMode::JoinedAdmission
+        | BridgeMode::ProductionAdmission => calibration_gateway as *const () as usize,
         _ => return Err("invalid CanEver gateway mode"),
     };
     unsafe {
@@ -1878,13 +2409,25 @@ unsafe fn install_hook(
         return Err("cannot publish the relay and trampoline");
     }
     match mode {
+        BridgeMode::AssignCalibration => ASSIGN_TRACE_PTR.store(trace.cast(), Ordering::Release),
         BridgeMode::CanEver => BRIDGE_TRACE_PTR.store(trace, Ordering::Release),
-        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
+        BridgeMode::CanEverCalibration
+        | BridgeMode::JoinedAdmission
+        | BridgeMode::ProductionAdmission => {
+            if mode == BridgeMode::ProductionAdmission {
+                unsafe {
+                    (*trace.cast::<CalibrationTrace>()).reserved = mode as u32;
+                }
+            }
             CALIBRATION_TRACE_PTR.store(trace.cast(), Ordering::Release)
         }
         _ => unreachable!(),
     }
-    BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    if mode == BridgeMode::AssignCalibration {
+        ASSIGN_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    } else {
+        BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    }
     let mut patched = original;
     patched[..5].copy_from_slice(&jump_to_relay);
     patched[5..prologue.len()].fill(0x90);
@@ -1962,6 +2505,8 @@ unsafe fn install_property_at(
         BridgeMode::PropertyAdmissionScoped
     } else if unsafe { (*trace).scope } == BridgeMode::JoinedAdmission as u32 {
         BridgeMode::JoinedAdmission
+    } else if unsafe { (*trace).scope } == BridgeMode::ProductionAdmission as u32 {
+        BridgeMode::ProductionAdmission
     } else if unsafe { (*trace).scope } == 0 {
         BridgeMode::Property
     } else {
@@ -2008,6 +2553,7 @@ unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> 
 
 unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
+    product_deactivate();
     let promotion = unsafe { restore_promotion_call() }?;
     let main = restore_one(&HOOK)?;
     let property = restore_one(&JOINED_PROPERTY_HOOK)?;
@@ -2217,13 +2763,14 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5 | 8)
+        || !matches!(config.mode, 0..=8)
         || config.trace_size as usize
             != match config.mode {
                 0 => BridgeMode::CanEver.trace_size(),
                 3 => BridgeMode::CanEverCalibration.trace_size(),
-                5 => BridgeMode::JoinedAdmission.trace_size(),
+                5 | 6 => BridgeMode::JoinedAdmission.trace_size(),
                 8 => BridgeMode::PromotionCall.trace_size(),
+                7 => BridgeMode::AssignCalibration.trace_size(),
                 _ => BridgeMode::Property.trace_size(),
             }
         || !committed_range(
@@ -2255,7 +2802,9 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         3 => BridgeMode::CanEverCalibration,
         4 => BridgeMode::PropertyAdmissionScoped,
         5 => BridgeMode::JoinedAdmission,
+        6 => BridgeMode::ProductionAdmission,
         8 => BridgeMode::PromotionCall,
+        7 => BridgeMode::AssignCalibration,
         _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
@@ -2287,7 +2836,10 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     } else {
         None
     };
-    let property_entry = if mode == BridgeMode::JoinedAdmission {
+    let property_entry = if matches!(
+        mode,
+        BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+    ) {
         let Some(address) = (module as usize).checked_add(PINNED_PROPERTY_GET_RVA) else {
             return BridgeStatus::EntryBytes;
         };
@@ -2326,6 +2878,17 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         None
     };
     let installed = match mode {
+        BridgeMode::AssignCalibration => {
+            if ASSIGN_USED
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                return BridgeStatus::HookFailure;
+            }
+            let trace = config.trace_address as *mut AssignCalibrationTrace;
+            unsafe { ptr::write(trace, AssignCalibrationTrace::default()) };
+            unsafe { install_assign_calibration_at(entry, trace, disk_bytes) }
+        }
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
             unsafe { ptr::write(trace, SharedTrace::default()) };
@@ -2350,10 +2913,14 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             unsafe { ptr::write(trace, CalibrationTrace::default()) };
             unsafe { install_calibration_at(entry, trace, disk_bytes) }
         }
-        BridgeMode::JoinedAdmission => {
+        BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission => {
             let trace = config.trace_address as *mut JoinedTrace;
             unsafe { ptr::write(trace, JoinedTrace::default()) };
             joined_deactivate();
+            product_deactivate();
+            if mode == BridgeMode::ProductionAdmission {
+                unsafe { ptr::write(&mut (*trace).property, PropertyTrace::production_scoped()) };
+            }
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
             let property_result = unsafe {
@@ -2371,15 +2938,21 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                             entry,
                             ptr::addr_of_mut!((*trace).calibration).cast(),
                             disk_bytes,
-                            BridgeMode::JoinedAdmission,
+                            mode,
                         )
                     };
-                    if can_result.is_ok() && joined_activate() {
+                    let active = can_result.is_ok()
+                        && if mode == BridgeMode::ProductionAdmission {
+                            product_activate()
+                        } else {
+                            joined_activate()
+                        };
+                    if active {
                         Ok(())
                     } else {
                         let error = can_result
                             .err()
-                            .unwrap_or("joined session generation exhausted");
+                            .unwrap_or("admission session generation exhausted");
                         match unsafe { uninstall() } {
                             Ok(()) => Err(error),
                             Err(_) => Err("critical: joined hook rollback failed"),
@@ -2449,6 +3022,312 @@ mod tests {
     use std::time::{Duration, Instant};
 
     #[test]
+    fn production_stale_true_cannot_open_without_closed_ack() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        let publish = |key, payload| {
+            let token = product_property_begin(0x1000, key);
+            product_observe_property(0x1000, key, token, 1, 1, payload, 0);
+        };
+        publish(903077, 1);
+        publish(901077, 1); // stale true while Lua attempted false
+        publish(900077, 1);
+        publish(901077, 1);
+        assert_eq!(
+            product_permission(2, 77, 0x1000, session),
+            Some(false),
+            "manifest and stale true cannot replace a verified closed acknowledgment"
+        );
+        product_deactivate();
+    }
+    fn publish_product(receiver: u64, key: u32, payload: u64) {
+        let token = product_property_begin(receiver, key);
+        product_observe_property(receiver, key, token, 1, 1, payload, 0);
+    }
+
+    fn open_product(receiver: u64, index: u32) {
+        publish_product(receiver, PRODUCTION_CLOSE_BASE + index, 1);
+        publish_product(receiver, PRODUCTION_ALLOW_BASE + index, 0);
+        publish_product(receiver, PRODUCTION_MANIFEST_BASE + index, 1);
+        publish_product(receiver, PRODUCTION_ALLOW_BASE + index, 1);
+    }
+
+    #[test]
+    fn production_cache_keys_owner_and_gameinfo_index_and_rejects_old_reads() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(1, 0x1000, session, product_next_ticket().unwrap());
+        product_bind(2, 0x2000, session, product_next_ticket().unwrap());
+        open_product(0x1000, 77);
+        open_product(0x1000, 78);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
+        assert_eq!(product_permission(2, 77, 0x2000, session), Some(false));
+        assert_eq!(product_permission(1, 79, 0x1000, session), None);
+        let delayed = product_property_begin(0x1000, 901077);
+        // Closure is effective before the close getter returns.
+        let close = product_property_begin(0x1000, 903077);
+        assert_ne!(close, 0);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(true));
+        product_observe_property(0x1000, 901077, delayed, 1, 1, 1, 0);
+        publish_product(0x1000, 901077, 0);
+        publish_product(0x1000, 900077, 1);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        publish_product(0x1000, 901077, 1);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
+        let bad = product_property_begin(0x1000, 901077);
+        product_observe_property(0x1000, 901077, bad, 1, 2, 1, 0);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        let stale = product_property_begin(0x1000, 901078);
+        let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY);
+        assert_ne!(reset, 0);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        // True-only publications after a reset cannot use old false ACKs.
+        publish_product(0x1000, 900078, 1);
+        publish_product(0x1000, 901078, 1);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        open_product(0x1000, 78);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(true));
+        let stale = product_property_begin(0x1000, 901078);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_ne!(product_permission(2, 78, 0x1000, session), Some(true));
+        open_product(0x1000, 78);
+        assert_eq!(product_permission(2, 78, 0x1000, session), Some(true));
+        assert_ne!(product_permission(1, 78, 0x1000, session), Some(true));
+        assert_eq!(product_property_begin(0x3000, 901078), 0, "UI is not Core");
+        let stale = product_property_begin(0x1000, 901078);
+        product_deactivate();
+        assert!(product_activate());
+        product_bind(
+            2,
+            0x1000,
+            PRODUCT_SESSION.load(Ordering::Acquire),
+            product_next_ticket().unwrap(),
+        );
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_ne!(
+            product_permission(2, 78, 0x1000, PRODUCT_SESSION.load(Ordering::Acquire)),
+            Some(true)
+        );
+        product_deactivate();
+    }
+    #[test]
+    fn production_malformed_raw_observation_records_the_same_cell_closed() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        let mut trace = Box::new(PropertyTrace::production_scoped());
+        PROPERTY_TRACE_PTR.store(&mut *trace, Ordering::Release);
+        for (tag, payload, flags) in [(2u16, 1u64, 0u32), (1, 2, 0), (1, 1, 7)] {
+            open_product(0x1000, 77);
+            let mut raw = [0u8; 24];
+            raw[0..2].copy_from_slice(&tag.to_le_bytes());
+            raw[8..16].copy_from_slice(&payload.to_le_bytes());
+            raw[20..24].copy_from_slice(&flags.to_le_bytes());
+            let token = product_property_begin(0x1000, 901077);
+            unsafe { record_property(0x1000, 901077, raw.as_ptr() as u64, token) };
+            assert_eq!(product_permission(2, 77, 0x1000, session), Some(false));
+        }
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|row| row.denial_owner == 2
+            && row.denial_index == 77
+            && row.denial_checked == 1
+            && row.property == 0x1000));
+        PROPERTY_TRACE_PTR.store(null_mut(), Ordering::Release);
+        product_deactivate();
+    }
+    #[test]
+    fn production_records_the_consumed_raw_copy_without_rereading_borrowed_storage() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        open_product(0x1000, 77);
+        let mut trace = Box::new(PropertyTrace::production_scoped());
+        PROPERTY_TRACE_PTR.store(&mut *trace, Ordering::Release);
+        let mut raw = [0u8; 24];
+        raw[0] = 1;
+        raw[8] = 1;
+        let address = raw.as_ptr() as u64;
+        PROPERTY_TEST_RAW_MUTATE_RETURNED.store(address, Ordering::Release);
+        let token = product_property_begin(0x1000, 901077);
+        unsafe { record_property(0x1000, 901077, address, token) };
+        PROPERTY_TEST_RAW_MUTATE_RETURNED.store(0, Ordering::Release);
+        let actual = trace.complete_rows().unwrap()[0].payload;
+        let permit = product_permission(2, 77, 0x1000, session);
+        PROPERTY_TRACE_PTR.store(null_mut(), Ordering::Release);
+        product_deactivate();
+        assert_eq!(raw[8], 0, "fault changed the borrowed storage");
+        assert_eq!(
+            permit,
+            Some(true),
+            "consumer applied the first captured true"
+        );
+        assert_eq!(
+            actual, 1,
+            "telemetry must contain that same consumed capture"
+        );
+    }
+    #[test]
+    fn production_mode_uses_two_original_calls_and_preserves_other_governors() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let can_entry = unsafe { page.add(16) };
+        let property_entry = unsafe { page.add(128) };
+        let prefix = unsafe { property_entry.sub(PROPERTY_PREFIX_LEN) };
+        let can_bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
+        ];
+        let property_bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0xc3,
+        ];
+        unsafe {
+            ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
+            ptr::copy_nonoverlapping(
+                property_bytes.as_ptr(),
+                property_entry,
+                property_bytes.len(),
+            );
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN);
+        }
+        #[repr(align(8))]
+        struct PlayerBytes([u8; 0x600]);
+        let mut owner = PlayerBytes([0; 0x600]);
+        owner.0[0xd8..0xdc].copy_from_slice(&2u32.to_le_bytes());
+        let mut value = [0u8; 24];
+        value[..2].copy_from_slice(&1u16.to_le_bytes());
+        owner.0[0x568..0x570].copy_from_slice(&(value.as_ptr() as u64).to_le_bytes());
+        let mut gov = [0u8; 0x80];
+        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        let can: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(can_entry) };
+        let property: extern "system" fn(usize, u32) -> usize =
+            unsafe { std::mem::transmute(property_entry) };
+        let receiver = owner.0.as_ptr() as usize + 0x528;
+        let mut trace = Box::new(JoinedTrace::default());
+        trace.property = PropertyTrace::production_scoped();
+        unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
+            .unwrap();
+        unsafe {
+            install_hook(
+                can_entry,
+                (&mut trace.calibration as *mut CalibrationTrace).cast(),
+                can_bytes[..8].try_into().unwrap(),
+                BridgeMode::ProductionAdmission,
+            )
+        }
+        .unwrap();
+        assert!(product_activate());
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
+        let publish = |key, payload| {
+            value[8] = payload;
+            assert_eq!(property(receiver, key), value.as_ptr() as usize);
+        };
+        let mut publish = publish;
+        publish(PRODUCTION_CLOSE_BASE + 77, 1);
+        publish(PRODUCTION_ALLOW_BASE + 77, 0);
+        publish(PRODUCTION_MANIFEST_BASE + 77, 1);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 0);
+        publish(PRODUCTION_ALLOW_BASE + 77, 1);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        assert_eq!(
+            can(gov.as_ptr() as usize, 78),
+            1,
+            "other mod governor keeps original"
+        );
+        // Property sample exhaustion does not affect authority. Both a false
+        // and a true after the final sampled row still change the actual gate.
+        for _ in 0..TRACE_CAPACITY + 40 {
+            publish(PRODUCTION_ALLOW_BASE + 77, 1);
+        }
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        publish(PRODUCTION_ALLOW_BASE + 77, 0);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 0);
+        publish(PRODUCTION_ALLOW_BASE + 77, 1);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        for _ in 0..CALIBRATION_CAPACITY + 80 {
+            assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        }
+        assert_eq!(can(gov.as_ptr() as usize, 78), 1);
+        assert_eq!(
+            u32::from_le_bytes(gov[0x78..0x7c].try_into().unwrap()),
+            trace.calibration.next.load(Ordering::Acquire),
+            "original CanEver once for every sampled and unsampled call"
+        );
+        assert!(trace.calibration.dropped.load(Ordering::Acquire) > 0);
+        assert_eq!(
+            trace.calibration.complete_rows().unwrap().len(),
+            CALIBRATION_CAPACITY
+        );
+        assert_eq!(
+            u32::from_le_bytes(owner.0[0x570..0x574].try_into().unwrap()),
+            trace.property.next.load(Ordering::Acquire),
+            "original getter once; native consumer invokes no additional getter"
+        );
+        gov[0x70..0x78].fill(0);
+        assert_eq!(
+            can(gov.as_ptr() as usize, 77),
+            0,
+            "unknown owner closes known persona"
+        );
+        assert_eq!(
+            can(gov.as_ptr() as usize, 78),
+            1,
+            "unknown owner preserves ordinary Governor"
+        );
+        assert!(trace.property.dropped.load(Ordering::Acquire) > 0);
+        assert_eq!(
+            trace.property.complete_rows().unwrap().len(),
+            TRACE_CAPACITY
+        );
+        let original_calls = u32::from_le_bytes(gov[0x78..0x7c].try_into().unwrap());
+        let getter_calls = u32::from_le_bytes(owner.0[0x570..0x574].try_into().unwrap());
+        assert_eq!(
+            original_calls,
+            trace.calibration.next.load(Ordering::Acquire)
+        );
+        println!("production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
+            original_calls, getter_calls, trace.calibration.dropped.load(Ordering::Acquire),
+            trace.property.dropped.load(Ordering::Acquire));
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(
+            unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
+            can_bytes[..8]
+        );
+        assert_eq!(
+            unsafe { ptr::read(property_entry.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
+        );
+        assert_eq!(
+            trace.property.snapshot_rows().unwrap().len(),
+            TRACE_CAPACITY
+        );
+        assert!(trace.property.dropped.load(Ordering::Acquire) > 0);
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
     fn delayed_receiver_bind_cannot_replace_a_newer_published_receiver() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         joined_deactivate();
@@ -2459,7 +3338,10 @@ mod tests {
         JOINED_TEST_BIND_PAUSED.store(false, Ordering::Release);
         JOINED_TEST_BIND_RELEASE.store(false, Ordering::Release);
         let old_ticket = joined_next_ticket().unwrap();
-        let old = std::thread::spawn(move || joined_bind(0x2000, session, old_ticket));
+        let mut old = PausedFixtureWorker::new(
+            &JOINED_TEST_BIND_RELEASE,
+            std::thread::spawn(move || joined_bind(0x2000, session, old_ticket)),
+        );
         let deadline = Instant::now() + Duration::from_secs(5);
         while !JOINED_TEST_BIND_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::yield_now();
@@ -2493,6 +3375,176 @@ mod tests {
     };
 
     static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct PausedFixtureWorker<T> {
+        release: &'static AtomicBool,
+        worker: Option<std::thread::JoinHandle<T>>,
+    }
+
+    impl<T> PausedFixtureWorker<T> {
+        fn new(release: &'static AtomicBool, worker: std::thread::JoinHandle<T>) -> Self {
+            Self {
+                release,
+                worker: Some(worker),
+            }
+        }
+
+        fn join(&mut self) -> std::thread::Result<T> {
+            self.release.store(true, Ordering::Release);
+            self.worker.take().unwrap().join()
+        }
+    }
+
+    impl<T> Drop for PausedFixtureWorker<T> {
+        fn drop(&mut self) {
+            if let Some(worker) = self.worker.take() {
+                self.release.store(true, Ordering::Release);
+                let _ = worker.join();
+            }
+        }
+    }
+
+    struct HookFixtureGuard;
+
+    impl Drop for HookFixtureGuard {
+        fn drop(&mut self) {
+            let _ = unsafe { uninstall() };
+        }
+    }
+
+    fn wait_for_synthetic_phase(
+        progress: &std::sync::mpsc::Receiver<(u32, u32)>,
+        expected_phase: u32,
+    ) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut observed = 0u32;
+        while observed != 0b1111 {
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                return false;
+            };
+            let Ok((owner, phase)) = progress.recv_timeout(remaining) else {
+                return false;
+            };
+            if owner >= 4 || phase != expected_phase || observed & (1 << owner) != 0 {
+                return false;
+            }
+            observed |= 1 << owner;
+        }
+        true
+    }
+
+    struct SyntheticCallers {
+        phase: Arc<AtomicU32>,
+        workers: Vec<std::thread::JoinHandle<u32>>,
+    }
+
+    impl SyntheticCallers {
+        fn stop_and_join(&mut self) -> Result<u32, &'static str> {
+            self.phase.store(3, Ordering::Release);
+            let mut calls = 0;
+            let mut failed = false;
+            for worker in self.workers.drain(..) {
+                match worker.join() {
+                    Ok(count) => calls += count,
+                    Err(_) => failed = true,
+                }
+            }
+            if failed {
+                Err("synthetic caller panicked")
+            } else {
+                Ok(calls)
+            }
+        }
+    }
+
+    impl Drop for SyntheticCallers {
+        fn drop(&mut self) {
+            // The trace is declared before this guard and remains alive through
+            // worker collection, including while the test body is unwinding.
+            let _ = self.stop_and_join();
+            let _ = unsafe { uninstall() };
+        }
+    }
+
+    type PromotionWorker = (u64, u32, u64, usize);
+
+    struct PromotionCallers {
+        running: Arc<AtomicBool>,
+        workers: Vec<std::thread::JoinHandle<PromotionWorker>>,
+    }
+
+    impl PromotionCallers {
+        fn stop_and_join(&mut self) -> Result<Vec<PromotionWorker>, &'static str> {
+            self.running.store(false, Ordering::Release);
+            let mut joined = Vec::with_capacity(self.workers.len());
+            let mut failed = false;
+            for worker in self.workers.drain(..) {
+                match worker.join() {
+                    Ok(result) => joined.push(result),
+                    Err(_) => failed = true,
+                }
+            }
+            if failed {
+                Err("promotion caller panicked")
+            } else {
+                Ok(joined)
+            }
+        }
+    }
+
+    impl Drop for PromotionCallers {
+        fn drop(&mut self) {
+            let _ = self.stop_and_join();
+            let _ = unsafe { restore_promotion_call() };
+        }
+    }
+
+    fn spawn_synthetic_callers(
+        phase: &Arc<AtomicU32>,
+        call: impl Fn(u32) + Send + Sync + 'static,
+    ) -> (SyntheticCallers, std::sync::mpsc::Receiver<(u32, u32)>) {
+        spawn_synthetic_callers_with_hook(phase, call, |_| {})
+    }
+
+    fn spawn_synthetic_callers_with_hook(
+        phase: &Arc<AtomicU32>,
+        call: impl Fn(u32) + Send + Sync + 'static,
+        after_spawn: impl Fn(usize),
+    ) -> (SyntheticCallers, std::sync::mpsc::Receiver<(u32, u32)>) {
+        let call = Arc::new(call);
+        let (send, progress) = std::sync::mpsc::channel();
+        // Own each handle as soon as it exists, so a later spawn panic still
+        // stops and joins the already running callers before their trace drops.
+        let mut callers = SyntheticCallers {
+            phase: Arc::clone(phase),
+            workers: Vec::new(),
+        };
+        for owner in 0..4 {
+            let phase = Arc::clone(phase);
+            let call = Arc::clone(&call);
+            let send = send.clone();
+            callers.workers.push(std::thread::spawn(move || {
+                let mut last_phase = u32::MAX;
+                let mut calls = 0;
+                while calls < 1_000_000 {
+                    let current = phase.load(Ordering::Acquire);
+                    if current == 3 {
+                        break;
+                    }
+                    call(owner);
+                    calls += 1;
+                    if current != last_phase {
+                        send.send((owner, current)).unwrap();
+                        last_phase = current;
+                    }
+                    std::thread::yield_now();
+                }
+                calls
+            }));
+            after_spawn(callers.workers.len());
+        }
+        (callers, progress)
+    }
 
     #[test]
     fn property_gateway_has_win64_unwind_metadata() {
@@ -2675,29 +3727,21 @@ mod tests {
             )
         };
         assert!(!paused.is_null() && thread_id != 0);
-        let running = Arc::new(AtomicBool::new(true));
-        let workers = (0..4)
-            .map(|_| {
-                let running = Arc::clone(&running);
-                let address = target as usize;
-                std::thread::spawn(move || {
-                    let first: extern "system" fn(usize, u32) -> u32 =
-                        unsafe { std::mem::transmute(address) };
-                    let second: extern "system" fn(usize) -> u32 =
-                        unsafe { std::mem::transmute(address + PROPERTY_FIRST_LEN) };
-                    let mut calls = 0u32;
-                    while running.load(Ordering::Acquire) && calls < 100_000 {
-                        assert_eq!(first(argument, 0), expected);
-                        assert_eq!(second(argument), expected);
-                        calls += 1;
-                    }
-                    calls
-                })
-            })
-            .collect::<Vec<_>>();
-        std::thread::sleep(Duration::from_millis(5));
+        let phase = Arc::new(AtomicU32::new(0));
+        let address = target as usize;
         let mut trace = Box::new(PropertyTrace::default());
+        let (mut workers, progress) = spawn_synthetic_callers(&phase, move |_| {
+            let first: extern "system" fn(usize, u32) -> u32 =
+                unsafe { std::mem::transmute(address) };
+            let second: extern "system" fn(usize) -> u32 =
+                unsafe { std::mem::transmute(address + PROPERTY_FIRST_LEN) };
+            assert_eq!(first(argument, 0), expected);
+            assert_eq!(second(argument), expected);
+        });
+        let before_hook = wait_for_synthetic_phase(&progress, 0);
         unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
+        phase.store(1, Ordering::Release);
+        let during_hook = wait_for_synthetic_phase(&progress, 1);
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) }[2..],
             bytes[2..8]
@@ -2709,8 +3753,9 @@ mod tests {
         assert_eq!(exit_code, expected);
         assert_ne!(unsafe { CloseHandle(paused) }, 0);
         unsafe { uninstall() }.unwrap();
-        running.store(false, Ordering::Release);
-        assert!(workers.into_iter().map(|w| w.join().unwrap()).sum::<u32>() > 0);
+        phase.store(2, Ordering::Release);
+        let after_restore = wait_for_synthetic_phase(&progress, 2);
+        assert!(workers.stop_and_join().unwrap() > 0);
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) },
             PROPERTY_PROLOGUE
@@ -2720,6 +3765,12 @@ mod tests {
             0xe9
         );
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+        assert!(before_hook, "each caller must execute before installation");
+        assert!(
+            during_hook,
+            "each caller must execute while the hook is installed"
+        );
+        assert!(after_restore, "each caller must execute after restoration");
     }
 
     #[test]
@@ -2968,7 +4019,9 @@ mod tests {
         let can_bytes = [
             0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
         ];
-        let property_bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        let property_bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0xc3,
+        ];
         unsafe {
             ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
             ptr::copy_nonoverlapping(
@@ -3102,18 +4155,15 @@ mod tests {
             unsafe { ptr::read(property_entry.cast::<[u8; 8]>()) },
             PROPERTY_PROLOGUE
         );
-        assert_eq!(
-            trace
-                .calibration
-                .complete_rows()
-                .unwrap()
-                .iter()
-                .any(|row| row.player_id == 0
-                    && row.governor_index == 4
-                    && row.original_al == 1
-                    && row.effective_al == 1),
-            true
-        );
+        assert!(trace
+            .calibration
+            .complete_rows()
+            .unwrap()
+            .iter()
+            .any(|row| row.player_id == 0
+                && row.governor_index == 4
+                && row.original_al == 1
+                && row.effective_al == 1));
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
@@ -3170,6 +4220,7 @@ mod tests {
         let mut trace = Box::new(JoinedTrace::default());
         unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
             .unwrap();
+        let _hook_cleanup = HookFixtureGuard;
         unsafe {
             install_hook(
                 can_entry,
@@ -3182,7 +4233,10 @@ mod tests {
         assert!(joined_activate());
         assert_eq!(can(gov.as_ptr() as usize, 4), 0);
         JOINED_TEST_DELAY_RETURNED.store(yes.as_ptr() as u64, Ordering::Release);
-        let old = std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let mut old = PausedFixtureWorker::new(
+            &JOINED_TEST_RELEASE,
+            std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID)),
+        );
         let deadline = Instant::now() + Duration::from_secs(5);
         while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::yield_now();
@@ -3204,7 +4258,10 @@ mod tests {
         owner.0[0x568..0x570].copy_from_slice(&(yes.as_ptr() as u64).to_le_bytes());
         JOINED_TEST_PAUSED.store(false, Ordering::Release);
         JOINED_TEST_RELEASE.store(false, Ordering::Release);
-        let old_session = std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let mut old_session = PausedFixtureWorker::new(
+            &JOINED_TEST_RELEASE,
+            std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID)),
+        );
         let deadline = Instant::now() + Duration::from_secs(5);
         while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::yield_now();
@@ -3229,8 +4286,10 @@ mod tests {
         JOINED_TEST_DELAY_RETURNED.store(yes.as_ptr() as u64, Ordering::Release);
         JOINED_TEST_PAUSED.store(false, Ordering::Release);
         JOINED_TEST_RELEASE.store(false, Ordering::Release);
-        let old_generation =
-            std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let mut old_generation = PausedFixtureWorker::new(
+            &JOINED_TEST_RELEASE,
+            std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID)),
+        );
         let deadline = Instant::now() + Duration::from_secs(5);
         while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
             std::thread::yield_now();
@@ -3496,73 +4555,75 @@ mod tests {
         let mut trace = Box::new(PromotionTrace::default());
         let running = Arc::new(AtomicBool::new(true));
         let progress = Arc::new(AtomicU32::new(0));
-        let callers = (0..4u64)
-            .map(|id| {
-                let running = Arc::clone(&running);
-                let progress = Arc::clone(&progress);
-                let address = call as usize;
-                std::thread::spawn(move || {
-                    let mut evidence = [0u8; 144];
-                    let evidence_address = evidence.as_mut_ptr() as u64;
-                    let thread_id = unsafe { GetCurrentThreadId() };
-                    let mut count = 0;
-                    while running.load(Ordering::Acquire) && count < 500 {
-                        let result = unsafe {
-                            synthetic_promotion_call(address, evidence.as_mut_ptr(), id + 20)
-                        };
-                        assert_eq!(result, address + 5);
+        let mut callers = PromotionCallers {
+            running: Arc::clone(&running),
+            workers: Vec::new(),
+        };
+        for id in 0..4u64 {
+            let running = Arc::clone(&running);
+            let progress = Arc::clone(&progress);
+            let address = call as usize;
+            callers.workers.push(std::thread::spawn(move || {
+                let mut evidence = [0u8; 144];
+                let evidence_address = evidence.as_mut_ptr() as u64;
+                let thread_id = unsafe { GetCurrentThreadId() };
+                let mut count = 0;
+                while running.load(Ordering::Acquire) && count < 500 {
+                    let result = unsafe {
+                        synthetic_promotion_call(address, evidence.as_mut_ptr(), id + 20)
+                    };
+                    assert_eq!(result, address + 5);
+                    assert_eq!(
+                        u64::from_le_bytes(evidence[0..8].try_into().unwrap()),
+                        id + 20
+                    );
+                    assert_eq!(
+                        u64::from_le_bytes(evidence[8..16].try_into().unwrap()),
+                        id + 21
+                    );
+                    assert_eq!(
+                        u64::from_le_bytes(evidence[16..24].try_into().unwrap()),
+                        id + 22
+                    );
+                    assert_eq!(
+                        u64::from_le_bytes(evidence[24..32].try_into().unwrap()),
+                        (address + 5) as u64
+                    );
+                    for (xmm, expected) in [
+                        0x1111111111111111u64,
+                        0x2222222222222222,
+                        0x3333333333333333,
+                        0x4444444444444444,
+                        0x5555555555555555,
+                        0x6666666666666666,
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    {
                         assert_eq!(
-                            u64::from_le_bytes(evidence[0..8].try_into().unwrap()),
-                            id + 20
+                            u64::from_le_bytes(
+                                evidence[32 + xmm * 16..40 + xmm * 16].try_into().unwrap()
+                            ),
+                            expected
                         );
                         assert_eq!(
-                            u64::from_le_bytes(evidence[8..16].try_into().unwrap()),
-                            id + 21
+                            u64::from_le_bytes(
+                                evidence[40 + xmm * 16..48 + xmm * 16].try_into().unwrap()
+                            ),
+                            0x7777777777777777
                         );
-                        assert_eq!(
-                            u64::from_le_bytes(evidence[16..24].try_into().unwrap()),
-                            id + 22
-                        );
-                        assert_eq!(
-                            u64::from_le_bytes(evidence[24..32].try_into().unwrap()),
-                            (address + 5) as u64
-                        );
-                        for (xmm, expected) in [
-                            0x1111111111111111u64,
-                            0x2222222222222222,
-                            0x3333333333333333,
-                            0x4444444444444444,
-                            0x5555555555555555,
-                            0x6666666666666666,
-                        ]
-                        .into_iter()
-                        .enumerate()
-                        {
-                            assert_eq!(
-                                u64::from_le_bytes(
-                                    evidence[32 + xmm * 16..40 + xmm * 16].try_into().unwrap()
-                                ),
-                                expected
-                            );
-                            assert_eq!(
-                                u64::from_le_bytes(
-                                    evidence[40 + xmm * 16..48 + xmm * 16].try_into().unwrap()
-                                ),
-                                0x7777777777777777
-                            );
-                        }
-                        assert_ne!(
-                            u64::from_le_bytes(evidence[128..136].try_into().unwrap()) & 1,
-                            0
-                        );
-                        count += 1;
-                        progress.fetch_add(1, Ordering::Release);
-                        std::thread::sleep(Duration::from_micros(100));
                     }
-                    (id + 20, thread_id, evidence_address, count)
-                })
-            })
-            .collect::<Vec<_>>();
+                    assert_ne!(
+                        u64::from_le_bytes(evidence[128..136].try_into().unwrap()) & 1,
+                        0
+                    );
+                    count += 1;
+                    progress.fetch_add(1, Ordering::Release);
+                    std::thread::sleep(Duration::from_micros(100));
+                }
+                (id + 20, thread_id, evidence_address, count)
+            }));
+        }
         let deadline = Instant::now() + Duration::from_secs(2);
         while progress.load(Ordering::Acquire) < 4 && Instant::now() < deadline {
             std::thread::yield_now();
@@ -3584,11 +4645,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert!(progress.load(Ordering::Acquire) >= before_restore + 4);
-        running.store(false, Ordering::Release);
-        let workers = callers
-            .into_iter()
-            .map(|thread| thread.join().unwrap())
-            .collect::<Vec<_>>();
+        let workers = callers.stop_and_join().unwrap();
         assert!(workers.iter().map(|worker| worker.3).sum::<usize>() > 0);
         let mut after = [0u8; 144];
         assert_eq!(
@@ -3609,6 +4666,59 @@ mod tests {
             assert_eq!(row.r8, row.rdx + 1);
             assert_eq!(row.r9, row.rdx + 2);
         }
+        drop(callers);
+
+        let mut panic_trace = Box::new(PromotionTrace::default());
+        let running = Arc::new(AtomicBool::new(true));
+        let progress = Arc::new(AtomicU32::new(0));
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut callers = PromotionCallers {
+                running: Arc::clone(&running),
+                workers: Vec::new(),
+            };
+            for id in 0..2 {
+                let running = Arc::clone(&running);
+                let progress = Arc::clone(&progress);
+                let address = call as usize;
+                callers.workers.push(std::thread::spawn(move || {
+                    let mut evidence = [0u8; 144];
+                    let mut count = 0;
+                    while running.load(Ordering::Acquire) {
+                        assert_eq!(
+                            unsafe { synthetic_promotion_call(address, evidence.as_mut_ptr(), id) },
+                            address + 5
+                        );
+                        count += 1;
+                        progress.fetch_add(1, Ordering::Release);
+                        std::thread::yield_now();
+                    }
+                    (id, 0, 0, count)
+                }));
+            }
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while progress.load(Ordering::Acquire) < 2 && Instant::now() < deadline {
+                std::thread::yield_now();
+            }
+            assert!(progress.load(Ordering::Acquire) >= 2);
+            unsafe {
+                install_promotion_call(call, callee, panic_trace.as_mut(), PROMOTION_CALL_WINDOW)
+            }
+            .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while panic_trace.next.load(Ordering::Acquire) == 0 && Instant::now() < deadline {
+                std::thread::yield_now();
+            }
+            assert!(panic_trace.next.load(Ordering::Acquire) > 0);
+            panic!("injected failure while the promotion hook has callers");
+        }));
+        assert!(panic.is_err());
+        assert!(!running.load(Ordering::Acquire));
+        assert_eq!(Arc::strong_count(&running), 1);
+        assert_eq!(panic_trace.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(
+            unsafe { ptr::read(call.cast::<[u8; 16]>()) },
+            PROMOTION_CALL_WINDOW
+        );
         PROMOTION_TRACE_PTR.store(null_mut(), Ordering::Release);
         PROMOTION_CALLEE_PTR.store(null_mut(), Ordering::Release);
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
@@ -3743,33 +4853,17 @@ mod tests {
         unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
         let mut trace = Box::new(SharedTrace::default());
         unsafe { install_at(target, trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
-        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let callers = (0..4u32)
-            .map(|owner| {
-                let running = Arc::clone(&running);
-                let address = target as usize;
-                std::thread::spawn(move || {
-                    let f: extern "system" fn(usize, u32) -> u32 =
-                        unsafe { std::mem::transmute(address) };
-                    let mut calls = 0;
-                    while running.load(Ordering::Acquire) && calls < 1_000_000 {
-                        assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
-                        calls += 1;
-                    }
-                    calls
-                })
-            })
-            .collect::<Vec<_>>();
-        std::thread::sleep(Duration::from_millis(5));
+        let phase = Arc::new(AtomicU32::new(1));
+        let address = target as usize;
+        let (mut callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
+            let f: extern "system" fn(usize, u32) -> u32 = unsafe { std::mem::transmute(address) };
+            assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
+        });
+        let during_hook = wait_for_synthetic_phase(&progress, 1);
         unsafe { uninstall() }.unwrap();
-        running.store(false, Ordering::Release);
-        assert!(
-            callers
-                .into_iter()
-                .map(|thread| thread.join().unwrap())
-                .sum::<u32>()
-                > 0
-        );
+        phase.store(2, Ordering::Release);
+        let after_restore = wait_for_synthetic_phase(&progress, 2);
+        assert!(callers.stop_and_join().unwrap() > 0);
         assert!(trace.next.load(Ordering::Acquire) > 0);
         assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
         if trace.dropped.load(Ordering::Acquire) == 0 {
@@ -3780,6 +4874,85 @@ mod tests {
         } else {
             assert!(trace.complete_rows().is_err());
         }
+        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+        assert!(
+            during_hook,
+            "each caller must execute while the hook is installed"
+        );
+        assert!(after_restore, "each caller must execute after restoration");
+    }
+
+    #[test]
+    fn synthetic_caller_guard_joins_and_restores_before_trace_drop_on_panic() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let target = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!target.is_null());
+        let bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0xc8, 0x31, 0xd0, 0xc3,
+        ];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let mut trace = Box::new(SharedTrace::default());
+        unsafe { install_at(target, trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
+        let phase = Arc::new(AtomicU32::new(1));
+        let address = target as usize;
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let (_callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
+                let f: extern "system" fn(usize, u32) -> u32 =
+                    unsafe { std::mem::transmute(address) };
+                assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
+            });
+            assert!(wait_for_synthetic_phase(&progress, 1));
+            panic!("injected test-body failure after every worker entered the hook");
+        }));
+        assert!(panic.is_err());
+        assert_eq!(phase.load(Ordering::Acquire), 3);
+        assert_eq!(
+            Arc::strong_count(&phase),
+            1,
+            "no worker may retain the phase"
+        );
+        assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
+
+        let mut next_trace = Box::new(SharedTrace::default());
+        unsafe { install_at(target, next_trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
+        let phase = Arc::new(AtomicU32::new(1));
+        let invoked = Arc::new(AtomicU32::new(0));
+        let calls = Arc::clone(&invoked);
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = spawn_synthetic_callers_with_hook(
+                &phase,
+                move |owner| {
+                    let f: extern "system" fn(usize, u32) -> u32 =
+                        unsafe { std::mem::transmute(address) };
+                    assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
+                    calls.fetch_add(1, Ordering::Release);
+                },
+                |spawned| {
+                    if spawned == 2 {
+                        let deadline = Instant::now() + Duration::from_secs(5);
+                        while invoked.load(Ordering::Acquire) == 0 && Instant::now() < deadline {
+                            std::thread::yield_now();
+                        }
+                        assert!(invoked.load(Ordering::Acquire) > 0);
+                        panic!("injected failure partway through worker creation");
+                    }
+                },
+            );
+        }));
+        assert!(panic.is_err());
+        assert_eq!(phase.load(Ordering::Acquire), 3);
+        assert_eq!(Arc::strong_count(&phase), 1);
+        assert_eq!(next_trace.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
         assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
     }
 
@@ -3809,7 +4982,7 @@ mod tests {
     #[test]
     fn install_rejects_bad_config_and_trace_ranges_before_dereference() {
         assert_eq!(
-            BridgeInstall(1usize as *mut c_void),
+            BridgeInstall(std::ptr::dangling_mut::<c_void>()),
             BridgeStatus::InvalidInput as u32
         );
         assert_eq!(

@@ -1,5 +1,53 @@
 # PR86: 加入人物の本体任命資格（共有ToDo 853）
 
+## ToDo1433の配置観測Aと未払い拒否Bの接続契約
+
+**今回追加するのは原戻り値を保持する配置観測Aで、費用2・3の未払い配置拒否Bは未実装・未実機である。** 基準a29a8717の専用作業フォルダーでmode ordinal 7 `AssignCalibration`を追加する。通常資格のmode 6は担当1399/1447が修正中であり、この差分に複製しない。mode 5、数値getter、ticket/session、128bit原子更新と既存の終了処理は保持する。mode 7だけでは人物を任命可能にしない。
+
+### Aの実装と測定対象
+
+固定GameCore SHA-256は `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`。配置可否RVA `0x2DD880` のRCXはGovernors、RDXはGovernor **ポインター**、R8はCity **ポインター**、R9は理由出力ポインター候補である。`0x2DD8B9` がGovernor+4のIndexを、`0x2DD941` がGovernors+0x70のPlayerを使う。入口の最初の10 byteは `48 89 5c 24 08 48 89 6c 24 10` と一致を要求する。任命資格用の2引数gatewayは流用せず、専用の4引数gatewayを使う。
+
+静的には公式UI `0xBA350` が `0xBA3DD` から `0x2DDB30` を呼び、後者の `0x2DDBAB` が `0x2DD880` へ末尾分岐する。観測するUIの戻り先は `0xBA3E2`。本体配置更新 `0x2DD340` は `0x2DD36D` でR9を0にし、`0x2DD370` から同じ検証へ呼び、戻り先 `0x2DD375` でALが偽なら `0x2DD6DB` へ進む。これは固定DLLの読取・逆アセンブルによる根拠であり、実手番やAIの通過を証明しない。`0x2DD880` はBOOL検証で、配置setterそのものではない。
+
+専用gatewayは4引数とRAX/R10/R11、XMM0..5を原呼出し前に復元し、原関数を一度だけ呼ぶ。戻ったRAX全体を退避・復元し、ALも改変しない。Win64のshadow space、16 byteの呼出し時stack alignment、SEH unwind情報を持つ。入口5 byteの中継分岐は既存の8 byte原子交換で設置・復元する。先頭命令だけをtrampolineへ移すため、二番目の命令の途中を分岐先にしない。復元後もDLL・trace・中継コードを所有ゲームの終了まで保持し、mode 7の再設置は同一プロセスで拒否する。実行器の事前検証も配置観測を単回に制限し、停止後のrestart_gameだけで使用済み状態を戻す。安定したsnapshotは遅れて中継へ入るthreadの不存在を証明しない。
+
+呼出し中に `this+0x70`、Player+0xD8、Governor+4、および本体検証が使うCity+0xA8/+0xC0/+0xC4/+0xD8のraw値だけをコピーする。読取成功bitを独立して記録し、null・不正アドレス・欠落を許可へ変換しない。R9の先や任意getter、Lua VMは呼ばない。アドレスは数値の観測記録にし、別の呼出しで参照しない。City各fieldの意味は親が同じ場面のLua city ID・座標・ownerと照合するまで実測済みとしない。
+
+traceは独立版1・容量1,024。上限では行を上書きせず欠落を加算し、原戻り値を保持する。controllerは不完全行、欠落、旧版、未復元を成功としない。実行器は終端のquiescence_proven=falseとcounter_scope=snapshot_observation_not_complete_call_historyを必須とし、所有者0・実Index4のUI/本体更新双方の行と、両経路のthis/Governor/City/PlayerおよびCity raw値の一致を要求する。この数値比較も、別呼出し間のポインター寿命の証明ではない。合成Windows検査は途中のpanicでもworkerを全件回収してから入口を復元し、traceを解放する。
+
+### 親が実行する有限シナリオ
+
+既存の私的費用1の手動任命シナリオを基に `leader-persona-assign-calibration-15km.json` を追加した。正規Join、本人の偉人、称号全額予約、公式APPOINT一度、Governor/base/Spent+1、通常Finalizeを確認する。mode 5を復元してから、同じ所有ゲームにmode 7を一度設置し、公式UIのCanAssignと通常のJAC_AssignLeaderを一度送る。実Cityへの配置と称号使用数不変を確認し、入口を復元する。観測窓は90秒、配置待ちは30秒。strict Luaと既存のgeneric固定Judgeを使い、新テストMOD・map・rulesetは追加しない。通常の新規開始の試験MOD分離を保持する。
+
+親853が別モデルレビュー後、所有ゲームのない状態で同一候補からDLL・controller・実行器をrelease buildして配置し、次を実行する。子1433は実Civ6・実メモリ・共有ロックに接続しない。
+
+```powershell
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-assign-calibration-15km.json --stop-on-failure
+```
+
+`assign-calibration-cost1.jsonl` と同試行の `ASSIGN1433_UI/REQUEST/AFTER`・steps・Lua.logを照合する。最初のAは費用1だけなので、費用2/3途中の拒否や本体AIの自然な配置試行を合格に数えない。AI用の寿命未証明な `0x30CBE0/0x30C100` は呼ばない。
+
+### Bの具体的な実装契約（A実測と1447確定後）
+
+1. mode 6の `901000+Index` は全額予約中のEVOLVINGにも真となる**任命**資格であり、配置資格へ共用しない。`903000+Index` は任命の閉鎖に使う。配置の候補は対応表 `904000+Index`、本人の支払済みbool `905000+Index`、閉鎖 `906000+Index`、所有者失効 `907000` とする。全runtime定義・保存初期化で既存範囲との衝突を検査し、同じowner・人物Index・Core receiver・session・ticket・typed false ACKで公開する。番号は未実装で、まだ製品へ公開しない。
+2. 同期Gameplayの正本から、同じactor・人物・runtime Index・保存された費用、実Governor、base、必要なTITLE_1/TITLE_2、公式Spentと人物別の全支払の会計一致を確認してpaidを作る。予約残高、UI cache、EVOLVING/GOVERNORという文字列だけを全支払の証明にしない。未払い時は偉人と支払済みの実Governorを保持する。追加称号や完了stateを偽造しない。
+3. producerは任命資格とは独立してpaid falseを最初に公開し、manifest/owner/Index/世代の確定と閉鎖値のCore自然getterによる確認後、全支払の確定点で最後にtrueを公開する。死亡・取消・所有者変更・保存読込・実体欠落・会計不一致では最初に閉じる。1399/1447の初期化/reload、receiver切替、closed ACK、manifest競合の契約へ合流し、全22人のproducerを複製しない。
+4. consumerにはactor×Indexのpaid用128bit cellを追加し、同一Core receiver・session・入口で一度採番したticket・派生paidを一体でCAS更新する。manifest/owner/resetにも同じ世代照合を要求する。UI receiver・不正型・flags・欠損・旧世代・古いtrueの遅延復帰は閉鎖。資格consumerと同じ受信先切替/取消で両cellを閉じ、任命allow trueからpaid trueを導出しない。未確定の1447のatomic形式を別実装で固定しない。
+5. A実測後の共通CanAssign callbackは、その呼出し中にコピーしたowner/Indexで確定manifestを照合し、原関数を一度呼ぶ。人物ならpaidだけで原ALを制限し、偽を真にはしない。通常の非人物総督は原RAXを返す。manifest未初期化時は全人物を識別できるまで人物を閉じる設計を1447のmanifest契約と統合する。無効owner・不正型・旧世代・未払いは閉じ、引数ポインターは保持しない。R9理由出力の仕様はAで未証明のため書き換えない。
+6. controllerはCanEver/自然getter/CanAssignを同一Job・lease・sessionで管理し、paidを先に閉じて全入口を復元する。第二/第三設置失敗のatomic rollback、遅延callbackと取消の競合、各版のsnapshot読取、所有ゲーム終了を合成で検査する。mode 7は観測専用として維持し、製品のmode 6との接続はレビュー確定後の別deltaにする。
+7. 合成の拒否/許可/元一回/通常総督保持と、親の費用2・3の公式APPOINT→未払いUI/本体ASSIGN拒否→PROMOTE一個ずつ→実Spent/base/title照合→全額後の配置、保存読込・複数端末・AI実手番を必須にする。AIの公式PROMOTE選択・支払い経路は親の別工程で未完了のまま残す。
+
+Aの観測sourceと合成検査だけを引き渡し、B完成やPR86の製品完成とは報告しない。
+
+### 1433の検査結果と引き継ぐ差分
+
+専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が112実行対象・1,712件成功、失敗・ignored・filtered 0。Lua 5.1の全件を含む。別実行のworkspace文書検査10対象も成功した。新シナリオは実行器の `--check` で30手順VALIDだった。初回の新規開始件数133→134、配布固定一覧への新シナリオ登録漏れ、基準版の手動任命回帰1件の登録漏れを検出して修復した。元の119件と追加5件の人物検査一覧は、親の公開済み `9c34d443` と同一の差分を取り込み、削除・省略しない。
+
+追加Clippyでは依存先を含む既存のスタイル警告で停止したため、任意の別領域へ機能変更を広げず、Aを載せるnative crateを `--all-targets --no-deps -- -D warnings` で検査した。この範囲のscope初期化3箇所、bool検査、無効ポインターの検査記法を等価に修正し、成功した。依存先を含めた厳格Clippy全体の成功は主張しない。修正後はnative 34件、実行器と関係シナリオ126件、人物一覧2件の計162件を再実行し、すべて成功した。整形と `git diff --check` も成功した。ソースの別モデルレビュー、同一候補release、CIと実機Aは親の担当で、子1433では未実行である。
+
+対象はnative bridgeのlib/windows/独立assignment module/controller、実行器のnative_bridge/runner/scenario、assignment回帰と配布・MOD分離・人物一覧の検査、30手順シナリオ、本節の13ファイルだけ。親は基準a29a8717からのcommit deltaを3-way統合し、mode 6と新しい親修正を保持する。実機Aの同一call内の数値・原ALを確認し、1447確定後のpaid契約Bへ進む。AIの公式支払い工程は別の未完了条件である。
+
 ## 技術判断
 
 **機能本体は未実装。** 現行のSteam版Gathering Stormで、標準Lua・SQLから加入後の人物だけに `Governors.TraitType` の資格を動的に与える接続は確認できなかった。公式任命操作の内部経路は本体 `CanAppointGovernor` 相当のRVA `0x2DD820` を通り、RVA `0x2DDDD0` の人物別資格判定へ末尾分岐する。`AI::Governors` の内部経路にも後者への直接呼出しがある。ただし、実手番でその呼出しがAIの任命判断に使われたことは未証明である。したがって製品用のRust hookや架空のLua setterは書かない。次の技術実証に渡す契約と測定点を以下に固定する。
@@ -285,6 +333,42 @@ DLLのSHA-256はC87FC1D16D4C93CCEB8AB0515114764259916A3B58D8D16DDD9E51A269AD6CEA
 同コミットに対する親担当の全件検査は、111実行対象と10文書対象、1,707件成功、失敗・ignored・filtered outは0件だった。別の作業フォルダーの先行検査へ読み替えず、記録`D:/CC/Work/pr86-redesign-853/workspace-c3102fd8-summary.json`と対応する実行ログで照合した。mainとの差分に含まれる58シナリオも、Rust実行器の`--check`ですべて成功した。形式検査は実機の完走を意味しない。
 
 AIが費用2・3の支払い用昇進を自発的に選ぶ経路は、引き続き未実証である。公式昇進定義にはAI選好の列がなく、汎用のAI選好設定から総督昇進へ届く公式の接続も確認していない。人間のアクティブ手番だけで動く人物画面を、AIの支払い実装として扱わない。次の確認は通常の加入資格と配置観測の接続後、伊達稙宗（費用2）と上杉憲政（費用3）のAI所有者について、画面から昇進要求を送らず本体の可否・取得反映・使用済み称号を有限の実手番で照合する。取得しない場合も、正式な昇進会計を通る本体操作入口を実測するまで、架空の減算や未確認の関数呼出しで成功を作らない。
+## 通常22人の派生資格（ToDo1399・1447）
+
+通常Gameplayの権限源は同期Game台帳、実Great Person、Coreの公式称号である。UI cache・私的Bの853304・UI人物資格は入力にしない。Governor Indexは実行中のGameInfoから求め、22人の重複・欠損・範囲外を拒否する。
+
+公開キーは、対応表900000+Index、資格901000+Index、所有者の失効902000、人物セルの閉鎖903000+Indexである。初回は3範囲と失効キーの衝突を確認する。同期Gameの既存schemaキーは値2で新しい閉鎖範囲も所有する。旧保存の値1では全主要所有者の新閉鎖キーが未使用であることを確認してから値2へ移す。衝突なら元の値を上書きせず、全所有者を失効して中断する。Luaの揮発性スナップショットは前回公開値の比較だけに使い、権限源にしない。所有者の操作はその所有者を、各PlayerTurnはその所有者を、全体Turnは全員を再計算する。変化のないセルの数値propertyは読み書きしない。加入直後・EVOLVING前後・正式Finalize前後も同じ処理である。
+
+初回・Lua再作成・所有者オブジェクトの変更は、各所有者につき自然なCore CanEverAppointGovernorを1回読み、Core受信先を結ぶ。その後、全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、親は接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
+
+変更されたセルは、閉鎖キーの読取、資格falseの読取確認、対応表trueの読取確認、必要な場合だけ資格trueの読取確認の順で公開する。全変更セルを閉じてから新しい値を公開する。falseまたは対応表の確認に失敗すれば所有者全体を失効し、その自然読取も確認して中断する。失敗したスナップショットは捨てる。失効の読取が不正型でもnative側は入口で失効する。古いtrueがfalseの直後に戻る場合、nativeは新しい閉鎖世代のfalse確認がないため許可しない。
+
+nativeは各owner/Indexに受信先・session・ticketを持つ閉鎖、false確認、対応表、許可の有界セルを使う。閉鎖はgetter入口でticketを進め、返値の正誤に依存しない。新世代の正しいbool falseを確認した後でだけ対応表を公開でき、その後の資格trueだけを許可とする。旧世代・遅れた読取・所有者再利用・旧session・不正tag/flags/payloadを拒否する。許可を返す直前に、所有者・閉鎖・対応表・資格が変わっていないことを再確認する。別MODの通常Governorは元ALを保ち、対応済み人物の未知の所有者は閉じる。
+
+22所有者×22人の再ロード初期化は、失効22回と3段階×484回で1,474回の対象getterになる。初回の名前空間確認も含めると2,948回で、property観測4,096件以内である。変更のない300ターンで全体と全22 PlayerTurnを実行しても追加の対象getter・公開・Core binding anchorは0回である。この数値はLua 5.1合成試験の測定で、実機時間の測定ではない。
+
+観測と資格判定を分離した。通常mode6の校正は1,024行、propertyは4,096行の先頭サンプルだけを保存する。超過呼出しも原関数を1回呼び、資格判定を行う。原関数の前後の本人情報は各呼出しのスタックに持ち、サンプル行がなくても同じactor/sessionで判定する。自然なproperty返値はサンプルの残量に関係なく消費する。容量不足で許可を閉じたりcontrollerを失敗させたりしない。ticketの実際の枯渇は別であり、許可を閉じる。
+
+校正traceは版4、property traceは版3であり、DLLとcontrollerは同じ型のVERSIONとサイズを照合する。mode6のcounter_scopeはbounded_prefix_samples_not_complete_call_history、sample limitは1,024/4,096、droppedは未保存の呼出し数である。全履歴の完全性・全22人の動作成功をこのサンプルだけから主張しない。他の診断・私的Bモードの厳密な記録契約は保持する。有限接続時間は最大300秒のままで、原関数1回・全入口復元・所有プロセス回収の契約を変えない。
+
+不正型の公開行には、その自然返値を消費した直後の同じ所有者・Indexについてnative consumerが閉鎖を確認した結果を添える。成果物検査はその結果とCore受信先の所有者対応を照合する。該当Indexや所有者が違う閉鎖、確認の欠落、完全履歴を装う上限超過は受理しない。サンプルにない後続イベントまで閉鎖済みとは扱わない。
+
+### Core Governor getterの実機診断と残り
+
+GOVERNOR段階の本人への支払照合は未解決である。Gameplay HasGovernorは実機54/89で不在、GetGovernorの存在は未確認である。CorePaymentCompleteは両正式bindingと本人の基礎・必要な追加昇進を読める場合だけ許可し、UIの値で代用しない。fixtureで両メソッドがあることは本体の証明ではない。HasGovernor欠損のnegativeを維持する。
+
+親の限定診断は、live_chain所有セッションで費用1の本人が正式APPOINTされた直後とFinalize直後に、Gameplay内の次の関数を1回ずつ呼ぶ。任命・称号・配置・記録の書換えは行わない。
+
+    local r = ExposedMembers.JAC_LeaderPersona.CoreAdmissionCapabilities(0, "LEADER_JAC_ASHINA_MORIKIYO")
+    for _,k in ipairs({"context","owner","leader","index","state","ledgerOwner","available","spent","hasGovernorBinding","hasGovernorOK","hasGovernor","getGovernorBinding","getGovernorOK","governorReturned","baseOK","base","paymentOK1","payment1","paymentOK2","payment2"}) do
+        print("JAC_CORE_GOV_BINDING " .. k .. "=" .. tostring(r[k]))
+    end
+
+診断は自然な正式Lua bindingのHasGovernor/GetGovernorを各1回だけ呼び、取得できた本人の昇進を読む。bindingがない場合もその不在を返し、別のgetter・未確認RVAを呼ばない。両bindingが存在するなら費用2・3の同じ本人について支払昇進を実測する。存在しなければ、親は本体の正式イベントまたは自然なnative queryの本人情報を用いた支払証明へ次段の設計を進める。総使用済み数だけ、UI cache、未確認30CBE0/30C100の呼出しでは紐付けを作らない。
+
+配置担当1433への契約: 901000+Indexは未任命EVOLVINGの全額予約もtrueになり、追加称号の支払済み配置資格ではない。PaidAssignmentは別の派生bool/manifest範囲と閉鎖キーを設け、同じCore actor/Index・session・getter入口ticket・false ACKの原子的な公開契約を使う必要がある。今回その配置範囲を予約・公開しない。配置の4引数ABIへ任命のIndex入口を流用しない。
+
+実機の通常22人、AI追加公式PROMOTE、未払いAssign、保存/MP、元113通し、中和・回復、常時の製品接続、別モデルの固定全差分レビューは親853/1399/1433の未完了である。04b単体を統合せず、今回の修正も合成成功だけで製品完了・マージ可とは扱わない。私的manual fixtureの親8d/099修正と最新spy修正は、親が3-way統合で保持する。
 
 単回起動の実行制約に合わせ、形式検査でも同じゲームプロセス内の2回目の昇進観測を拒否する。property観測と私的な加入観測も、同じproperty入口を共有するためまとめて単回とする。観測停止後のrestart_gameだけが再起動を許し、観測中の再起動は拒否する。入口記録の終端ではquiescence_proven=falseと、完全な呼出し履歴ではない範囲の明示も必須にした。
 

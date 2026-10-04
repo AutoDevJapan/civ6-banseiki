@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 27] = [
+pub const ACTIONS: [&str; 31] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -25,9 +25,13 @@ pub const ACTIONS: [&str; 27] = [
     "start_native_can_ever_trace",
     "stop_native_can_ever_trace",
     "start_native_can_ever_calibration",
+    "start_native_assign_calibration",
+    "stop_native_assign_calibration",
     "stop_native_can_ever_calibration",
     "start_native_joined_admission",
     "stop_native_joined_admission",
+    "start_native_production_admission",
+    "stop_native_production_admission",
     "start_native_property_trace",
     "stop_native_property_trace",
     "start_native_promotion_call_trace",
@@ -105,10 +109,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut bridge_open = false;
     let mut property_open = false;
     let mut calibration_open = false;
+    let mut assignment_open = false;
     let mut joined_open = false;
+    let mut production_open = false;
     let mut promotion_open = false;
     let mut property_used = false;
     let mut promotion_used = false;
+    let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
@@ -148,7 +155,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 "stop native CanEver bridge before changing game lifecycle".into(),
             ));
         }
-        if (property_open || joined_open) && matches!(action, "save" | "end_turn" | "autoplay") {
+        if (property_open || joined_open || production_open)
+            && matches!(action, "save" | "end_turn" | "autoplay")
+        {
             return Err(fail(
                 "stop native property observation before a save or turn change".into(),
             ));
@@ -161,11 +170,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             property_used = false;
             promotion_used = false;
+            assignment_used = false;
         }
         match action {
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
+            | "start_native_assign_calibration"
             | "start_native_joined_admission"
+            | "start_native_production_admission"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 if bridge_open || trace_open {
@@ -173,12 +185,15 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
                 let uses_property = matches!(
                     action,
-                    "start_native_property_trace" | "start_native_joined_admission"
+                    "start_native_property_trace"
+                        | "start_native_joined_admission"
+                        | "start_native_production_admission"
                 );
                 if (uses_property && property_used)
                     || (action == "start_native_promotion_call_trace" && promotion_used)
+                    || (action == "start_native_assign_calibration" && assignment_used)
                 {
-                    return Err(fail("native property and promotion observation are each single-use until restart_game".into()));
+                    return Err(fail("native property, promotion and assignment observations are each single-use until restart_game".into()));
                 }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
                     || !trace_names.insert(step["name"].as_str().unwrap().to_owned())
@@ -199,20 +214,27 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 bridge_open = true;
                 property_open = action == "start_native_property_trace";
                 calibration_open = action == "start_native_can_ever_calibration";
+                assignment_open = action == "start_native_assign_calibration";
                 joined_open = action == "start_native_joined_admission";
+                production_open = action == "start_native_production_admission";
                 promotion_open = action == "start_native_promotion_call_trace";
                 property_used |= uses_property;
                 promotion_used |= promotion_open;
+                assignment_used |= assignment_open;
             }
             "stop_native_can_ever_trace"
             | "stop_native_can_ever_calibration"
+            | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
+            | "stop_native_production_admission"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 if !bridge_open
                     || property_open != (action == "stop_native_property_trace")
                     || calibration_open != (action == "stop_native_can_ever_calibration")
+                    || assignment_open != (action == "stop_native_assign_calibration")
                     || joined_open != (action == "stop_native_joined_admission")
+                    || production_open != (action == "stop_native_production_admission")
                     || promotion_open != (action == "stop_native_promotion_call_trace")
                     || step
                         .as_object()
@@ -225,7 +247,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 bridge_open = false;
                 property_open = false;
                 calibration_open = false;
+                assignment_open = false;
                 joined_open = false;
+                production_open = false;
                 promotion_open = false;
             }
             "start_native_governor_trace" => {

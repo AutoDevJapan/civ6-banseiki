@@ -1080,6 +1080,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
                     | "leader-persona-joined-admission-calibration-15km.json"
                     | "leader-persona-joined-admission-cost1-15km.json"
                     | "leader-persona-promotion-call-calibration-15km.json"
+                    | "leader-persona-assign-calibration-15km.json"
             ) {
                 assert!(
                     strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
@@ -1105,8 +1106,8 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Include the additional isolated promotion-call calibration game.
-    assert_eq!(count, 134);
+    // Includes isolated promotion-call and assignment calibration games.
+    assert_eq!(count, 135);
 }
 
 #[test]

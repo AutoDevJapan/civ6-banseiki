@@ -287,6 +287,29 @@ mod native_trace_step_tests {
     }
 
     #[test]
+    fn runner_dispatches_four_argument_assignment_observer() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-assignment1433-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        runner.run_step(&json!({"action":"start_native_assign_calibration","name":"assign","max_seconds":90})).unwrap();
+        runner
+            .run_step(&json!({"action":"stop_native_assign_calibration"}))
+            .unwrap();
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:assign:90:assign-calibration", "stop"]
+        );
+    }
+
+    #[test]
     fn runner_dispatches_only_explicit_promotion_call_mode() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let output = std::env::temp_dir().join("pr86-promotion-call-dispatch");
@@ -2004,14 +2027,18 @@ impl Runner {
         match action {
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
+            | "start_native_assign_calibration"
             | "start_native_joined_admission"
+            | "start_native_production_admission"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 self.remaining(deadline)?;
                 let mode = match (action, step.get("scope")) {
                     ("start_native_can_ever_trace", None) => "can-ever",
                     ("start_native_can_ever_calibration", None) => "can-ever-calibration",
+                    ("start_native_assign_calibration", None) => "assign-calibration",
                     ("start_native_joined_admission", None) => "joined-admission",
+                    ("start_native_production_admission", None) => "production-admission",
                     ("start_native_promotion_call_trace", None) => "promotion-call",
                     ("start_native_property_trace", None) => "property",
                     ("start_native_property_trace", Some(scope))
@@ -2043,7 +2070,9 @@ impl Runner {
             }
             "stop_native_can_ever_trace"
             | "stop_native_can_ever_calibration"
+            | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
+            | "stop_native_production_admission"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
