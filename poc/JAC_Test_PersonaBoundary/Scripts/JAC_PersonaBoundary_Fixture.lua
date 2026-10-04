@@ -623,8 +623,8 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             "UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"].Hash,
         "failed native history, Governor or official title receipt changed");
     if params.Mode=="PRODUCE" then
-        assert(not R.FindSpy(controller,spy.id),
-            "old native spy is still on the map; production retry is invalid");
+        assert(R.MapSpyCount(controller)==0,
+            "production retry requires a complete roster without a native map spy");
     elseif params.Mode=="MAP" then
         local current=assert(R.FindSpy(controller,params.CurrentID),
             "living native map spy missing at archive");
