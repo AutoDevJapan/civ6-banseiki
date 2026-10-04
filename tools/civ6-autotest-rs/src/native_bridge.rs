@@ -284,6 +284,9 @@ mod platform {
                     if row["rows"] == entries
                         && row["in_flight"] == 0
                         && row["snapshot_stable"] == true
+                        && (mode != BridgeMode::PromotionCall
+                            || (row["quiescence_proven"] == false
+                                && row["counter_scope"] == "snapshot_observation_not_complete_call_history"))
                         && row["observed_calls"].as_u64().is_some_and(|n| {
                             n == entries as u64 + row["dropped"].as_u64().unwrap_or(u64::MAX)
                         })
@@ -909,6 +912,7 @@ mod platform {
                     "entry_only":true}),
                 json!({"kind":"stop","result":"ok","rows":1,"dropped":0,
                     "observed_calls":1,"in_flight":0,"snapshot_stable":true,
+                    "quiescence_proven":false,"counter_scope":"snapshot_observation_not_complete_call_history",
                     "classification":"promotion_call_entry_only","prefix_retained_until_exit":false}),
             ];
             let write = |rows: &[Value]| {
@@ -934,6 +938,8 @@ mod platform {
                 (3, "entry_only", json!(false)),
                 (4, "dropped", json!(1)),
                 (4, "in_flight", json!(1)),
+                (4, "quiescence_proven", json!(true)),
+                (4, "counter_scope", json!("complete_call_history")),
                 (4, "classification", json!("can_ever_entry")),
             ] {
                 let mut bad = rows.to_vec();
@@ -945,6 +951,12 @@ mod platform {
                 );
             }
             let mut partial = rows.to_vec();
+            for field in ["quiescence_proven", "counter_scope"] {
+                let mut missing = rows.to_vec();
+                missing[4].as_object_mut().unwrap().remove(field);
+                write(&missing);
+                assert!(terminal_artifact(&path, 7, 123, BridgeMode::PromotionCall).is_err());
+            }
             partial.remove(3);
             write(&partial);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::PromotionCall).is_err());

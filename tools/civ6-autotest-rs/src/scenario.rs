@@ -107,6 +107,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut calibration_open = false;
     let mut joined_open = false;
     let mut promotion_open = false;
+    let mut property_used = false;
+    let mut promotion_used = false;
     let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
@@ -152,6 +154,15 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             ));
         }
         match action {
+            "restart_game" => {
+                if bridge_open || trace_open {
+                    return Err(fail(
+                        "stop native observation before restarting the game".into(),
+                    ));
+                }
+                property_used = false;
+                promotion_used = false;
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_joined_admission"
@@ -159,6 +170,15 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "start_native_property_trace" => {
                 if bridge_open || trace_open {
                     return Err(fail("native observation already active".into()));
+                }
+                let uses_property = matches!(
+                    action,
+                    "start_native_property_trace" | "start_native_joined_admission"
+                );
+                if (uses_property && property_used)
+                    || (action == "start_native_promotion_call_trace" && promotion_used)
+                {
+                    return Err(fail("native property and promotion observation are each single-use until restart_game".into()));
                 }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
                     || !trace_names.insert(step["name"].as_str().unwrap().to_owned())
@@ -181,6 +201,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 calibration_open = action == "start_native_can_ever_calibration";
                 joined_open = action == "start_native_joined_admission";
                 promotion_open = action == "start_native_promotion_call_trace";
+                property_used |= uses_property;
+                promotion_used |= promotion_open;
             }
             "stop_native_can_ever_trace"
             | "stop_native_can_ever_calibration"

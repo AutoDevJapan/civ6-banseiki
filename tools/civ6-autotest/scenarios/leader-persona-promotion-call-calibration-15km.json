@@ -1,0 +1,338 @@
+{
+  "name": "Calibrate one official PROMOTE rejection through the raw call-site observer after a private cost-one appointment",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "91cf7b65-54bb-4f69-a452-19a65527cde2",
+        "d8532710-f853-4c53-8853-271000000001"
+      ],
+      "disable_ids": [
+        "5d4393c0-c02a-48bf-83d2-7b6839d4e5cb",
+        "a1faab65-5371-4e25-9a46-7522075f865d",
+        "8c615430-5a09-4431-877a-bfd03bca9e80",
+        "4a72b1c0-958b-4bd5-81e4-a094f86ce643",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c",
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0",
+        "c678a216-58ab-4d40-a614-8f309d36ac86",
+        "2b20f0d9-64cd-42b8-9841-74067419b81e"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620974,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "condition": {
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "code": "local row=assert(GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO']); local d=assert(GameInfo.Governors[row.GovernorType]); assert(d.Index==4 and row.EvolutionCost==1); assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')==nil); local n=0; for _,id in ipairs(PlayerManager.GetAliveMajorIDs()) do for persona in GameInfo.JAC_LeaderPersonas() do local g=assert(GameInfo.Governors[persona.GovernorType]); assert(Players[id]:GetGovernors():CanEverAppointGovernor(g.Hash)==false); n=n+1 end end; assert(n==484); return 'unjoined 484 native pairs closed; Ashina runtime Index 4'",
+      "action": "ui_lua",
+      "state_name": "InGame"
+    },
+    {
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_JoinedAdmissionInitialize',ManualAppoint=1}); return 'request synchronized 484 false derived permissions and private manual appointment ownership'",
+      "action": "ui_lua",
+      "state_name": "InGame"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "code": "local r=Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'); return r and r.phase=='CLOSED' and r.pairs==484 and Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==1 and Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==1 and Players[0]:GetProperty(853304)==false and Players[1]:GetProperty(853304)==false",
+        "state_name": "InGame"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then local g=p:GetGovernors(); if g:GetGovernorPoints()-g:GetGovernorPointsSpent()<1 then local culture=p:GetCulture(); local added=false; for row in GameInfo.JAC_PersonaTitleCivics() do local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); added=true; break end end; assert(added,'AI title civic unavailable') end; assert(g:GetGovernorPoints()-g:GetGovernorPointsSpent()>=1 and g:GetGovernorPointsSpent()==0); count=count+1 end end; assert(count==21); return '21 AI have real civic titles and zero spent'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0] and Players[0]:IsTurnActive()"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local count=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then local g=p:GetGovernors(); assert(g:GetGovernorPointsSpent()==0,'AI spent before join'); for row in GameInfo.JAC_LeaderPersonas() do local d=assert(GameInfo.Governors[row.GovernorType]); assert(g:CanEverAppointGovernor(d.Hash)==false and not g:HasGovernor(d.Hash),'unjoined AI appointment') end; count=count+1 end end; assert(count==21); return 'real AI turn kept all unjoined Governors and Spent closed'"
+    },
+    {
+      "action": "start_native_joined_admission",
+      "name": "joined-admission-cost1",
+      "max_seconds": 180,
+      "timeout": 30
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local d=assert(GameInfo.Governors[GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO'].GovernorType]); assert(d.Index==4); assert(Players[0]:GetGovernors():CanEverAppointGovernor(d.Hash)==false and Players[1]:GetGovernors():CanEverAppointGovernor(d.Hash)==false); assert(Players[0]:GetProperty(853304)==false); return 'native owner bound while every Ashina permission remains false'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_JoinedAdmissionPrepare'}); return 'request real Join, unique Great Person, official title and full reservation'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'); local d=GameInfo.Governors[GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO'].GovernorType]; return r and r.phase=='EVOLVING' and r.owner==0 and r.source==2 and r.personCount==1 and r.total-r.spent>=1 and Players[0]:GetProperty(853304)==true and Players[0]:GetGovernors():CanEverAppointGovernor(d.Hash)==true"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local leader='LEADER_JAC_ASHINA_MORIKIYO'; local r=assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'),'native preappoint receipt missing'); local owner=Game:GetProperty('JAC_PERSONA_'..leader..'_OWNER'); local stage=Game:GetProperty('JAC_PERSONA_'..leader..'_STATE'); assert(owner==0 and stage=='EVOLVING','native preappoint owner='..tostring(owner)..' state='..tostring(stage)..' receiptOwner='..tostring(r.owner)..' receiptPhase='..tostring(r.phase)); local ids=PlayerManager.GetAliveMajorIDs(); assert(type(ids)=='table','native preappoint alive IDs type='..type(ids)); assert(#ids==22,'native preappoint alive count='..tostring(#ids)); local count=0; for _,id in ipairs(ids) do local g=Players[id]:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do local d=assert(GameInfo.Governors[row.GovernorType],'native preappoint Governor definition missing '..row.GovernorType); local expected=id==0 and row.LeaderType==leader; local qualified=g:CanEverAppointGovernor(d.Hash); assert(qualified==expected,'wrong native qualification '..id..'/'..row.LeaderType..' actual='..tostring(qualified)..' expected='..tostring(expected)); count=count+1 end end; assert(count==484,'native preappoint native pair count='..tostring(count)); local d=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[leader].GovernorType]; local g=Players[0]:GetGovernors(); local can=g:CanAppointGovernor(d.Hash); local has=g:HasGovernor(d.Hash); local spent=g:GetGovernorPointsSpent(); assert(can and not has and spent==r.spent,'native preappoint canAppoint='..tostring(can)..' hasGovernor='..tostring(has)..' spent='..tostring(spent)..' receiptSpent='..tostring(r.spent)); return 'only joined owner Ashina admitted across all 484 native pairs'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local d=assert(GameInfo.Governors[GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO'].GovernorType]); UI.RequestPlayerOperation(0,PlayerOperations.APPOINT_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=d.Index}); return 'one official APPOINT requested for joined cost-one Ashina'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local r=Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT'); local row=GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO']; local d=GameInfo.Governors[row.GovernorType]; local g=Players[0]:GetGovernors(); return r and g:HasGovernor(d.Hash) and g:GetGovernorPointsSpent()==r.spent+1"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_ASHINA_MORIKIYO'; local r=assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')); local row=GameInfo.JAC_LeaderPersonas[l]; local d=GameInfo.Governors[row.GovernorType]; local g=Players[0]:GetGovernors(); local physical=assert(g:GetGovernor(d.Hash)); assert(physical:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash) and g:GetGovernorPointsSpent()==r.spent+1); assert(Game:GetProperty('JAC_PERSONA_'..l..'_STATE')=='EVOLVING'); return 'official native Governor, base and one Spent confirmed'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaFinalize',Leader='LEADER_JAC_ASHINA_MORIKIYO'}); return 'regular evolution completion requested'"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ASHINA_MORIKIYO_STATE')=='GOVERNOR'"
+      },
+      "timeout": 60
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local l='LEADER_JAC_ASHINA_MORIKIYO'; local r=assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')); local row=GameInfo.JAC_LeaderPersonas[l]; local d=GameInfo.Governors[row.GovernorType]; local p=Players[0]; local g=p:GetGovernors(); assert(g:HasGovernor(d.Hash) and g:GetGovernorPointsSpent()==r.spent+1 and g:GetGovernor(d.Hash):HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash)); local people=0; for _,u in p:GetUnits():Members() do local gp=u:GetGreatPerson(); local id=gp and gp:GetIndividual(); local person=id~=nil and id~=-1 and GameInfo.GreatPersonIndividuals[id]; if person and person.GreatPersonIndividualType==row.PersonType then people=people+1 end end; assert(people==0 and Game:GetProperty('JAC_PERSONA_'..l..'_UNIT')==nil); local count=0; for _,id in ipairs(PlayerManager.GetAliveMajorIDs()) do for person in GameInfo.JAC_LeaderPersonas() do local def=GameInfo.Governors[person.GovernorType]; assert(Players[id]:GetGovernors():CanEverAppointGovernor(def.Hash)==(id==0 and person.LeaderType==l)); count=count+1 end end; assert(count==484); return 'finalized native Governor and Spent one; Great Person gone; other 483 closed'"
+    },
+    {
+      "action": "stop_native_joined_admission",
+      "timeout": 30
+    },
+    {
+      "code": "local p=Players[0]; assert(Game.GetLocalPlayer()==0 and p:IsHuman() and p:IsTurnActive()); local g=p:GetGovernors(); local r=assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')); assert(g:GetGovernorPointsSpent()==r.spent+1); if g:GetGovernorPoints()-g:GetGovernorPointsSpent()<1 then local culture=p:GetCulture(); local added=false; for row in GameInfo.JAC_PersonaTitleCivics() do local c=GameInfo.Civics[row.CivicType]; if not culture:HasCivic(c.Index) then culture:SetCulturalProgress(c.Index,culture:GetCultureCost(c.Index)); added=true; break end end; assert(added,'no official title civic remains') end; return 'one official spare title prepared for native promotion rejection'",
+      "state_name": "InGame",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local g=Players[0]:GetGovernors(); return g:GetGovernorPoints()-g:GetGovernorPointsSpent()>=1",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "name": "promotion-owned-base-rejection",
+      "max_seconds": 120,
+      "action": "start_native_promotion_call_trace"
+    },
+    {
+      "code": "local row=assert(GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO']); local d=assert(GameInfo.Governors[row.GovernorType]); local promotion=assert(GameInfo.GovernorPromotions[row.BasePromotionType]); local g=Players[0]:GetGovernors(); local unit=assert(g:GetGovernor(d.Hash)); assert(Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive() and unit:HasPromotion(promotion.Hash) and not unit:CanEarnPromotion(promotion.Hash)); ExposedMembers.JAC_PromotionCallCalibration={spent=g:GetGovernorPointsSpent(),total=g:GetGovernorPoints(),governorIndex=d.Index,promotionIndex=promotion.Index}; UI.RequestPlayerOperation(0,PlayerOperations.PROMOTE_GOVERNOR,{[PlayerOperations.PARAM_GOVERNOR_TYPE]=d.Index,[PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=promotion.Index}); return 'one formal PROMOTE request for already-owned base; raw call entry only'",
+      "state_name": "InGame",
+      "action": "ui_lua"
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "condition": {
+        "code": "return Players[0]:IsTurnActive() and not UI.IsGameCoreBusy()",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 30,
+      "action": "wait_for"
+    },
+    {
+      "code": "local r=assert(Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')); local g=Players[0]:GetGovernors(); assert(g:GetGovernorPointsSpent()==r.spent+1 and g:GetGovernorPoints()>=g:GetGovernorPointsSpent()+1,'native core account changed after owned-base request'); return 'Core official Spent remains one appointment with a spare title'",
+      "state_name": "GameCore_Tuner",
+      "action": "ui_lua"
+    },
+    {
+      "code": "local before=assert(ExposedMembers.JAC_PromotionCallCalibration); local row=GameInfo.JAC_LeaderPersonas['LEADER_JAC_ASHINA_MORIKIYO']; local g=Players[0]:GetGovernors(); local unit=assert(g:GetGovernor(GameInfo.Governors[row.GovernorType].Hash)); assert(g:GetGovernorPointsSpent()==before.spent and g:GetGovernorPoints()==before.total and unit:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash),'native title account or base changed'); return 'owned-base request rejected without another title payment'",
+      "state_name": "InGame",
+      "action": "ui_lua"
+    },
+    {
+      "action": "stop_native_promotion_call_trace",
+      "timeout": 30
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}
