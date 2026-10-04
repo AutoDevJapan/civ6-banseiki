@@ -712,6 +712,136 @@ impl Runner {
         let remaining = self.remaining(deadline)?;
         self.backend.run_lua(state, code, remaining)
     }
+    fn captive_session_read(
+        &mut self,
+        label: &str,
+        state: &str,
+        code: &str,
+        deadline: f64,
+        per_lua: f64,
+    ) -> Result<Option<String>> {
+        let timeout = self.budget(deadline, per_lua)?;
+        match self.lua(state, code, timeout) {
+            Ok(value) => {
+                self.log("captive_session_probe", "OK", &format!("{label}={value}"))?;
+                Ok(Some(value))
+            }
+            Err(e)
+                if matches!(
+                    e.kind,
+                    ErrorKind::LuaResponseUnknown
+                        | ErrorKind::LuaExecution
+                        | ErrorKind::Tuner
+                        | ErrorKind::Io
+                ) =>
+            {
+                self.log(
+                    "captive_session_probe",
+                    "UNAVAILABLE",
+                    &format!("{label}: {e}"),
+                )?;
+                self.disconnect();
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+    fn observe_captive_session(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        let attacker = step["attacker"].as_u64().unwrap();
+        let captor = step["captor"].as_u64().unwrap();
+        let per_lua = step["lua_timeout"].as_f64().unwrap();
+        let states = self.states(self.budget(deadline, per_lua)?)?;
+        let in_game = states.iter().any(|s| state_name_eq(s, "InGame"));
+        let deal_view = states.iter().any(|s| state_name_eq(s, "DiplomacyDealView"));
+        self.log(
+            "captive_session_probe",
+            "OK",
+            &format!("contexts InGame={in_game} DiplomacyDealView={deal_view}"),
+        )?;
+        let hidden = self.captive_session_read(
+            "deal_view_hidden",
+            "DiplomacyDealView",
+            "return ContextPtr:IsHidden()",
+            deadline,
+            per_lua,
+        )?;
+        let snapshot_code="local b=ExposedMembers.JAC_PersonaBoundary; return b and b.CaptiveExchangeSessionReadOnly() or 'NONE'";
+        let in_game_snapshot = self.captive_session_read(
+            "ingame_snapshot",
+            "InGame",
+            snapshot_code,
+            deadline,
+            per_lua,
+        )?;
+        let deal_snapshot = self.captive_session_read(
+            "deal_view_snapshot",
+            "DiplomacyDealView",
+            snapshot_code,
+            deadline,
+            per_lua,
+        )?;
+        let id_code=format!("local id=DiplomacyManager.FindOpenSessionID({attacker},{captor}); if id==nil then return 'nil' end; return type(id)=='number' and tostring(id) or 'TYPE:'..type(id)");
+        let in_game_id =
+            self.captive_session_read("ingame_session_id", "InGame", &id_code, deadline, per_lua)?;
+        let deal_id = self.captive_session_read(
+            "deal_view_session_id",
+            "DiplomacyDealView",
+            &id_code,
+            deadline,
+            per_lua,
+        )?;
+        let parsed_id =
+            |value: &Option<String>| value.as_deref().and_then(|s| s.parse::<u64>().ok());
+        let id_for_info = parsed_id(&in_game_id).or_else(|| parsed_id(&deal_id));
+        let (in_game_from, deal_from) = if let Some(id) = id_for_info {
+            let code=format!("local info=DiplomacyManager.GetSessionInfo({id}); if info==nil then return 'nil' end; return type(info.FromPlayer)=='number' and tostring(info.FromPlayer) or 'TYPE:'..type(info.FromPlayer)");
+            (
+                self.captive_session_read(
+                    "ingame_from_player",
+                    "InGame",
+                    &code,
+                    deadline,
+                    per_lua,
+                )?,
+                self.captive_session_read(
+                    "deal_view_from_player",
+                    "DiplomacyDealView",
+                    &code,
+                    deadline,
+                    per_lua,
+                )?,
+            )
+        } else {
+            self.log(
+                "captive_session_probe",
+                "UNAVAILABLE",
+                "GetSessionInfo skipped: no numeric session ID observed",
+            )?;
+            (None, None)
+        };
+        let same_native_id =
+            parsed_id(&in_game_id).is_some() && parsed_id(&in_game_id) == parsed_id(&deal_id);
+        let snapshot_prefix = format!("{attacker}|{captor}|");
+        let same_snapshot = in_game_snapshot
+            .as_deref()
+            .is_some_and(|s| s.starts_with(&snapshot_prefix) && s.contains("|true|false|"))
+            && in_game_snapshot == deal_snapshot;
+        let expected_from = attacker.to_string();
+        if in_game
+            && deal_view
+            && hidden.as_deref() == Some("false")
+            && same_native_id
+            && same_snapshot
+            && in_game_from.as_deref() == Some(expected_from.as_str())
+            && deal_from.as_deref() == Some(expected_from.as_str())
+        {
+            return Ok(format!(
+                "native captive diplomacy session {} observed in both contexts",
+                parsed_id(&in_game_id).unwrap()
+            ));
+        }
+        Err(Error::scenario(format!("captive session observation incomplete: visible={hidden:?}, native_ids={in_game_id:?}/{deal_id:?}, from={in_game_from:?}/{deal_from:?}, snapshots={in_game_snapshot:?}/{deal_snapshot:?}; observation made no proposal")))
+    }
     pub fn log_since_same_generation(&self, name: &str, baseline: &Value) -> Result<String> {
         let path = self.logs.join(name);
         let mark = &baseline["files"][name];
@@ -1951,6 +2081,7 @@ impl Runner {
                 self.wait(&step["condition"], self.remaining(deadline)?, false)?;
                 Ok(format!("condition met: {}", step["condition"]))
             }
+            "observe_captive_session" => self.observe_captive_session(step, deadline),
             "pause" => {
                 let seconds = step["seconds"].as_f64().unwrap();
                 if seconds > self.remaining(deadline)? {

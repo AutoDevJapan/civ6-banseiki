@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 18] = [
+pub const ACTIONS: [&str; 19] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -17,6 +17,7 @@ pub const ACTIONS: [&str; 18] = [
     "exit_to_menu",
     "load",
     "wait_for",
+    "observe_captive_session",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -410,6 +411,30 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                             "wait_for needs a lua, log_line or state condition".into(),
                         ))
                     }
+                }
+            }
+            "observe_captive_session" => {
+                let attacker = step["attacker"].as_u64();
+                let captor = step["captor"].as_u64();
+                if !attacker.is_some_and(|n| n <= 63)
+                    || !captor.is_some_and(|n| n <= 63)
+                    || attacker == captor
+                {
+                    return Err(fail(
+                        "captive session observation needs distinct player IDs in 0..63".into(),
+                    ));
+                }
+                if !step["lua_timeout"]
+                    .as_f64()
+                    .is_some_and(|n| n.is_finite() && (5.0..=20.0).contains(&n))
+                    || !step["timeout"]
+                        .as_f64()
+                        .is_some_and(|n| n.is_finite() && (30.0..=120.0).contains(&n))
+                {
+                    return Err(fail(
+                        "captive session observation needs 5..20s Lua and 30..120s total timeouts"
+                            .into(),
+                    ));
                 }
             }
             "pause" => {

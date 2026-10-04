@@ -785,6 +785,16 @@ end
 ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=
     B.MissingCaptiveDealTooltipKey;
 
+-- A scalar UI snapshot for diagnosing a diplomacy context that cannot answer
+-- its native session getter. This does not query or change the native deal.
+function B.CaptiveExchangeSessionReadOnly()
+    local x=captiveExchange;
+    if not x then return "NONE"; end
+    return tostring(x.attacker).."|"..tostring(x.captor).."|"..
+        tostring(x.itemID).."|"..tostring(x.sessionRequested).."|"..
+        tostring(x.proposed).."|"..tostring(x.sessionID);
+end
+
 local function CaptiveExchangeSession()
     local x=assert(captiveExchange,"native captive exchange session missing");
     local id=DiplomacyManager.FindOpenSessionID(x.attacker,x.captor);
