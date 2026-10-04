@@ -71,15 +71,25 @@ fn opt_in_capacity_fixture_changes_only_four_internal_flags_after_sengoku() {
                 .unwrap()
         })
         .collect();
-    assert_eq!(
-        maps,
-        BTreeSet::from([
-            "Maps/JAC_Japan_15km.Civ6Map",
-            "Maps/JAC_Japan_20km.Civ6Map",
-            "Maps/JAC_Japan_15km_Settlers.Civ6Map",
-            "Maps/JAC_Japan_20km_Settlers.Civ6Map",
-        ])
-    );
+    let persona_source = repo
+        .read("poc/JAC_PoC_LeaderPersona/JAC_PoC_LeaderPersona.modinfo")
+        .unwrap();
+    let persona = Document::parse(&persona_source).unwrap();
+    // These criteria loaded the real fixture in live120. Compare the full map
+    // identity, including its mod GUID, rather than accepting bare filenames.
+    let native_maps: BTreeSet<_> = persona
+        .descendants()
+        .filter(|n| n.has_tag_name("ConfigurationValueMatches"))
+        .map(|n| {
+            n.children()
+                .find(|c| c.has_tag_name("Value"))
+                .unwrap()
+                .text()
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(native_maps.len(), 4);
+    assert_eq!(maps, native_maps);
     assert!(doc
         .descendants()
         .find(|n| n.has_tag_name("Files"))

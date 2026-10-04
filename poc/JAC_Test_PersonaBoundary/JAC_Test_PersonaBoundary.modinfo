@@ -11,10 +11,10 @@
     <Mod id="91cf7b65-54bb-4f69-a452-19a65527cde2" title="JAC PoC: Leader Persona" />
   </Dependencies>
   <ActionCriteria>
-    <Criteria id="Boundary15"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>Maps/JAC_Japan_15km.Civ6Map</Value></ConfigurationValueMatches></Criteria>
-    <Criteria id="Boundary20"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>Maps/JAC_Japan_20km.Civ6Map</Value></ConfigurationValueMatches></Criteria>
-    <Criteria id="Boundary15Settlers"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>Maps/JAC_Japan_15km_Settlers.Civ6Map</Value></ConfigurationValueMatches></Criteria>
-    <Criteria id="Boundary20Settlers"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>Maps/JAC_Japan_20km_Settlers.Civ6Map</Value></ConfigurationValueMatches></Criteria>
+    <Criteria id="Boundary15"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map</Value></ConfigurationValueMatches></Criteria>
+    <Criteria id="Boundary20"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map</Value></ConfigurationValueMatches></Criteria>
+    <Criteria id="Boundary15Settlers"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map</Value></ConfigurationValueMatches></Criteria>
+    <Criteria id="Boundary20Settlers"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Map</Group><ConfigurationId>MAP_SCRIPT</ConfigurationId><Value>{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map</Value></ConfigurationValueMatches></Criteria>
   </ActionCriteria>
   <InGameActions>
     <UpdateDatabase id="BoundaryCapacity15" criteria="Boundary15"><Properties><LoadOrder>901</LoadOrder></Properties><File>Data/JAC_PersonaBoundary_Capacity.sql</File></UpdateDatabase>
