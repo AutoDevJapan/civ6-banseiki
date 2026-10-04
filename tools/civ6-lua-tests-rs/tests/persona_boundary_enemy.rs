@@ -603,6 +603,22 @@ fn neutralized_governor_establishment_flag_is_observed_without_inventing_its_val
 }
 
 #[test]
+fn recycled_spy_lookup_cannot_dispatch_a_mission_for_the_saved_identity() {
+    let h = Enemy::new();
+    h.prepare();
+    h.bind();
+    h.run("ENEMY_CASES.settled(); local replacement=makeSpy(0,786440); replacement.x=FOREIGN.x; replacement.y=FOREIGN.y; Game:SetProperty('JAC_BOUNDARY_SPY',{owner=0,id=15}); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==15 then return replacement end; return find(self,id) end; return units end; REQUEST_EFFECT='mission'; ExposedMembers.JAC_PersonaBoundary.Queue('SPY_MISSION',{owner=1,city=20}); local ok,err=pcall(FRAME); assert(not ok and string.find(tostring(err),'native spy identity no longer present',1,true),'missing identity did not reject the operation'); assert(#UNIT_REQUESTS==0,'recycled lookup sent a mission to an unadopted spy'); assert(Game:GetProperty('JAC_BOUNDARY_SPY').id==15,'lookup changed the saved identity')");
+}
+
+#[test]
+fn recycled_spy_lookup_cannot_make_an_unobserved_mission_event_ready() {
+    let h = Enemy::new();
+    h.prepare();
+    h.bind();
+    h.run("ENEMY_CASES.settled(); local replacement=makeSpy(0,786440); replacement.op=0; replacement.finish=TURN+8; Game:SetProperty('JAC_BOUNDARY_SPY',{owner=0,id=15}); Game:SetProperty('JAC_BOUNDARY_SPY_BARRIER',{owner=0,spyID=15,action='SPY_MISSION',token=1}); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==15 then return replacement end; return find(self,id) end; return units end; assert(not ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady(),'another spy operation hid the missing original event')");
+}
+
+#[test]
 fn enemy_native_mission_uses_one_human_spy_request_and_does_not_claim_success_early() {
     let h = Enemy::new();
     h.prepare();
@@ -877,6 +893,18 @@ fn cascaded_official_spy_capacity_has_one_civic_and_one_government_building_rout
         )
         .unwrap();
     assert_eq!(dangling_unlocks, 0);
+}
+
+#[test]
+fn native_production_retry_rechecks_the_map_roster_before_clearing_history() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=61; ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); RETRY_PARAMS=REQUESTS[#REQUESTS].params; assert(RETRY_PARAMS.Mode=='PRODUCE'); local replacement=makeSpy(0,786440); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==15 then return replacement end; return find(self,id) end; return units end");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',RETRY_PARAMS)",
+        "native map spy",
+    );
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL')~=nil and Game:GetProperty('JAC_BOUNDARY_SPY_BARRIER')~=nil,'rejected production retry cleared the original history')");
 }
 
 #[test]
@@ -2209,6 +2237,28 @@ fn capacity_tier_two_stale_ui_still_rejects_invalid_core_receipts_and_native_gat
         );
         h.run("assert(GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
     }
+}
+
+#[test]
+fn result_diagnostic_checks_the_saved_identity_against_the_actual_native_unit() {
+    let scene: Value = serde_json::from_str(&read_repo(
+        "tools/civ6-autotest/scenarios/leader-persona-spy-result-diagnostic.json",
+    ))
+    .unwrap();
+    let code = scene_phase_lua(&scene, "ui_lua", "saved spy identity checked");
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.run("local old=Game:GetProperty('JAC_BOUNDARY_SPY').id; local replacement=makeSpy(0,786440); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==old then return replacement end; return find(self,id) end; return units end");
+    h.run(code);
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; local read=b.ReadEnemy; b.ReadEnemy=function() local s=read(); s.spy.present=true; return s end");
+    h.reject(code, "lookup resolved another native spy");
+}
+
+#[test]
+fn recycled_native_unit_slot_cannot_make_the_archived_captive_present() {
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.run("local old=Game:GetProperty('JAC_BOUNDARY_SPY').id; local replacement=makeSpy(0,786440); replacement.x=CONTROL.x; replacement.y=CONTROL.y; local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==old then return replacement end; return find(self,id) end; return units end; local s=ExposedMembers.JAC_PersonaBoundary.ReadEnemy(); assert(s.spy.id==old and s.spy.present==false,'recycled native slot was mistaken for the original captive'); assert(s.spy.lookupID==786440 and s.spyRoster.map[1].id==786440 and #s.spyRoster.captured==1 and s.spyRoster.physicalCount==2); assert(s.spy.operation==nil and s.spy.endTurn==nil and s.spy.remaining==nil and s.spy.x==nil and s.spy.y==nil, 'aliased spy details leaked into the archived identity'); assert(Game:GetProperty('JAC_BOUNDARY_SPY').id==old, 'read changed the archived identity')");
 }
 
 #[test]
