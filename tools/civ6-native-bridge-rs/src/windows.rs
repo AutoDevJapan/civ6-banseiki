@@ -26,8 +26,12 @@ const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
 const PROPERTY_TRACE_VERSION: u32 = 2;
+const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
+const CALIBRATION_TRACE_VERSION: u32 = 1;
+pub const CALIBRATION_CAPACITY: usize = 128;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
+pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
 const CODE_PAGE: usize = 4096;
 const RELAY_OFFSET: usize = 0;
 const TRAMPOLINE_OFFSET: usize = 32;
@@ -58,38 +62,52 @@ pub enum BridgeMode {
     CanEver = 0,
     Property = 1,
     PropertyScoped = 2,
+    CanEverCalibration = 3,
+    PropertyAdmissionScoped = 4,
 }
 
 impl BridgeMode {
     pub const fn is_property(self) -> bool {
-        matches!(self, Self::Property | Self::PropertyScoped)
+        matches!(
+            self,
+            Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped
+        )
     }
 
     pub const fn rva(self) -> usize {
         match self {
-            Self::CanEver => PINNED_CAN_EVER_RVA,
-            Self::Property | Self::PropertyScoped => PINNED_PROPERTY_GET_RVA,
+            Self::CanEver | Self::CanEverCalibration => PINNED_CAN_EVER_RVA,
+            Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
+                PINNED_PROPERTY_GET_RVA
+            }
         }
     }
 
     const fn file_offset(self) -> u64 {
         match self {
-            Self::CanEver => PINNED_CAN_EVER_FILE_OFFSET,
-            Self::Property | Self::PropertyScoped => PINNED_PROPERTY_GET_FILE_OFFSET,
+            Self::CanEver | Self::CanEverCalibration => PINNED_CAN_EVER_FILE_OFFSET,
+            Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
+                PINNED_PROPERTY_GET_FILE_OFFSET
+            }
         }
     }
 
     const fn prologue(self) -> &'static [u8] {
         match self {
-            Self::CanEver => &PINNED_PROLOGUE,
-            Self::Property | Self::PropertyScoped => &PROPERTY_PROLOGUE,
+            Self::CanEver | Self::CanEverCalibration => &PINNED_PROLOGUE,
+            Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
+                &PROPERTY_PROLOGUE
+            }
         }
     }
 
     pub const fn trace_size(self) -> usize {
         match self {
             Self::CanEver => std::mem::size_of::<SharedTrace>(),
-            Self::Property | Self::PropertyScoped => std::mem::size_of::<PropertyTrace>(),
+            Self::CanEverCalibration => std::mem::size_of::<CalibrationTrace>(),
+            Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
+                std::mem::size_of::<PropertyTrace>()
+            }
         }
     }
 }
@@ -132,6 +150,23 @@ impl BridgeConfig {
     pub fn for_property_scoped(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
         let mut config = Self::for_property(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::PropertyScoped as u32;
+        config
+    }
+
+    pub fn for_calibration(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::CanEverCalibration as u32;
+        config.trace_size = BridgeMode::CanEverCalibration.trace_size() as u32;
+        config
+    }
+
+    pub fn for_admission_property(
+        game_pid: u32,
+        created_filetime: u64,
+        trace_address: u64,
+    ) -> Self {
+        let mut config = Self::for_property(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::PropertyAdmissionScoped as u32;
         config
     }
 }
@@ -225,6 +260,182 @@ impl SharedTrace {
     }
 }
 
+/// One original CanEver call. Field addresses are copied while its caller is
+/// still on the stack; they are observations, never retained as admission state.
+#[repr(C)]
+#[derive(Default)]
+pub struct CalibrationRow {
+    pub sequence: AtomicU32,
+    pub governor_index: AtomicU32,
+    pub thread_id: AtomicU32,
+    /// 1: all owner fields copied; 0: null owner; 2: unreadable field.
+    pub owner_read_state: AtomicU32,
+    pub governors_this: AtomicU64,
+    pub return_address: AtomicU64,
+    pub player_address: AtomicU64,
+    pub player_id: AtomicU32,
+    pub original_al: AtomicU32,
+    pub property_receiver: AtomicU64,
+}
+
+#[repr(C)]
+pub struct CalibrationTrace {
+    pub magic: u32,
+    pub version: u32,
+    pub next: AtomicU32,
+    pub dropped: AtomicU32,
+    pub in_flight: AtomicU32,
+    pub reserved: u32,
+    pub rows: [CalibrationRow; CALIBRATION_CAPACITY],
+}
+
+impl Default for CalibrationTrace {
+    fn default() -> Self {
+        Self {
+            magic: CALIBRATION_TRACE_MAGIC,
+            version: CALIBRATION_TRACE_VERSION,
+            next: AtomicU32::new(0),
+            dropped: AtomicU32::new(0),
+            in_flight: AtomicU32::new(0),
+            reserved: 0,
+            rows: std::array::from_fn(|_| CalibrationRow::default()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CalibrationObservation {
+    pub sequence: u32,
+    pub governor_index: u32,
+    pub thread_id: u32,
+    pub owner_read_state: u32,
+    pub governors_this: u64,
+    pub return_address: u64,
+    pub player_address: u64,
+    pub player_id: u32,
+    pub property_receiver: u64,
+    pub original_al: u32,
+}
+
+impl CalibrationTrace {
+    pub fn complete_rows(&self) -> Result<Vec<CalibrationObservation>, &'static str> {
+        if self.in_flight.load(Ordering::Acquire) != 0 {
+            return Err("calibration calls remain in flight");
+        }
+        if self.dropped.load(Ordering::Acquire) != 0 {
+            return Err("calibration capacity exceeded");
+        }
+        let next = self.next.load(Ordering::Acquire) as usize;
+        if next > CALIBRATION_CAPACITY {
+            return Err("calibration sequence exceeded capacity");
+        }
+        let mut rows = Vec::with_capacity(next);
+        for (index, row) in self.rows[..next].iter().enumerate() {
+            if row.sequence.load(Ordering::Acquire) != 1 {
+                return Err("calibration call has no original return");
+            }
+            rows.push(CalibrationObservation {
+                sequence: index as u32 + 1,
+                governor_index: row.governor_index.load(Ordering::Relaxed),
+                thread_id: row.thread_id.load(Ordering::Relaxed),
+                owner_read_state: row.owner_read_state.load(Ordering::Relaxed),
+                governors_this: row.governors_this.load(Ordering::Relaxed),
+                return_address: row.return_address.load(Ordering::Relaxed),
+                player_address: row.player_address.load(Ordering::Relaxed),
+                player_id: row.player_id.load(Ordering::Relaxed),
+                property_receiver: row.property_receiver.load(Ordering::Relaxed),
+                original_al: row.original_al.load(Ordering::Relaxed),
+            });
+        }
+        Ok(rows)
+    }
+}
+
+fn copy_current<const N: usize>(address: u64) -> Option<[u8; N]> {
+    if address == 0 {
+        return None;
+    }
+    let mut bytes = [0u8; N];
+    let mut read = 0usize;
+    let ok = unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            address as *const c_void,
+            bytes.as_mut_ptr().cast(),
+            N,
+            &mut read,
+        )
+    } != 0;
+    (ok && read == N).then_some(bytes)
+}
+
+// No Lua/C++ calls, allocation, formatting or lock acquisition in the hook.
+// The original function receives its saved argument registers immediately after
+// this bounded copy. A failed copy is recorded, never treated as permission.
+unsafe extern "system" fn calibration_begin(
+    governors_this: u64,
+    governor_index: u32,
+    return_address: u64,
+) -> *const CalibrationRow {
+    let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
+    if trace.is_null() {
+        return null_mut();
+    }
+    let trace = unsafe { &*trace };
+    trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+    if slot >= CALIBRATION_CAPACITY {
+        trace.dropped.fetch_add(1, Ordering::Relaxed);
+        trace.in_flight.fetch_sub(1, Ordering::Release);
+        return null_mut();
+    }
+    let row = &trace.rows[slot];
+    row.governor_index.store(governor_index, Ordering::Relaxed);
+    row.governors_this.store(governors_this, Ordering::Relaxed);
+    row.return_address.store(return_address, Ordering::Relaxed);
+    row.thread_id
+        .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+    let owner = governors_this
+        .checked_add(0x70)
+        .and_then(copy_current::<8>)
+        .map(u64::from_le_bytes);
+    match owner {
+        Some(0) => row.owner_read_state.store(0, Ordering::Relaxed),
+        Some(player) => {
+            row.player_address.store(player, Ordering::Relaxed);
+            if let (Some(id), Some(receiver)) = (
+                player
+                    .checked_add(0xd8)
+                    .and_then(copy_current::<4>)
+                    .map(u32::from_le_bytes),
+                player.checked_add(0x528),
+            ) {
+                row.player_id.store(id, Ordering::Relaxed);
+                row.property_receiver.store(receiver, Ordering::Relaxed);
+                row.owner_read_state.store(1, Ordering::Relaxed);
+            } else {
+                row.owner_read_state.store(2, Ordering::Relaxed);
+            }
+        }
+        None => row.owner_read_state.store(2, Ordering::Relaxed),
+    }
+    row as *const CalibrationRow
+}
+
+unsafe extern "system" fn calibration_end(row: *const CalibrationRow, original_rax: u64) {
+    if row.is_null() {
+        return;
+    }
+    let row = unsafe { &*row };
+    row.original_al
+        .store((original_rax & 0xff) as u32, Ordering::Relaxed);
+    row.sequence.store(1, Ordering::Release);
+    let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
+    if !trace.is_null() {
+        unsafe { &*trace }.in_flight.fetch_sub(1, Ordering::Release);
+    }
+}
+
 /// Fixed-size, string-free telemetry for the direct native getter. `read_state`
 /// is 0 for a missing key, 1 for a complete 24-byte copy, 2 for an unreadable
 /// returned address. A returned pointer is never retained for a later read.
@@ -275,6 +486,12 @@ impl PropertyTrace {
     pub fn scoped() -> Self {
         let mut trace = Self::default();
         trace.scope = BridgeMode::PropertyScoped as u32;
+        trace
+    }
+
+    pub fn admission_scoped() -> Self {
+        let mut trace = Self::default();
+        trace.scope = BridgeMode::PropertyAdmissionScoped as u32;
         trace
     }
 }
@@ -343,9 +560,11 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         return;
     }
     let trace = unsafe { &*trace };
-    if trace.scope == BridgeMode::PropertyScoped as u32
+    if (trace.scope == BridgeMode::PropertyScoped as u32
         && key_id != PROPERTY_TEST_VALUE_KEY_ID
-        && key_id != PROPERTY_TEST_PHASE_KEY_ID
+        && key_id != PROPERTY_TEST_PHASE_KEY_ID)
+        || (trace.scope == BridgeMode::PropertyAdmissionScoped as u32
+            && key_id != ASHINA_ADMISSION_KEY_ID)
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
         return;
@@ -490,6 +709,65 @@ unsafe extern "system" {
 static BRIDGE_TRACE_PTR: AtomicPtr<SharedTrace> = AtomicPtr::new(null_mut());
 #[unsafe(no_mangle)]
 static BRIDGE_TRAMPOLINE_PTR: AtomicPtr<u8> = AtomicPtr::new(null_mut());
+
+// A read-only return wrapper for owner/receiver calibration. Both callbacks
+// operate on the current call only. All incoming volatile argument registers
+// and XMM0..5 are restored before the original native function runs once.
+global_asm!(
+    ".globl calibration_gateway",
+    ".seh_proc calibration_gateway",
+    "calibration_gateway:",
+    "sub rsp, 0xd8",
+    ".seh_stackalloc 0xd8",
+    ".seh_endprologue",
+    "mov qword ptr [rsp + 0x20], rcx",
+    "mov qword ptr [rsp + 0x28], rdx",
+    "mov qword ptr [rsp + 0x30], r8",
+    "mov qword ptr [rsp + 0x38], r9",
+    "mov qword ptr [rsp + 0x40], rax",
+    "mov qword ptr [rsp + 0x48], r10",
+    "mov qword ptr [rsp + 0x50], r11",
+    "movdqu xmmword ptr [rsp + 0x70], xmm0",
+    "movdqu xmmword ptr [rsp + 0x80], xmm1",
+    "movdqu xmmword ptr [rsp + 0x90], xmm2",
+    "movdqu xmmword ptr [rsp + 0xa0], xmm3",
+    "movdqu xmmword ptr [rsp + 0xb0], xmm4",
+    "movdqu xmmword ptr [rsp + 0xc0], xmm5",
+    "mov r8, qword ptr [rsp + 0xd8]",
+    "call {begin}",
+    "mov qword ptr [rsp + 0x58], rax",
+    "mov rcx, qword ptr [rsp + 0x20]",
+    "mov rdx, qword ptr [rsp + 0x28]",
+    "mov r8, qword ptr [rsp + 0x30]",
+    "mov r9, qword ptr [rsp + 0x38]",
+    "mov rax, qword ptr [rsp + 0x40]",
+    "mov r10, qword ptr [rsp + 0x48]",
+    "mov r11, qword ptr [rsp + 0x50]",
+    "movdqu xmm0, xmmword ptr [rsp + 0x70]",
+    "movdqu xmm1, xmmword ptr [rsp + 0x80]",
+    "movdqu xmm2, xmmword ptr [rsp + 0x90]",
+    "movdqu xmm3, xmmword ptr [rsp + 0xa0]",
+    "movdqu xmm4, xmmword ptr [rsp + 0xb0]",
+    "movdqu xmm5, xmmword ptr [rsp + 0xc0]",
+    "call qword ptr [rip + BRIDGE_TRAMPOLINE_PTR]",
+    "mov qword ptr [rsp + 0x60], rax",
+    "mov rcx, qword ptr [rsp + 0x58]",
+    "mov rdx, rax",
+    "call {end}",
+    "mov rax, qword ptr [rsp + 0x60]",
+    "add rsp, 0xd8",
+    "ret",
+    ".seh_endproc",
+    begin = sym calibration_begin,
+    end = sym calibration_end,
+);
+
+unsafe extern "system" {
+    fn calibration_gateway();
+}
+
+#[unsafe(no_mangle)]
+static CALIBRATION_TRACE_PTR: AtomicPtr<CalibrationTrace> = AtomicPtr::new(null_mut());
 
 struct Hook {
     mode: BridgeMode,
@@ -747,6 +1025,7 @@ unsafe fn install_hook(
     target: *mut u8,
     trace: *mut SharedTrace,
     expected: [u8; 8],
+    mode: BridgeMode,
 ) -> Result<(), &'static str> {
     if target.is_null() || trace.is_null() || !(target as usize).is_multiple_of(8) {
         return Err("unaligned or missing hook input");
@@ -770,7 +1049,11 @@ unsafe fn install_hook(
         target as usize + prologue.len(),
     )
     .ok_or("trampoline return out of range")?;
-    let gateway = bridge_gateway as *const () as usize;
+    let gateway = match mode {
+        BridgeMode::CanEver => bridge_gateway as *const () as usize,
+        BridgeMode::CanEverCalibration => calibration_gateway as *const () as usize,
+        _ => return Err("invalid CanEver gateway mode"),
+    };
     unsafe {
         // FF 25 00000000 followed by the absolute gateway address.
         ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
@@ -785,7 +1068,13 @@ unsafe fn install_hook(
         unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
         return Err("cannot publish the relay and trampoline");
     }
-    BRIDGE_TRACE_PTR.store(trace, Ordering::Release);
+    match mode {
+        BridgeMode::CanEver => BRIDGE_TRACE_PTR.store(trace, Ordering::Release),
+        BridgeMode::CanEverCalibration => {
+            CALIBRATION_TRACE_PTR.store(trace.cast(), Ordering::Release)
+        }
+        _ => unreachable!(),
+    }
     BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
     let mut patched = original;
     patched[..5].copy_from_slice(&jump_to_relay);
@@ -800,7 +1089,7 @@ unsafe fn install_hook(
         return Err("pinned entry changed before the atomic install");
     }
     *guard = Some(Hook {
-        mode: BridgeMode::CanEver,
+        mode,
         target,
         original,
         patched,
@@ -824,7 +1113,28 @@ unsafe fn install_at(
     {
         return Err("trace mapping version mismatch");
     }
-    unsafe { install_hook(target, trace, expected) }
+    unsafe { install_hook(target, trace, expected, BridgeMode::CanEver) }
+}
+
+unsafe fn install_calibration_at(
+    target: *mut u8,
+    trace: *mut CalibrationTrace,
+    expected: [u8; 8],
+) -> Result<(), &'static str> {
+    if trace.is_null()
+        || unsafe { (*trace).magic } != CALIBRATION_TRACE_MAGIC
+        || unsafe { (*trace).version } != CALIBRATION_TRACE_VERSION
+    {
+        return Err("calibration mapping version mismatch");
+    }
+    unsafe {
+        install_hook(
+            target,
+            trace.cast(),
+            expected,
+            BridgeMode::CanEverCalibration,
+        )
+    }
 }
 
 unsafe fn install_property_at(
@@ -840,6 +1150,8 @@ unsafe fn install_property_at(
     }
     let mode = if unsafe { (*trace).scope } == BridgeMode::PropertyScoped as u32 {
         BridgeMode::PropertyScoped
+    } else if unsafe { (*trace).scope } == BridgeMode::PropertyAdmissionScoped as u32 {
+        BridgeMode::PropertyAdmissionScoped
     } else if unsafe { (*trace).scope } == 0 {
         BridgeMode::Property
     } else {
@@ -852,14 +1164,14 @@ unsafe fn uninstall() -> Result<(), &'static str> {
     let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
     let hook = guard.as_ref().ok_or("bridge not installed")?;
     let outcome = match hook.mode {
-        BridgeMode::CanEver => unsafe {
+        BridgeMode::CanEver | BridgeMode::CanEverCalibration => unsafe {
             exchange_entry(
                 hook.target,
                 u64::from_le_bytes(hook.patched),
                 u64::from_le_bytes(hook.original),
             )
         }?,
-        BridgeMode::Property | BridgeMode::PropertyScoped => {
+        BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             let first: [u8; 2] = hook.original[..2]
                 .try_into()
                 .map_err(|_| "property entry width")?;
@@ -1016,12 +1328,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1 | 2)
+        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4)
         || config.trace_size as usize
-            != if config.mode == 0 {
-                BridgeMode::CanEver.trace_size()
-            } else {
-                BridgeMode::Property.trace_size()
+            != match config.mode {
+                0 => BridgeMode::CanEver.trace_size(),
+                3 => BridgeMode::CanEverCalibration.trace_size(),
+                _ => BridgeMode::Property.trace_size(),
             }
         || !committed_range(
             config.trace_address as usize,
@@ -1046,6 +1358,8 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         0 => BridgeMode::CanEver,
         1 => BridgeMode::Property,
         2 => BridgeMode::PropertyScoped,
+        3 => BridgeMode::CanEverCalibration,
+        4 => BridgeMode::PropertyAdmissionScoped,
         _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
@@ -1084,15 +1398,20 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             unsafe { ptr::write(trace, SharedTrace::default()) };
             unsafe { install_at(entry, trace, disk_bytes) }
         }
-        BridgeMode::Property | BridgeMode::PropertyScoped => {
+        BridgeMode::CanEverCalibration => {
+            let trace = config.trace_address as *mut CalibrationTrace;
+            unsafe { ptr::write(trace, CalibrationTrace::default()) };
+            unsafe { install_calibration_at(entry, trace, disk_bytes) }
+        }
+        BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             let trace = config.trace_address as *mut PropertyTrace;
             unsafe {
                 ptr::write(
                     trace,
-                    if mode == BridgeMode::PropertyScoped {
-                        PropertyTrace::scoped()
-                    } else {
-                        PropertyTrace::default()
+                    match mode {
+                        BridgeMode::PropertyScoped => PropertyTrace::scoped(),
+                        BridgeMode::PropertyAdmissionScoped => PropertyTrace::admission_scoped(),
+                        _ => PropertyTrace::default(),
                     },
                 )
             };
@@ -1172,6 +1491,84 @@ mod tests {
         assert_eq!(unwind[2], 1); // one unwind operation
         assert_eq!(unwind[4], 4); // four-byte sub rsp, 0x68
         assert_eq!(unwind[5], 0xc2); // UWOP_ALLOC_SMALL: 12*8+8 = 0x68
+    }
+
+    #[test]
+    fn calibration_preserves_original_result_and_rereads_current_owner() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let mut image_base = 0u64;
+        assert!(!unsafe {
+            RtlLookupFunctionEntry(
+                calibration_gateway as *const () as u64,
+                &mut image_base,
+                null_mut(),
+            )
+        }
+        .is_null());
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        // Pinned five-byte prologue, then increment an owned invocation count.
+        // The synthetic original returns the low bit of Governor Index.
+        let bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0x89, 0xd0, 0x83, 0xe0, 0x01, 0xc3,
+        ];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let original: [u8; 8] = bytes[..8].try_into().unwrap();
+        let f: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(target) };
+        let mut governors = [0u64; 16];
+        let mut first_player = [0u8; 0x600];
+        let mut next_player = [0u8; 0x600];
+        first_player[0xd8..0xdc].copy_from_slice(&0u32.to_le_bytes());
+        next_player[0xd8..0xdc].copy_from_slice(&1u32.to_le_bytes());
+        governors[14] = first_player.as_ptr() as u64; // +0x70
+        let mut trace = Box::new(CalibrationTrace::default());
+        unsafe { install_calibration_at(target, trace.as_mut(), original) }.unwrap();
+        assert_eq!(f(governors.as_ptr() as usize, 4), 0);
+        governors[14] = next_player.as_ptr() as u64;
+        assert_eq!(f(governors.as_ptr() as usize, 5), 1);
+        governors[14] = 1; // Bad owner field cannot become a positive observation.
+        assert_eq!(f(governors.as_ptr() as usize, 4), 0);
+        unsafe { uninstall() }.unwrap();
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(governors[15], 3, "original function ran once per call");
+        assert_eq!(
+            (
+                rows[0].player_id,
+                rows[0].governor_index,
+                rows[0].original_al
+            ),
+            (0, 4, 0)
+        );
+        assert_eq!(
+            (
+                rows[1].player_id,
+                rows[1].governor_index,
+                rows[1].original_al
+            ),
+            (1, 5, 1)
+        );
+        assert_eq!(rows[0].owner_read_state, 1);
+        assert_eq!(rows[1].owner_read_state, 1);
+        assert_eq!(rows[2].owner_read_state, 2);
+        assert_eq!(
+            rows[0].property_receiver,
+            first_player.as_ptr() as u64 + 0x528
+        );
+        assert_eq!(
+            rows[1].property_receiver,
+            next_player.as_ptr() as u64 + 0x528
+        );
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, original);
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
     #[test]
@@ -1437,6 +1834,53 @@ mod tests {
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) },
             PROPERTY_PROLOGUE
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn admission_scope_records_only_the_fixed_ashina_numeric_key() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        let prefix = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN)
+        };
+        let bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let mut value = [0u8; 24];
+        value[..2].copy_from_slice(&1u16.to_le_bytes());
+        value[8] = 1;
+        let mut property = [0u64; 9];
+        property[8] = value.as_ptr() as u64;
+        let f: extern "system" fn(usize, u32) -> usize = unsafe { std::mem::transmute(target) };
+        let mut trace = Box::new(PropertyTrace::admission_scoped());
+        unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
+        assert_eq!(
+            f(property.as_ptr() as usize, PROPERTY_TEST_VALUE_KEY_ID),
+            value.as_ptr() as usize
+        );
+        assert_eq!(
+            f(property.as_ptr() as usize, ASHINA_ADMISSION_KEY_ID),
+            value.as_ptr() as usize
+        );
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(trace.filtered.load(Ordering::Acquire), 1);
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            (rows[0].key_id, rows[0].tag, rows[0].payload),
+            (ASHINA_ADMISSION_KEY_ID, 1, 1)
         );
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }

@@ -105,7 +105,7 @@ llvm-objdump -d --no-show-raw-insn --start-address=0x1804a80ea --stop-address=0x
 
 ### 費用未払い時のAssign境界
 
-資格が開いてAPPOINTが通っても、費用2/3の追加PROMOTE前に公式Governor実体ができる。UIの `CanAssignGovernor` はwrapper `0x710090` →本体 `0xBA350` → `0x2DDB30` →末尾分岐 `0x2DD880` を通る。一方、公式ASSIGN操作側の分岐候補は `0x30EC0F` で本体 `0x2DDBB0` を確認し、真なら `0x30EC24` で配置処理候補 `0x2DF340` へ進む。両者は同一の入口ではない。したがってUIを隠すだけで途中の配置・定着・効果を防げるとは言えない。費用2/3を扱う次段階では、未払いの実総督に対してUI判定と操作側判定の双方が拒否することをobserverと本体結果で測る。公式PROMOTE、Spent、活動不能とスパイの実体をpropertyで偽造しない。
+資格が開いてAPPOINTが通っても、費用2/3の追加PROMOTE前に公式Governor実体ができる。UIの `CanAssignGovernor` はwrapper `0x710090` →本体 `0xBA350` → `0x2DDB30` →末尾分岐 `0x2DD880` を通る。固定DLLの追加解析では、`0x30EB62` がPROMOTE操作ID `0x7D3DA99D` を分岐し、`0x30EC0F` → `0x2DDBB0` で昇進を検査した後、`0x30EC24` → `0x2DF340` で適用する。従来この `0x30EC0F` をASSIGNと記したのは誤りである。ASSIGN操作ID `0xF97C278B` は `0x30E070` → `0x30E0D5` → `0x30E1AC` → `0x2DD6F0` → `0x2DD340` → `0x2DD880` を通る候補である。`0x2DEA90` は取得済み昇進flagを数えてSpentへ反映する候補で、AI実手番での追加PROMOTEの実行は未観測である。費用2/3を扱う次段階では、未払いの実総督に対してUIとASSIGN操作側の両方が拒否することを実測する。公式PROMOTE、Spent、活動不能とスパイの実体をpropertyで偽造しない。
 
 ## task853の実装候補と実機待ちの境界（2026-10-03）
 
@@ -165,6 +165,22 @@ b025c32の比較は再起動を含む17手順と6種類のログ判定に成功�
 成果物はtools/civ6-autotest/artifacts/leaderperson-94。診断の成功を人物化の成功に数えない。次はRustで本体の共通資格判定へ接続する技術実証を行う。既存の読み取り専用観測ツールの契約は維持し、危険が再現したハードウェアブレークポイントは使わない。現在のGameCoreのABI・値寿命・同期を実測してから、加入と全額予約に結び付く本人だけを許可する。AIの費用2・3の公式昇進と未払い時の配置禁止は別の必須条件として残る。接続未完成の静的閉鎖版を製品合格にしない。
 
 ## 実機94の拒否と独立native bridgeの最初の境界
+
+### 加入資格の所有者・property照合を行う有限シナリオ（ROOT853実行待ち）
+
+`tools/civ6-native-bridge-rs` に `can-ever-calibration` を追加した。固定SHAの `CanEver` 入口では従来と同じ先頭5バイトだけを置き換え、元の関数を**一度だけ**呼んで `AL` をそのまま返す。呼出し中に `this+0x70` のPlayer、`Player+0xD8` のIDを限定してコピーし、`Player+0x528` をproperty receiver候補として記録する。保存したPlayerポインタを次回呼出しやロード後へ流用しない。読取失敗は失敗状態として残す。別の `property-admission-scoped` は既存の本体getter観測器を数値ID `853304` に限定し、元のgetterが自然に呼ばれた際の24バイトの値をコピーする。これらは資格を開かず、未知のC++ accessorも呼ばない。
+
+`poc/JAC_Test_PropertyObserver` の試験用同期Gameplayイベントは、22人の実行中Governor Indexから `853300+Index` を作り、Game/Playerでの既存値との衝突を全484組について拒否してから、全員をfalseにする。蘆名盛舜（実行時Index 4、費用1）だけを正規Joinし、実Great Personが1体であることと公式称号1個の全額予約、Game台帳の所有者・EVOLVINGを確認してから、所有者0の派生値だけをtrueにする。Game propertyの加入台帳を正本とし、試験用のPlayer値やreceiptから加入・称号を作らない。別の人物・所有者はfalseのままにする。
+
+ROOT853が新しいDLL・controller・runnerを同じビルドから配置した後に実行する有限シナリオは次である。20手順で、元の資格判定のfalseと所有者0/1をJoin前後に観測し、その間に派生propertyのfalse→trueをGameplay/UI getterで観測する。実行・共有ロック・ゲーム終了はROOT853の`live_chain`が所有する。
+
+```powershell
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admission-calibration-15km.json --stop-on-failure
+```
+
+証跡は `joined-admission-before.jsonl`、`joined-admission-property.jsonl`、`joined-admission-after.jsonl`、同期Game receiptと`steps.jsonl`で照合する。前後のnative行にIndex 4、所有者0/1、元のAL=0、UI戻り先RVA `0xBA523`、Player候補と`+0x528` receiverの整合が必要である。property行はID `853304`、boolタグ1、payload 0/1、flags 0、Core/UIの別threadを必要とする。property traceのreceiverと各CanEver行のreceiverが一致しても、別呼出し・別threadのポインタ寿命や同時更新の安全性は証明されない。ROOT853はその差と同期Gameplay receiptの順序を実際の証跡で判断する。
+
+このA段階の実機照合後、同じCanEverコールバックで**その所有者**のpropertyを安全に読むスレッド・寿命・同期の根拠を確定し、初めて費用1の私的read-through許可モードを構築する。必要なB段階の合格は、蘆名盛舜本人だけのnative資格真、他483組偽、公式APPOINT1回による実Governor・基礎昇進・本体Spent+1、Finalize後の実Great Person消失である。費用2/3のPROMOTE、未払い時ASSIGN拒否、AI21人の実手番、保存とスパイ回復はその後のMustであり、このシナリオの成功に含めない。
 
 ### 元の判定を保つ接続の実測（実機100）
 

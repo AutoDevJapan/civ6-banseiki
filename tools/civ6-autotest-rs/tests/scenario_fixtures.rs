@@ -969,6 +969,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
                 name.as_str(),
                 "leader-persona-property-observer-15km.json"
                     | "leader-persona-property-numeric-observer-15km.json"
+                    | "leader-persona-joined-admission-calibration-15km.json"
             ) {
                 assert!(
                     strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
@@ -994,7 +995,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 86);
+    assert_eq!(count, 87);
 }
 
 #[test]
@@ -1041,6 +1042,58 @@ fn property_abi_probe_is_a_single_scoped_read_only_diagnostic() {
     assert!(code.contains("JAC_ACCESSOR_853_TEXT"));
     assert!(!code.contains("ChangeGovernorPoints"));
     assert!(!code.contains("JAC_PERSONA_"));
+}
+
+#[test]
+fn joined_admission_calibration_separates_owner_returns_and_typed_property_transition() {
+    let data = scenario("leader-persona-joined-admission-calibration-15km.json");
+    let s = steps(&data);
+    assert_eq!(s.len(), 20);
+    let actions = s
+        .iter()
+        .map(|step| step["action"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|a| **a == "start_native_can_ever_calibration")
+            .count(),
+        2
+    );
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|a| **a == "stop_native_can_ever_calibration")
+            .count(),
+        2
+    );
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|a| **a == "start_native_property_trace")
+            .count(),
+        1
+    );
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|a| **a == "stop_native_property_trace")
+            .count(),
+        1
+    );
+    assert!(!s
+        .iter()
+        .any(|step| step["code"].as_str().is_some_and(
+            |code| code.contains("APPOINT_GOVERNOR") || code.contains("PROMOTE_GOVERNOR")
+        )));
+    let property = s
+        .iter()
+        .find(|step| step["action"] == "start_native_property_trace")
+        .unwrap();
+    assert_eq!(property["scope"], "ashina_admission_853304");
+    assert!(s.iter().any(|step| step["code"]
+        .as_str()
+        .is_some_and(|code| code.contains("JAC_JoinedAdmissionPrepare"))));
 }
 
 #[test]

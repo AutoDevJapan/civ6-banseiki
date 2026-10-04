@@ -1,7 +1,7 @@
 use civ6_native_bridge_rs::{
-    BridgeConfig, BridgeMode, BridgeStatus, PropertyTrace, SharedTrace, GAMECORE, GAME_EXE,
-    MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PROPERTY_TEST_PHASE_KEY_ID,
-    PROPERTY_TEST_VALUE_KEY_ID,
+    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, PropertyTrace, SharedTrace,
+    ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA,
+    PINNED_GAMECORE_SHA256, PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -232,6 +232,8 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "can-ever" => BridgeMode::CanEver,
         "property" => BridgeMode::Property,
         "property-scoped" => BridgeMode::PropertyScoped,
+        "can-ever-calibration" => BridgeMode::CanEverCalibration,
+        "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
         _ => return Err("invalid bridge mode".into()),
     };
     if pid == 0
@@ -570,8 +572,10 @@ fn bridge_dll() -> Result<PathBuf, String> {
 fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<[u8; 8], String> {
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
     let (offset, prologue): (u64, &[u8]) = match mode {
-        BridgeMode::CanEver => (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE),
-        BridgeMode::Property | BridgeMode::PropertyScoped => {
+        BridgeMode::CanEver | BridgeMode::CanEverCalibration => {
+            (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE)
+        }
+        BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE)
         }
     };
@@ -655,6 +659,43 @@ fn drained_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, Stri
         std::thread::sleep(Duration::from_millis(50));
     }
     Err("gateway trace did not drain or contains dropped/unfinished rows".into())
+}
+
+fn drained_calibration_trace(
+    game: &Handle,
+    address: usize,
+) -> Result<Box<CalibrationTrace>, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut stable = 0u32;
+    let mut prior = None;
+    while Instant::now() < deadline {
+        let mut snapshot = Box::new(CalibrationTrace::default());
+        let bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                (&mut *snapshot as *mut CalibrationTrace).cast::<u8>(),
+                size_of::<CalibrationTrace>(),
+            )
+        };
+        read_remote(game, address, bytes)?;
+        if snapshot.magic != 0x4a41_4341 || snapshot.version != 1 {
+            return Err("calibration trace version differs".into());
+        }
+        let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        let in_flight = snapshot
+            .in_flight
+            .load(std::sync::atomic::Ordering::Acquire);
+        if in_flight == 0 && prior == Some(next) && snapshot.complete_rows().is_ok() {
+            stable += 1;
+            if stable >= 3 {
+                return Ok(snapshot);
+            }
+        } else {
+            stable = 0;
+        }
+        prior = Some(next);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("calibration calls did not drain or lost an original return".into())
 }
 
 fn read_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrace>, String> {
@@ -754,17 +795,24 @@ pub fn run() -> Result<(), String> {
     let mut identity = json!({"kind":"identity","pid":parsed.pid,"created_filetime":parsed.created,
             "gamecore_sha256":PINNED_GAMECORE_SHA256,"mode":match parsed.mode {
                 BridgeMode::CanEver => "can-ever", BridgeMode::Property => "property",
-                BridgeMode::PropertyScoped => "property-scoped"},
+                BridgeMode::PropertyScoped => "property-scoped",
+                BridgeMode::CanEverCalibration => "can-ever-calibration",
+                BridgeMode::PropertyAdmissionScoped => "property-admission-scoped"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration});
-    if parsed.mode == BridgeMode::CanEver {
+    if matches!(
+        parsed.mode,
+        BridgeMode::CanEver | BridgeMode::CanEverCalibration
+    ) {
         identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
     } else {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
         if parsed.mode == BridgeMode::PropertyScoped {
             identity["scope_key_ids"] =
                 json!([PROPERTY_TEST_VALUE_KEY_ID, PROPERTY_TEST_PHASE_KEY_ID]);
+        } else if parsed.mode == BridgeMode::PropertyAdmissionScoped {
+            identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
         }
     }
     write_json(&mut writer, identity)?;
@@ -798,6 +846,14 @@ pub fn run() -> Result<(), String> {
             BridgeMode::PropertyScoped => {
                 BridgeConfig::for_property_scoped(parsed.pid, parsed.created, trace_remote as u64)
             }
+            BridgeMode::CanEverCalibration => {
+                BridgeConfig::for_calibration(parsed.pid, parsed.created, trace_remote as u64)
+            }
+            BridgeMode::PropertyAdmissionScoped => BridgeConfig::for_admission_property(
+                parsed.pid,
+                parsed.created,
+                trace_remote as u64,
+            ),
         };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
@@ -929,7 +985,45 @@ pub fn run() -> Result<(), String> {
                     0,
                 )
             }
-            BridgeMode::Property | BridgeMode::PropertyScoped => {
+            BridgeMode::CanEverCalibration => {
+                let snapshot = drained_calibration_trace(&game, trace_remote)?;
+                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                let gamecore_size = modules(parsed.pid)?
+                    .into_iter()
+                    .find(|m| same_path(&m.path, Path::new(GAMECORE)))
+                    .ok_or("GameCore unloaded before calibration collection")?
+                    .size;
+                for row in &rows {
+                    let return_rva = (row.return_address as usize)
+                        .checked_sub(target - parsed.mode.rva())
+                        .filter(|rva| *rva < gamecore_size);
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"calibration","sequence":row.sequence,
+                            "governor_index":row.governor_index,
+                            "governors_this":format!("0x{:016x}",row.governors_this),
+                            "return_site_rva":return_rva,
+                            "thread_id":row.thread_id,
+                            "owner_read_state":row.owner_read_state,
+                            "player_address":format!("0x{:016x}",row.player_address),
+                            "player_id":row.player_id,
+                            "property_receiver":format!("0x{:016x}",row.property_receiver),
+                            "original_al":row.original_al}),
+                    )?;
+                }
+                (
+                    rows.len(),
+                    snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
+                    snapshot
+                        .in_flight
+                        .load(std::sync::atomic::Ordering::Acquire),
+                    snapshot.next.load(std::sync::atomic::Ordering::Acquire),
+                    0,
+                )
+            }
+            BridgeMode::Property
+            | BridgeMode::PropertyScoped
+            | BridgeMode::PropertyAdmissionScoped => {
                 let snapshot = drained_property_trace(&game, trace_remote)?;
                 if snapshot.scope != parsed.mode as u32
                     || (parsed.mode == BridgeMode::Property
@@ -982,7 +1076,11 @@ pub fn run() -> Result<(), String> {
             "in_flight":in_flight,
             "snapshot_stable":true,
             "quiescence_proven":false,
-            "classification":if parsed.mode.is_property() {"raw_collection"} else {"can_ever_entry"},
+            "classification":match parsed.mode {
+                BridgeMode::CanEver => "can_ever_entry",
+                BridgeMode::CanEverCalibration => "can_ever_calibration",
+                _ => "raw_collection",
+            },
             "prefix_retained_until_exit":installed_prefix.is_some(),
             "result":result}),
         )?;
