@@ -1,6 +1,6 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, Error, ErrorKind, Result};
+use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error, ErrorKind, Result};
 use serde_json::json;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -380,6 +380,112 @@ fn expected_captive_session_is_preserved_during_ingame_timeout() {
     );
     assert!(h.calls().iter().all(|(state, _)| state == "InGame"));
     assert!(!h.log().contains("ingame_unblock"));
+}
+
+fn captive_session_probe_backend(
+    deal_view_reply: bool,
+    deal_view_id: &str,
+    deal_view_from: &str,
+) -> FakeBackend {
+    let deal_view_id = deal_view_id.to_owned();
+    let deal_view_from = deal_view_from.to_owned();
+    FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into(), "DiplomacyDealView".into()]))
+        .lua(move |state, code| {
+            if state == "DiplomacyDealView" && !deal_view_reply {
+                return Err(Error::unknown(
+                    "FireTuner response timed out after 0/8 bytes",
+                ));
+            }
+            if code == "return ContextPtr:IsHidden()" {
+                return Ok("false".into());
+            }
+            if code.contains("CaptiveExchangeSessionReadOnly()") {
+                return Ok("0|1|2|true|false|nil".into());
+            }
+            if code.contains("FindOpenSessionID(0,1)") {
+                return Ok(if state == "DiplomacyDealView" {
+                    deal_view_id.clone()
+                } else {
+                    "44".into()
+                });
+            }
+            if code.contains("GetSessionInfo(44)") {
+                return Ok(if state == "DiplomacyDealView" {
+                    deal_view_from.clone()
+                } else {
+                    "0".into()
+                });
+            }
+            panic!("unexpected captive session query: {state} {code}");
+        })
+}
+
+#[test]
+fn captive_session_observation_requires_matching_native_ids_and_initiators() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut observed = Harness::new(json!({}), captive_session_probe_backend(true, "44", "0"));
+    assert!(observed
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("session 44 observed"));
+    assert_eq!(observed.calls().len(), 7);
+    assert!(observed.calls().iter().all(|(_, code)| {
+        !code.contains("RequestSession")
+            && !code.contains("SendWorkingDeal")
+            && !code.contains("CloseSession")
+    }));
+    assert!(observed.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
+
+    let mut wrong = Harness::new(json!({}), captive_session_probe_backend(true, "44", "1"));
+    let error = wrong.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.to_string().contains("from=Some(\"0\")/Some(\"1\")"));
+    let mut replaced = Harness::new(json!({}), captive_session_probe_backend(true, "45", "0"));
+    let error = replaced.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error
+        .to_string()
+        .contains("native_ids=Some(\"44\")/Some(\"45\")"));
+}
+
+#[test]
+fn captive_session_observation_records_noack_in_one_context_without_closing_it() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut h = Harness::new(json!({}), captive_session_probe_backend(false, "44", "0"));
+    let error = h.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.to_string().contains("native_ids=Some(\"44\")/None"));
+    assert_eq!(h.calls().len(), 7);
+    assert!(
+        h.log().contains("deal_view_hidden")
+            && h.log().contains("ingame_session_id=44")
+            && h.log().contains("deal_view_session_id")
+            && !h.log().contains("closed AI deal proposal")
+    );
+    assert!(h.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
+}
+
+#[test]
+fn captive_session_observation_rejects_invalid_roles_and_budgets() {
+    let valid = json!({"name":"session probe","steps":[{"action":"observe_captive_session",
+        "attacker":0,"captor":1,"timeout":120,"lua_timeout":12}]});
+    assert!(scenario::validate_scenario(&valid).is_ok());
+    for (field, value) in [
+        ("attacker", json!("0")),
+        ("captor", json!(0)),
+        ("lua_timeout", json!(0)),
+        ("lua_timeout", json!(21)),
+        ("timeout", json!(121)),
+        ("timeout", json!("120")),
+    ] {
+        let mut invalid = valid.clone();
+        invalid["steps"][0][field] = value;
+        assert!(scenario::validate_scenario(&invalid).is_err(), "{field}");
+    }
 }
 
 #[test]

@@ -289,16 +289,21 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     );
     assert!(exchange_index("ProposeCaptiveExchange()") < exchange_index("AcceptCaptiveExchange()"));
     assert!(exchange_index("AcceptCaptiveExchange()") < exchange_index("#d.roster.captured==0"));
-    let session_open = exchange_steps
+    let screen_ready = exchange_steps
         .iter()
         .position(|step| {
             action(step, "wait_for")
-                && step["condition"]["state_name"] == "DiplomacyDealView"
-                && embedded_lua(step).is_some_and(|code| {
-                    code.contains("FindOpenSessionID")
-                        && code.contains("GetSessionInfo")
-                        && code.contains("info.FromPlayer==a")
-                })
+                && step["condition"]["type"] == "state"
+                && step["condition"]["name"] == "DiplomacyDealView"
+        })
+        .unwrap();
+    let session_observed = exchange_steps
+        .iter()
+        .position(|step| {
+            action(step, "observe_captive_session")
+                && step["attacker"] == 0
+                && step["captor"] == 1
+                && step["lua_timeout"] == 12
         })
         .unwrap();
     let outcome = exchange_steps
@@ -310,8 +315,8 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 })
         })
         .unwrap();
-    assert!(session_open < outcome);
-    assert!(exchange_steps[session_open + 1..=outcome]
+    assert!(screen_ready < session_observed && session_observed < outcome);
+    assert!(exchange_steps[session_observed + 1..=outcome]
         .iter()
         .all(|step| {
             if action(step, "wait_for") {
