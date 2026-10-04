@@ -1,5 +1,6 @@
 use core::arch::global_asm;
 use sha2::{Digest, Sha256};
+use std::cell::UnsafeCell;
 use std::ffi::{c_void, OsString};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -27,7 +28,7 @@ const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
 const PROPERTY_TRACE_VERSION: u32 = 2;
 const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
-const CALIBRATION_TRACE_VERSION: u32 = 1;
+const CALIBRATION_TRACE_VERSION: u32 = 2;
 pub const CALIBRATION_CAPACITY: usize = 512;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
@@ -288,6 +289,7 @@ pub struct CalibrationRow {
     pub original_al: AtomicU32,
     pub effective_al: AtomicU32,
     pub property_receiver: AtomicU64,
+    pub joined_session: AtomicU32,
 }
 
 #[repr(C)]
@@ -398,42 +400,241 @@ fn copy_current<const N: usize>(address: u64) -> Option<[u8; N]> {
     (ok && read == N).then_some(bytes)
 }
 
-// The low bit is the derived permission; the rest is the observed Core
-// Player+0x528 receiver. One atomic word prevents mixing a new receiver with
-// an old true value. No receiver or IValue pointer is saved across sessions.
-static JOINED_RECEIVER_PERMISSION: AtomicU64 = AtomicU64::new(0);
-static JOINED_ACTIVE: AtomicBool = AtomicBool::new(false);
+// One compare-exchanged word contains the entire admission decision:
+// Core receiver (low 64), session (next 32), getter/bind ticket (next 31),
+// and permission (top bit). A pointer change and its fail-closed permission
+// are therefore indivisible. Tickets are assigned before the native getter;
+// a late completion cannot overtake a newer false or a receiver change.
+const JOINED_TICKET_MAX: u32 = 0x7fff_ffff;
 
-fn joined_bind(receiver: u64) {
-    if !JOINED_ACTIVE.load(Ordering::Acquire) || receiver == 0 || receiver & 7 != 0 {
+// Stable Rust 1.95 has no AtomicU128 API. Win64's cmpxchg16b publishes the
+// receiver, session, ticket, and bit as one aligned value. RBX is preserved and
+// the helper has unwind metadata because it changes the stack.
+global_asm!(
+    ".globl joined_cas128",
+    ".seh_proc joined_cas128",
+    "joined_cas128:",
+    "push rbx",
+    ".seh_pushreg rbx",
+    ".seh_endprologue",
+    "mov r10, rcx",
+    "mov rax, rdx",
+    "mov rdx, r8",
+    "mov rbx, r9",
+    "mov rcx, qword ptr [rsp + 0x30]",
+    "lock cmpxchg16b xmmword ptr [r10]",
+    "mov r10, qword ptr [rsp + 0x38]",
+    "mov qword ptr [r10], rax",
+    "mov qword ptr [r10 + 8], rdx",
+    "setz al",
+    "movzx eax, al",
+    "pop rbx",
+    "ret",
+    ".seh_endproc",
+);
+
+unsafe extern "system" {
+    fn joined_cas128(
+        target: *mut u128,
+        expected_lo: u64,
+        expected_hi: u64,
+        replacement_lo: u64,
+        replacement_hi: u64,
+        observed: *mut u128,
+    ) -> u8;
+}
+
+#[repr(align(16))]
+struct AtomicJoinedWord(UnsafeCell<u128>);
+
+// All access to the aligned cell goes through the locked 16-byte operation.
+unsafe impl Sync for AtomicJoinedWord {}
+
+impl AtomicJoinedWord {
+    const fn new() -> Self {
+        Self(UnsafeCell::new(0))
+    }
+
+    fn compare_exchange(&self, current: u128, replacement: u128) -> Result<(), u128> {
+        let mut observed = 0u128;
+        let success = unsafe {
+            joined_cas128(
+                self.0.get(),
+                current as u64,
+                (current >> 64) as u64,
+                replacement as u64,
+                (replacement >> 64) as u64,
+                &mut observed,
+            )
+        };
+        if success != 0 {
+            Ok(())
+        } else {
+            Err(observed)
+        }
+    }
+
+    fn load(&self) -> u128 {
+        let mut observed = 0u128;
+        unsafe { joined_cas128(self.0.get(), 0, 0, 0, 0, &mut observed) };
+        observed
+    }
+
+    fn store(&self, replacement: u128) {
+        let mut current = self.load();
+        loop {
+            match self.compare_exchange(current, replacement) {
+                Ok(()) => return,
+                Err(observed) => current = observed,
+            }
+        }
+    }
+}
+
+static JOINED_RECEIVER_PERMISSION: AtomicJoinedWord = AtomicJoinedWord::new();
+static JOINED_NEXT_TICKET: AtomicU32 = AtomicU32::new(0);
+static JOINED_ACTIVE: AtomicBool = AtomicBool::new(false);
+static JOINED_TICKET_EXHAUSTED: AtomicBool = AtomicBool::new(false);
+
+fn joined_word(receiver: u64, session: u32, ticket: u32, permitted: bool) -> u128 {
+    u128::from(receiver)
+        | (u128::from(ticket) << 64)
+        | (u128::from(session) << 96)
+        | (u128::from(permitted) << 95)
+}
+
+fn joined_receiver(word: u128) -> u64 {
+    word as u64
+}
+
+fn joined_session(word: u128) -> u32 {
+    (word >> 96) as u32
+}
+
+fn joined_ticket(word: u128) -> u32 {
+    ((word >> 64) as u32) & JOINED_TICKET_MAX
+}
+
+fn joined_permitted(word: u128) -> bool {
+    word & (1u128 << 95) != 0
+}
+
+fn joined_next_ticket() -> Option<u32> {
+    match JOINED_NEXT_TICKET.fetch_update(Ordering::AcqRel, Ordering::Acquire, |old| {
+        old.checked_add(1).filter(|next| *next <= JOINED_TICKET_MAX)
+    }) {
+        Ok(old) => Some(old + 1),
+        Err(_) => {
+            // Keep the joined gate installed and force it closed. Turning off
+            // JOINED_ACTIVE would pass through the original CanEver result.
+            JOINED_TICKET_EXHAUSTED.store(true, Ordering::Release);
+            None
+        }
+    }
+}
+
+fn joined_activate() -> bool {
+    let current = JOINED_RECEIVER_PERMISSION.load();
+    let Some(session) = joined_session(current).checked_add(1) else {
+        return false;
+    };
+    JOINED_NEXT_TICKET.store(0, Ordering::Release);
+    JOINED_RECEIVER_PERMISSION.store(joined_word(0, session, 0, false));
+    JOINED_TICKET_EXHAUSTED.store(false, Ordering::Release);
+    JOINED_ACTIVE.store(true, Ordering::Release);
+    true
+}
+
+fn joined_deactivate() {
+    JOINED_ACTIVE.store(false, Ordering::Release);
+    let current = JOINED_RECEIVER_PERMISSION.load();
+    let session = joined_session(current).saturating_add(1);
+    JOINED_RECEIVER_PERMISSION.store(joined_word(0, session, 0, false));
+}
+
+fn joined_bind(receiver: u64, session: u32) {
+    if receiver == 0 || receiver & 7 != 0 {
         return;
     }
-    let current = JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire);
-    if current & !1 != receiver {
-        JOINED_RECEIVER_PERMISSION.store(receiver, Ordering::Release);
+    loop {
+        if !JOINED_ACTIVE.load(Ordering::Acquire) || JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
+        {
+            return;
+        }
+        let current = JOINED_RECEIVER_PERMISSION.load();
+        if joined_session(current) != session || joined_receiver(current) == receiver {
+            return;
+        }
+        let Some(ticket) = joined_next_ticket() else {
+            return;
+        };
+        if ticket <= joined_ticket(current) {
+            continue;
+        }
+        let replacement = joined_word(receiver, session, ticket, false);
+        if JOINED_RECEIVER_PERMISSION
+            .compare_exchange(current, replacement)
+            .is_ok()
+        {
+            return;
+        }
     }
+}
+
+// Returns a session/ticket token only for the one numeric Core property and
+// the currently bound receiver. This runs before the original getter once.
+unsafe extern "system" fn joined_property_begin(property: u64, key: u32) -> u64 {
+    if key != ASHINA_ADMISSION_KEY_ID
+        || !JOINED_ACTIVE.load(Ordering::Acquire)
+        || JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
+    {
+        return 0;
+    }
+    let current = JOINED_RECEIVER_PERMISSION.load();
+    if property == 0 || joined_receiver(current) != property {
+        return 0;
+    }
+    let Some(ticket) = joined_next_ticket() else {
+        return 0;
+    };
+    if !JOINED_ACTIVE.load(Ordering::Acquire)
+        || JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
+        || joined_session(JOINED_RECEIVER_PERMISSION.load()) != joined_session(current)
+    {
+        return 0;
+    }
+    (u64::from(joined_session(current)) << 32) | u64::from(ticket)
 }
 
 fn joined_observe_property(
     property: u64,
     key: u32,
+    token: u64,
     state: u32,
     tag: u32,
     payload: u64,
     flags: u32,
 ) {
-    if !JOINED_ACTIVE.load(Ordering::Acquire) || key != ASHINA_ADMISSION_KEY_ID {
+    if !JOINED_ACTIVE.load(Ordering::Acquire)
+        || JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
+        || key != ASHINA_ADMISSION_KEY_ID
+        || token == 0
+    {
         return;
     }
     let permitted = state == 1 && tag == 1 && flags == 0 && payload == 1;
     loop {
-        let current = JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire);
-        if current & !1 != property || property == 0 {
+        let current = JOINED_RECEIVER_PERMISSION.load();
+        if joined_receiver(current) != property
+            || property == 0
+            || joined_session(current) != (token >> 32) as u32
+            || joined_ticket(current) >= token as u32
+        {
             return;
         }
-        let replacement = property | u64::from(permitted);
+        let replacement = joined_word(property, joined_session(current), token as u32, permitted);
         if JOINED_RECEIVER_PERMISSION
-            .compare_exchange(current, replacement, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(current, replacement)
             .is_ok()
         {
             return;
@@ -452,6 +653,7 @@ unsafe extern "system" fn calibration_begin(
     if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index != 4 {
         return null_mut();
     }
+    let session = joined_session(JOINED_RECEIVER_PERMISSION.load());
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return null_mut();
@@ -465,6 +667,7 @@ unsafe extern "system" fn calibration_begin(
         return null_mut();
     }
     let row = &trace.rows[slot];
+    row.joined_session.store(session, Ordering::Relaxed);
     row.governor_index.store(governor_index, Ordering::Relaxed);
     row.governors_this.store(governors_this, Ordering::Relaxed);
     row.return_address.store(return_address, Ordering::Relaxed);
@@ -498,7 +701,7 @@ unsafe extern "system" fn calibration_begin(
         && row.owner_read_state.load(Ordering::Relaxed) == 1
         && row.player_id.load(Ordering::Relaxed) == 0
     {
-        joined_bind(row.property_receiver.load(Ordering::Relaxed));
+        joined_bind(row.property_receiver.load(Ordering::Relaxed), session);
     }
     row as *const CalibrationRow
 }
@@ -521,9 +724,14 @@ unsafe extern "system" fn calibration_end(
     let mut result = original_rax;
     if JOINED_ACTIVE.load(Ordering::Acquire) && row.governor_index.load(Ordering::Relaxed) == 4 {
         let receiver = row.property_receiver.load(Ordering::Relaxed);
+        let admission = JOINED_RECEIVER_PERMISSION.load();
         let permitted = row.owner_read_state.load(Ordering::Relaxed) == 1
             && row.player_id.load(Ordering::Relaxed) == 0
-            && JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire) == receiver | 1;
+            && !JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire)
+            && receiver != 0
+            && joined_session(admission) == row.joined_session.load(Ordering::Relaxed)
+            && joined_receiver(admission) == receiver
+            && joined_permitted(admission);
         result = (original_rax & !0xff) | u64::from(permitted);
     }
     row.effective_al
@@ -660,12 +868,29 @@ impl PropertyTrace {
 // allocation, formatting, locking, Lua access, or C++ method invocation.
 // ReadProcessMemory copies all 24 bytes or records unreadable; the borrowed
 // returned pointer is never read after this synchronous call.
-unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64) {
+#[cfg(test)]
+static JOINED_TEST_DELAY_RETURNED: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+static JOINED_TEST_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static JOINED_TEST_RELEASE: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
     let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return;
     }
     let trace = unsafe { &*trace };
+    #[cfg(test)]
+    if trace.scope == BridgeMode::JoinedAdmission as u32
+        && returned != 0
+        && returned == JOINED_TEST_DELAY_RETURNED.load(Ordering::Acquire)
+    {
+        JOINED_TEST_PAUSED.store(true, Ordering::Release);
+        while !JOINED_TEST_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+    }
     if (trace.scope == BridgeMode::PropertyScoped as u32
         && key_id != PROPERTY_TEST_VALUE_KEY_ID
         && key_id != PROPERTY_TEST_PHASE_KEY_ID)
@@ -680,7 +905,7 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
     if slot >= TRACE_CAPACITY {
         if trace.scope == BridgeMode::JoinedAdmission as u32 {
-            joined_observe_property(property, key_id, 0, 0, 0, 0);
+            joined_observe_property(property, key_id, token, 0, 0, 0, 0);
         }
         trace.dropped.fetch_add(1, Ordering::Relaxed);
         trace.in_flight.fetch_sub(1, Ordering::Release);
@@ -732,6 +957,7 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         joined_observe_property(
             property,
             key_id,
+            token,
             row.read_state.load(Ordering::Relaxed),
             row.tag.load(Ordering::Relaxed),
             row.payload.load(Ordering::Relaxed),
@@ -745,28 +971,56 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
 // Win64 entry: RCX=property, EDX=key. .seh_* emits pdata/xdata for this
 // nonleaf frame. The pinned 0x99F5C0 getter has no covering pdata entry and
 // only leaf instructions; the allocated trampoline is a MOV plus direct JMP.
-// The 0x68-byte frame supplies aligned
-// calls and shadow space. The original sees the exact argument registers once;
+// The 0xd8-byte frame supplies aligned calls, shadow space, and saved volatile
+// argument registers for the entry ticket call. The original sees them once;
 // its RAX is saved across telemetry and restored before returning to its caller.
 global_asm!(
     ".globl property_gateway",
     ".seh_proc property_gateway",
     "property_gateway:",
-    "sub rsp, 0x68",
-    ".seh_stackalloc 0x68",
+    "sub rsp, 0xd8",
+    ".seh_stackalloc 0xd8",
     ".seh_endprologue",
     "mov qword ptr [rsp + 0x20], rcx",
     "mov qword ptr [rsp + 0x28], rdx",
+    "mov qword ptr [rsp + 0x30], r8",
+    "mov qword ptr [rsp + 0x38], r9",
+    "mov qword ptr [rsp + 0x40], rax",
+    "mov qword ptr [rsp + 0x48], r10",
+    "mov qword ptr [rsp + 0x50], r11",
+    "movdqu xmmword ptr [rsp + 0x70], xmm0",
+    "movdqu xmmword ptr [rsp + 0x80], xmm1",
+    "movdqu xmmword ptr [rsp + 0x90], xmm2",
+    "movdqu xmmword ptr [rsp + 0xa0], xmm3",
+    "movdqu xmmword ptr [rsp + 0xb0], xmm4",
+    "movdqu xmmword ptr [rsp + 0xc0], xmm5",
+    "call {begin}",
+    "mov qword ptr [rsp + 0x58], rax",
+    "mov rcx, qword ptr [rsp + 0x20]",
+    "mov rdx, qword ptr [rsp + 0x28]",
+    "mov r8, qword ptr [rsp + 0x30]",
+    "mov r9, qword ptr [rsp + 0x38]",
+    "mov rax, qword ptr [rsp + 0x40]",
+    "mov r10, qword ptr [rsp + 0x48]",
+    "mov r11, qword ptr [rsp + 0x50]",
+    "movdqu xmm0, xmmword ptr [rsp + 0x70]",
+    "movdqu xmm1, xmmword ptr [rsp + 0x80]",
+    "movdqu xmm2, xmmword ptr [rsp + 0x90]",
+    "movdqu xmm3, xmmword ptr [rsp + 0xa0]",
+    "movdqu xmm4, xmmword ptr [rsp + 0xb0]",
+    "movdqu xmm5, xmmword ptr [rsp + 0xc0]",
     "call qword ptr [rip + PROPERTY_TRAMPOLINE_PTR]",
-    "mov qword ptr [rsp + 0x30], rax",
+    "mov qword ptr [rsp + 0x60], rax",
     "mov rcx, qword ptr [rsp + 0x20]",
     "mov edx, dword ptr [rsp + 0x28]",
     "mov r8, rax",
+    "mov r9, qword ptr [rsp + 0x58]",
     "call {record}",
-    "mov rax, qword ptr [rsp + 0x30]",
-    "add rsp, 0x68",
+    "mov rax, qword ptr [rsp + 0x60]",
+    "add rsp, 0xd8",
     "ret",
     ".seh_endproc",
+    begin = sym joined_property_begin,
     record = sym record_property,
 );
 
@@ -1324,8 +1578,7 @@ unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> 
 }
 
 unsafe fn uninstall() -> Result<(), &'static str> {
-    JOINED_ACTIVE.store(false, Ordering::Release);
-    JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+    joined_deactivate();
     let main = restore_one(&HOOK)?;
     let property = restore_one(&JOINED_PROPERTY_HOOK)?;
     if !main && !property {
@@ -1565,8 +1818,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         BridgeMode::JoinedAdmission => {
             let trace = config.trace_address as *mut JoinedTrace;
             unsafe { ptr::write(trace, JoinedTrace::default()) };
-            JOINED_ACTIVE.store(false, Ordering::Release);
-            JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+            joined_deactivate();
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
             let property_result = unsafe {
@@ -1587,12 +1839,14 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                             BridgeMode::JoinedAdmission,
                         )
                     };
-                    if can_result.is_ok() {
-                        JOINED_ACTIVE.store(true, Ordering::Release);
+                    if can_result.is_ok() && joined_activate() {
                         Ok(())
                     } else {
+                        let error = can_result
+                            .err()
+                            .unwrap_or("joined session generation exhausted");
                         match unsafe { uninstall() } {
-                            Ok(()) => can_result,
+                            Ok(()) => Err(error),
                             Err(_) => Err("critical: joined hook rollback failed"),
                         }
                     }
@@ -1657,7 +1911,7 @@ pub extern "system" fn BridgeUninstall(_: *mut c_void) -> u32 {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry;
     use windows_sys::Win32::System::Threading::{
@@ -1682,11 +1936,36 @@ mod tests {
         assert!(unsafe { (*entry).BeginAddress as u64 } <= rva);
         assert!(rva < unsafe { (*entry).EndAddress as u64 });
         let unwind_address = image_base + unsafe { (*entry).Anonymous.UnwindData as u64 };
-        let unwind = unsafe { ptr::read(unwind_address as *const [u8; 6]) };
+        let unwind = unsafe { ptr::read(unwind_address as *const [u8; 8]) };
         assert_eq!(unwind[0] & 0x07, 1); // UNWIND_INFO version 1
-        assert_eq!(unwind[2], 1); // one unwind operation
-        assert_eq!(unwind[4], 4); // four-byte sub rsp, 0x68
-        assert_eq!(unwind[5], 0xc2); // UWOP_ALLOC_SMALL: 12*8+8 = 0x68
+        assert_eq!(unwind[2], 2); // UWOP_ALLOC_LARGE uses two unwind slots
+        assert_eq!(unwind[5] & 0x0f, 1);
+        assert_eq!(u16::from_le_bytes([unwind[6], unwind[7]]), 0xd8 / 8);
+        assert!(!unsafe {
+            RtlLookupFunctionEntry(
+                joined_cas128 as *const () as u64,
+                &mut image_base,
+                null_mut(),
+            )
+        }
+        .is_null());
+    }
+
+    #[test]
+    fn joined_atomic_word_compares_all_receiver_generation_and_permission_bits() {
+        assert_eq!(std::mem::size_of::<AtomicJoinedWord>(), 16);
+        assert_eq!(std::mem::align_of::<AtomicJoinedWord>(), 16);
+        let word = AtomicJoinedWord::new();
+        assert_eq!(word.load(), 0);
+        let first = joined_word(u64::MAX, u32::MAX, JOINED_TICKET_MAX, true);
+        assert!(word.compare_exchange(0, first).is_ok());
+        assert_eq!(word.load(), first);
+        assert_eq!(word.compare_exchange(0, 0), Err(first));
+        word.store(joined_word(0, 1, 2, false));
+        assert_eq!(joined_receiver(word.load()), 0);
+        assert_eq!(joined_session(word.load()), 1);
+        assert_eq!(joined_ticket(word.load()), 2);
+        assert!(!joined_permitted(word.load()));
     }
 
     #[test]
@@ -2084,8 +2363,7 @@ mod tests {
     #[test]
     fn joined_gate_opens_only_bound_owner_after_native_core_bool_and_restores_both_entries() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
-        JOINED_ACTIVE.store(false, Ordering::Release);
-        JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+        joined_deactivate();
         let page = unsafe {
             VirtualAlloc(
                 null_mut(),
@@ -2100,7 +2378,7 @@ mod tests {
         let property_entry = unsafe { page.add(128) };
         let prefix = unsafe { property_entry.sub(PROPERTY_PREFIX_LEN) };
         let can_bytes = [
-            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0x89, 0xd0, 0x83, 0xe0, 0x01, 0xc3,
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
         ];
         let property_bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
         unsafe {
@@ -2137,7 +2415,7 @@ mod tests {
             )
         }
         .unwrap();
-        JOINED_ACTIVE.store(true, Ordering::Release);
+        assert!(joined_activate());
         assert_eq!(can(gov.as_ptr() as usize, 4), 0);
         assert_eq!(
             property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID),
@@ -2150,6 +2428,12 @@ mod tests {
             value.as_ptr() as usize
         );
         assert_eq!(can(gov.as_ptr() as usize, 4), 1);
+        value[8] = 0;
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0, "false closes admission");
+        value[8] = 1;
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
         assert_eq!(
             can(gov.as_ptr() as usize, 5),
             1,
@@ -2157,7 +2441,23 @@ mod tests {
         );
         gov[0x70..0x78].copy_from_slice(&(other.0.as_ptr() as u64).to_le_bytes());
         assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        other.0[0xd8..0xdc].copy_from_slice(&0u32.to_le_bytes());
+        other.0[0x568..0x570].copy_from_slice(&(value.as_ptr() as u64).to_le_bytes());
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "new Core receiver starts closed"
+        );
+        let _ = property(other.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
         gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "A-B-A changes pointer generation"
+        );
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
         value[..2].copy_from_slice(&2u16.to_le_bytes());
         let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
         assert_eq!(
@@ -2165,8 +2465,47 @@ mod tests {
             0,
             "bad native tag closes admission"
         );
+        value[..2].copy_from_slice(&1u16.to_le_bytes());
+        owner.0[0x568..0x570].copy_from_slice(&1u64.to_le_bytes());
+        assert_eq!(
+            property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID),
+            1
+        );
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "unreadable value closes admission"
+        );
+        owner.0[0x568..0x570].copy_from_slice(&(value.as_ptr() as u64).to_le_bytes());
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
+        let remaining = TRACE_CAPACITY as u32 - trace.property.next.load(Ordering::Acquire);
+        for _ in 0..remaining {
+            let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        }
+        assert_eq!(
+            trace.property.next.load(Ordering::Acquire),
+            TRACE_CAPACITY as u32
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "capacity closes admission"
+        );
+        assert_eq!(trace.property.dropped.load(Ordering::Acquire), 1);
+        JOINED_NEXT_TICKET.store(JOINED_TICKET_MAX, Ordering::Release);
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert!(JOINED_TICKET_EXHAUSTED.load(Ordering::Acquire));
+        assert!(JOINED_ACTIVE.load(Ordering::Acquire));
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "ticket exhaustion stays closed"
+        );
         unsafe { uninstall() }.unwrap();
-        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
         assert_eq!(
             unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
             can_bytes[..8]
@@ -2183,10 +2522,170 @@ mod tests {
                 .iter()
                 .any(|row| row.player_id == 0
                     && row.governor_index == 4
-                    && row.original_al == 0
+                    && row.original_al == 1
                     && row.effective_al == 1),
             true
         );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn joined_late_true_getter_cannot_reopen_after_newer_false() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        joined_deactivate();
+        JOINED_TEST_PAUSED.store(false, Ordering::Release);
+        JOINED_TEST_RELEASE.store(false, Ordering::Release);
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let can_entry = unsafe { page.add(16) };
+        let property_entry = unsafe { page.add(128) };
+        let prefix = unsafe { property_entry.sub(PROPERTY_PREFIX_LEN) };
+        let can_bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
+        ];
+        let property_bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0xc3,
+        ];
+        unsafe {
+            ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
+            ptr::copy_nonoverlapping(
+                property_bytes.as_ptr(),
+                property_entry,
+                property_bytes.len(),
+            );
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN);
+        }
+        #[repr(align(8))]
+        struct PlayerBytes([u8; 0x600]);
+        let mut owner = PlayerBytes([0u8; 0x600]);
+        let other = PlayerBytes([0u8; 0x600]);
+        let mut yes = [0u8; 24];
+        yes[..2].copy_from_slice(&1u16.to_le_bytes());
+        yes[8] = 1;
+        let mut no = [0u8; 24];
+        no[..2].copy_from_slice(&1u16.to_le_bytes());
+        owner.0[0x568..0x570].copy_from_slice(&(yes.as_ptr() as u64).to_le_bytes());
+        let mut gov = [0u8; 0x80];
+        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        let receiver = owner.0.as_ptr() as usize + 0x528;
+        let can: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(can_entry) };
+        let property: extern "system" fn(usize, u32) -> usize =
+            unsafe { std::mem::transmute(property_entry) };
+        let mut trace = Box::new(JoinedTrace::default());
+        unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
+            .unwrap();
+        unsafe {
+            install_hook(
+                can_entry,
+                (&mut trace.calibration as *mut CalibrationTrace).cast(),
+                can_bytes[..8].try_into().unwrap(),
+                BridgeMode::JoinedAdmission,
+            )
+        }
+        .unwrap();
+        assert!(joined_activate());
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        JOINED_TEST_DELAY_RETURNED.store(yes.as_ptr() as u64, Ordering::Release);
+        let old = std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        if !JOINED_TEST_PAUSED.load(Ordering::Acquire) {
+            JOINED_TEST_RELEASE.store(true, Ordering::Release);
+            old.join().unwrap();
+            panic!("old native getter did not pause after returning true");
+        }
+        owner.0[0x568..0x570].copy_from_slice(&(no.as_ptr() as u64).to_le_bytes());
+        assert_eq!(
+            property(receiver, ASHINA_ADMISSION_KEY_ID),
+            no.as_ptr() as usize
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        JOINED_TEST_RELEASE.store(true, Ordering::Release);
+        assert_eq!(old.join().unwrap(), yes.as_ptr() as usize);
+        let after_late_true = can(gov.as_ptr() as usize, 4);
+        owner.0[0x568..0x570].copy_from_slice(&(yes.as_ptr() as u64).to_le_bytes());
+        JOINED_TEST_PAUSED.store(false, Ordering::Release);
+        JOINED_TEST_RELEASE.store(false, Ordering::Release);
+        let old_session = std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        if !JOINED_TEST_PAUSED.load(Ordering::Acquire) {
+            JOINED_TEST_RELEASE.store(true, Ordering::Release);
+            old_session.join().unwrap();
+            panic!("old-session native getter did not pause");
+        }
+        joined_deactivate();
+        assert!(joined_activate());
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        JOINED_TEST_RELEASE.store(true, Ordering::Release);
+        assert_eq!(old_session.join().unwrap(), yes.as_ptr() as usize);
+        let after_restart = can(gov.as_ptr() as usize, 4);
+        JOINED_TEST_DELAY_RETURNED.store(0, Ordering::Release);
+        assert_eq!(
+            property(receiver, ASHINA_ADMISSION_KEY_ID),
+            yes.as_ptr() as usize
+        );
+        let after_fresh_read = can(gov.as_ptr() as usize, 4);
+        JOINED_TEST_DELAY_RETURNED.store(yes.as_ptr() as u64, Ordering::Release);
+        JOINED_TEST_PAUSED.store(false, Ordering::Release);
+        JOINED_TEST_RELEASE.store(false, Ordering::Release);
+        let old_generation =
+            std::thread::spawn(move || property(receiver, ASHINA_ADMISSION_KEY_ID));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !JOINED_TEST_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        if !JOINED_TEST_PAUSED.load(Ordering::Acquire) {
+            JOINED_TEST_RELEASE.store(true, Ordering::Release);
+            old_generation.join().unwrap();
+            panic!("old-generation native getter did not pause");
+        }
+        gov[0x70..0x78].copy_from_slice(&(other.0.as_ptr() as u64).to_le_bytes());
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        JOINED_TEST_RELEASE.store(true, Ordering::Release);
+        assert_eq!(old_generation.join().unwrap(), yes.as_ptr() as usize);
+        let after_generation_change = can(gov.as_ptr() as usize, 4);
+        JOINED_TEST_DELAY_RETURNED.store(0, Ordering::Release);
+        assert_eq!(
+            property(receiver, ASHINA_ADMISSION_KEY_ID),
+            yes.as_ptr() as usize
+        );
+        let after_generation_read = can(gov.as_ptr() as usize, 4);
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(
+            u32::from_le_bytes(owner.0[0x570..0x574].try_into().unwrap()),
+            6
+        );
+        assert_eq!(u32::from_le_bytes(gov[0x78..0x7c].try_into().unwrap()), 10);
+        assert_eq!(trace.property.complete_rows().unwrap().len(), 6);
+        assert_eq!(
+            after_late_true, 0,
+            "old true getter reopened a closed admission"
+        );
+        assert_eq!(
+            after_restart, 0,
+            "old session reopened admission after restart"
+        );
+        assert_eq!(
+            after_fresh_read, 1,
+            "new session requires a fresh Core read"
+        );
+        assert_eq!(after_generation_change, 0, "A-B-A reused an old Core read");
+        assert_eq!(after_generation_read, 1);
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
