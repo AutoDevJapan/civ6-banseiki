@@ -337,13 +337,18 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         }
         assert_eq!(
             steps.iter().filter(|s| action(s, "end_turn")).count(),
-            usize::from(
-                suffix.ends_with("tick")
-                    || suffix == "retry-capacity-civic"
-                    || suffix == "retry-capacity-government-tier1"
-                    || suffix == "retry-capacity-government-classify"
-                    || suffix == "retry-capacity-tier2-civic",
-            ),
+            if suffix == "retry-capacity-tier2-civic" {
+                // First publish researched ancestors to UI, then confirm the
+                // target Civic and official Government after their own turn.
+                2
+            } else {
+                usize::from(
+                    suffix.ends_with("tick")
+                        || suffix == "retry-capacity-civic"
+                        || suffix == "retry-capacity-government-tier1"
+                        || suffix == "retry-capacity-government-classify",
+                )
+            },
             "{name}"
         );
     }
@@ -424,7 +429,25 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                         .is_some_and(|code| code.contains("Queue('CHANGE_CAPACITY_GOVERNMENT')"))
             })
             .unwrap();
-        let turn = steps.iter().position(|s| action(s, "end_turn")).unwrap();
+        let turn = steps
+            .iter()
+            .enumerate()
+            .skip(government + 1)
+            .find_map(|(index, s)| action(s, "end_turn").then_some(index))
+            .unwrap();
+        if suffix == "retry-capacity-tier2-civic" {
+            let research = steps
+                .iter()
+                .position(|s| action(s, "ui_lua") && s["state_name"] == "GameCore_Tuner")
+                .unwrap();
+            assert!(action(&steps[research + 1], "end_turn"));
+            assert_eq!(steps[research + 1]["turns"], 1);
+            assert!(action(&steps[research + 2], "wait_for"));
+            assert!(embedded_lua(&steps[research + 2])
+                .unwrap()
+                .contains("#t.missingPrerequisites==0"));
+            assert!(research + 2 < civic);
+        }
         let save = steps.iter().position(|s| action(s, "save")).unwrap();
         assert!(
             civic < government && government < turn && turn < save,
