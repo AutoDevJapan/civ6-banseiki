@@ -63,8 +63,28 @@ fn opt_in_capacity_fixture_changes_only_four_internal_flags_after_sengoku() {
                     .text(),
                 Some("RULESET_JAC_BANSEIKI")
             );
-            criterion
-                .descendants()
+            let setting = criterion
+                .children()
+                .find(|n| n.has_tag_name("ConfigurationValueMatches"))
+                .unwrap();
+            assert_eq!(
+                setting
+                    .children()
+                    .find(|n| n.has_tag_name("Group"))
+                    .unwrap()
+                    .text(),
+                Some("Map")
+            );
+            assert_eq!(
+                setting
+                    .children()
+                    .find(|n| n.has_tag_name("ConfigurationId"))
+                    .unwrap()
+                    .text(),
+                Some("MAP_SCRIPT")
+            );
+            setting
+                .children()
                 .find(|n| n.has_tag_name("Value"))
                 .unwrap()
                 .text()
