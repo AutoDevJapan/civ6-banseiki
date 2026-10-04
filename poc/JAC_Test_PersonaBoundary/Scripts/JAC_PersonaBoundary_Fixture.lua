@@ -656,7 +656,9 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         if captiveCount~=nil then
             assert(captiveCount==(params.Outcome=="CAPTURED" and 1 or 0),
                 "native PRODUCE captive roster changed");
-            if captiveCount==1 and type(captorDiplomacy.GetNthCapturedSpy)=="function" then
+            if captiveCount==1 then
+                assert(type(captorDiplomacy.GetNthCapturedSpy)=="function",
+                    "native PRODUCE captive record API unavailable");
                 local held=assert(captorDiplomacy:GetNthCapturedSpy(rosterCaptorID,0),
                     "native PRODUCE captive record missing");
                 assert(held.OwningPlayer==controller and
@@ -670,9 +672,17 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             assert((params.Outcome=="CAPTURED" and offMapCount<=1) or
                 (params.Outcome=="GONE_NO_CAPTURE_RECORD" and offMapCount==0),
                 "native PRODUCE off-map roster changed");
-            if offMapCount==1 and type(attackerDiplomacy.GetNthOffMapSpy)=="function" then
+            if offMapCount==1 then
+                assert(type(attackerDiplomacy.GetNthOffMapSpy)=="function",
+                    "native PRODUCE off-map record API unavailable");
                 local placeholder=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
                     "native PRODUCE captive placeholder missing");
+                local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+                local sameName=placeholder.Name==params.CaptiveName or
+                    (placeholder.Name=="" and params.CaptiveName==defaultName) or
+                    (params.CaptiveName=="" and placeholder.Name==defaultName);
+                assert(sameName and placeholder.Level==params.CaptiveLevel,
+                    "native PRODUCE captive placeholder identity changed");
                 assert(placeholder.ReturnTurn==-1 and
                     placeholder.XLocation==-9999 and placeholder.YLocation==-9999,
                     "native PRODUCE off-map roster changed");
@@ -754,7 +764,9 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         assert(mapCount==0 and (offMapCount==nil or offMapCount==1) and
             (captiveCount==nil or captiveCount==0),
             "native RETURN roster changed between UI and Gameplay");
-        if offMapCount==1 and type(attackerDiplomacy.GetNthOffMapSpy)=="function" then
+        if offMapCount==1 then
+            assert(type(attackerDiplomacy.GetNthOffMapSpy)=="function",
+                "native RETURN off-map record API unavailable");
             local returning=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
                 "native RETURN off-map record missing");
             assert(returning.Name==params.ReturnName and

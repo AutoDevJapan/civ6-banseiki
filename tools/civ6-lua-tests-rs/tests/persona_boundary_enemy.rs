@@ -2697,6 +2697,35 @@ fn captive_production_uses_the_observed_captor_even_when_it_is_not_the_defender(
 }
 
 #[test]
+fn partial_core_retry_record_apis_do_not_archive_unverified_people() {
+    for (roster, mutation, expected) in [
+        (
+            "UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}",
+            "local original=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() local d=original(); d.GetNthOffMapSpy=nil; return d end",
+            "native RETURN off-map record API unavailable",
+        ),
+        (
+            "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}",
+            "local original=Players[1].GetDiplomacy; Players[1].GetDiplomacy=function() local d=original(); d.GetNthCapturedSpy=nil; return d end",
+            "native PRODUCE captive record API unavailable",
+        ),
+        (
+            "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}",
+            "OFF_MAP[1].Name='Another operative'; OFF_MAP[1].Level=2",
+            "native PRODUCE captive placeholder identity changed",
+        ),
+    ] {
+        let h = Enemy::new();
+        h.failed();
+        h.run(roster);
+        h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); BEFORE_WRITES=#WRITES");
+        h.run(mutation);
+        h.reject("ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)", expected);
+        h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and HISTORY[0][0].CompletionTurn==TURN and #WRITES==BEFORE_WRITES)");
+    }
+}
+
+#[test]
 fn capacity_map_rejects_an_extra_spy_before_archive() {
     let map = Enemy::new();
     map.captured_with_capacity_spy();
