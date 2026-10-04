@@ -942,7 +942,10 @@ fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -
       GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
       JAC_AbsorptionGameplay={Rules={Copy=function(value) return value end}}
       PlayerManager={GetAliveIDs=function() return {2} end}
-      Players={[2]={GetUnits=function() return {Members=function()
+      CITY_COUNT=2
+      Players={[2]={GetCities=function() return {Members=function()
+        local n=0;return function() n=n+1;if n<=CITY_COUNT then return n,city end end
+      end} end,GetUnits=function() return {Members=function()
         local done=false;return function() if not done then done=true;return 88,unit end end
       end} end}}
       UnitManager={GetUnit=function(owner,id) assert(owner==2 and id==88);return unit end,
@@ -990,6 +993,15 @@ fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -
             "return TRANSFERS==0 and OWNER==2 and PX==10 and PY==10 and DAMAGE==7 and MOVES==2"
         )
         .eval::<bool>()?
+    );
+    lua.load("PLACE=true;CITY_COUNT=1").exec()?;
+    assert!(
+        lua.load(transfer).exec().is_err(),
+        "transferred a city after the donor lost its remaining city"
+    );
+    assert!(
+        lua.load("return TRANSFERS==0 and OWNER==2 and PX==10 and PY==10")
+            .eval::<bool>()?
     );
     Ok(())
 }
@@ -1054,6 +1066,20 @@ fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() ->
         lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
             .eval::<bool>()?
     );
+    lua.load("Game.GetArtifactAtPlot=function(i) if i>=6 and i<10 then return {} end end;Players[2].GetCities=function() return {Members=function() local n=3;return function() n=n+1;if n<=5 then return n,{} end end end} end").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "reserved both of a donor's two cities"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    let unreserved = code.replace("if used+1<candidate.CityCount then", "if true then");
+    assert_ne!(unreserved, code, "reservation gate not found");
+    lua.load(&unreserved).exec()?;
+    assert!(lua.load("return #ExposedMembers.JAC_ArtifactSiteCity.Cities==2 and #ExposedMembers.JAC_ArtifactSiteCity.Plots==4").eval::<bool>()?);
+    lua.load("ExposedMembers.JAC_ArtifactSiteCity=nil").exec()?;
     lua.load("Game.GetArtifactAtPlot=function() return {} end;Players[2].GetCities=function() return {Members=function() local done=false;return function() if not done then done=true;return 5,{} end end end} end").exec()?;
     assert!(
         lua.load(code).exec().is_err(),
