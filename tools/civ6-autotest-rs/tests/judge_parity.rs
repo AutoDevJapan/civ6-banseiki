@@ -637,6 +637,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 .to_string(),
             "leader-persona-property-numeric-observer-15km.json".to_string(),
             "leader-persona-joined-admission-calibration-15km.json".to_string(),
+            "leader-persona-joined-admission-cost1-15km.json".to_string(),
         ])
     );
     for name in &actual {

@@ -1,7 +1,8 @@
 use civ6_native_bridge_rs::{
-    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, PropertyTrace, SharedTrace,
-    ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA,
-    PINNED_GAMECORE_SHA256, PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
+    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace, PropertyTrace,
+    SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
+    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROPERTY_GET_RVA,
+    PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -234,6 +235,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "property-scoped" => BridgeMode::PropertyScoped,
         "can-ever-calibration" => BridgeMode::CanEverCalibration,
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
+        "joined-admission" => BridgeMode::JoinedAdmission,
         _ => return Err("invalid bridge mode".into()),
     };
     if pid == 0
@@ -572,7 +574,7 @@ fn bridge_dll() -> Result<PathBuf, String> {
 fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<[u8; 8], String> {
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
     let (offset, prologue): (u64, &[u8]) = match mode {
-        BridgeMode::CanEver | BridgeMode::CanEverCalibration => {
+        BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
             (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE)
         }
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
@@ -781,11 +783,25 @@ pub fn run() -> Result<(), String> {
     }
     let target = pinned_target(parsed.pid, &game, parsed.mode)?;
     let original = pinned_entry_bytes(&game, target, parsed.mode)?;
-    let original_prefix = if parsed.mode.is_property() {
-        Some(pinned_property_prefix(&game, target)?)
+    let property_target = if parsed.mode == BridgeMode::JoinedAdmission {
+        Some(target - PINNED_CAN_EVER_RVA + PINNED_PROPERTY_GET_RVA)
+    } else if parsed.mode.is_property() {
+        Some(target)
     } else {
         None
     };
+    let property_original = if parsed.mode == BridgeMode::JoinedAdmission {
+        Some(pinned_entry_bytes(
+            &game,
+            property_target.unwrap(),
+            BridgeMode::PropertyAdmissionScoped,
+        )?)
+    } else {
+        None
+    };
+    let original_prefix = property_target
+        .map(|property| pinned_property_prefix(&game, property))
+        .transpose()?;
     let dll = bridge_dll()?;
     let bridge_sha = sha256(&dll)?;
     let (install_rva, uninstall_rva) = exported_rvas(&dll)?;
@@ -797,15 +813,23 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::CanEver => "can-ever", BridgeMode::Property => "property",
                 BridgeMode::PropertyScoped => "property-scoped",
                 BridgeMode::CanEverCalibration => "can-ever-calibration",
-                BridgeMode::PropertyAdmissionScoped => "property-admission-scoped"},
+                BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
+                BridgeMode::JoinedAdmission => "joined-admission"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration});
     if matches!(
         parsed.mode,
-        BridgeMode::CanEver | BridgeMode::CanEverCalibration
+        BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission
     ) {
         identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
+        if parsed.mode == BridgeMode::JoinedAdmission {
+            identity["property_rva"] = json!(PINNED_PROPERTY_GET_RVA);
+            identity["property_entry_bytes"] =
+                json!(format!("{:02x?}", property_original.unwrap()));
+            identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
+            identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
+        }
     } else {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
         if parsed.mode == BridgeMode::PropertyScoped {
@@ -854,6 +878,9 @@ pub fn run() -> Result<(), String> {
                 parsed.created,
                 trace_remote as u64,
             ),
+            BridgeMode::JoinedAdmission => {
+                BridgeConfig::for_joined(parsed.pid, parsed.created, trace_remote as u64)
+            }
         };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
@@ -880,17 +907,25 @@ pub fn run() -> Result<(), String> {
                     .into(),
             );
         }
-        let installed_prefix = if parsed.mode.is_property() {
+        let installed_prefix = if let Some(property_target) = property_target {
+            let property_bytes = property_original.unwrap_or(original);
             let mut prefix = [0u8; PROPERTY_PREFIX_LEN];
-            read_remote(&game, target - PROPERTY_PREFIX_LEN, &mut prefix)?;
+            read_remote(&game, property_target - PROPERTY_PREFIX_LEN, &mut prefix)?;
             let mut entry = [0u8; 8];
-            read_remote(&game, target, &mut entry)?;
+            read_remote(&game, property_target, &mut entry)?;
             if prefix[0] != 0xe9
                 || prefix == original_prefix.unwrap()
                 || entry[..2] != [0xeb, 0xf9]
-                || entry[2..] != original[2..]
+                || entry[2..] != property_bytes[2..]
             {
                 return Err("property hotpatch did not preserve entry+2..+7".into());
+            }
+            if parsed.mode == BridgeMode::JoinedAdmission {
+                let mut can_entry = [0u8; 8];
+                read_remote(&game, target, &mut can_entry)?;
+                if can_entry[0] != 0xe9 || can_entry[5..] != original[5..] {
+                    return Err("joined CanEver entry changed outside its first instruction".into());
+                }
             }
             Some(prefix)
         } else {
@@ -943,9 +978,17 @@ pub fn run() -> Result<(), String> {
         }
         if let Some(patched) = installed_prefix {
             let mut retained = [0u8; PROPERTY_PREFIX_LEN];
-            read_remote(&game, target - PROPERTY_PREFIX_LEN, &mut retained)?;
+            let property_target = property_target.unwrap();
+            read_remote(&game, property_target - PROPERTY_PREFIX_LEN, &mut retained)?;
             if retained != patched {
                 return Err("property prefix changed before game exit".into());
+            }
+            if let Some(property_original) = property_original {
+                let mut restored_property = [0u8; 8];
+                read_remote(&game, property_target, &mut restored_property)?;
+                if restored_property != property_original {
+                    return Err("joined property entry was not restored".into());
+                }
             }
         }
         write_json(
@@ -1008,7 +1051,8 @@ pub fn run() -> Result<(), String> {
                             "player_address":format!("0x{:016x}",row.player_address),
                             "player_id":row.player_id,
                             "property_receiver":format!("0x{:016x}",row.property_receiver),
-                            "original_al":row.original_al}),
+                            "original_al":row.original_al,
+                            "effective_al":row.effective_al}),
                     )?;
                 }
                 (
@@ -1055,6 +1099,70 @@ pub fn run() -> Result<(), String> {
                     snapshot.filtered.load(std::sync::atomic::Ordering::Acquire),
                 )
             }
+            BridgeMode::JoinedAdmission => {
+                let calibration = drained_calibration_trace(
+                    &game,
+                    trace_remote + std::mem::offset_of!(JoinedTrace, calibration),
+                )?;
+                let properties = drained_property_trace(
+                    &game,
+                    trace_remote + std::mem::offset_of!(JoinedTrace, property),
+                )?;
+                if properties.scope != BridgeMode::JoinedAdmission as u32 {
+                    return Err("joined property scope differs".into());
+                }
+                let calls = calibration.complete_rows().map_err(str::to_string)?;
+                let values = properties.complete_rows().map_err(str::to_string)?;
+                for row in &calls {
+                    let return_rva =
+                        (row.return_address as usize).checked_sub(target - parsed.mode.rva());
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"calibration",
+                        "sequence":row.sequence,"governor_index":row.governor_index,
+                        "governors_this":format!("0x{:016x}",row.governors_this),
+                        "return_site_rva":return_rva,"thread_id":row.thread_id,
+                        "owner_read_state":row.owner_read_state,
+                        "player_address":format!("0x{:016x}",row.player_address),
+                        "player_id":row.player_id,
+                        "property_receiver":format!("0x{:016x}",row.property_receiver),
+                        "original_al":row.original_al,"effective_al":row.effective_al}),
+                    )?;
+                }
+                for row in &values {
+                    let copied = row.read_state == 1;
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"property_get",
+                        "sequence":row.sequence,"property":format!("0x{:016x}",row.property),
+                        "key_id":row.key_id,"returned":format!("0x{:016x}",row.returned),
+                        "thread_id":row.thread_id,"read_state":row.read_state,
+                        "tag":copied.then_some(row.tag),
+                        "payload8":copied.then(|| format!("0x{:016x}",row.payload)),
+                        "flags14":copied.then_some(row.flags)}),
+                    )?;
+                }
+                (
+                    calls.len() + values.len(),
+                    calibration
+                        .dropped
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        + properties
+                            .dropped
+                            .load(std::sync::atomic::Ordering::Acquire),
+                    calibration
+                        .in_flight
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        + properties
+                            .in_flight
+                            .load(std::sync::atomic::Ordering::Acquire),
+                    calibration.next.load(std::sync::atomic::Ordering::Acquire)
+                        + properties.next.load(std::sync::atomic::Ordering::Acquire),
+                    properties
+                        .filtered
+                        .load(std::sync::atomic::Ordering::Acquire),
+                )
+            }
         };
         let result = if control_error.is_some() {
             "error"
@@ -1079,6 +1187,7 @@ pub fn run() -> Result<(), String> {
             "classification":match parsed.mode {
                 BridgeMode::CanEver => "can_ever_entry",
                 BridgeMode::CanEverCalibration => "can_ever_calibration",
+                BridgeMode::JoinedAdmission => "joined_admission",
                 _ => "raw_collection",
             },
             "prefix_retained_until_exit":installed_prefix.is_some(),

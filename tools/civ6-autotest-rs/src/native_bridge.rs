@@ -1,5 +1,5 @@
-//! Bounded, separate native bridge telemetry. This never routes through the
-//! read-only hardware-breakpoint observer or claims admission is working.
+//! Bounded native bridge controller. Its private joined mode can admit the
+//! one pinned cost-one person; only a live receipt can prove that it works.
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
@@ -43,6 +43,11 @@ mod platform {
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
+        let mut joined_calibrations = 0usize;
+        let mut joined_properties = 0usize;
+        let mut joined_positive = false;
+        let mut joined_positive_receivers = std::collections::BTreeSet::new();
+        let mut joined_true_property_receivers = std::collections::BTreeSet::new();
         let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
         let mut calibrated_owners = std::collections::BTreeSet::new();
@@ -67,12 +72,20 @@ mod platform {
                                 BridgeMode::PropertyScoped => "property-scoped",
                                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
+                                BridgeMode::JoinedAdmission => "joined-admission",
                             }
                         && row["entry_rva"] == mode.rva()
                         && (matches!(
                             mode,
                             BridgeMode::CanEver | BridgeMode::CanEverCalibration
                         ) || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
+                        && (mode != BridgeMode::JoinedAdmission
+                            || (row["property_rva"]
+                                == civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA
+                                && row["scope_key_ids"]
+                                    == serde_json::json!([
+                                        civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID
+                                    ])))
                         && (mode != BridgeMode::PropertyScoped
                             || row["scope_key_ids"]
                                 == serde_json::json!([
@@ -93,7 +106,8 @@ mod platform {
                 Some("uninstall")
                     if row["status"] == 0
                         && row["entry_restored"] == true
-                        && row["prefix_retained_until_exit"] == mode.is_property() =>
+                        && row["prefix_retained_until_exit"]
+                            == (mode.is_property() || mode == BridgeMode::JoinedAdmission) =>
                 {
                     restored += 1
                 }
@@ -104,16 +118,38 @@ mod platform {
                     entries += 1
                 }
                 Some("calibration")
-                    if mode == BridgeMode::CanEverCalibration
-                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                    if matches!(
+                        mode,
+                        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission
+                    ) && row["sequence"].as_u64()
+                        == Some(if mode == BridgeMode::JoinedAdmission {
+                            joined_calibrations as u64 + 1
+                        } else {
+                            entries as u64 + 1
+                        })
                         && row["thread_id"].as_u64().is_some_and(|id| id > 0)
                         && row["owner_read_state"] == 1
                         && hex_address(&row["governors_this"]).is_some_and(|p| p != 0)
                         && hex_address(&row["player_address"])
                             .and_then(|player| player.checked_add(0x528))
                             == hex_address(&row["property_receiver"])
-                        && row["original_al"].as_u64().is_some_and(|n| n <= 1) =>
+                        && row["original_al"].as_u64().is_some_and(|n| n <= 1)
+                        && (mode != BridgeMode::JoinedAdmission
+                            || row["effective_al"].as_u64().is_some_and(|n| n <= 1)) =>
                 {
+                    if mode == BridgeMode::JoinedAdmission {
+                        joined_calibrations += 1;
+                        if row["player_id"] == 0
+                            && row["governor_index"] == 4
+                            && row["original_al"] == 0
+                            && row["effective_al"] == 1
+                        {
+                            joined_positive = true;
+                            if let Some(receiver) = hex_address(&row["property_receiver"]) {
+                                joined_positive_receivers.insert(receiver);
+                            }
+                        }
+                    }
                     if row["governor_index"] == 4
                         && row["return_site_rva"] == 0xba523
                         && row["original_al"] == 0
@@ -125,8 +161,13 @@ mod platform {
                     entries += 1
                 }
                 Some("property_get")
-                    if mode.is_property()
-                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                    if (mode.is_property() || mode == BridgeMode::JoinedAdmission)
+                        && row["sequence"].as_u64()
+                            == Some(if mode == BridgeMode::JoinedAdmission {
+                                joined_properties as u64 + 1
+                            } else {
+                                entries as u64 + 1
+                            })
                         && row["property"]
                             .as_str()
                             .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
@@ -142,10 +183,12 @@ mod platform {
                                     || n == u64::from(
                                         civ6_native_bridge_rs::PROPERTY_TEST_PHASE_KEY_ID,
                                     ))
-                                && (mode != BridgeMode::PropertyAdmissionScoped
-                                    || n == u64::from(
-                                        civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID,
-                                    ))
+                                && (!matches!(
+                                    mode,
+                                    BridgeMode::PropertyAdmissionScoped
+                                        | BridgeMode::JoinedAdmission
+                                ) || n
+                                    == u64::from(civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID))
                         })
                         && row["thread_id"]
                             .as_u64()
@@ -155,7 +198,10 @@ mod platform {
                     let returned = row["returned"].as_str().unwrap();
                     if mode == BridgeMode::PropertyScoped {
                         scoped_keys.insert(row["key_id"].as_u64().unwrap());
-                    } else if mode == BridgeMode::PropertyAdmissionScoped {
+                    } else if matches!(
+                        mode,
+                        BridgeMode::PropertyAdmissionScoped | BridgeMode::JoinedAdmission
+                    ) {
                         scoped_keys.insert(row["key_id"].as_u64().unwrap());
                         if row["read_state"] != 1
                             || row["tag"] != 1
@@ -175,6 +221,13 @@ mod platform {
                             && admission_values.contains("0x0000000000000000")
                         {
                             admission_true_after_false = true;
+                        }
+                        if mode == BridgeMode::JoinedAdmission
+                            && row["payload8"] == "0x0000000000000001"
+                        {
+                            if let Some(receiver) = hex_address(&row["property"]) {
+                                joined_true_property_receivers.insert(receiver);
+                            }
                         }
                     }
                     if row["read_state"] == 0 {
@@ -204,6 +257,9 @@ mod platform {
                     {
                         return Err(Error::input("invalid unreadable property row"));
                     }
+                    if mode == BridgeMode::JoinedAdmission {
+                        joined_properties += 1;
+                    }
                     entries += 1;
                 }
                 Some("stop")
@@ -213,17 +269,24 @@ mod platform {
                         && row["observed_calls"].as_u64().is_some_and(|n| {
                             n == entries as u64 + row["dropped"].as_u64().unwrap_or(u64::MAX)
                         })
-                        && (if matches!(mode, BridgeMode::CanEver | BridgeMode::CanEverCalibration)
-                        {
+                        && (if matches!(
+                            mode,
+                            BridgeMode::CanEver
+                                | BridgeMode::CanEverCalibration
+                                | BridgeMode::JoinedAdmission
+                        ) {
                             row["result"] == "ok"
                                 && row["dropped"] == 0
                                 && row["classification"]
                                     == if mode == BridgeMode::CanEver {
                                         "can_ever_entry"
+                                    } else if mode == BridgeMode::JoinedAdmission {
+                                        "joined_admission"
                                     } else {
                                         "can_ever_calibration"
                                     }
-                                && row["prefix_retained_until_exit"] == false
+                                && row["prefix_retained_until_exit"]
+                                    == (mode == BridgeMode::JoinedAdmission)
                         } else {
                             row["classification"] == "raw_collection"
                                 && row["prefix_retained_until_exit"] == true
@@ -311,6 +374,18 @@ mod platform {
         {
             return Err(Error::input(
                 "native admission false/true or Core/UI threads missing",
+            ));
+        }
+        if mode == BridgeMode::JoinedAdmission
+            && (!joined_positive
+                || joined_calibrations == 0
+                || joined_properties == 0
+                || !admission_true_after_false
+                || admission_threads.len() < 2
+                || joined_positive_receivers.is_disjoint(&joined_true_property_receivers))
+        {
+            return Err(Error::input(
+                "joined native positive is not bound to a Core getter true",
             ));
         }
         Ok(entries)
@@ -485,6 +560,7 @@ mod platform {
                 "property-scoped" => BridgeMode::PropertyScoped,
                 "can-ever-calibration" => BridgeMode::CanEverCalibration,
                 "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
+                "joined-admission" => BridgeMode::JoinedAdmission,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
             };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
@@ -521,6 +597,7 @@ mod platform {
                         BridgeMode::PropertyScoped => "property-scoped",
                         BridgeMode::CanEverCalibration => "can-ever-calibration",
                         BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
+                        BridgeMode::JoinedAdmission => "joined-admission",
                     },
                 ])
                 .stdin(Stdio::piped())
@@ -1033,6 +1110,68 @@ mod platform {
             reversed[4]["payload8"] = json!("0x0000000000000000");
             write(&reversed);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::PropertyAdmissionScoped).is_err());
+        }
+
+        #[test]
+        fn joined_terminal_requires_positive_bound_to_core_bool_and_both_restorations() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("joined.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"joined-admission","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
+                    "property_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
+                    "scope_key_ids":[853304],"prefix_bytes":"[cc, cc, cc, cc, cc]",
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":true}),
+                json!({"kind":"calibration","sequence":1,"governor_index":4,
+                    "thread_id":11,"owner_read_state":1,"governors_this":"0x0000000000001000",
+                    "return_site_rva":0xba523,"player_address":"0x0000000000002000",
+                    "player_id":0,"property_receiver":"0x0000000000002528",
+                    "original_al":0,"effective_al":0}),
+                json!({"kind":"calibration","sequence":2,"governor_index":4,
+                    "thread_id":11,"owner_read_state":1,"governors_this":"0x0000000000001000",
+                    "return_site_rva":0xba523,"player_address":"0x0000000000002000",
+                    "player_id":0,"property_receiver":"0x0000000000002528",
+                    "original_al":0,"effective_al":1}),
+                json!({"kind":"property_get","sequence":1,"property":"0x0000000000002528",
+                    "key_id":853304,"returned":"0x0000000000006000","thread_id":12,
+                    "read_state":1,"tag":1,"payload8":"0x0000000000000000","flags14":0}),
+                json!({"kind":"property_get","sequence":2,"property":"0x0000000000002528",
+                    "key_id":853304,"returned":"0x0000000000006010","thread_id":12,
+                    "read_state":1,"tag":1,"payload8":"0x0000000000000001","flags14":0}),
+                json!({"kind":"property_get","sequence":3,"property":"0x0000000000003528",
+                    "key_id":853304,"returned":"0x0000000000006020","thread_id":11,
+                    "read_state":1,"tag":1,"payload8":"0x0000000000000000","flags14":0}),
+                json!({"kind":"stop","result":"ok","rows":5,"dropped":0,
+                    "observed_calls":5,"filtered_calls":0,"getter_calls_seen":5,
+                    "in_flight":0,"snapshot_stable":true,"classification":"joined_admission",
+                    "prefix_retained_until_exit":true}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::JoinedAdmission).unwrap(),
+                5
+            );
+            let mut bad = rows.to_vec();
+            bad[4]["property_receiver"] = json!("0x0000000000004528");
+            write(&bad);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::JoinedAdmission).is_err());
+            let mut bad = rows.to_vec();
+            bad[4]["effective_al"] = json!(0);
+            write(&bad);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::JoinedAdmission).is_err());
         }
     }
 }

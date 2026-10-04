@@ -28,7 +28,7 @@ const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
 const PROPERTY_TRACE_VERSION: u32 = 2;
 const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
 const CALIBRATION_TRACE_VERSION: u32 = 1;
-pub const CALIBRATION_CAPACITY: usize = 128;
+pub const CALIBRATION_CAPACITY: usize = 512;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
 pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
@@ -64,6 +64,7 @@ pub enum BridgeMode {
     PropertyScoped = 2,
     CanEverCalibration = 3,
     PropertyAdmissionScoped = 4,
+    JoinedAdmission = 5,
 }
 
 impl BridgeMode {
@@ -76,7 +77,7 @@ impl BridgeMode {
 
     pub const fn rva(self) -> usize {
         match self {
-            Self::CanEver | Self::CanEverCalibration => PINNED_CAN_EVER_RVA,
+            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => PINNED_CAN_EVER_RVA,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_RVA
             }
@@ -85,7 +86,9 @@ impl BridgeMode {
 
     const fn file_offset(self) -> u64 {
         match self {
-            Self::CanEver | Self::CanEverCalibration => PINNED_CAN_EVER_FILE_OFFSET,
+            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => {
+                PINNED_CAN_EVER_FILE_OFFSET
+            }
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_FILE_OFFSET
             }
@@ -94,7 +97,7 @@ impl BridgeMode {
 
     const fn prologue(self) -> &'static [u8] {
         match self {
-            Self::CanEver | Self::CanEverCalibration => &PINNED_PROLOGUE,
+            Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => &PINNED_PROLOGUE,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 &PROPERTY_PROLOGUE
             }
@@ -105,6 +108,7 @@ impl BridgeMode {
         match self {
             Self::CanEver => std::mem::size_of::<SharedTrace>(),
             Self::CanEverCalibration => std::mem::size_of::<CalibrationTrace>(),
+            Self::JoinedAdmission => std::mem::size_of::<JoinedTrace>(),
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 std::mem::size_of::<PropertyTrace>()
             }
@@ -167,6 +171,13 @@ impl BridgeConfig {
     ) -> Self {
         let mut config = Self::for_property(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::PropertyAdmissionScoped as u32;
+        config
+    }
+
+    pub fn for_joined(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::JoinedAdmission as u32;
+        config.trace_size = BridgeMode::JoinedAdmission.trace_size() as u32;
         config
     }
 }
@@ -275,6 +286,7 @@ pub struct CalibrationRow {
     pub player_address: AtomicU64,
     pub player_id: AtomicU32,
     pub original_al: AtomicU32,
+    pub effective_al: AtomicU32,
     pub property_receiver: AtomicU64,
 }
 
@@ -287,6 +299,21 @@ pub struct CalibrationTrace {
     pub in_flight: AtomicU32,
     pub reserved: u32,
     pub rows: [CalibrationRow; CALIBRATION_CAPACITY],
+}
+
+#[repr(C)]
+pub struct JoinedTrace {
+    pub calibration: CalibrationTrace,
+    pub property: PropertyTrace,
+}
+
+impl Default for JoinedTrace {
+    fn default() -> Self {
+        Self {
+            calibration: CalibrationTrace::default(),
+            property: PropertyTrace::joined_scoped(),
+        }
+    }
 }
 
 impl Default for CalibrationTrace {
@@ -315,6 +342,7 @@ pub struct CalibrationObservation {
     pub player_id: u32,
     pub property_receiver: u64,
     pub original_al: u32,
+    pub effective_al: u32,
 }
 
 impl CalibrationTrace {
@@ -345,6 +373,7 @@ impl CalibrationTrace {
                 player_id: row.player_id.load(Ordering::Relaxed),
                 property_receiver: row.property_receiver.load(Ordering::Relaxed),
                 original_al: row.original_al.load(Ordering::Relaxed),
+                effective_al: row.effective_al.load(Ordering::Relaxed),
             });
         }
         Ok(rows)
@@ -369,6 +398,49 @@ fn copy_current<const N: usize>(address: u64) -> Option<[u8; N]> {
     (ok && read == N).then_some(bytes)
 }
 
+// The low bit is the derived permission; the rest is the observed Core
+// Player+0x528 receiver. One atomic word prevents mixing a new receiver with
+// an old true value. No receiver or IValue pointer is saved across sessions.
+static JOINED_RECEIVER_PERMISSION: AtomicU64 = AtomicU64::new(0);
+static JOINED_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+fn joined_bind(receiver: u64) {
+    if !JOINED_ACTIVE.load(Ordering::Acquire) || receiver == 0 || receiver & 7 != 0 {
+        return;
+    }
+    let current = JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire);
+    if current & !1 != receiver {
+        JOINED_RECEIVER_PERMISSION.store(receiver, Ordering::Release);
+    }
+}
+
+fn joined_observe_property(
+    property: u64,
+    key: u32,
+    state: u32,
+    tag: u32,
+    payload: u64,
+    flags: u32,
+) {
+    if !JOINED_ACTIVE.load(Ordering::Acquire) || key != ASHINA_ADMISSION_KEY_ID {
+        return;
+    }
+    let permitted = state == 1 && tag == 1 && flags == 0 && payload == 1;
+    loop {
+        let current = JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire);
+        if current & !1 != property || property == 0 {
+            return;
+        }
+        let replacement = property | u64::from(permitted);
+        if JOINED_RECEIVER_PERMISSION
+            .compare_exchange(current, replacement, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
 // No Lua/C++ calls, allocation, formatting or lock acquisition in the hook.
 // The original function receives its saved argument registers immediately after
 // this bounded copy. A failed copy is recorded, never treated as permission.
@@ -377,6 +449,9 @@ unsafe extern "system" fn calibration_begin(
     governor_index: u32,
     return_address: u64,
 ) -> *const CalibrationRow {
+    if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index != 4 {
+        return null_mut();
+    }
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return null_mut();
@@ -419,21 +494,46 @@ unsafe extern "system" fn calibration_begin(
         }
         None => row.owner_read_state.store(2, Ordering::Relaxed),
     }
+    if governor_index == 4
+        && row.owner_read_state.load(Ordering::Relaxed) == 1
+        && row.player_id.load(Ordering::Relaxed) == 0
+    {
+        joined_bind(row.property_receiver.load(Ordering::Relaxed));
+    }
     row as *const CalibrationRow
 }
 
-unsafe extern "system" fn calibration_end(row: *const CalibrationRow, original_rax: u64) {
+unsafe extern "system" fn calibration_end(
+    row: *const CalibrationRow,
+    original_rax: u64,
+    governor_index: u32,
+) -> u64 {
     if row.is_null() {
-        return;
+        return if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index == 4 {
+            original_rax & !0xff
+        } else {
+            original_rax
+        };
     }
     let row = unsafe { &*row };
     row.original_al
         .store((original_rax & 0xff) as u32, Ordering::Relaxed);
+    let mut result = original_rax;
+    if JOINED_ACTIVE.load(Ordering::Acquire) && row.governor_index.load(Ordering::Relaxed) == 4 {
+        let receiver = row.property_receiver.load(Ordering::Relaxed);
+        let permitted = row.owner_read_state.load(Ordering::Relaxed) == 1
+            && row.player_id.load(Ordering::Relaxed) == 0
+            && JOINED_RECEIVER_PERMISSION.load(Ordering::Acquire) == receiver | 1;
+        result = (original_rax & !0xff) | u64::from(permitted);
+    }
+    row.effective_al
+        .store((result & 0xff) as u32, Ordering::Relaxed);
     row.sequence.store(1, Ordering::Release);
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if !trace.is_null() {
         unsafe { &*trace }.in_flight.fetch_sub(1, Ordering::Release);
     }
+    result
 }
 
 /// Fixed-size, string-free telemetry for the direct native getter. `read_state`
@@ -492,6 +592,12 @@ impl PropertyTrace {
     pub fn admission_scoped() -> Self {
         let mut trace = Self::default();
         trace.scope = BridgeMode::PropertyAdmissionScoped as u32;
+        trace
+    }
+
+    pub fn joined_scoped() -> Self {
+        let mut trace = Self::default();
+        trace.scope = BridgeMode::JoinedAdmission as u32;
         trace
     }
 }
@@ -563,7 +669,8 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     if (trace.scope == BridgeMode::PropertyScoped as u32
         && key_id != PROPERTY_TEST_VALUE_KEY_ID
         && key_id != PROPERTY_TEST_PHASE_KEY_ID)
-        || (trace.scope == BridgeMode::PropertyAdmissionScoped as u32
+        || ((trace.scope == BridgeMode::PropertyAdmissionScoped as u32
+            || trace.scope == BridgeMode::JoinedAdmission as u32)
             && key_id != ASHINA_ADMISSION_KEY_ID)
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
@@ -572,6 +679,9 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
     if slot >= TRACE_CAPACITY {
+        if trace.scope == BridgeMode::JoinedAdmission as u32 {
+            joined_observe_property(property, key_id, 0, 0, 0, 0);
+        }
         trace.dropped.fetch_add(1, Ordering::Relaxed);
         trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
@@ -617,6 +727,16 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         } else {
             row.read_state.store(2, Ordering::Relaxed);
         }
+    }
+    if trace.scope == BridgeMode::JoinedAdmission as u32 {
+        joined_observe_property(
+            property,
+            key_id,
+            row.read_state.load(Ordering::Relaxed),
+            row.tag.load(Ordering::Relaxed),
+            row.payload.load(Ordering::Relaxed),
+            row.flags.load(Ordering::Relaxed),
+        );
     }
     row.sequence.store(1, Ordering::Release);
     trace.in_flight.fetch_sub(1, Ordering::Release);
@@ -753,8 +873,8 @@ global_asm!(
     "mov qword ptr [rsp + 0x60], rax",
     "mov rcx, qword ptr [rsp + 0x58]",
     "mov rdx, rax",
+    "mov r8d, dword ptr [rsp + 0x28]",
     "call {end}",
-    "mov rax, qword ptr [rsp + 0x60]",
     "add rsp, 0xd8",
     "ret",
     ".seh_endproc",
@@ -770,7 +890,6 @@ unsafe extern "system" {
 static CALIBRATION_TRACE_PTR: AtomicPtr<CalibrationTrace> = AtomicPtr::new(null_mut());
 
 struct Hook {
-    mode: BridgeMode,
     target: *mut u8,
     original: [u8; 8],
     patched: [u8; 8],
@@ -784,6 +903,7 @@ struct Hook {
 unsafe impl Send for Hook {}
 
 static HOOK: Mutex<Option<Hook>> = Mutex::new(None);
+static JOINED_PROPERTY_HOOK: Mutex<Option<Hook>> = Mutex::new(None);
 static PROPERTY_USED: AtomicBool = AtomicBool::new(false);
 
 fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
@@ -944,7 +1064,12 @@ unsafe fn install_property_hotpatch(
     {
         return Err("unaligned or missing property hook input");
     }
-    let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
+    let lock = if mode == BridgeMode::JoinedAdmission {
+        &JOINED_PROPERTY_HOOK
+    } else {
+        &HOOK
+    };
+    let mut guard = lock.lock().map_err(|_| "bridge lock poisoned")?;
     if guard.is_some() {
         return Err("bridge already installed");
     }
@@ -1005,7 +1130,6 @@ unsafe fn install_property_hotpatch(
     let mut patched = original;
     patched[..2].copy_from_slice(&PROPERTY_SHORT_JUMP);
     *guard = Some(Hook {
-        mode,
         target,
         original,
         patched,
@@ -1051,7 +1175,9 @@ unsafe fn install_hook(
     .ok_or("trampoline return out of range")?;
     let gateway = match mode {
         BridgeMode::CanEver => bridge_gateway as *const () as usize,
-        BridgeMode::CanEverCalibration => calibration_gateway as *const () as usize,
+        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
+            calibration_gateway as *const () as usize
+        }
         _ => return Err("invalid CanEver gateway mode"),
     };
     unsafe {
@@ -1070,7 +1196,7 @@ unsafe fn install_hook(
     }
     match mode {
         BridgeMode::CanEver => BRIDGE_TRACE_PTR.store(trace, Ordering::Release),
-        BridgeMode::CanEverCalibration => {
+        BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
             CALIBRATION_TRACE_PTR.store(trace.cast(), Ordering::Release)
         }
         _ => unreachable!(),
@@ -1089,7 +1215,6 @@ unsafe fn install_hook(
         return Err("pinned entry changed before the atomic install");
     }
     *guard = Some(Hook {
-        mode,
         target,
         original,
         patched,
@@ -1152,6 +1277,8 @@ unsafe fn install_property_at(
         BridgeMode::PropertyScoped
     } else if unsafe { (*trace).scope } == BridgeMode::PropertyAdmissionScoped as u32 {
         BridgeMode::PropertyAdmissionScoped
+    } else if unsafe { (*trace).scope } == BridgeMode::JoinedAdmission as u32 {
+        BridgeMode::JoinedAdmission
     } else if unsafe { (*trace).scope } == 0 {
         BridgeMode::Property
     } else {
@@ -1160,23 +1287,24 @@ unsafe fn install_property_at(
     unsafe { install_property_hotpatch(target, trace, expected, mode) }
 }
 
-unsafe fn uninstall() -> Result<(), &'static str> {
-    let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
-    let hook = guard.as_ref().ok_or("bridge not installed")?;
-    let outcome = match hook.mode {
-        BridgeMode::CanEver | BridgeMode::CanEverCalibration => unsafe {
+unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> {
+    let mut guard = slot.lock().map_err(|_| "bridge lock poisoned")?;
+    let Some(hook) = guard.as_ref() else {
+        return Ok(false);
+    };
+    let outcome = if hook.prefix.is_none() {
+        unsafe {
             exchange_entry(
                 hook.target,
                 u64::from_le_bytes(hook.patched),
                 u64::from_le_bytes(hook.original),
             )
-        }?,
-        BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
-            let first: [u8; 2] = hook.original[..2]
-                .try_into()
-                .map_err(|_| "property entry width")?;
-            unsafe { exchange_property_entry(hook.target, PROPERTY_SHORT_JUMP, first) }?
-        }
+        }?
+    } else {
+        let first: [u8; 2] = hook.original[..2]
+            .try_into()
+            .map_err(|_| "property entry width")?;
+        unsafe { exchange_property_entry(hook.target, PROPERTY_SHORT_JUMP, first) }?
     };
     if !outcome.exchanged
         || !outcome.protection_restored
@@ -1192,6 +1320,17 @@ unsafe fn uninstall() -> Result<(), &'static str> {
     // fetched EB F9 before restoration may still be about to enter it.
     // DLL, trace, relay and trampoline remain resident for that same period.
     *guard = None;
+    Ok(true)
+}
+
+unsafe fn uninstall() -> Result<(), &'static str> {
+    JOINED_ACTIVE.store(false, Ordering::Release);
+    JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+    let main = restore_one(&HOOK)?;
+    let property = restore_one(&JOINED_PROPERTY_HOOK)?;
+    if !main && !property {
+        return Err("bridge not installed");
+    }
     Ok(())
 }
 
@@ -1328,11 +1467,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4)
+        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5)
         || config.trace_size as usize
             != match config.mode {
                 0 => BridgeMode::CanEver.trace_size(),
                 3 => BridgeMode::CanEverCalibration.trace_size(),
+                5 => BridgeMode::JoinedAdmission.trace_size(),
                 _ => BridgeMode::Property.trace_size(),
             }
         || !committed_range(
@@ -1360,6 +1500,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         2 => BridgeMode::PropertyScoped,
         3 => BridgeMode::CanEverCalibration,
         4 => BridgeMode::PropertyAdmissionScoped,
+        5 => BridgeMode::JoinedAdmission,
         _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
@@ -1372,14 +1513,29 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if unsafe { ptr::read(entry.cast::<[u8; 8]>()) } != disk_bytes {
         return BridgeStatus::EntryBytes;
     }
-    if mode.is_property() {
-        if (entry as usize & (CODE_PAGE - 1)) < PROPERTY_PREFIX_LEN {
+    let property_entry = if mode == BridgeMode::JoinedAdmission {
+        let Some(address) = (module as usize).checked_add(PINNED_PROPERTY_GET_RVA) else {
+            return BridgeStatus::EntryBytes;
+        };
+        Some(address as *mut u8)
+    } else if mode.is_property() {
+        Some(entry)
+    } else {
+        None
+    };
+    let property_disk = if let Some(property) = property_entry {
+        if (property as usize & (CODE_PAGE - 1)) < PROPERTY_PREFIX_LEN {
             return BridgeStatus::EntryBytes;
         }
-        let prefix = unsafe { entry.sub(PROPERTY_PREFIX_LEN) };
+        let prefix = unsafe { property.sub(PROPERTY_PREFIX_LEN) };
+        let Some(bytes) = pinned_gamecore(Path::new(GAMECORE), BridgeMode::PropertyAdmissionScoped)
+        else {
+            return BridgeStatus::GameCoreIdentity;
+        };
         if !committed_range(prefix as usize, PROPERTY_PREFIX_LEN, 1, false)
             || unsafe { ptr::read(prefix.cast::<[u8; PROPERTY_PREFIX_LEN]>()) }
                 != PROPERTY_PREFIX_PAD
+            || unsafe { ptr::read(property.cast::<[u8; 8]>()) } != bytes
         {
             return BridgeStatus::EntryBytes;
         }
@@ -1391,7 +1547,10 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         {
             return BridgeStatus::HookFailure;
         }
-    }
+        Some(bytes)
+    } else {
+        None
+    };
     let installed = match mode {
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
@@ -1402,6 +1561,43 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             let trace = config.trace_address as *mut CalibrationTrace;
             unsafe { ptr::write(trace, CalibrationTrace::default()) };
             unsafe { install_calibration_at(entry, trace, disk_bytes) }
+        }
+        BridgeMode::JoinedAdmission => {
+            let trace = config.trace_address as *mut JoinedTrace;
+            unsafe { ptr::write(trace, JoinedTrace::default()) };
+            JOINED_ACTIVE.store(false, Ordering::Release);
+            JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+            let property = property_entry.expect("verified joined property entry");
+            let property_bytes = property_disk.expect("verified joined property bytes");
+            let property_result = unsafe {
+                install_property_at(
+                    property,
+                    ptr::addr_of_mut!((*trace).property),
+                    property_bytes,
+                )
+            };
+            match property_result {
+                Err(error) => Err(error),
+                Ok(()) => {
+                    let can_result = unsafe {
+                        install_hook(
+                            entry,
+                            ptr::addr_of_mut!((*trace).calibration).cast(),
+                            disk_bytes,
+                            BridgeMode::JoinedAdmission,
+                        )
+                    };
+                    if can_result.is_ok() {
+                        JOINED_ACTIVE.store(true, Ordering::Release);
+                        Ok(())
+                    } else {
+                        match unsafe { uninstall() } {
+                            Ok(()) => can_result,
+                            Err(_) => Err("critical: joined hook rollback failed"),
+                        }
+                    }
+                }
+            }
         }
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             let trace = config.trace_address as *mut PropertyTrace;
@@ -1882,6 +2078,159 @@ mod tests {
             (rows[0].key_id, rows[0].tag, rows[0].payload),
             (ASHINA_ADMISSION_KEY_ID, 1, 1)
         );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn joined_gate_opens_only_bound_owner_after_native_core_bool_and_restores_both_entries() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        JOINED_ACTIVE.store(false, Ordering::Release);
+        JOINED_RECEIVER_PERMISSION.store(0, Ordering::Release);
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let can_entry = unsafe { page.add(16) };
+        let property_entry = unsafe { page.add(128) };
+        let prefix = unsafe { property_entry.sub(PROPERTY_PREFIX_LEN) };
+        let can_bytes = [
+            0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0x89, 0xd0, 0x83, 0xe0, 0x01, 0xc3,
+        ];
+        let property_bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        unsafe {
+            ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
+            ptr::copy_nonoverlapping(
+                property_bytes.as_ptr(),
+                property_entry,
+                property_bytes.len(),
+            );
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN);
+        }
+        #[repr(align(8))]
+        struct PlayerBytes([u8; 0x600]);
+        let mut owner = PlayerBytes([0u8; 0x600]);
+        let mut other = PlayerBytes([0u8; 0x600]);
+        other.0[0xd8..0xdc].copy_from_slice(&1u32.to_le_bytes());
+        let mut value = [0u8; 24];
+        value[..2].copy_from_slice(&1u16.to_le_bytes());
+        owner.0[0x568..0x570].copy_from_slice(&(value.as_ptr() as u64).to_le_bytes());
+        let mut gov = [0u8; 0x80];
+        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        let can: extern "system" fn(usize, u32) -> u8 = unsafe { std::mem::transmute(can_entry) };
+        let property: extern "system" fn(usize, u32) -> usize =
+            unsafe { std::mem::transmute(property_entry) };
+        let mut trace = Box::new(JoinedTrace::default());
+        unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
+            .unwrap();
+        unsafe {
+            install_hook(
+                can_entry,
+                (&mut trace.calibration as *mut CalibrationTrace).cast(),
+                can_bytes[..8].try_into().unwrap(),
+                BridgeMode::JoinedAdmission,
+            )
+        }
+        .unwrap();
+        JOINED_ACTIVE.store(true, Ordering::Release);
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        assert_eq!(
+            property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID),
+            value.as_ptr() as usize
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        value[8] = 1;
+        assert_eq!(
+            property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID),
+            value.as_ptr() as usize
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 4), 1);
+        assert_eq!(
+            can(gov.as_ptr() as usize, 5),
+            1,
+            "unrelated index keeps original result"
+        );
+        gov[0x70..0x78].copy_from_slice(&(other.0.as_ptr() as u64).to_le_bytes());
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
+        value[..2].copy_from_slice(&2u16.to_le_bytes());
+        let _ = property(owner.0.as_ptr() as usize + 0x528, ASHINA_ADMISSION_KEY_ID);
+        assert_eq!(
+            can(gov.as_ptr() as usize, 4),
+            0,
+            "bad native tag closes admission"
+        );
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(can(gov.as_ptr() as usize, 4), 0);
+        assert_eq!(
+            unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
+            can_bytes[..8]
+        );
+        assert_eq!(
+            unsafe { ptr::read(property_entry.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
+        );
+        assert_eq!(
+            trace
+                .calibration
+                .complete_rows()
+                .unwrap()
+                .iter()
+                .any(|row| row.player_id == 0
+                    && row.governor_index == 4
+                    && row.original_al == 0
+                    && row.effective_al == 1),
+            true
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn joined_second_hook_failure_restores_the_first_property_entry() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let can_entry = unsafe { page.add(16) };
+        let property_entry = unsafe { page.add(128) };
+        let prefix = unsafe { property_entry.sub(PROPERTY_PREFIX_LEN) };
+        let bad = [0x90u8; 8];
+        unsafe {
+            ptr::copy_nonoverlapping(bad.as_ptr(), can_entry, 8);
+            ptr::copy_nonoverlapping(PROPERTY_PROLOGUE.as_ptr(), property_entry, 8);
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), prefix, PROPERTY_PREFIX_LEN);
+        }
+        let mut trace = Box::new(JoinedTrace::default());
+        unsafe { install_property_at(property_entry, &mut trace.property, PROPERTY_PROLOGUE) }
+            .unwrap();
+        assert!(unsafe {
+            install_hook(
+                can_entry,
+                (&mut trace.calibration as *mut CalibrationTrace).cast(),
+                bad,
+                BridgeMode::JoinedAdmission,
+            )
+        }
+        .is_err());
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(
+            unsafe { ptr::read(property_entry.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
+        );
+        assert_eq!(unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) }, bad);
+        assert!(!JOINED_ACTIVE.load(Ordering::Acquire));
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 

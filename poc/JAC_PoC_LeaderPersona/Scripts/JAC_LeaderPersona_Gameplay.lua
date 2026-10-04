@@ -37,19 +37,60 @@ local function FindPerson(owner, row)
     if not p or not unitType then return nil, false; end
     -- leaderperson-06 verified GetIndividual in GameCore, but not IsGreatPerson.
     -- Filter by the class's native unit type before reading the individual identity.
+    local found, count = nil, 0;
     for _,unit in p:GetUnits():Members() do
         if unit:GetType() == unitType.Index then
             local gp = unit:GetGreatPerson();
             local id = gp and gp:GetIndividual();
             local actual = id ~= nil and id ~= -1 and GameInfo.GreatPersonIndividuals[id];
-            if actual and actual.GreatPersonIndividualType == row.PersonType then return unit, true; end
+            if actual and actual.GreatPersonIndividualType == row.PersonType then
+                found, count = unit, count + 1;
+            end
         end
     end
-    return nil, true;
+    return found, true, count;
 end
 
 local function NativeGovernor(owner, row)
     return Rules.NativeGovernor(owner, row.LeaderType);
+end
+
+-- Private cost-one native admission experiment. The flag is set only by the
+-- opt-in test fixture; the Game ledger and engine objects decide this derived
+-- Player property. An absent fixture never publishes an admission value.
+local ASHINA_ADMISSION = "LEADER_JAC_ASHINA_MORIKIYO";
+local function SyncAshinaAdmission(forceClosed)
+    if Game:GetProperty("JAC_TEST853_ADMISSION_ACTIVE") ~= 1 then return; end
+    local p = Player(0, false);
+    local row = Definition(ASHINA_ADMISSION);
+    local def = row and GameInfo.Governors[row.GovernorType];
+    if not p or not def or def.Index ~= 4 or row.EvolutionCost ~= 1 then return; end
+    p:SetProperty(853304, false);
+    if p:GetProperty(853304) ~= false then return; end
+    local allowed = false;
+    if not forceClosed and Get(ASHINA_ADMISSION, "OWNER") == 0 and
+       Get(ASHINA_ADMISSION, "EVOLUTION_COST") == 1 then
+        local stage = Get(ASHINA_ADMISSION, "STATE");
+        local native = NativeGovernor(0, row);
+        local person, ready, count = FindPerson(0, row);
+        local governors = p:GetGovernors();
+        if stage == "EVOLVING" and ready and person and count == 1 and native and not native.appointed then
+            local available = governors:GetGovernorPoints() - governors:GetGovernorPointsSpent();
+            local reserved, uncertain = Rules.ReservedAppointments(0);
+            allowed = not uncertain and available >= 1 and available >= reserved;
+        elseif stage == "GOVERNOR" and ready and not person and native and
+               native.appointed and native.base and native.surchargePaid == 0 and
+               Get(ASHINA_ADMISSION, "UNIT") == nil then
+            allowed = governors:GetGovernorPointsSpent() >= 1;
+        end
+    end
+    if allowed then
+        p:SetProperty(853304, true);
+        if p:GetProperty(853304) ~= true then
+            p:SetProperty(853304, false);
+            p:GetProperty(853304);
+        end
+    end
 end
 
 local function Join(owner, source, personality, trait)
@@ -101,6 +142,7 @@ local function Join(owner, source, personality, trait)
     Set(leader, "OWNER", owner);
     Set(leader, "STATE", "GREAT_PERSON");
     Set(leader, "MERIT", 0);
+    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
     return Finish(owner, "JOINED");
 end
 
@@ -139,6 +181,7 @@ local function PrepareEvolution(owner, leader)
     -- its paid portion is read from the engine's own Governor promotions.
     Set(leader, "EVOLUTION_SURCHARGE", cost - 1);
     Set(leader, "STATE", "EVOLVING");
+    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
     return Finish(owner, "EVOLVING");
 end
 
@@ -155,16 +198,19 @@ local function CompleteEvolution(owner, leader)
     -- Retain the Great Person until the engine has really appointed its Governor.
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "REMOVAL_PENDING"); end
+    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
     if unit then p:GetUnits():Destroy(unit); end -- TunerMapPanel.lua:199, also accepts no return value
     local remaining, observed = FindPerson(owner, row);
     if remaining or not observed then return Finish(owner, "REMOVAL_PENDING"); end
     Set(leader, "UNIT", nil);
     Set(leader, "STATE", "GOVERNOR");
+    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
     SnapshotAlliances(owner, leader);
     return Finish(owner, "EVOLVED");
 end
 
 local function Reconcile()
+    SyncAshinaAdmission(false);
     for row in GameInfo.JAC_LeaderPersonas() do
         local owner = Get(row.LeaderType, "OWNER");
         if owner ~= nil and Get(row.LeaderType, "STATE") == "EVOLVING" then

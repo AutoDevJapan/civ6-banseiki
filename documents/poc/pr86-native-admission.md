@@ -168,13 +168,29 @@ b025c32の比較は再起動を含む17手順と6種類のログ判定に成功�
 
 ## 実機94の拒否と独立native bridgeの最初の境界
 
-### 加入資格の所有者・property照合を行う有限シナリオ（ROOT853実行待ち）
+### 加入資格の所有者・property照合（A実機118確認、B実機待ち）
+
+#### 実機118のA段階と費用1の私的B接続
+
+ROOT853の実機118は22手順・6ログ検査に成功し、最終の484組もすべて元の本体資格が偽だった。加入した所有者0の蘆名盛舜だけ試験用派生ID `853304` がtrueとなり、ほかはfalseを維持した。`joined-admission-property.jsonl` のCore thread 146072では、本体getterのreceiver `0x152557b98` が前後のCanEver呼出しから得た所有者0の `Player+0x528` と一致した。同じreceiverでboolタグ1・flags0のpayloadが0から1へ移り、UI thread 148772のcache receiver `0x18061fba8` とは別だった。GameCore固定SHA、両入口の復元、欠落0も同試行で確認した。これは別呼出し間のポインタ寿命やロード時の同期を証明しない。
+
+この結果を受け、`joined-admission` を私的な費用1専用モードとして追加した。固定GameCoreの数値getter入口とCanEver入口を同じPID・作成FILETIME・共有lease・300秒上限のもとで同時に設置する。CanEverは元関数を一度だけ呼び、`this+0x70` のPlayer IDが0、Indexが実行時検査済みの4である呼出しからCore property receiverを登録する。自然に呼ばれたgetterが同じreceiver・固定キー `853304` の24バイトboolを返した時だけ、receiverと許可bitを一つの原子的な値で更新する。Core以外のUI cache receiver、欠損、不正タグ・flags・payload、所有者違いは許可を作らない。所有者0のIndex 4以外は元のCanEver結果を返す。controllerはtrueを構成から渡さない。終了時は許可を先に閉じてから両入口を復元し、property前置領域と中継コードをゲーム終了まで保持する。
+
+試験用の同期GameplayはGame台帳の正規Join、実Great Person、費用1の全額予約を確認した確定点で派生boolを公開する。完了時は偉人を消す前にfalseへ戻し、本体Governor・基礎昇進・称号使用済み数と偉人消失を確認した後にtrueを再公開する。初期値は全484組falseで、数値IDの衝突は試験開始時に拒否する。この公開処理は試験MODの明示flagで有効になり、通常の人物MODだけでは数値資格を公開しない。
+
+ROOT853が同一releaseビルドを配置・レビューした後に実行するBの有限シナリオは次である。24手順の内容は、未加入484組偽、21AIに公式称号を与えた実ターン後の使用済み0・未任命、正規Join後に所有者0の蘆名盛舜だけ真、ほか483組偽、公式APPOINT一度、実Governor・基礎昇進・Spent+1、通常Finalize後の偉人消失である。証跡は`joined-admission-cost1.jsonl`、同期receipt、`steps.jsonl`と各ログで判断する。
+
+```powershell
+D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admission-cost1-15km.json --stop-on-failure
+```
+
+合成Windows子プロセスでは元関数一回、所有者だけの偽→真、別所有者と別Index、不正なnative値による閉鎖、第二hook失敗時の第一hook復元を確認した。実機でのB成功は未確認である。稼働中の保存・ロード、即時の偉人死亡通知、費用2/3の公式PROMOTEと未払い時ASSIGN拒否、全22人・AI資格の製品接続は残る。Bセッション中の保存・ロード・ターン変更はシナリオ検証が拒否する。AI実ターン検査はhook設置前に行う。
 
 `tools/civ6-native-bridge-rs` に `can-ever-calibration` を追加した。固定SHAの `CanEver` 入口では従来と同じ先頭5バイトだけを置き換え、元の関数を**一度だけ**呼んで `AL` をそのまま返す。呼出し中に `this+0x70` のPlayer、`Player+0xD8` のIDを限定してコピーし、`Player+0x528` をproperty receiver候補として記録する。保存したPlayerポインタを次回呼出しやロード後へ流用しない。読取失敗は失敗状態として残す。別の `property-admission-scoped` は既存の本体getter観測器を数値ID `853304` に限定し、元のgetterが自然に呼ばれた際の24バイトの値をコピーする。これらは資格を開かず、未知のC++ accessorも呼ばない。
 
 `poc/JAC_Test_PropertyObserver` の試験用同期Gameplayイベントは、22人の実行中Governor Indexから `853300+Index` を作り、Game/Playerでの既存値との衝突を全484組について拒否してから、全員をfalseにする。蘆名盛舜（実行時Index 4、費用1）だけを正規Joinし、実Great Personが1体であることと公式称号1個の全額予約、Game台帳の所有者・EVOLVINGを確認してから、所有者0の派生値だけをtrueにする。Game propertyの加入台帳を正本とし、試験用のPlayer値やreceiptから加入・称号を作らない。別の人物・所有者はfalseのままにする。
 
-ROOT853が新しいDLL・controller・runnerを同じビルドから配置した後に実行する有限シナリオは次である。20手順で、元の資格判定のfalseと所有者0/1をJoin前後に観測し、その間に派生propertyのfalse→trueをGameplay/UI getterで観測する。実行・共有ロック・ゲーム終了はROOT853の`live_chain`が所有する。
+ROOT853はAの有限シナリオを実機118で実行した。ROOT側で加入後の484組を追加したため実行版は22手順だった。元の資格判定のfalseと所有者0/1をJoin前後に観測し、その間に派生propertyのfalse→trueをGameplay/UI getterで観測した。共有ロックとゲーム終了はROOT853の`live_chain`が所有した。
 
 ```powershell
 D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admission-calibration-15km.json --stop-on-failure
@@ -182,7 +198,7 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-joined-admissio
 
 証跡は `joined-admission-before.jsonl`、`joined-admission-property.jsonl`、`joined-admission-after.jsonl`、同期Game receiptと`steps.jsonl`で照合する。前後のnative行にIndex 4、所有者0/1、元のAL=0、UI戻り先RVA `0xBA523`、Player候補と`+0x528` receiverの整合が必要である。property行はID `853304`、boolタグ1、payload 0/1、flags 0、Core/UIの別threadを必要とする。property traceのreceiverと各CanEver行のreceiverが一致しても、別呼出し・別threadのポインタ寿命や同時更新の安全性は証明されない。ROOT853はその差と同期Gameplay receiptの順序を実際の証跡で判断する。
 
-このA段階の実機照合後、同じCanEverコールバックで**その所有者**のpropertyを安全に読むスレッド・寿命・同期の根拠を確定し、初めて費用1の私的read-through許可モードを構築する。必要なB段階の合格は、蘆名盛舜本人だけのnative資格真、他483組偽、公式APPOINT1回による実Governor・基礎昇進・本体Spent+1、Finalize後の実Great Person消失である。費用2/3のPROMOTE、未払い時ASSIGN拒否、AI21人の実手番、保存とスパイ回復はその後のMustであり、このシナリオの成功に含めない。
+Aの実測に基づく費用1の私的B接続は、CanEver内から新たにC++ getterを呼ばず、同じ所有者のCore receiverに対して本体が自然に呼んだgetterの結果だけを使う。B合格には蘆名盛舜本人だけのnative資格真、他483組偽、公式APPOINT1回による実Governor・基礎昇進・本体Spent+1、Finalize後の実Great Person消失が必要である。費用2/3のPROMOTE、未払い時ASSIGN拒否、保存とスパイ回復はその後のMustであり、Aの成功に含めない。
 
 ### 元の判定を保つ接続の実測（実機100）
 

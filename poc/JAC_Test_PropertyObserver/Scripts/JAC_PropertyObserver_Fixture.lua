@@ -90,6 +90,7 @@ GameEvents.JAC_JoinedAdmissionInitialize.Add(function(owner)
     local governor = assert(GameInfo.Governors[ashina.GovernorType]);
     assert(governor.Index == 4 and AdmissionKey(governor.Index) == 853304,
         "Ashina Index differs from pinned calibration scene");
+    Game:SetProperty("JAC_TEST853_ADMISSION_ACTIVE", 1);
     Game:SetProperty(ADMISSION_RECEIPT, {
         phase="CLOSED", owner=owner, leader=ASHINA, governorIndex=governor.Index,
         key=AdmissionKey(governor.Index), pairs=22 * #players,
@@ -151,10 +152,7 @@ GameEvents.JAC_JoinedAdmissionPrepare.Add(function(owner)
         Game:GetProperty("JAC_PERSONA_" .. ASHINA .. "_EVOLUTION_COST") == 1 and
         governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() >= 1,
         "authoritative admission inputs disagree");
-    assert(player:GetProperty(receipt.key) == false,
-        "derived permission opened before official reservation");
-    -- Publish last, in the same synchronized Gameplay operation.
-    player:SetProperty(receipt.key, true);
+    -- PrepareEvolution published from its verified Gameplay transition.
     assert(player:GetProperty(receipt.key) == true,
         "Gameplay Player receiver did not see the derived permission");
     Game:SetProperty(ADMISSION_RECEIPT, {

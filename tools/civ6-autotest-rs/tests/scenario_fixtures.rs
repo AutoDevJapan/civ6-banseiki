@@ -1052,6 +1052,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
                 "leader-persona-property-observer-15km.json"
                     | "leader-persona-property-numeric-observer-15km.json"
                     | "leader-persona-joined-admission-calibration-15km.json"
+                    | "leader-persona-joined-admission-cost1-15km.json"
             ) {
                 assert!(
                     strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
@@ -1077,7 +1078,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 87);
+    assert_eq!(count, 88);
 }
 
 #[test]
@@ -1180,6 +1181,55 @@ fn joined_admission_calibration_separates_owner_returns_and_typed_property_trans
     assert!(s.iter().any(|step| step["code"]
         .as_str()
         .is_some_and(|code| code.contains("JAC_JoinedAdmissionPrepare"))));
+}
+
+#[test]
+fn joined_cost_one_scene_uses_one_native_window_and_one_official_appointment() {
+    let data = scenario("leader-persona-joined-admission-cost1-15km.json");
+    let s = steps(&data);
+    assert_eq!(s.len(), 24);
+    let actions = s
+        .iter()
+        .map(|step| step["action"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|action| **action == "start_native_joined_admission")
+            .count(),
+        1
+    );
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|action| **action == "stop_native_joined_admission")
+            .count(),
+        1
+    );
+    assert_eq!(
+        actions
+            .iter()
+            .filter(|action| **action == "end_turn")
+            .count(),
+        1
+    );
+    assert!(s
+        .iter()
+        .any(|step| step["code"].as_str().is_some_and(
+            |code| code.contains("count==484") && code.contains("CanEverAppointGovernor")
+        )));
+    assert_eq!(
+        s.iter()
+            .filter(|step| step["code"]
+                .as_str()
+                .is_some_and(|code| code.contains("PlayerOperations.APPOINT_GOVERNOR")))
+            .count(),
+        1
+    );
+    assert!(s.iter().any(|step| step["code"]
+        .as_str()
+        .is_some_and(|code| code.contains("GetGovernorPointsSpent()==r.spent+1")
+            && code.contains("people==0"))));
 }
 
 #[test]

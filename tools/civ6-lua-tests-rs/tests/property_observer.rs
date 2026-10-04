@@ -212,6 +212,8 @@ fn joined_admission_fixture_publishes_only_after_real_join_and_full_title() {
                 local g = Players[owner].governors
                 assert(g.total-g.spent>=1)
                 Game:SetProperty('JAC_PERSONA_'..leader..'_STATE', 'EVOLVING')
+                assert(Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==1)
+                Players[owner]:SetProperty(853304,true)
                 return 'EVOLVING'
             end}}
         GameEvents = {
