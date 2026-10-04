@@ -47,6 +47,8 @@ mod platform {
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
+        let mut assign_ui = std::collections::BTreeSet::new();
+        let mut assign_update = std::collections::BTreeSet::new();
         let mut joined_calibrations = 0usize;
         let mut joined_properties = 0usize;
         let mut joined_positive = false;
@@ -80,11 +82,12 @@ mod platform {
                                 BridgeMode::JoinedAdmission => "joined-admission",
                                 BridgeMode::ProductionAdmission => "production-admission",
                                 BridgeMode::PromotionCall => "promotion-call",
+                                BridgeMode::AssignCalibration => "assign-calibration",
                             }
                         && row["entry_rva"] == mode.rva()
                         && (matches!(
                             mode,
-                            BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::PromotionCall
+                            BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::PromotionCall | BridgeMode::AssignCalibration
                         ) || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
                         && (mode != BridgeMode::PromotionCall
                             || (row["original_callee_rva"] == civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA
@@ -202,6 +205,70 @@ mod platform {
                         }
                     }
                     entries += 1
+                }
+                Some("assign_calibration")
+                    if mode == BridgeMode::AssignCalibration
+                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                        && row["thread_id"].as_u64().is_some_and(|n| n > 0)
+                        && row["read_flags"].as_u64().is_some_and(|n| n <= 7)
+                        && [
+                            "governors_this",
+                            "governor_pointer",
+                            "city_pointer",
+                            "reason_pointer",
+                            "player_address",
+                            "original_rax",
+                        ]
+                        .into_iter()
+                        .all(|key| hex_address(&row[key]).is_some())
+                        && row["original_al"].as_u64().is_some_and(|n| n <= 255)
+                        && row["effective_al"] == row["original_al"]
+                        && hex_address(&row["original_rax"]).map(|n| n & 255)
+                            == row["original_al"].as_u64()
+                        && [
+                            "player_id",
+                            "governor_index",
+                            "city_a8",
+                            "city_c0",
+                            "city_c4",
+                            "city_d8",
+                        ]
+                        .into_iter()
+                        .all(|key| row[key].as_u64().is_some_and(|n| n <= u32::MAX as u64)) =>
+                {
+                    if row["read_flags"] == 7
+                        && row["player_id"] == 0
+                        && row["governor_index"] == 4
+                        && row["city_d8"] == 0
+                        && row["original_al"].as_u64().is_some_and(|n| n <= 1)
+                        && [
+                            "governors_this",
+                            "governor_pointer",
+                            "city_pointer",
+                            "player_address",
+                        ]
+                        .into_iter()
+                        .all(|key| hex_address(&row[key]).is_some_and(|n| n != 0))
+                    {
+                        let pair = (
+                            hex_address(&row["governors_this"]),
+                            hex_address(&row["governor_pointer"]),
+                            hex_address(&row["city_pointer"]),
+                            hex_address(&row["player_address"]),
+                            row["city_a8"].as_u64(),
+                            row["city_c0"].as_u64(),
+                            row["city_c4"].as_u64(),
+                        );
+                        if row["return_site_rva"] == 0xba3e2 {
+                            assign_ui.insert(pair);
+                        }
+                        if row["return_site_rva"] == 0x2dd375
+                            && row["reason_pointer"] == "0x0000000000000000"
+                        {
+                            assign_update.insert(pair);
+                        }
+                    }
+                    entries += 1;
                 }
                 Some("property_get")
                     if (mode.is_property() || dual)
@@ -359,6 +426,7 @@ mod platform {
                                 | BridgeMode::JoinedAdmission
                                 | BridgeMode::ProductionAdmission
                                 | BridgeMode::PromotionCall
+                                | BridgeMode::AssignCalibration
                         ) {
                             row["result"] == "ok"
                                 && (row["dropped"] == 0
@@ -370,6 +438,8 @@ mod platform {
                                 && row["classification"]
                                     == if mode == BridgeMode::CanEver {
                                         "can_ever_entry"
+                                    } else if mode == BridgeMode::AssignCalibration {
+                                        "assign_calibration"
                                     } else if mode == BridgeMode::JoinedAdmission {
                                         "joined_admission"
                                     } else if mode == BridgeMode::ProductionAdmission {
@@ -429,6 +499,11 @@ mod platform {
                 "native property raw collection is partial: {entries} rows, {dropped} dropped; inspect {}",
                 path.display()
             )));
+        }
+        if mode == BridgeMode::AssignCalibration && assign_ui.is_disjoint(&assign_update) {
+            return Err(Error::input(
+                "native assignment UI/update pointer ABI evidence missing",
+            ));
         }
         if mode == BridgeMode::PropertyScoped
             && scoped_keys
@@ -663,6 +738,7 @@ mod platform {
                 "joined-admission" => BridgeMode::JoinedAdmission,
                 "production-admission" => BridgeMode::ProductionAdmission,
                 "promotion-call" => BridgeMode::PromotionCall,
+                "assign-calibration" => BridgeMode::AssignCalibration,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
             };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
@@ -702,6 +778,7 @@ mod platform {
                         BridgeMode::JoinedAdmission => "joined-admission",
                         BridgeMode::ProductionAdmission => "production-admission",
                         BridgeMode::PromotionCall => "promotion-call",
+                        BridgeMode::AssignCalibration => "assign-calibration",
                     },
                 ])
                 .stdin(Stdio::piped())
@@ -1224,6 +1301,69 @@ mod platform {
                 write(&bad);
                 assert!(
                     terminal_artifact(&path, 7, 123, BridgeMode::CanEverCalibration).is_err(),
+                    "{field}"
+                );
+            }
+        }
+
+        #[test]
+        fn assignment_terminal_requires_matching_ui_update_pointers_and_unchanged_original() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("assign.jsonl");
+            let call = json!({"kind":"assign_calibration","sequence":1,"thread_id":11,"read_flags":7,
+                "governors_this":"0x0000000000001000","governor_pointer":"0x0000000000003000",
+                "city_pointer":"0x0000000000004000","reason_pointer":"0x0000000000000000",
+                "player_address":"0x0000000000002000","player_id":0,"governor_index":4,
+                "city_a8":19,"city_c0":17,"city_c4":29,"city_d8":0,"return_site_rva":0xba3e2,
+                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1});
+            let mut update = call.clone();
+            update["sequence"] = json!(2);
+            update["return_site_rva"] = json!(0x2dd375);
+            let rows = vec![
+                json!({"kind":"identity","pid":7,"created_filetime":123,"mode":"assign-calibration",
+                    "entry_rva":civ6_native_bridge_rs::PINNED_CAN_ASSIGN_RVA,
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,"prefix_retained_until_exit":false}),
+                call,
+                update,
+                json!({"kind":"stop","result":"ok","rows":2,"observed_calls":2,"dropped":0,
+                    "in_flight":0,"snapshot_stable":true,"classification":"assign_calibration",
+                    "prefix_retained_until_exit":false}),
+            ];
+            let write = |r: &[Value]| {
+                std::fs::write(
+                    &path,
+                    r.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
+                2
+            );
+            for (index, field, value) in [
+                (3, "original_rax", json!("0xaabbccdd00000000")),
+                (3, "effective_al", json!(0)),
+                (3, "governor_pointer", json!(4)),
+                (4, "governor_pointer", json!("0x0000000000003008")),
+                (4, "read_flags", json!(3)),
+                (4, "city_a8", json!(20)),
+                (4, "reason_pointer", json!("0x0000000000007777")),
+                (4, "return_site_rva", json!(0x2dd370)),
+                (5, "dropped", json!(1)),
+                (2, "entry_restored", json!(false)),
+                (0, "entry_rva", json!(0x2dddd0)),
+            ] {
+                let mut bad = rows.clone();
+                bad[index][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err(),
                     "{field}"
                 );
             }
