@@ -1383,6 +1383,7 @@ local pending, verification, buildPending, travelReference, capacityBuildReady,
     capacityDistrictReady;
 local spyQueued = {};
 local capacityQueued = {};
+local capacityCivicPending;
 local operationStarts = {};
 local barrierToken = 0;
 local frameSerial, publishEpoch = 0, 0;
@@ -1662,6 +1663,7 @@ function B.Queue(action, params)
         action == "CONFIRM_ENEMY" or action == "BEGIN_SPY_RETRY" or
         action == "MARK_CAPTIVE_EXCHANGE" or
         action == "PREPARE_DISTRICT_CIVIC" or
+        action == "RESUME_CAPACITY_CIVIC_READ" or
         action == "CAPTURE_ENEMY" or action == "SAVE_TRAVEL" or
         action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
         action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "BUILD_SPY" or
@@ -1687,9 +1689,36 @@ function B.Queue(action, params)
     end
     if action=="PREPARE_DISTRICT_CIVIC" then
         assert(not capacityQueued[action] and
+            not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT") and
             not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT") and
             not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC"),
             "native capacity Civic request is already attempted; do not replay the setter");
+        capacityQueued[action]=true;
+    end
+    if action=="RESUME_CAPACITY_CIVIC_READ" then
+        local attempt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT"),
+            "capacity Civic setter attempt is missing");
+        local receipt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT"),
+            "capacity Civic setter result is missing");
+        local read=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_READ"),
+            "capacity Civic first Gameplay read is missing");
+        assert(not capacityQueued[action] and
+            Game.GetCurrentGameTurn()==attempt.turn+1 and
+            receipt.phase=="SETTER_RETURNED" and receipt.status~="ERROR" and
+            receipt.owner==attempt.owner and receipt.index==attempt.index and
+            receipt.token==attempt.token and receipt.turn==attempt.turn and
+            receipt.beforeSpent==attempt.beforeSpent and
+            receipt.beforeTotal==attempt.beforeTotal and
+            receipt.generation==attempt.generation and
+            read.action=="PREPARE_DISTRICT_CIVIC" and
+            read.originalToken==attempt.token and read.originalTurn==attempt.turn and
+            read.turn==attempt.turn and read.generation==attempt.generation and
+            (read.status=="OBSERVED" or read.status=="PENDING_NATIVE") and
+            read.spent==attempt.beforeSpent and
+            (not capacityCivicPending or
+             (capacityCivicPending.token==attempt.token and
+              capacityCivicPending.turn==attempt.turn)),
+            "capacity Civic read-only resume needs the original receipt and one real turn");
         capacityQueued[action]=true;
     end
     if action == "SPAWN_SPY" or action == "BUILD_SPY" or action == "PROGRESS_SPY" or
@@ -1737,16 +1766,20 @@ function B.Queue(action, params)
 end
 local function EnemySyncRequest(action,observed)
     local capacity;
-    if action=="PREPARE_DISTRICT_CIVIC" then
+    if action=="PREPARE_DISTRICT_CIVIC" or
+        action=="RESUME_CAPACITY_CIVIC_READ" then
         local priorBarrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
         local priorRead=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_READ");
         local priorMarker=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC");
+        local attempt=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT");
         -- The UI token counter starts at zero after load. Bound it above every
         -- saved Civic/barrier token so an old publish can never acknowledge it.
         barrierToken=math.max(barrierToken,priorBarrier and priorBarrier.token or 0,
-            priorRead and priorRead.token or 0,priorMarker and priorMarker.token or 0);
+            priorRead and priorRead.token or 0,priorMarker and priorMarker.token or 0,
+            attempt and attempt.token or 0);
         capacity={barrierSerial=priorBarrier and priorBarrier.serial or 0,
-            readSerial=priorRead and priorRead.serial or 0};
+            readSerial=priorRead and priorRead.serial or 0,
+            resume=action=="RESUME_CAPACITY_CIVIC_READ"};
     end
     barrierToken=barrierToken+1;
     local payload={Attacker=Game.GetLocalPlayer(),Defender=1,Source=2,
@@ -1754,6 +1787,14 @@ local function EnemySyncRequest(action,observed)
         Token=barrierToken,Turn=Game.GetCurrentGameTurn(),
         Frame=frameSerial,PublishEpoch=publishEpoch};
     for key,value in pairs(observed) do payload[key]=value; end
+    if action=="PREPARE_DISTRICT_CIVIC" then
+        payload.OriginalOwner=payload.Attacker;
+        payload.OriginalIndex=payload.CivicIndex;
+        payload.OriginalToken=payload.Token;
+        payload.OriginalTurn=payload.Turn;
+        payload.OriginalSpent=payload.Spent;
+        payload.OriginalSequence=payload.Token;
+    end
     local onStart={PREPARE_ENEMY="JAC_BoundaryPrepareEnemy",
         EVOLVE_ENEMY="JAC_BoundaryEvolveEnemy",
         CONFIRM_ENEMY="JAC_BoundaryConfirmEnemy",
@@ -1761,9 +1802,11 @@ local function EnemySyncRequest(action,observed)
         BEGIN_SPY_RETRY="JAC_BoundaryBeginEnemySpyRetry",
         MARK_CAPTIVE_EXCHANGE="JAC_BoundaryMarkCaptiveExchange",
         PREPARE_DISTRICT_CIVIC="JAC_BoundaryPrepareCapacityCivic",
+        RESUME_CAPACITY_CIVIC_READ="JAC_BoundaryReadCapacityCivic",
         PROGRESS_CAPACITY_DISTRICT="JAC_BoundaryProgressCapacityDistrict",
         PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding"};
     payload.OnStart=assert(onStart[action],"unknown enemy fixture operation");
+    if capacity and capacity.resume then payload.Phase="RESUME_READ"; end
     UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,payload);
     Log("ENEMY_SYNC_REQUEST",{action=action,token=payload.Token,
         turn=payload.Turn,frame=payload.Frame,publishEpoch=payload.PublishEpoch,
@@ -1774,20 +1817,38 @@ end
 
 local function VerifyCapacityCivic(request)
     local receipt=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT");
-    if not receipt or receipt.action~=request.action or
-        receipt.owner~=request.payload.Attacker or receipt.token~=request.token or
-        receipt.turn~=request.turn or receipt.generation~=1 then
+    if not receipt or receipt.action~="PREPARE_DISTRICT_CIVIC" or
+        receipt.owner~=request.payload.OriginalOwner or
+        receipt.token~=request.payload.OriginalToken or
+        receipt.turn~=request.payload.OriginalTurn then
         return "UNKNOWN","COMMAND_CALLBACK_NOT_OBSERVED",receipt;
     end
     if receipt.status=="ERROR" then
         return "ERROR","COMMAND_CALLBACK_ERROR",receipt;
     end
+    local attempt=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT");
+    if not attempt or attempt.owner~=request.payload.OriginalOwner or
+        attempt.index~=request.payload.OriginalIndex or
+        attempt.token~=request.payload.OriginalToken or
+        attempt.turn~=request.payload.OriginalTurn or
+        attempt.beforeSpent~=request.payload.OriginalSpent or
+        attempt.sequence~=request.payload.OriginalSequence or
+        attempt.generation~=receipt.generation or
+        attempt.beforeTotal~=receipt.beforeTotal or
+        attempt.beforeSpent~=receipt.beforeSpent or
+        receipt.index~=attempt.index then
+        return "UNKNOWN","IMMUTABLE_SETTER_ATTEMPT_MISMATCH",receipt;
+    end
     if receipt.phase~="SETTER_RETURNED" then
         return "UNKNOWN","SETTER_RESULT_UNKNOWN",receipt;
     end
     local read=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_READ");
-    if not read or read.owner~=receipt.owner or read.token~=receipt.token or
-        read.generation~=receipt.generation or
+    if not read or read.action~=request.action or
+        read.owner~=attempt.owner or read.token~=request.token or
+        read.turn~=request.turn or read.frame~=request.payload.Frame or
+        read.publishEpoch~=request.payload.PublishEpoch or
+        read.originalToken~=attempt.token or read.originalTurn~=attempt.turn or
+        read.generation~=attempt.generation or
         type(read.serial)~="number" or
         read.serial<=request.capacity.readSerial then
         return "UNKNOWN","READ_CALLBACK_NOT_OBSERVED",receipt,read;
@@ -1795,14 +1856,14 @@ local function VerifyCapacityCivic(request)
     if read.status=="ERROR" then
         return "ERROR","READ_CALLBACK_ERROR",receipt,read;
     end
+    if read.spent~=attempt.beforeSpent then
+        return "REJECTED","OFFICIAL_TITLE_SPENT_CHANGED",receipt,read;
+    end
     if not read.owned then
         return "PENDING","GAMEPLAY_CIVIC_NOT_OBSERVED",receipt,read;
     end
-    if read.spent~=receipt.beforeSpent then
-        return "REJECTED","OFFICIAL_TITLE_SPENT_CHANGED",receipt,read;
-    end
     local civic=GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"];
-    if not civic or read.index~=civic.Index then
+    if not civic or read.index~=civic.Index or attempt.index~=civic.Index then
         return "REJECTED","CIVIC_INDEX_CHANGED",receipt,read;
     end
     if not Players[Game.GetLocalPlayer()]:GetCulture():HasCivic(civic.Index) then
@@ -1810,10 +1871,14 @@ local function VerifyCapacityCivic(request)
     end
     local marker=Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC");
     if not marker or marker.owner~=receipt.owner or marker.index~=civic.Index or
-        marker.token~=request.token or marker.generation~=receipt.generation or
-        marker.readSerial~=read.serial or marker.commandTurn~=receipt.turn or
-        marker.beforeTotal~=receipt.beforeTotal or
-        marker.beforeSpent~=receipt.beforeSpent or
+        marker.token~=request.token or marker.generation~=attempt.generation or
+        marker.originalToken~=attempt.token or
+        marker.originalSequence~=attempt.sequence or
+        marker.readSerial~=read.serial or marker.readFrame~=read.frame or
+        marker.readPublishEpoch~=read.publishEpoch or
+        marker.commandTurn~=attempt.turn or marker.turn~=request.turn or
+        marker.beforeTotal~=attempt.beforeTotal or
+        marker.beforeSpent~=attempt.beforeSpent or
         marker.afterTotal~=read.total or marker.afterSpent~=read.spent then
         return "REJECTED","CORE_CIVIC_MARKER_MISMATCH",receipt,read;
     end
@@ -1840,6 +1905,15 @@ local function Submit(command)
         local titles=Players[owner]:GetGovernors();
         return EnemySyncRequest(action,{CivicIndex=civic.Index,
             Total=titles:GetGovernorPoints(),Spent=titles:GetGovernorPointsSpent()});
+    elseif action == "RESUME_CAPACITY_CIVIC_READ" then
+        local attempt=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT"),
+            "capacity Civic setter attempt vanished before read-only resume");
+        assert(attempt.owner==owner and Game.GetCurrentGameTurn()==attempt.turn+1,
+            "capacity Civic read-only resume turn or owner changed");
+        return EnemySyncRequest(action,{CivicIndex=attempt.index,
+            OriginalOwner=attempt.owner,OriginalIndex=attempt.index,
+            OriginalToken=attempt.token,OriginalTurn=attempt.turn,
+            OriginalSpent=attempt.beforeSpent,OriginalSequence=attempt.sequence});
     elseif action == "PROGRESS_CAPACITY_DISTRICT" then
         local plan=B.CaptiveCapacityPlan();
         local ready=assert(capacityDistrictReady,"native Government Plaza BUILD not accepted");
@@ -2213,7 +2287,9 @@ ContextPtr:SetUpdate(function()
                 local arguments={};
                 for key,value in pairs(request.payload) do arguments[key]=value; end
                 arguments.OnStart="JAC_BoundaryEnemyFixtureBarrier";
-                if request.capacity then arguments.Phase="COMMAND"; end
+                if request.capacity then
+                    arguments.Phase=request.capacity.resume and "RESUME_READ" or "COMMAND";
+                end
                 local ok,err=pcall(UI.RequestPlayerOperation,Game.GetLocalPlayer(),
                     PlayerOperations.EXECUTE_SCRIPT,arguments);
                 B.lastAction=(ok and "BARRIER_SENT_" or "UNKNOWN_")..request.action;
@@ -2223,7 +2299,8 @@ ContextPtr:SetUpdate(function()
                 end
                 return;
             end
-            if request.capacity and request.stage=="BARRIER_SENT" and request.published then
+            if request.capacity and not request.capacity.resume and
+                request.stage=="BARRIER_SENT" and request.published then
                 local marker=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
                 request.capacity.commandBarrierSerial=marker.serial;
                 request.stage="READ_SENT"; request.published=false;
@@ -2259,6 +2336,12 @@ ContextPtr:SetUpdate(function()
             if request.capacity then
                 local status,reason,receipt,read=VerifyCapacityCivic(request);
                 B.lastAction=status.."_"..request.action;
+                if status=="PENDING" then
+                    capacityCivicPending={token=request.payload.OriginalToken,
+                        turn=request.payload.OriginalTurn};
+                elseif status=="ACCEPTED" then
+                    capacityCivicPending=nil;
+                end
                 Log("CAPACITY_CIVIC_ACCEPTANCE",{status=status,reason=reason,
                     token=request.token,command=receipt,read=read,
                     commandBarrierSerial=request.capacity.commandBarrierSerial,
@@ -2435,13 +2518,16 @@ Events.GameCoreEventPublishComplete.Add(function()
             marker.action==verification.action and marker.token==verification.token and
             marker.turn==verification.turn and
             (not verification.capacity or
-             (marker.phase==(verification.stage=="BARRIER_SENT" and "COMMAND" or "READ") and
+             (marker.phase==(verification.stage=="READ_BARRIER_SENT" and "READ" or
+                verification.capacity.resume and "RESUME_READ" or "COMMAND") and
               type(marker.serial)=="number" and
               marker.serial>(verification.stage=="BARRIER_SENT" and
                   verification.capacity.barrierSerial or
                   verification.capacity.commandBarrierSerial))) then
             verification.published=true;
-            if verification.capacity and verification.stage=="READ_BARRIER_SENT" then
+            if verification.capacity and
+                (verification.stage=="READ_BARRIER_SENT" or
+                 verification.capacity.resume) then
                 verification.capacity.readBarrierSerial=marker.serial;
             end
         end
