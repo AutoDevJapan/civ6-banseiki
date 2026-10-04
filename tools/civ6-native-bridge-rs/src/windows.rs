@@ -6,7 +6,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::ptr::{self, null_mut};
-use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU16, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
@@ -34,6 +34,11 @@ const PINNED_PROLOGUE: [u8; PROLOGUE_LEN] = [0x48, 0x89, 0x5c, 0x24, 0x08];
 // LLVM disassembly of the pinned image: mov rax,[rcx+40h] (4 bytes),
 // lea r9,[rcx+30h] (4 bytes). Both whole instructions are relocated.
 const PROPERTY_PROLOGUE: [u8; 8] = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30];
+const PROPERTY_FIRST_LEN: usize = 4;
+const PROPERTY_PREFIX_LEN: usize = 5;
+const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
+// EB F9 jumps from entry+2 to entry-5. Entry+2..+7 are never modified.
+const PROPERTY_SHORT_JUMP: [u8; 2] = [0xeb, 0xf9];
 pub const PINNED_GAMECORE_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const PINNED_CAN_EVER_RVA: usize = 0x2d_ddd0;
@@ -264,13 +269,24 @@ pub struct PropertyValueTrace {
 
 impl PropertyTrace {
     pub fn complete_rows(&self) -> Result<Vec<PropertyValueTrace>, &'static str> {
-        if self.in_flight.load(Ordering::Acquire) != 0
-            || self.dropped.load(Ordering::Acquire) != 0
-            || self.next.load(Ordering::Acquire) as usize > TRACE_CAPACITY
-        {
-            return Err("property getter trace did not drain or capacity exceeded");
+        if self.dropped.load(Ordering::Acquire) != 0 {
+            return Err("property getter trace capacity exceeded");
         }
-        let end = self.next.load(Ordering::Acquire) as usize;
+        self.snapshot_rows()
+    }
+
+    /// All published rows, including a capacity-limited partial capture.
+    /// The caller separately reports `next` and `dropped` in the artifact.
+    pub fn snapshot_rows(&self) -> Result<Vec<PropertyValueTrace>, &'static str> {
+        if self.in_flight.load(Ordering::Acquire) != 0 {
+            return Err("property getter calls remain in flight");
+        }
+        let next = self.next.load(Ordering::Acquire);
+        let dropped = self.dropped.load(Ordering::Acquire);
+        if next.saturating_sub(TRACE_CAPACITY as u32) != dropped {
+            return Err("property getter count and dropped count disagree");
+        }
+        let end = next.min(TRACE_CAPACITY as u32) as usize;
         let mut rows = Vec::with_capacity(end);
         for (index, row) in self.rows[..end].iter().enumerate() {
             if row.sequence.load(Ordering::Acquire) != 1 {
@@ -355,13 +371,19 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     trace.in_flight.fetch_sub(1, Ordering::Release);
 }
 
-// Win64 entry: RCX=property, EDX=key. The 0x68-byte frame supplies aligned
+// Win64 entry: RCX=property, EDX=key. .seh_* emits pdata/xdata for this
+// nonleaf frame. The pinned 0x99F5C0 getter has no covering pdata entry and
+// only leaf instructions; the allocated trampoline is a MOV plus direct JMP.
+// The 0x68-byte frame supplies aligned
 // calls and shadow space. The original sees the exact argument registers once;
 // its RAX is saved across telemetry and restored before returning to its caller.
 global_asm!(
     ".globl property_gateway",
+    ".seh_proc property_gateway",
     "property_gateway:",
     "sub rsp, 0x68",
+    ".seh_stackalloc 0x68",
+    ".seh_endprologue",
     "mov qword ptr [rsp + 0x20], rcx",
     "mov qword ptr [rsp + 0x28], rdx",
     "call qword ptr [rip + PROPERTY_TRAMPOLINE_PTR]",
@@ -373,6 +395,7 @@ global_asm!(
     "mov rax, qword ptr [rsp + 0x30]",
     "add rsp, 0x68",
     "ret",
+    ".seh_endproc",
     record = sym record_property,
 );
 
@@ -437,9 +460,13 @@ static BRIDGE_TRACE_PTR: AtomicPtr<SharedTrace> = AtomicPtr::new(null_mut());
 static BRIDGE_TRAMPOLINE_PTR: AtomicPtr<u8> = AtomicPtr::new(null_mut());
 
 struct Hook {
+    mode: BridgeMode,
     target: *mut u8,
     original: [u8; 8],
     patched: [u8; 8],
+    // The property prefix stays executable until process exit. A thread may
+    // have fetched the short jump before the entry is restored.
+    prefix: Option<(*mut u8, [u8; PROPERTY_PREFIX_LEN])>,
     // Keep relay/trampoline allocated even after restoration. Another thread
     // could have entered the relay immediately before the entry was restored.
     _code: *mut u8,
@@ -447,6 +474,7 @@ struct Hook {
 unsafe impl Send for Hook {}
 
 static HOOK: Mutex<Option<Hook>> = Mutex::new(None);
+static PROPERTY_USED: AtomicBool = AtomicBool::new(false);
 
 fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     let displacement = (to as i128) - (from as i128) - 5;
@@ -457,7 +485,7 @@ fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     Some(jump)
 }
 
-unsafe fn executable_near(target: usize, prologue_len: usize) -> Option<*mut u8> {
+unsafe fn executable_near(jump_from: usize, target: usize, prologue_len: usize) -> Option<*mut u8> {
     // VirtualAlloc's address hint is allocation-granularity aligned. Both
     // rel32 jumps must fit; a failed or occupied hint only advances the scan.
     let base = target & !0xffffusize;
@@ -465,7 +493,7 @@ unsafe fn executable_near(target: usize, prologue_len: usize) -> Option<*mut u8>
         let delta = step * 0x10000;
         for candidate in [base.checked_add(delta), base.checked_sub(delta)] {
             let Some(candidate) = candidate else { continue };
-            if rel32_jump(target, candidate).is_none()
+            if rel32_jump(jump_from, candidate).is_none()
                 || rel32_jump(
                     candidate + TRAMPOLINE_OFFSET + prologue_len,
                     target + prologue_len,
@@ -520,11 +548,172 @@ unsafe fn exchange_entry(
     })
 }
 
+unsafe fn exchange_property_entry(
+    target: *mut u8,
+    expected: [u8; 2],
+    replacement: [u8; 2],
+) -> Result<PatchOutcome, &'static str> {
+    if !(target as usize).is_multiple_of(2) {
+        return Err("property entry is not two-byte aligned");
+    }
+    let mut previous = 0u32;
+    if unsafe { VirtualProtect(target.cast(), 2, PAGE_EXECUTE_READWRITE, &mut previous) } == 0 {
+        return Err("cannot make property entry writable");
+    }
+    let exchanged = unsafe { &*target.cast::<AtomicU16>() }
+        .compare_exchange(
+            u16::from_le_bytes(expected),
+            u16::from_le_bytes(replacement),
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        )
+        .is_ok();
+    let mut replaced = 0u32;
+    let protection_restored =
+        unsafe { VirtualProtect(target.cast(), 2, previous, &mut replaced) } != 0;
+    let cache_flushed =
+        unsafe { FlushInstructionCache(GetCurrentProcess(), target.cast(), 2) } != 0;
+    Ok(PatchOutcome {
+        exchanged,
+        protection_restored,
+        cache_flushed,
+    })
+}
+
+unsafe fn publish_property_prefix(
+    slot: *mut u8,
+    expected: [u8; PROPERTY_PREFIX_LEN],
+    jump: [u8; PROPERTY_PREFIX_LEN],
+) -> Result<(), &'static str> {
+    let mut previous = 0u32;
+    if unsafe {
+        VirtualProtect(
+            slot.cast(),
+            PROPERTY_PREFIX_LEN,
+            PAGE_EXECUTE_READWRITE,
+            &mut previous,
+        )
+    } == 0
+    {
+        return Err("cannot make verified property prefix writable");
+    }
+    if unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) } != expected {
+        let mut replaced = 0u32;
+        if unsafe { VirtualProtect(slot.cast(), PROPERTY_PREFIX_LEN, previous, &mut replaced) } == 0
+        {
+            return Err("critical: property prefix protection unverified");
+        }
+        return Err("verified property prefix changed before publication");
+    }
+    unsafe { ptr::copy_nonoverlapping(jump.as_ptr(), slot, PROPERTY_PREFIX_LEN) };
+    let mut replaced = 0u32;
+    let restored =
+        unsafe { VirtualProtect(slot.cast(), PROPERTY_PREFIX_LEN, previous, &mut replaced) } != 0;
+    let flushed =
+        unsafe { FlushInstructionCache(GetCurrentProcess(), slot.cast(), PROPERTY_PREFIX_LEN) }
+            != 0;
+    if !restored
+        || !flushed
+        || unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) } != jump
+    {
+        return Err("critical: property prefix publication unverified");
+    }
+    Ok(())
+}
+
+unsafe fn install_property_hotpatch(
+    target: *mut u8,
+    trace: *mut PropertyTrace,
+    expected: [u8; 8],
+) -> Result<(), &'static str> {
+    if target.is_null()
+        || trace.is_null()
+        || !(target as usize).is_multiple_of(8)
+        || (target as usize & (CODE_PAGE - 1)) < PROPERTY_PREFIX_LEN
+    {
+        return Err("unaligned or missing property hook input");
+    }
+    let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
+    if guard.is_some() {
+        return Err("bridge already installed");
+    }
+    let slot = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+    if !committed_range(slot as usize, PROPERTY_PREFIX_LEN, 1, false) {
+        return Err("property prefix is not fully readable");
+    }
+    let original = unsafe { ptr::read(target.cast::<[u8; 8]>()) };
+    let prefix = unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) };
+    if original != expected || original != PROPERTY_PROLOGUE || prefix != PROPERTY_PREFIX_PAD {
+        return Err("pinned property entry or five-byte prefix differs");
+    }
+    let code = unsafe { executable_near(slot as usize, target as usize, PROPERTY_FIRST_LEN) }
+        .ok_or("no rel32 relay near property prefix")?;
+    let relay = unsafe { code.add(RELAY_OFFSET) };
+    let trampoline = unsafe { code.add(TRAMPOLINE_OFFSET) };
+    let prefix_jump =
+        rel32_jump(slot as usize, relay as usize).ok_or("property prefix relay out of range")?;
+    let jump_back = rel32_jump(
+        trampoline as usize + PROPERTY_FIRST_LEN,
+        target as usize + PROPERTY_FIRST_LEN,
+    )
+    .ok_or("property trampoline return out of range")?;
+    unsafe {
+        ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+        ptr::copy_nonoverlapping(
+            (property_gateway as *const () as usize as u64)
+                .to_le_bytes()
+                .as_ptr(),
+            relay.add(6),
+            8,
+        );
+        ptr::copy_nonoverlapping(original.as_ptr(), trampoline, PROPERTY_FIRST_LEN);
+        ptr::copy_nonoverlapping(jump_back.as_ptr(), trampoline.add(PROPERTY_FIRST_LEN), 5);
+    }
+    let mut previous = 0u32;
+    if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut previous) } == 0
+        || unsafe { FlushInstructionCache(GetCurrentProcess(), code.cast(), CODE_PAGE) } == 0
+    {
+        unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
+        return Err("cannot publish property relay and leaf trampoline");
+    }
+    PROPERTY_TRACE_PTR.store(trace, Ordering::Release);
+    PROPERTY_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    // The prefix was five INT3 padding bytes and the previous function ends
+    // in RET. Publish the prefix first; no valid original path executes it.
+    // Once the entry is switched, even a thread at entry+4 executes unchanged
+    // original bytes. The prefix and allocations remain until game exit.
+    unsafe { publish_property_prefix(slot, prefix, prefix_jump) }?;
+    let old_first: [u8; 2] = original[..2]
+        .try_into()
+        .map_err(|_| "property entry width")?;
+    let outcome = unsafe { exchange_property_entry(target, old_first, PROPERTY_SHORT_JUMP) }
+        .map_err(|_| "critical: property entry exchange failed after prefix publication")?;
+    if !outcome.exchanged {
+        return Err("critical: property entry changed after prefix publication");
+    }
+    let mut patched = original;
+    patched[..2].copy_from_slice(&PROPERTY_SHORT_JUMP);
+    *guard = Some(Hook {
+        mode: BridgeMode::Property,
+        target,
+        original,
+        patched,
+        prefix: Some((slot, prefix_jump)),
+        _code: code,
+    });
+    if !outcome.protection_restored
+        || !outcome.cache_flushed
+        || unsafe { ptr::read(target.cast::<[u8; 8]>()) } != patched
+    {
+        return Err("critical: property entry publication unverified");
+    }
+    Ok(())
+}
+
 unsafe fn install_hook(
     target: *mut u8,
-    trace: *mut c_void,
+    trace: *mut SharedTrace,
     expected: [u8; 8],
-    mode: BridgeMode,
 ) -> Result<(), &'static str> {
     if target.is_null() || trace.is_null() || !(target as usize).is_multiple_of(8) {
         return Err("unaligned or missing hook input");
@@ -534,11 +723,11 @@ unsafe fn install_hook(
         return Err("bridge already installed");
     }
     let original = unsafe { ptr::read(target.cast::<[u8; 8]>()) };
-    let prologue = mode.prologue();
+    let prologue = &PINNED_PROLOGUE;
     if original != expected || &expected[..prologue.len()] != prologue {
         return Err("pinned GameCore entry bytes differ");
     }
-    let code = unsafe { executable_near(target as usize, prologue.len()) }
+    let code = unsafe { executable_near(target as usize, target as usize, prologue.len()) }
         .ok_or("no rel32 relay near entry")?;
     let relay = unsafe { code.add(RELAY_OFFSET) };
     let trampoline = unsafe { code.add(TRAMPOLINE_OFFSET) };
@@ -548,10 +737,7 @@ unsafe fn install_hook(
         target as usize + prologue.len(),
     )
     .ok_or("trampoline return out of range")?;
-    let gateway = match mode {
-        BridgeMode::CanEver => bridge_gateway as *const () as usize,
-        BridgeMode::Property => property_gateway as *const () as usize,
-    };
+    let gateway = bridge_gateway as *const () as usize;
     unsafe {
         // FF 25 00000000 followed by the absolute gateway address.
         ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
@@ -566,16 +752,8 @@ unsafe fn install_hook(
         unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
         return Err("cannot publish the relay and trampoline");
     }
-    match mode {
-        BridgeMode::CanEver => {
-            BRIDGE_TRACE_PTR.store(trace.cast(), Ordering::Release);
-            BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
-        }
-        BridgeMode::Property => {
-            PROPERTY_TRACE_PTR.store(trace.cast(), Ordering::Release);
-            PROPERTY_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
-        }
-    }
+    BRIDGE_TRACE_PTR.store(trace, Ordering::Release);
+    BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
     let mut patched = original;
     patched[..5].copy_from_slice(&jump_to_relay);
     patched[5..prologue.len()].fill(0x90);
@@ -589,9 +767,11 @@ unsafe fn install_hook(
         return Err("pinned entry changed before the atomic install");
     }
     *guard = Some(Hook {
+        mode: BridgeMode::CanEver,
         target,
         original,
         patched,
+        prefix: None,
         _code: code,
     });
     if !outcome.protection_restored || !outcome.cache_flushed {
@@ -611,7 +791,7 @@ unsafe fn install_at(
     {
         return Err("trace mapping version mismatch");
     }
-    unsafe { install_hook(target, trace.cast(), expected, BridgeMode::CanEver) }
+    unsafe { install_hook(target, trace, expected) }
 }
 
 unsafe fn install_property_at(
@@ -625,24 +805,40 @@ unsafe fn install_property_at(
     {
         return Err("property trace mapping version mismatch");
     }
-    unsafe { install_hook(target, trace.cast(), expected, BridgeMode::Property) }
+    unsafe { install_property_hotpatch(target, trace, expected) }
 }
 
 unsafe fn uninstall() -> Result<(), &'static str> {
     let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
     let hook = guard.as_ref().ok_or("bridge not installed")?;
-    let old_word = u64::from_le_bytes(hook.patched);
-    let new_word = u64::from_le_bytes(hook.original);
-    let outcome = unsafe { exchange_entry(hook.target, old_word, new_word) }?;
+    let outcome = match hook.mode {
+        BridgeMode::CanEver => unsafe {
+            exchange_entry(
+                hook.target,
+                u64::from_le_bytes(hook.patched),
+                u64::from_le_bytes(hook.original),
+            )
+        }?,
+        BridgeMode::Property => {
+            let first: [u8; 2] = hook.original[..2]
+                .try_into()
+                .map_err(|_| "property entry width")?;
+            unsafe { exchange_property_entry(hook.target, PROPERTY_SHORT_JUMP, first) }?
+        }
+    };
     if !outcome.exchanged
         || !outcome.protection_restored
         || !outcome.cache_flushed
         || unsafe { ptr::read(hook.target.cast::<[u8; 8]>()) } != hook.original
+        || hook.prefix.is_some_and(|(slot, jump)| unsafe {
+            ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) != jump
+        })
     {
         return Err("pinned entry was not restored and verified");
     }
-    // DLL and trampoline remain resident until process exit. There is no
-    // FreeLibrary in this prototype, including after successful restoration.
+    // Property prefix remains a valid branch until game exit. A caller that
+    // fetched EB F9 before restoration may still be about to enter it.
+    // DLL, trace, relay and trampoline remain resident for that same period.
     *guard = None;
     Ok(())
 }
@@ -756,6 +952,17 @@ fn pinned_gamecore(path: &Path, mode: BridgeMode) -> Option<[u8; 8]> {
     if format!("{:x}", hash.finalize()) != PINNED_GAMECORE_SHA256 {
         return None;
     }
+    if mode == BridgeMode::Property {
+        file.seek(SeekFrom::Start(
+            PINNED_PROPERTY_GET_FILE_OFFSET - PROPERTY_PREFIX_LEN as u64,
+        ))
+        .ok()?;
+        let mut pad = [0u8; PROPERTY_PREFIX_LEN];
+        file.read_exact(&mut pad).ok()?;
+        if pad != PROPERTY_PREFIX_PAD {
+            return None;
+        }
+    }
     file.seek(SeekFrom::Start(mode.file_offset())).ok()?;
     let mut first = [0u8; 8];
     file.read_exact(&mut first).ok()?;
@@ -810,6 +1017,26 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if unsafe { ptr::read(entry.cast::<[u8; 8]>()) } != disk_bytes {
         return BridgeStatus::EntryBytes;
     }
+    if mode == BridgeMode::Property {
+        if (entry as usize & (CODE_PAGE - 1)) < PROPERTY_PREFIX_LEN {
+            return BridgeStatus::EntryBytes;
+        }
+        let prefix = unsafe { entry.sub(PROPERTY_PREFIX_LEN) };
+        if !committed_range(prefix as usize, PROPERTY_PREFIX_LEN, 1, false)
+            || unsafe { ptr::read(prefix.cast::<[u8; PROPERTY_PREFIX_LEN]>()) }
+                != PROPERTY_PREFIX_PAD
+        {
+            return BridgeStatus::EntryBytes;
+        }
+        // The prefix remains published until the process exits; a second
+        // property run in this process could redirect an older paused jump.
+        if PROPERTY_USED
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return BridgeStatus::HookFailure;
+        }
+    }
     let installed = match mode {
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
@@ -848,9 +1075,10 @@ pub extern "system" fn BridgeInstall(config: *mut c_void) -> u32 {
     .unwrap_or(BridgeStatus::Panic as u32)
 }
 
-/// Restores and verifies the original entry. The DLL remains loaded until
-/// the owned game exits, so a thread already in the relay cannot execute
-/// unmapped code. A critical result requires the controller to close that game.
+/// Restores and verifies the original entry. Property mode retains its
+/// pre-entry branch because a thread may already have fetched the short jump.
+/// The DLL, trace and relay remain mapped until game exit. A critical result
+/// requires the controller to close that owned game.
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeUninstall(_: *mut c_void) -> u32 {
     std::panic::catch_unwind(|| match unsafe { uninstall() } {
@@ -865,15 +1093,41 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::time::Duration;
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry;
+    use windows_sys::Win32::System::Threading::{
+        CreateThread, GetExitCodeThread, ResumeThread, WaitForSingleObject, THREAD_CREATE_SUSPENDED,
+    };
 
     static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn property_trampoline_calls_original_once_and_preserves_pointer_or_missing() {
+    fn property_gateway_has_win64_unwind_metadata() {
+        let mut image_base = 0u64;
+        let entry = unsafe {
+            RtlLookupFunctionEntry(
+                property_gateway as *const () as u64,
+                &mut image_base,
+                null_mut(),
+            )
+        };
+        assert!(!entry.is_null(), "stack-changing gateway needs pdata/xdata");
+        assert_ne!(image_base, 0);
+        let rva = property_gateway as *const () as u64 - image_base;
+        assert!(unsafe { (*entry).BeginAddress as u64 } <= rva);
+        assert!(rva < unsafe { (*entry).EndAddress as u64 });
+        let unwind_address = image_base + unsafe { (*entry).Anonymous.UnwindData as u64 };
+        let unwind = unsafe { ptr::read(unwind_address as *const [u8; 6]) };
+        assert_eq!(unwind[0] & 0x07, 1); // UNWIND_INFO version 1
+        assert_eq!(unwind[2], 1); // one unwind operation
+        assert_eq!(unwind[4], 4); // four-byte sub rsp, 0x68
+        assert_eq!(unwind[5], 0xc2); // UWOP_ALLOC_SMALL: 12*8+8 = 0x68
+    }
+
+    #[test]
+    fn suspended_second_instruction_and_concurrent_callers_survive_property_patch_cycle() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
-        assert_eq!(std::mem::size_of::<PropertyRow>(), 48);
-        assert_eq!(std::mem::offset_of!(PropertyTrace, rows), 24);
-        let target = unsafe {
+        let page = unsafe {
             VirtualAlloc(
                 null_mut(),
                 CODE_PAGE,
@@ -882,7 +1136,102 @@ mod tests {
             )
         }
         .cast::<u8>();
-        assert!(!target.is_null());
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        let slot = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), slot, PROPERTY_PREFIX_LEN)
+        };
+        // mov rax,[rcx+40h]; lea r9,[rcx+30h]; mov eax,r9d; ret.
+        // A thread starting at +4 proves the second instruction remains whole.
+        let bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0x44, 0x89, 0xc8, 0xc3,
+        ];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let mut property = [0u64; 10];
+        let argument = property.as_mut_ptr() as usize;
+        let expected = (argument + 0x30) as u32;
+        let second: unsafe extern "system" fn(*mut c_void) -> u32 =
+            unsafe { std::mem::transmute(target.add(PROPERTY_FIRST_LEN)) };
+        let mut thread_id = 0u32;
+        let paused = unsafe {
+            CreateThread(
+                null_mut(),
+                0,
+                Some(second),
+                argument as *const c_void,
+                THREAD_CREATE_SUSPENDED,
+                &mut thread_id,
+            )
+        };
+        assert!(!paused.is_null() && thread_id != 0);
+        let running = Arc::new(AtomicBool::new(true));
+        let workers = (0..4)
+            .map(|_| {
+                let running = Arc::clone(&running);
+                let address = target as usize;
+                std::thread::spawn(move || {
+                    let first: extern "system" fn(usize, u32) -> u32 =
+                        unsafe { std::mem::transmute(address) };
+                    let second: extern "system" fn(usize) -> u32 =
+                        unsafe { std::mem::transmute(address + PROPERTY_FIRST_LEN) };
+                    let mut calls = 0u32;
+                    while running.load(Ordering::Acquire) && calls < 100_000 {
+                        assert_eq!(first(argument, 0), expected);
+                        assert_eq!(second(argument), expected);
+                        calls += 1;
+                    }
+                    calls
+                })
+            })
+            .collect::<Vec<_>>();
+        std::thread::sleep(Duration::from_millis(5));
+        let mut trace = Box::new(PropertyTrace::default());
+        unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
+        assert_eq!(
+            unsafe { ptr::read(target.cast::<[u8; 8]>()) }[2..],
+            bytes[2..8]
+        );
+        assert_eq!(unsafe { ResumeThread(paused) }, 1);
+        assert_eq!(unsafe { WaitForSingleObject(paused, 5_000) }, WAIT_OBJECT_0);
+        let mut exit_code = 0u32;
+        assert_ne!(unsafe { GetExitCodeThread(paused, &mut exit_code) }, 0);
+        assert_eq!(exit_code, expected);
+        assert_ne!(unsafe { CloseHandle(paused) }, 0);
+        unsafe { uninstall() }.unwrap();
+        running.store(false, Ordering::Release);
+        assert!(workers.into_iter().map(|w| w.join().unwrap()).sum::<u32>() > 0);
+        assert_eq!(
+            unsafe { ptr::read(target.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
+        );
+        assert_eq!(
+            unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) }[0],
+            0xe9
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn property_trampoline_calls_original_once_and_preserves_pointer_or_missing() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        assert_eq!(std::mem::size_of::<PropertyRow>(), 48);
+        assert_eq!(std::mem::offset_of!(PropertyTrace, rows), 24);
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        let slot = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), slot, PROPERTY_PREFIX_LEN)
+        };
         // Exactly the pinned two-instruction prologue, then an owned counter
         // and key-dependent return. This fixture never invokes a game method.
         let bytes = [
@@ -903,12 +1252,23 @@ mod tests {
             install_property_at(target, trace.as_mut(), bytes[..8].try_into().unwrap())
         }
         .is_ok());
+        let trampoline = PROPERTY_TRAMPOLINE_PTR.load(Ordering::Acquire);
+        assert!(!trampoline.is_null());
+        let leaf = unsafe { ptr::read(trampoline.cast::<[u8; 9]>()) };
+        assert_eq!(
+            &leaf[..PROPERTY_FIRST_LEN],
+            &PROPERTY_PROLOGUE[..PROPERTY_FIRST_LEN]
+        );
+        assert_eq!(leaf[PROPERTY_FIRST_LEN], 0xe9); // direct jump back, no stack change
+        let mut base = 0u64;
+        assert!(
+            unsafe { RtlLookupFunctionEntry(trampoline as u64, &mut base, null_mut()) }.is_null()
+        );
         assert_eq!(f(property, 0), value.as_ptr() as usize);
         assert_eq!(f(property, 1), 0);
         object[8] = 1; // Valid original pointer value, unreadable for the copy.
         assert_eq!(f(property, 0), 1);
         assert_eq!(object[9], 3, "the original ran exactly once per call");
-        unsafe { uninstall() }.unwrap();
         let rows = trace.complete_rows().unwrap();
         assert_eq!(rows.len(), 3);
         assert!(rows
@@ -933,14 +1293,47 @@ mod tests {
             (rows[2].key_id, rows[2].returned, rows[2].read_state),
             (0, 1, 2)
         );
+        for _ in 0..TRACE_CAPACITY {
+            assert_eq!(f(property, 1), 0);
+        }
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(PROPERTY_TRAMPOLINE_PTR.load(Ordering::Acquire), trampoline);
+        assert_eq!(
+            PROPERTY_TRACE_PTR.load(Ordering::Acquire),
+            trace.as_mut() as *mut PropertyTrace
+        );
+        let mut region: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe {
+                VirtualQuery(
+                    trampoline.cast(),
+                    &mut region,
+                    std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            },
+            std::mem::size_of::<MEMORY_BASIC_INFORMATION>()
+        );
+        assert_eq!(region.State, MEM_COMMIT);
+        assert_eq!(region.Protect & 0xff, PAGE_EXECUTE_READ);
+        assert_eq!(
+            trace.next.load(Ordering::Acquire),
+            TRACE_CAPACITY as u32 + 3
+        );
+        assert_eq!(trace.dropped.load(Ordering::Acquire), 3);
+        assert_eq!(trace.snapshot_rows().unwrap().len(), TRACE_CAPACITY);
+        assert!(trace.complete_rows().is_err());
         assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
-        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+        assert_eq!(
+            unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) }[0],
+            0xe9
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
     #[test]
     fn property_hook_rejects_partial_or_changed_prologue_before_mutation() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
-        let target = unsafe {
+        let page = unsafe {
             VirtualAlloc(
                 null_mut(),
                 CODE_PAGE,
@@ -949,14 +1342,32 @@ mod tests {
             )
         }
         .cast::<u8>();
-        assert!(!target.is_null());
+        assert!(!page.is_null());
+        let target = unsafe { page.add(16) };
+        let slot = unsafe { target.sub(PROPERTY_PREFIX_LEN) };
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), slot, PROPERTY_PREFIX_LEN)
+        };
         let mut wrong = PROPERTY_PROLOGUE;
         wrong[7] ^= 1;
         unsafe { ptr::copy_nonoverlapping(wrong.as_ptr(), target, wrong.len()) };
         let mut trace = Box::new(PropertyTrace::default());
         assert!(unsafe { install_property_at(target, trace.as_mut(), wrong) }.is_err());
         assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, wrong);
-        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+        assert_eq!(
+            unsafe { ptr::read(slot.cast::<[u8; PROPERTY_PREFIX_LEN]>()) },
+            PROPERTY_PREFIX_PAD
+        );
+        unsafe {
+            ptr::copy_nonoverlapping(PROPERTY_PROLOGUE.as_ptr(), target, PROPERTY_PROLOGUE.len())
+        };
+        unsafe { *slot = 0x90 };
+        assert!(unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.is_err());
+        assert_eq!(
+            unsafe { ptr::read(target.cast::<[u8; 8]>()) },
+            PROPERTY_PROLOGUE
+        );
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
     #[test]

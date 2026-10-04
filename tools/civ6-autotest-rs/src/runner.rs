@@ -304,10 +304,11 @@ mod native_trace_step_tests {
             "name":"values","max_seconds":120}))
             .unwrap()
             .contains("values.jsonl"));
-        assert!(runner
+        let stopped = runner
             .run_step(&json!({"action":"stop_native_property_trace"}))
-            .unwrap()
-            .contains("bridge.jsonl"));
+            .unwrap();
+        assert!(stopped.contains("bridge.jsonl"));
+        assert!(stopped.contains("mapping unverified"));
         assert_eq!(
             *calls.lock().unwrap(),
             ["start:values:120:property", "stop"]
@@ -1759,10 +1760,17 @@ impl Runner {
                     .backend
                     .stop_native_bridge()?
                     .ok_or_else(|| Error::scenario("native bridge was not active"))?;
-                Ok(format!(
-                    "native entry restored; artifact {}",
-                    artifact.display()
-                ))
+                if action == "stop_native_property_trace" {
+                    Ok(format!(
+                        "native property entry restored; prefix retained until game exit; raw rows collected, key and value mapping unverified; artifact {}",
+                        artifact.display()
+                    ))
+                } else {
+                    Ok(format!(
+                        "native entry restored; artifact {}",
+                        artifact.display()
+                    ))
+                }
             }
             "start_native_governor_trace" => {
                 self.remaining(deadline)?;

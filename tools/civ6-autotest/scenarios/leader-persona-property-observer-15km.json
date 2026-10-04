@@ -1,5 +1,5 @@
 {
-  "name": "PR86 native property getter scalar and missing observation",
+  "name": "PR86 raw native property getter collection; key/value mapping unverified",
   "judge_profile": "generic",
   "strict_lua_errors": true,
   "steps": [
@@ -166,7 +166,7 @@
     },
     {
       "action": "start_native_property_trace",
-      "max_seconds": 180,
+      "max_seconds": 90,
       "timeout": 30,
       "name": "property-values"
     },

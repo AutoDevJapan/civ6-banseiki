@@ -1,7 +1,8 @@
 //! Separate, opt-in native bridge prototype. It does not share the read-only
 //! `civ6-native-probe-rs` debugger contract or load into a game by itself.
-//! Its first stage only records the caller/Index and tail-jumps to the
-//! original CanEver function. No Lua state or native property value is read.
+//! CanEver mode records caller/Index and tail-jumps to the original function.
+//! Separate property mode calls the original getter once and copies bounded
+//! raw value bytes after it returns. Neither mode enters the Lua VM.
 
 /// Portable scenario limit; only the Windows module implements execution.
 pub const MAX_ACTIVE_SECONDS: u32 = 300;

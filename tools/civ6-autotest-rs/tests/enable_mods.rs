@@ -1,6 +1,9 @@
 mod support_fixture;
 
-use civ6_autotest_rs::scenario::{enable_mods_code, validate_scenario};
+use civ6_autotest_rs::scenario::{
+    enable_mods_code, isolated_disabled_mods, validate_scenario, ENEMY_PERSONA_GATE_ID,
+    PROPERTY_OBSERVER_MOD_ID, STATIC_PERSONA_GATE_ID, TRAIT_GRANT_PROBE_ID,
+};
 use mlua::{Lua, Table};
 use serde_json::json;
 use support_fixture::{expect_error, lua_error};
@@ -12,6 +15,39 @@ const SIBLING: u8 = 4;
 const KEEP: u8 = 5;
 const OFF: u8 = 6;
 const MISSING: u8 = 7;
+
+#[test]
+fn property_observer_is_disabled_after_its_scene_unless_explicitly_enabled() {
+    let all = [
+        STATIC_PERSONA_GATE_ID,
+        ENEMY_PERSONA_GATE_ID,
+        TRAIT_GRANT_PROBE_ID,
+        PROPERTY_OBSERVER_MOD_ID,
+    ]
+    .map(str::to_owned);
+    assert!(isolated_disabled_mods(&all, &[]).is_empty());
+    assert_eq!(isolated_disabled_mods(&[], &[]), all);
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    let definition = lua.create_table().unwrap();
+    definition
+        .set("Id", PROPERTY_OBSERVER_MOD_ID.to_uppercase())
+        .unwrap();
+    definition.set("Enabled", true).unwrap();
+    definition
+        .set("Dependencies", lua.create_table().unwrap())
+        .unwrap();
+    definitions.set(1, definition).unwrap();
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code(&[], &[])).exec().unwrap();
+    let mods: Table = lua.globals().get("MODS").unwrap();
+    let observer: Table = mods.get(PROPERTY_OBSERVER_MOD_ID).unwrap();
+    assert!(!observer.get::<bool>("Enabled").unwrap());
+    let disabled: Table = lua.globals().get("DISABLED").unwrap();
+    assert_eq!(disabled.raw_len(), 1);
+}
 
 #[test]
 fn static_gate_is_disabled_by_default_but_an_explicit_diagnostic_can_enable_it() {
