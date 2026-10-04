@@ -825,8 +825,15 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
           PARAM_QUEUE_DESTINATION_LOCATION=3,VALUE_REPLACE_AT=4,BUILD=5}
         local queue={GetCurrentProductionTypeHash=function() return HASH end,
           AddProgress=function(_,value) assert(value==1000);PROGRESS=PROGRESS+1 end}
+        QUEUE=queue
         local city={GetOwner=function() return OWNER end,GetID=function() return CITY end,
+          GetX=function() return 4 end,GetY=function() return 5 end,
           GetBuildQueue=function() return queue end}
+        g_PlacementSettings={}
+        GetSelectedCity=function()
+          assert(g_PlacementSettings.Player==1 and g_PlacementSettings.CityID==10)
+          return city
+        end
         CityManager={GetCityAt=function(x,y) assert(x==4 and y==5);return city end,
           RequestOperation=function(c,kind,p)
             assert(c==city and kind==5 and p[1]==2468 and p[2]==4 and p[3]==0)
@@ -845,6 +852,11 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
     .exec()?;
     let request = code("JAC_ARTIFACT_PRODUCTION_REQUEST");
     let progress = code("advanced active official production");
+    let progress_step = steps
+        .iter()
+        .find(|s| s["code"].as_str() == Some(progress))
+        .expect("progress step");
+    assert_eq!(progress_step["state_name"], "TunerCityPanel");
     let bind = code("JAC_ARTIFACT_EXCAVATOR_PRODUCED");
     assert!(lua.load(request).exec().is_err());
     assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
@@ -855,6 +867,14 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
     assert!(lua.load(progress).exec().is_err());
     assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
     lua.load("HASH=2468").exec()?;
+    lua.load("SAVED_PROGRESS=QUEUE.AddProgress;QUEUE.AddProgress=nil")
+        .exec()?;
+    assert!(
+        lua.load(progress).exec().is_err(),
+        "advanced production without the official API"
+    );
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
+    lua.load("QUEUE.AddProgress=SAVED_PROGRESS").exec()?;
     lua.load(progress).exec()?;
     assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 1);
     for units in [
@@ -900,6 +920,11 @@ fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -
         .filter_map(|s| s["condition"]["code"].as_str())
         .find(|s| s.contains("local before=assert(t.Records"))
         .expect("fixture record comparison");
+    let guard = steps
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_GUARDS_VERIFIED"))
+        .expect("guard preservation after save/load");
     let lua = Lua::new();
     lua.load(r#"
       PX,PY,DAMAGE,MOVES,OWNER,TRANSFERS,PLACE=10,10,7,2,2,0,true
@@ -935,6 +960,20 @@ fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -
     lua.load(transfer).exec()?;
     assert!(lua.load("return TRANSFERS==1 and OWNER==1 and DAMAGE==7 and MOVES==2 and #PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED==1 and PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED[1].ID==88").eval::<bool>()?);
     assert!(lua.load(verify).eval::<bool>()?);
+    lua.load(guard).exec()?;
+    lua.load("DAMAGE=8").exec()?;
+    assert!(
+        lua.load(guard).exec().is_err(),
+        "accepted altered guard damage after reload"
+    );
+    lua.load("DAMAGE=7;Game.GetArtifactAtPlot=function() return {Era=2,Extra=1} end")
+        .exec()?;
+    assert!(
+        !lua.load(verify).eval::<bool>()?,
+        "accepted an added artifact record field"
+    );
+    lua.load("Game.GetArtifactAtPlot=function() return {Era=ERA} end")
+        .exec()?;
     lua.load("ERA=3").exec()?;
     assert!(
         !lua.load(verify).eval::<bool>()?,
@@ -993,6 +1032,9 @@ fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() ->
       end} end
       Cities={GetPlotPurchaseCity=function(q) return cities[q.City] end}
       CityManager={GetCityAt=function(x) return cities[x-100] end}
+      Players={[2]={GetCities=function() return {Members=function()
+        local n=1;return function() n=n+1;if cities[n] then return n,cities[n] end end
+      end} end}}
     "#,
     )
     .exec()?;
@@ -1007,6 +1049,15 @@ fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() ->
     assert!(
         lua.load(code).exec().is_err(),
         "accepted existing original or fewer than three sites"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    lua.load("Game.GetArtifactAtPlot=function() return {} end;Players[2].GetCities=function() return {Members=function() local done=false;return function() if not done then done=true;return 5,{} end end end} end").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "selected the donor's last city"
     );
     assert!(
         lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
