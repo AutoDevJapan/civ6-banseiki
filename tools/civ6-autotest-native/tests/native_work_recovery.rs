@@ -127,6 +127,17 @@ fn inherited_native_types_use_city_owner_change_without_individual_move() -> mlu
             end
             assert(A.Rules.Equal(locations[1].Effects,original.Effects))
             assert(A.Verify(plan.ID,true))
+            local rosterBefore=A.Canonical(A.GetRoster(2))
+            local saved=A.GetState()
+            saved.Transactions[plan.ID].NativeWorks[1].NativeRoute='CORE'
+            saved.Transactions[plan.ID].Status='BLOCKED'
+            saved.Transactions[plan.ID].Error='old save interrupted before final proof'
+            Game:SetProperty(A.Rules.STATE_KEY,saved)
+            local resumed=A.Resume(plan.ID)
+            assert(resumed.Status=='COMPLETE' and resumed.NativeWorks[1].NativeRoute=='CITY',
+              'old CORE inheritance was not migrated to the engine city route')
+            assert(A.Canonical(A.GetRoster(2))==rosterBefore and #A.NativeWorkLocations(900)==1,
+              'legacy route migration repeated an award or lost the original')
         "#).exec()?;
     }
     Ok(())
