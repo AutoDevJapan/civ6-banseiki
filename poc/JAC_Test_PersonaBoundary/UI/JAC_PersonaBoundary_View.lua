@@ -211,14 +211,8 @@ local function ReadPersona(c)
     local spyInfo = Game:GetProperty("JAC_BOUNDARY_SPY");
     if spyInfo then
         s.spyRoster=ReadSpyRoster(spyInfo.owner);
-        local spy = Players[spyInfo.owner]:GetUnits():FindID(spyInfo.id);
-        -- FindID can resolve a reused native slot to a different generation.
-        -- A lookup result alone is not proof that the archived spy is present.
-        local lookupID = spy and spy:GetID();
-        local exact = spy and lookupID==spyInfo.id and spy:GetOwner()==spyInfo.owner and
-            spy:GetType()==GameInfo.Units["UNIT_SPY"].Index;
-        s.spy = {owner=spyInfo.owner, id=spyInfo.id, present=exact==true,lookupID=lookupID};
-        if not exact then spy=nil; end
+        local spy, lookupID = R.FindSpy(spyInfo.owner, spyInfo.id);
+        s.spy = {owner=spyInfo.owner, id=spyInfo.id, present=spy~=nil,lookupID=lookupID};
         if spy then
             s.spy.operation=spy:GetSpyOperation(); s.spy.endTurn=spy:GetSpyOperationEndTurn();
             s.spy.remaining=s.spy.endTurn-s.turn; s.spy.x=spy:GetX(); s.spy.y=spy:GetY();
@@ -382,7 +376,7 @@ end
 local function LocalSpy()
     local info = assert(Game:GetProperty("JAC_BOUNDARY_SPY"), "native fixture spy not created");
     assert(info.owner == Game.GetLocalPlayer(), "enemy-spy requests have no proven control path");
-    local spy = assert(Players[info.owner]:GetUnits():FindID(info.id), "native spy no longer present");
+    local spy = assert(R.FindSpy(info.owner, info.id), "native spy identity no longer present");
     local def = GameInfo.Units[spy:GetType()];
     assert(spy:GetType() == GameInfo.Units["UNIT_SPY"].Index and def and def.Spy and
         spy:GetOwner() == info.owner, "native spy identity mismatch");
@@ -947,7 +941,7 @@ function B.CaptiveExchangeState()
         "accepted native captive deal has no living original operative");
     local ready=false;
     if d.mode=="MAP" then
-        local unit=assert(Players[x.attacker]:GetUnits():FindID(d.currentID),
+        local unit=assert(R.FindSpy(x.attacker,d.currentID),
             "returned native map spy missing");
         assert(unit:GetX()~=-9999 and unit:GetY()~=-9999 and
             Map.GetPlot(unit:GetX(),unit:GetY()),
@@ -1781,7 +1775,7 @@ function B.RetryLivingSpy()
     end
     local city=Cities.GetPlotPurchaseCity(Map.GetPlot(unit.x,unit.y));
     if city and city:GetOwner()==c.attacker then
-        local native=assert(Players[c.attacker]:GetUnits():FindID(unit.id),
+        local native=assert(R.FindSpy(c.attacker,unit.id),
             "living retry map spy vanished before native travel query");
         return MapSpyNativeRouteReady(native,c) and
             "HOME_READY" or "WAIT_NATIVE_READY";
@@ -1940,7 +1934,7 @@ function B.EnemyMissionEventReady()
     local marker=Game:GetProperty("JAC_BOUNDARY_SPY_BARRIER");
     if not marker or marker.action~="SPY_MISSION" then return true; end
     local reference=Game:GetProperty("JAC_BOUNDARY_SPY");
-    local spy=reference and Players[reference.owner]:GetUnits():FindID(reference.id);
+    local spy=reference and R.FindSpy(reference.owner,reference.id);
     local mission=GameInfo.UnitOperations["UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"];
     if spy and (spy:GetSpyOperation()==mission.Index or spy:GetSpyOperation()==mission.Hash) and
         spy:GetSpyOperationEndTurn()>Game.GetCurrentGameTurn() then
@@ -3099,7 +3093,7 @@ local function Submit(command)
         local retry=assert(CheckArchivedMission(c),"archived retry missing");
         assert(retry.mode=="RETURN" and retry.spyID and type(params.id)=="number",
             "returned native spy cannot be adopted");
-        local arrived=assert(Players[owner]:GetUnits():FindID(params.id),
+        local arrived=assert(R.FindSpy(owner,params.id),
             "returned native spy unit missing");
         local city=assert(Cities.GetPlotPurchaseCity(Map.GetPlot(arrived:GetX(),arrived:GetY())),
             "returned native spy has no city");
