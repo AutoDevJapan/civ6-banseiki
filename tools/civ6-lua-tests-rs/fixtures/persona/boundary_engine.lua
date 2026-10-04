@@ -20,6 +20,7 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery',
  'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryProgressCapacityBuilding',
  'JAC_BoundaryMarkCaptiveExchange','JAC_BoundaryPrepareCapacityCivic',
+ 'JAC_BoundaryReadCapacityCivic',
  'JAC_BoundaryProgressCapacityDistrict'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)

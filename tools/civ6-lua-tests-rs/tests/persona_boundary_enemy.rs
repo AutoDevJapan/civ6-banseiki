@@ -57,13 +57,22 @@ impl Enemy {
     }
 
     fn sync(&self, action: &str, event: &str) {
+        let read = if action == "PREPARE_DISTRICT_CIVIC" {
+            "local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryReadCapacityCivic'); \
+             ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityCivic',r.params); FRAME(); \
+             local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='READ'); \
+             ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); \
+             fire(Events.GameCoreEventPublishComplete); FRAME();"
+        } else {
+            ""
+        };
         self.run(&format!(
             "ExposedMembers.JAC_PersonaBoundary.Queue('{action}'); FRAME(); \
              local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='{event}'); \
              ENEMY_CASES.fireCore('{event}',r.params); FRAME(); \
              local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier'); \
              ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); \
-             fire(Events.GameCoreEventPublishComplete); FRAME(); \
+             fire(Events.GameCoreEventPublishComplete); FRAME(); {read} \
              assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_{action}')"
         ));
     }
@@ -199,6 +208,19 @@ impl Enemy {
                 CloseSession=function(id) assert(id==44); SESSION_ID=nil end
             };
         "#);
+    }
+
+    fn captive_capacity(&self) {
+        self.failed();
+        self.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='NEEDS_DOMAIN_LAW')");
+    }
+
+    fn civic_roundtrip(&self, deliver_command: bool) {
+        self.run("ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC'); FRAME(); assert(REQUESTS[#REQUESTS].params.OnStart=='JAC_BoundaryPrepareCapacityCivic')");
+        if deliver_command {
+            self.run("ENEMY_CASES.fireCore('JAC_BoundaryPrepareCapacityCivic',REQUESTS[#REQUESTS].params)");
+        }
+        self.run("FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='COMMAND'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryReadCapacityCivic' and r.params.Phase=='READ'); ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityCivic',r.params); FRAME(); b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='READ'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME()");
     }
 
     fn barrier(&self) {
@@ -1107,6 +1129,70 @@ fn official_domain_law_and_owned_plot_build_the_government_plaza_before_tier_one
         "ENEMY_CASES.fireCore('JAC_BoundaryProgressCapacityDistrict',REQUESTS[#REQUESTS].params)",
         "stale",
     );
+}
+
+#[test]
+fn capacity_civic_old_saved_barrier_cannot_acknowledge_a_missing_core_callback() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("Game:SetProperty('JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER',{action='PREPARE_DISTRICT_CIVIC',token=100,turn=TURN,attacker=0,phase='COMMAND',serial=7}); Game:SetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_READ',{owner=0,token=100,generation=1,serial=1,owned=true,status='OBSERVED'}); ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC'); FRAME(); assert(REQUESTS[#REQUESTS].params.Token==101,'new token must exceed saved markers'); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(REQUESTS[#REQUESTS].params.Phase=='COMMAND','first new barrier must be sent'); local before=#REQUESTS; fire(Events.GameCoreEventPublishComplete); FRAME(); assert(#REQUESTS==before and ExposedMembers.JAC_PersonaBoundary.lastAction=='BARRIER_SENT_PREPARE_DISTRICT_CIVIC','old marker must not publish new barrier')");
+    h.run("local b=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(REQUESTS[#REQUESTS].params.OnStart=='JAC_BoundaryReadCapacityCivic','new barrier must permit diagnostic read'); ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityCivic',REQUESTS[#REQUESTS].params); FRAME(); b=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='UNKNOWN_PREPARE_DISTRICT_CIVIC' and not GOV_CIVIC_COMPLETED and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')==nil,'missing callback must remain unknown')");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC')",
+        "do not replay the setter",
+    );
+}
+
+#[test]
+fn capacity_civic_saved_native_marker_prevents_another_setter_request() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("Game:SetProperty('JAC_BOUNDARY_CAPACITY_CIVIC',{owner=0,index=13,token=1}); BEFORE_REQUESTS=#REQUESTS");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC')",
+        "do not replay the setter",
+    );
+    h.run("assert(#REQUESTS==BEFORE_REQUESTS and not GOV_CIVIC_COMPLETED)");
+}
+
+#[test]
+fn capacity_civic_setter_return_without_native_ownership_stays_pending() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==13 and grant); SETTER_CALLS=(SETTER_CALLS or 0)+1 end; return culture end");
+    h.civic_roundtrip(true);
+    h.run("local c=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT')); local r=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_READ')); assert(c.phase=='SETTER_RETURNED' and c.status=='PENDING_NATIVE' and r.status=='PENDING_NATIVE' and not r.owned and SETTER_CALLS==1); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='PENDING_PREPARE_DISTRICT_CIVIC' and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')==nil and not GOV_CIVIC_COMPLETED)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC')",
+        "do not replay the setter",
+    );
+}
+
+#[test]
+fn capacity_civic_core_ownership_with_stale_ui_cache_cannot_be_accepted() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC'); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryPrepareCapacityCivic',REQUESTS[#REQUESTS].params); FRAME(); local b=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); local r=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityCivic',r.params); assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_READ').owned and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')); FRAME(); b=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.HasCivic=function(_,index) if index==13 then return false end; return true end; return culture end; fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='PENDING_PREPARE_DISTRICT_CIVIC' and GOV_CIVIC_COMPLETED)");
+}
+
+#[test]
+fn capacity_civic_unknown_setter_result_records_phase_and_does_not_replay() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==13 and grant); SETTER_CALLS=(SETTER_CALLS or 0)+1; error('simulated native setter failure') end; return culture end");
+    h.civic_roundtrip(true);
+    h.run("local c=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT')); local logged=false; for _,line in ipairs(LOGS) do if string.find(line,'simulated native setter failure',1,true) then logged=true end end; assert(c.phase=='SETTER_ENTERED' and c.status=='ERROR' and c.error=='CALLBACK_FAILED' and logged); assert(SETTER_CALLS==1 and ExposedMembers.JAC_PersonaBoundary.lastAction=='ERROR_PREPARE_DISTRICT_CIVIC' and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')==nil)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_DISTRICT_CIVIC')",
+        "do not replay the setter",
+    );
+}
+
+#[test]
+fn capacity_civic_malformed_core_parameters_are_recorded_before_setter() {
+    let h = Enemy::new();
+    h.captive_capacity();
+    h.run("ENEMY_CASES.fireCore('JAC_BoundaryPrepareCapacityCivic',{Action='PREPARE_DISTRICT_CIVIC',Token=1,Turn=TURN,Frame=1,PublishEpoch=0,Attacker=0,Defender=1,Source=2,Leader=ENEMY_CASES.leader,CivicIndex=999,Total=1,Spent=1}); local c=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT')); assert(c.phase=='ENTERED' and c.status=='ERROR' and c.error and not GOV_CIVIC_COMPLETED and Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC')==nil)");
 }
 
 #[test]
