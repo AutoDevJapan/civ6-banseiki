@@ -398,6 +398,32 @@ fn scene_lua(scene: &Value, index: usize) -> &str {
         .unwrap()
 }
 
+fn scene_phase_index(scene: &Value, action: &str, marker: &str) -> usize {
+    let matches: Vec<_> = scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter_map(|(index, step)| {
+            let source = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+                .unwrap_or("");
+            (step["action"] == action && source.contains(marker)).then_some(index)
+        })
+        .collect();
+    assert_eq!(
+        matches.len(),
+        1,
+        "nonunique scenario phase: {action}/{marker}"
+    );
+    matches[0]
+}
+
+fn scene_phase_lua<'a>(scene: &'a Value, action: &str, marker: &str) -> &'a str {
+    scene_lua(scene, scene_phase_index(scene, action, marker))
+}
+
 #[test]
 fn enemy_fixture_requires_real_actor_roles_join_and_one_official_title() {
     let h = Enemy::new();
@@ -1971,47 +1997,93 @@ fn capacity_tier_two_civic_scene_preserves_domain_law_and_never_replays_the_sett
     h.civic_roundtrip(true);
     h.pin_original_mission_at_turn_24();
     h.run("ORIGINAL_DOMAIN_TOKEN=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT').token; GOV_CURRENT=1; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_TIER1_BUILT=true; GOV_TIER2_CIVIC_COMPLETED=false; GOV_WINDOW_PASSES=true; GOV_CIVIC_COMPLETED_THIS_TURN=false; local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='NEEDS_TIER2_CIVIC' and p.government.target.governmentType=='GOVERNMENT_MERCHANT_REPUBLIC' and #p.government.target.missingPrerequisites==0)");
-    h.run(scene_lua(&scene, 2));
+    h.run(scene_phase_lua(
+        &scene,
+        "ui_lua",
+        "Queue('PREPARE_TIER2_CAPACITY_CIVIC')",
+    ));
     h.tier2_civic_complete_queued();
     assert!(h
         .0
-        .load(scene_lua(&scene, 3))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "ACCEPTED_PREPARE_TIER2_CAPACITY_CIVIC"
+        ))
         .strict_eval::<bool>()
         .unwrap());
     assert!(h
         .0
-        .load(scene_lua(&scene, 4))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "r.afterTotal==a.beforeTotal+a.expectedTitleDelta"
+        ))
         .strict_eval::<bool>()
         .unwrap());
-    h.run(scene_lua(&scene, 5));
+    h.run(scene_phase_lua(
+        &scene,
+        "ui_lua",
+        "Queue('CHANGE_CAPACITY_GOVERNMENT')",
+    ));
     h.capacity_government_complete_queued();
     assert!(h
         .0
-        .load(scene_lua(&scene, 6))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "REQUESTED_CHANGE_CAPACITY_GOVERNMENT"
+        ))
         .strict_eval::<bool>()
         .unwrap());
-    assert_eq!(scene["steps"][7]["action"], "end_turn");
+    let requested = scene_phase_index(&scene, "wait_for", "REQUESTED_CHANGE_CAPACITY_GOVERNMENT");
+    assert_eq!(scene["steps"][requested + 1]["action"], "end_turn");
     h.run("ADVANCE_TURN()");
     assert!(h
         .0
-        .load(scene_lua(&scene, 8))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')"
+        ))
         .strict_eval::<bool>()
         .unwrap());
     h.capacity_government_complete_next_turn();
     assert!(h
         .0
-        .load(scene_lua(&scene, 9))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "ACCEPTED_CHANGE_CAPACITY_GOVERNMENT"
+        ))
         .strict_eval::<bool>()
         .unwrap());
-    h.run(scene_lua(&scene, 10));
+    h.run(scene_phase_lua(
+        &scene,
+        "ui_lua",
+        "Queue('RESUME_TIER2_CAPACITY_CIVIC_READ')",
+    ));
     h.tier2_civic_complete_next_turn();
     assert!(h
         .0
-        .load(scene_lua(&scene, 11))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "ACCEPTED_RESUME_TIER2_CAPACITY_CIVIC_READ"
+        ))
         .strict_eval::<bool>()
         .unwrap());
-    h.run(scene_lua(&scene, 12));
-    assert_eq!(scene["steps"][13]["action"], "save");
+    h.run(scene_phase_lua(
+        &scene,
+        "ui_lua",
+        "native Tier 2 Civic, Government, title accounting or original captive differs",
+    ));
+    let proof = scene_phase_index(
+        &scene,
+        "ui_lua",
+        "native Tier 2 Civic, Government, title accounting or original captive differs",
+    );
+    assert_eq!(scene["steps"][proof + 1]["action"], "save");
     h.run("local domain=Game:GetProperty('JAC_BOUNDARY_CAPACITY_CIVIC_ATTEMPT'); local tier2=Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT'); local gov=Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS').Tier2; assert(domain.index==13 and domain.token==ORIGINAL_DOMAIN_TOKEN and tier2.index==14 and gov.turn==tier2.turn and GOV_CURRENT==2 and GOV_POINTS==2 and GOV_REQUEST_CALLS==1); ENEMY_CASES.fireCore('JAC_BoundaryPrepareTier2CapacityCivic',TIER2_SETTER_PARAMS); assert(GOV_POINTS==2)");
 }
 
@@ -2022,24 +2094,41 @@ fn capacity_tier_two_civic_scene_stops_before_save_when_native_read_is_pending()
     h.actual_captive_at_turn_24();
     h.run("GOV_CIVIC_COMPLETED=true; GOV_CURRENT=1; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_TIER1_BUILT=true; GOV_TIER2_CIVIC_COMPLETED=false; GOV_WINDOW_PASSES=true");
     h.run("local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); culture.SetCivic=function(_,index,grant) assert(index==14 and grant); TIER2_SETTER_CALLS=(TIER2_SETTER_CALLS or 0)+1 end; return culture end");
-    h.run(scene_lua(&scene, 2));
+    h.run(scene_phase_lua(
+        &scene,
+        "ui_lua",
+        "Queue('PREPARE_TIER2_CAPACITY_CIVIC')",
+    ));
     h.tier2_civic_complete_queued();
     assert!(h
         .0
-        .load(scene_lua(&scene, 3))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "ACCEPTED_PREPARE_TIER2_CAPACITY_CIVIC"
+        ))
         .strict_eval::<bool>()
         .unwrap());
     assert!(!h
         .0
-        .load(scene_lua(&scene, 4))
+        .load(scene_phase_lua(
+            &scene,
+            "wait_for",
+            "r.afterTotal==a.beforeTotal+a.expectedTitleDelta"
+        ))
         .strict_eval::<bool>()
         .unwrap());
     h.reject(
-        scene_lua(&scene, 5),
+        scene_phase_lua(&scene, "ui_lua", "Queue('CHANGE_CAPACITY_GOVERNMENT')"),
         "official Tier 2 Government window closed",
     );
     h.run("assert(TIER2_SETTER_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC')==nil and GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
-    assert_eq!(scene["steps"][13]["action"], "save");
+    let proof = scene_phase_index(
+        &scene,
+        "ui_lua",
+        "native Tier 2 Civic, Government, title accounting or original captive differs",
+    );
+    assert_eq!(scene["steps"][proof + 1]["action"], "save");
 }
 
 #[test]
