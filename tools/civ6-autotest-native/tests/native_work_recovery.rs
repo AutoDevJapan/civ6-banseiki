@@ -539,8 +539,13 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
         assert(saved.NativeWorks[1].DealSubmitted and not saved.NativeWorks[1].PhysicalMoved)
         assert(saved.NativeDealUI and saved.NativeDealUI.Index==900)
         local token=saved.NativeDealUI.Token
+        local legacy=A.GetState()
+        legacy.Transactions[PLAN.ID].NativeWorks[1].NativeRoute='CORE'
+        Game:SetProperty(A.Rules.STATE_KEY,legacy)
         assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and ENACT_CALLS==1,
           'unpublished work triggered a duplicate deal')
+        assert(A.GetState().Transactions[PLAN.ID].NativeWorks[1].NativeRoute=='DEAL',
+          'legacy submitted deal did not preserve its physical route')
         ExposedMembers.JAC_HeroReadAPI.GetObservation=function(value)
           if value==token then return {Published=true} end
         end
@@ -587,6 +592,15 @@ fn external_native_work_deal_precedes_donor_city_mutation_and_reconciles_before_
           returned.NativeCustody.Building==1 and returned.NativeCustody.Slot==0)
         assert(returned.City.Owner==3 and returned.City.X==16 and returned.City.Y==0)
         assert(A.Verify(PLAN.ID,true))
+        local legacy=A.GetState()
+        legacy.Transactions[PLAN.ID].NativeWorks[1].NativeRoute='CORE'
+        legacy.Transactions[PLAN.ID].Status='BLOCKED'
+        legacy.Transactions[PLAN.ID].Error='legacy save after physical deal proof'
+        Game:SetProperty(A.Rules.STATE_KEY,legacy)
+        local resumed=A.Resume(PLAN.ID)
+        assert(resumed.Status=='COMPLETE' and resumed.NativeWorks[1].NativeRoute=='DEAL'
+          and ENACT_CALLS==2 and #A.NativeWorkLocations(900)==1,
+          'legacy confirmed deal was resent or lost its original')
         "#,
     )
     .exec()
@@ -1034,9 +1048,17 @@ fn reserved_carrier_rechecks_a_new_center_unit_and_resumes_after_reload() -> mlu
         assert(pending.Status=='WAITING_UI' and carrier.BorrowIssued and TRANSFERS==1
           and CITIES[18]:GetOwner()==1 and Players[2].units[203]==unit and KILLS==0,
           'the saved route could not resume after the blocker left')
+        local legacy=A.GetState()
+        legacy.Transactions[PLAN.ID].NativeWorks[1].NativeRoute=nil
+        Game:SetProperty(A.Rules.STATE_KEY,legacy)
         PUBLISHED[carrier.BorrowToken]=true
         pending=A.Resume(PLAN.ID);carrier=pending.NativeWorks[1].Carrier
-        assert(carrier.Phase=='MOVE' and carrier.MoveTarget.X==18)
+        assert(carrier.Phase=='MOVE' and carrier.MoveTarget.X==18 and TRANSFERS==1
+          and pending.NativeWorks[1].NativeRoute=='CARRIER',
+          'legacy borrowed carrier repeated its city transfer')
+        local legacy=A.GetState()
+        legacy.Transactions[PLAN.ID].NativeWorks[1].NativeRoute='CORE'
+        Game:SetProperty(A.Rules.STATE_KEY,legacy)
         WORK_CITIES[4],WORK_CITIES[18]=nil,true
         PUBLISHED[carrier.MoveToken]=true
         pending=A.Resume(PLAN.ID);carrier=pending.NativeWorks[1].Carrier
