@@ -52,10 +52,33 @@ pub const PINNED_CAN_EVER_RVA: usize = 0x2d_ddd0;
 const PINNED_CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 pub const PINNED_PROPERTY_GET_RVA: usize = 0x99_f5c0;
 const PINNED_PROPERTY_GET_FILE_OFFSET: u64 = 0x99_e9c0;
+pub const PINNED_PROMOTION_CALL_RVA: usize = 0x30_ec0f;
+pub const PINNED_PROMOTION_CALLEE_RVA: usize = 0x2d_dbb0;
+const PINNED_PROMOTION_CALL_FILE_OFFSET: u64 = 0x30_e00f;
+const PROMOTION_CALL_WINDOW: [u8; 16] = [
+    0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f, 0x84, 0x75, 0x01, 0x00, 0x00, 0x44, 0x8b, 0xc7,
+];
+const PROMOTION_CALL_HEAD: [u8; 8] = [0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f];
+const PROMOTION_TRACE_MAGIC: u32 = 0x4a41_4338; // JAC8
+const PROMOTION_TRACE_VERSION: u32 = 1;
+pub const PROMOTION_TRACE_CAPACITY: usize = 2048;
 pub const GAME_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const CONFIG_VERSION: u32 = 1;
 use crate::MAX_ACTIVE_SECONDS;
+
+/// AMD64 APM 3.11 permits an asynchronous single atomic store to a code
+/// region wholly within an aligned eight-byte word. The fixed operand meets
+/// that condition. Intel's documented cross-modifying-code contract differs,
+/// so this optional mode refuses other CPU vendors before any mutation.
+pub fn supports_atomic_promotion_fetch() -> bool {
+    let leaf = core::arch::x86_64::__cpuid(0);
+    let mut vendor = [0u8; 12];
+    vendor[..4].copy_from_slice(&leaf.ebx.to_le_bytes());
+    vendor[4..8].copy_from_slice(&leaf.edx.to_le_bytes());
+    vendor[8..].copy_from_slice(&leaf.ecx.to_le_bytes());
+    &vendor == b"AuthenticAMD"
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u32)]
@@ -66,6 +89,8 @@ pub enum BridgeMode {
     CanEverCalibration = 3,
     PropertyAdmissionScoped = 4,
     JoinedAdmission = 5,
+    // 6 and 7 are reserved for production admission and assignment.
+    PromotionCall = 8,
 }
 
 impl BridgeMode {
@@ -82,6 +107,7 @@ impl BridgeMode {
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_RVA
             }
+            Self::PromotionCall => PINNED_PROMOTION_CALL_RVA,
         }
     }
 
@@ -93,6 +119,7 @@ impl BridgeMode {
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_FILE_OFFSET
             }
+            Self::PromotionCall => PINNED_PROMOTION_CALL_FILE_OFFSET,
         }
     }
 
@@ -102,6 +129,7 @@ impl BridgeMode {
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 &PROPERTY_PROLOGUE
             }
+            Self::PromotionCall => &PROMOTION_CALL_HEAD,
         }
     }
 
@@ -113,6 +141,7 @@ impl BridgeMode {
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 std::mem::size_of::<PropertyTrace>()
             }
+            Self::PromotionCall => std::mem::size_of::<PromotionTrace>(),
         }
     }
 }
@@ -180,6 +209,110 @@ impl BridgeConfig {
         config.mode = BridgeMode::JoinedAdmission as u32;
         config.trace_size = BridgeMode::JoinedAdmission.trace_size() as u32;
         config
+    }
+
+    pub fn for_promotion_call(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::PromotionCall as u32;
+        config.trace_size = BridgeMode::PromotionCall.trace_size() as u32;
+        config
+    }
+}
+
+/// Entry-only raw Win64 register labels. No owner, index, ABI type, or return
+/// value is inferred from this call site.
+#[repr(C)]
+#[derive(Default)]
+pub struct PromotionRow {
+    pub sequence: AtomicU32,
+    pub thread_id: AtomicU32,
+    pub rcx: AtomicU64,
+    pub rdx: AtomicU64,
+    pub r8: AtomicU64,
+    pub r9: AtomicU64,
+    pub return_address: AtomicU64,
+}
+
+#[repr(C)]
+pub struct PromotionTrace {
+    pub magic: u32,
+    pub version: u32,
+    pub mode: u32,
+    pub capacity: u32,
+    pub next: AtomicU32,
+    pub dropped: AtomicU32,
+    pub in_flight: AtomicU32,
+    pub reserved: u32,
+    pub rows: [PromotionRow; PROMOTION_TRACE_CAPACITY],
+}
+
+impl Default for PromotionTrace {
+    fn default() -> Self {
+        Self {
+            magic: PROMOTION_TRACE_MAGIC,
+            version: PROMOTION_TRACE_VERSION,
+            mode: BridgeMode::PromotionCall as u32,
+            capacity: PROMOTION_TRACE_CAPACITY as u32,
+            next: AtomicU32::new(0),
+            dropped: AtomicU32::new(0),
+            in_flight: AtomicU32::new(0),
+            reserved: 0,
+            rows: std::array::from_fn(|_| PromotionRow::default()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PromotionObservation {
+    pub sequence: u32,
+    pub thread_id: u32,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub return_address: u64,
+}
+
+impl PromotionTrace {
+    pub const VERSION: u32 = PROMOTION_TRACE_VERSION;
+
+    pub fn complete_rows(&self) -> Result<Vec<PromotionObservation>, &'static str> {
+        if self.magic != PROMOTION_TRACE_MAGIC
+            || self.version != PROMOTION_TRACE_VERSION
+            || self.mode != BridgeMode::PromotionCall as u32
+            || self.capacity != PROMOTION_TRACE_CAPACITY as u32
+            || self.reserved != 0
+        {
+            return Err("promotion trace header mismatch");
+        }
+        if self.in_flight.load(Ordering::Acquire) != 0 {
+            return Err("promotion gateway calls remain in flight");
+        }
+        if self.dropped.load(Ordering::Acquire) != 0 {
+            return Err("promotion trace overflow");
+        }
+        let count = self.next.load(Ordering::Acquire) as usize;
+        if count > PROMOTION_TRACE_CAPACITY {
+            return Err("promotion sequence exceeds capacity");
+        }
+        self.rows[..count]
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                if row.sequence.load(Ordering::Acquire) != i as u32 + 1 {
+                    return Err("partial promotion row");
+                }
+                Ok(PromotionObservation {
+                    sequence: i as u32 + 1,
+                    thread_id: row.thread_id.load(Ordering::Relaxed),
+                    rcx: row.rcx.load(Ordering::Relaxed),
+                    rdx: row.rdx.load(Ordering::Relaxed),
+                    r8: row.r8.load(Ordering::Relaxed),
+                    r9: row.r9.load(Ordering::Relaxed),
+                    return_address: row.return_address.load(Ordering::Relaxed),
+                })
+            })
+            .collect()
     }
 }
 
@@ -1170,6 +1303,102 @@ unsafe extern "system" {
 #[unsafe(no_mangle)]
 static CALIBRATION_TRACE_PTR: AtomicPtr<CalibrationTrace> = AtomicPtr::new(null_mut());
 
+#[repr(C)]
+struct RawPromotionRegisters {
+    rcx: u64,
+    rdx: u64,
+    r8: u64,
+    r9: u64,
+    return_address: u64,
+}
+
+// This is called only by the assembly gateway. It records entry state and
+// never calls GameCore or interprets any argument as an object/index.
+extern "system" fn record_promotion_call(raw: *const RawPromotionRegisters) {
+    let trace = PROMOTION_TRACE_PTR.load(Ordering::Acquire);
+    if trace.is_null() {
+        return;
+    }
+    let trace = unsafe { &*trace };
+    trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+    if slot >= PROMOTION_TRACE_CAPACITY {
+        trace.dropped.fetch_add(1, Ordering::Relaxed);
+    } else {
+        let raw = unsafe { &*raw };
+        let row = &trace.rows[slot];
+        row.thread_id
+            .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+        row.rcx.store(raw.rcx, Ordering::Relaxed);
+        row.rdx.store(raw.rdx, Ordering::Relaxed);
+        row.r8.store(raw.r8, Ordering::Relaxed);
+        row.r9.store(raw.r9, Ordering::Relaxed);
+        row.return_address
+            .store(raw.return_address, Ordering::Relaxed);
+        row.sequence.store(slot as u32 + 1, Ordering::Release);
+    }
+    trace.in_flight.fetch_sub(1, Ordering::Release);
+}
+
+// The original E8 pushes the original return site. The gateway's only call
+// is the recorder above; it restores its exact incoming stack, flags, all
+// volatile integer registers and XMM0..5, then jumps to the unmodified native
+// callee. No Rust call frame is interposed around the native invocation.
+global_asm!(
+    ".globl promotion_call_gateway",
+    ".seh_proc promotion_call_gateway",
+    "promotion_call_gateway:",
+    "pushfq",
+    ".seh_stackalloc 8",
+    "sub rsp, 0xe0",
+    ".seh_stackalloc 0xe0",
+    ".seh_endprologue",
+    "mov qword ptr [rsp + 0x20], rcx",
+    "mov qword ptr [rsp + 0x28], rdx",
+    "mov qword ptr [rsp + 0x30], r8",
+    "mov qword ptr [rsp + 0x38], r9",
+    "mov qword ptr [rsp + 0x58], r11",
+    "mov r11, qword ptr [rsp + 0xe8]",
+    "mov qword ptr [rsp + 0x40], r11",
+    "mov qword ptr [rsp + 0x48], rax",
+    "mov qword ptr [rsp + 0x50], r10",
+    "movdqu xmmword ptr [rsp + 0x70], xmm0",
+    "movdqu xmmword ptr [rsp + 0x80], xmm1",
+    "movdqu xmmword ptr [rsp + 0x90], xmm2",
+    "movdqu xmmword ptr [rsp + 0xa0], xmm3",
+    "movdqu xmmword ptr [rsp + 0xb0], xmm4",
+    "movdqu xmmword ptr [rsp + 0xc0], xmm5",
+    "lea rcx, [rsp + 0x20]",
+    "call {record}",
+    "movdqu xmm0, xmmword ptr [rsp + 0x70]",
+    "movdqu xmm1, xmmword ptr [rsp + 0x80]",
+    "movdqu xmm2, xmmword ptr [rsp + 0x90]",
+    "movdqu xmm3, xmmword ptr [rsp + 0xa0]",
+    "movdqu xmm4, xmmword ptr [rsp + 0xb0]",
+    "movdqu xmm5, xmmword ptr [rsp + 0xc0]",
+    "mov rcx, qword ptr [rsp + 0x20]",
+    "mov rdx, qword ptr [rsp + 0x28]",
+    "mov r8, qword ptr [rsp + 0x30]",
+    "mov r9, qword ptr [rsp + 0x38]",
+    "mov rax, qword ptr [rsp + 0x48]",
+    "mov r10, qword ptr [rsp + 0x50]",
+    "mov r11, qword ptr [rsp + 0x58]",
+    "lea rsp, [rsp + 0xe0]",
+    "popfq",
+    "jmp qword ptr [rip + PROMOTION_CALLEE_PTR]",
+    ".seh_endproc",
+    record = sym record_promotion_call,
+);
+
+unsafe extern "system" {
+    fn promotion_call_gateway();
+}
+
+#[unsafe(no_mangle)]
+static PROMOTION_TRACE_PTR: AtomicPtr<PromotionTrace> = AtomicPtr::new(null_mut());
+#[unsafe(no_mangle)]
+static PROMOTION_CALLEE_PTR: AtomicPtr<u8> = AtomicPtr::new(null_mut());
+
 struct Hook {
     target: *mut u8,
     original: [u8; 8],
@@ -1185,7 +1414,40 @@ unsafe impl Send for Hook {}
 
 static HOOK: Mutex<Option<Hook>> = Mutex::new(None);
 static JOINED_PROPERTY_HOOK: Mutex<Option<Hook>> = Mutex::new(None);
+struct PromotionHook {
+    call: *mut u8,
+    original: [u8; 16],
+    patched_operand: u32,
+    // A caller may have fetched the old operand before restoration. Retain
+    // the relay, gateway DLL and trace allocation until process exit.
+    _relay: *mut u8,
+}
+unsafe impl Send for PromotionHook {}
+static PROMOTION_HOOK: Mutex<Option<PromotionHook>> = Mutex::new(None);
+static PROMOTION_USED: AtomicBool = AtomicBool::new(false);
 static PROPERTY_USED: AtomicBool = AtomicBool::new(false);
+
+fn promotion_operand(call: usize, to: usize) -> Option<u32> {
+    let operand = call.checked_add(1)?;
+    if !operand.is_multiple_of(4)
+        || (operand & 7) > 4
+        || (operand & 63) > 60
+        || (operand & (CODE_PAGE - 1)) > CODE_PAGE - 4
+    {
+        return None;
+    }
+    let next = call.checked_add(5)?;
+    let displacement = i32::try_from(to as i128 - next as i128).ok()?;
+    Some(u32::from_le_bytes(displacement.to_le_bytes()))
+}
+
+fn verified_promotion_window(call: usize, callee: usize, window: &[u8; 16]) -> bool {
+    if *window != PROMOTION_CALL_WINDOW || window[0] != 0xe8 {
+        return false;
+    }
+    let original = u32::from_le_bytes(window[1..5].try_into().unwrap());
+    promotion_operand(call, callee) == Some(original)
+}
 
 fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     let displacement = (to as i128) - (from as i128) - 5;
@@ -1194,6 +1456,146 @@ fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     jump[0] = 0xe9;
     jump[1..].copy_from_slice(&displacement.to_le_bytes());
     Some(jump)
+}
+
+unsafe fn promotion_relay_near(call: usize) -> Option<*mut u8> {
+    let base = call & !0xffffusize;
+    for step in 1..=0x4000usize {
+        let delta = step * 0x10000;
+        for candidate in [base.checked_add(delta), base.checked_sub(delta)] {
+            let Some(candidate) = candidate else { continue };
+            if promotion_operand(call, candidate).is_none() {
+                continue;
+            }
+            let region = unsafe {
+                VirtualAlloc(
+                    candidate as *const c_void,
+                    CODE_PAGE,
+                    MEM_COMMIT | MEM_RESERVE,
+                    PAGE_EXECUTE_READWRITE,
+                )
+            };
+            if !region.is_null() {
+                return Some(region.cast());
+            }
+        }
+    }
+    None
+}
+
+unsafe fn exchange_promotion_operand(
+    call: *mut u8,
+    expected: u32,
+    replacement: u32,
+) -> Result<PatchOutcome, &'static str> {
+    let operand = unsafe { call.add(1) };
+    if promotion_operand(call as usize, call as usize).is_none() {
+        return Err("promotion operand alignment or cacheline invalid");
+    }
+    let mut previous = 0u32;
+    if unsafe { VirtualProtect(operand.cast(), 4, PAGE_EXECUTE_READWRITE, &mut previous) } == 0 {
+        return Err("cannot make promotion operand writable");
+    }
+    let exchanged = unsafe { &*operand.cast::<AtomicU32>() }
+        .compare_exchange(expected, replacement, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok();
+    let mut replaced = 0u32;
+    let protection_restored =
+        unsafe { VirtualProtect(operand.cast(), 4, previous, &mut replaced) } != 0;
+    let cache_flushed = unsafe { FlushInstructionCache(GetCurrentProcess(), call.cast(), 5) } != 0;
+    Ok(PatchOutcome {
+        exchanged,
+        protection_restored,
+        cache_flushed,
+    })
+}
+
+unsafe fn install_promotion_call(
+    call: *mut u8,
+    callee: *mut u8,
+    trace: *mut PromotionTrace,
+    expected: [u8; 16],
+) -> Result<(), &'static str> {
+    if call.is_null()
+        || callee.is_null()
+        || trace.is_null()
+        || unsafe { (*trace).magic } != PROMOTION_TRACE_MAGIC
+        || unsafe { (*trace).version } != PROMOTION_TRACE_VERSION
+        || unsafe { (*trace).mode } != BridgeMode::PromotionCall as u32
+        || unsafe { (*trace).capacity } != PROMOTION_TRACE_CAPACITY as u32
+    {
+        return Err("invalid promotion call or trace header");
+    }
+    let mut guard = PROMOTION_HOOK
+        .lock()
+        .map_err(|_| "promotion lock poisoned")?;
+    if guard.is_some() || HOOK.lock().map_err(|_| "bridge lock poisoned")?.is_some() {
+        return Err("another bridge hook is installed");
+    }
+    let original = unsafe { ptr::read(call.cast::<[u8; 16]>()) };
+    if original != expected || !verified_promotion_window(call as usize, callee as usize, &original)
+    {
+        return Err("pinned complete promotion call or target differs");
+    }
+    let relay = unsafe { promotion_relay_near(call as usize) }
+        .ok_or("no rel32 promotion relay near call")?;
+    let gateway = promotion_call_gateway as *const () as usize;
+    unsafe {
+        ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
+        ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), relay.add(6), 8);
+    }
+    let mut previous = 0u32;
+    if unsafe { VirtualProtect(relay.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut previous) } == 0
+        || unsafe { FlushInstructionCache(GetCurrentProcess(), relay.cast(), CODE_PAGE) } == 0
+    {
+        unsafe { VirtualFree(relay.cast(), 0, MEM_RELEASE) };
+        return Err("cannot publish promotion relay");
+    }
+    let original_operand = u32::from_le_bytes(original[1..5].try_into().unwrap());
+    let patched_operand = promotion_operand(call as usize, relay as usize)
+        .ok_or("promotion relay displacement out of range")?;
+    PROMOTION_TRACE_PTR.store(trace, Ordering::Release);
+    PROMOTION_CALLEE_PTR.store(callee, Ordering::Release);
+    let outcome = unsafe { exchange_promotion_operand(call, original_operand, patched_operand) }?;
+    if !outcome.exchanged {
+        return Err("critical: promotion call changed before atomic install");
+    }
+    *guard = Some(PromotionHook {
+        call,
+        original,
+        patched_operand,
+        _relay: relay,
+    });
+    let mut patched = original;
+    patched[1..5].copy_from_slice(&patched_operand.to_le_bytes());
+    if !outcome.protection_restored
+        || !outcome.cache_flushed
+        || unsafe { ptr::read(call.cast::<[u8; 16]>()) } != patched
+    {
+        return Err("critical: promotion operand publication unverified");
+    }
+    Ok(())
+}
+
+unsafe fn restore_promotion_call() -> Result<bool, &'static str> {
+    let mut guard = PROMOTION_HOOK
+        .lock()
+        .map_err(|_| "promotion lock poisoned")?;
+    let Some(hook) = guard.as_ref() else {
+        return Ok(false);
+    };
+    let original_operand = u32::from_le_bytes(hook.original[1..5].try_into().unwrap());
+    let outcome =
+        unsafe { exchange_promotion_operand(hook.call, hook.patched_operand, original_operand) }?;
+    if !outcome.exchanged
+        || !outcome.protection_restored
+        || !outcome.cache_flushed
+        || unsafe { ptr::read(hook.call.cast::<[u8; 16]>()) } != hook.original
+    {
+        return Err("critical: promotion operand restoration unverified");
+    }
+    *guard = None;
+    Ok(true)
 }
 
 unsafe fn executable_near(jump_from: usize, target: usize, prologue_len: usize) -> Option<*mut u8> {
@@ -1606,9 +2008,10 @@ unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> 
 
 unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
+    let promotion = unsafe { restore_promotion_call() }?;
     let main = restore_one(&HOOK)?;
     let property = restore_one(&JOINED_PROPERTY_HOOK)?;
-    if !main && !property {
+    if !main && !property && !promotion {
         return Err("bridge not installed");
     }
     Ok(())
@@ -1723,6 +2126,33 @@ fn pinned_gamecore(path: &Path, mode: BridgeMode) -> Option<[u8; 8]> {
     if format!("{:x}", hash.finalize()) != PINNED_GAMECORE_SHA256 {
         return None;
     }
+    if mode == BridgeMode::PromotionCall {
+        let call_offset = pe_file_offset(&mut file, PINNED_PROMOTION_CALL_RVA as u32)?;
+        let callee_offset = pe_file_offset(&mut file, PINNED_PROMOTION_CALLEE_RVA as u32)?;
+        if call_offset != PINNED_PROMOTION_CALL_FILE_OFFSET || callee_offset != 0x2d_cfb0 {
+            return None;
+        }
+        file.seek(SeekFrom::Start(callee_offset - 5)).ok()?;
+        let mut callee_boundary = [0u8; 13];
+        file.read_exact(&mut callee_boundary).ok()?;
+        if callee_boundary
+            != [
+                0xe9, 0xd0, 0xfc, 0xff, 0xff, 0x40, 0x53, 0x56, 0x57, 0x48, 0x83, 0xec, 0x30,
+            ]
+        {
+            return None;
+        }
+        file.seek(SeekFrom::Start(call_offset)).ok()?;
+        let mut window = [0u8; 16];
+        file.read_exact(&mut window).ok()?;
+        if !verified_promotion_window(
+            PINNED_PROMOTION_CALL_RVA,
+            PINNED_PROMOTION_CALLEE_RVA,
+            &window,
+        ) {
+            return None;
+        }
+    }
     if mode.is_property() {
         file.seek(SeekFrom::Start(
             PINNED_PROPERTY_GET_FILE_OFFSET - PROPERTY_PREFIX_LEN as u64,
@@ -1740,6 +2170,46 @@ fn pinned_gamecore(path: &Path, mode: BridgeMode) -> Option<[u8; 8]> {
     (&first[..mode.prologue().len()] == mode.prologue()).then_some(first)
 }
 
+fn pe_file_offset(file: &mut File, rva: u32) -> Option<u64> {
+    let mut dos = [0u8; 64];
+    file.seek(SeekFrom::Start(0)).ok()?;
+    file.read_exact(&mut dos).ok()?;
+    if &dos[..2] != b"MZ" {
+        return None;
+    }
+    let pe = u32::from_le_bytes(dos[0x3c..0x40].try_into().ok()?) as u64;
+    file.seek(SeekFrom::Start(pe)).ok()?;
+    let mut coff = [0u8; 24];
+    file.read_exact(&mut coff).ok()?;
+    if &coff[..4] != b"PE\0\0" || u16::from_le_bytes(coff[4..6].try_into().ok()?) != 0x8664 {
+        return None;
+    }
+    let sections = u16::from_le_bytes(coff[6..8].try_into().ok()?) as usize;
+    let optional_size = u16::from_le_bytes(coff[20..22].try_into().ok()?) as u64;
+    if sections == 0 || sections > 96 || optional_size < 0x70 {
+        return None;
+    }
+    let section_start = pe.checked_add(24)?.checked_add(optional_size)?;
+    for i in 0..sections {
+        file.seek(SeekFrom::Start(section_start.checked_add((i * 40) as u64)?))
+            .ok()?;
+        let mut section = [0u8; 40];
+        file.read_exact(&mut section).ok()?;
+        if &section[..5] != b".text" {
+            continue;
+        }
+        let virtual_size = u32::from_le_bytes(section[8..12].try_into().ok()?);
+        let section_rva = u32::from_le_bytes(section[12..16].try_into().ok()?);
+        let raw_size = u32::from_le_bytes(section[16..20].try_into().ok()?);
+        let raw_offset = u32::from_le_bytes(section[20..24].try_into().ok()?);
+        let relative = rva.checked_sub(section_rva)?;
+        if relative < virtual_size && relative < raw_size {
+            return Some(u64::from(raw_offset) + u64::from(relative));
+        }
+    }
+    None
+}
+
 fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if config.version != CONFIG_VERSION
         || config.size as usize != std::mem::size_of::<BridgeConfig>()
@@ -1747,12 +2217,13 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5)
+        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5 | 8)
         || config.trace_size as usize
             != match config.mode {
                 0 => BridgeMode::CanEver.trace_size(),
                 3 => BridgeMode::CanEverCalibration.trace_size(),
                 5 => BridgeMode::JoinedAdmission.trace_size(),
+                8 => BridgeMode::PromotionCall.trace_size(),
                 _ => BridgeMode::Property.trace_size(),
             }
         || !committed_range(
@@ -1770,6 +2241,9 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     {
         return BridgeStatus::ProcessIdentity;
     }
+    if config.mode == BridgeMode::PromotionCall as u32 && !supports_atomic_promotion_fetch() {
+        return BridgeStatus::InvalidInput;
+    }
     let module = unsafe { GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr()) };
     if module.is_null() || !module_path(module).is_some_and(|path| same_file(&path, GAMECORE)) {
         return BridgeStatus::GameCoreIdentity;
@@ -1781,6 +2255,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         3 => BridgeMode::CanEverCalibration,
         4 => BridgeMode::PropertyAdmissionScoped,
         5 => BridgeMode::JoinedAdmission,
+        8 => BridgeMode::PromotionCall,
         _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
@@ -1793,6 +2268,25 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if unsafe { ptr::read(entry.cast::<[u8; 8]>()) } != disk_bytes {
         return BridgeStatus::EntryBytes;
     }
+    let promotion_window = if mode == BridgeMode::PromotionCall {
+        let call = unsafe { ptr::read(entry.cast::<[u8; 16]>()) };
+        let Some(callee_address) = (module as usize).checked_add(PINNED_PROMOTION_CALLEE_RVA)
+        else {
+            return BridgeStatus::EntryBytes;
+        };
+        let callee = callee_address as *const u8;
+        if !verified_promotion_window(entry as usize, callee_address, &call)
+            || unsafe { ptr::read(callee.sub(5).cast::<[u8; 13]>()) }
+                != [
+                    0xe9, 0xd0, 0xfc, 0xff, 0xff, 0x40, 0x53, 0x56, 0x57, 0x48, 0x83, 0xec, 0x30,
+                ]
+        {
+            return BridgeStatus::EntryBytes;
+        }
+        Some(call)
+    } else {
+        None
+    };
     let property_entry = if mode == BridgeMode::JoinedAdmission {
         let Some(address) = (module as usize).checked_add(PINNED_PROPERTY_GET_RVA) else {
             return BridgeStatus::EntryBytes;
@@ -1836,6 +2330,20 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             let trace = config.trace_address as *mut SharedTrace;
             unsafe { ptr::write(trace, SharedTrace::default()) };
             unsafe { install_at(entry, trace, disk_bytes) }
+        }
+        BridgeMode::PromotionCall => {
+            // A fetched relay may outlive restoration. Never repoint its
+            // global trace/callee during a second session in this process.
+            if PROMOTION_USED
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                return BridgeStatus::HookFailure;
+            }
+            let trace = config.trace_address as *mut PromotionTrace;
+            unsafe { ptr::write(trace, PromotionTrace::default()) };
+            let callee = unsafe { (module as *mut u8).add(PINNED_PROMOTION_CALLEE_RVA) };
+            unsafe { install_promotion_call(entry, callee, trace, promotion_window.unwrap()) }
         }
         BridgeMode::CanEverCalibration => {
             let trace = config.trace_address as *mut CalibrationTrace;
@@ -2015,6 +2523,20 @@ mod tests {
             )
         }
         .is_null());
+        let promotion = unsafe {
+            RtlLookupFunctionEntry(
+                promotion_call_gateway as *const () as u64,
+                &mut image_base,
+                null_mut(),
+            )
+        };
+        assert!(
+            !promotion.is_null(),
+            "promotion gateway calls a recorder and changes rsp"
+        );
+        let promotion_rva = promotion_call_gateway as *const () as u64 - image_base;
+        assert!(unsafe { (*promotion).BeginAddress as u64 } <= promotion_rva);
+        assert!(promotion_rva < unsafe { (*promotion).EndAddress as u64 });
     }
 
     #[test]
@@ -2889,6 +3411,319 @@ mod tests {
         assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
     }
 
+    unsafe fn synthetic_promotion_call(call: usize, evidence: *mut u8, id: u64) -> usize {
+        let result: usize;
+        unsafe {
+            std::arch::asm!(
+                "sub rsp, 0x20",
+                "mov rax, 0x1111111111111111",
+                "movq xmm0, rax",
+                "mov rax, 0x2222222222222222",
+                "movq xmm1, rax",
+                "mov rax, 0x3333333333333333",
+                "movq xmm2, rax",
+                "mov rax, 0x4444444444444444",
+                "movq xmm3, rax",
+                "mov rax, 0x5555555555555555",
+                "movq xmm4, rax",
+                "mov rax, 0x6666666666666666",
+                "movq xmm5, rax",
+                "mov rax, 0x7777777777777777",
+                "pinsrq xmm0, rax, 1",
+                "pinsrq xmm1, rax, 1",
+                "pinsrq xmm2, rax, 1",
+                "pinsrq xmm3, rax, 1",
+                "pinsrq xmm4, rax, 1",
+                "pinsrq xmm5, rax, 1",
+                "stc",
+                "call r11",
+                "add rsp, 0x20",
+                in("r11") call,
+                in("rcx") evidence,
+                in("rdx") id,
+                in("r8") id + 1,
+                in("r9") id + 2,
+                lateout("rax") result,
+                clobber_abi("win64"),
+            );
+        }
+        result
+    }
+
+    #[test]
+    fn promotion_operand_switch_preserves_concurrent_original_calls_and_raw_entry() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                0x40000,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        let callee = page;
+        let call = unsafe { page.add(0x3105f) };
+        // The fixed displacement is -0x31064. The synthetic callee writes
+        // incoming registers, XMM0..5, flags and its actual stack return.
+        let callee_bytes = [
+            0x48, 0x89, 0x51, 0x00, 0x4c, 0x89, 0x41, 0x08, 0x4c, 0x89, 0x49, 0x10, 0x48, 0x8b,
+            0x04, 0x24, 0x48, 0x89, 0x41, 0x18, 0x0f, 0x11, 0x41, 0x20, 0x0f, 0x11, 0x49, 0x30,
+            0x0f, 0x11, 0x51, 0x40, 0x0f, 0x11, 0x59, 0x50, 0x0f, 0x11, 0x61, 0x60, 0x0f, 0x11,
+            0x69, 0x70, 0x9c, 0x41, 0x5a, 0x4c, 0x89, 0x91, 0x80, 0x00, 0x00, 0x00, 0xc3,
+        ];
+        unsafe {
+            ptr::copy_nonoverlapping(callee_bytes.as_ptr(), callee, callee_bytes.len());
+            ptr::copy_nonoverlapping(PROMOTION_CALL_WINDOW.as_ptr(), call, 16);
+            *call.add(16) = 0xc3;
+        }
+        let expected_return = call as usize + 5;
+        assert!(verified_promotion_window(
+            call as usize,
+            callee as usize,
+            &PROMOTION_CALL_WINDOW
+        ));
+        let mut before = [0u8; 144];
+        assert_eq!(
+            unsafe { synthetic_promotion_call(call as usize, before.as_mut_ptr(), 10) },
+            expected_return
+        );
+        assert_eq!(
+            u64::from_le_bytes(before[24..32].try_into().unwrap()),
+            expected_return as u64
+        );
+        let mut trace = Box::new(PromotionTrace::default());
+        let running = Arc::new(AtomicBool::new(true));
+        let progress = Arc::new(AtomicU32::new(0));
+        let callers = (0..4u64)
+            .map(|id| {
+                let running = Arc::clone(&running);
+                let progress = Arc::clone(&progress);
+                let address = call as usize;
+                std::thread::spawn(move || {
+                    let mut evidence = [0u8; 144];
+                    let evidence_address = evidence.as_mut_ptr() as u64;
+                    let thread_id = unsafe { GetCurrentThreadId() };
+                    let mut count = 0;
+                    while running.load(Ordering::Acquire) && count < 500 {
+                        let result = unsafe {
+                            synthetic_promotion_call(address, evidence.as_mut_ptr(), id + 20)
+                        };
+                        assert_eq!(result, address + 5);
+                        assert_eq!(
+                            u64::from_le_bytes(evidence[0..8].try_into().unwrap()),
+                            id + 20
+                        );
+                        assert_eq!(
+                            u64::from_le_bytes(evidence[8..16].try_into().unwrap()),
+                            id + 21
+                        );
+                        assert_eq!(
+                            u64::from_le_bytes(evidence[16..24].try_into().unwrap()),
+                            id + 22
+                        );
+                        assert_eq!(
+                            u64::from_le_bytes(evidence[24..32].try_into().unwrap()),
+                            (address + 5) as u64
+                        );
+                        for (xmm, expected) in [
+                            0x1111111111111111u64,
+                            0x2222222222222222,
+                            0x3333333333333333,
+                            0x4444444444444444,
+                            0x5555555555555555,
+                            0x6666666666666666,
+                        ]
+                        .into_iter()
+                        .enumerate()
+                        {
+                            assert_eq!(
+                                u64::from_le_bytes(
+                                    evidence[32 + xmm * 16..40 + xmm * 16].try_into().unwrap()
+                                ),
+                                expected
+                            );
+                            assert_eq!(
+                                u64::from_le_bytes(
+                                    evidence[40 + xmm * 16..48 + xmm * 16].try_into().unwrap()
+                                ),
+                                0x7777777777777777
+                            );
+                        }
+                        assert_ne!(
+                            u64::from_le_bytes(evidence[128..136].try_into().unwrap()) & 1,
+                            0
+                        );
+                        count += 1;
+                        progress.fetch_add(1, Ordering::Release);
+                        std::thread::sleep(Duration::from_micros(100));
+                    }
+                    (id + 20, thread_id, evidence_address, count)
+                })
+            })
+            .collect::<Vec<_>>();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while progress.load(Ordering::Acquire) < 4 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(progress.load(Ordering::Acquire) >= 4);
+        // Workers are already executing the original E8 when the operand
+        // changes. Both old and new destinations are kept executable.
+        unsafe { install_promotion_call(call, callee, trace.as_mut(), PROMOTION_CALL_WINDOW) }
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while trace.next.load(Ordering::Acquire) < 20 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(trace.next.load(Ordering::Acquire) >= 20);
+        let before_restore = progress.load(Ordering::Acquire);
+        assert!(unsafe { restore_promotion_call() }.unwrap());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while progress.load(Ordering::Acquire) < before_restore + 4 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(progress.load(Ordering::Acquire) >= before_restore + 4);
+        running.store(false, Ordering::Release);
+        let workers = callers
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert!(workers.iter().map(|worker| worker.3).sum::<usize>() > 0);
+        let mut after = [0u8; 144];
+        assert_eq!(
+            unsafe { synthetic_promotion_call(call as usize, after.as_mut_ptr(), 99) },
+            expected_return
+        );
+        assert_eq!(
+            unsafe { ptr::read(call.cast::<[u8; 16]>()) },
+            PROMOTION_CALL_WINDOW
+        );
+        let rows = trace.complete_rows().unwrap();
+        assert!(!rows.is_empty());
+        for row in rows {
+            assert_eq!(row.return_address, expected_return as u64);
+            let worker = workers.iter().find(|worker| worker.0 == row.rdx).unwrap();
+            assert_eq!(row.thread_id, worker.1);
+            assert_eq!(row.rcx, worker.2);
+            assert_eq!(row.r8, row.rdx + 1);
+            assert_eq!(row.r9, row.rdx + 2);
+        }
+        PROMOTION_TRACE_PTR.store(null_mut(), Ordering::Release);
+        PROMOTION_CALLEE_PTR.store(null_mut(), Ordering::Release);
+        assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn promotion_call_window_and_trace_reject_bad_boundaries_and_partial_rows() {
+        assert_eq!(
+            promotion_operand(PINNED_PROMOTION_CALL_RVA, PINNED_PROMOTION_CALLEE_RVA),
+            Some(0xfffcef9c)
+        );
+        assert!(promotion_operand(0x30ec0e, 0x2ddbb0).is_none());
+        assert!(promotion_operand(0x30ec0f, usize::MAX).is_none());
+        assert!(promotion_operand(0x3b, 0x100).is_some()); // final aligned DWORD of a line
+        assert!(promotion_operand(0x3f, 0x100).is_some()); // E8 crosses a fetch block; operand does not
+        assert!(!verified_promotion_window(
+            PINNED_PROMOTION_CALL_RVA,
+            PINNED_PROMOTION_CALLEE_RVA + 1,
+            &PROMOTION_CALL_WINDOW
+        ));
+        let mut wrong = PROMOTION_CALL_WINDOW;
+        wrong[0] = 0xe9;
+        assert!(!verified_promotion_window(
+            PINNED_PROMOTION_CALL_RVA,
+            PINNED_PROMOTION_CALLEE_RVA,
+            &wrong
+        ));
+        wrong = PROMOTION_CALL_WINDOW;
+        wrong[1] ^= 1;
+        assert!(!verified_promotion_window(
+            PINNED_PROMOTION_CALL_RVA,
+            PINNED_PROMOTION_CALLEE_RVA,
+            &wrong
+        ));
+        wrong = PROMOTION_CALL_WINDOW;
+        wrong[5] ^= 1;
+        assert!(!verified_promotion_window(
+            PINNED_PROMOTION_CALL_RVA,
+            PINNED_PROMOTION_CALLEE_RVA,
+            &wrong
+        ));
+        let mut trace = Box::new(PromotionTrace::default());
+        trace.next.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.rows[0].sequence.store(1, Ordering::Release);
+        assert_eq!(trace.complete_rows().unwrap().len(), 1);
+        trace.in_flight.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.in_flight.store(0, Ordering::Release);
+        trace
+            .next
+            .store(PROMOTION_TRACE_CAPACITY as u32 + 1, Ordering::Release);
+        trace.dropped.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.dropped.store(0, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.next.store(0, Ordering::Release);
+        trace.mode = BridgeMode::CanEver as u32;
+        assert!(trace.complete_rows().is_err());
+        trace.mode = BridgeMode::PromotionCall as u32;
+        trace.magic = 0x4a41_4342;
+        assert!(trace.complete_rows().is_err());
+        trace.magic = PROMOTION_TRACE_MAGIC;
+        trace.version += 1;
+        assert!(trace.complete_rows().is_err());
+        trace.version = PROMOTION_TRACE_VERSION;
+        trace.capacity -= 1;
+        assert!(trace.complete_rows().is_err());
+    }
+
+    #[test]
+    fn promotion_recorder_accepts_exact_capacity_then_rejects_the_next_call() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let mut trace = Box::new(PromotionTrace::default());
+        let raw = RawPromotionRegisters {
+            rcx: 1,
+            rdx: 2,
+            r8: 3,
+            r9: 4,
+            return_address: 5,
+        };
+        PROMOTION_TRACE_PTR.store(trace.as_mut(), Ordering::Release);
+        for _ in 0..PROMOTION_TRACE_CAPACITY {
+            record_promotion_call(&raw);
+        }
+        assert_eq!(
+            trace.complete_rows().unwrap().len(),
+            PROMOTION_TRACE_CAPACITY
+        );
+        record_promotion_call(&raw);
+        assert_eq!(trace.dropped.load(Ordering::Acquire), 1);
+        assert!(trace.complete_rows().is_err());
+        PROMOTION_TRACE_PTR.store(null_mut(), Ordering::Release);
+    }
+
+    #[test]
+    fn fixed_primary_gamecore_maps_complete_promotion_call_and_keeps_callee_boundary() {
+        if !Path::new(GAMECORE).is_file() {
+            return;
+        }
+        let mut file = File::open(GAMECORE).unwrap();
+        assert_eq!(
+            pe_file_offset(&mut file, PINNED_PROMOTION_CALL_RVA as u32),
+            Some(0x30e00f)
+        );
+        assert_eq!(
+            pe_file_offset(&mut file, PINNED_PROMOTION_CALLEE_RVA as u32),
+            Some(0x2dcfb0)
+        );
+        assert_eq!(
+            pinned_gamecore(Path::new(GAMECORE), BridgeMode::PromotionCall),
+            Some(PROMOTION_CALL_HEAD)
+        );
+    }
+
     #[test]
     fn atomic_restore_keeps_concurrent_synthetic_callers_on_original_behavior() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
@@ -2998,6 +3833,25 @@ mod tests {
         property.mode = 3;
         assert_eq!(
             BridgeInstall((&mut property as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        let mut promotion = BridgeConfig::for_promotion_call(1, 1, 1);
+        assert_eq!(promotion.mode, 8);
+        assert_eq!(
+            promotion.trace_size as usize,
+            std::mem::size_of::<PromotionTrace>()
+        );
+        for mode in [6, 7, 9] {
+            promotion.mode = mode;
+            assert_eq!(
+                BridgeInstall((&mut promotion as *mut BridgeConfig).cast()),
+                BridgeStatus::InvalidInput as u32
+            );
+        }
+        promotion.mode = 8;
+        promotion.trace_size = BridgeMode::CanEver.trace_size() as u32;
+        assert_eq!(
+            BridgeInstall((&mut promotion as *mut BridgeConfig).cast()),
             BridgeStatus::InvalidInput as u32
         );
         let page = unsafe {

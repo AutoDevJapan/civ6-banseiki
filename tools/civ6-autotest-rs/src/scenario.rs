@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 25] = [
+pub const ACTIONS: [&str; 27] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -30,6 +30,8 @@ pub const ACTIONS: [&str; 25] = [
     "stop_native_joined_admission",
     "start_native_property_trace",
     "stop_native_property_trace",
+    "start_native_promotion_call_trace",
+    "stop_native_promotion_call_trace",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -104,6 +106,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut property_open = false;
     let mut calibration_open = false;
     let mut joined_open = false;
+    let mut promotion_open = false;
     let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
@@ -152,6 +155,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_joined_admission"
+            | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 if bridge_open || trace_open {
                     return Err(fail("native observation already active".into()));
@@ -176,15 +180,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 property_open = action == "start_native_property_trace";
                 calibration_open = action == "start_native_can_ever_calibration";
                 joined_open = action == "start_native_joined_admission";
+                promotion_open = action == "start_native_promotion_call_trace";
             }
             "stop_native_can_ever_trace"
             | "stop_native_can_ever_calibration"
             | "stop_native_joined_admission"
+            | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 if !bridge_open
                     || property_open != (action == "stop_native_property_trace")
                     || calibration_open != (action == "stop_native_can_ever_calibration")
                     || joined_open != (action == "stop_native_joined_admission")
+                    || promotion_open != (action == "stop_native_promotion_call_trace")
                     || step
                         .as_object()
                         .unwrap()
@@ -197,6 +204,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 property_open = false;
                 calibration_open = false;
                 joined_open = false;
+                promotion_open = false;
             }
             "start_native_governor_trace" => {
                 if trace_open || bridge_open {
@@ -835,6 +843,44 @@ mod native_trace_tests {
             json!({"action":"start_native_governor_trace","name":"conflict","max_seconds":20,"mode":"lifecycle"}),
             stop
         ])).is_err());
+    }
+
+    #[test]
+    fn promotion_call_observer_is_explicit_bounded_and_cannot_mix_stops() {
+        let start = json!({"action":"start_native_promotion_call_trace","name":"promote","max_seconds":120});
+        let stop = json!({"action":"stop_native_promotion_call_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"promotion call","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"end_turn","turns":1,"timeout":600}),
+            stop.clone()
+        ]))
+        .is_ok());
+        for wrong in [
+            "stop_native_can_ever_trace",
+            "stop_native_property_trace",
+            "stop_native_joined_admission",
+        ] {
+            assert!(
+                validate_scenario(&scenario(vec![start.clone(), json!({"action":wrong})])).is_err()
+            );
+        }
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        for bad in [0, 301] {
+            let mut changed = start.clone();
+            changed["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![changed, stop.clone()])).is_err());
+        }
+        let mut scope = start.clone();
+        scope["scope"] = json!("all_promotions");
+        assert!(validate_scenario(&scenario(vec![scope, stop.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start,
+            json!({"action":"load","name":"other"}),
+            stop
+        ]))
+        .is_err());
     }
 
     #[test]

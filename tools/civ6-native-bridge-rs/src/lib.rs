@@ -13,10 +13,12 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
-    BridgeConfig, BridgeMode, BridgeStatus, BridgeTrace, CalibrationObservation, CalibrationTrace,
-    JoinedTrace, PropertyTrace, PropertyValueTrace, SharedTrace, TraceRow, ASHINA_ADMISSION_KEY_ID,
+    supports_atomic_promotion_fetch, BridgeConfig, BridgeMode, BridgeStatus, BridgeTrace,
+    CalibrationObservation, CalibrationTrace, JoinedTrace, PromotionObservation, PromotionTrace,
+    PropertyTrace, PropertyValueTrace, SharedTrace, TraceRow, ASHINA_ADMISSION_KEY_ID,
     CALIBRATION_CAPACITY, GAMECORE, GAME_EXE, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256,
-    PINNED_PROPERTY_GET_RVA, PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
+    PINNED_PROMOTION_CALLEE_RVA, PINNED_PROMOTION_CALL_RVA, PINNED_PROPERTY_GET_RVA,
+    PROMOTION_TRACE_CAPACITY, PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
     TRACE_CAPACITY,
 };
 

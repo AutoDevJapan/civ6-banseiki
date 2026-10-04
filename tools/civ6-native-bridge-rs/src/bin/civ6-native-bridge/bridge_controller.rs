@@ -1,8 +1,9 @@
 use civ6_native_bridge_rs::{
-    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace, PropertyTrace,
-    SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
-    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROPERTY_GET_RVA,
-    PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
+    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace, PromotionTrace,
+    PropertyTrace, SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
+    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROMOTION_CALLEE_RVA,
+    PINNED_PROMOTION_CALL_RVA, PINNED_PROPERTY_GET_RVA, PROPERTY_TEST_PHASE_KEY_ID,
+    PROPERTY_TEST_VALUE_KEY_ID,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -51,6 +52,10 @@ const REMOTE_CALL_SECONDS: u32 = 8;
 const RECOVERY_SECONDS: u32 = 30;
 const CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 const PROPERTY_GET_FILE_OFFSET: u64 = 0x99e9c0;
+const PROMOTION_CALL_FILE_OFFSET: u64 = 0x30e00f;
+const PROMOTION_CALL_WINDOW: [u8; 16] = [
+    0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f, 0x84, 0x75, 0x01, 0x00, 0x00, 0x44, 0x8b, 0xc7,
+];
 const PROPERTY_PREFIX_LEN: usize = 5;
 const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
 const CAN_EVER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5c, 0x24, 0x08];
@@ -196,7 +201,7 @@ struct Args {
 
 fn args(raw: &[String]) -> Result<Args, String> {
     if raw.len() != 8 && raw.len() != 10 {
-        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property|property-scoped]".into());
+        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property|property-scoped|promotion-call]".into());
     }
     let mut fields = std::collections::BTreeMap::new();
     for pair in raw.chunks_exact(2) {
@@ -236,6 +241,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "can-ever-calibration" => BridgeMode::CanEverCalibration,
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
         "joined-admission" => BridgeMode::JoinedAdmission,
+        "promotion-call" => BridgeMode::PromotionCall,
         _ => return Err("invalid bridge mode".into()),
     };
     if pid == 0
@@ -424,6 +430,11 @@ fn modules(pid: u32) -> Result<Vec<Module>, String> {
 }
 
 fn pinned_target(pid: u32, game: &Handle, mode: BridgeMode) -> Result<usize, String> {
+    if mode == BridgeMode::PromotionCall
+        && !civ6_native_bridge_rs::supports_atomic_promotion_fetch()
+    {
+        return Err("promotion call operand exchange requires documented AMD atomic instruction-fetch support".into());
+    }
     if !same_path(&process_path(game)?, Path::new(GAME_EXE)) {
         return Err("unpinned game executable".into());
     }
@@ -431,7 +442,16 @@ fn pinned_target(pid: u32, game: &Handle, mode: BridgeMode) -> Result<usize, Str
         .into_iter()
         .find(|m| same_path(&m.path, Path::new(GAMECORE)))
         .ok_or("pinned GameCore not loaded")?;
-    if sha256(Path::new(GAMECORE))? != PINNED_GAMECORE_SHA256 || module.size <= mode.rva() + 8 {
+    if sha256(Path::new(GAMECORE))? != PINNED_GAMECORE_SHA256
+        || module.size
+            <= mode.rva()
+                + if mode == BridgeMode::PromotionCall {
+                    16
+                } else {
+                    8
+                }
+        || (mode == BridgeMode::PromotionCall && module.size <= PINNED_PROMOTION_CALLEE_RVA + 8)
+    {
         return Err("GameCore hash or image size differs".into());
     }
     Ok(module.base + mode.rva())
@@ -580,6 +600,7 @@ fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE)
         }
+        BridgeMode::PromotionCall => (PROMOTION_CALL_FILE_OFFSET, &PROMOTION_CALL_WINDOW[..8]),
     };
     file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("pinned entry seek: {e}"))?;
@@ -590,6 +611,29 @@ fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<
     read_remote(game, target, &mut memory)?;
     if memory != disk || &disk[..prologue.len()] != prologue {
         return Err("pinned in-memory GameCore entry differs".into());
+    }
+    Ok(disk)
+}
+
+fn pinned_promotion_window(game: &Handle, call: usize) -> Result<[u8; 16], String> {
+    let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
+    file.seek(SeekFrom::Start(PROMOTION_CALL_FILE_OFFSET))
+        .map_err(|e| e.to_string())?;
+    let mut disk = [0u8; 16];
+    file.read_exact(&mut disk).map_err(|e| e.to_string())?;
+    let mut memory = [0u8; 16];
+    read_remote(game, call, &mut memory)?;
+    if memory != disk || disk != PROMOTION_CALL_WINDOW {
+        return Err("complete promotion call window differs".into());
+    }
+    let original_target =
+        (call + 5) as i128 + i32::from_le_bytes(disk[1..5].try_into().unwrap()) as i128;
+    if !call.wrapping_add(1).is_multiple_of(4)
+        || ((call + 1) & 63) > 60
+        || original_target
+            != (call - PINNED_PROMOTION_CALL_RVA + PINNED_PROMOTION_CALLEE_RVA) as i128
+    {
+        return Err("promotion call target or atomic operand invalid".into());
     }
     Ok(disk)
 }
@@ -661,6 +705,34 @@ fn drained_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, Stri
         std::thread::sleep(Duration::from_millis(50));
     }
     Err("gateway trace did not drain or contains dropped/unfinished rows".into())
+}
+
+fn drained_promotion_trace(game: &Handle, address: usize) -> Result<Box<PromotionTrace>, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut prior = None;
+    let mut stable = 0;
+    while Instant::now() < deadline {
+        let mut snapshot = Box::new(PromotionTrace::default());
+        let bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                (&mut *snapshot as *mut PromotionTrace).cast::<u8>(),
+                size_of::<PromotionTrace>(),
+            )
+        };
+        read_remote(game, address, bytes)?;
+        let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        if snapshot.complete_rows().is_ok() && prior == Some(next) {
+            stable += 1;
+            if stable >= 3 {
+                return Ok(snapshot);
+            }
+        } else {
+            stable = 0;
+        }
+        prior = Some(next);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("promotion trace header, overflow, inflight, or partial row invalid".into())
 }
 
 fn drained_calibration_trace(
@@ -783,6 +855,11 @@ pub fn run() -> Result<(), String> {
     }
     let target = pinned_target(parsed.pid, &game, parsed.mode)?;
     let original = pinned_entry_bytes(&game, target, parsed.mode)?;
+    let promotion_window = if parsed.mode == BridgeMode::PromotionCall {
+        Some(pinned_promotion_window(&game, target)?)
+    } else {
+        None
+    };
     let property_target = if parsed.mode == BridgeMode::JoinedAdmission {
         Some(target - PINNED_CAN_EVER_RVA + PINNED_PROPERTY_GET_RVA)
     } else if parsed.mode.is_property() {
@@ -814,7 +891,8 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::PropertyScoped => "property-scoped",
                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
-                BridgeMode::JoinedAdmission => "joined-admission"},
+                BridgeMode::JoinedAdmission => "joined-admission",
+                BridgeMode::PromotionCall => "promotion-call"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration});
@@ -830,6 +908,11 @@ pub fn run() -> Result<(), String> {
             identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
             identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
         }
+    } else if parsed.mode == BridgeMode::PromotionCall {
+        identity["call_window"] = json!(format!("{:02x?}", promotion_window.unwrap()));
+        identity["original_callee_rva"] = json!(PINNED_PROMOTION_CALLEE_RVA);
+        identity["original_return_site_rva"] = json!(PINNED_PROMOTION_CALL_RVA + 5);
+        identity["observation_scope"] = json!("one_official_promote_call_entry_only");
     } else {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
         if parsed.mode == BridgeMode::PropertyScoped {
@@ -881,6 +964,9 @@ pub fn run() -> Result<(), String> {
             BridgeMode::JoinedAdmission => {
                 BridgeConfig::for_joined(parsed.pid, parsed.created, trace_remote as u64)
             }
+            BridgeMode::PromotionCall => {
+                BridgeConfig::for_promotion_call(parsed.pid, parsed.created, trace_remote as u64)
+            }
         };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
@@ -931,6 +1017,17 @@ pub fn run() -> Result<(), String> {
         } else {
             None
         };
+        if parsed.mode == BridgeMode::PromotionCall {
+            let mut patched = [0u8; 16];
+            read_remote(&game, target, &mut patched)?;
+            let original = promotion_window.unwrap();
+            if patched[0] != 0xe8
+                || patched[1..5] == original[1..5]
+                || patched[5..] != original[5..]
+            {
+                return Err("promotion call exchange changed opcode or neighbor bytes".into());
+            }
+        }
         println!("READY pid={} max_seconds={}", parsed.pid, parsed.duration);
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let (sender, receiver) = mpsc::channel();
@@ -976,6 +1073,13 @@ pub fn run() -> Result<(), String> {
         if restored != original {
             return Err("original GameCore entry differs after remote uninstall returned".into());
         }
+        if let Some(original_window) = promotion_window {
+            let mut restored_window = [0u8; 16];
+            read_remote(&game, target, &mut restored_window)?;
+            if restored_window != original_window {
+                return Err("complete promotion call window differs after uninstall".into());
+            }
+        }
         if let Some(patched) = installed_prefix {
             let mut retained = [0u8; PROPERTY_PREFIX_LEN];
             let property_target = property_target.unwrap();
@@ -998,6 +1102,36 @@ pub fn run() -> Result<(), String> {
                 "prefix_retained_until_exit":installed_prefix.is_some()}),
         )?;
         let (row_count, dropped, in_flight, observed_calls, filtered_calls) = match parsed.mode {
+            BridgeMode::PromotionCall => {
+                let snapshot = drained_promotion_trace(&game, trace_remote)?;
+                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                let base = target - PINNED_PROMOTION_CALL_RVA;
+                for row in &rows {
+                    if row.return_address != (base + PINNED_PROMOTION_CALL_RVA + 5) as u64
+                        || row.thread_id == 0
+                    {
+                        return Err("promotion gateway did not retain the exact call return".into());
+                    }
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"promotion_call_entry",
+                        "sequence":row.sequence,"thread_id":row.thread_id,
+                        "raw_rcx":format!("0x{:016x}",row.rcx),
+                        "raw_rdx":format!("0x{:016x}",row.rdx),
+                        "raw_r8":format!("0x{:016x}",row.r8),
+                        "raw_r9":format!("0x{:016x}",row.r9),
+                        "return_site_rva":PINNED_PROMOTION_CALL_RVA + 5,
+                        "entry_only":true}),
+                    )?;
+                }
+                (
+                    rows.len(),
+                    0,
+                    0,
+                    snapshot.next.load(std::sync::atomic::Ordering::Acquire),
+                    0,
+                )
+            }
             BridgeMode::CanEver => {
                 let snapshot = drained_trace(&game, trace_remote)?;
                 let rows = snapshot.complete_rows().map_err(str::to_string)?;
@@ -1188,6 +1322,7 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::CanEver => "can_ever_entry",
                 BridgeMode::CanEverCalibration => "can_ever_calibration",
                 BridgeMode::JoinedAdmission => "joined_admission",
+                BridgeMode::PromotionCall => "promotion_call_entry_only",
                 _ => "raw_collection",
             },
             "prefix_retained_until_exit":installed_prefix.is_some(),

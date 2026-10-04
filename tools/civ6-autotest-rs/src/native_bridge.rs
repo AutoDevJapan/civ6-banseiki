@@ -73,12 +73,18 @@ mod platform {
                                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                                 BridgeMode::JoinedAdmission => "joined-admission",
+                                BridgeMode::PromotionCall => "promotion-call",
                             }
                         && row["entry_rva"] == mode.rva()
                         && (matches!(
                             mode,
-                            BridgeMode::CanEver | BridgeMode::CanEverCalibration
+                            BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::PromotionCall
                         ) || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
+                        && (mode != BridgeMode::PromotionCall
+                            || (row["original_callee_rva"] == civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA
+                                && row["original_return_site_rva"] == civ6_native_bridge_rs::PINNED_PROMOTION_CALL_RVA + 5
+                                && row["observation_scope"] == "one_official_promote_call_entry_only"
+                                && row["call_window"] == "[e8, 9c, ef, fc, ff, 84, c0, 0f, 84, 75, 01, 00, 00, 44, 8b, c7]"))
                         && (mode != BridgeMode::JoinedAdmission
                             || (row["property_rva"]
                                 == civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA
@@ -114,6 +120,18 @@ mod platform {
                 Some("entry")
                     if mode == BridgeMode::CanEver
                         && row["sequence"].as_u64() == Some(entries as u64 + 1) =>
+                {
+                    entries += 1
+                }
+                Some("promotion_call_entry")
+                    if mode == BridgeMode::PromotionCall
+                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                        && row["thread_id"].as_u64().is_some_and(|id| id > 0)
+                        && ["raw_rcx", "raw_rdx", "raw_r8", "raw_r9"]
+                            .into_iter().all(|name| hex_address(&row[name]).is_some())
+                        && row["return_site_rva"] == civ6_native_bridge_rs::PINNED_PROMOTION_CALL_RVA + 5
+                        && row["entry_only"] == true
+                        && row.get("original_return_value").is_none() =>
                 {
                     entries += 1
                 }
@@ -274,6 +292,7 @@ mod platform {
                             BridgeMode::CanEver
                                 | BridgeMode::CanEverCalibration
                                 | BridgeMode::JoinedAdmission
+                                | BridgeMode::PromotionCall
                         ) {
                             row["result"] == "ok"
                                 && row["dropped"] == 0
@@ -282,6 +301,8 @@ mod platform {
                                         "can_ever_entry"
                                     } else if mode == BridgeMode::JoinedAdmission {
                                         "joined_admission"
+                                    } else if mode == BridgeMode::PromotionCall {
+                                        "promotion_call_entry_only"
                                     } else {
                                         "can_ever_calibration"
                                     }
@@ -561,6 +582,7 @@ mod platform {
                 "can-ever-calibration" => BridgeMode::CanEverCalibration,
                 "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
                 "joined-admission" => BridgeMode::JoinedAdmission,
+                "promotion-call" => BridgeMode::PromotionCall,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
             };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
@@ -598,6 +620,7 @@ mod platform {
                         BridgeMode::CanEverCalibration => "can-ever-calibration",
                         BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                         BridgeMode::JoinedAdmission => "joined-admission",
+                        BridgeMode::PromotionCall => "promotion-call",
                     },
                 ])
                 .stdin(Stdio::piped())
@@ -862,6 +885,69 @@ mod platform {
                     "{field}"
                 );
             }
+        }
+
+        #[test]
+        fn promotion_artifact_rejects_other_mode_header_missing_rows_and_overflow() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("promotion.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"promotion-call","entry_rva":civ6_native_bridge_rs::PINNED_PROMOTION_CALL_RVA,
+                    "original_callee_rva":civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA,
+                    "original_return_site_rva":civ6_native_bridge_rs::PINNED_PROMOTION_CALL_RVA+5,
+                    "observation_scope":"one_official_promote_call_entry_only",
+                    "call_window":"[e8, 9c, ef, fc, ff, 84, c0, 0f, 84, 75, 01, 00, 00, 44, 8b, c7]",
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":false}),
+                json!({"kind":"promotion_call_entry","sequence":1,"thread_id":55,
+                    "raw_rcx":"0x0000000000000001","raw_rdx":"0x0000000000000002",
+                    "raw_r8":"0x0000000000000003","raw_r9":"0x0000000000000004",
+                    "return_site_rva":civ6_native_bridge_rs::PINNED_PROMOTION_CALL_RVA+5,
+                    "entry_only":true}),
+                json!({"kind":"stop","result":"ok","rows":1,"dropped":0,
+                    "observed_calls":1,"in_flight":0,"snapshot_stable":true,
+                    "classification":"promotion_call_entry_only","prefix_retained_until_exit":false}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::PromotionCall).unwrap(),
+                1
+            );
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::CanEver).is_err());
+            for (index, field, value) in [
+                (0, "mode", json!("can-ever")),
+                (0, "call_window", json!("wrong")),
+                (3, "return_site_rva", json!(0)),
+                (3, "entry_only", json!(false)),
+                (4, "dropped", json!(1)),
+                (4, "in_flight", json!(1)),
+                (4, "classification", json!("can_ever_entry")),
+            ] {
+                let mut bad = rows.to_vec();
+                bad[index][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::PromotionCall).is_err(),
+                    "{index}:{field}"
+                );
+            }
+            let mut partial = rows.to_vec();
+            partial.remove(3);
+            write(&partial);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::PromotionCall).is_err());
         }
 
         #[test]
