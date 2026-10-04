@@ -50,8 +50,13 @@ fn completed_building_before_turn_is_accepted_without_weakening_final_confirmati
             let mut damaged = completed.clone();
             damaged[key] = invalid;
             assert!(
-                !accepts(before, damaged),
+                !accepts(before, damaged.clone()),
                 "accepted {building} with wrong {key}"
+            );
+            damaged["turn"] = json!(26);
+            assert!(
+                !accepts(after, damaged),
+                "final confirmation accepted {building} with wrong {key}"
             );
         }
     }
