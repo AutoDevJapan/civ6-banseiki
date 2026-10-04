@@ -877,9 +877,9 @@ impl Runner {
             s.starts_with(&snapshot_prefix) && s.contains("|true|false|") && s.ends_with("|nil")
         }) && in_game_snapshot == deal_snapshot;
         let expected_from = attacker.to_string();
-        // Visibility is a read-only getter. The native session can become
-        // responsive while its opening animation completes (live 105). Read
-        // visibility once more after the other evidence, within the same
+        // Visibility is a read-only getter. Live 105 lost its first reply but
+        // subsequent session reads responded; the cause remains unconfirmed.
+        // Read visibility once more after the other evidence, within the same
         // deadline; the final binding still revalidates the exact native ID.
         if in_game
             && deal_view

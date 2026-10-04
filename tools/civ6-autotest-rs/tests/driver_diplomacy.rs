@@ -547,6 +547,40 @@ fn captive_session_observation_requires_matching_native_ids_and_initiators() {
 }
 
 #[test]
+fn hidden_session_can_become_visible_before_exact_session_binding() {
+    let mut backend = captive_session_probe_backend(true, "44", "0", false);
+    let mut original = std::mem::replace(&mut backend.on_lua, Box::new(|_, _| unreachable!()));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |state, code| {
+        if code == "return ContextPtr:IsHidden()" {
+            reads += 1;
+            if reads == 1 {
+                return Ok("true".into());
+            }
+        }
+        original(state, code)
+    });
+    let mut h = Harness::new(json!({}), backend);
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,"timeout":120,"lua_timeout":12});
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("observed and bound"));
+    assert!(
+        h.log().contains("deal_view_hidden=true")
+            && h.log().contains("deal_view_hidden_recheck=false")
+    );
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, c)| c.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn captive_session_observation_records_noack_in_one_context_without_closing_it() {
     let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
         "timeout":120,"lua_timeout":12});
