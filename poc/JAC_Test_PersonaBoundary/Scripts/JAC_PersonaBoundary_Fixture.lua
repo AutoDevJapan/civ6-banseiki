@@ -594,7 +594,8 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
     local c=EnemyConfig(controller);
     assert(c.cityID and type(params)=="table" and params.Action=="BEGIN_SPY_RETRY" and
         params.Mode and (params.Mode=="PRODUCE" or params.Mode=="RETURN" or
-        params.Mode=="MAP") and not Game:GetProperty(RETRY),
+        params.Mode=="MAP" or params.Mode=="CAPACITY_MAP") and
+        not Game:GetProperty(RETRY),
         "enemy retry must begin once from the preserved failed attempt");
     local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
         "failed native mission event missing");
@@ -625,6 +626,73 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
     if params.Mode=="PRODUCE" then
         assert(R.MapSpyCount(controller)==0,
             "production retry requires a complete roster without a native map spy");
+    elseif params.Mode=="CAPACITY_MAP" then
+        local building=assert(GameInfo.Buildings["BUILDING_GOV_SPIES"],
+            "native Intelligence Agency definition missing");
+        local progress=assert(Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS"),
+            "native Intelligence Agency progress receipt missing");
+        local latest=assert(progress.latest,"latest native capacity receipt missing");
+        local step=progress.steps and progress.steps.BUILDING_GOV_SPIES;
+        local city=assert(CityManager.GetCity(controller,params.BindingCityID),
+            "native Intelligence Agency production city missing");
+        assert(params.Outcome=="CAPTURED_WITH_NEW_MAP" and
+            params.Capacity==2 and params.Occupied==2 and
+            params.CurrentID~=spy.id and
+            params.BindingType==building.BuildingType and
+            params.BindingIndex==building.Index and
+            step and latest.buildingType==building.BuildingType and
+            latest.buildingIndex==building.Index and
+            latest.cityID==params.BindingCityID and
+            latest.token==params.BindingToken and
+            latest.turn==params.BindingTurn and
+            step.cityID==latest.cityID and step.token==latest.token and
+            step.turn==latest.turn and step.buildingIndex==latest.buildingIndex and
+            latest.turn<=Game.GetCurrentGameTurn() and
+            city:GetOwner()==controller and
+            city:GetBuildings():HasBuilding(building.Index),
+            "new spy is not tied to the completed native Intelligence Agency");
+        local diplomacy=assert(Players[controller]:GetDiplomacy(),
+            "native attacker diplomacy missing");
+        local captor=assert(Players[c.owner]:GetDiplomacy(),
+            "native captor diplomacy missing");
+        assert(type(diplomacy.GetSpyCapacity)=="function" and
+            type(diplomacy.GetNumSpiesOffMap)=="function" and
+            type(diplomacy.GetNthOffMapSpy)=="function" and
+            type(captor.GetNumSpiesCaptured)=="function" and
+            type(captor.GetNthCapturedSpy)=="function",
+            "native Core captive or off-map roster API unavailable");
+        assert(diplomacy:GetSpyCapacity()==2 and
+            captor:GetNumSpiesCaptured()==1 and
+            params.CaptiveCaptor==c.owner and
+            R.MapSpyCount(controller)==1,
+            "capacity retry needs exactly one native map spy and one old captive");
+        local captive=assert(captor:GetNthCapturedSpy(c.owner,0),
+            "original native captive unavailable in Gameplay");
+        assert(captive.OwningPlayer==controller and
+            captive.Name==params.CaptiveName and
+            captive.NameIndex==params.CaptiveNameIndex and
+            captive.Level==params.CaptiveLevel and
+            captive.Level==travel.level,
+            "original native captive differs in Gameplay");
+        assert(diplomacy:GetNumSpiesOffMap()==1,
+            "native off-map roster changed between UI and Gameplay");
+        local placeholder=assert(diplomacy:GetNthOffMapSpy(controller,0),
+            "original captive placeholder unavailable in Gameplay");
+        local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+        local sameName=placeholder.Name==captive.Name or
+            (placeholder.Name=="" and captive.Name==defaultName) or
+            (captive.Name=="" and placeholder.Name==defaultName);
+        assert(sameName and
+            placeholder.Level==captive.Level and
+            placeholder.ReturnTurn==-1 and placeholder.XLocation==-9999 and
+            placeholder.YLocation==-9999,
+            "off-map roster contains a moving spy or a changed captive placeholder");
+        local current=assert(R.FindSpy(controller,params.CurrentID),
+            "new native map spy exact ID missing in Gameplay");
+        assert(current:GetOwner()==controller and
+            current:GetType()==GameInfo.Units["UNIT_SPY"].Index and
+            Map.GetPlot(current:GetX(),current:GetY()),
+            "new native map spy type, owner or plot changed in Gameplay");
     elseif params.Mode=="MAP" then
         local current=assert(R.FindSpy(controller,params.CurrentID),
             "living native map spy missing at archive");
@@ -648,7 +716,14 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         returnName=params.ReturnName,returnLevel=params.ReturnLevel,
         returnTurn=params.ReturnTurn,returnX=params.ReturnX,returnY=params.ReturnY};
     if params.Mode=="PRODUCE" then retry.spyID=nil; end
-    if params.Mode=="MAP" then retry.spyID=params.CurrentID; end
+    if params.Mode=="MAP" or params.Mode=="CAPACITY_MAP" then
+        retry.spyID=params.CurrentID;
+    end
+    if params.Mode=="CAPACITY_MAP" then
+        retry.binding={source="BUILDING_GOV_SPIES",spyID=params.CurrentID,
+            cityID=params.BindingCityID,buildingIndex=params.BindingIndex,
+            token=params.BindingToken,turn=params.BindingTurn};
+    end
     Game:SetProperty(RETRY,retry);
     Game:SetProperty("JAC_BOUNDARY_ENEMY_MISSION",nil);
     Game:SetProperty("JAC_BOUNDARY_SPY_BARRIER",nil);
@@ -658,7 +733,8 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         Game:SetProperty("JAC_BOUNDARY_SPY_PREPARED",nil);
         Game:SetProperty("JAC_BOUNDARY_SPY_PROGRESS",nil);
         Game:SetProperty(PRODUCTION,nil);
-    elseif params.Mode=="MAP" and params.CurrentID~=spy.id then
+    elseif (params.Mode=="MAP" or params.Mode=="CAPACITY_MAP") and
+        params.CurrentID~=spy.id then
         Game:SetProperty("JAC_BOUNDARY_SPY",{owner=controller,id=params.CurrentID});
     end
     print("JAC_BOUNDARY ENEMY_SPY_RETRY_ARCHIVED "..R.Serialize(retry));

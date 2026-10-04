@@ -51,7 +51,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ReadEnemy(); if #s.spyRoster.offMap==1 then return 'TRAVEL' end; local t=b.EnemyTarget(); local p=b.Probe(t.owner,t.city); return p.canStart and 'MISSION_READY' or 'SPY_NOT_READY'"
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ReadEnemy(); if #s.spyRoster.activeOffMap==1 then return 'TRAVEL' end; assert(#s.spyRoster.activeOffMap==0,'native travel roster ambiguous'); local t=b.EnemyTarget(); local p=b.Probe(t.owner,t.city); return p.canStart and 'MISSION_READY' or 'SPY_NOT_READY'"
     },
     {
       "action": "exit_to_menu"
