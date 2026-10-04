@@ -24,14 +24,20 @@ use windows_sys::Win32::System::Diagnostics::{
         TH32CS_SNAPPROCESS,
     },
 };
+use windows_sys::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicProcessIdList,
+    JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+    TerminateJobObject, JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+};
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleW, GetProcAddress, LoadLibraryExW, DONT_RESOLVE_DLL_REFERENCES,
 };
 use windows_sys::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
 use windows_sys::Win32::System::Threading::{
-    CreateRemoteThread, GetCurrentProcessId, GetExitCodeThread, GetProcessTimes, OpenProcess,
-    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject, PROCESS_CREATE_THREAD,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    CreateRemoteThread, GetCurrentProcessId, GetExitCodeThread, GetProcessId, GetProcessTimes,
+    OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject, PROCESS_CREATE_THREAD,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
 };
 
@@ -39,6 +45,7 @@ const LOCK: &str = "D:/CC/Tools/civ6-live/civ6.lock";
 const CHAIN: &str = "D:/CC/Tools/civ6-live/live_chain.exe";
 const BRIDGE_DLL: &str = "civ6_native_bridge_rs.dll";
 const REMOTE_CALL_SECONDS: u32 = 8;
+const RECOVERY_SECONDS: u32 = 30;
 const CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 
 struct Handle(HANDLE);
@@ -55,6 +62,120 @@ impl Drop for Handle {
     fn drop(&mut self) {
         unsafe { CloseHandle(self.0) };
     }
+}
+
+/// An unnamed, non-inheritable job containing only the already pinned target.
+/// While the kill flag is armed, process exit of this controller closes its
+/// sole job handle and makes Windows terminate the target in the kernel.
+struct OwnedJob {
+    handle: Option<Handle>,
+}
+
+impl OwnedJob {
+    fn attach(target: &Handle, pid: u32, created: u64) -> Result<Self, String> {
+        if pid == 0
+            || !alive(target)
+            || unsafe { GetProcessId(target.0) } != pid
+            || process_created(target)? != created
+        {
+            return Err("job target identity changed before assignment".into());
+        }
+        let job = Handle::checked(
+            unsafe { CreateJobObjectW(null_mut(), null_mut()) },
+            "CreateJobObjectW",
+        )?;
+        let owned = Self { handle: Some(job) };
+        owned.set_limits(
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        )?;
+        if unsafe { AssignProcessToJobObject(owned.raw(), target.0) } == 0 {
+            return Err(format!(
+                "pinned target job assignment failed before mutation: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let mut members = JOBOBJECT_BASIC_PROCESS_ID_LIST::default();
+        let mut returned = 0u32;
+        if unsafe {
+            QueryInformationJobObject(
+                owned.raw(),
+                JobObjectBasicProcessIdList,
+                (&mut members as *mut JOBOBJECT_BASIC_PROCESS_ID_LIST).cast(),
+                size_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>() as u32,
+                &mut returned,
+            )
+        } == 0
+            || members.NumberOfAssignedProcesses != 1
+            || members.NumberOfProcessIdsInList != 1
+            || members.ProcessIdList[0] != pid as usize
+        {
+            // If assignment succeeded, Drop closes the armed job and ends
+            // that exact target. No remote allocation has occurred yet.
+            return Err("pinned job does not contain exactly one target".into());
+        }
+        Ok(owned)
+    }
+
+    fn raw(&self) -> HANDLE {
+        self.handle.as_ref().expect("owned job already closed").0
+    }
+
+    fn set_limits(&self, flags: u32) -> Result<(), String> {
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        limits.BasicLimitInformation.LimitFlags = flags;
+        if unsafe {
+            SetInformationJobObject(
+                self.raw(),
+                JobObjectExtendedLimitInformation,
+                (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            )
+        } == 0
+        {
+            return Err(format!(
+                "job limits unavailable: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(())
+    }
+
+    fn disarm_after_restoration(&self) -> Result<(), String> {
+        self.set_limits(JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)?;
+        let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        if unsafe {
+            QueryInformationJobObject(
+                self.raw(),
+                JobObjectExtendedLimitInformation,
+                (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                null_mut(),
+            )
+        } == 0
+            || limits.BasicLimitInformation.LimitFlags != JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
+        {
+            return Err("job kill-on-close state unverified after original bytes restored".into());
+        }
+        Ok(())
+    }
+
+    fn terminate_and_confirm(&mut self, target: &Handle, wait_ms: u32) -> Result<(), String> {
+        let terminated = unsafe { TerminateJobObject(self.raw(), 1) } != 0;
+        // Also close the last handle. KILL_ON_JOB_CLOSE remains armed, so this
+        // covers an unexpected controller exit or TerminateJobObject failure.
+        self.handle.take();
+        if unsafe { WaitForSingleObject(target.0, wait_ms) } != WAIT_OBJECT_0 {
+            return Err(format!(
+                "job close initiated kernel target termination; exit unconfirmed (TerminateJobObject={terminated})"
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn fail_owned_call(job: &mut OwnedJob, target: &Handle, error: String, wait_ms: u32) -> String {
+    let cleanup = job.terminate_and_confirm(target, wait_ms);
+    format!("{error}; contained target cleanup={cleanup:?}")
 }
 
 struct Args {
@@ -212,7 +333,7 @@ fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), Str
     let created = process_created(chain)? as f64 / 10_000_000.0 - 11_644_473_600.0;
     if !acquired.is_finite()
         || acquired > now
-        || now + f64::from(duration) + 15.0 >= acquired + 1800.0
+        || now + f64::from(duration) + f64::from(RECOVERY_SECONDS) + 15.0 >= acquired + 1800.0
         || created > acquired + 1.0
     {
         return Err("live_chain lease cannot cover the bounded bridge run".into());
@@ -263,25 +384,6 @@ fn pinned_target(pid: u32, game: &Handle) -> Result<usize, String> {
         return Err("GameCore hash or image size differs".into());
     }
     Ok(module.base + PINNED_CAN_EVER_RVA)
-}
-
-fn close_pinned_game(pid: u32, created: u64, game: &Handle) -> Result<(), String> {
-    if !alive(game) {
-        return Ok(());
-    }
-    if process_created(game)? != created {
-        return Err("pinned game creation FILETIME changed before close".into());
-    }
-    // Recheck executable, loaded module path, hash and image bounds on the
-    // already-opened exact process handle. No peer PID is considered.
-    let _ = pinned_target(pid, game)?;
-    if unsafe { TerminateProcess(game.0, 1) } == 0 && alive(game) {
-        return Err("pinned game TerminateProcess failed".into());
-    }
-    if unsafe { WaitForSingleObject(game.0, 10_000) } != WAIT_OBJECT_0 {
-        return Err("pinned game exit was not confirmed".into());
-    }
-    Ok(())
 }
 
 fn read_remote(game: &Handle, address: usize, output: &mut [u8]) -> Result<(), String> {
@@ -515,7 +617,8 @@ pub fn run() -> Result<(), String> {
             | PROCESS_VM_OPERATION
             | PROCESS_VM_WRITE
             | PROCESS_VM_READ
-            | PROCESS_TERMINATE,
+            | PROCESS_TERMINATE
+            | PROCESS_SET_QUOTA,
     )?;
     if !alive(&game) || process_created(&game)? != parsed.created {
         return Err("pinned game identity differs".into());
@@ -535,33 +638,36 @@ pub fn run() -> Result<(), String> {
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration}),
     )?;
-    let path_wide = wide(&dll.to_string_lossy());
-    let path_bytes =
-        unsafe { std::slice::from_raw_parts(path_wide.as_ptr().cast::<u8>(), path_wide.len() * 2) };
-    let path_remote = remote_alloc(&game, path_bytes.len())?;
-    write_remote(&game, path_remote, path_bytes)?;
-    let _ = remote_call(&game, loader, path_remote, "LoadLibraryW")?;
-    let bridge = modules(parsed.pid)?
-        .into_iter()
-        .find(|m| same_path(&m.path, &dll))
-        .ok_or("bridge DLL not loaded into the pinned game")?;
-    if install_rva >= bridge.size || uninstall_rva >= bridge.size {
-        return Err("bridge exports outside remote DLL image".into());
-    }
-    let trace_remote = remote_alloc(&game, size_of::<SharedTrace>())?;
-    let mut config = BridgeConfig::new(parsed.pid, parsed.created, trace_remote as u64);
-    config.max_seconds = parsed.duration;
-    let config_bytes = unsafe {
-        std::slice::from_raw_parts(
-            (&config as *const BridgeConfig).cast::<u8>(),
-            size_of::<BridgeConfig>(),
-        )
-    };
-    let config_remote = remote_alloc(&game, config_bytes.len())?;
-    write_remote(&game, config_remote, config_bytes)?;
-    // From this point a timeout may mean the remote install ran. Every error
-    // closes this exact game before the controller returns.
+    // All remotely executing or writing operations are below this point.
+    // A failed assignment is a no-mutation refusal; an assigned job remains
+    // armed across every call, including timeouts and controller crashes.
+    let mut job = OwnedJob::attach(&game, parsed.pid, parsed.created)?;
     let outcome = (|| -> Result<(), String> {
+        let path_wide = wide(&dll.to_string_lossy());
+        let path_bytes = unsafe {
+            std::slice::from_raw_parts(path_wide.as_ptr().cast::<u8>(), path_wide.len() * 2)
+        };
+        let path_remote = remote_alloc(&game, path_bytes.len())?;
+        write_remote(&game, path_remote, path_bytes)?;
+        let _ = remote_call(&game, loader, path_remote, "LoadLibraryW")?;
+        let bridge = modules(parsed.pid)?
+            .into_iter()
+            .find(|m| same_path(&m.path, &dll))
+            .ok_or("bridge DLL not loaded into the pinned game")?;
+        if install_rva >= bridge.size || uninstall_rva >= bridge.size {
+            return Err("bridge exports outside remote DLL image".into());
+        }
+        let trace_remote = remote_alloc(&game, size_of::<SharedTrace>())?;
+        let mut config = BridgeConfig::new(parsed.pid, parsed.created, trace_remote as u64);
+        config.max_seconds = parsed.duration;
+        let config_bytes = unsafe {
+            std::slice::from_raw_parts(
+                (&config as *const BridgeConfig).cast::<u8>(),
+                size_of::<BridgeConfig>(),
+            )
+        };
+        let config_remote = remote_alloc(&game, config_bytes.len())?;
+        write_remote(&game, config_remote, config_bytes)?;
         let install_status = remote_call(
             &game,
             bridge.base + install_rva,
@@ -622,6 +728,11 @@ pub fn run() -> Result<(), String> {
         if uninstall_status != BridgeStatus::Ok as u32 {
             return Err("bridge entry was not restored; close the pinned game".into());
         }
+        let mut restored = [0u8; 8];
+        read_remote(&game, target, &mut restored)?;
+        if restored != original {
+            return Err("original GameCore entry differs after remote uninstall returned".into());
+        }
         let snapshot = drained_trace(&game, trace_remote)?;
         let rows = snapshot.complete_rows().map_err(str::to_string)?;
         let gamecore_size = modules(parsed.pid)?
@@ -645,7 +756,7 @@ pub fn run() -> Result<(), String> {
             json!({"kind":"stop","rows":rows.len(),
             "dropped":snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
             "in_flight":snapshot.in_flight.load(std::sync::atomic::Ordering::Acquire),
-            "trace_complete":true,
+            "snapshot_stable":true,
             "result":if control_error.is_none() {"ok"} else {"error"}}),
         )?;
         if let Some(error) = control_error {
@@ -654,26 +765,193 @@ pub fn run() -> Result<(), String> {
         Ok(())
     })();
     if let Err(error) = outcome {
-        return match close_pinned_game(parsed.pid, parsed.created, &game) {
-            Ok(()) => Err(format!("{error}; pinned game exit confirmed")),
-            Err(close) => {
-                // Keep the controller and its pinned handle alive while the
-                // runner/live_chain performs its own target-only close. This
-                // finite window is a failure path, never a successful trace.
-                let exited = unsafe { WaitForSingleObject(game.0, 30_000) } == WAIT_OBJECT_0;
-                Err(format!(
-                    "{error}; CRITICAL pinned game closure failed: {close}; external exit confirmed={exited}"
-                ))
-            }
+        let wait_ms = if verify_lease(chain_pid, &chain, 0).is_ok() {
+            RECOVERY_SECONDS * 1000
+        } else {
+            0
         };
+        return Err(fail_owned_call(&mut job, &game, error, wait_ms));
     }
+    // The install and uninstall remote threads have both signalled. The
+    // original eight bytes were read back, and the DLL/relay/trace allocations
+    // remain mapped in the game for any caller paused before gateway counting.
+    job.disarm_after_restoration()?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::windows::process::CommandExt;
+    use std::process::{Child, Command, Stdio};
     use std::sync::atomic::Ordering;
+
+    struct SleepingChild(Child);
+    impl SleepingChild {
+        fn start() -> Self {
+            let child = Command::new("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 20",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(0x0800_0000)
+                .spawn()
+                .unwrap();
+            Self(child)
+        }
+        fn handle(&self, rights: u32) -> Handle {
+            open_process(self.0.id(), rights).unwrap()
+        }
+    }
+    impl Drop for SleepingChild {
+        fn drop(&mut self) {
+            if self.0.try_wait().ok().flatten().is_none() {
+                let _ = self.0.kill();
+            }
+            let _ = self.0.wait();
+        }
+    }
+
+    const OWNED_TEST_RIGHTS: u32 = PROCESS_QUERY_LIMITED_INFORMATION
+        | PROCESS_SYNCHRONIZE
+        | PROCESS_TERMINATE
+        | PROCESS_SET_QUOTA;
+
+    #[test]
+    fn unexpected_controller_drop_kills_only_its_owned_job_target() {
+        let target = SleepingChild::start();
+        let peer = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let peer_handle = peer.handle(PROCESS_SYNCHRONIZE);
+        let job = OwnedJob::attach(
+            &target_handle,
+            target.0.id(),
+            process_created(&target_handle).unwrap(),
+        )
+        .unwrap();
+        assert!(alive(&target_handle));
+        drop(job);
+        assert_eq!(
+            unsafe { WaitForSingleObject(target_handle.0, 5_000) },
+            WAIT_OBJECT_0
+        );
+        assert!(alive(&peer_handle));
+    }
+
+    #[test]
+    fn fixture_job_owner_abrupt_exit() {
+        let Ok(pid_text) = std::env::var("CIV6_BRIDGE_TEST_TARGET_PID") else {
+            return;
+        };
+        let pid: u32 = pid_text.parse().unwrap();
+        let created: u64 = std::env::var("CIV6_BRIDGE_TEST_TARGET_CREATED")
+            .unwrap()
+            .parse()
+            .unwrap();
+        let parent = parent_pid(unsafe { GetCurrentProcessId() }).unwrap();
+        assert_eq!(parent_pid(pid).unwrap(), parent);
+        let target = open_process(pid, OWNED_TEST_RIGHTS).unwrap();
+        let _job = OwnedJob::attach(&target, pid, created).unwrap();
+        // Bypass Rust destructors. Windows must close the sole job handle.
+        std::process::exit(0);
+    }
+
+    #[test]
+    fn kernel_closes_pinned_target_after_owner_process_exits_abruptly() {
+        let target = SleepingChild::start();
+        let peer = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let peer_handle = peer.handle(PROCESS_SYNCHRONIZE);
+        let mut controller = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "windows::tests::fixture_job_owner_abrupt_exit",
+                "--nocapture",
+            ])
+            .env("CIV6_BRIDGE_TEST_TARGET_PID", target.0.id().to_string())
+            .env(
+                "CIV6_BRIDGE_TEST_TARGET_CREATED",
+                process_created(&target_handle).unwrap().to_string(),
+            )
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .unwrap();
+        let status = controller.wait().unwrap();
+        if !status.success() {
+            let mut output = String::new();
+            if let Some(mut stderr) = controller.stderr.take() {
+                stderr.read_to_string(&mut output).unwrap();
+            }
+            panic!("fixture controller failed: {output}");
+        }
+        assert_eq!(
+            unsafe { WaitForSingleObject(target_handle.0, 5_000) },
+            WAIT_OBJECT_0
+        );
+        assert!(alive(&peer_handle));
+    }
+
+    #[test]
+    fn synthetic_remote_timeout_closes_exact_target_and_retains_peer() {
+        let target = SleepingChild::start();
+        let peer = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let peer_handle = peer.handle(PROCESS_SYNCHRONIZE);
+        let mut job = OwnedJob::attach(
+            &target_handle,
+            target.0.id(),
+            process_created(&target_handle).unwrap(),
+        )
+        .unwrap();
+        let failure = fail_owned_call(
+            &mut job,
+            &target_handle,
+            "synthetic BridgeInstall remote timeout".into(),
+            5_000,
+        );
+        assert!(failure.contains("contained target cleanup=Ok(())"));
+        assert_eq!(
+            unsafe { WaitForSingleObject(target_handle.0, 0) },
+            WAIT_OBJECT_0
+        );
+        assert!(alive(&peer_handle));
+    }
+
+    #[test]
+    fn restored_fixture_can_disarm_without_closing_target() {
+        let target = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let job = OwnedJob::attach(
+            &target_handle,
+            target.0.id(),
+            process_created(&target_handle).unwrap(),
+        )
+        .unwrap();
+        job.disarm_after_restoration().unwrap();
+        drop(job);
+        assert!(alive(&target_handle));
+    }
+
+    #[test]
+    fn missing_assignment_rights_fail_before_target_mutation() {
+        let target = SleepingChild::start();
+        let target_handle = target.handle(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE);
+        let assigned = OwnedJob::attach(
+            &target_handle,
+            target.0.id(),
+            process_created(&target_handle).unwrap(),
+        );
+        assert!(assigned.is_err());
+        assert!(alive(&target_handle));
+    }
 
     #[test]
     fn drain_waits_for_a_published_slot_in_an_owned_process() {

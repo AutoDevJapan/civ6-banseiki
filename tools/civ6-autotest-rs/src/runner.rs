@@ -428,7 +428,7 @@ impl Backend for SystemBackend {
         }
         if self
             .live_lease_budget()?
-            .is_some_and(|remaining| remaining <= seconds as f64 + 15.0)
+            .is_some_and(|remaining| remaining <= seconds as f64 + 45.0)
         {
             return Err(Error::input(
                 "live_chain lease cannot cover native bridge telemetry",

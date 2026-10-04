@@ -61,7 +61,7 @@ mod platform {
                         && row["rows"] == entries
                         && row["dropped"] == 0
                         && row["in_flight"] == 0
-                        && row["trace_complete"] == true =>
+                        && row["snapshot_stable"] == true =>
                 {
                     stopped += 1
                 }
@@ -486,7 +486,7 @@ mod platform {
                 json!({"kind":"uninstall","status":0}),
                 json!({"kind":"entry","sequence":1}),
                 json!({"kind":"stop","result":"ok","rows":1,
-                    "dropped":0,"in_flight":0,"trace_complete":true}),
+                    "dropped":0,"in_flight":0,"snapshot_stable":true}),
             ];
             let write = |rows: &[Value]| {
                 std::fs::write(
@@ -513,7 +513,7 @@ mod platform {
             for (field, value) in [
                 ("dropped", json!(1)),
                 ("in_flight", json!(1)),
-                ("trace_complete", json!(false)),
+                ("snapshot_stable", json!(false)),
             ] {
                 let mut incomplete = rows.to_vec();
                 incomplete[4][field] = value;
