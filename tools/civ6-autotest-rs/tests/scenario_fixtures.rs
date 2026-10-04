@@ -673,14 +673,17 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         .unwrap();
     let confirmed = tick_steps
         .iter()
-        .position(|step| {
-            action(step, "ui_lua")
+        .enumerate()
+        .skip(turn + 1)
+        .find_map(|(index, step)| {
+            (action(step, "ui_lua")
                 && embedded_lua(step).is_some_and(|code| {
                     code.contains("o.targetBuilt")
                         && code.contains("o.stage=='TIER1_BUILT'")
                         && code.contains("o.stage=='CAPACITY_READY' and o.capacity==2")
                         && code.contains("o.captured==1")
-                })
+                }))
+            .then_some(index)
         })
         .unwrap();
     let save = tick_steps
