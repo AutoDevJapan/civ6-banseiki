@@ -16,7 +16,13 @@ use mlua::Lua;
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, process::Command};
 
-const NAMES: &[&str] = &["art-prepare", "artifact-prepare"];
+const NAMES: &[&str] = &[
+    "art-prepare",
+    "artifact-prepare",
+    "city-owner-transfer",
+    "scatter",
+    "return",
+];
 
 fn repo(path: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -56,6 +62,42 @@ fn execute(lua: &Lua, name: &str, id: &str) -> mlua::Result<()> {
     lua.load(step["code"].as_str().unwrap())
         .set_name(format!("{name}/{id}"))
         .exec()
+}
+
+fn condition(lua: &Lua, name: &str, id: &str) -> mlua::Result<bool> {
+    let step = step(name, id);
+    let condition = &step["condition"];
+    lua.globals().set(
+        "CONTEXT",
+        if condition["state_name"] == "JAC_Absorption_Entry" {
+            "Gameplay"
+        } else {
+            "UI"
+        },
+    )?;
+    let value: mlua::Value = lua
+        .load(condition["code"].as_str().unwrap())
+        .set_name(format!("wait {name}/{id}"))
+        .eval()?;
+    match value {
+        mlua::Value::Boolean(result) => Ok(result),
+        other => Err(mlua::Error::external(format!(
+            "native wait {name}/{id} returned a nonboolean: {other:?}"
+        ))),
+    }
+}
+
+fn drive(lua: &Lua, name: &str, id: &str) -> mlua::Result<()> {
+    for _ in 0..40 {
+        if condition(lua, name, id)? {
+            return Ok(());
+        }
+        lua.load("publish()").exec()?;
+    }
+    let detail: String = lua.load("local k=Game:GetProperty('JAC_TYPE_CASE');local tx=JAC_AbsorptionGameplay.GetState().Transactions[k.ID] or {};local f=JAC_AbsorptionFlowGameplay.Get(k.ID) or {};local s=(tx.NativeWorks or {})[1] or {};return JAC_AbsorptionGameplay.Canonical({Status=tx.Status,Phase=f.Phase,Error=f.Error,Final=tx.AwaitingFinalUI,Carrier=s.Carrier and s.Carrier.Phase})").eval()?;
+    Err(mlua::Error::external(format!(
+        "{name}/{id} did not become ready: {detail}"
+    )))
 }
 
 fn load(lua: &Lua, path: &str) -> mlua::Result<()> {
@@ -98,6 +140,9 @@ fn model(kind: &str, age: &str) -> mlua::Result<Lua> {
             Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
         end
         PlayerManager.GetFreeCitiesPlayerID=function() return 3 end
+        for owner,configuration in pairs(PlayerConfigurations) do
+          configuration.GetLeaderName=function() return 'Leader '..owner end
+        end
         Players[1].units={}
         Players[1]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{})
         Players[2]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{})
@@ -110,7 +155,7 @@ fn model(kind: &str, age: &str) -> mlua::Result<Lua> {
             return collection
           end
         end
-        INDEX=KIND=='art' and 3 or 17
+        INDEX=KIND=='art' and 3 or 0
         OBJECT=KIND=='art' and 'GREATWORKOBJECT_PORTRAIT' or 'GREATWORKOBJECT_ARTIFACT'
         BUILDING=KIND=='art' and 'BUILDING_MUSEUM_ART' or 'BUILDING_MUSEUM_ARTIFACT'
         SLOT_TYPE=KIND=='art' and 'GREATWORKSLOT_ART' or 'GREATWORKSLOT_ARTIFACT'
@@ -141,8 +186,26 @@ fn model(kind: &str, age: &str) -> mlua::Result<Lua> {
         end})
         WORKS={[4]={[0]=INDEX},[12]={[0]=44}}
         for _,city in pairs(CITIES) do
+          local cultural=city.GetCulturalIdentity
+          city.GetCulturalIdentity=function(self)
+            local result=cultural(self)
+            if CONTEXT~='UI' then result.GetLoyalty=nil end
+            return result
+          end
+          local religion=city.GetReligion
+          city.GetReligion=function(self)
+            local result=religion(self)
+            if CONTEXT~='UI' then result.GetReligionsInCity=nil end
+            return result
+          end
+          local districts=city.GetDistricts
+          city.GetDistricts=function(self)
+            local result=districts(self)
+            if CONTEXT~='UI' then result.Members=nil end
+            return result
+          end
           city.GetBuildings=function(self)
-            local b={HasBuilding=function(_,index) return index==1 end,
+            local b={HasBuilding=function(_,index) return index==1 and self.x~=0 and self.x~=8 end,
               IsPillaged=function() return false end,
               GetNumGreatWorkSlots=function(_,index) return index==1 and 3 or 0 end,
               GetGreatWorkInSlot=function(_,building,slot)
@@ -150,7 +213,7 @@ fn model(kind: &str, age: &str) -> mlua::Result<Lua> {
               end}
             if CONTEXT=='UI' then
               b.GetGreatWorkTypeFromIndex=function() ui_only();return 4 end
-              b.GetCreatorNameFromIndex=function() ui_only();return 'Original artist' end
+              b.GetCreatorNameFromIndex=function() ui_only();return KIND=='art' and 'Original artist' or '' end
               b.GetTurnFromIndex=function() ui_only();return ORIGINAL_TURN end
               b.GetGreatWorkSlotType=function() ui_only();return 1 end
             end
@@ -166,8 +229,17 @@ fn model(kind: &str, age: &str) -> mlua::Result<Lua> {
         Cities={GetPlotPurchaseCity=function(q) ui_only();return q.city and CITIES[q.city] end}
         for _,q in pairs(PLOTS) do q.IsImpassable=function() return false end end
         UnitManager.GetUnit=function(owner,id) return Players[owner].units[id] end
+        local improve=ImprovementBuilder.SetImprovementType
+        ImprovementBuilder.SetImprovementType=function(plot,kind,...)
+          if kind==-1 then plot.improvement=-1 else return improve(plot,kind,...) end
+        end
         local guard=UNIT(2,500,'UNIT_WARRIOR',18)
         guard.damage,guard.moves=7,1
+        if AGE_CASE=='aged' then
+          local donorGuard=UNIT(1,600,'UNIT_WARRIOR',4)
+          donorGuard.damage,donorGuard.moves,donorGuard.xp=13,1,20
+          donorGuard.promotions[7]=true
+        end
         PLOTS[18].owner=2
         MOVE_CALLS,DEAL_CALLS,MOVE_EFFECT=0,0,true
         DealDirection={OUTGOING=1};DealItemTypes={GREATWORK=2}
@@ -313,6 +385,70 @@ fn prepared_ready_wait_returns_a_boolean_true_to_the_native_runner() -> mlua::Re
 }
 
 #[test]
+fn successful_saved_target_is_required_and_artifact_zero_index_is_valid() -> mlua::Result<()> {
+    for kind in ["art", "artifact"] {
+        let name = if kind == "art" {
+            "art-prepare"
+        } else {
+            "artifact-prepare"
+        };
+        let lua = model(kind, if kind == "art" { "fresh" } else { "artifact" })?;
+        lua.load(
+            r#"
+            CityManager.TransferCity(CITIES[4],2)
+            local A=JAC_AbsorptionGameplay
+            local original=A.NativeWorkLocations(INDEX)[1]
+            local direct={Index=INDEX,Moved=true,RequestOnly=false,GlobalCount=1,
+              SourceAfter=-1,TargetAfter=INDEX,Target={Owner=2,City=original.CityID,
+                X=4,Y=0,Building=1,Slot=0}}
+            local originalKey=KIND=='art' and 'JAC_ARTWORK_FRESH_ORIGINAL' or 'JAC_ARTIFACT_FULL_ORIGINAL'
+            local evidenceKey=KIND=='art' and 'JAC_ARTWORK_CASE_EVIDENCE' or 'JAC_ARTIFACT_FULL_EVIDENCE'
+            local label=KIND=='art' and 'art_fresh' or 'artifact_full_empty'
+            Game:SetProperty(originalKey,original)
+            Game:SetProperty(evidenceKey,{[label]=direct})
+            "#,
+        ).exec()?;
+        execute(&lua, name, "capture-original")?;
+        lua.load("local k=Game:GetProperty('JAC_TYPE_CASE');assert(k.Index==INDEX and k.To==2 and k.Source.Owner==2);if KIND=='artifact' then assert(k.Index==0 and k.Original.CreatorName==nil) end").exec()?;
+        let before: String = lua
+            .load("return JAC_AbsorptionGameplay.Canonical(Game:GetProperty('JAC_TYPE_CASE'))")
+            .eval()?;
+        lua.load("local key=KIND=='art' and 'JAC_ARTWORK_CASE_EVIDENCE' or 'JAC_ARTIFACT_FULL_EVIDENCE';local label=KIND=='art' and 'art_fresh' or 'artifact_full_empty';Game:GetProperty(key)[label].Target.Slot=1").exec()?;
+        assert!(execute(&lua, name, "capture-original").is_err());
+        assert_eq!(
+            lua.load("return JAC_AbsorptionGameplay.Canonical(Game:GetProperty('JAC_TYPE_CASE'))")
+                .eval::<String>()?,
+            before
+        );
+        lua.load("assert(CITIES[4]:GetOwner()==2,'failed original proof transferred the source')")
+            .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn fixture_center_guard_moves_without_changing_owner_or_native_state() -> mlua::Result<()> {
+    let lua = model("art", "fresh")?;
+    lua.load(
+        r#"
+        local unit=Players[2].units[500];unit.x=4
+        local H=ExposedMembers.JAC_TypeChecks
+        local original=H.Unit(unit)
+        local moved=H.ClearCenters({{X=4,Y=0},{X=16,Y=0},{X=2,Y=0},{X=10,Y=0}})
+        assert(#moved==1 and moved[1].Owner==2 and moved[1].ID==500)
+        assert(moved[1].X~=4 and moved[1].X~=16 and moved[1].X~=2 and moved[1].X~=10)
+        original.X,original.Y=moved[1].X,moved[1].Y
+        assert(JAC_AbsorptionGameplay.Rules.Equal(moved[1],original),'guard identity/abilities changed')
+        H.Guards(moved)
+        local k=Game:GetProperty('JAC_TYPE_CASE')
+        local id=CITIES[16].id;CITIES[16].id=id+1
+        assert(not pcall(H.Empty,k.FreeSlot),'reserved empty slot accepted another city ID')
+        CITIES[16].id=id
+        "#,
+    ).exec()
+}
+
+#[test]
 fn all_type_templates_pass_native_validation_and_lua51_compilation() {
     for name in NAMES {
         let output = Command::new(env!("CARGO_BIN_EXE_civ6-autotest-native"))
@@ -381,6 +517,22 @@ fn renderer_uses_exact_external_save_and_ages_only_the_independent_branch() {
     let input = "JAC-artifact-full-success-chain-150-0123456789ab";
     let prepared = render(scenario("artifact-prepare"), input, None, 11).unwrap();
     assert_eq!(prepared["steps"][1]["name"], input);
+    let art = "JAC-type-art-prepared-0123456789ab";
+    for branch in ["city-owner-transfer", "scatter", "return"] {
+        let fresh = render(scenario(branch), art, Some("fresh"), 11).unwrap();
+        assert!(
+            !fresh["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|s| s["action"] == "end_turn")
+        );
+        let aged = render(scenario(branch), art, Some("aged"), 11).unwrap();
+        assert_eq!(aged["steps"][1]["name"], fresh["steps"][1]["name"]);
+        assert_eq!(aged["steps"][3]["action"], "end_turn");
+        assert_eq!(aged["steps"][3]["turns"], 11);
+        assert!(render(scenario(branch), art, None, 11).is_err());
+    }
     assert!(
         render(
             scenario("artifact-prepare"),
@@ -391,6 +543,115 @@ fn renderer_uses_exact_external_save_and_ages_only_the_independent_branch() {
         .is_err()
     );
     assert!(render(scenario("artifact-prepare"), "../another-save", None, 11).is_err());
+}
+
+fn product_to_intent(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
+    let lua = model(kind, age)?;
+    execute(&lua, "art-prepare", "prepare-proof")?;
+    lua.globals().set("CONTEXT", "Gameplay")?;
+    lua.load(
+        step(name, "begin")["code"]
+            .as_str()
+            .unwrap()
+            .replace("__TYPE_AGE__", age),
+    )
+    .set_name(format!("{name}/begin {kind}/{age}"))
+    .exec()?;
+    let calls_before: usize = lua.load("return #RANDOM_CALLS").eval()?;
+    boot(&lua)?;
+    execute(&lua, name, "checks-choice-reloaded")?;
+    execute(&lua, name, "choice-reload-proof")?;
+    assert_eq!(
+        lua.load("return #RANDOM_CALLS").eval::<usize>()?,
+        calls_before
+    );
+    execute(&lua, name, "screen-choices")?;
+    drive(&lua, name, "screen-selected")?;
+    drive(&lua, name, "screen-confirm-ready")?;
+    execute(&lua, name, "hold-native-publication")?;
+    execute(&lua, name, "screen-confirm")?;
+    drive(&lua, name, "native-intent-ready")?;
+    execute(&lua, name, "native-intent-proof")?;
+    Ok(lua)
+}
+
+fn run_product_branch(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
+    let lua = product_to_intent(name, kind, age)?;
+    boot(&lua)?;
+    execute(&lua, name, "checks-intent-reloaded")?;
+    execute(&lua, name, "slot-type-resume-native-intent")?;
+    execute(&lua, name, "resume-native-intent")?;
+    drive(&lua, name, "result-ready")?;
+    execute(&lua, name, "slot-type-result-proof")?;
+    execute(&lua, name, "result-proof")?;
+    execute(&lua, name, "request-exact-verification")?;
+    drive(&lua, name, "verification-published")?;
+    execute(&lua, name, "verify-exact")?;
+    boot(&lua)?;
+    execute(&lua, name, "checks-result-reloaded")?;
+    execute(&lua, name, "slot-type-result-reload-proof")?;
+    execute(&lua, name, "result-reload-proof")?;
+    execute(&lua, name, "request-reloaded-verification")?;
+    drive(&lua, name, "reloaded-verification-published")?;
+    execute(&lua, name, "verify-exact-reloaded")?;
+    execute(&lua, name, "screen-result-acknowledge")?;
+    drive(&lua, name, "done")?;
+    if name == "scatter" {
+        execute(&lua, name, "schedule-original-world-reward")?;
+        drive(&lua, name, "world-site-ready")?;
+        execute(&lua, name, "prepare-recovery")?;
+        execute(&lua, name, "hold-recovery-publication")?;
+        execute(&lua, name, "claim-original-site")?;
+        boot(&lua)?;
+        execute(&lua, name, "checks-recovery-reloaded")?;
+        execute(&lua, name, "resume-world-recovery")?;
+        drive(&lua, name, "recovered-ready")?;
+        execute(&lua, name, "recovered-proof")?;
+        boot(&lua)?;
+        execute(&lua, name, "checks-recovered-reloaded")?;
+        execute(&lua, name, "recovered-reload-proof")?;
+    }
+    Ok(lua)
+}
+
+#[test]
+fn city_owner_product_transfer_never_sends_an_individual_work_move() -> mlua::Result<()> {
+    for (kind, age) in [("art", "fresh"), ("art", "aged"), ("artifact", "artifact")] {
+        let lua = run_product_branch("city-owner-transfer", kind, age)?;
+        lua.load("assert(MOVE_CALLS==0 and DEAL_CALLS==0,'ordinary museum inheritance issued an individual MOVE or deal')").exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn type_return_uses_actual_panel_and_preserves_reserved_original_after_reload() -> mlua::Result<()>
+{
+    for (kind, age) in [("art", "fresh"), ("art", "aged"), ("artifact", "artifact")] {
+        run_product_branch("return", kind, age)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn type_scatter_recovers_the_same_original_once_after_both_intent_reloads() -> mlua::Result<()> {
+    for (kind, age) in [("art", "fresh"), ("art", "aged"), ("artifact", "artifact")] {
+        run_product_branch("scatter", kind, age)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn accepted_move_without_a_physical_effect_cannot_pass_the_scatter_oracle() -> mlua::Result<()> {
+    let lua = product_to_intent("scatter", "art", "fresh")?;
+    lua.globals().set("MOVE_EFFECT", false)?;
+    boot(&lua)?;
+    execute(&lua, "scatter", "checks-intent-reloaded")?;
+    execute(&lua, "scatter", "slot-type-resume-native-intent")?;
+    execute(&lua, "scatter", "resume-native-intent")?;
+    assert!(drive(&lua, "scatter", "result-ready").is_err());
+    assert!(execute(&lua, "scatter", "result-proof").is_err());
+    lua.load("local k=Game:GetProperty('JAC_TYPE_CASE');local H=ExposedMembers.JAC_TypeChecks;H.At(k.Source,k.Original);H.Restored(k.Museums.Free,k.Index);assert(not JAC_AbsorptionGameplay.GetRoster(k.To)[k.Asset]);assert(MOVE_CALLS==2,'unchanged MOVE did not stop after its two saved attempts: '..MOVE_CALLS)").exec()?;
+    Ok(())
 }
 
 #[test]
