@@ -201,6 +201,10 @@ impl Enemy {
         "#);
     }
 
+    fn pin_captive_session(&self) {
+        self.run("local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveExchangeState().stage=='SESSION_UNBOUND'); assert(b.PinObservedCaptiveExchangeSession(SESSION_ID)==SESSION_ID); assert(b.CaptiveExchangeState().stage=='SESSION_OPEN')");
+    }
+
     fn barrier(&self) {
         self.run("local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryEnemyBarrier'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyBarrier',r.params); fire(Events.GameCoreEventPublishComplete)");
     }
@@ -846,7 +850,8 @@ fn negative_native_name_index_is_probed_without_sending_or_accepting_a_deal() {
 fn captive_exchange_requires_native_ai_acceptance_and_actual_returned_spy() {
     let h = Enemy::new();
     h.captured_deal();
-    h.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='SESSION_OPEN'); assert(#OUTGOING==1 and OUTGOING[1].kind==4 and OUTGOING[1].from==1 and OUTGOING[1].to==0 and OUTGOING[1].value==-1 and OUTGOING[1].locked and #SENDS==0 and #CAPTURED[1]==1)");
+    h.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='SESSION_UNBOUND'); assert(#OUTGOING==1 and OUTGOING[1].kind==4 and OUTGOING[1].from==1 and OUTGOING[1].to==0 and OUTGOING[1].value==-1 and OUTGOING[1].locked and #SENDS==0 and #CAPTURED[1]==1)");
+    h.pin_captive_session();
     h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     h.run("assert(Game:GetProperty('JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT').eventID==0); assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI'); assert(#SENDS==1 and SENDS[1]==DealProposalAction.PROPOSED and #CAPTURED[1]==1); PENDING_DEAL=true; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='AI_ACCEPTED_PENDING'); PENDING_DEAL=false; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='AI_ACCEPTED_EXACT'); CAN_START=false; assert(ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange()=='FINAL_SENT'); assert(#SENDS==2 and SENDS[2]==DealProposalAction.ACCEPTED); OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='RETURN_UNOBSERVED'); OFF_MAP={}; local s=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState(); assert(s.stage=='RETURNED_MAP_WAIT_NATIVE' and not s.operationReady and s.spyID==15 and s.currentID==16 and s.occupied==1 and #CAPTURED[1]==0); CAN_START=true; s=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState(); assert(s.stage=='RETURNED_MAP_READY' and s.operationReady); assert(ExposedMembers.JAC_PersonaBoundary.CloseCaptiveExchangeSession()=='RETURNED_MAP_READY' and SESSION_ID==nil); assert(HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED and ENEMY_GOV.neutralized==0)");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
@@ -860,15 +865,106 @@ fn unnamed_captive_tooltip_key_requires_the_exact_native_locked_item() {
     h.run("local request=DiplomacyManager.RequestSession; DiplomacyManager.RequestSession=function(a,b,kind) assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==GameInfo.Units['UNIT_SPY'].Name); return request(a,b,kind) end");
     h.run("local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveExchangeSessionReadOnly()=='NONE' and b.MissingCaptiveDealTooltipKey()==nil); assert(b.BeginCaptiveExchange()=='SESSION_REQUESTED'); assert(b.CaptiveExchangeSessionReadOnly()=='0|1|'..OUTGOING[1]:GetID()..'|true|false|nil' and ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==GameInfo.Units['UNIT_SPY'].Name and OUTGOING[1].value==-1 and #SENDS==0 and #CAPTURED[1]==1)");
     h.run("local item=OUTGOING[1]; item.GetValueTypeNameID=function() return 'LOC_REAL_NAME' end; assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==nil); item.GetValueTypeNameID=function() return nil end; item.locked=false; assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==nil); item.locked=true; item.id=item.id+1; assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==nil); item.id=item.id-1; CAPTURED[1][1].NameIndex=3; assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==nil); CAPTURED[1][1].NameIndex=-1; assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==GameInfo.Units['UNIT_SPY'].Name)");
+    h.pin_captive_session();
     h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     h.run("AI_REPLY='REJECT'; assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI'); assert(ExposedMembers.JAC_PersonaBoundary.CloseCaptiveExchangeSession()=='AI_REFUSED'); assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey()==nil and #CAPTURED[1]==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)");
+}
+
+#[test]
+fn observed_captive_session_must_bind_the_prepared_item_before_any_proposal() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; assert(b.BeginCaptiveExchange()=='SESSION_REQUESTED'); assert(b.CaptiveExchangeState().stage=='SESSION_UNBOUND' and b.CaptiveExchangeSessionReadOnly()=='0|1|'..OUTGOING[1]:GetID()..'|true|false|nil')");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()",
+        "no observed ownership binding",
+    );
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('MARK_CAPTIVE_EXCHANGE')",
+        "no observed ownership binding",
+    );
+    h.run("assert(#SENDS==0 and Game:GetProperty('JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT')==nil and #CAPTURED[1]==1)");
+    for value in ["nil", "true", "'44'", "-1", "44.5"] {
+        h.reject(
+            &format!(
+                "ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession({value})"
+            ),
+            "not an exact integer",
+        );
+    }
+    h.run("SESSION_ID=45");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession(44)",
+        "changed before binding",
+    );
+    h.run("assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='SESSION_UNBOUND' and #SENDS==0 and #CAPTURED[1]==1)");
+}
+
+#[test]
+fn captive_session_binding_rechecks_native_item_captive_and_initiator() {
+    for mutation in [
+        "OUTGOING[1].locked=false",
+        "OUTGOING[1].value=7",
+        "OUTGOING[1].id=OUTGOING[1].id+1",
+        "CAPTURED[1][1].NameIndex=7",
+        "DiplomacyManager.GetSessionInfo=function() return {FromPlayer=1} end",
+    ] {
+        let h = Enemy::new();
+        h.captured_deal();
+        h.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+        h.run(mutation);
+        h.reject(
+            "ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession(44)",
+            if mutation.contains("GetSessionInfo") {
+                "initiator changed"
+            } else if mutation.contains("CAPTURED") {
+                "captured operative differs"
+            } else {
+                "prepared captive"
+            },
+        );
+        h.run("assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='SESSION_UNBOUND' and #SENDS==0 and Game:GetProperty('JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT')==nil)");
+    }
+}
+
+#[test]
+fn replaced_native_session_after_explicit_binding_cannot_propose_or_close() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+    h.pin_captive_session();
+    h.run("CLOSED={}; DiplomacyManager.CloseSession=function(id) CLOSED[#CLOSED+1]=id end; SESSION_ID=45");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()",
+        "session identity changed",
+    );
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.CloseCaptiveExchangeSession()",
+        "session identity changed",
+    );
+    h.run("assert(#CLOSED==0 and #SENDS==0 and Game:GetProperty('JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT')==nil and #CAPTURED[1]==1)");
+
+    let accepted = Enemy::new();
+    accepted.captured_deal();
+    accepted.run(
+        "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
+    );
+    accepted.pin_captive_session();
+    accepted.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    accepted.run("assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI' and #SENDS==1); SESSION_ID=45");
+    accepted.reject(
+        "ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange()",
+        "session identity changed",
+    );
+    accepted.run("assert(#SENDS==1 and #CAPTURED[1]==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)");
 }
 
 #[test]
 fn captive_exchange_never_closes_a_replacement_or_foreign_initiated_session() {
     let h = Enemy::new();
     h.captured_deal();
-    h.run("AI_REPLY='REJECT'; local b=ExposedMembers.JAC_PersonaBoundary; b.BeginCaptiveExchange(); assert(b.CaptiveExchangeState().stage=='SESSION_OPEN')");
+    h.run("AI_REPLY='REJECT'; local b=ExposedMembers.JAC_PersonaBoundary; b.BeginCaptiveExchange(); assert(b.CaptiveExchangeState().stage=='SESSION_UNBOUND')");
+    h.pin_captive_session();
     h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     h.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); CLOSED={}; DiplomacyManager.CloseSession=function(id) CLOSED[#CLOSED+1]=id end; SESSION_ID=45; DiplomacyManager.GetSessionInfo=function() return {FromPlayer=0} end");
     h.reject(
@@ -888,6 +984,7 @@ fn returned_map_captive_requires_a_physical_plot_before_terminal_classification(
     let h = Enemy::new();
     h.captured_deal();
     h.run("ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    h.pin_captive_session();
     h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     h.run("local b=ExposedMembers.JAC_PersonaBoundary; b.ProposeCaptiveExchange(); b.AcceptCaptiveExchange(); UNITS[0][1].x=-9999");
     h.reject(
@@ -907,6 +1004,7 @@ fn accepted_captive_exchange_can_follow_a_real_off_map_return_without_new_produc
     let h = Enemy::new();
     h.captured_deal();
     h.run("RETURN_OFFMAP=true; assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+    h.pin_captive_session();
     h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     h.run("assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='AI_ACCEPTED_EXACT'); assert(ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange()=='FINAL_SENT'); local s=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState(); assert(s.stage=='RETURNED_OFF_MAP' and not s.operationReady and s.spyID==15 and s.occupied==1 and #CAPTURED[1]==0 and #OFF_MAP==1 and OFF_MAP[1].ReturnTurn==TURN+2)");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
@@ -920,6 +1018,7 @@ fn returned_captive_requires_the_native_spy_owner_type_future_turn_and_real_coor
     map.run(
         "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
     );
+    map.pin_captive_session();
     map.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     map.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange(); UNITS[0][1].owner=1");
     map.reject(
@@ -935,6 +1034,7 @@ fn returned_captive_requires_the_native_spy_owner_type_future_turn_and_real_coor
     let off_map = Enemy::new();
     off_map.captured_deal();
     off_map.run("RETURN_OFFMAP=true; ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    off_map.pin_captive_session();
     off_map.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     off_map.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange(); OFF_MAP[1].ReturnTurn=TURN");
     off_map.reject(
@@ -963,6 +1063,7 @@ fn captive_exchange_refusal_or_changed_terms_never_releases_or_accepts_a_spy() {
         let h = Enemy::new();
         h.captured_deal();
         h.run(&format!("AI_REPLY='{reply}'; assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')"));
+        h.pin_captive_session();
         h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
         h.run(&format!("assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='{expected}'); assert(#SENDS==1 and SENDS[1]==DealProposalAction.PROPOSED and #CAPTURED[1]==1 and ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='UNAVAILABLE_CAPACITY'); assert(ExposedMembers.JAC_PersonaBoundary.CloseCaptiveExchangeSession()=='{expected}' and SESSION_ID==nil)"));
         h.reject(
@@ -997,6 +1098,7 @@ fn captive_exchange_preserves_an_existing_unsent_deal_and_native_invalid_terms()
     invalid.run(
         "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
     );
+    invalid.pin_captive_session();
     invalid.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     invalid.run("DEAL_VALIDATION_RESULT=DealValidationResult.INVALID; assert(DealValidationResult.INVALID~=0); assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='DEAL_INVALID'); assert(ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeState().stage=='DEAL_INVALID' and #OUTGOING==0 and #SENDS==0 and #CAPTURED[1]==1)");
 
@@ -1009,6 +1111,7 @@ fn captive_exchange_preserves_an_existing_unsent_deal_and_native_invalid_terms()
         let unknown = Enemy::new();
         unknown.captured_deal();
         unknown.run("assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+        unknown.pin_captive_session();
         unknown.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
         unknown.run(&format!("DEAL_VALIDATION_RESULT={value}; local stage=ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); assert(stage=='{expected}' and #SENDS==0 and #OUTGOING==0 and #CAPTURED[1]==1)"));
     }
@@ -1017,6 +1120,7 @@ fn captive_exchange_preserves_an_existing_unsent_deal_and_native_invalid_terms()
     no_enum.run(
         "assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')",
     );
+    no_enum.pin_captive_session();
     no_enum.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
     no_enum.run("DealValidationResult=nil; assert(ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()=='DEAL_VALIDATION_UNKNOWN' and #SENDS==0 and #OUTGOING==0)");
 

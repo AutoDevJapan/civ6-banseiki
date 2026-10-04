@@ -386,6 +386,7 @@ fn captive_session_probe_backend(
     deal_view_reply: bool,
     deal_view_id: &str,
     deal_view_from: &str,
+    binding_noack: bool,
 ) -> FakeBackend {
     let deal_view_id = deal_view_id.to_owned();
     let deal_view_from = deal_view_from.to_owned();
@@ -417,6 +418,15 @@ fn captive_session_probe_backend(
                     "0".into()
                 });
             }
+            if code.contains("PinObservedCaptiveExchangeSession(44)") {
+                assert_eq!(state, "InGame");
+                if binding_noack {
+                    return Err(Error::unknown(
+                        "binding acknowledgment lost after 0/8 bytes",
+                    ));
+                }
+                return Ok("44".into());
+            }
             panic!("unexpected captive session query: {state} {code}");
         })
 }
@@ -425,13 +435,22 @@ fn captive_session_probe_backend(
 fn captive_session_observation_requires_matching_native_ids_and_initiators() {
     let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
         "timeout":120,"lua_timeout":12});
-    let mut observed = Harness::new(json!({}), captive_session_probe_backend(true, "44", "0"));
+    let mut observed = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "0", false),
+    );
     assert!(observed
         .runner
         .run_step(&step)
         .unwrap()
-        .contains("session 44 observed"));
-    assert_eq!(observed.calls().len(), 7);
+        .contains("session 44 observed and bound"));
+    assert_eq!(observed.calls().len(), 8);
+    assert!(observed
+        .calls()
+        .last()
+        .unwrap()
+        .1
+        .contains("PinObservedCaptiveExchangeSession(44)"));
     assert!(observed.calls().iter().all(|(_, code)| {
         !code.contains("RequestSession")
             && !code.contains("SendWorkingDeal")
@@ -439,23 +458,34 @@ fn captive_session_observation_requires_matching_native_ids_and_initiators() {
     }));
     assert!(observed.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
 
-    let mut wrong = Harness::new(json!({}), captive_session_probe_backend(true, "44", "1"));
+    let mut wrong = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "1", false),
+    );
     let error = wrong.runner.run_step(&step).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
     assert!(error.to_string().contains("from=Some(\"0\")/Some(\"1\")"));
-    let mut replaced = Harness::new(json!({}), captive_session_probe_backend(true, "45", "0"));
+    assert_eq!(wrong.calls().len(), 7);
+    let mut replaced = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "45", "0", false),
+    );
     let error = replaced.runner.run_step(&step).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
     assert!(error
         .to_string()
         .contains("native_ids=Some(\"44\")/Some(\"45\")"));
+    assert_eq!(replaced.calls().len(), 7);
 }
 
 #[test]
 fn captive_session_observation_records_noack_in_one_context_without_closing_it() {
     let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
         "timeout":120,"lua_timeout":12});
-    let mut h = Harness::new(json!({}), captive_session_probe_backend(false, "44", "0"));
+    let mut h = Harness::new(
+        json!({}),
+        captive_session_probe_backend(false, "44", "0", false),
+    );
     let error = h.runner.run_step(&step).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
     assert!(error.to_string().contains("native_ids=Some(\"44\")/None"));
@@ -467,6 +497,39 @@ fn captive_session_observation_records_noack_in_one_context_without_closing_it()
             && !h.log().contains("closed AI deal proposal")
     );
     assert!(h.timeouts.lock().unwrap().iter().all(|n| *n <= 12.0));
+}
+
+#[test]
+fn captive_session_binding_noack_stops_without_retrying_or_proposing() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,
+        "timeout":120,"lua_timeout":12});
+    let mut h = Harness::new(
+        json!({}),
+        captive_session_probe_backend(true, "44", "0", true),
+    );
+    let error = h.runner.run_step(&step).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+    assert_eq!(h.calls().len(), 8);
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, code)| code.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+    assert!(h
+        .calls()
+        .last()
+        .unwrap()
+        .1
+        .contains("PinObservedCaptiveExchangeSession(44)"));
+    assert!(
+        h.log().contains("binding acknowledgment unknown")
+            && !h
+                .calls()
+                .iter()
+                .any(|(_, code)| code.contains("SendWorkingDeal") || code.contains("CloseSession"))
+    );
 }
 
 #[test]
