@@ -135,6 +135,15 @@
       "timeout": 180
     },
     {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local k=Game:GetProperty('JAC_TYPE_CASE')\nif not k then return false end\nlocal ok,found=pcall(JAC_AbsorptionGameplay.NativeWorkLocations,k.Index)\nif not ok then\n if tostring(found):find('UI city cache is not ready',1,true) then return false end\n error(found)\nend\nreturn #found==1"
+      }
+    },
+    {
       "action": "ui_lua",
       "code": "local A,F=assert(JAC_AbsorptionGameplay),assert(JAC_AbsorptionFlowGameplay)\nlocal H=assert(ExposedMembers.JAC_TypeChecks)\nlocal k=assert(Game:GetProperty('JAC_TYPE_CASE'))\nlocal flow=assert(F.Get(k.ID))\nlocal tx=assert(A.GetState().Transactions[k.ID])\nlocal snap=H.Native(tx,k.Index)\nassert(flow.Phase=='APPLYING' and tx.Status~='COMPLETE','intent must be saved before completion')\nassert(snap.Outcome==k.Branch,'saved product intent has the wrong native outcome')\nlocal found=A.NativeWorkLocations(k.Index)\nassert(#found==1,'original missing or duplicated during native intent')\nH.Identity(found[1],k.Original)\nif k.Branch=='TRANSFER' then\n assert(not snap.Custodian and not snap.Carrier and not snap.DealSubmitted,'ordinary museum transfer unexpectedly became a deal')\n assert(tx.AwaitingFinalUI,'ordinary city-owner transfer did not reach final publication')\nelse\n local slot=assert(snap.TargetSlot,'native intent has no exact reserved target')\n assert(slot.Owner==(k.Branch=='SCATTER' and k.Free or k.Third),'native intent reserved the wrong recipient')\n local expected=k[k.Branch=='SCATTER' and 'FreeSlot' or 'ThirdSlot']\n assert(slot.X==expected.X and slot.Y==expected.Y and slot.Building==expected.Building and slot.Slot==expected.Slot,'native intent reserved another museum slot')\n assert(snap.Carrier or tx.NativeDealUI,'native intent has neither a carrier nor a Core publication token')\n for _,city in ipairs(tx.Cities) do assert(CityManager.GetCityAt(city.X,city.Y):GetOwner()==k.From,'donor city moved before external work proof') end\nend\nk.NativeIntent={Route=snap.NativeRoute,Outcome=snap.Outcome,Source=A.Rules.Copy(snap.Source),Target=A.Rules.Copy(snap.TargetSlot),\n Carrier=A.Rules.Copy(snap.Carrier),Entries=A.Rules.Copy(flow.Entries)}\nGame:SetProperty('JAC_TYPE_CASE',k)\nprint('[JAC_TYPE_NATIVE_INTENT] index='..k.Index..' outcome='..snap.Outcome..' route='..tostring(snap.NativeRoute))\nreturn 'actual product native intent saved independently of carrier or Core route'",
       "id": "native-intent-proof",
