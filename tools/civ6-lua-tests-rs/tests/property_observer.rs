@@ -37,7 +37,10 @@ fn exact_game_and_player_values_and_removal_are_read_back() {
         end
         Game = property_object(false)
         Players = {[0] = property_object(true), [1] = property_object(false)}
-        GameEvents = {JAC_PropertyObserverStep = {Add = function(fn) OBSERVER_STEP = fn end}}
+        GameEvents = {
+            JAC_PropertyObserverStep = {Add = function(fn) OBSERVER_STEP = fn end},
+            JAC_PropertyObserverNumericStep = {Add = function(fn) NUMERIC_STEP = fn end},
+        }
         print = function() end
     "#,
     );
@@ -55,6 +58,14 @@ fn exact_game_and_player_values_and_removal_are_read_back() {
             assert(Players[0]:GetProperty(key) == expected[phase])
         end
         assert(Players[1]:GetProperty(key) == nil)
+        assert(Game:GetProperty(853271) == nil and Players[0]:GetProperty(853271) == nil)
+        for phase=1,5 do
+            NUMERIC_STEP(0, {Phase=phase})
+            assert(Game:GetProperty(853272) == phase)
+            assert(Game:GetProperty(853271) == expected[phase])
+            assert(Players[0]:GetProperty(853271) == expected[phase])
+        end
+        assert(Players[1]:GetProperty(853271) == nil)
     "#,
     );
 }
@@ -72,7 +83,10 @@ fn rejects_wrong_owner_replay_skips_malformed_and_dirty_start() {
             GetProperty=function(_, k) return values['player:'..k] end,
             SetProperty=function(_, k, v) values['player:'..k]=v end},
             [1]={IsHuman=function() return false end}}
-        GameEvents = {JAC_PropertyObserverStep={Add=function(fn) OBSERVER_STEP=fn end}}
+        GameEvents = {
+            JAC_PropertyObserverStep={Add=function(fn) OBSERVER_STEP=fn end},
+            JAC_PropertyObserverNumericStep={Add=function(fn) NUMERIC_STEP=fn end},
+        }
         print=function() end
     "#,
     );
@@ -91,6 +105,16 @@ fn rejects_wrong_owner_replay_skips_malformed_and_dirty_start() {
         Game:SetProperty('JAC_TEST853_VALUE', 99)
         assert(not pcall(OBSERVER_STEP, 0, {Phase=1}))
         assert(Game:GetProperty('JAC_TEST853_VALUE') == 99)
+        for _,case in ipairs({
+            {1, {Phase=1}}, {0, nil}, {0, {Phase='1'}},
+            {0, {Phase=2}}, {0, {Phase=1.5}}, {0, {Phase=6}},
+        }) do
+            assert(not pcall(NUMERIC_STEP, case[1], case[2]))
+        end
+        assert(Game:GetProperty(853272) == nil and Game:GetProperty(853271) == nil)
+        Game:SetProperty(853271, 99)
+        assert(not pcall(NUMERIC_STEP, 0, {Phase=1}))
+        assert(Game:GetProperty(853271) == 99)
     "#,
     );
 }
