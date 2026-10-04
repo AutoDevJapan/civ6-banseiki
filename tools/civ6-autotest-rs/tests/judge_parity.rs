@@ -588,6 +588,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-neutralization-retry-capacity-government-tier1.json".to_string(),
             "leader-persona-spy-neutralization-retry-capacity-government-tier2.json".to_string(),
             "leader-persona-spy-neutralization-retry-capacity-tier2-civic.json".to_string(),
+            "leader-persona-spy-neutralization-retry-capacity-tier1-production-diagnose.json"
+                .to_string(),
             "leader-persona-property-numeric-observer-15km.json".to_string(),
             "leader-persona-joined-admission-calibration-15km.json".to_string(),
         ])

@@ -258,6 +258,92 @@ impl Enemy {
         self.run("GOV_CIVIC_COMPLETED=true; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_CURRENT=0; GOV_CIVIC_COMPLETED_THIS_TURN=false; local p=ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan(); assert(p.stage=='TIER1_GOVERNMENT_BLOCKED' and p.government.stage=='NO_CIVIC_COMPLETED_THIS_TURN')");
     }
 
+    fn saved_tier1_production_refusal(&self) {
+        self.actual_captive_at_turn_24();
+        self.setup_tier1_before_window();
+        self.run(
+            r#"
+            GOV_CURRENT=1; ADVANCE_TURN(); CONTROL.id=65536;
+            GOV_DISTRICT_ID=458758; GOV_DISTRICT_MEMBER_KEY=3;
+            GOV_DISTRICT_X=133; GOV_DISTRICT_Y=26;
+            PLOTS['133/26']={GetIndex=function() return 5437 end,
+                GetX=function() return 133 end,GetY=function() return 26 end};
+            local purchase=Cities.GetPlotPurchaseCity;
+            Cities.GetPlotPurchaseCity=function(plot)
+                if plot==PLOTS['133/26'] then return CONTROL end;
+                return purchase(plot);
+            end;
+            Game:SetProperty('JAC_BOUNDARY_CAPACITY_DISTRICT_PROGRESS',{
+                owner=0,cityOwner=0,cityID=65536,districtID=458758,
+                memberKey=3,plot=5437,x=133,y=26,acceptedNonce=1,
+                districtIndex=70,turn=24});
+            Game:SetProperty('JAC_BOUNDARY_GOV_CLASSIFY_INTENT',{
+                status='PREPARED',owner=0,token=3,turn=24,
+                targetGovernment='GOVERNMENT_OLIGARCHY'});
+            Game:SetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ',{
+                status='OBSERVED',owner=0,originalToken=3,originalTurn=24,
+                turn=25,index=1,tier='Tier1',
+                governmentType='GOVERNMENT_OLIGARCHY',total=1,spent=0});
+            local governors=Players[0].GetGovernors;
+            Players[0].GetGovernors=function()
+                local titles=governors();
+                titles.GetGovernorPointsSpent=function() return 0 end;
+                return titles;
+            end;
+            GameInfo.GovernmentSlots={
+                [0]={GovernmentSlotType='SLOT_MILITARY'},
+                [1]={GovernmentSlotType='SLOT_ECONOMIC'},
+                [2]={GovernmentSlotType='SLOT_DIPLOMATIC'},
+                [3]={GovernmentSlotType='SLOT_WILDCARD'}};
+            GameInfo.Policies=collection({
+                {PolicyType='POLICY_DISCIPLINE',Hash=501,GovernmentSlotType='SLOT_MILITARY'},
+                {PolicyType='POLICY_URBAN_PLANNING',Hash=502,GovernmentSlotType='SLOT_ECONOMIC'},
+                {PolicyType='POLICY_BANNED',Hash=503,GovernmentSlotType='SLOT_MILITARY'},
+                {PolicyType='POLICY_UNSLOTTABLE',Hash=504,GovernmentSlotType='SLOT_ECONOMIC'},
+                {PolicyType='POLICY_OBSOLETE',Hash=505,GovernmentSlotType='SLOT_MILITARY'}},
+                'PolicyType');
+            local originalCulture=Players[0].GetCulture;
+            Players[0].GetCulture=function()
+                local culture=originalCulture();
+                culture.GetNumPolicySlots=function() return 4 end;
+                culture.GetNumPolicySlotsOpen=function() return 4 end;
+                culture.GetCostToUnlockPolicies=function() return 0 end;
+                culture.PolicyChangeMade=function() return false end;
+                culture.GetSlotType=function(_,index) return index end;
+                culture.GetSlotPolicy=function() return -1 end;
+                culture.IsPolicyBanned=function(_,hash) return hash==503 end;
+                culture.CanPolicyBeSlotted=function(_,hash) return hash~=504 end;
+                culture.IsPolicyObsolete=function(_,hash) return hash==505 end;
+                return culture;
+            end;
+            local originalQueue=CONTROL.GetBuildQueue();
+            local canProduce=originalQueue.CanProduce;
+            originalQueue.CanProduce=function(_,hash,exclusion,withResults)
+                if hash==760 or hash==770 or hash==780 then
+                    assert(exclusion==true or exclusion==false and withResults==true);
+                    return false,nil;
+                end;
+                return canProduce(originalQueue,hash,exclusion,withResults);
+            end;
+            CONTROL.GetBuildQueue=function() return originalQueue end;
+            CityCommandResults={FAILURE_REASONS='failureReasons'};
+            CityManager.CanStartOperation=function(city,op,args,readOnly)
+                assert(city==CONTROL and op==CityOperationTypes.BUILD and
+                    readOnly==true and (args.building==760 or args.building==770 or
+                    args.building==780) and args.insert==7 and args.location==0);
+                return false,{failureReasons={'LOC_TEST_NATIVE_BUILD_REFUSED'}};
+            end;
+            CityManager.GetOperationTargets=function(city,op,args)
+                assert(city==CONTROL and op==CityOperationTypes.BUILD and
+                    (args.building==760 or args.building==770 or args.building==780));
+                return {};
+            end;
+            assert(ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage==
+                'TIER1_PRODUCTION_UNAVAILABLE');
+        "#,
+        );
+    }
+
     fn complete_tier1_window_queued(&self) {
         self.run("FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryPrepareTier1GovernmentWindowCivic'); WINDOW_SETTER_PARAMS=r.params; ENEMY_CASES.fireCore('JAC_BoundaryPrepareTier1GovernmentWindowCivic',r.params); FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='COMMAND'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryReadTier1GovernmentWindowCivic' and r.params.Phase=='READ'); ENEMY_CASES.fireCore('JAC_BoundaryReadTier1GovernmentWindowCivic',r.params); FRAME(); b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='READ'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); local a=Game:GetProperty('JAC_BOUNDARY_GOV_WINDOW_CIVIC_ATTEMPT'); local c=Game:GetProperty('JAC_BOUNDARY_GOV_WINDOW_CIVIC_RECEIPT'); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_PREPARE_TIER1_GOV_WINDOW_CIVIC' and GOV_WINDOW_LEARNING and c.status=='OBSERVED' and c.afterTotal==a.beforeTotal+a.expectedTitleDelta and GOV_POINTS==c.afterTotal and ExposedMembers.JAC_PersonaBoundary.CaptiveCapacityPlan().stage=='NEEDS_TIER1_GOVERNMENT')");
     }
@@ -299,6 +385,10 @@ fn capacity_government_scene(suffix: &str) -> Value {
 
 fn government_classification_scene() -> Value {
     capacity_government_scene("classify")
+}
+
+fn tier1_production_scene() -> Value {
+    serde_json::from_str(&read_repo("tools/civ6-autotest/scenarios/leader-persona-spy-neutralization-retry-capacity-tier1-production-diagnose.json")).unwrap()
 }
 
 fn scene_lua(scene: &Value, index: usize) -> &str {
@@ -1755,6 +1845,43 @@ fn government_classification_rejects_a_changed_original_request_reference() {
         "UNKNOWN_READ_CAPACITY_GOVERNMENT_CLASSIFICATION",
     );
     h.run("assert(GOV_REQUEST_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ').status=='ERROR')");
+}
+
+#[test]
+fn saved_oligarchy_production_diagnosis_reads_the_native_refusal_and_policy_slots() {
+    let scene = tier1_production_scene();
+    let h = Enemy::new();
+    h.saved_tier1_production_refusal();
+    let message: String = h.0.load(scene_lua(&scene, 2)).strict_eval().unwrap();
+    assert!(message.contains("NATIVE_QUEUE_REFUSED plan=TIER1_PRODUCTION_UNAVAILABLE"));
+    assert!(message.contains("policy=OBSERVED open=4 cost=0 tall=false/nil"));
+    h.run("local d=ExposedMembers.JAC_PersonaBoundary.Tier1ProductionDiagnosis(); assert(d.status=='NATIVE_QUEUE_REFUSED' and d.coreTitleTotal==1 and d.coreTitleSpent==0 and d.governmentPolicyToUnlock=='' and d.policy.slotCount==4 and d.policy.openCount==4 and d.policy.unlockCost==0 and d.policy.changeMade==false and #d.policy.available==2 and d.policy.slots[1].policyType=='' and #d.candidates==3); for _,c in ipairs(d.candidates) do assert(c.listedCallOK and not c.listed and c.allowedCallOK and not c.allowed and c.allowedResults.kind=='nil' and c.startCallOK and not c.canStart and c.startResults.failureReasons[1]=='LOC_TEST_NATIVE_BUILD_REFUSED' and c.targetsCallOK) end; assert(GOV_REQUEST_CALLS==0 and TURN==25 and GOV_CURRENT==1 and GOV_POINTS==1)");
+}
+
+#[test]
+fn saved_oligarchy_production_diagnosis_rejects_changed_core_and_captive_evidence() {
+    let scene = tier1_production_scene();
+    let h = Enemy::new();
+    h.saved_tier1_production_refusal();
+    h.run("Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ').total=2");
+    h.reject(scene_lua(&scene, 2), "independent title receipt changed");
+    h.run("Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ').total=1; CAPTURED[1][1].NameIndex=7");
+    h.reject(
+        scene_lua(&scene, 2),
+        "captured operative differs from the original spy",
+    );
+    h.run("CAPTURED[1][1].NameIndex=-1; HISTORY[0][0].CompletionTurn=24");
+    h.reject(
+        scene_lua(&scene, 2),
+        "retry requires the actual failed mission",
+    );
+    h.run("HISTORY[0][0].CompletionTurn=23; GOV_DISTRICT_ID=458759");
+    h.reject(
+        scene_lua(&scene, 2),
+        "native Government Plaza district identity changed",
+    );
+    h.run("GOV_DISTRICT_ID=458758; CityManager.CanStartOperation=function(_,op,args,readOnly) assert(op==CityOperationTypes.BUILD and args.building and readOnly==true); return true,{} end; local d=ExposedMembers.JAC_PersonaBoundary.Tier1ProductionDiagnosis(); assert(d.status=='NATIVE_BUILD_OPERATION_AVAILABLE_QUEUE_REFUSED' and d.candidates[1].canStart and not d.candidates[1].allowed)");
+    h.run("assert(GOV_REQUEST_CALLS==0 and TURN==25 and GOV_POINTS==1)");
 }
 
 #[test]

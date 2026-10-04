@@ -295,6 +295,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         "retry-capacity-civic",
         "retry-capacity-government-plan",
         "retry-capacity-government-classify",
+        "retry-capacity-tier1-production-diagnose",
         "retry-capacity-government-tier1",
         "retry-capacity-government-tier2",
         "retry-capacity-tier2-civic",
@@ -347,6 +348,16 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         );
     }
     assert_eq!(saves, 18);
+    let production =
+        scenario("leader-persona-spy-neutralization-retry-capacity-tier1-production-diagnose.json");
+    let production_steps = steps(&production);
+    assert_eq!(production_steps.len(), 4);
+    assert!(production_steps.iter().all(|step| {
+        !action(step, "save") && !action(step, "end_turn") && !action(step, "configure")
+    }));
+    assert!(embedded_lua(&production_steps[2])
+        .unwrap()
+        .contains("Tier1ProductionDiagnosis()"));
     let classification =
         scenario("leader-persona-spy-neutralization-retry-capacity-government-classify.json");
     let classification_steps = steps(&classification);

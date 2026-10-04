@@ -1,0 +1,11 @@
+{
+  "name": "Read native Tier 1 Government Plaza production gates after Oligarchy",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local d=ExposedMembers.JAC_PersonaBoundary.Tier1ProductionDiagnosis(); assert(d.owner==0 and d.turn==25 and d.governmentType=='GOVERNMENT_OLIGARCHY' and d.governmentTier=='Tier1' and d.coreTitleTotal==1 and d.coreTitleSpent==0 and d.cityID==65536 and d.districtID==458758 and d.districtPlot==5437 and #d.candidates==3,'saved Government, Plaza, or title proof differs'); return d.status..' plan='..d.planStage..' policy='..d.policy.status..' open='..tostring(d.policy.openCount)..' cost='..tostring(d.policy.unlockCost)..' tall='..tostring(d.candidates[1].allowed)..'/'..d.candidates[1].allowedResults.kind"},
+    {"action":"exit_to_menu"}
+  ]
+}

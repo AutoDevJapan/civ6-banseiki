@@ -1539,6 +1539,173 @@ function B.CaptiveCapacityDistrictOutcome()
     return result;
 end
 
+-- Read the same native building probes as ProductionPanel.lua:2026-2039,
+-- plus its BUILD command shape, from the saved Oligarchy checkpoint. A nil
+-- engine result is recorded as nil; it is not a policy or anarchy diagnosis.
+local function CapacityProductionResults(value)
+    local summary={kind=type(value),failureReasons={},keys={}};
+    if type(value)~="table" then return summary; end
+    local key=CityCommandResults and CityCommandResults.FAILURE_REASONS;
+    local reasons=key and value[key];
+    summary.failureReasonsKind=type(reasons);
+    if type(reasons)=="table" then
+        for _,reason in ipairs(reasons) do
+            summary.failureReasons[#summary.failureReasons+1]=tostring(reason);
+        end
+    end
+    for resultKey,resultValue in pairs(value) do
+        summary.keys[#summary.keys+1]={key=tostring(resultKey),kind=type(resultValue)};
+    end
+    table.sort(summary.keys,function(a,b) return a.key<b.key; end);
+    return summary;
+end
+
+function B.Tier1ProductionDiagnosis()
+    local owner=Game.GetLocalPlayer();
+    local turn=Game.GetCurrentGameTurn();
+    local intent=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT"),
+        "saved Oligarchy Government intent missing");
+    local read=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_READ"),
+        "saved independent Gameplay Government receipt missing");
+    local native=B.ReadCapacityGovernmentNative(owner);
+    local titles=Players[owner]:GetGovernors();
+    assert(owner==0 and turn==25 and intent.status=="PREPARED" and
+        intent.owner==owner and intent.turn==24 and
+        intent.targetGovernment=="GOVERNMENT_OLIGARCHY" and
+        read.status=="OBSERVED" and read.owner==owner and
+        read.originalToken==intent.token and read.originalTurn==intent.turn and
+        read.turn==turn and read.index==1 and read.tier=="Tier1" and
+        read.governmentType=="GOVERNMENT_OLIGARCHY" and
+        native.turn==turn and native.index==read.index and
+        native.tier==read.tier and native.governmentType==read.governmentType and
+        read.total==1 and read.spent==0 and
+        titles:GetGovernorPoints()==read.total and
+        titles:GetGovernorPointsSpent()==read.spent,
+        "saved native Government or independent title receipt changed");
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and
+        d.mission.turn==23 and d.outcome=="CAPTURED" and d.occupied==1 and
+        d.capacity==1 and d.captive and d.captive.captor==1 and
+        d.captive.nameIndex==-1,
+        "original captive or mission history changed before production diagnosis");
+    local district=B.CaptiveCapacityDistrictOutcome();
+    assert(district.stage=="DISTRICT_BUILT" and district.owner==owner and
+        district.cityOwner==owner and district.cityID==65536 and
+        district.districtID==458758 and district.memberKey==3 and
+        district.plot==5437 and district.x==133 and district.y==26 and
+        district.acceptedNonce==1,
+        "saved Government Plaza instance changed before production diagnosis");
+    local city=assert(CityManager.GetCity(owner,district.cityID),
+        "saved Government Plaza city missing");
+    local queue=assert(city:GetBuildQueue(),"native city production queue missing");
+    local culture=Players[owner]:GetCulture();
+    local government=assert(GameInfo.Governments[native.index],
+        "retained Government definition missing");
+    local result={status="NATIVE_QUEUE_READ_FAILED",owner=owner,turn=turn,
+        governmentType=native.governmentType,governmentTier=native.tier,
+        governmentPolicyToUnlock=government.PolicyToUnlock or "",
+        coreTitleTotal=read.total,coreTitleSpent=read.spent,
+        districtID=district.districtID,districtPlot=district.plot,
+        cityID=city:GetID(),candidates={}};
+    -- Expansion2 GovernmentScreen overrides IsPolicyAvailable with these
+    -- three native Culture checks; catalog availability is not slot approval.
+    local policyMethods={"GetNumPolicySlots","GetNumPolicySlotsOpen",
+        "GetSlotType","GetSlotPolicy","IsPolicyBanned",
+        "CanPolicyBeSlotted","IsPolicyObsolete",
+        "GetCostToUnlockPolicies","PolicyChangeMade"};
+    result.policy={status="OBSERVED",slots={},available={}};
+    for _,method in ipairs(policyMethods) do
+        if type(culture[method])~="function" then
+            result.policy.status="API_UNAVAILABLE";
+            result.policy.missing=method;
+            break;
+        end
+    end
+    if result.policy.status=="OBSERVED" then
+        local count=culture:GetNumPolicySlots();
+        assert(type(count)=="number" and count>=0 and count<=16,
+            "native Government policy slot count unavailable");
+        result.policy.slotCount=count;
+        result.policy.openCount=culture:GetNumPolicySlotsOpen();
+        result.policy.unlockCost=culture:GetCostToUnlockPolicies();
+        result.policy.changeMade=culture:PolicyChangeMade();
+        for index=0,count-1 do
+            local slotIndex=culture:GetSlotType(index);
+            local slot=assert(GameInfo.GovernmentSlots[slotIndex],
+                "native Government slot definition missing");
+            local policyIndex=culture:GetSlotPolicy(index);
+            local active=policyIndex>=0 and GameInfo.Policies[policyIndex] or nil;
+            assert(policyIndex<0 or active,
+                "native slotted policy definition missing");
+            result.policy.slots[#result.policy.slots+1]={index=index,
+                slotType=slot.GovernmentSlotType,
+                policyType=active and active.PolicyType or ""};
+        end
+        for row in GameInfo.Policies() do
+            if not culture:IsPolicyBanned(row.Hash) and
+                culture:CanPolicyBeSlotted(row.Hash) and
+                not culture:IsPolicyObsolete(row.Hash) then
+                result.policy.available[#result.policy.available+1]={
+                    policyType=row.PolicyType,hash=row.Hash,
+                    slotType=row.GovernmentSlotType};
+            end
+        end
+        table.sort(result.policy.available,function(a,b)
+            return a.policyType<b.policyType;
+        end);
+    end
+    local plan=B.CaptiveCapacityPlan();
+    result.planStage=plan.stage;
+    local allReadable,anyAllowed,anyCanStart=true,false,false;
+    for _,kind in ipairs({"BUILDING_GOV_TALL","BUILDING_GOV_WIDE",
+        "BUILDING_GOV_CONQUEST"}) do
+        local row=assert(GameInfo.Buildings[kind],
+            "official Tier 1 building definition missing");
+        assert(row.PrereqDistrict=="DISTRICT_GOVERNMENT" and
+            row.GovernmentTierRequirement=="Tier1",
+            "official Tier 1 building prerequisite changed");
+        local listedOK,listed=pcall(queue.CanProduce,queue,row.Hash,true);
+        local allowedOK,allowed,allowedResults=pcall(queue.CanProduce,
+            queue,row.Hash,false,true);
+        local args={[CityOperationTypes.PARAM_BUILDING_TYPE]=row.Hash,
+            [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,
+            [CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0};
+        local startOK,canStart,startResults=pcall(CityManager.CanStartOperation,
+            city,CityOperationTypes.BUILD,args,true);
+        local targetsOK,targets=pcall(CityManager.GetOperationTargets,
+            city,CityOperationTypes.BUILD,
+            {[CityOperationTypes.PARAM_BUILDING_TYPE]=row.Hash});
+        local candidate={buildingType=kind,hash=row.Hash,index=row.Index,
+            prereqCivic=row.PrereqCivic or "",mustPurchase=row.MustPurchase==true,
+            internalOnly=row.InternalOnly==true,
+            requiresPlacement=row.RequiresPlacement==true,
+            listedCallOK=listedOK,listed=listedOK and listed or false,
+            listedError=not listedOK and tostring(listed) or "",
+            allowedCallOK=allowedOK,allowed=allowedOK and allowed or false,
+            allowedError=not allowedOK and tostring(allowed) or "",
+            allowedResults=CapacityProductionResults(allowedResults),
+            startCallOK=startOK,canStart=startOK and canStart or false,
+            startError=not startOK and tostring(canStart) or "",
+            startResults=CapacityProductionResults(startResults),
+            targetsCallOK=targetsOK,
+            targetsError=not targetsOK and tostring(targets) or "",
+            targets=CapacityProductionResults(targets)};
+        result.candidates[#result.candidates+1]=candidate;
+        allReadable=allReadable and listedOK and allowedOK and startOK and
+            type(listed)=="boolean" and type(allowed)=="boolean" and
+            type(canStart)=="boolean";
+        anyAllowed=anyAllowed or candidate.allowed;
+        anyCanStart=anyCanStart or candidate.canStart;
+    end
+    if allReadable then
+        result.status=anyAllowed and "NATIVE_QUEUE_AVAILABLE" or
+            anyCanStart and "NATIVE_BUILD_OPERATION_AVAILABLE_QUEUE_REFUSED" or
+            "NATIVE_QUEUE_REFUSED";
+    end
+    Log("CAPACITY_TIER1_PRODUCTION_DIAGNOSIS",result);
+    return result;
+end
+
 function B.RetryLivingSpy()
     local c=EnemyConfig();
     local retry=assert(CheckArchivedMission(c),"archived retry missing");
