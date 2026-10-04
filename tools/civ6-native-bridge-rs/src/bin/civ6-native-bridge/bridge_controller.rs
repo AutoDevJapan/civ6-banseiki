@@ -1222,7 +1222,7 @@ pub fn run() -> Result<(), String> {
                         "governors_this":format!("0x{:016x}",row.governors_this),
                         "governor_pointer":format!("0x{:016x}",row.governor_pointer),
                         "city_pointer":format!("0x{:016x}",row.city_pointer),
-                        "reason_pointer":format!("0x{:016x}",row.reason_pointer),
+                        "raw_r9":format!("0x{:016x}",row.raw_r9),
                         "player_address":format!("0x{:016x}",row.player_address),
                         "player_id":row.player_id,"governor_index":row.governor_index,
                         "city_a8":row.city_a8,"city_c0":row.city_c0,"city_c4":row.city_c4,"city_d8":row.city_d8,

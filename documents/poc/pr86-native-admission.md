@@ -6,7 +6,7 @@
 
 ### Aの実装と測定対象
 
-固定GameCore SHA-256は `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`。配置可否RVA `0x2DD880` のRCXはGovernors、RDXはGovernor **ポインター**、R8はCity **ポインター**、R9は理由出力ポインター候補である。`0x2DD8B9` がGovernor+4のIndexを、`0x2DD941` がGovernors+0x70のPlayerを使う。入口の最初の10 byteは `48 89 5c 24 08 48 89 6c 24 10` と一致を要求する。任命資格用の2引数gatewayは流用せず、専用の4引数gatewayを使う。
+固定GameCore SHA-256は `324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c`。配置可否RVA `0x2DD880` のRCXはGovernors、RDXはGovernor **ポインター**、R8はCity **ポインター**、R9は意味を確定していないraw引数である。公式Expansion2のGovernorAssignmentChooser.lua:179はCanAssignGovernorに第三引数trueを渡しており、R9を理由出力ポインターと断定しない。`0x2DD8B9` がGovernor+4のIndexを、`0x2DD941` がGovernors+0x70のPlayerを使う。入口の最初の10 byteは `48 89 5c 24 08 48 89 6c 24 10` と一致を要求する。任命資格用の2引数gatewayは流用せず、専用の4引数gatewayを使う。
 
 静的には公式UI `0xBA350` が `0xBA3DD` から `0x2DDB30` を呼び、後者の `0x2DDBAB` が `0x2DD880` へ末尾分岐する。観測するUIの戻り先は `0xBA3E2`。本体配置更新 `0x2DD340` は `0x2DD36D` でR9を0にし、`0x2DD370` から同じ検証へ呼び、戻り先 `0x2DD375` でALが偽なら `0x2DD6DB` へ進む。これは固定DLLの読取・逆アセンブルによる根拠であり、実手番やAIの通過を証明しない。`0x2DD880` はBOOL検証で、配置setterそのものではない。
 
@@ -34,7 +34,7 @@ D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-assign-calibrat
 2. 同期Gameplayの正本から、同じactor・人物・runtime Index・保存された費用、実Governor、base、必要なTITLE_1/TITLE_2、公式Spentと人物別の全支払の会計一致を確認してpaidを作る。予約残高、UI cache、EVOLVING/GOVERNORという文字列だけを全支払の証明にしない。未払い時は偉人と支払済みの実Governorを保持する。追加称号や完了stateを偽造しない。
 3. producerは任命資格とは独立してpaid falseを最初に公開し、manifest/owner/Index/世代の確定と閉鎖値のCore自然getterによる確認後、全支払の確定点で最後にtrueを公開する。死亡・取消・所有者変更・保存読込・実体欠落・会計不一致では最初に閉じる。1399/1447の初期化/reload、receiver切替、closed ACK、manifest競合の契約へ合流し、全22人のproducerを複製しない。
 4. consumerにはactor×Indexのpaid用128bit cellを追加し、同一Core receiver・session・入口で一度採番したticket・派生paidを一体でCAS更新する。manifest/owner/resetにも同じ世代照合を要求する。UI receiver・不正型・flags・欠損・旧世代・古いtrueの遅延復帰は閉鎖。資格consumerと同じ受信先切替/取消で両cellを閉じ、任命allow trueからpaid trueを導出しない。未確定の1447のatomic形式を別実装で固定しない。
-5. A実測後の共通CanAssign callbackは、その呼出し中にコピーしたowner/Indexで確定manifestを照合し、原関数を一度呼ぶ。人物ならpaidだけで原ALを制限し、偽を真にはしない。通常の非人物総督は原RAXを返す。manifest未初期化時は全人物を識別できるまで人物を閉じる設計を1447のmanifest契約と統合する。無効owner・不正型・旧世代・未払いは閉じ、引数ポインターは保持しない。R9理由出力の仕様はAで未証明のため書き換えない。
+5. A実測後の共通CanAssign callbackは、その呼出し中にコピーしたowner/Indexで確定manifestを照合し、原関数を一度呼ぶ。人物ならpaidだけで原ALを制限し、偽を真にはしない。通常の非人物総督は原RAXを返す。manifest未初期化時は全人物を識別できるまで人物を閉じる設計を1447のmanifest契約と統合する。無効owner・不正型・旧世代・未払いは閉じ、引数ポインターは保持しない。R9の意味はAで未証明のため書き換えず、記録名はraw_r9とする。
 6. controllerはCanEver/自然getter/CanAssignを同一Job・lease・sessionで管理し、paidを先に閉じて全入口を復元する。第二/第三設置失敗のatomic rollback、遅延callbackと取消の競合、各版のsnapshot読取、所有ゲーム終了を合成で検査する。mode 7は観測専用として維持し、製品のmode 6との接続はレビュー確定後の別deltaにする。
 7. 合成の拒否/許可/元一回/通常総督保持と、親の費用2・3の公式APPOINT→未払いUI/本体ASSIGN拒否→PROMOTE一個ずつ→実Spent/base/title照合→全額後の配置、保存読込・複数端末・AI実手番を必須にする。AIの公式PROMOTE選択・支払い経路は親の別工程で未完了のまま残す。
 

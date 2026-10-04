@@ -16,7 +16,7 @@ pub struct AssignRow {
     pub governors_this: AtomicU64,
     pub governor_pointer: AtomicU64,
     pub city_pointer: AtomicU64,
-    pub reason_pointer: AtomicU64,
+    pub raw_r9: AtomicU64,
     pub return_address: AtomicU64,
     pub player_address: AtomicU64,
     pub player_id: AtomicU32,
@@ -64,7 +64,7 @@ pub struct AssignCalibrationObservation {
     pub governors_this: u64,
     pub governor_pointer: u64,
     pub city_pointer: u64,
-    pub reason_pointer: u64,
+    pub raw_r9: u64,
     pub return_address: u64,
     pub player_address: u64,
     pub player_id: u32,
@@ -105,7 +105,7 @@ impl AssignCalibrationTrace {
                 governors_this: row.governors_this.load(Ordering::Relaxed),
                 governor_pointer: row.governor_pointer.load(Ordering::Relaxed),
                 city_pointer: row.city_pointer.load(Ordering::Relaxed),
-                reason_pointer: row.reason_pointer.load(Ordering::Relaxed),
+                raw_r9: row.raw_r9.load(Ordering::Relaxed),
                 return_address: row.return_address.load(Ordering::Relaxed),
                 player_address: row.player_address.load(Ordering::Relaxed),
                 player_id: row.player_id.load(Ordering::Relaxed),
@@ -136,7 +136,7 @@ unsafe extern "system" fn assign_calibration_begin(
     governors: u64,
     governor: u64,
     city: u64,
-    reason: u64,
+    raw_r9: u64,
     caller: u64,
 ) -> u64 {
     let Some(trace) = (unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() }) else {
@@ -159,7 +159,7 @@ unsafe extern "system" fn assign_calibration_begin(
     row.governors_this.store(governors, Ordering::Relaxed);
     row.governor_pointer.store(governor, Ordering::Relaxed);
     row.city_pointer.store(city, Ordering::Relaxed);
-    row.reason_pointer.store(reason, Ordering::Relaxed);
+    row.raw_r9.store(raw_r9, Ordering::Relaxed);
     row.return_address.store(caller, Ordering::Relaxed);
     row.player_id.store(u32::MAX, Ordering::Relaxed);
     row.governor_index.store(u32::MAX, Ordering::Relaxed);

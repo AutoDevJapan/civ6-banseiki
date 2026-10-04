@@ -215,7 +215,7 @@ mod platform {
                             "governors_this",
                             "governor_pointer",
                             "city_pointer",
-                            "reason_pointer",
+                            "raw_r9",
                             "player_address",
                             "original_rax",
                         ]
@@ -263,7 +263,7 @@ mod platform {
                             assign_ui.insert(pair);
                         }
                         if row["return_site_rva"] == 0x2dd375
-                            && row["reason_pointer"] == "0x0000000000000000"
+                            && row["raw_r9"] == "0x0000000000000000"
                         {
                             assign_update.insert(pair);
                         }
@@ -1312,7 +1312,7 @@ mod platform {
             let path = dir.path().join("assign.jsonl");
             let call = json!({"kind":"assign_calibration","sequence":1,"thread_id":11,"read_flags":7,
                 "governors_this":"0x0000000000001000","governor_pointer":"0x0000000000003000",
-                "city_pointer":"0x0000000000004000","reason_pointer":"0x0000000000000000",
+                "city_pointer":"0x0000000000004000","raw_r9":"0x0000000000000000",
                 "player_address":"0x0000000000002000","player_id":0,"governor_index":4,
                 "city_a8":19,"city_c0":17,"city_c4":29,"city_d8":0,"return_site_rva":0xba3e2,
                 "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1});
@@ -1354,7 +1354,7 @@ mod platform {
                 (4, "governor_pointer", json!("0x0000000000003008")),
                 (4, "read_flags", json!(3)),
                 (4, "city_a8", json!(20)),
-                (4, "reason_pointer", json!("0x0000000000007777")),
+                (4, "raw_r9", json!("0x0000000000007777")),
                 (4, "return_site_rva", json!(0x2dd370)),
                 (5, "dropped", json!(1)),
                 (5, "quiescence_proven", json!(true)),
