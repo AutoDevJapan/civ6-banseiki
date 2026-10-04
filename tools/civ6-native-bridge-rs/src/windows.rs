@@ -2821,6 +2821,64 @@ mod tests {
 
     static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
+    fn wait_for_synthetic_phase(
+        progress: &std::sync::mpsc::Receiver<(u32, u32)>,
+        expected_phase: u32,
+    ) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut observed = 0u32;
+        while observed != 0b1111 {
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                return false;
+            };
+            let Ok((owner, phase)) = progress.recv_timeout(remaining) else {
+                return false;
+            };
+            if owner >= 4 || phase != expected_phase || observed & (1 << owner) != 0 {
+                return false;
+            }
+            observed |= 1 << owner;
+        }
+        true
+    }
+
+    fn spawn_synthetic_callers(
+        phase: &Arc<AtomicU32>,
+        call: impl Fn(u32) + Send + Sync + 'static,
+    ) -> (
+        Vec<std::thread::JoinHandle<u32>>,
+        std::sync::mpsc::Receiver<(u32, u32)>,
+    ) {
+        let call = Arc::new(call);
+        let (send, progress) = std::sync::mpsc::channel();
+        let workers = (0..4)
+            .map(|owner| {
+                let phase = Arc::clone(phase);
+                let call = Arc::clone(&call);
+                let send = send.clone();
+                std::thread::spawn(move || {
+                    let mut last_phase = u32::MAX;
+                    let mut calls = 0;
+                    loop {
+                        let current = phase.load(Ordering::Acquire);
+                        if current == 3 {
+                            break;
+                        }
+                        call(owner);
+                        calls += 1;
+                        if current != last_phase {
+                            send.send((owner, current)).unwrap();
+                            last_phase = current;
+                        }
+                        std::thread::yield_now();
+                    }
+                    calls
+                })
+            })
+            .collect();
+        (workers, progress)
+    }
+
     #[test]
     fn property_gateway_has_win64_unwind_metadata() {
         let mut image_base = 0u64;
@@ -2988,29 +3046,21 @@ mod tests {
             )
         };
         assert!(!paused.is_null() && thread_id != 0);
-        let running = Arc::new(AtomicBool::new(true));
-        let workers = (0..4)
-            .map(|_| {
-                let running = Arc::clone(&running);
-                let address = target as usize;
-                std::thread::spawn(move || {
-                    let first: extern "system" fn(usize, u32) -> u32 =
-                        unsafe { std::mem::transmute(address) };
-                    let second: extern "system" fn(usize) -> u32 =
-                        unsafe { std::mem::transmute(address + PROPERTY_FIRST_LEN) };
-                    let mut calls = 0u32;
-                    while running.load(Ordering::Acquire) && calls < 100_000 {
-                        assert_eq!(first(argument, 0), expected);
-                        assert_eq!(second(argument), expected);
-                        calls += 1;
-                    }
-                    calls
-                })
-            })
-            .collect::<Vec<_>>();
-        std::thread::sleep(Duration::from_millis(5));
+        let phase = Arc::new(AtomicU32::new(0));
+        let address = target as usize;
+        let (workers, progress) = spawn_synthetic_callers(&phase, move |_| {
+            let first: extern "system" fn(usize, u32) -> u32 =
+                unsafe { std::mem::transmute(address) };
+            let second: extern "system" fn(usize) -> u32 =
+                unsafe { std::mem::transmute(address + PROPERTY_FIRST_LEN) };
+            assert_eq!(first(argument, 0), expected);
+            assert_eq!(second(argument), expected);
+        });
+        let before_hook = wait_for_synthetic_phase(&progress, 0);
         let mut trace = Box::new(PropertyTrace::default());
         unsafe { install_property_at(target, trace.as_mut(), PROPERTY_PROLOGUE) }.unwrap();
+        phase.store(1, Ordering::Release);
+        let during_hook = wait_for_synthetic_phase(&progress, 1);
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) }[2..],
             bytes[2..8]
@@ -3022,7 +3072,9 @@ mod tests {
         assert_eq!(exit_code, expected);
         assert_ne!(unsafe { CloseHandle(paused) }, 0);
         unsafe { uninstall() }.unwrap();
-        running.store(false, Ordering::Release);
+        phase.store(2, Ordering::Release);
+        let after_restore = wait_for_synthetic_phase(&progress, 2);
+        phase.store(3, Ordering::Release);
         assert!(workers.into_iter().map(|w| w.join().unwrap()).sum::<u32>() > 0);
         assert_eq!(
             unsafe { ptr::read(target.cast::<[u8; 8]>()) },
@@ -3033,6 +3085,12 @@ mod tests {
             0xe9
         );
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+        assert!(before_hook, "each caller must execute before installation");
+        assert!(
+            during_hook,
+            "each caller must execute while the hook is installed"
+        );
+        assert!(after_restore, "each caller must execute after restoration");
     }
 
     #[test]
@@ -3742,26 +3800,17 @@ mod tests {
         unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
         let mut trace = Box::new(SharedTrace::default());
         unsafe { install_at(target, trace.as_mut(), bytes[..8].try_into().unwrap()) }.unwrap();
-        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let callers = (0..4u32)
-            .map(|owner| {
-                let running = Arc::clone(&running);
-                let address = target as usize;
-                std::thread::spawn(move || {
-                    let f: extern "system" fn(usize, u32) -> u32 =
-                        unsafe { std::mem::transmute(address) };
-                    let mut calls = 0;
-                    while running.load(Ordering::Acquire) && calls < 1_000_000 {
-                        assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
-                        calls += 1;
-                    }
-                    calls
-                })
-            })
-            .collect::<Vec<_>>();
-        std::thread::sleep(Duration::from_millis(5));
+        let phase = Arc::new(AtomicU32::new(1));
+        let address = target as usize;
+        let (callers, progress) = spawn_synthetic_callers(&phase, move |owner| {
+            let f: extern "system" fn(usize, u32) -> u32 = unsafe { std::mem::transmute(address) };
+            assert_eq!(f(0x1000 + owner as usize, owner), 0x1000);
+        });
+        let during_hook = wait_for_synthetic_phase(&progress, 1);
         unsafe { uninstall() }.unwrap();
-        running.store(false, Ordering::Release);
+        phase.store(2, Ordering::Release);
+        let after_restore = wait_for_synthetic_phase(&progress, 2);
+        phase.store(3, Ordering::Release);
         assert!(
             callers
                 .into_iter()
@@ -3780,6 +3829,11 @@ mod tests {
             assert!(trace.complete_rows().is_err());
         }
         assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+        assert!(
+            during_hook,
+            "each caller must execute while the hook is installed"
+        );
+        assert!(after_restore, "each caller must execute after restoration");
     }
 
     #[test]
