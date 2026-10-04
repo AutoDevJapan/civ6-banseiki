@@ -711,6 +711,7 @@ fn persona_native_turn_observations_allow_the_15km_map_to_finish() {
         "leader-persona-native-slots-activation-15km.json",
         "leader-persona-native-slot-ai-only-15km.json",
         "leader-persona-static-gate-15km.json",
+        "leader-persona-trait-grant-native-control-15km.json",
     ] {
         let data = scenario(name);
         let turns: Vec<_> = steps(&data)
@@ -815,7 +816,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 83);
+    assert_eq!(count, 84);
 }
 
 #[test]

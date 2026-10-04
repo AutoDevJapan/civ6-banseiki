@@ -190,7 +190,7 @@
     },
     {
       "action": "end_turn",
-      "count": 1,
+      "turns": 1,
       "timeout": 240
     },
     {
@@ -205,7 +205,7 @@
     },
     {
       "action": "end_turn",
-      "count": 1,
+      "turns": 1,
       "timeout": 240
     },
     {

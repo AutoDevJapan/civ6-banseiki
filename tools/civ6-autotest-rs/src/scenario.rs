@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 16] = [
+pub const ACTIONS: [&str; 18] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -21,6 +21,8 @@ pub const ACTIONS: [&str; 16] = [
     "manual",
     "start_native_governor_trace",
     "stop_native_governor_trace",
+    "start_native_can_ever_trace",
+    "stop_native_can_ever_trace",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -91,6 +93,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::scenario("Scenario needs a nonempty steps array"))?;
     let mut trace_open = false;
+    let mut bridge_open = false;
     let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
@@ -120,9 +123,48 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 ));
             }
         }
+        if bridge_open
+            && matches!(
+                action,
+                "restart_game" | "start_game" | "exit_to_menu" | "load"
+            )
+        {
+            return Err(fail(
+                "stop native CanEver bridge before changing game lifecycle".into(),
+            ));
+        }
         match action {
+            "start_native_can_ever_trace" => {
+                if bridge_open || trace_open {
+                    return Err(fail("native observation already active".into()));
+                }
+                if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
+                    || !trace_names.insert(step["name"].as_str().unwrap().to_owned())
+                    || !step["max_seconds"].as_u64().is_some_and(|n| {
+                        (1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&n)
+                    })
+                    || step.as_object().unwrap().keys().any(|k| {
+                        !["action", "name", "max_seconds", "timeout"].contains(&k.as_str())
+                    })
+                {
+                    return Err(fail("invalid bounded native CanEver bridge start".into()));
+                }
+                bridge_open = true;
+            }
+            "stop_native_can_ever_trace" => {
+                if !bridge_open
+                    || step
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .any(|k| !["action", "timeout"].contains(&k.as_str()))
+                {
+                    return Err(fail("invalid native CanEver bridge stop".into()));
+                }
+                bridge_open = false;
+            }
             "start_native_governor_trace" => {
-                if trace_open {
+                if trace_open || bridge_open {
                     return Err(fail("native governor trace is already active".into()));
                 }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
@@ -178,7 +220,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 trace_open = false;
             }
             "restart_game" => {
-                if trace_open {
+                if trace_open || bridge_open {
                     return Err(fail(
                         "stop native governor trace before restarting Civ6".into(),
                     ));
@@ -400,7 +442,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             return Err(fail("timeout must be a finite positive number".into()));
         }
     }
-    if trace_open {
+    if trace_open || bridge_open {
         return Err(Error::scenario("native governor trace has no stop step"));
     }
     Ok(())
@@ -693,6 +735,44 @@ mod native_trace_tests {
             json!({"action":"start_native_governor_trace","name":"governor-before-join","max_seconds":1}),
             json!({"action":"stop_native_governor_trace"}), again,
             json!({"action":"stop_native_governor_trace"})
+        ])).is_err());
+    }
+
+    #[test]
+    fn native_bridge_is_separate_bounded_and_stopped_before_game_lifecycle_changes() {
+        let start =
+            json!({"action":"start_native_can_ever_trace","name":"can-ever","max_seconds":300});
+        let stop = json!({"action":"stop_native_can_ever_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"bridge contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![stop.clone()])).is_err());
+        for bad in [0, 301] {
+            let mut step = start.clone();
+            step["max_seconds"] = json!(bad);
+            assert!(validate_scenario(&scenario(vec![step, stop.clone()])).is_err());
+        }
+        let mut extra = start.clone();
+        extra["mode"] = json!("property");
+        assert!(validate_scenario(&scenario(vec![extra, stop.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"end_turn","turns":1,"timeout":600}),
+            stop.clone()
+        ]))
+        .is_ok());
+        for lifecycle in ["restart_game", "exit_to_menu", "load"] {
+            assert!(validate_scenario(&scenario(vec![
+                start.clone(),
+                json!({"action":lifecycle}),
+                stop.clone()
+            ]))
+            .is_err());
+        }
+        assert!(validate_scenario(&scenario(vec![
+            start,
+            json!({"action":"start_native_governor_trace","name":"conflict","max_seconds":20,"mode":"lifecycle"}),
+            stop
         ])).is_err());
     }
 }

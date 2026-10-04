@@ -163,3 +163,17 @@ leader-persona-trait-grant-native-control-15km.jsonは、正規Joinと費用予�
 b025c32の比較は再起動を含む17手順と6種類のログ判定に成功した。正規Joinと称号1個の予約後、実ターン1→2を進めてもUI資格は偽だった。対象本人の公式APPOINTを一度だけ要求し、実ターン2→3の完了後に同期Gameplayの称号会計とUIの実Governorを照合した。使用済み称号は0のまま、実Governorはなく、結果はNATIVE_REQUEST_REFUSEDだった。観測ターンが準備より2以上進み、現在のゲームターンと一致することも確認した。これで、この特性付与候補は実ターン更新と正式要求を通しても任命を開けないと実測した。効果handlerの不存在や、あらゆる本体接続の不可能性は断定しない。
 
 成果物はtools/civ6-autotest/artifacts/leaderperson-94。診断の成功を人物化の成功に数えない。次はRustで本体の共通資格判定へ接続する技術実証を行う。既存の読み取り専用観測ツールの契約は維持し、危険が再現したハードウェアブレークポイントは使わない。現在のGameCoreのABI・値寿命・同期を実測してから、加入と全額予約に結び付く本人だけを許可する。AIの費用2・3の公式昇進と未払い時の配置禁止は別の必須条件として残る。接続未完成の静的閉鎖版を製品合格にしない。
+
+## 実機94の拒否と独立native bridgeの最初の境界
+
+実機94は17手順と6ログ検査に合格したが、機能の成功ではない。正規Join・実Great Person・公式称号1の予約・`AttachModifierByID`の接続後、実ターンを1回進めても資格は偽だった。対象の公式`APPOINT_GOVERNOR`を一度送った後に、本体使用済み称号0・Governor不在・`CanEver=false`を同期GameplayとUIで読んだため、この操作は拒否と分類した。成果物は`leaderperson-94/result.json`と`steps.jsonl`である。`EFFECT_GRANT_TRAIT`候補を製品の22人へ展開しない。効果handlerの登録成否はこの記録だけでは確定せず、別の公式接続の全否定でもない。
+
+`tools/civ6-native-bridge-rs`は既存の読取専用debuggerとは別のRust DLLと、期限付きの専用controllerである。**現段階は受理を一切変えない。** 固定DX11実行ファイル、GameCoreのSHA-256、DLLファイルとメモリの関数先頭8バイト、実PID・作成FILETIME、標準`live_chain`のleaseを照合してから、対象RVA `0x2DDDD0`の先頭5バイトだけを同じ長さのjumpへ原子的に置く。元の5バイトを近傍trampolineに置き、入口ではRCX・EDX・戻り先だけを上限4096行の専用領域へ記録してから、元の処理へtail jumpする。Lua状態、Player propertyの値や未知のC++値型は読まない。停止時は元の8バイトを原子的に復元して照合する。DLLとtrampolineはゲーム終了まで保持する。ハードウェアbreakpoint、debug register、DRM、Steamファイル、kernel/driverは扱わない。
+
+Windows上の自分の合成関数では、先頭5バイトの差替え前後でRCX/EDX由来の戻り値が等しく、実呼出し元とIndexが記録され、4096件の上限超過が数えられ、復元後も元の関数が動いた。複数スレッドが同じ合成関数を呼ぶ間の原子的な復元も検査した。専用controllerは自分のテストプロセスへのDLL読込を検査し、bridge本体のinstallは実Civ6以外を拒否する。これらは実ゲームのABI・スレッド安全性を証明しない。Controllerは別の`start_native_can_ever_trace`/`stop_native_can_ever_trace` actionでのみ動き、最大300秒、無関係なプロセスメモリは読まない。
+
+レビュー後の修正では、300秒の上限をOS共通のcrate定数に移し、DLL入口でconfigとtraceの全領域・配置・アクセス権を`VirtualQuery`で検査する。gatewayの処理中件数を数え、復元後に最大2秒の静穏期間を取り、未完了slotまたは上限超過を正常なtraceとして受け取らない。JSONLの`snapshot_stable=true`は取得時点の安定した行集合を指し、全呼出し履歴の完全性は主張しない。停止スレッドが記録開始前に後からrelayへ入る可能性は残る。
+
+失敗時の保護は待機時間に依存しない。controllerは遠隔確保・DLL読込・入口変更より前に、照合済みの対象PIDだけを匿名の[Windows Job Object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)へ割り当てる。所属PIDが1件と確認できなければ遠隔変更せず失敗する。Jobには`KILL_ON_JOB_CLOSE`と子プロセスの`SILENT_BREAKAWAY_OK`を設定し、controllerの異常終了時も最後のJobハンドルが閉じると対象だけが終了する。remote call timeoutや復元失敗ではJobを終了・閉鎖し、保持した対象プロセスハンドルで終了を確認する。共有leaseに30秒の復旧枠を予約する。正常時だけ、install/uninstallの両遠隔スレッドの終了と元の入口8バイトの読戻し、記録の検査を経てからKill-on-closeを解除する。実機ABI・並行動作の安全性はこの合成試験で証明できない。
+
+親担当がsourceRootを組み込む際、`cargo build --locked --release --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --bin civ6-native-bridge --lib --target-dir tools/target`でDLLとcontrollerを作り、実行器の隣へ置く。固定テストは`tools/civ6-autotest/scenarios/leader-persona-bridge-original-15km.json`で、未加入の蘆名盛舜について人間0とAI1の公式UI判定を設置前と設置中に各1回読む。設置中も資格が元の偽を保つこと、入口・復元の成功と呼出し元RVAを確認する。実行は親の共有leaseで`D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-bridge-original-15km.json --stop-on-failure`の1回とする。正常完走後に `can-ever-original.jsonl` の `identity/install/entry/uninstall/stop`、Index、戻り先RVA、行数と欠落数を検査する。実機での資格真、AIの費用2・3の公式PROMOTE、GameCore property値のABI・寿命・同時実行安全性は未確認である。この確認を経る前に資格を真へ変えるhookは実装しない。
