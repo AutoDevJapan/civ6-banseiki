@@ -220,6 +220,56 @@ fn ordinary_city_transfer_requires_one_original_work_in_its_saved_slot() -> mlua
 }
 
 #[test]
+fn city_inheritance_waits_for_native_ui_cache_after_owner_mutation_without_replaying_it()
+-> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(
+        r#"
+        Players[1].units={}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+        GameInfo.JAC_AbsorptionOutcomes=function()
+          local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+            {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}}
+          local i=0;return function() i=i+1;return rows[i] end
+        end
+        local read=ExposedMembers.JAC_HeroReadAPI.ReadNativeWork
+        UI_BUSY=false;TRANSFER_CALLS=0
+        ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function(...)
+          assert(not UI_BUSY,'UI city cache is not ready')
+          return read(...)
+        end
+        local transfer=CityManager.TransferCity
+        CityManager.TransferCity=function(city,owner)
+          TRANSFER_CALLS=TRANSFER_CALLS+1
+          transfer(city,owner)
+          UI_BUSY=true
+        end
+        local plan={ID='native-cache-publication',From=1,To=2,Mode='MERGER',
+          EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT'}
+        local pending=A.Apply(plan)
+        assert(pending.Status=='WAITING_UI' and not pending.Error,
+          'transient native cache after city ownership was treated as permanent failure')
+        local calls=TRANSFER_CALLS
+        assert(calls>0 and CITIES[4]:GetOwner()==2)
+        assert(A.Resume(plan.ID).Status=='WAITING_UI' and TRANSFER_CALLS==calls,
+          'waiting for UI replayed an already journaled city ownership change')
+        Game.props=A.Rules.Copy(Game.props)
+        UI_BUSY=false
+        ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+        local completed=A.Resume(plan.ID)
+        assert(completed.Status=='COMPLETE' and TRANSFER_CALLS==2
+          and #A.NativeWorkLocations(900)==1 and A.NativeWorkLocations(900)[1].Owner==2,
+          'published cache failed to finish the original inheritance exactly once')
+        local roster=A.Canonical(A.GetRoster(2))
+        assert(A.Resume(plan.ID).Status=='COMPLETE' and TRANSFER_CALLS==2
+          and A.Canonical(A.GetRoster(2))==roster)
+        assert(A.Verify(plan.ID,true))
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn palace_work_uses_a_verified_deal_before_its_city_can_change_owner() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load(

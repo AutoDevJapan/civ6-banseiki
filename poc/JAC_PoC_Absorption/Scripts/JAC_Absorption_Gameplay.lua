@@ -2136,7 +2136,7 @@ local function AdvanceNativeCarrier(state, carrier)
   return true
 end
 
-local function NativeCarrierUIStale(err)
+local function NativeUIStale(err)
   local message = tostring(err)
   return message:find("UI city cache is not ready", 1, true)
     or message:find("native carrier city is not published", 1, true)
@@ -2231,7 +2231,7 @@ local function MoveNativeWorks(state, tx)
         end
         local ready, advanced = pcall(AdvanceNativeCarrier, state, snap.Carrier)
         if not ready then
-          if NativeCarrierUIStale(advanced) then
+          if NativeUIStale(advanced) then
             snap.Carrier.RefreshRequested = snap.Carrier.Phase == "PROVED"
             tx.AwaitingFinalUI = true
             Save(state)
@@ -2649,7 +2649,7 @@ function A.Resume(id)
   for name in pairs(tx.Adapters) do assert(adapters[name], "missing absorption adapter: " .. name) end
   local ok, result = pcall(Execute, state, tx)
   if not ok then
-    if tostring(result) == "JAC_ABSORPTION_WAITING_UI" then
+    if tostring(result) == "JAC_ABSORPTION_WAITING_UI" or NativeUIStale(result) then
       tx.Status, tx.Error = "WAITING_UI", nil
       Save(state)
       return R.Copy(tx)
@@ -2877,7 +2877,7 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
     Save(state)
   end
   local ready, advanced = pcall(AdvanceNativeCarrier, state, intent.NativeCarrier)
-  if not ready and NativeCarrierUIStale(advanced) then
+  if not ready and NativeUIStale(advanced) then
     intent.NativeCarrier.RefreshRequested = intent.NativeCarrier.Phase == "PROVED"
     advanced = false
   elseif not ready then error(advanced) end
