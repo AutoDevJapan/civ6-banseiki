@@ -8,6 +8,7 @@ LOGS, REQUESTS, UNIT_REQUESTS, OFF_MAP={}, {}, {}, {}
 function print(...) local a={...}; LOGS[#LOGS+1]=table.concat(a,' ') end
 function include() end
 function event() local e={}; e.Add=function(f) e[#e+1]=f end; return e end
+LuaEvents={DiploPopup_DealUpdated=event()}
 Events,GameEvents={},{}
 for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted',
  'CityProductionQueueChanged','UnitOperationStarted','DiplomacyIncomingDeal'}) do Events[k]=event() end
