@@ -449,6 +449,37 @@ fn fixture_center_guard_moves_without_changing_owner_or_native_state() -> mlua::
 }
 
 #[test]
+fn kept_human_recovery_land_is_a_safe_guard_destination_while_transfer_land_stays_excluded()
+-> mlua::Result<()> {
+    let lua = model("artifact", "artifact")?;
+    lua.load(
+        r#"
+        CityManager.TransferCity(CITIES[4],2)
+        CityManager.TransferCity(CITIES[16],2)
+        for index,q in pairs(PLOTS) do
+          if index~=4 and index~=5 and index~=10 and index~=11 and index~=16 and index~=17 then q.owner=0 end
+        end
+        local H=ExposedMembers.JAC_TypeChecks
+        local unit=Players[2].units[500];unit.x=4
+        local original=H.Unit(unit)
+        local centers={{X=4,Y=0,Role='Source'},{X=16,Y=0,Role='Free'},
+          {X=2,Y=0,Role='Third'},{X=10,Y=0,Role='Human'}}
+        local moved=H.ClearCenters(centers)
+        assert(#moved==1 and moved[1].Owner==2 and moved[1].ID==500 and moved[1].X==11,
+          'human recovery purchased land was incorrectly forbidden')
+        original.X=11
+        assert(JAC_AbsorptionGameplay.Rules.Equal(moved[1],original))
+        H.Guards(moved)
+        unit.x=4;PLOTS[11].owner=0
+        local accepted,why=pcall(H.ClearCenters,centers)
+        assert(not accepted and tostring(why):find('candidates=0',1,true),
+          'changing source/Free/Third land was admitted without a safe kept-human plot')
+        assert(unit:GetOwner()==2 and unit:GetID()==500 and unit:GetX()==4 and unit:GetDamage()==7 and unit:GetMovesRemaining()==1)
+        "#,
+    ).exec()
+}
+
+#[test]
 fn all_type_templates_pass_native_validation_and_lua51_compilation() {
     for name in NAMES {
         let output = Command::new(env!("CARGO_BIN_EXE_civ6-autotest-native"))
