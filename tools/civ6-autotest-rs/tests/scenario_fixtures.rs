@@ -256,7 +256,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         }
         assert_eq!(
             steps.iter().filter(|s| action(s, "end_turn")).count(),
-            usize::from(suffix.ends_with("tick")),
+            usize::from(suffix.ends_with("tick") || suffix == "retry-capacity-civic"),
             "{name}"
         );
     }
@@ -329,6 +329,25 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     assert!(outcome < save);
     let civic = scenario("leader-persona-spy-neutralization-retry-capacity-civic.json");
     let civic_steps = steps(&civic);
+    let civic_turn = civic_steps
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    let civic_resume = civic_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step)
+                    .is_some_and(|code| code.contains("Queue('RESUME_CAPACITY_CIVIC_READ')"))
+        })
+        .unwrap();
+    assert!(civic_turn < civic_resume);
+    assert_eq!(civic_steps[civic_turn]["turns"], 1);
+    assert!(civic_steps[civic_turn]["timeout"].as_u64().unwrap() >= 240);
+    assert!(civic["test_mode"].is_null());
+    assert!(civic_steps
+        .iter()
+        .all(|step| !action(step, "autoplay") && step["fast_forward"] != true));
     let civic_verified = civic_steps
         .iter()
         .position(|step| {
@@ -339,6 +358,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 })
         })
         .unwrap();
+    assert!(civic_resume < civic_verified);
     assert!(
         civic_verified
             < civic_steps
