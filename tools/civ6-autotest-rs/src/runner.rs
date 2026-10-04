@@ -444,13 +444,19 @@ impl Backend for SystemBackend {
             output,
             name,
             seconds,
-            Box::new(crate::restart::terminate_civ_process),
+            Box::new(crate::native_bridge::close_pinned_game),
         )?);
         Ok(())
     }
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
-        match self.native_bridge.take() {
-            Some(mut bridge) => bridge.stop().map(Some),
+        match self.native_bridge.as_mut() {
+            Some(bridge) => {
+                let result = bridge.stop().map(Some);
+                if result.is_ok() {
+                    self.native_bridge = None;
+                }
+                result
+            }
             None => Ok(None),
         }
     }

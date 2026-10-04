@@ -12,8 +12,9 @@ use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 use windows_sys::Win32::System::Memory::{
-    VirtualAlloc, VirtualFree, VirtualProtect, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE,
-    PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
+    VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT,
+    MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY,
+    PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetProcessTimes,
@@ -21,7 +22,7 @@ use windows_sys::Win32::System::Threading::{
 
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
-const TRACE_VERSION: u32 = 1;
+const TRACE_VERSION: u32 = 2;
 const CODE_PAGE: usize = 4096;
 const RELAY_OFFSET: usize = 0;
 const TRAMPOLINE_OFFSET: usize = 32;
@@ -34,7 +35,7 @@ const PINNED_CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 pub const GAME_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const CONFIG_VERSION: u32 = 1;
-pub const MAX_ACTIVE_SECONDS: u32 = 300;
+use crate::MAX_ACTIVE_SECONDS;
 
 /// Passed only by the bounded controller into its own remote allocation.
 #[repr(C)]
@@ -92,6 +93,8 @@ pub struct SharedTrace {
     pub version: u32,
     pub next: AtomicU32,
     pub dropped: AtomicU32,
+    pub in_flight: AtomicU32,
+    pub reserved: u32,
     pub rows: [TraceRow; TRACE_CAPACITY],
 }
 
@@ -102,6 +105,8 @@ impl Default for SharedTrace {
             version: TRACE_VERSION,
             next: AtomicU32::new(0),
             dropped: AtomicU32::new(0),
+            in_flight: AtomicU32::new(0),
+            reserved: 0,
             rows: std::array::from_fn(|_| TraceRow::default()),
         }
     }
@@ -116,6 +121,24 @@ pub struct BridgeTrace {
 }
 
 impl SharedTrace {
+    pub fn complete_rows(&self) -> Result<Vec<BridgeTrace>, &'static str> {
+        if self.in_flight.load(Ordering::Acquire) != 0 {
+            return Err("gateway calls remain in flight");
+        }
+        if self.dropped.load(Ordering::Acquire) != 0 {
+            return Err("gateway trace capacity exceeded");
+        }
+        let next = self.next.load(Ordering::Acquire);
+        if next as usize > TRACE_CAPACITY {
+            return Err("gateway trace sequence exceeded capacity");
+        }
+        let rows = self.rows();
+        if rows.len() != next as usize {
+            return Err("gateway trace contains an unfinished slot");
+        }
+        Ok(rows)
+    }
+
     pub fn rows(&self) -> Vec<BridgeTrace> {
         let end = self.next.load(Ordering::Acquire).min(TRACE_CAPACITY as u32);
         (0..end)
@@ -146,12 +169,13 @@ global_asm!(
     "mov r10, qword ptr [rip + BRIDGE_TRACE_PTR]",
     "test r10, r10",
     "jz 2f",
+    "lock inc dword ptr [r10 + 16]",
     "mov eax, 1",
     "lock xadd dword ptr [r10 + 8], eax",
     "cmp eax, 4096",
     "jae 1f",
     "imul rax, rax, 24",
-    "lea r11, [r10 + rax + 16]",
+    "lea r11, [r10 + rax + 24]",
     "mov dword ptr [r11 + 4], edx",
     "mov qword ptr [r11 + 8], rcx",
     "mov rax, qword ptr [rsp + 32]",
@@ -162,6 +186,10 @@ global_asm!(
     "1:",
     "lock inc dword ptr [r10 + 12]",
     "2:",
+    "test r10, r10",
+    "jz 3f",
+    "lock dec dword ptr [r10 + 16]",
+    "3:",
     "pop r11",
     "pop r10",
     "pop rax",
@@ -395,6 +423,57 @@ fn current_created_filetime() -> Option<u64> {
     Some((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
 }
 
+fn committed_range(address: usize, bytes: usize, alignment: usize, writable: bool) -> bool {
+    if address == 0 || bytes == 0 || !address.is_multiple_of(alignment) {
+        return false;
+    }
+    let Some(end) = address.checked_add(bytes) else {
+        return false;
+    };
+    let mut cursor = address;
+    while cursor < end {
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe {
+            VirtualQuery(
+                cursor as *const c_void,
+                &mut info,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        } != std::mem::size_of::<MEMORY_BASIC_INFORMATION>()
+            || info.State != MEM_COMMIT
+            || info.Protect & (PAGE_GUARD | PAGE_NOACCESS) != 0
+        {
+            return false;
+        }
+        let access = info.Protect & 0xff;
+        let permitted = if writable {
+            matches!(
+                access,
+                PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY
+            )
+        } else {
+            matches!(
+                access,
+                PAGE_READONLY
+                    | PAGE_READWRITE
+                    | PAGE_WRITECOPY
+                    | PAGE_EXECUTE_READ
+                    | PAGE_EXECUTE_READWRITE
+                    | PAGE_EXECUTE_WRITECOPY
+            )
+        };
+        let base = info.BaseAddress as usize;
+        let Some(region_end) = base.checked_add(info.RegionSize) else {
+            return false;
+        };
+        if !permitted || cursor < base || region_end <= cursor {
+            return false;
+        }
+        cursor = region_end.min(end);
+    }
+    true
+}
+
 fn pinned_gamecore(path: &Path) -> Option<[u8; 8]> {
     let mut file = File::open(path).ok()?;
     let mut hash = Sha256::new();
@@ -425,6 +504,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.trace_address == 0
         || config.trace_size as usize != std::mem::size_of::<SharedTrace>()
         || config.reserved != 0
+        || !committed_range(
+            config.trace_address as usize,
+            std::mem::size_of::<SharedTrace>(),
+            std::mem::align_of::<SharedTrace>(),
+            true,
+        )
     {
         return BridgeStatus::InvalidInput;
     }
@@ -461,7 +546,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
 /// Merely loading the DLL has no side effects on the game.
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeInstall(config: *mut c_void) -> u32 {
-    if config.is_null() {
+    if !committed_range(
+        config as usize,
+        std::mem::size_of::<BridgeConfig>(),
+        std::mem::align_of::<BridgeConfig>(),
+        false,
+    ) {
         return BridgeStatus::InvalidInput as u32;
     }
     std::panic::catch_unwind(|| {
@@ -495,7 +585,7 @@ mod tests {
     fn gateway_preserves_original_result_and_captures_actual_call_arguments() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         assert_eq!(std::mem::size_of::<TraceRow>(), 24);
-        assert_eq!(std::mem::offset_of!(SharedTrace, rows), 16);
+        assert_eq!(std::mem::offset_of!(SharedTrace, rows), 24);
         let target = unsafe {
             VirtualAlloc(
                 null_mut(),
@@ -532,7 +622,9 @@ mod tests {
         }
         assert_eq!(trace.rows().len(), TRACE_CAPACITY);
         assert_eq!(trace.dropped.load(Ordering::Acquire), 4);
+        assert!(trace.complete_rows().is_err());
         unsafe { uninstall() }.unwrap();
+        assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
         assert_eq!(f(0x9999, 99), 0x9999 ^ 99);
         assert_eq!(trace.rows().len(), TRACE_CAPACITY);
         assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
@@ -586,6 +678,15 @@ mod tests {
                 > 0
         );
         assert!(trace.next.load(Ordering::Acquire) > 0);
+        assert_eq!(trace.in_flight.load(Ordering::Acquire), 0);
+        if trace.dropped.load(Ordering::Acquire) == 0 {
+            assert_eq!(
+                trace.complete_rows().unwrap().len(),
+                trace.next.load(Ordering::Acquire) as usize
+            );
+        } else {
+            assert!(trace.complete_rows().is_err());
+        }
         assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
     }
 
@@ -608,7 +709,78 @@ mod tests {
         bad.trace_address = 1;
         assert_eq!(
             BridgeInstall((&mut bad as *mut BridgeConfig).cast()),
-            BridgeStatus::ProcessIdentity as u32
+            BridgeStatus::InvalidInput as u32
         );
+    }
+
+    #[test]
+    fn install_rejects_bad_config_and_trace_ranges_before_dereference() {
+        assert_eq!(
+            BridgeInstall(1usize as *mut c_void),
+            BridgeStatus::InvalidInput as u32
+        );
+        assert_eq!(
+            BridgeInstall(usize::MAX as *mut c_void),
+            BridgeStatus::InvalidInput as u32
+        );
+        let mut config = BridgeConfig::new(1, 1, 1);
+        assert_eq!(
+            BridgeInstall((&mut config as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_READWRITE,
+            )
+        };
+        assert!(!page.is_null());
+        config.trace_address = page as u64;
+        assert!(!committed_range(
+            page as usize,
+            std::mem::size_of::<SharedTrace>(),
+            std::mem::align_of::<SharedTrace>(),
+            true
+        ));
+        assert_eq!(
+            BridgeInstall((&mut config as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        let mut previous = 0u32;
+        assert_ne!(
+            unsafe { VirtualProtect(page, CODE_PAGE, PAGE_READONLY, &mut previous) },
+            0
+        );
+        assert!(!committed_range(
+            page as usize,
+            CODE_PAGE,
+            std::mem::align_of::<SharedTrace>(),
+            true
+        ));
+        assert!(committed_range(
+            page as usize,
+            CODE_PAGE,
+            std::mem::align_of::<BridgeConfig>(),
+            false
+        ));
+        assert_ne!(unsafe { VirtualFree(page, 0, MEM_RELEASE) }, 0);
+        let misaligned = ((&config as *const BridgeConfig as usize) + 1) as *mut c_void;
+        assert_eq!(BridgeInstall(misaligned), BridgeStatus::InvalidInput as u32);
+    }
+
+    #[test]
+    fn complete_trace_refuses_unfinished_slots_and_inflight_calls() {
+        let trace = SharedTrace::default();
+        trace.next.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.rows[0].sequence.store(1, Ordering::Release);
+        assert_eq!(trace.complete_rows().unwrap().len(), 1);
+        trace.in_flight.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
+        trace.in_flight.store(0, Ordering::Release);
+        trace.dropped.store(1, Ordering::Release);
+        assert!(trace.complete_rows().is_err());
     }
 }

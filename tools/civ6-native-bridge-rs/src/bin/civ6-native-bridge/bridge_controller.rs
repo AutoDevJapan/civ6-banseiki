@@ -30,9 +30,9 @@ use windows_sys::Win32::System::LibraryLoader::{
 use windows_sys::Win32::System::Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
 use windows_sys::Win32::System::Threading::{
     CreateRemoteThread, GetCurrentProcessId, GetExitCodeThread, GetProcessTimes, OpenProcess,
-    QueryFullProcessImageNameW, WaitForSingleObject, PROCESS_CREATE_THREAD,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_VM_OPERATION, PROCESS_VM_READ,
-    PROCESS_VM_WRITE,
+    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject, PROCESS_CREATE_THREAD,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
 };
 
 const LOCK: &str = "D:/CC/Tools/civ6-live/civ6.lock";
@@ -265,6 +265,25 @@ fn pinned_target(pid: u32, game: &Handle) -> Result<usize, String> {
     Ok(module.base + PINNED_CAN_EVER_RVA)
 }
 
+fn close_pinned_game(pid: u32, created: u64, game: &Handle) -> Result<(), String> {
+    if !alive(game) {
+        return Ok(());
+    }
+    if process_created(game)? != created {
+        return Err("pinned game creation FILETIME changed before close".into());
+    }
+    // Recheck executable, loaded module path, hash and image bounds on the
+    // already-opened exact process handle. No peer PID is considered.
+    let _ = pinned_target(pid, game)?;
+    if unsafe { TerminateProcess(game.0, 1) } == 0 && alive(game) {
+        return Err("pinned game TerminateProcess failed".into());
+    }
+    if unsafe { WaitForSingleObject(game.0, 10_000) } != WAIT_OBJECT_0 {
+        return Err("pinned game exit was not confirmed".into());
+    }
+    Ok(())
+}
+
 fn read_remote(game: &Handle, address: usize, output: &mut [u8]) -> Result<(), String> {
     let mut read = 0usize;
     if unsafe {
@@ -419,6 +438,47 @@ fn write_json(writer: &mut BufWriter<File>, value: Value) -> Result<(), String> 
     writer.flush().map_err(|e| e.to_string())
 }
 
+fn read_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, String> {
+    let mut snapshot = Box::new(SharedTrace::default());
+    let bytes = unsafe {
+        std::slice::from_raw_parts_mut(
+            (&mut *snapshot as *mut SharedTrace).cast::<u8>(),
+            size_of::<SharedTrace>(),
+        )
+    };
+    read_remote(game, address, bytes)?;
+    if snapshot.magic != 0x4a41_4342 || snapshot.version != 2 {
+        return Err("bridge trace version differs".into());
+    }
+    Ok(snapshot)
+}
+
+fn drained_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, String> {
+    // Restoration stops new entry jumps. Existing gateway calls may still be
+    // writing their reserved slots. Require a bounded quiet interval.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut stable = 0u32;
+    let mut prior = None;
+    while Instant::now() < deadline {
+        let snapshot = read_trace(game, address)?;
+        let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        let in_flight = snapshot
+            .in_flight
+            .load(std::sync::atomic::Ordering::Acquire);
+        if in_flight == 0 && prior == Some(next) && snapshot.complete_rows().is_ok() {
+            stable += 1;
+            if stable >= 3 {
+                return Ok(snapshot);
+            }
+        } else {
+            stable = 0;
+        }
+        prior = Some(next);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("gateway trace did not drain or contains dropped/unfinished rows".into())
+}
+
 pub fn run() -> Result<(), String> {
     let parsed = args(&std::env::args().skip(1).collect::<Vec<_>>())?;
     let chain_pid = std::env::var("CIV6_LIVE_CHAIN_PID")
@@ -454,7 +514,8 @@ pub fn run() -> Result<(), String> {
             | PROCESS_CREATE_THREAD
             | PROCESS_VM_OPERATION
             | PROCESS_VM_WRITE
-            | PROCESS_VM_READ,
+            | PROCESS_VM_READ
+            | PROCESS_TERMINATE,
     )?;
     if !alive(&game) || process_created(&game)? != parsed.created {
         return Err("pinned game identity differs".into());
@@ -498,100 +559,113 @@ pub fn run() -> Result<(), String> {
     };
     let config_remote = remote_alloc(&game, config_bytes.len())?;
     write_remote(&game, config_remote, config_bytes)?;
-    let install_status = remote_call(
-        &game,
-        bridge.base + install_rva,
-        config_remote,
-        "BridgeInstall",
-    )?;
-    write_json(
-        &mut writer,
-        json!({"kind":"install","status":install_status}),
-    )?;
-    if install_status != BridgeStatus::Ok as u32 {
-        return Err(
-            "bridge installation refused; a critical status requires closing the pinned game"
-                .into(),
-        );
-    }
-    println!("READY pid={} max_seconds={}", parsed.pid, parsed.duration);
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
-    let (sender, receiver) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut line = String::new();
-        let result = std::io::stdin().lock().read_line(&mut line);
-        let _ = sender.send(result.map(|_| line));
-    });
-    let deadline = Instant::now() + Duration::from_secs(u64::from(parsed.duration));
-    let mut control_error = None;
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            break;
-        }
-        match receiver.recv_timeout(remaining.min(Duration::from_secs(1))) {
-            Ok(Ok(line)) if line.trim() == "stop" => break,
-            Ok(_) => {
-                control_error = Some("bridge stop pipe closed or invalid".to_string());
-                break;
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                control_error = Some("bridge stop pipe disconnected".to_string());
-                break;
-            }
-        }
-        if verify_lease(chain_pid, &chain, 0).is_err()
-            || !alive(&game)
-            || process_created(&game) != Ok(parsed.created)
-        {
-            control_error = Some("bridge lost its pinned game or live_chain lease".into());
-            break;
-        }
-    }
-    let uninstall_status = remote_call(&game, bridge.base + uninstall_rva, 0, "BridgeUninstall")?;
-    write_json(
-        &mut writer,
-        json!({"kind":"uninstall","status":uninstall_status}),
-    )?;
-    if uninstall_status != BridgeStatus::Ok as u32 {
-        return Err("bridge entry was not restored; close the pinned game".into());
-    }
-    let mut snapshot = Box::new(SharedTrace::default());
-    let snapshot_bytes = unsafe {
-        std::slice::from_raw_parts_mut(
-            (&mut *snapshot as *mut SharedTrace).cast::<u8>(),
-            size_of::<SharedTrace>(),
-        )
-    };
-    read_remote(&game, trace_remote, snapshot_bytes)?;
-    if snapshot.magic != 0x4a41_4342 || snapshot.version != 1 {
-        return Err("bridge trace version differs".into());
-    }
-    let gamecore_size = modules(parsed.pid)?
-        .into_iter()
-        .find(|m| same_path(&m.path, Path::new(GAMECORE)))
-        .ok_or("GameCore unloaded before trace collection")?
-        .size;
-    for row in snapshot.rows() {
-        let return_rva = (row.return_address as usize)
-            .checked_sub(target - PINNED_CAN_EVER_RVA)
-            .filter(|rva| *rva < gamecore_size);
+    // From this point a timeout may mean the remote install ran. Every error
+    // closes this exact game before the controller returns.
+    let outcome = (|| -> Result<(), String> {
+        let install_status = remote_call(
+            &game,
+            bridge.base + install_rva,
+            config_remote,
+            "BridgeInstall",
+        )?;
         write_json(
             &mut writer,
-            json!({"kind":"entry","sequence":row.sequence,"governor_index":row.governor_index,
+            json!({"kind":"install","status":install_status}),
+        )?;
+        if install_status != BridgeStatus::Ok as u32 {
+            return Err(
+                "bridge installation refused; a critical status requires closing the pinned game"
+                    .into(),
+            );
+        }
+        println!("READY pid={} max_seconds={}", parsed.pid, parsed.duration);
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            let result = std::io::stdin().lock().read_line(&mut line);
+            let _ = sender.send(result.map(|_| line));
+        });
+        let deadline = Instant::now() + Duration::from_secs(u64::from(parsed.duration));
+        let mut control_error = None;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match receiver.recv_timeout(remaining.min(Duration::from_secs(1))) {
+                Ok(Ok(line)) if line.trim() == "stop" => break,
+                Ok(_) => {
+                    control_error = Some("bridge stop pipe closed or invalid".to_string());
+                    break;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    control_error = Some("bridge stop pipe disconnected".to_string());
+                    break;
+                }
+            }
+            if verify_lease(chain_pid, &chain, 0).is_err()
+                || !alive(&game)
+                || process_created(&game) != Ok(parsed.created)
+            {
+                control_error = Some("bridge lost its pinned game or live_chain lease".into());
+                break;
+            }
+        }
+        let uninstall_status =
+            remote_call(&game, bridge.base + uninstall_rva, 0, "BridgeUninstall")?;
+        write_json(
+            &mut writer,
+            json!({"kind":"uninstall","status":uninstall_status}),
+        )?;
+        if uninstall_status != BridgeStatus::Ok as u32 {
+            return Err("bridge entry was not restored; close the pinned game".into());
+        }
+        let snapshot = drained_trace(&game, trace_remote)?;
+        let rows = snapshot.complete_rows().map_err(str::to_string)?;
+        let gamecore_size = modules(parsed.pid)?
+            .into_iter()
+            .find(|m| same_path(&m.path, Path::new(GAMECORE)))
+            .ok_or("GameCore unloaded before trace collection")?
+            .size;
+        for row in &rows {
+            let return_rva = (row.return_address as usize)
+                .checked_sub(target - PINNED_CAN_EVER_RVA)
+                .filter(|rva| *rva < gamecore_size);
+            write_json(
+                &mut writer,
+                json!({"kind":"entry","sequence":row.sequence,"governor_index":row.governor_index,
                 "governors_this":format!("0x{:x}",row.governors_this),
                 "return_site_rva":return_rva}),
-        )?;
-    }
-    write_json(
-        &mut writer,
-        json!({"kind":"stop","rows":snapshot.rows().len(),
+            )?;
+        }
+        write_json(
+            &mut writer,
+            json!({"kind":"stop","rows":rows.len(),
             "dropped":snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
+            "in_flight":snapshot.in_flight.load(std::sync::atomic::Ordering::Acquire),
+            "trace_complete":true,
             "result":if control_error.is_none() {"ok"} else {"error"}}),
-    )?;
-    if let Some(error) = control_error {
-        return Err(error);
+        )?;
+        if let Some(error) = control_error {
+            return Err(error);
+        }
+        Ok(())
+    })();
+    if let Err(error) = outcome {
+        return match close_pinned_game(parsed.pid, parsed.created, &game) {
+            Ok(()) => Err(format!("{error}; pinned game exit confirmed")),
+            Err(close) => {
+                // Keep the controller and its pinned handle alive while the
+                // runner/live_chain performs its own target-only close. This
+                // finite window is a failure path, never a successful trace.
+                let exited = unsafe { WaitForSingleObject(game.0, 30_000) } == WAIT_OBJECT_0;
+                Err(format!(
+                    "{error}; CRITICAL pinned game closure failed: {close}; external exit confirmed={exited}"
+                ))
+            }
+        };
     }
     Ok(())
 }
@@ -599,6 +673,27 @@ pub fn run() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn drain_waits_for_a_published_slot_in_an_owned_process() {
+        let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
+        let trace = Box::new(SharedTrace::default());
+        let address = (&*trace as *const SharedTrace) as usize;
+        trace.next.store(1, Ordering::Release);
+        trace.in_flight.store(1, Ordering::Release);
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            trace.rows[0].governor_index.store(42, Ordering::Release);
+            trace.rows[0].sequence.store(1, Ordering::Release);
+            trace.in_flight.store(0, Ordering::Release);
+            trace
+        });
+        let snapshot = drained_trace(&process, address).unwrap();
+        assert_eq!(snapshot.complete_rows().unwrap()[0].governor_index, 42);
+        writer.join().unwrap();
+    }
+
     #[test]
     fn bounded_arguments_reject_unpinned_or_overlong_runs_before_process_access() {
         let base = [
