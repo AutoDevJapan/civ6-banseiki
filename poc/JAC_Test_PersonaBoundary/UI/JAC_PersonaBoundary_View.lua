@@ -515,8 +515,15 @@ function B.EnemyRetryDiagnosis()
     if emptyRosterObservation and emptyRosterObservation.key~=observationKey then
         emptyRosterObservation=nil;
     end
-    assert(#roster.map<=1 and #roster.activeOffMap<=1 and #roster.captured<=1 and
-        occupied<=2,"retry requires an unambiguous original operative roster");
+    assert(#roster.map<=1 and #roster.activeOffMap<=1 and #roster.captured<=1,
+        "retry requires an unambiguous original operative roster");
+    -- The only legitimate two-operative intake is the original captive plus
+    -- the distinct map unit added after the official Intelligence Agency BUILD.
+    -- All uncaptured routes still describe exactly one original operative.
+    if #roster.captured==0 then
+        assert(occupied<=1 and #roster.offMap==#roster.activeOffMap,
+            "retry requires an unambiguous original operative roster");
+    end
     local result={spyID=reference.id,eventID=event.id,eventTurn=event.turn,
         mission=mission,roster=roster,capacity=capacity,occupied=occupied,
         spent=s.titles.spent,total=s.titles.total,governorType=s.native.type};
@@ -562,13 +569,18 @@ function B.EnemyRetryDiagnosis()
             result.currentID=unit.id;
             result.binding={source=building.BuildingType,cityID=city:GetID(),
                 buildingIndex=building.Index,token=latest.token,turn=latest.turn};
-        elseif occupied>=capacity then
-            result.mode="UNAVAILABLE_CAPACITY";
-            result.next="native captive exchange or capacity increase, then reread roster";
         else
-            result.mode="PRODUCE";
+            assert(occupied==1,"retry requires an unambiguous original operative roster");
+            if occupied>=capacity then
+                result.mode="UNAVAILABLE_CAPACITY";
+                result.next="native captive exchange or capacity increase, then reread roster";
+            else
+                result.mode="PRODUCE";
+            end
         end
     elseif #roster.map==1 then
+        assert(#roster.activeOffMap==0 and occupied==1,
+            "retry requires an unambiguous original operative roster");
         local unit=roster.map[1];
         assert(unit.owner==c.attacker and
             unit.unitType==GameInfo.Units["UNIT_SPY"].Index and
@@ -576,6 +588,8 @@ function B.EnemyRetryDiagnosis()
             "living map spy does not match the original operative");
         result.mode="MAP"; result.outcome="LIVING_MAP"; result.currentID=unit.id;
     elseif #roster.activeOffMap==1 then
+        assert(#roster.map==0 and occupied==1,
+            "retry requires an unambiguous original operative roster");
         local unit=roster.activeOffMap[1];
         assert((unit.name==travel.name or
             (unit.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
@@ -586,6 +600,7 @@ function B.EnemyRetryDiagnosis()
         result.returnName=unit.name; result.returnLevel=unit.level;
         result.returnTurn=unit.returnTurn; result.returnX=unit.x; result.returnY=unit.y;
     else
+        assert(occupied==0,"retry requires an unambiguous original operative roster");
         assert(not s.spy.present,"spy reference is still present despite an empty map roster");
         -- Arrival may temporarily expose neither a map unit nor an off-map
         -- record. Require 60 seconds continuously empty in this UI load and
@@ -1795,9 +1810,9 @@ function B.RetryLivingSpy()
     end
     if #roster.activeOffMap==1 and #roster.map==0 then
         local record=roster.activeOffMap[1];
-        if retry.mode=="CAPACITY_MAP" then
+        if retry.mode=="MAP" or retry.mode=="CAPACITY_MAP" then
             local travel=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
-                "accepted second-spy travel receipt missing");
+                "accepted retry spy travel receipt missing");
             assert(travel.oldID==retry.spyID and
                 (record.name==travel.name or
                  (record.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
@@ -1814,7 +1829,11 @@ function B.RetryLivingSpy()
             "native return record changed or belongs to another spy");
         return "OFF_MAP_RETURN";
     end
-    if #roster.map==0 and #roster.activeOffMap==0 then return "ARRIVAL_UNOBSERVED"; end
+    if #roster.map==0 and #roster.activeOffMap==0 then
+        assert(retry.mode=="RETURN" or Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
+            "retry operative disappeared before accepted travel");
+        return "ARRIVAL_UNOBSERVED";
+    end
     assert(#roster.map==1 and #roster.activeOffMap==0,
         "living retry operative roster is ambiguous");
     local unit=roster.map[1];
@@ -1831,7 +1850,8 @@ function B.RetryLivingSpy()
             return "ADOPTION_REQUIRED";
         end
     else
-        if unit.id~=retry.spyID and retry.mode=="CAPACITY_MAP" then
+        if unit.id~=retry.spyID and
+            (retry.mode=="MAP" or retry.mode=="CAPACITY_MAP") then
             local receipt=Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL");
             assert(receipt and unit.name==receipt.name and
                 unit.level==receipt.level and

@@ -1510,7 +1510,7 @@ fn capacity_spawn_rechecks_core_roster_after_ui_observation() {
         "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)",
         "exactly one native map spy",
     );
-    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and #CAPTURED[1]==1)");
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL').targetID==20 and Game:GetProperty('JAC_BOUNDARY_SPY_BARRIER').spyID==655368 and HISTORY[0][0].CompletionTurn==23 and #CAPTURED[1]==1)");
 }
 
 #[test]
@@ -1522,7 +1522,7 @@ fn capacity_spawn_rejects_moving_spy_or_changed_captive_between_ui_and_core() {
         "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)",
         "native off-map roster changed",
     );
-    moving.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368)");
+    moving.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and HISTORY[0][0].CompletionTurn==23 and #CAPTURED[1]==1)");
 
     let captive = Enemy::new();
     captive.captured_with_capacity_spy();
@@ -2636,6 +2636,85 @@ fn already_returned_map_spy_with_new_id_is_bound_without_production() {
     h.run("UNITS[0]={}; local spy=makeSpy(0,16); spy.name='Spy 15'; spy.x=CONTROL.x; spy.y=CONTROL.y; local d=ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis(); assert(d.mode=='MAP' and d.currentID==16 and d.spyID==15)");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
     h.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.archive.spyID==15 and r.spyID==16 and Game:GetProperty('JAC_BOUNDARY_SPY').id==16); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='HOME_READY'); assert(PROGRESS_CALLS==0)");
+    h.run("REQUEST_EFFECT='travel'; ExposedMembers.JAC_PersonaBoundary.Queue('SPY_TRAVEL',{owner=1,city=20}); FRAME(); START_NATIVE(0,16,991); FRAME(); local r=REQUESTS[#REQUESTS]; ENEMY_CASES.fireCore('JAC_BoundarySpyBarrier',r.params); fire(Events.GameCoreEventPublishComplete); FRAME(); ExposedMembers.JAC_PersonaBoundary.Queue('SAVE_TRAVEL'); FRAME(); ENEMY_CASES.fireCore('JAC_BoundarySaveSpyTravel',REQUESTS[#REQUESTS].params); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_TRAVEL'); ARRIVE_OFFMAP(17); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='ADOPTION_REQUIRED'); assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive.spyID==15 and HISTORY[0][0].CompletionTurn==TURN)");
+}
+
+#[test]
+fn ordinary_map_plus_moving_spy_cannot_archive_the_failed_mission() {
+    let diagnosis = Enemy::new();
+    diagnosis.failed();
+    diagnosis.run("UNITS[0]={}; local spy=makeSpy(0,16); spy.name='Spy 15'; spy.x=CONTROL.x; spy.y=CONTROL.y; OFF_MAP={{Name='Other Spy',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; BEFORE_WRITES=#WRITES");
+    diagnosis.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis()",
+        "unambiguous original operative roster",
+    );
+    diagnosis.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and HISTORY[0][0].CompletionTurn==TURN and #WRITES==BEFORE_WRITES)");
+
+    let race = Enemy::new();
+    race.failed();
+    race.run("UNITS[0]={}; local spy=makeSpy(0,16); spy.name='Spy 15'; spy.x=CONTROL.x; spy.y=CONTROL.y; ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); assert(REQUESTS[#REQUESTS].params.Mode=='MAP'); OFF_MAP={{Name='Other Spy',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}");
+    race.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)",
+        "native MAP roster changed",
+    );
+    race.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and HISTORY[0][0].CompletionTurn==TURN)");
+}
+
+#[test]
+fn ordinary_return_rechecks_zero_map_spies_before_archive() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); assert(REQUESTS[#REQUESTS].params.Mode=='RETURN'); makeSpy(0,16)");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)",
+        "native RETURN roster changed",
+    );
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and HISTORY[0][0].CompletionTurn==TURN)");
+}
+
+#[test]
+fn original_retry_routes_keep_their_core_map_proof_without_unproved_getters() {
+    for (mode, roster) in [
+        ("MAP", "UNITS[0]={}; local spy=makeSpy(0,16); spy.name='Spy 15'; spy.x=CONTROL.x; spy.y=CONTROL.y"),
+        ("RETURN", "UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}"),
+        ("PRODUCE", "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}"),
+    ] {
+        let h = Enemy::new();
+        h.failed();
+        h.run(roster);
+        h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); local originalAttacker=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() local d=originalAttacker(); d.GetNumSpiesOffMap=nil; d.GetNthOffMapSpy=nil; return d end; local originalCaptor=Players[1].GetDiplomacy; Players[1].GetDiplomacy=function() local d=originalCaptor(); d.GetNumSpiesCaptured=nil; d.GetNthCapturedSpy=nil; return d end; ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)");
+        h.run(&format!("local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.mode=='{mode}' and r.archive.spyID==15 and r.archive.eventID==0 and r.coreRoster.offMapAPI==false and r.coreRoster.captiveAPI==false and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION')==nil and HISTORY[0][0].CompletionTurn==TURN)"));
+    }
+}
+
+#[test]
+fn captive_production_uses_the_observed_captor_even_when_it_is_not_the_defender() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={}; CAPTURED[2]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; Players[2].GetID=function() return 2 end; Players[2].GetDiplomacy=function() return {GetMission=function() return 0 end,GetNumSpiesCaptured=function() return #CAPTURED[2] end,GetNthCapturedSpy=function(_,owner,index) assert(owner==2); return CAPTURED[2][index+1] end} end; Game.GetPlayers=function() return {Players[0],Players[1],Players[2]} end; local d=ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis(); assert(d.mode=='PRODUCE' and d.captive.captor==2 and d.occupied==1)");
+    h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+    h.run("local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); assert(r.mode=='PRODUCE' and r.archive.captiveCaptor==2 and r.coreRoster.captured==1 and r.archive.spyID==15 and HISTORY[0][0].CompletionTurn==TURN)");
+}
+
+#[test]
+fn capacity_map_rejects_an_extra_spy_before_archive() {
+    let map = Enemy::new();
+    map.captured_with_capacity_spy();
+    map.run("makeSpy(0,786441); BEFORE_WRITES=#WRITES");
+    map.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis()",
+        "unambiguous original operative roster",
+    );
+    map.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and HISTORY[0][0].CompletionTurn==23 and #CAPTURED[1]==1 and #WRITES==BEFORE_WRITES)");
+
+    let moving = Enemy::new();
+    moving.captured_with_capacity_spy();
+    moving.run("OFF_MAP[2]={Name='moving',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}; BEFORE_WRITES=#WRITES");
+    moving.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis()",
+        "unambiguous original operative roster",
+    );
+    moving.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and HISTORY[0][0].CompletionTurn==23 and #CAPTURED[1]==1 and #WRITES==BEFORE_WRITES)");
 }
 
 #[test]
