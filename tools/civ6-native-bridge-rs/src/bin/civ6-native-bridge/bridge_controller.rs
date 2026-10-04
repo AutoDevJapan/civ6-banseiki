@@ -1,6 +1,6 @@
 use civ6_native_bridge_rs::{
-    BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace, PropertyTrace,
-    SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
+    AssignCalibrationTrace, BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace,
+    PropertyTrace, SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
     PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROPERTY_GET_RVA,
     PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
 };
@@ -235,6 +235,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "property-scoped" => BridgeMode::PropertyScoped,
         "can-ever-calibration" => BridgeMode::CanEverCalibration,
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
+        "assign-calibration" => BridgeMode::AssignCalibration,
         "joined-admission" => BridgeMode::JoinedAdmission,
         _ => return Err("invalid bridge mode".into()),
     };
@@ -574,6 +575,7 @@ fn bridge_dll() -> Result<PathBuf, String> {
 fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<[u8; 8], String> {
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
     let (offset, prologue): (u64, &[u8]) = match mode {
+        BridgeMode::AssignCalibration => (0x2dcc80, &[0x48, 0x89, 0x5c, 0x24, 0x08]),
         BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
             (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE)
         }
@@ -700,6 +702,43 @@ fn drained_calibration_trace(
     Err("calibration calls did not drain or lost an original return".into())
 }
 
+fn drained_assign_calibration_trace(
+    game: &Handle,
+    address: usize,
+) -> Result<Box<AssignCalibrationTrace>, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut stable = 0u32;
+    let mut prior = None;
+    while Instant::now() < deadline {
+        let mut snapshot = Box::new(AssignCalibrationTrace::default());
+        let bytes = unsafe {
+            std::slice::from_raw_parts_mut(
+                (&mut *snapshot as *mut AssignCalibrationTrace).cast::<u8>(),
+                size_of::<AssignCalibrationTrace>(),
+            )
+        };
+        read_remote(game, address, bytes)?;
+        if snapshot.magic != 0x4a41_4353 || snapshot.version != AssignCalibrationTrace::VERSION {
+            return Err("assignment trace version differs".into());
+        }
+        let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        let in_flight = snapshot
+            .in_flight
+            .load(std::sync::atomic::Ordering::Acquire);
+        if in_flight == 0 && prior == Some(next) && snapshot.complete_rows().is_ok() {
+            stable += 1;
+            if stable >= 3 {
+                return Ok(snapshot);
+            }
+        } else {
+            stable = 0;
+        }
+        prior = Some(next);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("assignment calls did not drain or lost an original return".into())
+}
+
 fn read_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrace>, String> {
     let mut snapshot = Box::new(PropertyTrace::default());
     let bytes = unsafe {
@@ -814,6 +853,7 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::PropertyScoped => "property-scoped",
                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
+                BridgeMode::AssignCalibration => "assign-calibration",
                 BridgeMode::JoinedAdmission => "joined-admission"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
@@ -830,7 +870,7 @@ pub fn run() -> Result<(), String> {
             identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
             identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
         }
-    } else {
+    } else if parsed.mode.is_property() {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
         if parsed.mode == BridgeMode::PropertyScoped {
             identity["scope_key_ids"] =
@@ -861,6 +901,11 @@ pub fn run() -> Result<(), String> {
         }
         let trace_remote = remote_alloc(&game, parsed.mode.trace_size())?;
         let mut config = match parsed.mode {
+            BridgeMode::AssignCalibration => BridgeConfig::for_assign_calibration(
+                parsed.pid,
+                parsed.created,
+                trace_remote as u64,
+            ),
             BridgeMode::CanEver => {
                 BridgeConfig::new(parsed.pid, parsed.created, trace_remote as u64)
             }
@@ -998,6 +1043,43 @@ pub fn run() -> Result<(), String> {
                 "prefix_retained_until_exit":installed_prefix.is_some()}),
         )?;
         let (row_count, dropped, in_flight, observed_calls, filtered_calls) = match parsed.mode {
+            BridgeMode::AssignCalibration => {
+                let snapshot = drained_assign_calibration_trace(&game, trace_remote)?;
+                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                let gamecore_size = modules(parsed.pid)?
+                    .into_iter()
+                    .find(|m| same_path(&m.path, Path::new(GAMECORE)))
+                    .ok_or("GameCore unloaded before assignment collection")?
+                    .size;
+                for row in &rows {
+                    let return_rva = (row.return_address as usize)
+                        .checked_sub(target - parsed.mode.rva())
+                        .filter(|rva| *rva < gamecore_size);
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"assign_calibration", "sequence":row.sequence,
+                        "thread_id":row.thread_id,"read_flags":row.read_flags,
+                        "governors_this":format!("0x{:016x}",row.governors_this),
+                        "governor_pointer":format!("0x{:016x}",row.governor_pointer),
+                        "city_pointer":format!("0x{:016x}",row.city_pointer),
+                        "reason_pointer":format!("0x{:016x}",row.reason_pointer),
+                        "player_address":format!("0x{:016x}",row.player_address),
+                        "player_id":row.player_id,"governor_index":row.governor_index,
+                        "city_a8":row.city_a8,"city_c0":row.city_c0,"city_c4":row.city_c4,"city_d8":row.city_d8,
+                        "return_site_rva":return_rva,"original_al":row.original_al,"effective_al":row.original_al,
+                        "original_rax":format!("0x{:016x}",row.original_rax)}),
+                    )?;
+                }
+                (
+                    rows.len(),
+                    snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
+                    snapshot
+                        .in_flight
+                        .load(std::sync::atomic::Ordering::Acquire),
+                    snapshot.next.load(std::sync::atomic::Ordering::Acquire),
+                    0,
+                )
+            }
             BridgeMode::CanEver => {
                 let snapshot = drained_trace(&game, trace_remote)?;
                 let rows = snapshot.complete_rows().map_err(str::to_string)?;
@@ -1187,6 +1269,7 @@ pub fn run() -> Result<(), String> {
             "classification":match parsed.mode {
                 BridgeMode::CanEver => "can_ever_entry",
                 BridgeMode::CanEverCalibration => "can_ever_calibration",
+                BridgeMode::AssignCalibration => "assign_calibration",
                 BridgeMode::JoinedAdmission => "joined_admission",
                 _ => "raw_collection",
             },
@@ -1405,6 +1488,27 @@ mod tests {
     }
 
     #[test]
+    fn restored_joined_job_can_transfer_the_same_fixture_to_assignment_job() {
+        let target = SleepingChild::start();
+        let peer = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let peer_handle = peer.handle(PROCESS_SYNCHRONIZE);
+        let created = process_created(&target_handle).unwrap();
+        let joined = OwnedJob::attach(&target_handle, target.0.id(), created).unwrap();
+        joined.disarm_after_verified_entry_restoration().unwrap();
+        drop(joined);
+        assert!(alive(&target_handle));
+        let assignment = OwnedJob::attach(&target_handle, target.0.id(), created).unwrap();
+        assert!(alive(&target_handle));
+        drop(assignment);
+        assert_eq!(
+            unsafe { WaitForSingleObject(target_handle.0, 5_000) },
+            WAIT_OBJECT_0
+        );
+        assert!(alive(&peer_handle));
+    }
+
+    #[test]
     fn missing_assignment_rights_fail_before_target_mutation() {
         let target = SleepingChild::start();
         let target_handle = target.handle(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE);
@@ -1448,6 +1552,33 @@ mod tests {
             drained_calibration_trace(&process, address).err().unwrap(),
             "calibration trace version differs"
         );
+    }
+
+    #[test]
+    fn assignment_controller_checks_current_trace_version_and_mode_ordinal() {
+        let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
+        let mut trace = Box::new(AssignCalibrationTrace::default());
+        let address = (&*trace as *const AssignCalibrationTrace) as usize;
+        assert_eq!(
+            drained_assign_calibration_trace(&process, address)
+                .unwrap()
+                .version,
+            AssignCalibrationTrace::VERSION
+        );
+        trace.version = 0;
+        assert_eq!(
+            drained_assign_calibration_trace(&process, address)
+                .err()
+                .unwrap(),
+            "assignment trace version differs"
+        );
+        let config = BridgeConfig::for_assign_calibration(7, 123, address as u64);
+        assert_eq!(config.mode, 7);
+        assert_eq!(
+            config.trace_size as usize,
+            size_of::<AssignCalibrationTrace>()
+        );
+        assert_eq!(BridgeMode::AssignCalibration.rva(), 0x2dd880);
     }
 
     #[test]

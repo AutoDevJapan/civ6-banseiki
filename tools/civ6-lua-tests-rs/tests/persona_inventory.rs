@@ -89,6 +89,7 @@ macro_rules! persona_tests {
             "prior_persona_payment_cannot_mask_unpaid_current_evolution".to_string(),
             "lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn"
                 .to_string(),
+            "private_manual_admission_keeps_the_fixture_in_control_of_native_requests".to_string(),
         ])
     );
     tests

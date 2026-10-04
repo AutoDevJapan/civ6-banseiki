@@ -22,6 +22,14 @@ use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetProcessTimes,
 };
 
+#[path = "windows/assignment.rs"]
+mod assignment;
+use assignment::{
+    assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
+    ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
+};
+pub use assignment::{AssignCalibrationObservation, AssignCalibrationTrace, PINNED_CAN_ASSIGN_RVA};
+
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
@@ -66,6 +74,8 @@ pub enum BridgeMode {
     CanEverCalibration = 3,
     PropertyAdmissionScoped = 4,
     JoinedAdmission = 5,
+    // 6 is reserved for the parallel production admission delta.
+    AssignCalibration = 7,
 }
 
 impl BridgeMode {
@@ -78,6 +88,7 @@ impl BridgeMode {
 
     pub const fn rva(self) -> usize {
         match self {
+            Self::AssignCalibration => PINNED_CAN_ASSIGN_RVA,
             Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => PINNED_CAN_EVER_RVA,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 PINNED_PROPERTY_GET_RVA
@@ -87,6 +98,7 @@ impl BridgeMode {
 
     const fn file_offset(self) -> u64 {
         match self {
+            Self::AssignCalibration => ASSIGN_FILE_OFFSET,
             Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => {
                 PINNED_CAN_EVER_FILE_OFFSET
             }
@@ -98,6 +110,7 @@ impl BridgeMode {
 
     const fn prologue(self) -> &'static [u8] {
         match self {
+            Self::AssignCalibration => &PINNED_PROLOGUE,
             Self::CanEver | Self::CanEverCalibration | Self::JoinedAdmission => &PINNED_PROLOGUE,
             Self::Property | Self::PropertyScoped | Self::PropertyAdmissionScoped => {
                 &PROPERTY_PROLOGUE
@@ -107,6 +120,7 @@ impl BridgeMode {
 
     pub const fn trace_size(self) -> usize {
         match self {
+            Self::AssignCalibration => std::mem::size_of::<AssignCalibrationTrace>(),
             Self::CanEver => std::mem::size_of::<SharedTrace>(),
             Self::CanEverCalibration => std::mem::size_of::<CalibrationTrace>(),
             Self::JoinedAdmission => std::mem::size_of::<JoinedTrace>(),
@@ -172,6 +186,17 @@ impl BridgeConfig {
     ) -> Self {
         let mut config = Self::for_property(game_pid, created_filetime, trace_address);
         config.mode = BridgeMode::PropertyAdmissionScoped as u32;
+        config
+    }
+
+    pub fn for_assign_calibration(
+        game_pid: u32,
+        created_filetime: u64,
+        trace_address: u64,
+    ) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::AssignCalibration as u32;
+        config.trace_size = BridgeMode::AssignCalibration.trace_size() as u32;
         config
     }
 
@@ -819,21 +844,24 @@ impl Default for PropertyTrace {
 impl PropertyTrace {
     pub const VERSION: u32 = PROPERTY_TRACE_VERSION;
     pub fn scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::PropertyScoped as u32;
-        trace
+        Self {
+            scope: BridgeMode::PropertyScoped as u32,
+            ..Self::default()
+        }
     }
 
     pub fn admission_scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::PropertyAdmissionScoped as u32;
-        trace
+        Self {
+            scope: BridgeMode::PropertyAdmissionScoped as u32,
+            ..Self::default()
+        }
     }
 
     pub fn joined_scoped() -> Self {
-        let mut trace = Self::default();
-        trace.scope = BridgeMode::JoinedAdmission as u32;
-        trace
+        Self {
+            scope: BridgeMode::JoinedAdmission as u32,
+            ..Self::default()
+        }
     }
 }
 
@@ -1186,6 +1214,9 @@ unsafe impl Send for Hook {}
 static HOOK: Mutex<Option<Hook>> = Mutex::new(None);
 static JOINED_PROPERTY_HOOK: Mutex<Option<Hook>> = Mutex::new(None);
 static PROPERTY_USED: AtomicBool = AtomicBool::new(false);
+// An entry-restored snapshot does not prove old relay entrants are gone.
+// Never redirect a delayed assignment callback to a second trace mapping.
+static ASSIGN_USED: AtomicBool = AtomicBool::new(false);
 
 fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     let displacement = (to as i128) - (from as i128) - 5;
@@ -1455,6 +1486,7 @@ unsafe fn install_hook(
     )
     .ok_or("trampoline return out of range")?;
     let gateway = match mode {
+        BridgeMode::AssignCalibration => assign_calibration_gateway as *const () as usize,
         BridgeMode::CanEver => bridge_gateway as *const () as usize,
         BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
             calibration_gateway as *const () as usize
@@ -1476,13 +1508,18 @@ unsafe fn install_hook(
         return Err("cannot publish the relay and trampoline");
     }
     match mode {
+        BridgeMode::AssignCalibration => ASSIGN_TRACE_PTR.store(trace.cast(), Ordering::Release),
         BridgeMode::CanEver => BRIDGE_TRACE_PTR.store(trace, Ordering::Release),
         BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
             CALIBRATION_TRACE_PTR.store(trace.cast(), Ordering::Release)
         }
         _ => unreachable!(),
     }
-    BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    if mode == BridgeMode::AssignCalibration {
+        ASSIGN_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    } else {
+        BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    }
     let mut patched = original;
     patched[..5].copy_from_slice(&jump_to_relay);
     patched[5..prologue.len()].fill(0x90);
@@ -1747,12 +1784,13 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5)
+        || !matches!(config.mode, 0 | 1 | 2 | 3 | 4 | 5 | 7)
         || config.trace_size as usize
             != match config.mode {
                 0 => BridgeMode::CanEver.trace_size(),
                 3 => BridgeMode::CanEverCalibration.trace_size(),
                 5 => BridgeMode::JoinedAdmission.trace_size(),
+                7 => BridgeMode::AssignCalibration.trace_size(),
                 _ => BridgeMode::Property.trace_size(),
             }
         || !committed_range(
@@ -1781,6 +1819,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         3 => BridgeMode::CanEverCalibration,
         4 => BridgeMode::PropertyAdmissionScoped,
         5 => BridgeMode::JoinedAdmission,
+        7 => BridgeMode::AssignCalibration,
         _ => return BridgeStatus::InvalidInput,
     };
     let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
@@ -1832,6 +1871,17 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         None
     };
     let installed = match mode {
+        BridgeMode::AssignCalibration => {
+            if ASSIGN_USED
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                return BridgeStatus::HookFailure;
+            }
+            let trace = config.trace_address as *mut AssignCalibrationTrace;
+            unsafe { ptr::write(trace, AssignCalibrationTrace::default()) };
+            unsafe { install_assign_calibration_at(entry, trace, disk_bytes) }
+        }
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
             unsafe { ptr::write(trace, SharedTrace::default()) };
@@ -2580,18 +2630,15 @@ mod tests {
             unsafe { ptr::read(property_entry.cast::<[u8; 8]>()) },
             PROPERTY_PROLOGUE
         );
-        assert_eq!(
-            trace
-                .calibration
-                .complete_rows()
-                .unwrap()
-                .iter()
-                .any(|row| row.player_id == 0
-                    && row.governor_index == 4
-                    && row.original_al == 1
-                    && row.effective_al == 1),
-            true
-        );
+        assert!(trace
+            .calibration
+            .complete_rows()
+            .unwrap()
+            .iter()
+            .any(|row| row.player_id == 0
+                && row.governor_index == 4
+                && row.original_al == 1
+                && row.effective_al == 1));
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
     }
 
@@ -2974,7 +3021,7 @@ mod tests {
     #[test]
     fn install_rejects_bad_config_and_trace_ranges_before_dereference() {
         assert_eq!(
-            BridgeInstall(1usize as *mut c_void),
+            BridgeInstall(std::ptr::dangling_mut::<c_void>()),
             BridgeStatus::InvalidInput as u32
         );
         assert_eq!(
