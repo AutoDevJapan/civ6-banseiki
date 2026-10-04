@@ -631,7 +631,7 @@ fn read_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, String>
         )
     };
     read_remote(game, address, bytes)?;
-    if snapshot.magic != 0x4a41_4342 || snapshot.version != 2 {
+    if snapshot.magic != 0x4a41_4342 || snapshot.version != SharedTrace::VERSION {
         return Err("bridge trace version differs".into());
     }
     Ok(snapshot)
@@ -679,7 +679,7 @@ fn drained_calibration_trace(
             )
         };
         read_remote(game, address, bytes)?;
-        if snapshot.magic != 0x4a41_4341 || snapshot.version != 1 {
+        if snapshot.magic != 0x4a41_4341 || snapshot.version != CalibrationTrace::VERSION {
             return Err("calibration trace version differs".into());
         }
         let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
@@ -709,7 +709,7 @@ fn read_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrac
         )
     };
     read_remote(game, address, bytes)?;
-    if snapshot.magic != 0x4a41_4350 || snapshot.version != 2 {
+    if snapshot.magic != 0x4a41_4350 || snapshot.version != PropertyTrace::VERSION {
         return Err("property trace version differs".into());
     }
     Ok(snapshot)
@@ -1434,6 +1434,20 @@ mod tests {
         let snapshot = drained_trace(&process, address).unwrap();
         assert_eq!(snapshot.complete_rows().unwrap()[0].governor_index, 42);
         writer.join().unwrap();
+    }
+
+    #[test]
+    fn controller_accepts_current_calibration_layout_and_rejects_old_version() {
+        let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
+        let mut trace = Box::new(CalibrationTrace::default());
+        let address = (&*trace as *const CalibrationTrace) as usize;
+        let snapshot = drained_calibration_trace(&process, address).unwrap();
+        assert_eq!(snapshot.version, trace.version);
+        trace.version -= 1;
+        assert_eq!(
+            drained_calibration_trace(&process, address).err().unwrap(),
+            "calibration trace version differs"
+        );
     }
 
     #[test]

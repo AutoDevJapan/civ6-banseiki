@@ -238,6 +238,7 @@ pub struct BridgeTrace {
 }
 
 impl SharedTrace {
+    pub const VERSION: u32 = TRACE_VERSION;
     pub fn complete_rows(&self) -> Result<Vec<BridgeTrace>, &'static str> {
         if self.in_flight.load(Ordering::Acquire) != 0 {
             return Err("gateway calls remain in flight");
@@ -348,6 +349,7 @@ pub struct CalibrationObservation {
 }
 
 impl CalibrationTrace {
+    pub const VERSION: u32 = CALIBRATION_TRACE_VERSION;
     pub fn complete_rows(&self) -> Result<Vec<CalibrationObservation>, &'static str> {
         if self.in_flight.load(Ordering::Acquire) != 0 {
             return Err("calibration calls remain in flight");
@@ -815,6 +817,7 @@ impl Default for PropertyTrace {
 }
 
 impl PropertyTrace {
+    pub const VERSION: u32 = PROPERTY_TRACE_VERSION;
     pub fn scoped() -> Self {
         let mut trace = Self::default();
         trace.scope = BridgeMode::PropertyScoped as u32;
