@@ -56,7 +56,7 @@ local function AdmissionKey(index)
     return key;
 end
 
-GameEvents.JAC_JoinedAdmissionInitialize.Add(function(owner)
+GameEvents.JAC_JoinedAdmissionInitialize.Add(function(owner, params)
     assert(owner == 0 and Players[owner] and Players[owner]:IsHuman(),
         "admission calibration requires human player zero");
     assert(Game:GetProperty(ADMISSION_RECEIPT) == nil, "admission already initialized");
@@ -90,6 +90,8 @@ GameEvents.JAC_JoinedAdmissionInitialize.Add(function(owner)
     local governor = assert(GameInfo.Governors[ashina.GovernorType]);
     assert(governor.Index == 4 and AdmissionKey(governor.Index) == 853304,
         "Ashina Index differs from pinned calibration scene");
+    Game:SetProperty("JAC_TEST853_ADMISSION_MANUAL_APPOINT",
+        type(params) == "table" and params.ManualAppoint == 1 and 1 or nil);
     Game:SetProperty("JAC_TEST853_ADMISSION_ACTIVE", 1);
     Game:SetProperty(ADMISSION_RECEIPT, {
         phase="CLOSED", owner=owner, leader=ASHINA, governorIndex=governor.Index,

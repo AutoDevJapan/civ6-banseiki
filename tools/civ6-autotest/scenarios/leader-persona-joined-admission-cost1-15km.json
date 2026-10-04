@@ -171,7 +171,7 @@
       "state_name": "InGame"
     },
     {
-      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_JoinedAdmissionInitialize'}); return 'request synchronized 484 false derived permissions'",
+      "code": "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_JoinedAdmissionInitialize',ManualAppoint=1}); return 'request synchronized 484 false derived permissions and private manual appointment ownership'",
       "action": "ui_lua",
       "state_name": "InGame"
     },

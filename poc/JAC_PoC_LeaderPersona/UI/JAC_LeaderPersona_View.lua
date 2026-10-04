@@ -179,7 +179,11 @@ function JAC_RefreshPersonas()
 end
 
 local function Update()
-    if Active() then
+    -- A private admission fixture may own the APPOINT/Finalize sequence. Its
+    -- two explicit flags pause only automatic UI submission, not native state.
+    local manualAdmission = Game:GetProperty("JAC_TEST853_ADMISSION_ACTIVE") == 1 and
+        Game:GetProperty("JAC_TEST853_ADMISSION_MANUAL_APPOINT") == 1;
+    if Active() and not manualAdmission then
         local owner = Game.GetLocalPlayer();
         for row in GameInfo.JAC_LeaderPersonas() do
             local leader = row.LeaderType;

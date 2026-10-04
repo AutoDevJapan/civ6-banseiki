@@ -290,3 +290,43 @@ fn prior_persona_payment_cannot_mask_unpaid_current_evolution() {
 fn lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn() {
     run_case("test_lost_unappointed_person_releases_only_its_unpaid_reservation_after_next_turn");
 }
+
+#[test]
+fn private_manual_admission_keeps_the_fixture_in_control_of_native_requests() {
+    for (active, manual, paused) in [(1, 1, true), (0, 1, false), (1, 0, false)] {
+        let lua = new_lua();
+        initialize(&lua).unwrap();
+        lua.globals().set("TEST_ACTIVE", active).unwrap();
+        lua.globals().set("TEST_MANUAL", manual).unwrap();
+        lua.globals().set("TEST_PAUSED", paused).unwrap();
+        lua.load(
+            r#"
+            local leader='LEADER_JAC_DATE_TANEMUNE'
+            local api=ExposedMembers.JAC_LeaderPersona
+            Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',TEST_ACTIVE)
+            Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',TEST_MANUAL)
+            assert(api.Join(0,1)=='JOINED')
+            Players[0].points=api.EvolutionCost(leader)
+            assert(api.PrepareEvolution(0,leader)=='EVOLVING')
+            FIREUI('GameCoreEventPublishComplete')
+            if TEST_PAUSED then
+                assert(#REQUESTS==0,'private manual fixture lost ownership of APPOINT')
+                assert(Players[0].spent==0)
+                assert(Game:GetProperty('JAC_PERSONA_'..leader..'_STATE')=='EVOLVING')
+                Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',nil)
+                FIREUI('GameCoreEventPublishComplete')
+            end
+            assert(#REQUESTS==1 and REQUESTS[1].op==PlayerOperations.APPOINT_GOVERNOR,
+                   'normal automatic appointment must remain available')
+            FIREUI('GameCoreEventPublishComplete')
+            assert(#REQUESTS==1,'automatic APPOINT was duplicated')
+            DRAIN()
+            assert(Game:GetProperty('JAC_PERSONA_'..leader..'_STATE')=='GOVERNOR')
+            assert(Players[0].spent==api.EvolutionCost(leader) and DESTROYS==1)
+            "#,
+        )
+        .set_name("manual-admission-operation-ownership")
+        .exec()
+        .unwrap();
+    }
+}

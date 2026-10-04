@@ -229,7 +229,8 @@ fn joined_admission_fixture_publishes_only_after_real_join_and_full_title() {
         &lua,
         r#"
         assert(not pcall(ADMISSION_INIT, 1))
-        ADMISSION_INIT(0)
+        ADMISSION_INIT(0, {ManualAppoint=1})
+        assert(Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==1)
         local receipt = Game:GetProperty('JAC_TEST853_ADMISSION_RECEIPT')
         assert(receipt.phase=='CLOSED' and receipt.pairs==484 and receipt.key==853304)
         for id=0,21 do
