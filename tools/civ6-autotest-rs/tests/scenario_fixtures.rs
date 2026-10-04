@@ -47,6 +47,42 @@ fn embedded_lua(step: &Value) -> Option<&str> {
 }
 
 #[test]
+fn property_observer_scene_is_bounded_and_all_embedded_lua_parses() {
+    let data = scenario("leader-persona-property-observer-15km.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(data["strict_lua_errors"], true);
+    let actions = steps(&data);
+    assert!(actions[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == "d8532710-f853-4c53-8853-271000000001"));
+    let start = actions
+        .iter()
+        .position(|step| action(step, "start_native_property_trace"))
+        .unwrap();
+    let stop = actions
+        .iter()
+        .position(|step| action(step, "stop_native_property_trace"))
+        .unwrap();
+    assert!(start < stop && actions[start]["max_seconds"] == 180);
+    assert!(actions[start + 1..stop].iter().all(|step| ![
+        "save",
+        "load",
+        "end_turn",
+        "autoplay",
+        "start_game"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    let lua = Lua::new();
+    for step in actions {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
 fn persona_boundary_scenarios_validate_without_operating_the_game() {
     let lua = Lua::new();
     for name in [
@@ -607,7 +643,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 83);
+    assert_eq!(count, 84);
 }
 
 #[test]

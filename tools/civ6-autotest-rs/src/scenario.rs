@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 18] = [
+pub const ACTIONS: [&str; 20] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -23,6 +23,8 @@ pub const ACTIONS: [&str; 18] = [
     "stop_native_governor_trace",
     "start_native_can_ever_trace",
     "stop_native_can_ever_trace",
+    "start_native_property_trace",
+    "stop_native_property_trace",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -94,6 +96,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         .ok_or_else(|| Error::scenario("Scenario needs a nonempty steps array"))?;
     let mut trace_open = false;
     let mut bridge_open = false;
+    let mut property_open = false;
     let mut trace_names = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
@@ -119,8 +122,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 "stop native CanEver bridge before changing game lifecycle".into(),
             ));
         }
+        if property_open && matches!(action, "save" | "end_turn" | "autoplay") {
+            return Err(fail(
+                "stop native property observation before a save or turn change".into(),
+            ));
+        }
         match action {
-            "start_native_can_ever_trace" => {
+            "start_native_can_ever_trace" | "start_native_property_trace" => {
                 if bridge_open || trace_open {
                     return Err(fail("native observation already active".into()));
                 }
@@ -136,9 +144,11 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("invalid bounded native CanEver bridge start".into()));
                 }
                 bridge_open = true;
+                property_open = action == "start_native_property_trace";
             }
-            "stop_native_can_ever_trace" => {
+            "stop_native_can_ever_trace" | "stop_native_property_trace" => {
                 if !bridge_open
+                    || property_open != (action == "stop_native_property_trace")
                     || step
                         .as_object()
                         .unwrap()
@@ -148,6 +158,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("invalid native CanEver bridge stop".into()));
                 }
                 bridge_open = false;
+                property_open = false;
             }
             "start_native_governor_trace" => {
                 if trace_open || bridge_open {
@@ -760,5 +771,45 @@ mod native_trace_tests {
             json!({"action":"start_native_governor_trace","name":"conflict","max_seconds":20,"mode":"lifecycle"}),
             stop
         ])).is_err());
+    }
+
+    #[test]
+    fn property_trace_requires_its_own_stop_and_excludes_save_turn_and_load() {
+        let start =
+            json!({"action":"start_native_property_trace","name":"values","max_seconds":120});
+        let stop = json!({"action":"stop_native_property_trace"});
+        let scenario = |steps: Vec<Value>| json!({"name":"property contract","steps":steps});
+        assert!(validate_scenario(&scenario(vec![start.clone(),
+            json!({"action":"ui_lua","state_name":"InGame","code":"return Game:GetProperty('JAC_TEST853_VALUE')"}),
+            stop.clone()])).is_ok());
+        assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
+        assert!(validate_scenario(&scenario(vec![
+            start.clone(),
+            json!({"action":"stop_native_can_ever_trace"})
+        ]))
+        .is_err());
+        for action in [
+            "save",
+            "load",
+            "end_turn",
+            "autoplay",
+            "restart_game",
+            "exit_to_menu",
+        ] {
+            assert!(
+                validate_scenario(&scenario(vec![
+                    start.clone(),
+                    json!({"action":action}),
+                    stop.clone()
+                ]))
+                .is_err(),
+                "{action}"
+            );
+        }
+        for duration in [0, 301] {
+            let mut bad = start.clone();
+            bad["max_seconds"] = json!(duration);
+            assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
+        }
     }
 }

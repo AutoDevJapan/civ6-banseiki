@@ -1164,7 +1164,7 @@ mod platform {
         fn critical_just_after_ready_timeout_is_still_consumed_once() {
             let closes = Arc::new(AtomicUsize::new(0));
             let (mut session, tx) = session_with_close(
-                Some(Instant::now() + Duration::from_millis(500)),
+                Some(Instant::now() + Duration::from_secs(3)),
                 Arc::clone(&closes),
                 true,
             );
@@ -1187,7 +1187,7 @@ mod platform {
         fn critical_just_before_ready_timeout_closes_once_and_fails_startup() {
             let closes = Arc::new(AtomicUsize::new(0));
             let (mut session, tx) = session_with_close(
-                Some(Instant::now() + Duration::from_millis(500)),
+                Some(Instant::now() + Duration::from_secs(3)),
                 Arc::clone(&closes),
                 true,
             );

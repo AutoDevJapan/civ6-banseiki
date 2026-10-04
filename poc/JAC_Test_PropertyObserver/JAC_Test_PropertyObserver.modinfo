@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="d8532710-f853-4c53-8853-271000000001" version="1">
+  <Properties>
+    <Name>JAC Test: Native property value observer</Name>
+    <Description>Opt-in synchronized Game and Player scalar property fixture. No automatic changes.</Description>
+    <Authors>civ6-banseiki</Authors>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+  <Dependencies>
+    <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="Gathering Storm" />
+  </Dependencies>
+  <InGameActions>
+    <AddGameplayScripts id="PropertyObserverFixture">
+      <Properties><LoadOrder>900</LoadOrder></Properties>
+      <File>Scripts/JAC_PropertyObserver_Fixture.lua</File>
+    </AddGameplayScripts>
+  </InGameActions>
+  <Files>
+    <File>Scripts/JAC_PropertyObserver_Fixture.lua</File>
+  </Files>
+</Mod>

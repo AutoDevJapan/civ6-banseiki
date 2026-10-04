@@ -1,6 +1,6 @@
 use civ6_native_bridge_rs::{
-    BridgeConfig, BridgeStatus, SharedTrace, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
-    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256,
+    BridgeConfig, BridgeMode, BridgeStatus, PropertyTrace, SharedTrace, GAMECORE, GAME_EXE,
+    MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -47,6 +47,9 @@ const BRIDGE_DLL: &str = "civ6_native_bridge_rs.dll";
 const REMOTE_CALL_SECONDS: u32 = 8;
 const RECOVERY_SECONDS: u32 = 30;
 const CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
+const PROPERTY_GET_FILE_OFFSET: u64 = 0x99e9c0;
+const CAN_EVER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5c, 0x24, 0x08];
+const PROPERTY_PROLOGUE: [u8; 8] = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30];
 
 struct Handle(HANDLE);
 impl Handle {
@@ -183,28 +186,49 @@ struct Args {
     created: u64,
     duration: u32,
     out: PathBuf,
+    mode: BridgeMode,
 }
 
 fn args(raw: &[String]) -> Result<Args, String> {
-    if raw.len() != 8 {
-        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl".into());
+    if raw.len() != 8 && raw.len() != 10 {
+        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property]".into());
     }
     let mut fields = std::collections::BTreeMap::new();
     for pair in raw.chunks_exact(2) {
-        if !["--pid", "--created-filetime", "--duration", "--out"].contains(&pair[0].as_str())
+        if ![
+            "--pid",
+            "--created-filetime",
+            "--duration",
+            "--out",
+            "--mode",
+        ]
+        .contains(&pair[0].as_str())
             || fields.insert(pair[0].as_str(), pair[1].as_str()).is_some()
         {
             return Err("duplicate or unknown bridge argument".into());
         }
     }
-    let pid = fields["--pid"].parse::<u32>().map_err(|_| "invalid PID")?;
-    let created = fields["--created-filetime"]
+    let pid = fields
+        .get("--pid")
+        .ok_or("missing PID")?
+        .parse::<u32>()
+        .map_err(|_| "invalid PID")?;
+    let created = fields
+        .get("--created-filetime")
+        .ok_or("missing creation FILETIME")?
         .parse::<u64>()
         .map_err(|_| "invalid creation FILETIME")?;
-    let duration = fields["--duration"]
+    let duration = fields
+        .get("--duration")
+        .ok_or("missing duration")?
         .parse::<u32>()
         .map_err(|_| "invalid duration")?;
-    let out = PathBuf::from(fields["--out"]);
+    let out = PathBuf::from(*fields.get("--out").ok_or("missing output")?);
+    let mode = match fields.get("--mode").copied().unwrap_or("can-ever") {
+        "can-ever" => BridgeMode::CanEver,
+        "property" => BridgeMode::Property,
+        _ => return Err("invalid bridge mode".into()),
+    };
     if pid == 0
         || created == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&duration)
@@ -220,6 +244,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         created,
         duration,
         out,
+        mode,
     })
 }
 
@@ -370,7 +395,7 @@ fn modules(pid: u32) -> Result<Vec<Module>, String> {
     Ok(result)
 }
 
-fn pinned_target(pid: u32, game: &Handle) -> Result<usize, String> {
+fn pinned_target(pid: u32, game: &Handle, mode: BridgeMode) -> Result<usize, String> {
     if !same_path(&process_path(game)?, Path::new(GAME_EXE)) {
         return Err("unpinned game executable".into());
     }
@@ -378,12 +403,10 @@ fn pinned_target(pid: u32, game: &Handle) -> Result<usize, String> {
         .into_iter()
         .find(|m| same_path(&m.path, Path::new(GAMECORE)))
         .ok_or("pinned GameCore not loaded")?;
-    if sha256(Path::new(GAMECORE))? != PINNED_GAMECORE_SHA256
-        || module.size <= PINNED_CAN_EVER_RVA + 8
-    {
+    if sha256(Path::new(GAMECORE))? != PINNED_GAMECORE_SHA256 || module.size <= mode.rva() + 8 {
         return Err("GameCore hash or image size differs".into());
     }
-    Ok(module.base + PINNED_CAN_EVER_RVA)
+    Ok(module.base + mode.rva())
 }
 
 fn read_remote(game: &Handle, address: usize, output: &mut [u8]) -> Result<(), String> {
@@ -520,16 +543,20 @@ fn bridge_dll() -> Result<PathBuf, String> {
     path.canonicalize()
         .map_err(|e| format!("bridge DLL path: {e}"))
 }
-fn pinned_entry_bytes(game: &Handle, target: usize) -> Result<[u8; 8], String> {
+fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<[u8; 8], String> {
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
-    file.seek(SeekFrom::Start(CAN_EVER_FILE_OFFSET))
+    let (offset, prologue): (u64, &[u8]) = match mode {
+        BridgeMode::CanEver => (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE),
+        BridgeMode::Property => (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE),
+    };
+    file.seek(SeekFrom::Start(offset))
         .map_err(|e| format!("pinned entry seek: {e}"))?;
     let mut disk = [0u8; 8];
     file.read_exact(&mut disk)
         .map_err(|e| format!("pinned entry read: {e}"))?;
     let mut memory = [0u8; 8];
     read_remote(game, target, &mut memory)?;
-    if memory != disk || disk[..5] != [0x48, 0x89, 0x5c, 0x24, 0x08] {
+    if memory != disk || &disk[..prologue.len()] != prologue {
         return Err("pinned in-memory GameCore entry differs".into());
     }
     Ok(disk)
@@ -581,6 +608,45 @@ fn drained_trace(game: &Handle, address: usize) -> Result<Box<SharedTrace>, Stri
     Err("gateway trace did not drain or contains dropped/unfinished rows".into())
 }
 
+fn read_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrace>, String> {
+    let mut snapshot = Box::new(PropertyTrace::default());
+    let bytes = unsafe {
+        std::slice::from_raw_parts_mut(
+            (&mut *snapshot as *mut PropertyTrace).cast::<u8>(),
+            size_of::<PropertyTrace>(),
+        )
+    };
+    read_remote(game, address, bytes)?;
+    if snapshot.magic != 0x4a41_4350 || snapshot.version != 1 {
+        return Err("property trace version differs".into());
+    }
+    Ok(snapshot)
+}
+
+fn drained_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyTrace>, String> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut stable = 0u32;
+    let mut prior = None;
+    while Instant::now() < deadline {
+        let snapshot = read_property_trace(game, address)?;
+        let next = snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        let in_flight = snapshot
+            .in_flight
+            .load(std::sync::atomic::Ordering::Acquire);
+        if in_flight == 0 && prior == Some(next) && snapshot.complete_rows().is_ok() {
+            stable += 1;
+            if stable >= 3 {
+                return Ok(snapshot);
+            }
+        } else {
+            stable = 0;
+        }
+        prior = Some(next);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Err("property getter trace did not drain or contains dropped/unfinished rows".into())
+}
+
 pub fn run() -> Result<(), String> {
     let parsed = args(&std::env::args().skip(1).collect::<Vec<_>>())?;
     let chain_pid = std::env::var("CIV6_LIVE_CHAIN_PID")
@@ -623,21 +689,24 @@ pub fn run() -> Result<(), String> {
     if !alive(&game) || process_created(&game)? != parsed.created {
         return Err("pinned game identity differs".into());
     }
-    let target = pinned_target(parsed.pid, &game)?;
-    let original = pinned_entry_bytes(&game, target)?;
+    let target = pinned_target(parsed.pid, &game, parsed.mode)?;
+    let original = pinned_entry_bytes(&game, target, parsed.mode)?;
     let dll = bridge_dll()?;
     let bridge_sha = sha256(&dll)?;
     let (install_rva, uninstall_rva) = exported_rvas(&dll)?;
     let loader = remote_load_library(parsed.pid)?;
     let output = File::create_new(&parsed.out).map_err(|e| format!("new JSONL output: {e}"))?;
     let mut writer = BufWriter::new(output);
-    write_json(
-        &mut writer,
-        json!({"kind":"identity","pid":parsed.pid,"created_filetime":parsed.created,
-            "gamecore_sha256":PINNED_GAMECORE_SHA256,"can_ever_rva":PINNED_CAN_EVER_RVA,
+    let mut identity = json!({"kind":"identity","pid":parsed.pid,"created_filetime":parsed.created,
+            "gamecore_sha256":PINNED_GAMECORE_SHA256,"mode":match parsed.mode {
+                BridgeMode::CanEver => "can-ever", BridgeMode::Property => "property"},
+            "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
-            "duration_limit_seconds":parsed.duration}),
-    )?;
+            "duration_limit_seconds":parsed.duration});
+    if parsed.mode == BridgeMode::CanEver {
+        identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
+    }
+    write_json(&mut writer, identity)?;
     // All remotely executing or writing operations are below this point.
     // A failed assignment is a no-mutation refusal; an assigned job remains
     // armed across every call, including timeouts and controller crashes.
@@ -657,8 +726,15 @@ pub fn run() -> Result<(), String> {
         if install_rva >= bridge.size || uninstall_rva >= bridge.size {
             return Err("bridge exports outside remote DLL image".into());
         }
-        let trace_remote = remote_alloc(&game, size_of::<SharedTrace>())?;
-        let mut config = BridgeConfig::new(parsed.pid, parsed.created, trace_remote as u64);
+        let trace_remote = remote_alloc(&game, parsed.mode.trace_size())?;
+        let mut config = match parsed.mode {
+            BridgeMode::CanEver => {
+                BridgeConfig::new(parsed.pid, parsed.created, trace_remote as u64)
+            }
+            BridgeMode::Property => {
+                BridgeConfig::for_property(parsed.pid, parsed.created, trace_remote as u64)
+            }
+        };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
             std::slice::from_raw_parts(
@@ -733,29 +809,65 @@ pub fn run() -> Result<(), String> {
         if restored != original {
             return Err("original GameCore entry differs after remote uninstall returned".into());
         }
-        let snapshot = drained_trace(&game, trace_remote)?;
-        let rows = snapshot.complete_rows().map_err(str::to_string)?;
-        let gamecore_size = modules(parsed.pid)?
-            .into_iter()
-            .find(|m| same_path(&m.path, Path::new(GAMECORE)))
-            .ok_or("GameCore unloaded before trace collection")?
-            .size;
-        for row in &rows {
-            let return_rva = (row.return_address as usize)
-                .checked_sub(target - PINNED_CAN_EVER_RVA)
-                .filter(|rva| *rva < gamecore_size);
-            write_json(
-                &mut writer,
-                json!({"kind":"entry","sequence":row.sequence,"governor_index":row.governor_index,
-                "governors_this":format!("0x{:x}",row.governors_this),
-                "return_site_rva":return_rva}),
-            )?;
-        }
+        let (row_count, dropped, in_flight) = match parsed.mode {
+            BridgeMode::CanEver => {
+                let snapshot = drained_trace(&game, trace_remote)?;
+                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                let gamecore_size = modules(parsed.pid)?
+                    .into_iter()
+                    .find(|m| same_path(&m.path, Path::new(GAMECORE)))
+                    .ok_or("GameCore unloaded before trace collection")?
+                    .size;
+                for row in &rows {
+                    let return_rva = (row.return_address as usize)
+                        .checked_sub(target - parsed.mode.rva())
+                        .filter(|rva| *rva < gamecore_size);
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"entry","sequence":row.sequence,
+                        "governor_index":row.governor_index,
+                        "governors_this":format!("0x{:x}",row.governors_this),
+                        "return_site_rva":return_rva}),
+                    )?;
+                }
+                (
+                    rows.len(),
+                    snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
+                    snapshot
+                        .in_flight
+                        .load(std::sync::atomic::Ordering::Acquire),
+                )
+            }
+            BridgeMode::Property => {
+                let snapshot = drained_property_trace(&game, trace_remote)?;
+                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                for row in &rows {
+                    let copied = row.read_state == 1;
+                    write_json(
+                        &mut writer,
+                        json!({"kind":"property_get","sequence":row.sequence,
+                        "property":format!("0x{:016x}",row.property),"key_id":row.key_id,
+                        "returned":format!("0x{:016x}",row.returned),"thread_id":row.thread_id,
+                        "read_state":row.read_state,
+                        "tag":copied.then_some(row.tag),
+                        "payload8":copied.then(|| format!("0x{:016x}",row.payload)),
+                        "flags14":copied.then_some(row.flags)}),
+                    )?;
+                }
+                (
+                    rows.len(),
+                    snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
+                    snapshot
+                        .in_flight
+                        .load(std::sync::atomic::Ordering::Acquire),
+                )
+            }
+        };
         write_json(
             &mut writer,
-            json!({"kind":"stop","rows":rows.len(),
-            "dropped":snapshot.dropped.load(std::sync::atomic::Ordering::Acquire),
-            "in_flight":snapshot.in_flight.load(std::sync::atomic::Ordering::Acquire),
+            json!({"kind":"stop","rows":row_count,
+            "dropped":dropped,
+            "in_flight":in_flight,
             "snapshot_stable":true,
             "result":if control_error.is_none() {"ok"} else {"error"}}),
         )?;
@@ -990,6 +1102,13 @@ mod tests {
         assert!(args(&bad).is_err());
         bad[4] = "--pid".into();
         assert!(args(&bad).is_err());
+        let dir = tempfile::tempdir().unwrap();
+        let mut valid = base.map(str::to_string).to_vec();
+        valid[7] = dir.path().join("new.jsonl").to_string_lossy().into_owned();
+        valid.extend(["--mode".into(), "property".into()]);
+        assert_eq!(args(&valid).unwrap().mode, BridgeMode::Property);
+        valid[9] = "unknown".into();
+        assert!(args(&valid).is_err());
     }
 
     #[test]

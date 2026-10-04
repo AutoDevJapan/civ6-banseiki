@@ -99,7 +99,13 @@ pub trait Backend: Send {
     fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
-    fn start_native_bridge(&mut self, _output: &Path, _name: &str, _seconds: u64) -> Result<()> {
+    fn start_native_bridge(
+        &mut self,
+        _output: &Path,
+        _name: &str,
+        _seconds: u64,
+        _mode: &str,
+    ) -> Result<()> {
         Err(Error::input(
             "backend cannot start native CanEver bridge telemetry",
         ))
@@ -232,11 +238,17 @@ mod native_trace_step_tests {
 
     struct BridgeBackend(Arc<Mutex<Vec<String>>>);
     impl Backend for BridgeBackend {
-        fn start_native_bridge(&mut self, _: &Path, name: &str, seconds: u64) -> Result<()> {
+        fn start_native_bridge(
+            &mut self,
+            _: &Path,
+            name: &str,
+            seconds: u64,
+            mode: &str,
+        ) -> Result<()> {
             self.0
                 .lock()
                 .unwrap()
-                .push(format!("start:{name}:{seconds}"));
+                .push(format!("start:{name}:{seconds}:{mode}"));
             Ok(())
         }
         fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
@@ -268,7 +280,38 @@ mod native_trace_step_tests {
             .run_step(&json!({"action":"stop_native_can_ever_trace"}))
             .unwrap();
         assert!(detail.contains("bridge.jsonl"));
-        assert_eq!(*calls.lock().unwrap(), ["start:can-ever:25", "stop"]);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:can-ever:25:can-ever", "stop"]
+        );
+    }
+
+    #[test]
+    fn runner_dispatches_property_mode_to_the_bounded_bridge() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-property-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        assert!(runner
+            .run_step(&json!({"action":"start_native_property_trace",
+            "name":"values","max_seconds":120}))
+            .unwrap()
+            .contains("values.jsonl"));
+        assert!(runner
+            .run_step(&json!({"action":"stop_native_property_trace"}))
+            .unwrap()
+            .contains("bridge.jsonl"));
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:values:120:property", "stop"]
+        );
     }
 }
 
@@ -422,7 +465,13 @@ impl Backend for SystemBackend {
             None => Ok(None),
         }
     }
-    fn start_native_bridge(&mut self, output: &Path, name: &str, seconds: u64) -> Result<()> {
+    fn start_native_bridge(
+        &mut self,
+        output: &Path,
+        name: &str,
+        seconds: u64,
+        mode: &str,
+    ) -> Result<()> {
         if self.native_bridge.is_some() || self.native_trace.is_some() {
             return Err(Error::scenario("another native observation is active"));
         }
@@ -444,6 +493,7 @@ impl Backend for SystemBackend {
             output,
             name,
             seconds,
+            mode,
             Box::new(crate::native_bridge::close_pinned_game),
         )?);
         Ok(())
@@ -1685,26 +1735,32 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
-            "start_native_can_ever_trace" => {
+            "start_native_can_ever_trace" | "start_native_property_trace" => {
                 self.remaining(deadline)?;
+                let mode = if action == "start_native_property_trace" {
+                    "property"
+                } else {
+                    "can-ever"
+                };
                 self.backend.start_native_bridge(
                     &self.output,
                     text(step, "name"),
                     step["max_seconds"].as_u64().unwrap(),
+                    mode,
                 )?;
                 Ok(format!(
-                    "native CanEver original-return telemetry ready; artifact {}.jsonl",
+                    "native {mode} original-return telemetry ready; artifact {}.jsonl",
                     text(step, "name")
                 ))
             }
-            "stop_native_can_ever_trace" => {
+            "stop_native_can_ever_trace" | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
                 let artifact = self
                     .backend
                     .stop_native_bridge()?
-                    .ok_or_else(|| Error::scenario("native CanEver bridge was not active"))?;
+                    .ok_or_else(|| Error::scenario("native bridge was not active"))?;
                 Ok(format!(
-                    "native CanEver entry restored; artifact {}",
+                    "native entry restored; artifact {}",
                     artifact.display()
                 ))
             }
