@@ -105,7 +105,9 @@ llvm-objdump -d --no-show-raw-insn --start-address=0x1804a80ea --stop-address=0x
 
 ### 費用未払い時のAssign境界
 
-資格が開いてAPPOINTが通っても、費用2/3の追加PROMOTE前に公式Governor実体ができる。UIの `CanAssignGovernor` はwrapper `0x710090` →本体 `0xBA350` → `0x2DDB30` →末尾分岐 `0x2DD880` を通る。一方、公式ASSIGN操作側の分岐候補は `0x30EC0F` で本体 `0x2DDBB0` を確認し、真なら `0x30EC24` で配置処理候補 `0x2DF340` へ進む。両者は同一の入口ではない。したがってUIを隠すだけで途中の配置・定着・効果を防げるとは言えない。費用2/3を扱う次段階では、未払いの実総督に対してUI判定と操作側判定の双方が拒否することをobserverと本体結果で測る。公式PROMOTE、Spent、活動不能とスパイの実体をpropertyで偽造しない。
+資格が開いてAPPOINTが通っても、費用2/3の追加PROMOTE前に公式Governor実体ができる。UIの `CanAssignGovernor` はwrapper `0x710090` →本体 `0xBA350` → `0x2DDB30` →末尾分岐 `0x2DD880` を通る。公式操作ID `ASSIGN_GOVERNOR=0xF97C278B` を比較命令から追うと、配置は `0x30E070` → `0x30E0D5` → `0x30E1AC` → `0x2DD6F0` → `0x2DD340` であり、反映前の `0x2DD370` → `0x2DD880` で可否を読む。UIと公式配置が合流する `0x2DD880` が未払い時の配置禁止の静的候補になる。実手番での通過と拒否はまだ未実測で、UIだけを隠して支払いを保証する方式は採らない。
+
+以前の記録で配置とした `0x30EC0F/24` は、操作ID `PROMOTE_GOVERNOR=0x7D3DA99D` の分岐だった。正式昇進はGovernor IndexとPromotion Indexを渡し、`0x30EC0F` → `0x2DDBB0` が可否を調べ、真なら `0x30EC24` → `0x2DF340` が取得済み昇進を反映する。`GetGovernorPointsSpent` の本体 `0x2DEA90` は取得済み昇進フラグを数える。別の使用済み数を直接加算して支払いを代替しない。AIが効果なしの追加称号昇進を順に選び、配置より前に全額を払うことは、この静的解析だけでは未証明である。公式昇進、Spent、活動不能とスパイの実体をpropertyで偽造しない。
 
 ## task853の実装候補と実機待ちの境界（2026-10-03）
 
