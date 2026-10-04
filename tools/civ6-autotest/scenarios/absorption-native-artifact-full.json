@@ -255,6 +255,25 @@
       "seconds": 3
     },
     {
+      "state_name": "InGame",
+      "action": "ui_lua",
+      "code": "local owner=Game.GetLocalPlayer()\nlocal resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal candidates={}\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==resource and q:GetOwner()>=0 and q:GetOwner()~=owner\n  and not q:IsWater() and not q:IsImpassable() and Game.GetArtifactAtPlot(index) then\n  local units=Map.GetUnitsAt(q)\n  local city=Cities.GetPlotPurchaseCity(q)\n  if city and (not units or units:GetCount()==0) then\n   local key=city:GetOwner()..':'..city:GetID()\n   local t=candidates[key] or {Owner=city:GetOwner(),City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots={}}\n   t.Plots[#t.Plots+1]=index;candidates[key]=t\n  end\n end\nend\nlocal options={}\nfor _,t in pairs(candidates) do\n local city=assert(CityManager.GetCityAt(t.X,t.Y))\n local units=Map.GetUnitsAt(assert(Map.GetPlot(t.X,t.Y)))\n if #t.Plots>=3 and (not units or units:GetCount()==0) then\n  local empty=true;local b=city:GetBuildings()\n  for definition in GameInfo.Buildings() do\n   if b:HasBuilding(definition.Index) then\n    for slot=0,b:GetNumGreatWorkSlots(definition.Index)-1 do\n     local work=b:GetGreatWorkInSlot(definition.Index,slot)\n     if work and work>=0 then empty=false end\n    end\n   end\n  end\n  if empty then options[#options+1]=t end\n end\nend\ntable.sort(options,function(a,b) if a.Owner~=b.Owner then return a.Owner<b.Owner end return a.City<b.City end)\nlocal t=assert(options[1],'no empty-center city with three genuine recorded antiquities')\ntable.sort(t.Plots);t.To=owner\nExposedMembers.JAC_ArtifactSiteCity=t\nprint('[JAC_ARTIFACT_SITE_CITY_PLAN] owner='..t.Owner..' city='..t.City..' sites='..#t.Plots..' to='..owner)\nreturn 'selected a real antiquity city without center units or existing works'"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua",
+      "code": "local t=assert(ExposedMembers.JAC_ArtifactSiteCity)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'antiquity city changed before transfer')\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n for _,unit in Players[owner]:GetUnits():Members() do\n  assert(unit:GetX()~=t.X or unit:GetY()~=t.Y,'antiquity city center became occupied')\n end\nend\nCityManager.TransferCity(city,t.To)\nGame:SetProperty('JAC_ARTIFACT_SITE_CITY',JAC_AbsorptionGameplay.Rules.Copy(t))\nreturn 'requested fixture city transfer; antiquity resources and records were not changed'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_SITE_CITY')\nif not t then return false end\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.To then return false end\nfor _,index in ipairs(t.Plots) do\n local q=Map.GetPlotByIndex(index)\n if not q or q:GetOwner()~=t.To or q:GetResourceType()~=GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index\n  or not Game.GetArtifactAtPlot(index) then return false end\nend\nreturn #t.Plots>=3"
+      }
+    },
+    {
       "action": "wait_for",
       "timeout": 60,
       "condition": {

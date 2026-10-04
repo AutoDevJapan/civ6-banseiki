@@ -887,6 +887,62 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
 }
 
 #[test]
+fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_CITY_PLAN"))
+        .expect("genuine antiquity city preparation");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+      ExposedMembers={}; SAFE=true
+      Game={GetLocalPlayer=function() return 1 end,GetArtifactAtPlot=function() return {} end}
+      GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}},Buildings=function()
+        local done=false;return function() if not done then done=true;return {Index=0} end end
+      end}
+      local cities={}
+      for id=2,5 do
+        local n=id
+        cities[n]={GetOwner=function() return 2 end,GetID=function() return n end,
+          GetX=function() return n+100 end,GetY=function() return 0 end,
+          GetBuildings=function() return {HasBuilding=function() return true end,
+            GetNumGreatWorkSlots=function() return 1 end,
+            GetGreatWorkInSlot=function() return n==3 and 99 or -1 end} end}
+      end
+      Map={GetPlotCount=function() return 11 end,GetPlotByIndex=function(i)
+        local city=i<3 and 2 or i<6 and 3 or i<8 and 4 or 5
+        return {City=city,GetIndex=function() return i end,GetResourceType=function() return 9 end,
+          GetOwner=function() return 2 end,IsWater=function() return false end,
+          IsImpassable=function() return false end}
+      end,GetPlot=function(x) return {Center=x-100} end}
+      Map.GetUnitsAt=function(q) return {GetCount=function()
+        if q.Center==2 or (q.Center==5 and not SAFE) then return 1 end;return 0
+      end} end
+      Cities={GetPlotPurchaseCity=function(q) return cities[q.City] end}
+      CityManager={GetCityAt=function(x) return cities[x-100] end}
+    "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return t.City==5 and t.Owner==2 and t.To==1 and #t.Plots==3 and t.Plots[1]==8 and t.Plots[3]==10").eval::<bool>()?);
+    lua.load("SAFE=false;ExposedMembers.JAC_ArtifactSiteCity=nil")
+        .exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "accepted an occupied center, existing original, or fewer than three sites"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    Ok(())
+}
+
+#[test]
 fn excavation_fixture_selects_recorded_unoccupied_local_or_neutral_land() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artifact-full.json");
     let codes: Vec<_> = scenario["steps"]
