@@ -928,7 +928,11 @@ fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() ->
     )
     .exec()?;
     lua.load(code).exec()?;
-    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return t.City==5 and t.Owner==2 and t.To==1 and #t.Plots==3 and t.Plots[1]==8 and t.Plots[3]==10").eval::<bool>()?);
+    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return t.Cities[1].City==5 and t.Cities[1].Owner==2 and #t.Cities==1 and t.To==1 and #t.Plots==3 and t.Plots[1]==8 and t.Plots[3]==10").eval::<bool>()?);
+    lua.load("Game.GetArtifactAtPlot=function(i) if i~=10 then return {} end end")
+        .exec()?;
+    lua.load(code).exec()?;
+    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return #t.Cities==2 and t.Cities[1].City==4 and t.Cities[2].City==5 and #t.Plots==4 and t.Plots[1]==6 and t.Plots[4]==9").eval::<bool>()?);
     lua.load("SAFE=false;ExposedMembers.JAC_ArtifactSiteCity=nil")
         .exec()?;
     assert!(
