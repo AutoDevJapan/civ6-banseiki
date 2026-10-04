@@ -297,6 +297,10 @@ fn capacity_government_scene(suffix: &str) -> Value {
     .unwrap()
 }
 
+fn government_classification_scene() -> Value {
+    capacity_government_scene("classify")
+}
+
 fn scene_lua(scene: &Value, index: usize) -> &str {
     scene["steps"][index]["code"]
         .as_str()
@@ -1625,6 +1629,132 @@ fn capacity_government_plan_exposes_official_tier_and_change_gates() {
     let core: String = h.0.load(scene_lua(&scene, 5)).strict_eval().unwrap();
     assert!(core.contains("gameplayStatus=API_UNAVAILABLE getter=nil index=nil"));
     assert!(core.contains("uiBridge=function civicModifiers=table modifierArguments=table dynamicModifiers=table civicPrereqs=table"));
+}
+
+#[test]
+fn government_classification_records_a_native_refusal_without_saving_or_replaying() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end");
+    h.run(scene_lua(&scene, 2));
+    h.run("FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryClassifyCapacityGovernmentIntent'); CLASSIFY_PARAMS=r.params; ENEMY_CASES.fireCore('JAC_BoundaryClassifyCapacityGovernmentIntent',r.params); FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='GOV_CLASSIFY_INTENT'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='REQUESTED_CLASSIFY_CAPACITY_GOVERNMENT' and GOV_REQUEST_CALLS==1 and GOV_CURRENT==0 and not GOV_CIVIC_COMPLETED_THIS_TURN)");
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 3))
+        .strict_eval::<bool>()
+        .unwrap());
+    h.run("ADVANCE_TURN()");
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 5))
+        .strict_eval::<bool>()
+        .unwrap());
+    h.run(scene_lua(&scene, 6));
+    h.run("FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryReadCapacityGovernmentClassification' and r.params.Turn==TURN and r.params.OriginalToken==CLASSIFY_PARAMS.Token); ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityGovernmentClassification',r.params); FRAME(); local b=REQUESTS[#REQUESTS]; assert(b.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier' and b.params.Phase=='GOV_CLASSIFY_READ'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',b.params); fire(Events.GameCoreEventPublishComplete); FRAME()");
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 7))
+        .strict_eval::<bool>()
+        .unwrap());
+    h.run("local x=ExposedMembers.JAC_PersonaBoundary.GovernmentClassification(); assert(x.status=='NATIVE_GOV_REFUSED' and x.rawType=='boolean' and x.rawValue=='false' and x.beforeTotal==1 and x.afterTotal==1 and x.beforeSpent==0 and x.afterSpent==0 and x.afterGovernment==0 and GOV_REQUEST_CALLS==1)");
+    h.reject(scene_lua(&scene, 8), "NATIVE_GOV_REFUSED");
+    assert_eq!(scene["steps"][9]["action"], "save");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('CLASSIFY_CAPACITY_GOVERNMENT')",
+        "already attempted",
+    );
+}
+
+#[test]
+fn government_classification_saves_only_an_observed_native_acceptance() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end; local read=Players[0].GetCulture; Players[0].GetCulture=function() local culture=read(); culture.RequestChangeGovernment=function(_,hash) assert(hash==GameInfo.Types.GOVERNMENT_OLIGARCHY.Hash); GOV_REQUEST_CALLS=GOV_REQUEST_CALLS+1; GOV_CURRENT=1; GOV_CHANGE_MADE=true; return true end; return culture end");
+    h.run(scene_lua(&scene, 2));
+    h.run("FRAME(); local r=REQUESTS[#REQUESTS]; CLASSIFY_PARAMS=r.params; ENEMY_CASES.fireCore('JAC_BoundaryClassifyCapacityGovernmentIntent',r.params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='REQUESTED_CLASSIFY_CAPACITY_GOVERNMENT' and GOV_REQUEST_CALLS==1)");
+    h.run("ADVANCE_TURN()");
+    h.run(scene_lua(&scene, 6));
+    h.run("FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityGovernmentClassification',REQUESTS[#REQUESTS].params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME()");
+    assert!(h
+        .0
+        .load(scene_lua(&scene, 7))
+        .strict_eval::<bool>()
+        .unwrap());
+    let status: String = h.0.load(scene_lua(&scene, 8)).strict_eval().unwrap();
+    assert!(status.contains("NATIVE_GOV_ACCEPTED"));
+    assert_eq!(scene["steps"][9]["action"], "save");
+    h.run("local x=ExposedMembers.JAC_PersonaBoundary.GovernmentClassification(); assert(x.afterGovernment==1 and x.afterTier=='Tier1' and x.beforeTotal==x.afterTotal and x.beforeSpent==x.afterSpent and x.rawValue=='true' and GOV_REQUEST_CALLS==1)");
+}
+
+#[test]
+fn government_classification_does_not_treat_a_true_request_return_as_acceptance() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end; local read=Players[0].GetCulture; Players[0].GetCulture=function() local culture=read(); culture.RequestChangeGovernment=function(_,hash) assert(hash==GameInfo.Types.GOVERNMENT_OLIGARCHY.Hash); GOV_REQUEST_CALLS=GOV_REQUEST_CALLS+1; return true end; return culture end");
+    h.run(scene_lua(&scene, 2));
+    h.run("FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryClassifyCapacityGovernmentIntent',REQUESTS[#REQUESTS].params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(GOV_REQUEST_CALLS==1 and GOV_CURRENT==0)");
+    h.run("ADVANCE_TURN()");
+    h.run(scene_lua(&scene, 6));
+    h.run("FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityGovernmentClassification',REQUESTS[#REQUESTS].params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME()");
+    h.run("local x=ExposedMembers.JAC_PersonaBoundary.GovernmentClassification(); assert(x.status=='NATIVE_GOV_REFUSED' and x.rawOk and x.rawValue=='true' and x.afterGovernment==0 and x.beforeTotal==x.afterTotal and x.beforeSpent==x.afterSpent and GOV_REQUEST_CALLS==1)");
+    h.reject(scene_lua(&scene, 8), "NATIVE_GOV_REFUSED raw=true");
+    assert_eq!(scene["steps"][9]["action"], "save");
+}
+
+#[test]
+fn government_classification_requires_the_original_native_actor_before_request() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end; GOV_CURRENT=1");
+    h.reject(
+        scene_lua(&scene, 2),
+        "Government classification actor or original captive differs",
+    );
+    h.run("assert(GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_INTENT')==nil)");
+}
+
+#[test]
+fn government_classification_unknown_request_stops_before_the_real_turn() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end; local read=Players[0].GetCulture; Players[0].GetCulture=function() local culture=read(); culture.RequestChangeGovernment=function() GOV_REQUEST_CALLS=GOV_REQUEST_CALLS+1; error('native request unavailable') end; return culture end");
+    h.run(scene_lua(&scene, 2));
+    h.run("FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryClassifyCapacityGovernmentIntent',REQUESTS[#REQUESTS].params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME()");
+    h.reject(scene_lua(&scene, 3), "UNKNOWN_CLASSIFY_CAPACITY_GOVERNMENT");
+    h.run("assert(GOV_REQUEST_CALLS==1 and GOV_CURRENT==0 and TURN==24 and Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_INTENT').status=='PREPARED' and Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ')==nil)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('CLASSIFY_CAPACITY_GOVERNMENT')",
+        "already attempted",
+    );
+}
+
+#[test]
+fn government_classification_rejects_a_changed_original_request_reference() {
+    let scene = government_classification_scene();
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.setup_tier1_before_window();
+    h.run("local original=Players[0].GetGovernors; Players[0].GetGovernors=function() local titles=original(); titles.GetGovernorPointsSpent=function() return 0 end; return titles end");
+    h.run(scene_lua(&scene, 2));
+    h.run("FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryClassifyCapacityGovernmentIntent',REQUESTS[#REQUESTS].params); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(GOV_REQUEST_CALLS==1)");
+    h.run("ADVANCE_TURN()");
+    h.run(scene_lua(&scene, 6));
+    h.run("FRAME(); local original=REQUESTS[#REQUESTS].params; local wrong={}; for key,value in pairs(original) do wrong[key]=value end; wrong.OriginalToken=wrong.OriginalToken+1; ENEMY_CASES.fireCore('JAC_BoundaryReadCapacityGovernmentClassification',wrong); local read=Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ'); assert(read.status=='ERROR' and read.error=='READ_FAILED'); FRAME(); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',REQUESTS[#REQUESTS].params); fire(Events.GameCoreEventPublishComplete); FRAME()");
+    h.reject(
+        scene_lua(&scene, 7),
+        "UNKNOWN_READ_CAPACITY_GOVERNMENT_CLASSIFICATION",
+    );
+    h.run("assert(GOV_REQUEST_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_GOV_CLASSIFY_READ').status=='ERROR')");
 }
 
 #[test]

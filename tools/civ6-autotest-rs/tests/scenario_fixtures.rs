@@ -294,6 +294,7 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         "retry-capacity-plan",
         "retry-capacity-civic",
         "retry-capacity-government-plan",
+        "retry-capacity-government-classify",
         "retry-capacity-government-tier1",
         "retry-capacity-government-tier2",
         "retry-capacity-tier2-civic",
@@ -339,12 +340,54 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 suffix.ends_with("tick")
                     || suffix == "retry-capacity-civic"
                     || suffix == "retry-capacity-government-tier1"
+                    || suffix == "retry-capacity-government-classify"
                     || suffix == "retry-capacity-tier2-civic",
             ),
             "{name}"
         );
     }
-    assert_eq!(saves, 17);
+    assert_eq!(saves, 18);
+    let classification =
+        scenario("leader-persona-spy-neutralization-retry-capacity-government-classify.json");
+    let classification_steps = steps(&classification);
+    let request = classification_steps
+        .iter()
+        .position(|s| {
+            action(s, "ui_lua")
+                && embedded_lua(s)
+                    .is_some_and(|code| code.contains("Queue('CLASSIFY_CAPACITY_GOVERNMENT')"))
+        })
+        .unwrap();
+    let turn = classification_steps
+        .iter()
+        .position(|s| action(s, "end_turn"))
+        .unwrap();
+    let read = classification_steps
+        .iter()
+        .position(|s| {
+            action(s, "ui_lua")
+                && embedded_lua(s).is_some_and(|code| {
+                    code.contains("Queue('READ_CAPACITY_GOVERNMENT_CLASSIFICATION')")
+                })
+        })
+        .unwrap();
+    let proof = classification_steps
+        .iter()
+        .position(|s| {
+            action(s, "ui_lua")
+                && embedded_lua(s)
+                    .is_some_and(|code| code.contains("x.status~='NATIVE_GOV_ACCEPTED'"))
+        })
+        .unwrap();
+    let save = classification_steps
+        .iter()
+        .position(|s| action(s, "save"))
+        .unwrap();
+    assert!(request < turn && turn < read && read < proof && proof < save);
+    assert!(classification_steps[proof]["code"]
+        .as_str()
+        .unwrap()
+        .contains("x.afterTotal==r.total"));
     for (suffix, civic_action) in [
         (
             "retry-capacity-government-tier1",
