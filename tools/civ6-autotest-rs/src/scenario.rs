@@ -153,16 +153,16 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 "stop native property observation before a save or turn change".into(),
             ));
         }
-        match action {
-            "restart_game" => {
-                if bridge_open || trace_open {
-                    return Err(fail(
-                        "stop native observation before restarting the game".into(),
-                    ));
-                }
-                property_used = false;
-                promotion_used = false;
+        if action == "restart_game" {
+            if bridge_open || trace_open {
+                return Err(fail(
+                    "stop native observation before restarting the game".into(),
+                ));
             }
+            property_used = false;
+            promotion_used = false;
+        }
+        match action {
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_joined_admission"
