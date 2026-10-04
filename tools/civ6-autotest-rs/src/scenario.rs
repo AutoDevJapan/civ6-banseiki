@@ -573,12 +573,14 @@ pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
 pub const STATIC_PERSONA_GATE_ID: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
 pub const ENEMY_PERSONA_GATE_ID: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
 pub const TRAIT_GRANT_PROBE_ID: &str = "2b20f0d9-64cd-42b8-9841-74067419b81e";
+pub const PROPERTY_OBSERVER_MOD_ID: &str = "d8532710-f853-4c53-8853-271000000001";
 pub fn isolated_disabled_mods(ids: &[String], disabled: &[String]) -> Vec<String> {
     let mut result = disabled.to_vec();
     for gate in [
         STATIC_PERSONA_GATE_ID,
         ENEMY_PERSONA_GATE_ID,
         TRAIT_GRANT_PROBE_ID,
+        PROPERTY_OBSERVER_MOD_ID,
     ] {
         if !ids.iter().any(|id| id.eq_ignore_ascii_case(gate))
             && !result.iter().any(|id| id.eq_ignore_ascii_case(gate))

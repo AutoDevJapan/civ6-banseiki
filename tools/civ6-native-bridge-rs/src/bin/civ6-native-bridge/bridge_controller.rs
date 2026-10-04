@@ -14,7 +14,8 @@ use std::ptr::null_mut;
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use windows_sys::Win32::Foundation::{
-    CloseHandle, FreeLibrary, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    CloseHandle, FreeLibrary, ERROR_BAD_LENGTH, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
+    WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::System::Diagnostics::{
     Debug::{ReadProcessMemory, WriteProcessMemory},
@@ -48,6 +49,8 @@ const REMOTE_CALL_SECONDS: u32 = 8;
 const RECOVERY_SECONDS: u32 = 30;
 const CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 const PROPERTY_GET_FILE_OFFSET: u64 = 0x99e9c0;
+const PROPERTY_PREFIX_LEN: usize = 5;
+const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
 const CAN_EVER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5c, 0x24, 0x08];
 const PROPERTY_PROLOGUE: [u8; 8] = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30];
 
@@ -143,7 +146,7 @@ impl OwnedJob {
         Ok(())
     }
 
-    fn disarm_after_restoration(&self) -> Result<(), String> {
+    fn disarm_after_verified_entry_restoration(&self) -> Result<(), String> {
         self.set_limits(JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)?;
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         if unsafe {
@@ -157,7 +160,7 @@ impl OwnedJob {
         } == 0
             || limits.BasicLimitInformation.LimitFlags != JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK
         {
-            return Err("job kill-on-close state unverified after original bytes restored".into());
+            return Err("job kill-on-close state unverified after entry restoration".into());
         }
         Ok(())
     }
@@ -371,11 +374,30 @@ struct Module {
     size: usize,
     path: PathBuf,
 }
+fn retry_module_snapshot<T>(mut open: impl FnMut() -> std::io::Result<T>) -> Result<T, String> {
+    // Windows documents ERROR_BAD_LENGTH as transient when a module list
+    // changes during TH32CS_SNAPMODULE. Keep the retry finite for this
+    // bounded controller, and propagate every other error immediately.
+    for attempt in 0..16 {
+        match open() {
+            Ok(snapshot) => return Ok(snapshot),
+            Err(error) if error.raw_os_error() == Some(ERROR_BAD_LENGTH as i32) && attempt < 15 => {
+                std::thread::yield_now();
+            }
+            Err(error) => return Err(format!("module snapshot: {error}")),
+        }
+    }
+    Err("module snapshot retry exhausted".into())
+}
 fn modules(pid: u32) -> Result<Vec<Module>, String> {
-    let snapshot = Handle::checked(
-        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) },
-        "module snapshot",
-    )?;
+    let snapshot = retry_module_snapshot(|| {
+        let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) };
+        if !raw.is_null() && raw != INVALID_HANDLE_VALUE {
+            Ok(Handle(raw))
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    })?;
     let mut entry: MODULEENTRY32W = unsafe { zeroed() };
     entry.dwSize = size_of::<MODULEENTRY32W>() as u32;
     if unsafe { Module32FirstW(snapshot.0, &mut entry) } == 0 {
@@ -561,6 +583,29 @@ fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<
     }
     Ok(disk)
 }
+
+fn pinned_property_prefix(
+    game: &Handle,
+    target: usize,
+) -> Result<[u8; PROPERTY_PREFIX_LEN], String> {
+    if target & 0xfff < PROPERTY_PREFIX_LEN {
+        return Err("property prefix crosses a page boundary".into());
+    }
+    let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
+    file.seek(SeekFrom::Start(
+        PROPERTY_GET_FILE_OFFSET - PROPERTY_PREFIX_LEN as u64,
+    ))
+    .map_err(|e| format!("pinned property prefix seek: {e}"))?;
+    let mut disk = [0u8; PROPERTY_PREFIX_LEN];
+    file.read_exact(&mut disk)
+        .map_err(|e| format!("pinned property prefix read: {e}"))?;
+    let mut memory = [0u8; PROPERTY_PREFIX_LEN];
+    read_remote(game, target - PROPERTY_PREFIX_LEN, &mut memory)?;
+    if disk != PROPERTY_PREFIX_PAD || memory != disk {
+        return Err("pinned property prefix is not five untouched INT3 bytes".into());
+    }
+    Ok(disk)
+}
 fn write_json(writer: &mut BufWriter<File>, value: Value) -> Result<(), String> {
     serde_json::to_writer(&mut *writer, &value).map_err(|e| e.to_string())?;
     writer.write_all(b"\n").map_err(|e| e.to_string())?;
@@ -633,7 +678,7 @@ fn drained_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyT
         let in_flight = snapshot
             .in_flight
             .load(std::sync::atomic::Ordering::Acquire);
-        if in_flight == 0 && prior == Some(next) && snapshot.complete_rows().is_ok() {
+        if in_flight == 0 && prior == Some(next) && snapshot.snapshot_rows().is_ok() {
             stable += 1;
             if stable >= 3 {
                 return Ok(snapshot);
@@ -691,6 +736,11 @@ pub fn run() -> Result<(), String> {
     }
     let target = pinned_target(parsed.pid, &game, parsed.mode)?;
     let original = pinned_entry_bytes(&game, target, parsed.mode)?;
+    let original_prefix = if parsed.mode == BridgeMode::Property {
+        Some(pinned_property_prefix(&game, target)?)
+    } else {
+        None
+    };
     let dll = bridge_dll()?;
     let bridge_sha = sha256(&dll)?;
     let (install_rva, uninstall_rva) = exported_rvas(&dll)?;
@@ -705,6 +755,8 @@ pub fn run() -> Result<(), String> {
             "duration_limit_seconds":parsed.duration});
     if parsed.mode == BridgeMode::CanEver {
         identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
+    } else {
+        identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
     }
     write_json(&mut writer, identity)?;
     // All remotely executing or writing operations are below this point.
@@ -760,6 +812,22 @@ pub fn run() -> Result<(), String> {
                     .into(),
             );
         }
+        let installed_prefix = if parsed.mode == BridgeMode::Property {
+            let mut prefix = [0u8; PROPERTY_PREFIX_LEN];
+            read_remote(&game, target - PROPERTY_PREFIX_LEN, &mut prefix)?;
+            let mut entry = [0u8; 8];
+            read_remote(&game, target, &mut entry)?;
+            if prefix[0] != 0xe9
+                || prefix == original_prefix.unwrap()
+                || entry[..2] != [0xeb, 0xf9]
+                || entry[2..] != original[2..]
+            {
+                return Err("property hotpatch did not preserve entry+2..+7".into());
+            }
+            Some(prefix)
+        } else {
+            None
+        };
         println!("READY pid={} max_seconds={}", parsed.pid, parsed.duration);
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let (sender, receiver) = mpsc::channel();
@@ -797,10 +865,6 @@ pub fn run() -> Result<(), String> {
         }
         let uninstall_status =
             remote_call(&game, bridge.base + uninstall_rva, 0, "BridgeUninstall")?;
-        write_json(
-            &mut writer,
-            json!({"kind":"uninstall","status":uninstall_status}),
-        )?;
         if uninstall_status != BridgeStatus::Ok as u32 {
             return Err("bridge entry was not restored; close the pinned game".into());
         }
@@ -809,7 +873,20 @@ pub fn run() -> Result<(), String> {
         if restored != original {
             return Err("original GameCore entry differs after remote uninstall returned".into());
         }
-        let (row_count, dropped, in_flight) = match parsed.mode {
+        if let Some(patched) = installed_prefix {
+            let mut retained = [0u8; PROPERTY_PREFIX_LEN];
+            read_remote(&game, target - PROPERTY_PREFIX_LEN, &mut retained)?;
+            if retained != patched {
+                return Err("property prefix changed before game exit".into());
+            }
+        }
+        write_json(
+            &mut writer,
+            json!({"kind":"uninstall","status":uninstall_status,
+                "entry_restored":true,
+                "prefix_retained_until_exit":installed_prefix.is_some()}),
+        )?;
+        let (row_count, dropped, in_flight, observed_calls) = match parsed.mode {
             BridgeMode::CanEver => {
                 let snapshot = drained_trace(&game, trace_remote)?;
                 let rows = snapshot.complete_rows().map_err(str::to_string)?;
@@ -836,11 +913,12 @@ pub fn run() -> Result<(), String> {
                     snapshot
                         .in_flight
                         .load(std::sync::atomic::Ordering::Acquire),
+                    snapshot.next.load(std::sync::atomic::Ordering::Acquire),
                 )
             }
             BridgeMode::Property => {
                 let snapshot = drained_property_trace(&game, trace_remote)?;
-                let rows = snapshot.complete_rows().map_err(str::to_string)?;
+                let rows = snapshot.snapshot_rows().map_err(str::to_string)?;
                 for row in &rows {
                     let copied = row.read_state == 1;
                     write_json(
@@ -860,16 +938,30 @@ pub fn run() -> Result<(), String> {
                     snapshot
                         .in_flight
                         .load(std::sync::atomic::Ordering::Acquire),
+                    snapshot.next.load(std::sync::atomic::Ordering::Acquire),
                 )
             }
+        };
+        let result = if control_error.is_some() {
+            "error"
+        } else if parsed.mode == BridgeMode::Property && dropped != 0 {
+            "partial_raw"
+        } else if parsed.mode == BridgeMode::Property {
+            "raw_collected"
+        } else {
+            "ok"
         };
         write_json(
             &mut writer,
             json!({"kind":"stop","rows":row_count,
             "dropped":dropped,
+            "observed_calls":observed_calls,
             "in_flight":in_flight,
             "snapshot_stable":true,
-            "result":if control_error.is_none() {"ok"} else {"error"}}),
+            "quiescence_proven":false,
+            "classification":if parsed.mode == BridgeMode::Property {"raw_collection"} else {"can_ever_entry"},
+            "prefix_retained_until_exit":installed_prefix.is_some(),
+            "result":result}),
         )?;
         if let Some(error) = control_error {
             return Err(error);
@@ -884,16 +976,17 @@ pub fn run() -> Result<(), String> {
         };
         return Err(fail_owned_call(&mut job, &game, error, wait_ms));
     }
-    // The install and uninstall remote threads have both signalled. The
-    // original eight bytes were read back, and the DLL/relay/trace allocations
-    // remain mapped in the game for any caller paused before gateway counting.
-    job.disarm_after_restoration()?;
+    // The original entry is restored. In property mode the prefix is still a
+    // published branch and stays mapped along with the DLL/relay/trace until
+    // game exit; no quiescence proof permits restoring those five bytes here.
+    job.disarm_after_verified_entry_restoration()?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::os::windows::process::CommandExt;
     use std::process::{Child, Command, Stdio};
     use std::sync::atomic::Ordering;
@@ -933,6 +1026,35 @@ mod tests {
         | PROCESS_SYNCHRONIZE
         | PROCESS_TERMINATE
         | PROCESS_SET_QUOTA;
+
+    #[test]
+    fn module_snapshot_retries_only_bad_length_and_has_a_finite_limit() {
+        let calls = Cell::new(0);
+        let value = retry_module_snapshot(|| {
+            calls.set(calls.get() + 1);
+            if calls.get() < 3 {
+                Err(std::io::Error::from_raw_os_error(ERROR_BAD_LENGTH as i32))
+            } else {
+                Ok(853u32)
+            }
+        })
+        .unwrap();
+        assert_eq!((value, calls.get()), (853, 3));
+        calls.set(0);
+        assert!(retry_module_snapshot::<u32>(|| {
+            calls.set(calls.get() + 1);
+            Err(std::io::Error::from_raw_os_error(5))
+        })
+        .is_err());
+        assert_eq!(calls.get(), 1);
+        calls.set(0);
+        assert!(retry_module_snapshot::<u32>(|| {
+            calls.set(calls.get() + 1);
+            Err(std::io::Error::from_raw_os_error(ERROR_BAD_LENGTH as i32))
+        })
+        .is_err());
+        assert_eq!(calls.get(), 16);
+    }
 
     #[test]
     fn unexpected_controller_drop_kills_only_its_owned_job_target() {
@@ -1047,7 +1169,7 @@ mod tests {
             process_created(&target_handle).unwrap(),
         )
         .unwrap();
-        job.disarm_after_restoration().unwrap();
+        job.disarm_after_verified_entry_restoration().unwrap();
         drop(job);
         assert!(alive(&target_handle));
     }
@@ -1082,6 +1204,28 @@ mod tests {
         let snapshot = drained_trace(&process, address).unwrap();
         assert_eq!(snapshot.complete_rows().unwrap()[0].governor_index, 42);
         writer.join().unwrap();
+    }
+
+    #[test]
+    fn overflowing_property_snapshot_keeps_all_published_rows_and_drop_count() {
+        let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
+        let trace = Box::new(PropertyTrace::default());
+        for row in &trace.rows {
+            row.sequence.store(1, Ordering::Release);
+        }
+        trace.next.store(
+            civ6_native_bridge_rs::TRACE_CAPACITY as u32 + 2,
+            Ordering::Release,
+        );
+        trace.dropped.store(2, Ordering::Release);
+        let address = (&*trace as *const PropertyTrace) as usize;
+        let snapshot = drained_property_trace(&process, address).unwrap();
+        assert_eq!(
+            snapshot.snapshot_rows().unwrap().len(),
+            civ6_native_bridge_rs::TRACE_CAPACITY
+        );
+        assert_eq!(snapshot.dropped.load(Ordering::Acquire), 2);
+        assert!(snapshot.complete_rows().is_err());
     }
 
     #[test]

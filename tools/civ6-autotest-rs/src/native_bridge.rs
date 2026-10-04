@@ -36,8 +36,7 @@ mod platform {
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
-        let mut missing = 0usize;
-        let mut copied = 0usize;
+        let mut partial_dropped = None;
         for line in BufReader::new(std::fs::File::open(path)?).lines() {
             let row: Value = serde_json::from_str(&line?)?;
             if stopped != 0 {
@@ -56,13 +55,21 @@ mod platform {
                                 "property"
                             }
                         && row["entry_rva"] == mode.rva()
+                        && (mode == BridgeMode::CanEver
+                            || row["prefix_bytes"] == "[cc, cc, cc, cc, cc]")
                         && row["gamecore_sha256"]
                             == civ6_native_bridge_rs::PINNED_GAMECORE_SHA256 =>
                 {
                     identity += 1
                 }
                 Some("install") if row["status"] == 0 => installed += 1,
-                Some("uninstall") if row["status"] == 0 => restored += 1,
+                Some("uninstall")
+                    if row["status"] == 0
+                        && row["entry_restored"] == true
+                        && row["prefix_retained_until_exit"] == (mode == BridgeMode::Property) =>
+                {
+                    restored += 1
+                }
                 Some("entry")
                     if mode == BridgeMode::CanEver
                         && row["sequence"].as_u64() == Some(entries as u64 + 1) =>
@@ -93,7 +100,6 @@ mod platform {
                         {
                             return Err(Error::input("invalid missing property row"));
                         }
-                        missing += 1;
                     } else if row["read_state"] == 1 {
                         if returned == "0x0000000000000000"
                             || !row["tag"].as_u64().is_some_and(|n| n <= u16::MAX as u64)
@@ -106,7 +112,6 @@ mod platform {
                         {
                             return Err(Error::input("invalid copied property row"));
                         }
-                        copied += 1;
                     } else if returned == "0x0000000000000000"
                         || !row["tag"].is_null()
                         || !row["payload8"].is_null()
@@ -117,12 +122,34 @@ mod platform {
                     entries += 1;
                 }
                 Some("stop")
-                    if row["result"] == "ok"
-                        && row["rows"] == entries
-                        && row["dropped"] == 0
+                    if row["rows"] == entries
                         && row["in_flight"] == 0
-                        && row["snapshot_stable"] == true =>
+                        && row["snapshot_stable"] == true
+                        && row["observed_calls"].as_u64().is_some_and(|n| {
+                            n == entries as u64 + row["dropped"].as_u64().unwrap_or(u64::MAX)
+                        })
+                        && (if mode == BridgeMode::CanEver {
+                            row["result"] == "ok"
+                                && row["dropped"] == 0
+                                && row["classification"] == "can_ever_entry"
+                                && row["prefix_retained_until_exit"] == false
+                        } else {
+                            row["classification"] == "raw_collection"
+                                && row["prefix_retained_until_exit"] == true
+                                && row["quiescence_proven"] == false
+                                && row["dropped"]
+                                    .as_u64()
+                                    .is_some_and(|n| n <= u32::MAX as u64)
+                                && (if row["dropped"] == 0 {
+                                    row["result"] == "raw_collected"
+                                } else {
+                                    row["result"] == "partial_raw"
+                                })
+                        }) =>
                 {
+                    if mode == BridgeMode::Property {
+                        partial_dropped = row["dropped"].as_u64();
+                    }
                     stopped += 1
                 }
                 _ => {
@@ -132,16 +159,16 @@ mod platform {
                 }
             }
         }
-        if identity != 1
-            || installed != 1
-            || restored != 1
-            || stopped != 1
-            || entries == 0
-            || (mode == BridgeMode::Property && (missing == 0 || copied == 0))
-        {
+        if identity != 1 || installed != 1 || restored != 1 || stopped != 1 || entries == 0 {
             return Err(Error::input(
                 "native bridge terminal proof or caller evidence missing",
             ));
+        }
+        if let Some(dropped) = partial_dropped.filter(|n| *n > 0) {
+            return Err(Error::input(format!(
+                "native property raw collection is partial: {entries} rows, {dropped} dropped; inspect {}",
+                path.display()
+            )));
         }
         Ok(entries)
     }
@@ -564,10 +591,13 @@ mod platform {
                     "mode":"can-ever","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
-                json!({"kind":"uninstall","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":false}),
                 json!({"kind":"entry","sequence":1}),
                 json!({"kind":"stop","result":"ok","rows":1,
-                    "dropped":0,"in_flight":0,"snapshot_stable":true}),
+                    "dropped":0,"observed_calls":1,"in_flight":0,
+                    "snapshot_stable":true,"classification":"can_ever_entry",
+                    "prefix_retained_until_exit":false}),
             ];
             let write = |rows: &[Value]| {
                 std::fs::write(
@@ -610,23 +640,27 @@ mod platform {
         }
 
         #[test]
-        fn property_terminal_requires_real_missing_and_complete_value_rows() {
+        fn property_terminal_classifies_raw_rows_and_keeps_partial_evidence() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("property.jsonl");
             let rows = [
                 json!({"kind":"identity","pid":7,"created_filetime":123,
                     "mode":"property","entry_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
+                    "prefix_bytes":"[cc, cc, cc, cc, cc]",
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
-                json!({"kind":"uninstall","status":0}),
+                json!({"kind":"uninstall","status":0,"entry_restored":true,
+                    "prefix_retained_until_exit":true}),
                 json!({"kind":"property_get","sequence":1,"property":"0x0000000000001000",
                     "key_id":853,"returned":"0x0000000000000000","thread_id":4,
                     "read_state":0,"tag":null,"payload8":null,"flags14":null}),
                 json!({"kind":"property_get","sequence":2,"property":"0x0000000000001000",
                     "key_id":853,"returned":"0x0000000000002000","thread_id":4,
                     "read_state":1,"tag":2,"payload8":"0x00000000000d0517","flags14":0}),
-                json!({"kind":"stop","result":"ok","rows":2,"dropped":0,
-                    "in_flight":0,"snapshot_stable":true}),
+                json!({"kind":"stop","result":"raw_collected","rows":2,"dropped":0,
+                    "observed_calls":2,"in_flight":0,"snapshot_stable":true,
+                    "quiescence_proven":false,"classification":"raw_collection",
+                    "prefix_retained_until_exit":true}),
             ];
             let write = |rows: &[Value]| {
                 std::fs::write(
@@ -643,6 +677,24 @@ mod platform {
                 terminal_artifact(&path, 7, 123, BridgeMode::Property).unwrap(),
                 2
             );
+            let mut one_unmapped = rows.to_vec();
+            one_unmapped.remove(4);
+            one_unmapped[4]["rows"] = json!(1);
+            one_unmapped[4]["observed_calls"] = json!(1);
+            write(&one_unmapped);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::Property).unwrap(),
+                1
+            );
+            let mut partial = rows.to_vec();
+            partial[5]["result"] = json!("partial_raw");
+            partial[5]["dropped"] = json!(3);
+            partial[5]["observed_calls"] = json!(5);
+            write(&partial);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::Property)
+                .unwrap_err()
+                .to_string()
+                .contains("3 dropped"));
             for index in 0..rows.len() {
                 let mut missing = rows.to_vec();
                 missing.remove(index);

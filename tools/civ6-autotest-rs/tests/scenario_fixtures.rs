@@ -17,6 +17,7 @@ const NATIVE_SLOT_ONLY_MOD: &str = "8c615430-5a09-4431-877a-bfd03bca9e80";
 const STATIC_GATE_MOD: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
 const ENEMY_GATE_MOD: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
 const TRAIT_GRANT_MOD: &str = "2b20f0d9-64cd-42b8-9841-74067419b81e";
+const PROPERTY_OBSERVER_MOD: &str = "d8532710-f853-4c53-8853-271000000001";
 const NEW_SCENARIOS: [&str; 7] = [
     "japan-15km-20turn-full-metrics.json",
     "japan-15km-300turn-full-metrics.json",
@@ -65,7 +66,7 @@ fn property_observer_scene_is_bounded_and_all_embedded_lua_parses() {
         .iter()
         .position(|step| action(step, "stop_native_property_trace"))
         .unwrap();
-    assert!(start < stop && actions[start]["max_seconds"] == 180);
+    assert!(start < stop && actions[start]["max_seconds"] == 90);
     assert!(actions[start + 1..stop].iter().all(|step| ![
         "save",
         "load",
@@ -874,6 +875,21 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
                 assert!(strings("ids").iter().any(|id| id == TRAIT_GRANT_MOD));
             } else {
                 assert!(isolated.iter().any(|id| id == TRAIT_GRANT_MOD), "{name}");
+            }
+            if name == "leader-persona-property-observer-15km.json" {
+                assert!(
+                    strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
+                    "{name}"
+                );
+                assert!(
+                    !isolated.iter().any(|id| id == PROPERTY_OBSERVER_MOD),
+                    "{name}"
+                );
+            } else {
+                assert!(
+                    isolated.iter().any(|id| id == PROPERTY_OBSERVER_MOD),
+                    "{name}"
+                );
             }
             assert!(
                 !first["ids"]
