@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use std::sync::Mutex;
 use windows_sys::Win32::Foundation::FILETIME;
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
+use windows_sys::Win32::System::Diagnostics::Debug::ReadProcessMemory;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 use windows_sys::Win32::System::Memory::{
     VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT,
@@ -17,25 +18,69 @@ use windows_sys::Win32::System::Memory::{
     PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
 };
 use windows_sys::Win32::System::Threading::{
-    GetCurrentProcess, GetCurrentProcessId, GetProcessTimes,
+    GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetProcessTimes,
 };
 
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
+const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
+const PROPERTY_TRACE_VERSION: u32 = 1;
 const CODE_PAGE: usize = 4096;
 const RELAY_OFFSET: usize = 0;
 const TRAMPOLINE_OFFSET: usize = 32;
 const PROLOGUE_LEN: usize = 5;
 const PINNED_PROLOGUE: [u8; PROLOGUE_LEN] = [0x48, 0x89, 0x5c, 0x24, 0x08];
+// LLVM disassembly of the pinned image: mov rax,[rcx+40h] (4 bytes),
+// lea r9,[rcx+30h] (4 bytes). Both whole instructions are relocated.
+const PROPERTY_PROLOGUE: [u8; 8] = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30];
 pub const PINNED_GAMECORE_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const PINNED_CAN_EVER_RVA: usize = 0x2d_ddd0;
 const PINNED_CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
+pub const PINNED_PROPERTY_GET_RVA: usize = 0x99_f5c0;
+const PINNED_PROPERTY_GET_FILE_OFFSET: u64 = 0x99_e9c0;
 pub const GAME_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const CONFIG_VERSION: u32 = 1;
 use crate::MAX_ACTIVE_SECONDS;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum BridgeMode {
+    CanEver = 0,
+    Property = 1,
+}
+
+impl BridgeMode {
+    pub const fn rva(self) -> usize {
+        match self {
+            Self::CanEver => PINNED_CAN_EVER_RVA,
+            Self::Property => PINNED_PROPERTY_GET_RVA,
+        }
+    }
+
+    const fn file_offset(self) -> u64 {
+        match self {
+            Self::CanEver => PINNED_CAN_EVER_FILE_OFFSET,
+            Self::Property => PINNED_PROPERTY_GET_FILE_OFFSET,
+        }
+    }
+
+    const fn prologue(self) -> &'static [u8] {
+        match self {
+            Self::CanEver => &PINNED_PROLOGUE,
+            Self::Property => &PROPERTY_PROLOGUE,
+        }
+    }
+
+    pub const fn trace_size(self) -> usize {
+        match self {
+            Self::CanEver => std::mem::size_of::<SharedTrace>(),
+            Self::Property => std::mem::size_of::<PropertyTrace>(),
+        }
+    }
+}
 
 /// Passed only by the bounded controller into its own remote allocation.
 #[repr(C)]
@@ -48,7 +93,7 @@ pub struct BridgeConfig {
     pub created_filetime: u64,
     pub trace_address: u64,
     pub trace_size: u32,
-    pub reserved: u32,
+    pub mode: u32,
 }
 
 impl BridgeConfig {
@@ -61,8 +106,15 @@ impl BridgeConfig {
             created_filetime,
             trace_address,
             trace_size: std::mem::size_of::<SharedTrace>() as u32,
-            reserved: 0,
+            mode: BridgeMode::CanEver as u32,
         }
+    }
+
+    pub fn for_property(game_pid: u32, created_filetime: u64, trace_address: u64) -> Self {
+        let mut config = Self::new(game_pid, created_filetime, trace_address);
+        config.mode = BridgeMode::Property as u32;
+        config.trace_size = BridgeMode::Property.trace_size() as u32;
+        config
     }
 }
 
@@ -155,6 +207,184 @@ impl SharedTrace {
     }
 }
 
+/// Fixed-size, string-free telemetry for the direct native getter. `read_state`
+/// is 0 for a missing key, 1 for a complete 24-byte copy, 2 for an unreadable
+/// returned address. A returned pointer is never retained for a later read.
+#[repr(C)]
+#[derive(Default)]
+pub struct PropertyRow {
+    pub sequence: AtomicU32,
+    pub key_id: AtomicU32,
+    pub property: AtomicU64,
+    pub returned: AtomicU64,
+    pub thread_id: AtomicU32,
+    pub read_state: AtomicU32,
+    pub tag: AtomicU32,
+    pub flags: AtomicU32,
+    pub payload: AtomicU64,
+}
+
+#[repr(C)]
+pub struct PropertyTrace {
+    pub magic: u32,
+    pub version: u32,
+    pub next: AtomicU32,
+    pub dropped: AtomicU32,
+    pub in_flight: AtomicU32,
+    pub reserved: u32,
+    pub rows: [PropertyRow; TRACE_CAPACITY],
+}
+
+impl Default for PropertyTrace {
+    fn default() -> Self {
+        Self {
+            magic: PROPERTY_TRACE_MAGIC,
+            version: PROPERTY_TRACE_VERSION,
+            next: AtomicU32::new(0),
+            dropped: AtomicU32::new(0),
+            in_flight: AtomicU32::new(0),
+            reserved: 0,
+            rows: std::array::from_fn(|_| PropertyRow::default()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PropertyValueTrace {
+    pub sequence: u32,
+    pub key_id: u32,
+    pub property: u64,
+    pub returned: u64,
+    pub thread_id: u32,
+    pub read_state: u32,
+    pub tag: u16,
+    pub payload: u64,
+    pub flags: u32,
+}
+
+impl PropertyTrace {
+    pub fn complete_rows(&self) -> Result<Vec<PropertyValueTrace>, &'static str> {
+        if self.in_flight.load(Ordering::Acquire) != 0
+            || self.dropped.load(Ordering::Acquire) != 0
+            || self.next.load(Ordering::Acquire) as usize > TRACE_CAPACITY
+        {
+            return Err("property getter trace did not drain or capacity exceeded");
+        }
+        let end = self.next.load(Ordering::Acquire) as usize;
+        let mut rows = Vec::with_capacity(end);
+        for (index, row) in self.rows[..end].iter().enumerate() {
+            if row.sequence.load(Ordering::Acquire) != 1 {
+                return Err("property getter row was not published");
+            }
+            rows.push(PropertyValueTrace {
+                sequence: index as u32 + 1,
+                key_id: row.key_id.load(Ordering::Relaxed),
+                property: row.property.load(Ordering::Relaxed),
+                returned: row.returned.load(Ordering::Relaxed),
+                thread_id: row.thread_id.load(Ordering::Relaxed),
+                read_state: row.read_state.load(Ordering::Relaxed),
+                tag: row.tag.load(Ordering::Relaxed) as u16,
+                payload: row.payload.load(Ordering::Relaxed),
+                flags: row.flags.load(Ordering::Relaxed),
+            });
+        }
+        Ok(rows)
+    }
+}
+
+// Called only after the original getter returned. This path performs no
+// allocation, formatting, locking, Lua access, or C++ method invocation.
+// ReadProcessMemory copies all 24 bytes or records unreadable; the borrowed
+// returned pointer is never read after this synchronous call.
+unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64) {
+    let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
+    if trace.is_null() {
+        return;
+    }
+    let trace = unsafe { &*trace };
+    trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+    if slot >= TRACE_CAPACITY {
+        trace.dropped.fetch_add(1, Ordering::Relaxed);
+        trace.in_flight.fetch_sub(1, Ordering::Release);
+        return;
+    }
+    let row = &trace.rows[slot];
+    row.key_id.store(key_id, Ordering::Relaxed);
+    row.property.store(property, Ordering::Relaxed);
+    row.returned.store(returned, Ordering::Relaxed);
+    row.thread_id
+        .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+    if returned == 0 {
+        row.read_state.store(0, Ordering::Relaxed);
+    } else {
+        let mut bytes = [0u8; 24];
+        let mut read = 0usize;
+        let ok = unsafe {
+            ReadProcessMemory(
+                GetCurrentProcess(),
+                returned as *const c_void,
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                &mut read,
+            )
+        } != 0
+            && read == bytes.len();
+        if ok {
+            row.tag.store(
+                u16::from_le_bytes([bytes[0], bytes[1]]) as u32,
+                Ordering::Relaxed,
+            );
+            row.payload.store(
+                u64::from_le_bytes([
+                    bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                    bytes[15],
+                ]),
+                Ordering::Relaxed,
+            );
+            row.flags.store(
+                u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
+                Ordering::Relaxed,
+            );
+            row.read_state.store(1, Ordering::Relaxed);
+        } else {
+            row.read_state.store(2, Ordering::Relaxed);
+        }
+    }
+    row.sequence.store(1, Ordering::Release);
+    trace.in_flight.fetch_sub(1, Ordering::Release);
+}
+
+// Win64 entry: RCX=property, EDX=key. The 0x68-byte frame supplies aligned
+// calls and shadow space. The original sees the exact argument registers once;
+// its RAX is saved across telemetry and restored before returning to its caller.
+global_asm!(
+    ".globl property_gateway",
+    "property_gateway:",
+    "sub rsp, 0x68",
+    "mov qword ptr [rsp + 0x20], rcx",
+    "mov qword ptr [rsp + 0x28], rdx",
+    "call qword ptr [rip + PROPERTY_TRAMPOLINE_PTR]",
+    "mov qword ptr [rsp + 0x30], rax",
+    "mov rcx, qword ptr [rsp + 0x20]",
+    "mov edx, dword ptr [rsp + 0x28]",
+    "mov r8, rax",
+    "call {record}",
+    "mov rax, qword ptr [rsp + 0x30]",
+    "add rsp, 0x68",
+    "ret",
+    record = sym record_property,
+);
+
+unsafe extern "system" {
+    fn property_gateway();
+}
+
+#[unsafe(no_mangle)]
+static PROPERTY_TRACE_PTR: AtomicPtr<PropertyTrace> = AtomicPtr::new(null_mut());
+#[unsafe(no_mangle)]
+static PROPERTY_TRAMPOLINE_PTR: AtomicPtr<u8> = AtomicPtr::new(null_mut());
+
 // The gateway deliberately has no Rust ABI for GameCore's unknown C++ type.
 // It preserves flags and every register it uses, records RCX/EDX and the
 // original return address, restores the caller stack, and tail-jumps through
@@ -227,7 +457,7 @@ fn rel32_jump(from: usize, to: usize) -> Option<[u8; 5]> {
     Some(jump)
 }
 
-unsafe fn executable_near(target: usize) -> Option<*mut u8> {
+unsafe fn executable_near(target: usize, prologue_len: usize) -> Option<*mut u8> {
     // VirtualAlloc's address hint is allocation-granularity aligned. Both
     // rel32 jumps must fit; a failed or occupied hint only advances the scan.
     let base = target & !0xffffusize;
@@ -236,7 +466,11 @@ unsafe fn executable_near(target: usize) -> Option<*mut u8> {
         for candidate in [base.checked_add(delta), base.checked_sub(delta)] {
             let Some(candidate) = candidate else { continue };
             if rel32_jump(target, candidate).is_none()
-                || rel32_jump(candidate + TRAMPOLINE_OFFSET + 5, target + 5).is_none()
+                || rel32_jump(
+                    candidate + TRAMPOLINE_OFFSET + prologue_len,
+                    target + prologue_len,
+                )
+                .is_none()
             {
                 continue;
             }
@@ -286,10 +520,11 @@ unsafe fn exchange_entry(
     })
 }
 
-unsafe fn install_at(
+unsafe fn install_hook(
     target: *mut u8,
-    trace: *mut SharedTrace,
+    trace: *mut c_void,
     expected: [u8; 8],
+    mode: BridgeMode,
 ) -> Result<(), &'static str> {
     if target.is_null() || trace.is_null() || !(target as usize).is_multiple_of(8) {
         return Err("unaligned or missing hook input");
@@ -298,31 +533,31 @@ unsafe fn install_at(
     if guard.is_some() {
         return Err("bridge already installed");
     }
-    if unsafe { (*trace).magic } != TRACE_MAGIC || unsafe { (*trace).version } != TRACE_VERSION {
-        return Err("trace mapping version mismatch");
-    }
     let original = unsafe { ptr::read(target.cast::<[u8; 8]>()) };
-    if original != expected || expected[..PROLOGUE_LEN] != PINNED_PROLOGUE {
+    let prologue = mode.prologue();
+    if original != expected || &expected[..prologue.len()] != prologue {
         return Err("pinned GameCore entry bytes differ");
     }
-    let code = unsafe { executable_near(target as usize) }.ok_or("no rel32 relay near entry")?;
+    let code = unsafe { executable_near(target as usize, prologue.len()) }
+        .ok_or("no rel32 relay near entry")?;
     let relay = unsafe { code.add(RELAY_OFFSET) };
     let trampoline = unsafe { code.add(TRAMPOLINE_OFFSET) };
     let jump_to_relay = rel32_jump(target as usize, relay as usize).ok_or("relay out of range")?;
-    let jump_back = rel32_jump(trampoline as usize + 5, target as usize + 5)
-        .ok_or("trampoline return out of range")?;
+    let jump_back = rel32_jump(
+        trampoline as usize + prologue.len(),
+        target as usize + prologue.len(),
+    )
+    .ok_or("trampoline return out of range")?;
+    let gateway = match mode {
+        BridgeMode::CanEver => bridge_gateway as *const () as usize,
+        BridgeMode::Property => property_gateway as *const () as usize,
+    };
     unsafe {
         // FF 25 00000000 followed by the absolute gateway address.
         ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
-        ptr::copy_nonoverlapping(
-            (bridge_gateway as *const () as usize as u64)
-                .to_le_bytes()
-                .as_ptr(),
-            relay.add(6),
-            8,
-        );
-        ptr::copy_nonoverlapping(original.as_ptr(), trampoline, PROLOGUE_LEN);
-        ptr::copy_nonoverlapping(jump_back.as_ptr(), trampoline.add(PROLOGUE_LEN), 5);
+        ptr::copy_nonoverlapping((gateway as u64).to_le_bytes().as_ptr(), relay.add(6), 8);
+        ptr::copy_nonoverlapping(original.as_ptr(), trampoline, prologue.len());
+        ptr::copy_nonoverlapping(jump_back.as_ptr(), trampoline.add(prologue.len()), 5);
     }
     let mut previous = 0u32;
     if unsafe { VirtualProtect(code.cast(), CODE_PAGE, PAGE_EXECUTE_READ, &mut previous) } == 0
@@ -331,21 +566,26 @@ unsafe fn install_at(
         unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
         return Err("cannot publish the relay and trampoline");
     }
-    BRIDGE_TRACE_PTR.store(trace, Ordering::Release);
-    BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+    match mode {
+        BridgeMode::CanEver => {
+            BRIDGE_TRACE_PTR.store(trace.cast(), Ordering::Release);
+            BRIDGE_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+        }
+        BridgeMode::Property => {
+            PROPERTY_TRACE_PTR.store(trace.cast(), Ordering::Release);
+            PROPERTY_TRAMPOLINE_PTR.store(trampoline, Ordering::Release);
+        }
+    }
     let mut patched = original;
-    patched[..PROLOGUE_LEN].copy_from_slice(&jump_to_relay);
+    patched[..5].copy_from_slice(&jump_to_relay);
+    patched[5..prologue.len()].fill(0x90);
     let old_word = u64::from_le_bytes(original);
     let new_word = u64::from_le_bytes(patched);
     let outcome = unsafe { exchange_entry(target, old_word, new_word) }?;
     if !outcome.exchanged {
-        BRIDGE_TRACE_PTR.store(null_mut(), Ordering::Release);
-        BRIDGE_TRAMPOLINE_PTR.store(null_mut(), Ordering::Release);
-        // A failed protection restoration leaves the page's state unknown.
-        // Keep the relay resident until the owned game closes in that case.
-        if outcome.protection_restored {
-            unsafe { VirtualFree(code.cast(), 0, MEM_RELEASE) };
-        }
+        // A prior invocation may still be paused before reading the global
+        // trampoline pointer. Retain the new pointer and code until the
+        // controller closes its owned game after this failed install.
         return Err("pinned entry changed before the atomic install");
     }
     *guard = Some(Hook {
@@ -358,6 +598,34 @@ unsafe fn install_at(
         return Err("critical: installed entry protection or cache unverified");
     }
     Ok(())
+}
+
+unsafe fn install_at(
+    target: *mut u8,
+    trace: *mut SharedTrace,
+    expected: [u8; 8],
+) -> Result<(), &'static str> {
+    if trace.is_null()
+        || unsafe { (*trace).magic } != TRACE_MAGIC
+        || unsafe { (*trace).version } != TRACE_VERSION
+    {
+        return Err("trace mapping version mismatch");
+    }
+    unsafe { install_hook(target, trace.cast(), expected, BridgeMode::CanEver) }
+}
+
+unsafe fn install_property_at(
+    target: *mut u8,
+    trace: *mut PropertyTrace,
+    expected: [u8; 8],
+) -> Result<(), &'static str> {
+    if trace.is_null()
+        || unsafe { (*trace).magic } != PROPERTY_TRACE_MAGIC
+        || unsafe { (*trace).version } != PROPERTY_TRACE_VERSION
+    {
+        return Err("property trace mapping version mismatch");
+    }
+    unsafe { install_hook(target, trace.cast(), expected, BridgeMode::Property) }
 }
 
 unsafe fn uninstall() -> Result<(), &'static str> {
@@ -474,7 +742,7 @@ fn committed_range(address: usize, bytes: usize, alignment: usize, writable: boo
     true
 }
 
-fn pinned_gamecore(path: &Path) -> Option<[u8; 8]> {
+fn pinned_gamecore(path: &Path, mode: BridgeMode) -> Option<[u8; 8]> {
     let mut file = File::open(path).ok()?;
     let mut hash = Sha256::new();
     let mut buffer = [0u8; 65536];
@@ -488,11 +756,10 @@ fn pinned_gamecore(path: &Path) -> Option<[u8; 8]> {
     if format!("{:x}", hash.finalize()) != PINNED_GAMECORE_SHA256 {
         return None;
     }
-    file.seek(SeekFrom::Start(PINNED_CAN_EVER_FILE_OFFSET))
-        .ok()?;
+    file.seek(SeekFrom::Start(mode.file_offset())).ok()?;
     let mut first = [0u8; 8];
     file.read_exact(&mut first).ok()?;
-    (first[..PROLOGUE_LEN] == PINNED_PROLOGUE).then_some(first)
+    (&first[..mode.prologue().len()] == mode.prologue()).then_some(first)
 }
 
 fn guarded_install(config: BridgeConfig) -> BridgeStatus {
@@ -502,11 +769,16 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.created_filetime == 0
         || !(1..=MAX_ACTIVE_SECONDS).contains(&config.max_seconds)
         || config.trace_address == 0
-        || config.trace_size as usize != std::mem::size_of::<SharedTrace>()
-        || config.reserved != 0
+        || !matches!(config.mode, 0 | 1)
+        || config.trace_size as usize
+            != if config.mode == 0 {
+                BridgeMode::CanEver.trace_size()
+            } else {
+                BridgeMode::Property.trace_size()
+            }
         || !committed_range(
             config.trace_address as usize,
-            std::mem::size_of::<SharedTrace>(),
+            config.trace_size as usize,
             std::mem::align_of::<SharedTrace>(),
             true,
         )
@@ -523,19 +795,34 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
     if module.is_null() || !module_path(module).is_some_and(|path| same_file(&path, GAMECORE)) {
         return BridgeStatus::GameCoreIdentity;
     }
-    let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE)) else {
+    let mode = if config.mode == 0 {
+        BridgeMode::CanEver
+    } else {
+        BridgeMode::Property
+    };
+    let Some(disk_bytes) = pinned_gamecore(Path::new(GAMECORE), mode) else {
         return BridgeStatus::GameCoreIdentity;
     };
-    let Some(entry) = (module as usize).checked_add(PINNED_CAN_EVER_RVA) else {
+    let Some(entry) = (module as usize).checked_add(mode.rva()) else {
         return BridgeStatus::EntryBytes;
     };
     let entry = entry as *mut u8;
     if unsafe { ptr::read(entry.cast::<[u8; 8]>()) } != disk_bytes {
         return BridgeStatus::EntryBytes;
     }
-    let trace = config.trace_address as *mut SharedTrace;
-    unsafe { ptr::write(trace, SharedTrace::default()) };
-    match unsafe { install_at(entry, trace, disk_bytes) } {
+    let installed = match mode {
+        BridgeMode::CanEver => {
+            let trace = config.trace_address as *mut SharedTrace;
+            unsafe { ptr::write(trace, SharedTrace::default()) };
+            unsafe { install_at(entry, trace, disk_bytes) }
+        }
+        BridgeMode::Property => {
+            let trace = config.trace_address as *mut PropertyTrace;
+            unsafe { ptr::write(trace, PropertyTrace::default()) };
+            unsafe { install_property_at(entry, trace, disk_bytes) }
+        }
+    };
+    match installed {
         Ok(()) => BridgeStatus::Ok,
         Err(reason) if reason.starts_with("critical:") => BridgeStatus::Critical,
         Err(_) => BridgeStatus::HookFailure,
@@ -580,6 +867,97 @@ mod tests {
     use std::time::Duration;
 
     static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn property_trampoline_calls_original_once_and_preserves_pointer_or_missing() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        assert_eq!(std::mem::size_of::<PropertyRow>(), 48);
+        assert_eq!(std::mem::offset_of!(PropertyTrace, rows), 24);
+        let target = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!target.is_null());
+        // Exactly the pinned two-instruction prologue, then an owned counter
+        // and key-dependent return. This fixture never invokes a game method.
+        let bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0x85, 0xd2, 0x75,
+            0x01, 0xc3, 0x31, 0xc0, 0xc3,
+        ];
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), target, bytes.len()) };
+        let f: extern "system" fn(usize, u32) -> usize = unsafe { std::mem::transmute(target) };
+        let mut object = [0u64; 10];
+        let mut value = [0u8; 24];
+        value[..2].copy_from_slice(&1u16.to_le_bytes());
+        value[8] = 1;
+        value[20..24].copy_from_slice(&0x2000_0000u32.to_le_bytes());
+        object[8] = value.as_ptr() as u64;
+        let property = object.as_mut_ptr() as usize;
+        let mut trace = Box::new(PropertyTrace::default());
+        assert!(unsafe {
+            install_property_at(target, trace.as_mut(), bytes[..8].try_into().unwrap())
+        }
+        .is_ok());
+        assert_eq!(f(property, 0), value.as_ptr() as usize);
+        assert_eq!(f(property, 1), 0);
+        object[8] = 1; // Valid original pointer value, unreadable for the copy.
+        assert_eq!(f(property, 0), 1);
+        assert_eq!(object[9], 3, "the original ran exactly once per call");
+        unsafe { uninstall() }.unwrap();
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows
+            .iter()
+            .all(|r| r.property == property as u64 && r.thread_id != 0));
+        assert_eq!(
+            (
+                rows[0].key_id,
+                rows[0].returned,
+                rows[0].read_state,
+                rows[0].tag,
+                rows[0].payload,
+                rows[0].flags
+            ),
+            (0, value.as_ptr() as u64, 1, 1, 1, 0x2000_0000)
+        );
+        assert_eq!(
+            (rows[1].key_id, rows[1].returned, rows[1].read_state),
+            (1, 0, 0)
+        );
+        assert_eq!(
+            (rows[2].key_id, rows[2].returned, rows[2].read_state),
+            (0, 1, 2)
+        );
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, bytes[..8]);
+        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+    }
+
+    #[test]
+    fn property_hook_rejects_partial_or_changed_prologue_before_mutation() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        let target = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!target.is_null());
+        let mut wrong = PROPERTY_PROLOGUE;
+        wrong[7] ^= 1;
+        unsafe { ptr::copy_nonoverlapping(wrong.as_ptr(), target, wrong.len()) };
+        let mut trace = Box::new(PropertyTrace::default());
+        assert!(unsafe { install_property_at(target, trace.as_mut(), wrong) }.is_err());
+        assert_eq!(unsafe { ptr::read(target.cast::<[u8; 8]>()) }, wrong);
+        assert_ne!(unsafe { VirtualFree(target.cast(), 0, MEM_RELEASE) }, 0);
+    }
 
     #[test]
     fn gateway_preserves_original_result_and_captures_actual_call_arguments() {
@@ -726,6 +1104,20 @@ mod tests {
         let mut config = BridgeConfig::new(1, 1, 1);
         assert_eq!(
             BridgeInstall((&mut config as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        let mut property = BridgeConfig::for_property(1, 1, 1);
+        assert_eq!(
+            property.trace_size as usize,
+            std::mem::size_of::<PropertyTrace>()
+        );
+        assert_eq!(
+            BridgeInstall((&mut property as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        property.mode = 2;
+        assert_eq!(
+            BridgeInstall((&mut property as *mut BridgeConfig).cast()),
             BridgeStatus::InvalidInput as u32
         );
         let page = unsafe {

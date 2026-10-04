@@ -11,8 +11,9 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
-    BridgeConfig, BridgeStatus, BridgeTrace, SharedTrace, TraceRow, GAMECORE, GAME_EXE,
-    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, TRACE_CAPACITY,
+    BridgeConfig, BridgeMode, BridgeStatus, BridgeTrace, PropertyTrace, PropertyValueTrace,
+    SharedTrace, TraceRow, GAMECORE, GAME_EXE, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256,
+    PINNED_PROPERTY_GET_RVA, TRACE_CAPACITY,
 };
 
 #[cfg(not(windows))]

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 mod platform {
     use super::*;
+    use civ6_native_bridge_rs::BridgeMode;
     use serde_json::Value;
     use sha2::{Digest, Sha256};
     use std::ffi::OsString;
@@ -29,12 +30,14 @@ mod platform {
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    fn terminal_artifact(path: &Path, pid: u32, created: u64) -> Result<usize> {
+    fn terminal_artifact(path: &Path, pid: u32, created: u64, mode: BridgeMode) -> Result<usize> {
         let mut identity = 0usize;
         let mut installed = 0usize;
         let mut restored = 0usize;
         let mut stopped = 0usize;
         let mut entries = 0usize;
+        let mut missing = 0usize;
+        let mut copied = 0usize;
         for line in BufReader::new(std::fs::File::open(path)?).lines() {
             let row: Value = serde_json::from_str(&line?)?;
             if stopped != 0 {
@@ -46,6 +49,13 @@ mod platform {
                 Some("identity")
                     if row["pid"] == pid
                         && row["created_filetime"] == created
+                        && row["mode"]
+                            == if mode == BridgeMode::CanEver {
+                                "can-ever"
+                            } else {
+                                "property"
+                            }
+                        && row["entry_rva"] == mode.rva()
                         && row["gamecore_sha256"]
                             == civ6_native_bridge_rs::PINNED_GAMECORE_SHA256 =>
                 {
@@ -53,8 +63,58 @@ mod platform {
                 }
                 Some("install") if row["status"] == 0 => installed += 1,
                 Some("uninstall") if row["status"] == 0 => restored += 1,
-                Some("entry") if row["sequence"].as_u64() == Some(entries as u64 + 1) => {
+                Some("entry")
+                    if mode == BridgeMode::CanEver
+                        && row["sequence"].as_u64() == Some(entries as u64 + 1) =>
+                {
                     entries += 1
+                }
+                Some("property_get")
+                    if mode == BridgeMode::Property
+                        && row["sequence"].as_u64() == Some(entries as u64 + 1)
+                        && row["property"]
+                            .as_str()
+                            .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
+                        && row["returned"]
+                            .as_str()
+                            .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
+                        && row["key_id"].as_u64().is_some_and(|n| n <= u32::MAX as u64)
+                        && row["thread_id"]
+                            .as_u64()
+                            .is_some_and(|n| n > 0 && n <= u32::MAX as u64)
+                        && row["read_state"].as_u64().is_some_and(|n| n <= 2) =>
+                {
+                    let returned = row["returned"].as_str().unwrap();
+                    if row["read_state"] == 0 {
+                        if returned != "0x0000000000000000"
+                            || !row["tag"].is_null()
+                            || !row["payload8"].is_null()
+                            || !row["flags14"].is_null()
+                        {
+                            return Err(Error::input("invalid missing property row"));
+                        }
+                        missing += 1;
+                    } else if row["read_state"] == 1 {
+                        if returned == "0x0000000000000000"
+                            || !row["tag"].as_u64().is_some_and(|n| n <= u16::MAX as u64)
+                            || !row["payload8"]
+                                .as_str()
+                                .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
+                            || !row["flags14"]
+                                .as_u64()
+                                .is_some_and(|n| n <= u32::MAX as u64)
+                        {
+                            return Err(Error::input("invalid copied property row"));
+                        }
+                        copied += 1;
+                    } else if returned == "0x0000000000000000"
+                        || !row["tag"].is_null()
+                        || !row["payload8"].is_null()
+                        || !row["flags14"].is_null()
+                    {
+                        return Err(Error::input("invalid unreadable property row"));
+                    }
+                    entries += 1;
                 }
                 Some("stop")
                     if row["result"] == "ok"
@@ -72,7 +132,13 @@ mod platform {
                 }
             }
         }
-        if identity != 1 || installed != 1 || restored != 1 || stopped != 1 || entries == 0 {
+        if identity != 1
+            || installed != 1
+            || restored != 1
+            || stopped != 1
+            || entries == 0
+            || (mode == BridgeMode::Property && (missing == 0 || copied == 0))
+        {
             return Err(Error::input(
                 "native bridge terminal proof or caller evidence missing",
             ));
@@ -230,6 +296,7 @@ mod platform {
         target: PinnedTarget,
         close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         finished: bool,
+        mode: BridgeMode,
     }
 
     impl Session {
@@ -239,8 +306,14 @@ mod platform {
             output: &Path,
             name: &str,
             seconds: u64,
+            mode: &str,
             mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
+            let mode = match mode {
+                "can-ever" => BridgeMode::CanEver,
+                "property" => BridgeMode::Property,
+                _ => return Err(Error::scenario("unknown native bridge mode")),
+            };
             if !(1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&seconds) {
                 return Err(Error::scenario(
                     "native bridge duration must be 1..300 seconds",
@@ -268,6 +341,12 @@ mod platform {
                     &seconds.to_string(),
                     "--out",
                     &artifact.to_string_lossy(),
+                    "--mode",
+                    if mode == BridgeMode::Property {
+                        "property"
+                    } else {
+                        "can-ever"
+                    },
                 ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -321,6 +400,7 @@ mod platform {
                 target,
                 close_game,
                 finished: false,
+                mode,
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -373,7 +453,7 @@ mod platform {
                     stderr.trim()
                 )));
             }
-            terminal_artifact(&self.artifact, self.pid, self.created)?;
+            terminal_artifact(&self.artifact, self.pid, self.created, self.mode)?;
             Ok(self.artifact.clone())
         }
 
@@ -481,6 +561,7 @@ mod platform {
             let path = dir.path().join("trace.jsonl");
             let rows = [
                 json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"can-ever","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
                 json!({"kind":"uninstall","status":0}),
@@ -499,17 +580,20 @@ mod platform {
                 .unwrap();
             };
             write(&rows);
-            assert_eq!(terminal_artifact(&path, 7, 123).unwrap(), 1);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::CanEver).unwrap(),
+                1
+            );
             for index in [0, 1, 2, 3, 4] {
                 let mut missing = rows.to_vec();
                 missing.remove(index);
                 write(&missing);
-                assert!(terminal_artifact(&path, 7, 123).is_err());
+                assert!(terminal_artifact(&path, 7, 123, BridgeMode::CanEver).is_err());
             }
             let mut wrong = rows.to_vec();
             wrong[2]["status"] = json!(6);
             write(&wrong);
-            assert!(terminal_artifact(&path, 7, 123).is_err());
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::CanEver).is_err());
             for (field, value) in [
                 ("dropped", json!(1)),
                 ("in_flight", json!(1)),
@@ -518,7 +602,68 @@ mod platform {
                 let mut incomplete = rows.to_vec();
                 incomplete[4][field] = value;
                 write(&incomplete);
-                assert!(terminal_artifact(&path, 7, 123).is_err(), "{field}");
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::CanEver).is_err(),
+                    "{field}"
+                );
+            }
+        }
+
+        #[test]
+        fn property_terminal_requires_real_missing_and_complete_value_rows() {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("property.jsonl");
+            let rows = [
+                json!({"kind":"identity","pid":7,"created_filetime":123,
+                    "mode":"property","entry_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
+                json!({"kind":"install","status":0}),
+                json!({"kind":"uninstall","status":0}),
+                json!({"kind":"property_get","sequence":1,"property":"0x0000000000001000",
+                    "key_id":853,"returned":"0x0000000000000000","thread_id":4,
+                    "read_state":0,"tag":null,"payload8":null,"flags14":null}),
+                json!({"kind":"property_get","sequence":2,"property":"0x0000000000001000",
+                    "key_id":853,"returned":"0x0000000000002000","thread_id":4,
+                    "read_state":1,"tag":2,"payload8":"0x00000000000d0517","flags14":0}),
+                json!({"kind":"stop","result":"ok","rows":2,"dropped":0,
+                    "in_flight":0,"snapshot_stable":true}),
+            ];
+            let write = |rows: &[Value]| {
+                std::fs::write(
+                    &path,
+                    rows.iter()
+                        .map(Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                )
+                .unwrap()
+            };
+            write(&rows);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::Property).unwrap(),
+                2
+            );
+            for index in 0..rows.len() {
+                let mut missing = rows.to_vec();
+                missing.remove(index);
+                write(&missing);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::Property).is_err(),
+                    "{index}"
+                );
+            }
+            for (field, value) in [
+                ("returned", json!("0x0000000000000000")),
+                ("tag", json!(null)),
+                ("read_state", json!(2)),
+            ] {
+                let mut bad = rows.to_vec();
+                bad[4][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::Property).is_err(),
+                    "{field}"
+                );
             }
         }
     }
@@ -542,6 +687,7 @@ impl Session {
         _output: &Path,
         _name: &str,
         _seconds: u64,
+        _mode: &str,
         _close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
     ) -> Result<Self> {
         Err(Error::input("native bridge requires Windows x64"))
