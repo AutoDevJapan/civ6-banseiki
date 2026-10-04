@@ -250,6 +250,11 @@
       "timeout": 30
     },
     {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local total=0; for owner=0,21 do for row in GameInfo.JAC_LeaderPersonas() do local d=assert(GameInfo.Governors[row.GovernorType]); assert(Players[owner]:GetGovernors():CanEverAppointGovernor(d.Hash)==false,'native qualification opened during calibration'); local key=853300+d.Index; local expected=owner==0 and row.LeaderType=='LEADER_JAC_ASHINA_MORIKIYO'; assert(Players[owner]:GetProperty(key)==expected,'derived qualification leaked after join'); total=total+1 end end; assert(total==484); return 'all 484 original qualifications remain false; only joined owner derived value is true'"
+    },
+    {
       "action": "exit_to_menu"
     }
   ]

@@ -1119,7 +1119,11 @@ fn property_abi_probe_is_a_single_scoped_read_only_diagnostic() {
 fn joined_admission_calibration_separates_owner_returns_and_typed_property_transition() {
     let data = scenario("leader-persona-joined-admission-calibration-15km.json");
     let s = steps(&data);
-    assert_eq!(s.len(), 20);
+    assert_eq!(s.len(), 21);
+    assert_eq!(s[s.len() - 3]["action"], "stop_native_can_ever_calibration");
+    assert_eq!(s[s.len() - 2]["action"], "ui_lua");
+    let after = s[s.len() - 2]["code"].as_str().unwrap();
+    assert!(after.contains("total==484") && after.contains("GetProperty(key)==expected"));
     let actions = s
         .iter()
         .map(|step| step["action"].as_str().unwrap())
