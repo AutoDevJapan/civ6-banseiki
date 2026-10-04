@@ -2212,6 +2212,13 @@ fn capacity_tier_two_stale_ui_still_rejects_invalid_core_receipts_and_native_gat
 }
 
 #[test]
+fn recycled_native_unit_slot_cannot_make_the_archived_captive_present() {
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.run("local old=Game:GetProperty('JAC_BOUNDARY_SPY').id; local replacement=makeSpy(0,786440); replacement.x=CONTROL.x; replacement.y=CONTROL.y; local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==old then return replacement end; return find(self,id) end; return units end; local s=ExposedMembers.JAC_PersonaBoundary.ReadEnemy(); assert(s.spy.id==old and s.spy.present==false,'recycled native slot was mistaken for the original captive'); assert(s.spy.lookupID==786440 and s.spyRoster.map[1].id==786440 and #s.spyRoster.captured==1 and s.spyRoster.physicalCount==2)");
+}
+
+#[test]
 fn capacity_government_preserves_actual_title_delta_zero_or_two_without_a_fixed_total() {
     for delta in [0, 2] {
         let h = Enemy::new();

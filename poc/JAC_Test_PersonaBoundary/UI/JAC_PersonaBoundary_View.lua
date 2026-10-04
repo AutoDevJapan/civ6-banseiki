@@ -212,7 +212,13 @@ local function ReadPersona(c)
     if spyInfo then
         s.spyRoster=ReadSpyRoster(spyInfo.owner);
         local spy = Players[spyInfo.owner]:GetUnits():FindID(spyInfo.id);
-        s.spy = {owner=spyInfo.owner, id=spyInfo.id, present=spy~=nil};
+        -- FindID can resolve a reused native slot to a different generation.
+        -- A lookup result alone is not proof that the archived spy is present.
+        local lookupID = spy and spy:GetID();
+        local exact = spy and lookupID==spyInfo.id and spy:GetOwner()==spyInfo.owner and
+            spy:GetType()==GameInfo.Units["UNIT_SPY"].Index;
+        s.spy = {owner=spyInfo.owner, id=spyInfo.id, present=exact==true,lookupID=lookupID};
+        if not exact then spy=nil; end
         if spy then
             s.spy.operation=spy:GetSpyOperation(); s.spy.endTurn=spy:GetSpyOperationEndTurn();
             s.spy.remaining=s.spy.endTurn-s.turn; s.spy.x=spy:GetX(); s.spy.y=spy:GetY();
