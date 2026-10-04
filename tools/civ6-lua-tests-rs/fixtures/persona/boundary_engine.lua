@@ -21,6 +21,9 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryProgressCapacityBuilding',
  'JAC_BoundaryMarkCaptiveExchange','JAC_BoundaryPrepareCapacityCivic',
  'JAC_BoundaryReadCapacityCivic',
+ 'JAC_BoundaryPrepareTier2CapacityCivic','JAC_BoundaryReadTier2CapacityCivic',
+ 'JAC_BoundaryCapacityGovernmentIntent','JAC_BoundaryCapacityGovernmentRead',
+ 'JAC_BoundaryCapacityGovernmentProbe',
  'JAC_BoundaryProgressCapacityDistrict'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
 function collection(rows,key)
@@ -35,7 +38,8 @@ props['JAC_PERSONA_'..LEADER..'_NODE_'..SKILL]=1
 WRITES={}
 Game={GetProperty=function(_,k) return props[k] end,
  SetProperty=function(_,k,v) WRITES[#WRITES+1]=k; props[k]=v end,
- GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end}
+ GetCurrentGameTurn=function() return TURN end,GetLocalPlayer=function() return 0 end,
+ IsAllowStrategicCommands=function(owner) assert(owner==0); return GOV_STRATEGIC_COMMANDS end}
 GameInfo={}
 GameInfo.JAC_LeaderPersonas=collection({{LeaderType=LEADER,GovernorType='GOV_TEST',PersonType='GP_TEST',BasePromotionType='BASE_TEST',EvolutionCost=1}},'LeaderType')
 GameInfo.Governors=collection({{GovernorType='GOV_TEST',Hash=9000,Index=0}},'GovernorType')
@@ -45,16 +49,33 @@ GameInfo.JAC_PersonaTreeNodes=collection({{LeaderType=LEADER,NodeType=SKILL,Modi
 GameInfo.GreatPersonClasses={GREAT_PERSON_CLASS_JAC_PERSONA={UnitType='UNIT_PERSONA'}}
 local spyDef={Index=55,Hash=555,UnitType='UNIT_SPY',Name='LOC_UNIT_SPY_NAME',PrereqCivic='CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE',Spy=true}
 GameInfo.Units={UNIT_PERSONA={Index=99},UNIT_SPY=spyDef,[55]=spyDef}
-GameInfo.Civics={[spyDef.PrereqCivic]={Index=12},CIVIC_JAC_SENGOKU_DOMAIN_LAW={Index=13}}
+GameInfo.Civics={[spyDef.PrereqCivic]={Index=12},
+ CIVIC_JAC_SENGOKU_DOMAIN_LAW={Index=13,CivicType='CIVIC_JAC_SENGOKU_DOMAIN_LAW'},
+ CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS={Index=14,
+  CivicType='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS'},
+ CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION={Index=15,
+  CivicType='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION'}}
+GameInfo.GovernmentTiers=collection({{TierType='Tier1',Sorting=1},
+ {TierType='Tier2',Sorting=2}},'TierType')
+GameInfo.Governments=collection({
+ {GovernmentType='GOVERNMENT_CHIEFDOM',Index=0},
+ {GovernmentType='GOVERNMENT_OLIGARCHY',Index=1,Tier='Tier1',
+  PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'},
+ {GovernmentType='GOVERNMENT_MERCHANT_REPUBLIC',Index=2,Tier='Tier2',
+  PrereqCivic='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS'},
+ {GovernmentType='GOVERNMENT_MONARCHY',Index=3,Tier='Tier2',
+  PrereqCivic='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION'}},'GovernmentType')
+GameInfo.Types={GOVERNMENT_OLIGARCHY={Hash=1001},
+ GOVERNMENT_MERCHANT_REPUBLIC={Hash=1002},GOVERNMENT_MONARCHY={Hash=1003}}
 GameInfo.Districts={DISTRICT_GOVERNMENT={DistrictType='DISTRICT_GOVERNMENT',Index=70,Hash=700,
  PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'}}
 GameInfo.Districts[70]=GameInfo.Districts.DISTRICT_GOVERNMENT
 GameInfo.Buildings={}
 for _,row in ipairs({
- {BuildingType='BUILDING_GOV_TALL',Index=76,Hash=760},
- {BuildingType='BUILDING_GOV_CONQUEST',Index=77,Hash=770},
- {BuildingType='BUILDING_GOV_WIDE',Index=78,Hash=780},
- {BuildingType='BUILDING_GOV_SPIES',Index=79,Hash=790}}) do
+  {BuildingType='BUILDING_GOV_TALL',Index=76,Hash=760,GovernmentTierRequirement='Tier1'},
+  {BuildingType='BUILDING_GOV_CONQUEST',Index=77,Hash=770,GovernmentTierRequirement='Tier1'},
+  {BuildingType='BUILDING_GOV_WIDE',Index=78,Hash=780,GovernmentTierRequirement='Tier1'},
+  {BuildingType='BUILDING_GOV_SPIES',Index=79,Hash=790,GovernmentTierRequirement='Tier2'}}) do
  row.PrereqDistrict='DISTRICT_GOVERNMENT'; row.RequiresPlacement=false
  GameInfo.Buildings[row.BuildingType]=row; GameInfo.Buildings[row.Index]=row
 end
@@ -101,14 +122,27 @@ GOV_DISTRICT_OWNER=0; GOV_DISTRICT_CITY=CONTROL
 GOV_DISTRICT_ID=991; GOV_DISTRICT_MEMBER_KEY=1
 GOV_DISTRICT_MISSING_GETTER=nil
 GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
+GOV_TIER2_CIVIC_COMPLETED=true; GOV_MONARCHY_CIVIC_COMPLETED=false
+GOV_CURRENT=2; GOV_CAN_CHANGE=true; GOV_CHANGE_MADE=false
+GOV_CIVIC_COMPLETED_THIS_TURN=false; GOV_STRATEGIC_COMMANDS=true
+GOV_REQUEST_CALLS=0
 CAPTURED={[0]={},[1]={}}
 local queue={
  GetAt=function(_,index) assert(index==0); return BUILD_HEAD end,
  CanProduce=function(_,hash)
   if hash==555 then return CIVIC_COMPLETED and SPY_CAPACITY>0 end
   if hash==700 then return GOV_CIVIC_COMPLETED and not GOV_DISTRICT_PLACED end
-  if hash==760 then return GOV_DISTRICT_BUILT and not GOV_TIER1_BUILT end
-  if hash==790 then return GOV_DISTRICT_BUILT and GOV_TIER1_BUILT and not GOV_SPIES_BUILT end
+   local government=GameInfo.Governments[GOV_CURRENT]
+   local tier=government and government.Tier and GameInfo.GovernmentTiers[government.Tier]
+   local sorting=tier and tier.Sorting or 0
+   if hash==760 or hash==770 or hash==780 then
+    return GOV_DISTRICT_BUILT and not GOV_TIER1_BUILT and sorting>=1,
+     sorting<1 and 'GOVERNMENT_TIER_REQUIREMENT_Tier1' or 'OTHER_PRODUCTION_GATE'
+   end
+   if hash==790 then
+    return GOV_DISTRICT_BUILT and GOV_TIER1_BUILT and not GOV_SPIES_BUILT and sorting>=2,
+     sorting<2 and 'GOVERNMENT_TIER_REQUIREMENT_Tier2' or 'OTHER_PRODUCTION_GATE'
+   end
   return false
  end,
  AddProgress=function(_,amount)
@@ -144,7 +178,8 @@ CONTROL.GetBuildings=function() return {HasBuilding=function(_,index)
  assert(index==79); return GOV_SPIES_BUILT
  end} end
 function ADVANCE_TURN()
- TURN=TURN+1
+  TURN=TURN+1
+  GOV_CIVIC_COMPLETED_THIS_TURN=false; GOV_CHANGE_MADE=false
  if BUILD_HEAD and BUILD_HEAD.DistrictType and CAPACITY_PROGRESS_CALLS>0 and
   CAPACITY_COMPLETES~=false then
   GOV_DISTRICT_BUILT=true; BUILD_HEAD=nil
@@ -200,15 +235,39 @@ for _,id in ipairs({0,1,62}) do
   GetCapitalCity=function() if id==0 then return CONTROL elseif id==1 then return FOREIGN end end} end
   p.GetUnits=function() return {Members=function() return members(UNITS[id]) end,FindID=function(_,uid) for _,u in ipairs(UNITS[id]) do if u:GetID()==uid then return u end end end} end
  p.GetCulture=function() return {HasCivic=function(_,index)
-  if index==13 then return GOV_CIVIC_COMPLETED end
-  assert(index==12); return CIVIC_COMPLETED end,
+   if index==13 then return GOV_CIVIC_COMPLETED end
+   if index==14 then return GOV_TIER2_CIVIC_COMPLETED end
+   if index==15 then return GOV_MONARCHY_CIVIC_COMPLETED end
+   assert(index==12); return CIVIC_COMPLETED end,
   GetCultureCost=function(_,index) assert(index==12); return 100 end,
   SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true; SPY_CAPACITY=0 end,
   SetCivic=function(_,index,grant)
    assert(grant==true)
-   if index==13 then assert(not GOV_CIVIC_COMPLETED); GOV_CIVIC_COMPLETED=true
-   else assert(index==12); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end
-  end} end
+    if index==13 then assert(not GOV_CIVIC_COMPLETED); GOV_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
+    elseif index==14 then GOV_TIER2_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
+    elseif index==15 then GOV_MONARCHY_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
+    else assert(index==12); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end
+   end,
+   GetCurrentGovernment=function() return GOV_CURRENT end,
+   IsGovernmentUnlocked=function(_,hash)
+    if hash==1001 then return GOV_CIVIC_COMPLETED end
+    if hash==1002 then return GOV_TIER2_CIVIC_COMPLETED end
+    if hash==1003 then return GOV_MONARCHY_CIVIC_COMPLETED end
+    return false
+   end,
+   CanChangeGovernmentAtAll=function() return GOV_CAN_CHANGE end,
+   GovernmentChangeMade=function() return GOV_CHANGE_MADE end,
+   CivicCompletedThisTurn=function() return GOV_CIVIC_COMPLETED_THIS_TURN end,
+   GetAnarchyTurns=function() return GOV_ANARCHY_TURNS or 0 end,
+   RequestChangeGovernment=function(self,hash)
+    GOV_REQUEST_CALLS=GOV_REQUEST_CALLS+1
+    if not GOV_CAN_CHANGE or GOV_CHANGE_MADE or not GOV_STRATEGIC_COMMANDS or
+     not (GOV_CURRENT==-1 or GOV_CIVIC_COMPLETED_THIS_TURN) or
+     not self:IsGovernmentUnlocked(hash) then return false end
+    local target=hash==1001 and 1 or hash==1002 and 2 or hash==1003 and 3
+    if not target then return false end
+    GOV_CURRENT=target; GOV_CHANGE_MADE=true; return true
+   end} end
  p.GetDiplomacy=function() return {GetMission=function(_,attacker,mid) assert(attacker==id); return HISTORY[id][mid] or 0 end,
   IsAtWarWith=function(_,other) assert(other~=id); return AT_WAR==true end,
   GetSpyCapacity=function() return CIVIC_COMPLETED and SPY_CAPACITY or 0 end,

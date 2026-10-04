@@ -255,6 +255,10 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         "retry-captive-exchange",
         "retry-capacity-plan",
         "retry-capacity-civic",
+        "retry-capacity-government-plan",
+        "retry-capacity-government-tier1",
+        "retry-capacity-government-tier2",
+        "retry-capacity-tier2-civic",
         "retry-capacity-district",
         "retry-capacity-district-tick",
         "retry-capacity-build",
@@ -293,11 +297,17 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         }
         assert_eq!(
             steps.iter().filter(|s| action(s, "end_turn")).count(),
-            usize::from(suffix.ends_with("tick") || suffix == "retry-capacity-civic"),
+            usize::from(
+                suffix.ends_with("tick")
+                    || suffix == "retry-capacity-civic"
+                    || suffix == "retry-capacity-government-tier1"
+                    || suffix == "retry-capacity-government-tier2"
+                    || suffix == "retry-capacity-tier2-civic",
+            ),
             "{name}"
         );
     }
-    assert_eq!(saves, 15);
+    assert_eq!(saves, 18);
     let probe = scenario("leader-persona-spy-neutralization-retry-captive-exchange-probe.json");
     let probe_codes: Vec<_> = steps(&probe).iter().filter_map(embedded_lua).collect();
     assert!(probe_codes

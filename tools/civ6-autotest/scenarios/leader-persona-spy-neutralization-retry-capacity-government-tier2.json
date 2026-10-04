@@ -1,0 +1,17 @@
+{
+  "name": "Change to an unlocked Tier 2 Government and verify the native Intelligence Agency prerequisite",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); local g=p.government; local d=b.EnemyRetryDiagnosis(); assert(p.stage=='NEEDS_TIER2_GOVERNMENT' and g.stage=='READY_CHANGE' and g.target.tier=='Tier2' and (g.target.governmentType=='GOVERNMENT_MERCHANT_REPUBLIC' or g.target.governmentType=='GOVERNMENT_MONARCHY') and g.target.civicOwned and g.target.unlocked and d.spyID==655368 and d.captive.captor==1 and d.captive.nameIndex==-1,'official Tier 2 Government gate or original captive differs'); b.Queue('CHANGE_CAPACITY_GOVERNMENT'); return 'official Tier 2 Government request queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_CHANGE_CAPACITY_GOVERNMENT' or a=='UNKNOWN_CHANGE_CAPACITY_GOVERNMENT' or a=='REJECTED_CHANGE_CAPACITY_GOVERNMENT' then error(a) end; return a=='REQUESTED_CHANGE_CAPACITY_GOVERNMENT'"}},
+    {"action":"end_turn","turns":1,"timeout":600},
+    {"action":"wait_for","timeout":240,"condition":{"type":"lua","state_name":"InGame","code":"local i=Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS'); local a=i and i.Tier2; local p=Players[Game.GetLocalPlayer()]; return a and p and p:IsTurnActive() and Game.GetCurrentGameTurn()==a.turn+1"}},
+    {"action":"wait_for","timeout":90,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_CHANGE_CAPACITY_GOVERNMENT' or a=='UNKNOWN_CHANGE_CAPACITY_GOVERNMENT' or a=='REJECTED_CHANGE_CAPACITY_GOVERNMENT' or a=='PENDING_CHANGE_CAPACITY_GOVERNMENT' then error(a) end; return a=='ACCEPTED_CHANGE_CAPACITY_GOVERNMENT'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; local p=b.CaptiveCapacityPlan(); local g=p.government; local i=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')).Tier2; local r=assert(Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_READ')); local d=b.EnemyRetryDiagnosis(); assert(p.stage=='BUILD_SPIES' and p.buildingType=='BUILDING_GOV_SPIES' and g.currentTier=='Tier2' and i.status=='PREPARED' and i.targetGovernment==g.currentType and i.targetIndex==r.governmentIndex and r.status=='OBSERVED' and r.governmentType==g.currentType and r.governmentTier==g.currentTier and r.originalToken==i.token and r.originalTurn==i.turn and r.turn==i.turn+1 and r.frame>0 and r.token>i.token and r.spent==i.beforeSpent and d.spyID==655368 and d.eventID==0 and d.outcome=='CAPTURED' and d.occupied==1 and d.capacity==1 and d.captive.captor==1 and d.captive.nameIndex==-1,'native Government, Tier 2 production, title or original captive differs'); return p.stage"},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"exit_to_menu"}
+  ]
+}
