@@ -1974,15 +1974,23 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
-            "start_native_can_ever_trace" | "start_native_property_trace" => {
+            "start_native_can_ever_trace"
+            | "start_native_can_ever_calibration"
+            | "start_native_property_trace" => {
                 self.remaining(deadline)?;
                 let mode = match (action, step.get("scope")) {
                     ("start_native_can_ever_trace", None) => "can-ever",
+                    ("start_native_can_ever_calibration", None) => "can-ever-calibration",
                     ("start_native_property_trace", None) => "property",
                     ("start_native_property_trace", Some(scope))
                         if scope == "numeric_test_keys_853271_853272" =>
                     {
                         "property-scoped"
+                    }
+                    ("start_native_property_trace", Some(scope))
+                        if scope == "ashina_admission_853304" =>
+                    {
+                        "property-admission-scoped"
                     }
                     _ => return Err(Error::scenario("invalid native bridge scope")),
                 };
@@ -1997,7 +2005,9 @@ impl Runner {
                     text(step, "name")
                 ))
             }
-            "stop_native_can_ever_trace" | "stop_native_property_trace" => {
+            "stop_native_can_ever_trace"
+            | "stop_native_can_ever_calibration"
+            | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
                 let artifact = self
                     .backend
