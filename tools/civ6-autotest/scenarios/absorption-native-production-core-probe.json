@@ -307,14 +307,18 @@
       "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')); local city=assert(Players[t.Owner]:GetCities():FindID(t.City)); local q=city:GetBuildQueue(); print('[JAC_ARTIFACT_CORE_QUEUE] collection='..tostring(q.AddProgress)..' location='..tostring(CityManager.GetCityAt(t.X,t.Y):GetBuildQueue().AddProgress)); assert(type(q.AddProgress)=='function','official game-core tuner production API missing'); assert(q:GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,'wrong official production'); q:AddProgress(1000); return 'official game-core tuner progress dispatched'"
     },
     {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nif not t then return false end\nlocal count=0\nfor _,unit in Players[t.Owner]:GetUnits():Members() do\n if unit:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(unit:GetID())]\n  and unit:GetX()==t.X and unit:GetY()==t.Y then count=count+1 end\nend\nreturn count==1"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
       "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal unit,count=nil,0\nfor _,candidate in Players[t.Owner]:GetUnits():Members() do\n if candidate:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(candidate:GetID())]\n  and candidate:GetX()==t.X and candidate:GetY()==t.Y then unit=candidate;count=count+1 end\nend\nassert(count==1 and unit,'one newly produced source-city archaeologist required')\nGame:SetProperty('JAC_ARTIFACT_EXCAVATOR',{Owner=t.Owner,Unit=unit:GetID(),City=t.City,Completed=0,Produced=true})\nprint('[JAC_ARTIFACT_EXCAVATOR_PRODUCED] owner='..t.Owner..' unit='..unit:GetID()..' city='..t.City)\nreturn 'bound the actual newly produced archaeologist; no direct InitUnit fixture'"
-    },
-    {
-      "state_name": "InGame",
-      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
-      "action": "ui_lua"
     },
     {
       "action": "save",
