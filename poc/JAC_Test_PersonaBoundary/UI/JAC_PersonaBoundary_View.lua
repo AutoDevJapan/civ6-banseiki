@@ -1253,6 +1253,34 @@ function B.ReadCapacityGovernment(targetTier)
     return result;
 end
 
+-- The UI's completion flag can lag a verified same-turn Core Civic result.
+-- This allows one native request; the following real turn still proves whether
+-- the engine accepted it. No reported UI state or Civic flag is rewritten.
+function B.CapacityGovernmentRequestReady(government)
+    if type(government)~="table" then return false; end
+    if government.stage=="READY_CHANGE" then return true; end
+    local target=government.target;
+    local source=Game:GetProperty("JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT");
+    local receipt=Game:GetProperty("JAC_BOUNDARY_TIER2_CIVIC_RECEIPT");
+    if government.stage~="NO_CIVIC_COMPLETED_THIS_TURN" or
+        government.requiredTier~="Tier2" or government.coreCivicReady~=true or
+        government.owner~=Game.GetLocalPlayer() or
+        government.turn~=Game.GetCurrentGameTurn() or
+        government.canChangeAtAll~=true or government.changeMade~=false or
+        government.strategicCommands~=true or government.anarchyTurns~=0 or
+        not target or target.tier~="Tier2" or target.unlocked~=true or
+        type(source)~="table" or type(receipt)~="table" or
+        type(source.beforeTotal)~="number" or type(source.expectedTitleDelta)~="number" then
+        return false;
+    end
+    return source.owner==government.owner and source.turn==government.turn and
+        source.index==target.civicIndex and source.targetGovernment==target.governmentType and
+        receipt.token==source.token and receipt.phase=="SETTER_RETURNED" and
+        receipt.status=="OBSERVED" and receipt.owned==true and
+        receipt.afterTotal==source.beforeTotal+source.expectedTitleDelta and
+        receipt.afterSpent==source.beforeSpent;
+end
+
 function B.Tier1GovernmentWindowCivic()
     local culture=Players[Game.GetLocalPlayer()]:GetCulture();
     local domain=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"],
@@ -2292,8 +2320,9 @@ function B.Queue(action, params)
         local source=Game:GetProperty(sourceKey);
         local receipt=Game:GetProperty(receiptKey);
         assert((plan.stage=="NEEDS_TIER1_GOVERNMENT" or
-            plan.stage=="NEEDS_TIER2_GOVERNMENT") and
-            government.stage=="READY_CHANGE" and not intents[target.tier] and
+            plan.stage=="NEEDS_TIER2_GOVERNMENT" or
+            plan.stage=="TIER2_GOVERNMENT_BLOCKED") and
+            B.CapacityGovernmentRequestReady(government) and not intents[target.tier] and
             not capacityQueued[action.."/"..target.tier] and
             source and receipt and source.owner==Game.GetLocalPlayer() and
             source.turn==Game.GetCurrentGameTurn() and
@@ -2807,8 +2836,9 @@ local function Submit(command)
         local government=assert(plan.government,"native capacity Government plan vanished");
         local target=assert(government.target,"native capacity Government target vanished");
         assert((plan.stage=="NEEDS_TIER1_GOVERNMENT" or
-            plan.stage=="NEEDS_TIER2_GOVERNMENT") and
-            government.stage=="READY_CHANGE" and government.owner==owner,
+            plan.stage=="NEEDS_TIER2_GOVERNMENT" or
+            plan.stage=="TIER2_GOVERNMENT_BLOCKED") and
+            B.CapacityGovernmentRequestReady(government) and government.owner==owner,
             "official capacity Government change gate changed before dispatch");
         local titles=Players[owner]:GetGovernors();
         local sourceKey=target.tier=="Tier1" and
@@ -3423,7 +3453,7 @@ ContextPtr:SetUpdate(function()
                     return;
                 end
                 local gate=B.ReadCapacityGovernment(intent.tier);
-                if gate.stage~="READY_CHANGE" or
+                if not B.CapacityGovernmentRequestReady(gate) or
                     gate.currentIndex~=intent.beforeGovernment or
                     not gate.target or gate.target.hash~=intent.targetHash then
                     B.lastAction="REJECTED_"..request.action;

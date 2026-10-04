@@ -2120,7 +2120,7 @@ fn capacity_tier_two_civic_scene_stops_before_save_when_native_read_is_pending()
         .unwrap());
     h.reject(
         scene_phase_lua(&scene, "ui_lua", "Queue('CHANGE_CAPACITY_GOVERNMENT')"),
-        "official Tier 2 Government window closed",
+        "official Tier 2 Government request lacks a fresh Core receipt",
     );
     h.run("assert(TIER2_SETTER_CALLS==1 and Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC')==nil and GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
     let proof = scene_phase_index(
@@ -2166,6 +2166,49 @@ fn capacity_government_cannot_be_requested_after_the_civic_turn_expires() {
         "official capacity Government change is unavailable",
     );
     tier2.run("assert(GOV_REQUEST_CALLS==0)");
+}
+
+#[test]
+fn capacity_tier_two_requests_once_from_core_completion_when_ui_window_is_stale() {
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.run("GOV_CIVIC_COMPLETED=true; GOV_CURRENT=1; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_TIER1_BUILT=true; GOV_TIER2_CIVIC_COMPLETED=false; GOV_WINDOW_PASSES=true; local original=Players[0].GetCulture; Players[0].GetCulture=function() local culture=original(); if UI_STALE and not CORE_READ then local has=culture.HasCivic; culture.HasCivic=function(_,index) if index==14 then return false end; return has(culture,index) end end; local request=culture.RequestChangeGovernment; culture.RequestChangeGovernment=function(self,hash) local uiFlag=GOV_CIVIC_COMPLETED_THIS_TURN; GOV_CIVIC_COMPLETED_THIS_TURN=CORE_WINDOW; local accepted=request(self,hash); GOV_CIVIC_COMPLETED_THIS_TURN=uiFlag; return accepted end; return culture end; ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_TIER2_CAPACITY_CIVIC')");
+    h.run("UI_STALE=true");
+    h.tier2_civic_complete_queued();
+    h.run("CORE_WINDOW=true; GOV_CIVIC_COMPLETED_THIS_TURN=false; local b=ExposedMembers.JAC_PersonaBoundary; local g=b.ReadCapacityGovernment('Tier2'); assert(g.stage=='NO_CIVIC_COMPLETED_THIS_TURN' and g.coreCivicReady and not g.target.civicOwned and g.target.unlocked); b.Queue('CHANGE_CAPACITY_GOVERNMENT')");
+    h.capacity_government_complete_queued();
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('CHANGE_CAPACITY_GOVERNMENT')",
+        "already pending",
+    );
+    h.run("assert(GOV_REQUEST_CALLS==1); UI_STALE=false; ADVANCE_TURN()");
+    h.capacity_government_complete_next_turn();
+    h.run("assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_CHANGE_CAPACITY_GOVERNMENT' and GOV_REQUEST_CALLS==1 and GOV_CURRENT==2 and GOV_POINTS==2)");
+}
+
+#[test]
+fn capacity_tier_two_stale_ui_still_rejects_invalid_core_receipts_and_native_gates() {
+    for mutation in [
+        "a.owner=1",
+        "a.turn=a.turn-1",
+        "r.token=r.token+1",
+        "r.status='PENDING_NATIVE'",
+        "r.afterSpent=r.afterSpent+1",
+        "a.index=a.index+1",
+        "GOV_CAN_CHANGE=false",
+        "GOV_ANARCHY_TURNS=1",
+    ] {
+        let h = Enemy::new();
+        h.actual_captive_at_turn_24();
+        h.run("GOV_CIVIC_COMPLETED=true; GOV_CURRENT=1; GOV_DISTRICT_BUILT=true; GOV_DISTRICT_PLACED=true; GOV_TIER1_BUILT=true; GOV_TIER2_CIVIC_COMPLETED=false; GOV_WINDOW_PASSES=true; ExposedMembers.JAC_PersonaBoundary.Queue('PREPARE_TIER2_CAPACITY_CIVIC')");
+        h.tier2_civic_complete_queued();
+        h.run(&format!("GOV_CIVIC_COMPLETED_THIS_TURN=false; local a=Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT'); local r=Game:GetProperty('JAC_BOUNDARY_TIER2_CIVIC_RECEIPT'); {mutation}"));
+        h.reject(
+            "ExposedMembers.JAC_PersonaBoundary.Queue('CHANGE_CAPACITY_GOVERNMENT')",
+            "official capacity Government change is unavailable",
+        );
+        h.run("assert(GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
+    }
 }
 
 #[test]
