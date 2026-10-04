@@ -1079,6 +1079,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
                     | "leader-persona-property-numeric-observer-15km.json"
                     | "leader-persona-joined-admission-calibration-15km.json"
                     | "leader-persona-joined-admission-cost1-15km.json"
+                    | "leader-persona-promotion-call-calibration-15km.json"
             ) {
                 assert!(
                     strings("ids").iter().any(|id| id == PROPERTY_OBSERVER_MOD),
@@ -1104,8 +1105,8 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // main added 45 absorption scenarios with isolated new-game selection.
-    assert_eq!(count, 133);
+    // Include the additional isolated promotion-call calibration game.
+    assert_eq!(count, 134);
 }
 
 #[test]
