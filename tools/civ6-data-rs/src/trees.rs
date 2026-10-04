@@ -1444,6 +1444,7 @@ mod tests {
     }
 
     const TREE_TEST_SCHEMA: &str = r#"
+PRAGMA foreign_keys=ON;
 CREATE TABLE Types (Type TEXT PRIMARY KEY, Kind TEXT);
 CREATE TABLE Technologies (TechnologyType TEXT PRIMARY KEY, Name TEXT, Description TEXT, Cost INT, EraType TEXT, UITreeRow INT, AdvisorType TEXT);
 CREATE TABLE Civics (CivicType TEXT PRIMARY KEY, Name TEXT, Description TEXT, Cost INT, EraType TEXT, UITreeRow INT, AdvisorType TEXT);
@@ -1460,7 +1461,7 @@ CREATE TABLE Districts (DistrictType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCi
 CREATE TABLE Buildings (BuildingType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT, InternalOnly INT);
 CREATE TABLE Improvements (ImprovementType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT, Buildable INT);
 CREATE TABLE Resources (ResourceType TEXT PRIMARY KEY, PrereqTech TEXT);
-CREATE TABLE Governments (GovernmentType TEXT PRIMARY KEY, PrereqCivic TEXT, PolicyToUnlock TEXT);
+CREATE TABLE Governments (GovernmentType TEXT PRIMARY KEY, PrereqCivic TEXT, PolicyToUnlock TEXT REFERENCES Policies(PolicyType) ON DELETE CASCADE);
 CREATE TABLE StartingCivics (Era TEXT, Civic TEXT);
 CREATE TABLE Policies (PolicyType TEXT PRIMARY KEY, PrereqCivic TEXT, PrereqTech TEXT);
 CREATE TABLE Projects (ProjectType TEXT PRIMARY KEY, PrereqTech TEXT, PrereqCivic TEXT);
@@ -1486,11 +1487,41 @@ INSERT INTO Districts VALUES ('DISTRICT_HARBOR','TECH_CELESTIAL_NAVIGATION',NULL
 INSERT INTO Buildings VALUES ('BUILDING_GRANARY','TECH_POTTERY',NULL,0);
 INSERT INTO Improvements VALUES ('IMPROVEMENT_MINE','TECH_MINING',NULL,1);
 INSERT INTO Resources VALUES ('RESOURCE_IRON','TECH_BRONZE_WORKING'),('RESOURCE_HORSES','TECH_ANIMAL_HUSBANDRY');
-INSERT INTO Governments VALUES ('GOVERNMENT_CHIEFDOM',NULL,NULL),('GOVERNMENT_OLIGARCHY','CIVIC_POLITICAL_PHILOSOPHY',NULL);
 INSERT INTO StartingCivics VALUES ('ERA_ANCIENT','CIVIC_CODE_OF_LAWS');
-INSERT INTO Policies VALUES ('POLICY_DISCIPLINE','CIVIC_CODE_OF_LAWS',NULL);
+INSERT INTO Policies VALUES
+  ('POLICY_DISCIPLINE','CIVIC_CODE_OF_LAWS',NULL),
+  ('POLICY_GOV_OLIGARCHY',NULL,NULL),
+  ('POLICY_GOV_MERCHANT_REPUBLIC',NULL,NULL),
+  ('POLICY_GOV_MONARCHY',NULL,NULL);
+INSERT INTO Governments VALUES
+  ('GOVERNMENT_CHIEFDOM',NULL,NULL),
+  ('GOVERNMENT_OLIGARCHY','CIVIC_POLITICAL_PHILOSOPHY','POLICY_GOV_OLIGARCHY'),
+  ('GOVERNMENT_MERCHANT_REPUBLIC','CIVIC_EXPLORATION','POLICY_GOV_MERCHANT_REPUBLIC'),
+  ('GOVERNMENT_MONARCHY','CIVIC_DIVINE_RIGHT','POLICY_GOV_MONARCHY');
 INSERT INTO Projects VALUES ('PROJECT_REPAIR_OUTER_DEFENSES',NULL,NULL);
 "#;
+
+    #[test]
+    fn retained_governments_would_cascade_away_without_detaching_deleted_policies() -> Result<()> {
+        let repo = Repository::checked_in();
+        let mut script = read_mod(&repo, "Data/JAC_Sengoku_Unlocks.sql")?;
+        let start = script
+            .find("UPDATE Governments SET PolicyToUnlock=NULL")
+            .expect("Government policy detachment missing");
+        let end = start
+            + script[start..]
+                .find(");\n")
+                .expect("detachment terminator missing")
+            + 3;
+        script.replace_range(start..end, "");
+        let db = Connection::open_in_memory()?;
+        db.execute_batch(TREE_TEST_SCHEMA)?;
+        db.execute_batch(&read_mod(&repo, "Data/JAC_Sengoku_Trees.sql")?)?;
+        db.execute_batch(&script)?;
+        assert_eq!(scalar::<i64>(&db, "SELECT COUNT(*) FROM Governments WHERE GovernmentType IN ('GOVERNMENT_OLIGARCHY','GOVERNMENT_MERCHANT_REPUBLIC','GOVERNMENT_MONARCHY')")?, 0,
+            "foreign-key cascade must make the omitted detachment a real regression");
+        Ok(())
+    }
 
     #[test]
     fn test_sql_loads_and_rewires_without_erasing_gs_sentinels() -> Result<()> {
@@ -1499,6 +1530,9 @@ INSERT INTO Projects VALUES ('PROJECT_REPAIR_OUTER_DEFENSES',NULL,NULL);
         db.execute_batch(TREE_TEST_SCHEMA)?;
         db.execute_batch(&read_mod(&repo, "Data/JAC_Sengoku_Trees.sql")?)?;
         db.execute_batch(&read_mod(&repo, "Data/JAC_Sengoku_Unlocks.sql")?)?;
+        assert_eq!(scalar::<i64>(&db, "SELECT COUNT(*) FROM Governments WHERE GovernmentType IN ('GOVERNMENT_OLIGARCHY','GOVERNMENT_MERCHANT_REPUBLIC','GOVERNMENT_MONARCHY')")?, 3,
+            "deleting obsolete Government policies must not cascade-delete retained Governments");
+        assert_eq!(scalar::<i64>(&db, "SELECT COUNT(*) FROM Governments WHERE GovernmentType IN ('GOVERNMENT_OLIGARCHY','GOVERNMENT_MERCHANT_REPUBLIC','GOVERNMENT_MONARCHY') AND PolicyToUnlock IS NOT NULL")?, 0);
         for (table, col, count) in [
             ("Technologies", "TechnologyType", 32),
             ("Civics", "CivicType", 30),

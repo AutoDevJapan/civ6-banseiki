@@ -22,6 +22,8 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryMarkCaptiveExchange','JAC_BoundaryPrepareCapacityCivic',
  'JAC_BoundaryReadCapacityCivic',
  'JAC_BoundaryPrepareTier2CapacityCivic','JAC_BoundaryReadTier2CapacityCivic',
+ 'JAC_BoundaryPrepareTier1GovernmentWindowCivic',
+ 'JAC_BoundaryReadTier1GovernmentWindowCivic',
  'JAC_BoundaryCapacityGovernmentIntent','JAC_BoundaryCapacityGovernmentRead',
  'JAC_BoundaryCapacityGovernmentProbe',
  'JAC_BoundaryProgressCapacityDistrict'}) do GameEvents[k]=event() end
@@ -54,7 +56,27 @@ GameInfo.Civics={[spyDef.PrereqCivic]={Index=12},
  CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS={Index=14,
   CivicType='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS'},
  CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION={Index=15,
-  CivicType='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION'}}
+  CivicType='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION'},
+ CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS={Index=16,
+  CivicType='CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS'},
+ CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER={Index=17,
+  CivicType='CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER'},
+ CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE={Index=18,
+  CivicType='CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE'},
+ CIVIC_JAC_SENGOKU_HOUSE_RULES={Index=19,CivicType='CIVIC_JAC_SENGOKU_HOUSE_RULES'}}
+GameInfo.CivicPrereqs=collection({
+ {Civic='CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS',PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'},
+ {Civic='CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER',PrereqCivic='CIVIC_JAC_SENGOKU_DOMAIN_LAW'},
+ {Civic='CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE',PrereqCivic='CIVIC_JAC_SENGOKU_HOUSE_RULES'},
+ {Civic='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS',PrereqCivic='CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE'}},'Civic')
+GameInfo.CivicModifiers=collection({
+ {CivicType='CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS',ModifierId='JAC_TEST_TITLE'},
+ {CivicType='CIVIC_JAC_SENGOKU_WARRIOR_FARMER_SEPARATION',ModifierId='JAC_TEST_TITLE'},
+ {CivicType='CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS',ModifierId='JAC_TEST_TITLE'},
+ {CivicType='CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER',ModifierId='JAC_TEST_TITLE'}},'CivicType')
+GameInfo.Modifiers={JAC_TEST_TITLE={ModifierType='JAC_TEST_TITLE_EFFECT'}}
+GameInfo.DynamicModifiers={JAC_TEST_TITLE_EFFECT={EffectType='EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS'}}
+GameInfo.ModifierArguments=collection({{ModifierId='JAC_TEST_TITLE',Name='Delta',Value='1'}},'ModifierId')
 GameInfo.GovernmentTiers=collection({{TierType='Tier1',Sorting=1},
  {TierType='Tier2',Sorting=2}},'TierType')
 GameInfo.Governments=collection({
@@ -123,6 +145,8 @@ GOV_DISTRICT_ID=991; GOV_DISTRICT_MEMBER_KEY=1
 GOV_DISTRICT_MISSING_GETTER=nil
 GOV_TIER1_BUILT=false; GOV_SPIES_BUILT=false; GOV_CIVIC_COMPLETED=false
 GOV_TIER2_CIVIC_COMPLETED=true; GOV_MONARCHY_CIVIC_COMPLETED=false
+GOV_WINDOW_LEARNING=false; GOV_WINDOW_MILITARY=false; GOV_WINDOW_PASSES=false
+GOV_POINTS=1
 GOV_CURRENT=2; GOV_CAN_CHANGE=true; GOV_CHANGE_MADE=false
 GOV_CIVIC_COMPLETED_THIS_TURN=false; GOV_STRATEGIC_COMMANDS=true
 GOV_REQUEST_CALLS=0
@@ -228,7 +252,7 @@ for _,id in ipairs({0,1,62}) do
  p.GetGovernors=function() return {
   HasGovernor=function(_,hash) assert(hash==9000); return id==0 and APPOINTED end,
   GetGovernor=function(_,hash) assert(hash==9000); if id==0 then return GOV end end,
-  GetGovernorPoints=function() return 1 end,GetGovernorPointsSpent=function() return 1 end,
+   GetGovernorPoints=function() return GOV_POINTS end,GetGovernorPointsSpent=function() return 1 end,
   CanAssignGovernor=function(_,hash,c) return GOV.neutralized==0 and c.owner==id end} end
  p.GetCities=function() return {
   Members=function() local owned={}; for _,c in ipairs(CITIES) do if c.owner==id then owned[#owned+1]=c end end; return members(owned) end,
@@ -238,14 +262,21 @@ for _,id in ipairs({0,1,62}) do
    if index==13 then return GOV_CIVIC_COMPLETED end
    if index==14 then return GOV_TIER2_CIVIC_COMPLETED end
    if index==15 then return GOV_MONARCHY_CIVIC_COMPLETED end
+   if index==16 then return GOV_WINDOW_LEARNING end
+   if index==17 then return GOV_WINDOW_MILITARY end
+   if index==18 then return GOV_WINDOW_PASSES end
+   if index==19 then return true end
    assert(index==12); return CIVIC_COMPLETED end,
   GetCultureCost=function(_,index) assert(index==12); return 100 end,
   SetCulturalProgress=function(_,index,amount) assert(index==12 and amount==100); CIVIC_COMPLETED=true; SPY_CAPACITY=0 end,
   SetCivic=function(_,index,grant)
    assert(grant==true)
     if index==13 then assert(not GOV_CIVIC_COMPLETED); GOV_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
-    elseif index==14 then GOV_TIER2_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
-    elseif index==15 then GOV_MONARCHY_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
+    elseif index==14 then GOV_TIER2_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true; GOV_POINTS=GOV_POINTS+1
+    elseif index==15 then GOV_MONARCHY_CIVIC_COMPLETED=true; GOV_CIVIC_COMPLETED_THIS_TURN=true; GOV_POINTS=GOV_POINTS+1
+    elseif index==16 then GOV_WINDOW_LEARNING=true; GOV_CIVIC_COMPLETED_THIS_TURN=true; GOV_POINTS=GOV_POINTS+1
+    elseif index==17 then GOV_WINDOW_MILITARY=true; GOV_CIVIC_COMPLETED_THIS_TURN=true; GOV_POINTS=GOV_POINTS+1
+    elseif index==18 then GOV_WINDOW_PASSES=true; GOV_CIVIC_COMPLETED_THIS_TURN=true
     else assert(index==12); CIVIC_COMPLETED=true; CIVIC_GRANT_CALLS=(CIVIC_GRANT_CALLS or 0)+1 end
    end,
    GetCurrentGovernment=function() return GOV_CURRENT end,
