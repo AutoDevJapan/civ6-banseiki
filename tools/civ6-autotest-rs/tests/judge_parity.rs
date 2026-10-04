@@ -583,6 +583,10 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-ui-clock-probe.json".to_string(),
             "leader-persona-bridge-original-15km.json".to_string(),
             "leader-persona-property-observer-15km.json".to_string(),
+            "leader-persona-spy-neutralization-retry-capacity-government-plan.json".to_string(),
+            "leader-persona-spy-neutralization-retry-capacity-government-tier1.json".to_string(),
+            "leader-persona-spy-neutralization-retry-capacity-government-tier2.json".to_string(),
+            "leader-persona-spy-neutralization-retry-capacity-tier2-civic.json".to_string(),
         ])
     );
     for name in &actual {
