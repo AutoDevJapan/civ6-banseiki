@@ -339,13 +339,54 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 suffix.ends_with("tick")
                     || suffix == "retry-capacity-civic"
                     || suffix == "retry-capacity-government-tier1"
-                    || suffix == "retry-capacity-government-tier2"
                     || suffix == "retry-capacity-tier2-civic",
             ),
             "{name}"
         );
     }
-    assert_eq!(saves, 18);
+    assert_eq!(saves, 17);
+    for (suffix, civic_action) in [
+        (
+            "retry-capacity-government-tier1",
+            "PREPARE_TIER1_GOV_WINDOW_CIVIC",
+        ),
+        ("retry-capacity-tier2-civic", "PREPARE_TIER2_CAPACITY_CIVIC"),
+    ] {
+        let data = scenario(&format!("leader-persona-spy-neutralization-{suffix}.json"));
+        let steps = steps(&data);
+        let civic = steps
+            .iter()
+            .position(|s| {
+                action(s, "ui_lua")
+                    && embedded_lua(s)
+                        .is_some_and(|code| code.contains(&format!("Queue('{civic_action}')")))
+            })
+            .unwrap();
+        let government = steps
+            .iter()
+            .position(|s| {
+                action(s, "ui_lua")
+                    && embedded_lua(s)
+                        .is_some_and(|code| code.contains("Queue('CHANGE_CAPACITY_GOVERNMENT')"))
+            })
+            .unwrap();
+        let turn = steps.iter().position(|s| action(s, "end_turn")).unwrap();
+        let save = steps.iter().position(|s| action(s, "save")).unwrap();
+        assert!(
+            civic < government && government < turn && turn < save,
+            "{suffix}"
+        );
+        assert_eq!(steps[turn]["turns"], 1);
+        assert!(steps[save - 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains("d.mission.turn==23"));
+    }
+    let old_tier2 =
+        scenario("leader-persona-spy-neutralization-retry-capacity-government-tier2.json");
+    assert!(steps(&old_tier2).iter().all(|s| !action(s, "save")
+        && !action(s, "end_turn")
+        && !embedded_lua(s).is_some_and(|code| code.contains("Queue("))));
     let probe = scenario("leader-persona-spy-neutralization-retry-captive-exchange-probe.json");
     let probe_codes: Vec<_> = steps(&probe).iter().filter_map(embedded_lua).collect();
     assert!(probe_codes

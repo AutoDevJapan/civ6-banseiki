@@ -97,7 +97,24 @@ function E.setup()
 end
 
 function E.fireCore(name,params,controller)
- local original=Players[1].GetGovernors
+  local original=Players[1].GetGovernors
+  local humanCulture=Players[0].GetCulture
+  local nativeGovernmentRead=ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead
+  Players[0].GetCulture=function()
+   local culture=humanCulture()
+   culture.GetCurrentGovernment=nil -- live 109: Gameplay lacks this UI getter
+   return culture
+  end
+  assert(Players[0]:GetCulture().GetCurrentGovernment==nil,
+   'test leaked UI-only Government getter into Gameplay')
+  ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead=function(owner)
+   local coreCulture=Players[0].GetCulture
+   Players[0].GetCulture=humanCulture -- independent UI VM reads its native wrapper
+   local ok,value=pcall(nativeGovernmentRead,owner)
+   Players[0].GetCulture=coreCulture
+   if not ok then error(value) end
+   return value
+  end
  Players[1].GetGovernors=function()
   return {GetGovernorPoints=function() return ENEMY_POINTS end,
    GetGovernorPointsSpent=function() return ENEMY_SPENT end}
@@ -106,8 +123,12 @@ function E.fireCore(name,params,controller)
  assert(core.HasGovernor==nil and core.CanEverAppointGovernor==nil and
   core.CanAppointGovernor==nil and core.GetGovernor==nil and
   core.CanAssignGovernor==nil, 'test leaked UI-only Governor getter into Gameplay')
- local ok,err=pcall(fire,assert(GameEvents[name]),controller or 0,params)
- Players[1].GetGovernors=original
+  CORE_READ=true
+  local ok,err=pcall(fire,assert(GameEvents[name]),controller or 0,params)
+  CORE_READ=false
+  Players[1].GetGovernors=original
+  Players[0].GetCulture=humanCulture
+  ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead=nativeGovernmentRead
  if not ok then error(err) end
 end
 

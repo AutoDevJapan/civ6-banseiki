@@ -17,6 +17,10 @@ local TIER2_CIVIC_ATTEMPT = "JAC_BOUNDARY_TIER2_CIVIC_ATTEMPT";
 local TIER2_CIVIC_RECEIPT = "JAC_BOUNDARY_TIER2_CIVIC_RECEIPT";
 local TIER2_CIVIC_READ = "JAC_BOUNDARY_TIER2_CIVIC_READ";
 local TIER2_CIVIC_MARKER = "JAC_BOUNDARY_TIER2_CIVIC";
+local GOV_WINDOW_ATTEMPT = "JAC_BOUNDARY_GOV_WINDOW_CIVIC_ATTEMPT";
+local GOV_WINDOW_RECEIPT = "JAC_BOUNDARY_GOV_WINDOW_CIVIC_RECEIPT";
+local GOV_WINDOW_READ = "JAC_BOUNDARY_GOV_WINDOW_CIVIC_READ";
+local GOV_WINDOW_MARKER = "JAC_BOUNDARY_GOV_WINDOW_CIVIC";
 local CAPACITY_GOVERNMENT_INTENTS = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS";
 local CAPACITY_GOVERNMENT_READ = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_READ";
 local CAPACITY_GOVERNMENT_API_PROBE = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_API_PROBE";
@@ -386,6 +390,31 @@ local function EnemyReceipt(controller,params,action)
         "enemy UI observation is stale or belongs to another actor");
 end
 
+local function OfficialCivicTitleDelta(civicType)
+    local total=0;
+    for link in GameInfo.CivicModifiers() do
+        if link.CivicType==civicType then
+            local modifier=assert(GameInfo.Modifiers[link.ModifierId],
+                "native Civic title modifier missing");
+            local definition=assert(GameInfo.DynamicModifiers[modifier.ModifierType],
+                "native Civic title effect definition missing");
+            if definition.EffectType=="EFFECT_ADJUST_PLAYER_GOVERNOR_POINTS" then
+                local found=false;
+                for argument in GameInfo.ModifierArguments() do
+                    if argument.ModifierId==link.ModifierId and argument.Name=="Delta" then
+                        local delta=tonumber(argument.Value);
+                        assert(delta and delta>=0 and delta==math.floor(delta),
+                            "official Civic Governor title delta is invalid");
+                        total=total+delta; found=true;
+                    end
+                end
+                assert(found,"official Civic Governor title delta missing");
+            end
+        end
+    end
+    return total;
+end
+
 -- A separate fixture keeps the earlier human Oda/city-loss experiment intact.
 -- UI checks the static candidate gate before this first synchronized write.
 -- No AI title is granted before the regular Join.
@@ -478,6 +507,7 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
         params.Action=="RESUME_CAPACITY_CIVIC_READ" or
         params.Action=="PREPARE_TIER2_CAPACITY_CIVIC" or
         params.Action=="RESUME_TIER2_CAPACITY_CIVIC_READ" or
+        params.Action=="PREPARE_TIER1_GOV_WINDOW_CIVIC" or
         params.Action=="CHANGE_CAPACITY_GOVERNMENT" or
         params.Action=="PROBE_CAPACITY_GOVERNMENT_API" or
         params.Action=="PROGRESS_CAPACITY_DISTRICT",
@@ -491,6 +521,7 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
         params.Action=="RESUME_CAPACITY_CIVIC_READ" or
         params.Action=="PREPARE_TIER2_CAPACITY_CIVIC" or
         params.Action=="RESUME_TIER2_CAPACITY_CIVIC_READ" or
+        params.Action=="PREPARE_TIER1_GOV_WINDOW_CIVIC" or
         params.Action=="CHANGE_CAPACITY_GOVERNMENT" then
         print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_BARRIER "..R.Serialize(marker));
     end
@@ -836,10 +867,26 @@ GameEvents.JAC_BoundaryPrepareTier2CapacityCivic.Add(function(controller,params)
             "Tier 2 Government prerequisite Civic missing");
         local player=assert(Players[controller],"Tier 2 Civic owner missing");
         local culture=player:GetCulture();
+        local prerequisiteCount=0;
+        for link in GameInfo.CivicPrereqs() do
+            if link.Civic==params.CivicType then
+                local prerequisite=assert(GameInfo.Civics[link.PrereqCivic],
+                    "Tier 2 Government Civic prerequisite definition missing");
+                assert(culture:HasCivic(prerequisite.Index),
+                    "Tier 2 Government Civic prerequisite is unresearched");
+                prerequisiteCount=prerequisiteCount+1;
+            end
+        end
+        assert(prerequisiteCount>0,
+            "Tier 2 Government Civic has no proven Sengoku prerequisite");
         local titles=player:GetGovernors();
-        assert(type(culture.GetCurrentGovernment)=="function",
-            "Gameplay current Government API unavailable before Tier 2 Civic");
-        local current=GameInfo.Governments[culture:GetCurrentGovernment()];
+        local nativeGov=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader unavailable")(controller);
+        assert(nativeGov.owner==controller and nativeGov.turn==params.Turn and
+            nativeGov.frame>=params.Frame and
+            nativeGov.publishEpoch>=params.PublishEpoch,
+            "native Government reader did not observe this request");
+        local current=GameInfo.Governments[nativeGov.index];
         assert(current and current.Tier=="Tier1",
             "Tier 2 Civic requires the completed Tier 1 Government path");
         local tier1Built=false;
@@ -861,11 +908,12 @@ GameEvents.JAC_BoundaryPrepareTier2CapacityCivic.Add(function(controller,params)
             params.OriginalSpent==spent and params.OriginalSequence==params.Token,
             "Tier 2 Civic or original title accounting changed");
         assert(type(culture.SetCivic)=="function","native Civic setter unavailable");
+        local expectedDelta=OfficialCivicTitleDelta(civic.CivicType);
         local attempt={owner=controller,index=civic.Index,civicType=civic.CivicType,
             targetGovernment=params.TargetGovernment,
             token=params.Token,sequence=params.Token,
             turn=Game.GetCurrentGameTurn(),beforeTotal=total,beforeSpent=spent,
-            generation=receipt.generation};
+            generation=receipt.generation,expectedTitleDelta=expectedDelta};
         Game:SetProperty(TIER2_CIVIC_ATTEMPT,attempt);
         local saved=assert(Game:GetProperty(TIER2_CIVIC_ATTEMPT),
             "Tier 2 Civic setter attempt did not persist");
@@ -875,6 +923,7 @@ GameEvents.JAC_BoundaryPrepareTier2CapacityCivic.Add(function(controller,params)
         receipt.index=civic.Index; receipt.civicType=civic.CivicType;
         receipt.targetGovernment=params.TargetGovernment;
         receipt.beforeTotal=total; receipt.beforeSpent=spent;
+        receipt.expectedTitleDelta=expectedDelta;
         receipt.phase="SETTER_ENTERED";
         Game:SetProperty(TIER2_CIVIC_RECEIPT,receipt);
         print("JAC_BOUNDARY CORE_TIER2_CIVIC_SETTER_ENTRY "..R.Serialize(attempt));
@@ -883,7 +932,9 @@ GameEvents.JAC_BoundaryPrepareTier2CapacityCivic.Add(function(controller,params)
         receipt.afterTotal=titles:GetGovernorPoints();
         receipt.afterSpent=titles:GetGovernorPointsSpent();
         receipt.owned=culture:HasCivic(civic.Index);
-        receipt.status=receipt.owned and "OBSERVED" or "PENDING_NATIVE";
+        receipt.status=receipt.owned and
+            receipt.afterTotal==total+expectedDelta and
+            receipt.afterSpent==spent and "OBSERVED" or "PENDING_NATIVE";
         Game:SetProperty(TIER2_CIVIC_RECEIPT,receipt);
     end);
     if not ok then
@@ -950,7 +1001,8 @@ GameEvents.JAC_BoundaryReadTier2CapacityCivic.Add(function(controller,params)
         read.total=player:GetGovernors():GetGovernorPoints();
         read.spent=player:GetGovernors():GetGovernorPointsSpent();
         read.status=read.owned and "OBSERVED" or "PENDING_NATIVE";
-        if read.owned and read.spent==attempt.beforeSpent then
+        if read.owned and read.spent==attempt.beforeSpent and
+            read.total==attempt.beforeTotal+attempt.expectedTitleDelta then
             Game:SetProperty(TIER2_CIVIC_MARKER,{
                 owner=controller,index=civic.Index,civicType=attempt.civicType,
                 targetGovernment=attempt.targetGovernment,
@@ -970,6 +1022,157 @@ GameEvents.JAC_BoundaryReadTier2CapacityCivic.Add(function(controller,params)
         print("JAC_BOUNDARY CORE_TIER2_CIVIC_READ_ERROR "..tostring(err));
     end
     print("JAC_BOUNDARY CORE_TIER2_CIVIC_READ_RESULT "..R.Serialize(read));
+end);
+
+-- A saved Domain Law completion is one turn too old to open the official
+-- GovernmentScreen change gate. Research exactly one other eligible Sengoku
+-- Civic, with the normal native title effect, on the Government-change turn.
+GameEvents.JAC_BoundaryPrepareTier1GovernmentWindowCivic.Add(function(controller,params)
+    if Game:GetProperty(GOV_WINDOW_ATTEMPT) or Game:GetProperty(GOV_WINDOW_RECEIPT) then
+        print("JAC_BOUNDARY CORE_GOV_WINDOW_CIVIC_DUPLICATE_SUPPRESSED");
+        return;
+    end
+    local receipt={action="PREPARE_TIER1_GOV_WINDOW_CIVIC",owner=controller,
+        token=type(params)=="table" and params.Token or -1,
+        turn=Game.GetCurrentGameTurn(),phase="ENTERED",status="ENTERED"};
+    Game:SetProperty(GOV_WINDOW_RECEIPT,receipt);
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"PREPARE_TIER1_GOV_WINDOW_CIVIC");
+        EnemyConfig(controller);
+        local player=Players[controller];
+        local culture=player:GetCulture();
+        local government=assert(GameInfo.Governments["GOVERNMENT_OLIGARCHY"],
+            "retained Tier 1 Government missing");
+        local domain=assert(GameInfo.Civics[government.PrereqCivic],
+            "Tier 1 Government prerequisite missing");
+        local nativeGov=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader unavailable")(controller);
+        assert(government.Tier=="Tier1" and culture:HasCivic(domain.Index) and
+            nativeGov.owner==controller and nativeGov.turn==params.Turn and
+            nativeGov.index==params.BeforeGovernment and
+            nativeGov.frame>=params.Frame and
+            nativeGov.publishEpoch>=params.PublishEpoch and
+            GameInfo.Governments[params.BeforeGovernment].Tier==nil,
+            "Tier 1 Government or saved Domain Law differs");
+        local allowed={CIVIC_JAC_SENGOKU_LEARNING_AND_RECORDS=true,
+            CIVIC_JAC_SENGOKU_MILITARY_SERVICE_LEDGER=true,
+            CIVIC_JAC_SENGOKU_PASSES_AND_PASSAGE=true};
+        local civic=assert(GameInfo.Civics[params.CivicType],
+            "selected Sengoku Government-window Civic missing");
+        assert(allowed[params.CivicType] and civic.Index==params.CivicIndex and
+            not culture:HasCivic(civic.Index),
+            "Government-window Civic is already owned or outside the scoped candidates");
+        local prerequisites=0;
+        for link in GameInfo.CivicPrereqs() do
+            if link.Civic==params.CivicType then
+                local required=assert(GameInfo.Civics[link.PrereqCivic],
+                    "Government-window prerequisite definition missing");
+                assert(culture:HasCivic(required.Index),
+                    "Government-window Civic has an unresearched prerequisite");
+                prerequisites=prerequisites+1;
+            end
+        end
+        assert(prerequisites>0,"Government-window Civic has no proven Sengoku prerequisite");
+        local titles=player:GetGovernors();
+        local total,spent=titles:GetGovernorPoints(),titles:GetGovernorPointsSpent();
+        assert(params.Total==total and params.Spent==spent and
+            params.OriginalOwner==controller and params.OriginalIndex==civic.Index and
+            params.OriginalToken==params.Token and params.OriginalTurn==params.Turn and
+            params.OriginalSpent==spent and params.OriginalSequence==params.Token,
+            "Government-window Civic or official title baseline changed");
+        assert(type(culture.SetCivic)=="function","native Civic setter unavailable");
+        local expected=OfficialCivicTitleDelta(params.CivicType);
+        local attempt={owner=controller,index=civic.Index,civicType=params.CivicType,
+            targetGovernment=government.GovernmentType,
+            token=params.Token,sequence=params.Token,turn=params.Turn,
+            beforeGovernment=params.BeforeGovernment,
+            beforeTotal=total,beforeSpent=spent,expectedTitleDelta=expected};
+        Game:SetProperty(GOV_WINDOW_ATTEMPT,attempt);
+        local saved=assert(Game:GetProperty(GOV_WINDOW_ATTEMPT),
+            "Government-window Civic attempt did not persist");
+        assert(saved.owner==attempt.owner and saved.index==attempt.index and
+            saved.token==attempt.token and saved.beforeTotal==attempt.beforeTotal and
+            saved.beforeSpent==attempt.beforeSpent,
+            "Government-window Civic attempt changed before mutation");
+        receipt.index=civic.Index; receipt.civicType=params.CivicType;
+        receipt.beforeTotal=total; receipt.beforeSpent=spent;
+        receipt.expectedTitleDelta=expected; receipt.phase="SETTER_ENTERED";
+        Game:SetProperty(GOV_WINDOW_RECEIPT,receipt);
+        culture:SetCivic(civic.Index,true);
+        receipt.phase="SETTER_RETURNED";
+        receipt.afterTotal=titles:GetGovernorPoints();
+        receipt.afterSpent=titles:GetGovernorPointsSpent();
+        receipt.owned=culture:HasCivic(civic.Index);
+        receipt.status=receipt.owned and
+            receipt.afterTotal==total+expected and
+            receipt.afterSpent==spent and "OBSERVED" or "PENDING_NATIVE";
+        Game:SetProperty(GOV_WINDOW_RECEIPT,receipt);
+    end);
+    if not ok then
+        receipt.status="ERROR"; receipt.error="CALLBACK_FAILED";
+        Game:SetProperty(GOV_WINDOW_RECEIPT,receipt);
+        print("JAC_BOUNDARY CORE_GOV_WINDOW_CIVIC_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_GOV_WINDOW_CIVIC_RESULT "..R.Serialize(receipt));
+end);
+
+GameEvents.JAC_BoundaryReadTier1GovernmentWindowCivic.Add(function(controller,params)
+    local prior=Game:GetProperty(GOV_WINDOW_READ);
+    local attempt=Game:GetProperty(GOV_WINDOW_ATTEMPT);
+    local receipt=Game:GetProperty(GOV_WINDOW_RECEIPT);
+    local read={owner=controller,action=type(params)=="table" and params.Action or "",
+        token=type(params)=="table" and params.Token or -1,
+        turn=Game.GetCurrentGameTurn(),
+        frame=type(params)=="table" and params.Frame or -1,
+        publishEpoch=type(params)=="table" and params.PublishEpoch or -1,
+        serial=(prior and prior.serial or 0)+1,status="ENTERED"};
+    Game:SetProperty(GOV_WINDOW_READ,read);
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"PREPARE_TIER1_GOV_WINDOW_CIVIC");
+        assert(params.Phase=="READ" and attempt and receipt and
+            receipt.phase=="SETTER_RETURNED" and receipt.status~="ERROR" and
+            receipt.owner==attempt.owner and receipt.token==attempt.token and
+            receipt.index==attempt.index and receipt.civicType==attempt.civicType and
+            receipt.turn==attempt.turn and receipt.beforeTotal==attempt.beforeTotal and
+            receipt.beforeSpent==attempt.beforeSpent and
+            params.OriginalOwner==attempt.owner and
+            params.OriginalIndex==attempt.index and
+            params.OriginalToken==attempt.token and
+            params.OriginalTurn==attempt.turn and
+            params.OriginalSpent==attempt.beforeSpent and
+            params.OriginalSequence==attempt.sequence and
+            params.CivicType==attempt.civicType and params.Token==attempt.token and
+            params.Turn==attempt.turn,
+            "Government-window Civic read is stale or mismatched");
+        local player=Players[controller];
+        local civic=assert(GameInfo.Civics[attempt.civicType],
+            "Government-window Civic definition vanished");
+        assert(civic.Index==attempt.index,"Government-window Civic index changed");
+        read.originalToken=attempt.token; read.originalTurn=attempt.turn;
+        read.index=civic.Index; read.owned=player:GetCulture():HasCivic(civic.Index);
+        read.total=player:GetGovernors():GetGovernorPoints();
+        read.spent=player:GetGovernors():GetGovernorPointsSpent();
+        read.status=read.owned and read.total==attempt.beforeTotal+attempt.expectedTitleDelta and
+            read.spent==attempt.beforeSpent and "OBSERVED" or "PENDING_NATIVE";
+        if read.status=="OBSERVED" then
+            Game:SetProperty(GOV_WINDOW_MARKER,{owner=controller,index=civic.Index,
+                civicType=attempt.civicType,
+                targetGovernment=attempt.targetGovernment,token=params.Token,
+                originalToken=attempt.token,originalSequence=attempt.sequence,
+                readSerial=read.serial,readFrame=read.frame,
+                readPublishEpoch=read.publishEpoch,
+                beforeTotal=attempt.beforeTotal,beforeSpent=attempt.beforeSpent,
+                afterTotal=read.total,afterSpent=read.spent,
+                commandTurn=attempt.turn,turn=read.turn});
+        end
+        Game:SetProperty(GOV_WINDOW_READ,read);
+    end);
+    if not ok then
+        read.status="ERROR"; read.error="READ_FAILED";
+        Game:SetProperty(GOV_WINDOW_READ,read);
+        print("JAC_BOUNDARY CORE_GOV_WINDOW_CIVIC_READ_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_GOV_WINDOW_CIVIC_READ_RESULT "..R.Serialize(read));
 end);
 
 -- The official GovernmentScreen sends Culture:RequestChangeGovernment(hash)
@@ -1001,19 +1204,57 @@ GameEvents.JAC_BoundaryCapacityGovernmentIntent.Add(function(controller,params)
             "capacity Government prerequisite Civic missing");
         local player=assert(Players[controller],"capacity Government actor missing");
         local culture=player:GetCulture();
-        assert(type(culture.GetCurrentGovernment)=="function",
-            "Gameplay current Government API unavailable");
+        local sourceKey=tier=="Tier1" and GOV_WINDOW_ATTEMPT or TIER2_CIVIC_ATTEMPT;
+        local receiptKey=tier=="Tier1" and GOV_WINDOW_RECEIPT or TIER2_CIVIC_RECEIPT;
+        local source=assert(Game:GetProperty(sourceKey),
+            "fresh official Civic attempt for Government change missing");
+        local civicReceipt=assert(Game:GetProperty(receiptKey),
+            "fresh official Civic receipt for Government change missing");
+        local sourceCivic=assert(GameInfo.Civics[source.civicType],
+            "Government-change source Civic definition missing");
+        assert(source.owner==controller and source.turn==Game.GetCurrentGameTurn() and
+            source.targetGovernment==row.GovernmentType and
+            source.index==sourceCivic.Index and
+            source.token==params.SourceCivicToken and
+            source.turn==params.SourceCivicTurn and
+            source.index==params.SourceCivicIndex and
+            source.civicType==params.SourceCivicType and
+            source.beforeTotal==params.SourceCivicBeforeTotal and
+            source.expectedTitleDelta==params.SourceCivicDelta and
+            source.expectedTitleDelta==OfficialCivicTitleDelta(source.civicType) and
+            civicReceipt.token==source.token and civicReceipt.phase=="SETTER_RETURNED" and
+            civicReceipt.status=="OBSERVED" and civicReceipt.owned and
+            civicReceipt.afterTotal==source.beforeTotal+source.expectedTitleDelta and
+            civicReceipt.afterTotal==params.BeforeTotal and
+            civicReceipt.afterSpent==source.beforeSpent and
+            civicReceipt.afterSpent==params.BeforeSpent and
+            culture:HasCivic(sourceCivic.Index),
+            "Government change does not follow this turn's native Civic completion");
+        local nativeGov=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader unavailable")(controller);
         assert(row.Tier==tier and row.Index==params.TargetIndex and
             nativeType.Hash==params.TargetHash and
             civic.Index==params.PrereqCivicIndex and culture:HasCivic(civic.Index) and
-            culture:GetCurrentGovernment()==params.BeforeGovernment and
+            nativeGov.owner==controller and nativeGov.turn==params.Turn and
+            nativeGov.index==params.BeforeGovernment and
+            nativeGov.governmentType==GameInfo.Governments[params.BeforeGovernment].GovernmentType and
+            nativeGov.frame>=params.Frame and
+            nativeGov.publishEpoch>=params.PublishEpoch and
+            player:GetGovernors():GetGovernorPoints()==params.BeforeTotal and
             player:GetGovernors():GetGovernorPointsSpent()==params.BeforeSpent,
             "native capacity Government intent no longer matches the real actor");
         intent.targetGovernment=row.GovernmentType;
         intent.targetIndex=row.Index; intent.targetHash=nativeType.Hash;
         intent.prereqCivicIndex=civic.Index;
         intent.beforeGovernment=params.BeforeGovernment;
+        intent.beforeTotal=params.BeforeTotal;
         intent.beforeSpent=params.BeforeSpent;
+        intent.sourceCivicType=source.civicType;
+        intent.sourceCivicIndex=source.index;
+        intent.sourceCivicToken=source.token;
+        intent.sourceCivicTurn=source.turn;
+        intent.sourceCivicBeforeTotal=source.beforeTotal;
+        intent.sourceCivicDelta=source.expectedTitleDelta;
         intent.frame=params.Frame; intent.publishEpoch=params.PublishEpoch;
         intent.status="PREPARED";
         Game:SetProperty(CAPACITY_GOVERNMENT_INTENTS,intents);
@@ -1032,7 +1273,12 @@ GameEvents.JAC_BoundaryCapacityGovernmentProbe.Add(function(controller,params)
     local culture=Players[controller]:GetCulture();
     local kind=type(culture.GetCurrentGovernment);
     local result={owner=controller,token=params.Token,turn=Game.GetCurrentGameTurn(),
-        getter=kind,status="API_UNAVAILABLE"};
+        getter=kind,status="API_UNAVAILABLE",
+        uiBridge=type(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead),
+        civicModifiers=type(GameInfo.CivicModifiers),
+        modifierArguments=type(GameInfo.ModifierArguments),
+        dynamicModifiers=type(GameInfo.DynamicModifiers),
+        civicPrereqs=type(GameInfo.CivicPrereqs)};
     if kind=="function" then
         local ok,index=pcall(culture.GetCurrentGovernment,culture);
         if ok and type(index)=="number" then
@@ -1071,21 +1317,38 @@ GameEvents.JAC_BoundaryCapacityGovernmentRead.Add(function(controller,params)
             intent.targetIndex==params.TargetIndex and
             intent.targetHash==params.TargetHash and
             intent.beforeGovernment==params.BeforeGovernment and
+            intent.beforeTotal==params.BeforeTotal and
             intent.beforeSpent==params.BeforeSpent and
+            intent.sourceCivicToken==params.SourceCivicToken and
+            intent.sourceCivicType==params.SourceCivicType and
+            intent.sourceCivicIndex==params.SourceCivicIndex and
+            intent.sourceCivicTurn==params.SourceCivicTurn and
+            intent.sourceCivicBeforeTotal==params.SourceCivicBeforeTotal and
+            intent.sourceCivicDelta==params.SourceCivicDelta and
             params.Turn==intent.turn+1 and params.Token>intent.token,
             "native capacity Government read is stale or changed");
         local player=assert(Players[controller],"capacity Government read actor missing");
         local culture=player:GetCulture();
-        assert(type(culture.GetCurrentGovernment)=="function",
-            "Gameplay current Government API unavailable at read");
+        local nativeGov=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader unavailable at read")(controller);
+        assert(nativeGov.owner==controller and nativeGov.turn==params.Turn and
+            nativeGov.frame>=params.Frame and
+            nativeGov.publishEpoch>=params.PublishEpoch,
+            "native Government UI bridge is stale at read");
         read.originalToken=intent.token; read.originalTurn=intent.turn;
         read.tier=intent.tier;
-        read.governmentIndex=culture:GetCurrentGovernment();
-        local row=read.governmentIndex>=0 and
-            GameInfo.Governments[read.governmentIndex] or nil;
-        read.governmentType=row and row.GovernmentType or "NONE";
-        read.governmentTier=row and row.Tier or "NONE";
+        read.governmentIndex=nativeGov.index;
+        read.governmentType=nativeGov.governmentType;
+        read.governmentTier=nativeGov.tier;
+        read.nativeFrame=nativeGov.frame;
+        read.nativePublishEpoch=nativeGov.publishEpoch;
+        read.nativeSource="UI_NATIVE_CULTURE";
+        read.total=player:GetGovernors():GetGovernorPoints();
         read.spent=player:GetGovernors():GetGovernorPointsSpent();
+        local sourceCivic=assert(GameInfo.Civics[intent.sourceCivicType],
+            "Government-change source Civic missing at read");
+        read.sourceCivicOwned=culture:HasCivic(sourceCivic.Index);
+        read.sourceCivicIndex=sourceCivic.Index;
         read.status="OBSERVED";
         Game:SetProperty(CAPACITY_GOVERNMENT_READ,read);
     end);
