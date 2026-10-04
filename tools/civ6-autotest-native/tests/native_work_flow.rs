@@ -758,10 +758,15 @@ fn excavation_checks_use_operation_parameters_before_visibility_flags() -> mlua:
     let lua = Lua::new();
     lua.load(
         r#"
-        local unit={}
+        local unit={GetArchaeology=function() return {GetArtifactIndex=function() return -1 end} end,
+          GetMovesRemaining=function() return 4 end}
         Game={GetProperty=function() return {Owner=1,Unit=77} end}
+        Game.GetArtifactAtPlot=function() return {Type=1,ActingPlayerID=1} end
+        Map={GetPlot=function() return {GetIndex=function() return 8 end,
+          GetOwner=function() return 1 end,GetResourceType=function() return 9 end,
+          GetDistrictType=function() return -1 end,GetImprovementType=function() return -1 end} end}
         Players={[1]={GetUnits=function() return {FindID=function(_,id)
-          assert(id==77);return unit end} end}}
+          assert(id==77);return unit end,GetNextExtractingArchaeologist=function() return nil end} end}}
         GameInfo={UnitOperations={UNITOPERATION_EXCAVATE={Hash=2468}}}
         UnitOperationResults={FAILURE_REASONS=2}
         Locale={Lookup=function(value) return value end}
@@ -1107,6 +1112,7 @@ fn excavation_fixture_selects_recorded_unoccupied_local_or_neutral_land() -> mlu
         r#"
         GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
         Game={GetLocalPlayer=function() return 1 end,
+          GetProperty=function() return VISITED end,
           GetArtifactAtPlot=function(index) return index~=1 and {} or nil end}
         ExposedMembers={}
         local owners={2,-1,-1,-1,-1}
@@ -1127,6 +1133,12 @@ fn excavation_fixture_selects_recorded_unoccupied_local_or_neutral_land() -> mlu
             lua.load("return ExposedMembers.JAC_ArtifactSite.Plot==4")
                 .eval::<bool>()?
         );
+        lua.load("VISITED={['4']=true}").exec()?;
+        assert!(
+            lua.load(code).exec().is_err(),
+            "reused a previously excavated site"
+        );
+        lua.load("VISITED=nil").exec()?;
     }
     Ok(())
 }
