@@ -980,8 +980,45 @@ fn kept_recovery_city_allows_same_owner_plot_membership_only_and_borrowed_city_s
         assert(not pcall(H.Kept,before,900),'recovery city lost real territory ownership')
         PLOT_OWNER=2;CURRENT.Population=4
         assert(not pcall(H.Kept,before,900),'same-owner membership exception hid population change')
+        CURRENT.Population=3
+        Map.GetPlotByIndex=function(plot) return {GetOwner=function() return plot==9 and 3 or 2 end} end
+        assert(not pcall(H.Kept,before,900),'only the removed plot changed owner without detection')
+        Map.GetPlotByIndex=function() return {GetOwner=function() return PLOT_OWNER end} end
         CURRENT.Population=3;CURRENT.Assets.museum.Works[0]=901
         assert(not pcall(H.Kept,before,900),'same-owner membership exception hid another original work')
+    "#).exec()
+}
+
+#[test]
+fn first_recovery_intent_is_immutable_across_publication() -> mlua::Result<()> {
+    let lua = model("artifact", "artifact")?;
+    let data = scenario("scatter");
+    let helper = data["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|s| {
+            s["code"]
+                .as_str()
+                .filter(|code| code.contains("function H.RecoveryIntent"))
+        })
+        .unwrap();
+    lua.load(helper).exec()?;
+    lua.load(r#"
+        local A=JAC_AbsorptionGameplay
+        local H=ExposedMembers.JAC_TypeChecks
+        local first={Source={Index=900,Owner=3,CityID=40},Target={Owner=2,City=10,Slot=0},Token='first'}
+        local k={Asset='native-work:900',To=2,RecoveryIntent=A.Rules.Copy(first)}
+        local intent={ID=k.Asset,Owner=k.To,NativeSource=A.Rules.Copy(first.Source),NativeTarget=A.Rules.Copy(first.Target),ObservationToken=first.Token,NativeCarrier={Phase='BORROW',BorrowToken=first.Token}}
+        H.RecoveryIntent(k,intent)
+        for _,change in ipairs({'source','target','token'}) do
+          local current=A.Rules.Copy(intent)
+          if change=='source' then current.NativeSource.Owner=9 end
+          if change=='target' then current.NativeTarget.Slot=1 end
+          if change=='token' then current.ObservationToken='another' end
+          assert(not pcall(H.RecoveryIntent,k,current),'changed recovery intent accepted: '..change)
+          assert(A.Rules.Equal(k.RecoveryIntent,first),'first intent was overwritten by its observation')
+        end
     "#).exec()
 }
 
