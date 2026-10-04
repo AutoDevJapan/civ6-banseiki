@@ -287,6 +287,34 @@ mod native_trace_step_tests {
     }
 
     #[test]
+    fn runner_dispatches_only_explicit_promotion_call_mode() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-promotion-call-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        let detail = runner
+            .run_step(&json!({"action":"start_native_promotion_call_trace",
+            "name":"promote","max_seconds":25}))
+            .unwrap();
+        assert!(detail.contains("raw registers only"));
+        let stopped = runner
+            .run_step(&json!({"action":"stop_native_promotion_call_trace"}))
+            .unwrap();
+        assert!(stopped.contains("operand restored"));
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:promote:25:promotion-call", "stop"]
+        );
+    }
+
+    #[test]
     fn runner_dispatches_property_mode_to_the_bounded_bridge() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let output = std::env::temp_dir().join("pr86-native-property-dispatch");
@@ -1978,6 +2006,7 @@ impl Runner {
             | "start_native_can_ever_calibration"
             | "start_native_joined_admission"
             | "start_native_production_admission"
+            | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 self.remaining(deadline)?;
                 let mode = match (action, step.get("scope")) {
@@ -1985,6 +2014,7 @@ impl Runner {
                     ("start_native_can_ever_calibration", None) => "can-ever-calibration",
                     ("start_native_joined_admission", None) => "joined-admission",
                     ("start_native_production_admission", None) => "production-admission",
+                    ("start_native_promotion_call_trace", None) => "promotion-call",
                     ("start_native_property_trace", None) => "property",
                     ("start_native_property_trace", Some(scope))
                         if scope == "numeric_test_keys_853271_853272" =>
@@ -2004,15 +2034,20 @@ impl Runner {
                     step["max_seconds"].as_u64().unwrap(),
                     mode,
                 )?;
-                Ok(format!(
-                    "native {mode} original-return telemetry ready; artifact {}.jsonl",
-                    text(step, "name")
-                ))
+                Ok(if mode == "promotion-call" {
+                    format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
+                } else {
+                    format!(
+                        "native {mode} original-return telemetry ready; artifact {}.jsonl",
+                        text(step, "name")
+                    )
+                })
             }
             "stop_native_can_ever_trace"
             | "stop_native_can_ever_calibration"
             | "stop_native_joined_admission"
             | "stop_native_production_admission"
+            | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
                 let artifact = self
@@ -2022,6 +2057,11 @@ impl Runner {
                 if action == "stop_native_property_trace" {
                     Ok(format!(
                         "native property entry restored; prefix retained until game exit; raw rows collected, key and value mapping unverified; artifact {}",
+                        artifact.display()
+                    ))
+                } else if action == "stop_native_promotion_call_trace" {
+                    Ok(format!(
+                        "original PROMOTE call operand restored; entry-only artifact {}",
                         artifact.display()
                     ))
                 } else {
