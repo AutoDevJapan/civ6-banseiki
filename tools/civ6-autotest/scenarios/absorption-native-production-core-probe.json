@@ -298,13 +298,13 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nreturn city and city:GetOwner()==t.Owner and city:GetID()==t.City\n and city:GetBuildQueue():GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash"
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City\n or city:GetBuildQueue():GetCurrentProductionTypeHash()~=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash then return false end\nExposedMembers.JAC_ArtifactProductionProof={Owner=t.Owner,City=t.City,X=t.X,Y=t.Y,\n Hash=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,Turn=Game.GetCurrentGameTurn()}\nreturn true"
       }
     },
     {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
-      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')); local city=assert(Players[t.Owner]:GetCities():FindID(t.City)); local q=city:GetBuildQueue(); print('[JAC_ARTIFACT_CORE_QUEUE] collection='..tostring(q.AddProgress)..' location='..tostring(CityManager.GetCityAt(t.X,t.Y):GetBuildQueue().AddProgress)); assert(type(q.AddProgress)=='function','official game-core tuner production API missing'); assert(q:GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,'wrong official production'); q:AddProgress(1000); return 'official game-core tuner progress dispatched'"
+      "code": "-- Debug/City.ltp:AddProgress needs writable city bindings. Production Hash is a UI-only read.\nlocal t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal proof=assert(ExposedMembers.JAC_ArtifactProductionProof,'UI production proof unavailable')\nassert(proof.Owner==t.Owner and proof.City==t.City and proof.X==t.X and proof.Y==t.Y\n and proof.Turn==Game.GetCurrentGameTurn() and proof.Hash==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,\n 'production source or publication changed')\nlocal city=assert(Players[t.Owner]:GetCities():FindID(t.City))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City and city:GetX()==t.X and city:GetY()==t.Y,\n 'production source city changed')\nlocal queue=city:GetBuildQueue()\nassert(type(queue.AddProgress)=='function','official game-core tuner production API missing')\nprint('[JAC_ARTIFACT_CORE_QUEUE] current='..tostring(queue:CurrentlyBuilding())..' progress='..tostring(queue.AddProgress))\nqueue:AddProgress(1000)\nreturn 'advanced active official production in writable game-core tuner'"
     },
     {
       "action": "wait_for",
