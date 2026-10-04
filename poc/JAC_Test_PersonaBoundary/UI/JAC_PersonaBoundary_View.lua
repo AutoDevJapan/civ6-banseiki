@@ -1594,6 +1594,7 @@ local capacityCivicPending;
 local operationStarts = {};
 local barrierToken = 0;
 local frameSerial, publishEpoch = 0, 0;
+local govClassification;
 -- Native Government methods are UI-only in live 109. Gameplay calls this
 -- read-only bridge, then stores its own synchronized receipt and independent
 -- official title counts. Each call re-reads the native UI Culture wrapper.
@@ -1893,6 +1894,8 @@ function B.Queue(action, params)
         action == "RESUME_TIER2_CAPACITY_CIVIC_READ" or
         action == "PREPARE_TIER1_GOV_WINDOW_CIVIC" or
         action == "CHANGE_CAPACITY_GOVERNMENT" or
+        action == "CLASSIFY_CAPACITY_GOVERNMENT" or
+        action == "READ_CAPACITY_GOVERNMENT_CLASSIFICATION" or
         action == "PROBE_CAPACITY_GOVERNMENT_API" or
         action == "CAPTURE_ENEMY" or action == "SAVE_TRAVEL" or
         action == "EVOLVE" or action == "ASSIGN" or action == "BUY" or
@@ -2024,6 +2027,38 @@ function B.Queue(action, params)
             "official capacity Government change is unavailable or already attempted");
         capacityQueued[action.."/"..target.tier]=true;
     end
+    if action=="CLASSIFY_CAPACITY_GOVERNMENT" then
+        assert(not capacityQueued[action] and
+            not Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT"),
+            "Government classification already attempted; no replay");
+        local titles=Players[Game.GetLocalPlayer()]:GetGovernors();
+        assert(Game.GetCurrentGameTurn()==24 and
+            titles:GetGovernorPoints()==1 and
+            titles:GetGovernorPointsSpent()==0,
+            "saved Government classification turn or title baseline differs");
+        local plan=B.CaptiveCapacityPlan();
+        local g=assert(plan.government,"Government classification plan missing");
+        local t=assert(g.target,"Oligarchy classification target missing");
+        assert(plan.stage=="TIER1_GOVERNMENT_BLOCKED" and
+            g.stage=="NO_CIVIC_COMPLETED_THIS_TURN" and
+            g.currentType=="GOVERNMENT_CHIEFDOM" and
+            t.governmentType=="GOVERNMENT_OLIGARCHY" and
+            t.civicOwned and t.unlocked and g.canChangeAtAll and
+            not g.changeMade and g.strategicCommands and g.anarchyTurns==0,
+            "official Government classification baseline differs");
+        capacityQueued[action]=true;
+    end
+    if action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION" then
+        local intent=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT"),
+            "Government classification intent missing");
+        assert(intent.status=="PREPARED" and intent.owner==Game.GetLocalPlayer() and
+            Game.GetCurrentGameTurn()==intent.turn+1 and
+            govClassification and govClassification.token==intent.token and
+            not capacityQueued[action] and
+            not Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_READ"),
+            "Government classification needs one real turn and the original request");
+        capacityQueued[action]=true;
+    end
     if action == "SPAWN_SPY" or action == "BUILD_SPY" or action == "PROGRESS_SPY" or
         action == "BIND_SPY" or action == "ADOPT_SPY" or action == "RETRY_ADOPT" or
         action == "SPY_TRAVEL" or action == "SPY_MISSION" then
@@ -2068,7 +2103,7 @@ function B.Queue(action, params)
     pending = {action=action, params=params or {}}; B.lastAction="QUEUED_"..action;
 end
 local function EnemySyncRequest(action,observed)
-    local capacity,government;
+    local capacity,government,classify;
     if action=="PREPARE_DISTRICT_CIVIC" or
         action=="RESUME_CAPACITY_CIVIC_READ" or
         action=="PREPARE_TIER2_CAPACITY_CIVIC" or
@@ -2107,6 +2142,14 @@ local function EnemySyncRequest(action,observed)
             priorRead and priorRead.token or 0);
         government={barrierSerial=priorBarrier and priorBarrier.serial or 0,
             readSerial=priorRead and priorRead.serial or 0};
+    elseif action=="CLASSIFY_CAPACITY_GOVERNMENT" or
+        action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION" then
+        local priorBarrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
+        local intent=Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT");
+        barrierToken=math.max(barrierToken,priorBarrier and priorBarrier.token or 0,
+            intent and intent.token or 0);
+        classify={barrierSerial=priorBarrier and priorBarrier.serial or 0,
+            read=action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION"};
     end
     barrierToken=barrierToken+1;
     local payload={Attacker=Game.GetLocalPlayer(),Defender=1,Source=2,
@@ -2136,6 +2179,8 @@ local function EnemySyncRequest(action,observed)
         RESUME_TIER2_CAPACITY_CIVIC_READ="JAC_BoundaryReadTier2CapacityCivic",
         PREPARE_TIER1_GOV_WINDOW_CIVIC="JAC_BoundaryPrepareTier1GovernmentWindowCivic",
         CHANGE_CAPACITY_GOVERNMENT="JAC_BoundaryCapacityGovernmentIntent",
+        CLASSIFY_CAPACITY_GOVERNMENT="JAC_BoundaryClassifyCapacityGovernmentIntent",
+        READ_CAPACITY_GOVERNMENT_CLASSIFICATION="JAC_BoundaryReadCapacityGovernmentClassification",
         PROBE_CAPACITY_GOVERNMENT_API="JAC_BoundaryCapacityGovernmentProbe",
         PROGRESS_CAPACITY_DISTRICT="JAC_BoundaryProgressCapacityDistrict",
         PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding"};
@@ -2146,7 +2191,8 @@ local function EnemySyncRequest(action,observed)
         turn=payload.Turn,frame=payload.Frame,publishEpoch=payload.PublishEpoch,
         observed=observed});
     return {kind="ENEMY_SYNC",action=action,token=payload.Token,turn=payload.Turn,
-        payload=payload,stage="DISPATCHED",capacity=capacity,government=government};
+        payload=payload,stage="DISPATCHED",capacity=capacity,
+        government=government,classify=classify};
 end
 
 local function VerifyCapacityCivic(request)
@@ -2331,6 +2377,88 @@ local function VerifyCapacityGovernment(request)
     end
     return "ACCEPTED","GAMEPLAY_UI_AND_PRODUCTION_READY",intent,read;
 end
+
+local function VerifyGovernmentClassification(request)
+    local intent=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT"),
+        "Government classification intent missing after the real turn");
+    local read=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_READ"),
+        "Government classification Gameplay read missing");
+    assert(intent.status=="PREPARED" and intent.owner==Game.GetLocalPlayer() and
+        intent.token==request.payload.OriginalToken and
+        intent.turn==request.payload.OriginalTurn and
+        intent.targetGovernment==request.payload.TargetGovernment and
+        intent.targetIndex==request.payload.TargetIndex and
+        intent.targetHash==request.payload.TargetHash and
+        read.status=="OBSERVED" and read.owner==intent.owner and
+        read.token==request.token and read.turn==request.turn and
+        read.frame==request.payload.Frame and
+        read.publishEpoch==request.payload.PublishEpoch and
+        read.originalToken==intent.token and read.originalTurn==intent.turn and
+        read.nativeSource=="UI_NATIVE_CULTURE" and
+        type(read.nativeFrame)=="number" and type(read.nativePublishEpoch)=="number" and
+        read.nativeFrame>=request.payload.Frame and
+        read.nativePublishEpoch>=request.payload.PublishEpoch,
+        "Government classification read is stale or belongs to another attempt");
+    local fresh=B.ReadCapacityGovernmentNative(intent.owner);
+    assert(fresh.turn==read.turn and fresh.frame>=read.nativeFrame and
+        fresh.publishEpoch>read.nativePublishEpoch and
+        fresh.index==read.index and fresh.governmentType==read.governmentType and
+        fresh.tier==read.tier,
+        "Government classification needs a fresh native UI read after the barrier");
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and
+        d.mission.turn==23 and d.outcome=="CAPTURED" and d.occupied==1 and
+        d.capacity==1 and d.captive and d.captive.captor==1 and
+        d.captive.nameIndex==-1,
+        "original captured spy or mission history changed during classification");
+    assert(govClassification and govClassification.owner==intent.owner and
+        govClassification.token==intent.token and
+        govClassification.turn==intent.turn and
+        type(govClassification.rawOk)=="boolean",
+        "original official Government request result missing");
+    local result={owner=intent.owner,token=intent.token,
+        originalTurn=intent.turn,readTurn=read.turn,
+        rawOk=govClassification.rawOk,rawType=govClassification.rawType,
+        rawValue=govClassification.rawValue,
+        beforeGovernment=intent.beforeGovernment,afterGovernment=read.index,
+        beforeTotal=intent.beforeTotal,afterTotal=read.total,
+        beforeSpent=intent.beforeSpent,afterSpent=read.spent,
+        nativeSource=read.nativeSource,afterTier=read.tier,status="UNKNOWN"};
+    if govClassification.rawOk and read.total==intent.beforeTotal and
+        read.spent==intent.beforeSpent then
+        local plan=B.CaptiveCapacityPlan();
+        result.planStage=plan.stage;
+        result.openPolicySlots=plan.government and plan.government.openPolicySlots;
+        result.policyUnlockCost=plan.government and plan.government.policyUnlockCost;
+        local city;
+        for _,candidate in ipairs(plan.cities or {}) do
+            if candidate.district then city=candidate; break; end
+        end
+        result.productionCandidates=city and city.tier1Production or {};
+        local production=city and city.tier1Production and
+            city.tier1Production.BUILDING_GOV_TALL;
+        result.productionReasons=plan.productionReasons or
+            production and production.reasons or "";
+        if read.index==intent.targetIndex and
+            read.governmentType==intent.targetGovernment and read.tier=="Tier1" then
+            result.status="NATIVE_GOV_ACCEPTED";
+            result.productionReady=plan.stage=="BUILD_TIER1" and
+                plan.buildingType~=nil;
+            result.buildingType=plan.buildingType or "";
+        elseif read.index==intent.beforeGovernment and
+            read.governmentType=="GOVERNMENT_CHIEFDOM" and
+            plan.stage=="TIER1_GOVERNMENT_BLOCKED" then
+            result.status="NATIVE_GOV_REFUSED";
+        end
+    end
+    return result;
+end
+
+function B.GovernmentClassification()
+    assert(govClassification and govClassification.status,
+        "Government classification has not completed");
+    return govClassification;
+end
 local function Submit(command)
     local owner = Game.GetLocalPlayer();
     assert(Players[owner]:IsTurnActive(), "turn ended before boundary frame request");
@@ -2432,6 +2560,35 @@ local function Submit(command)
             SourceCivicToken=source.token,SourceCivicTurn=source.turn,
             SourceCivicBeforeTotal=source.beforeTotal,
             SourceCivicDelta=source.expectedTitleDelta});
+    elseif action == "CLASSIFY_CAPACITY_GOVERNMENT" then
+        local g=B.ReadCapacityGovernment("Tier1");
+        local target=assert(g.target,"Oligarchy classification target missing");
+        assert(g.stage=="NO_CIVIC_COMPLETED_THIS_TURN" and
+            g.currentType=="GOVERNMENT_CHIEFDOM" and
+            target.governmentType=="GOVERNMENT_OLIGARCHY" and
+            target.civicOwned and target.unlocked and g.canChangeAtAll and
+            not g.changeMade and g.strategicCommands and g.anarchyTurns==0,
+            "classification actor or official candidate changed before dispatch");
+        local titles=Players[owner]:GetGovernors();
+        return EnemySyncRequest(action,{TargetGovernment=target.governmentType,
+            TargetIndex=target.index,TargetHash=target.hash,
+            PrereqCivicIndex=target.civicIndex,
+            BeforeGovernment=g.currentIndex,
+            BeforeCivicCompleted=g.civicCompletedThisTurn,
+            BeforeTotal=titles:GetGovernorPoints(),
+            BeforeSpent=titles:GetGovernorPointsSpent()});
+    elseif action == "READ_CAPACITY_GOVERNMENT_CLASSIFICATION" then
+        local intent=assert(Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT"),
+            "original Government classification intent missing");
+        assert(intent.status=="PREPARED" and intent.owner==owner and
+            Game.GetCurrentGameTurn()==intent.turn+1,
+            "Government classification read turn differs");
+        return EnemySyncRequest(action,{OriginalToken=intent.token,
+            OriginalTurn=intent.turn,
+            TargetGovernment=intent.targetGovernment,
+            TargetIndex=intent.targetIndex,TargetHash=intent.targetHash,
+            BeforeGovernment=intent.beforeGovernment,
+            BeforeTotal=intent.beforeTotal,BeforeSpent=intent.beforeSpent});
     elseif action == "PROBE_CAPACITY_GOVERNMENT_API" then
         return EnemySyncRequest(action,{});
     elseif action == "PROGRESS_CAPACITY_DISTRICT" then
@@ -2874,6 +3031,9 @@ ContextPtr:SetUpdate(function()
                     arguments.Phase=request.capacity.resume and "RESUME_READ" or "COMMAND";
                 elseif request.government then
                     arguments.Phase="GOV_INTENT";
+                elseif request.classify then
+                    arguments.Phase=request.classify.read and "GOV_CLASSIFY_READ" or
+                        "GOV_CLASSIFY_INTENT";
                 end
                 local ok,err=pcall(UI.RequestPlayerOperation,Game.GetLocalPlayer(),
                     PlayerOperations.EXECUTE_SCRIPT,arguments);
@@ -2921,6 +3081,53 @@ ContextPtr:SetUpdate(function()
                 return;
             end
             if not request.published then return; end
+            if request.classify then
+                if not request.classify.read then
+                    local intent=Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT");
+                    local native=B.ReadCapacityGovernmentNative(Game.GetLocalPlayer());
+                    local gate=B.ReadCapacityGovernment("Tier1");
+                    if not intent or intent.status~="PREPARED" or
+                        intent.owner~=request.payload.Attacker or
+                        intent.token~=request.token or intent.turn~=request.turn or
+                        intent.targetIndex~=request.payload.TargetIndex or
+                        intent.targetHash~=request.payload.TargetHash or
+                        intent.beforeTotal~=request.payload.BeforeTotal or
+                        intent.beforeSpent~=request.payload.BeforeSpent or
+                        native.index~=intent.beforeGovernment or
+                        gate.stage~="NO_CIVIC_COMPLETED_THIS_TURN" or
+                        not gate.target or not gate.target.unlocked then
+                        B.lastAction="ERROR_"..request.action;
+                        Log("CAPACITY_GOV_CLASSIFY_INTENT_UNAVAILABLE",{intent=intent,gate=gate});
+                        verification=nil;
+                        return;
+                    end
+                    local culture=Players[Game.GetLocalPlayer()]:GetCulture();
+                    local ok,value=pcall(culture.RequestChangeGovernment,culture,
+                        intent.targetHash);
+                    govClassification={owner=intent.owner,token=intent.token,
+                        turn=intent.turn,rawOk=ok,rawType=type(value),
+                        rawValue=tostring(value)};
+                    Log("CAPACITY_GOV_CLASSIFY_NATIVE_REQUEST",{token=intent.token,
+                        turn=intent.turn,target=intent.targetGovernment,
+                        beforeGovernment=intent.beforeGovernment,
+                        beforeCivicCompleted=gate.civicCompletedThisTurn,
+                        beforeTotal=intent.beforeTotal,beforeSpent=intent.beforeSpent,
+                        rawOk=ok,rawType=type(value),rawValue=tostring(value)});
+                    B.lastAction=(ok and "REQUESTED_" or "UNKNOWN_")..request.action;
+                else
+                    local ok,result=pcall(VerifyGovernmentClassification,request);
+                    if ok then
+                        govClassification=result;
+                        B.lastAction="CLASSIFIED_"..request.action;
+                        Log("CAPACITY_GOV_CLASSIFICATION",result);
+                    else
+                        B.lastAction="UNKNOWN_"..request.action;
+                        Log("CAPACITY_GOV_CLASSIFICATION_UNAVAILABLE",tostring(result));
+                    end
+                end
+                verification=nil;
+                return;
+            end
             if request.government then
                 local intents=Game:GetProperty("JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS") or {};
                 local intent=intents[request.payload.TargetTier];
@@ -3155,7 +3362,11 @@ Events.GameCoreEventPublishComplete.Add(function()
             marker.turn==verification.turn and
             (not verification.government or
              (marker.phase=="GOV_INTENT" and type(marker.serial)=="number" and
-              marker.serial>verification.government.barrierSerial)) and
+               marker.serial>verification.government.barrierSerial)) and
+            (not verification.classify or
+             (marker.phase==(verification.classify.read and "GOV_CLASSIFY_READ" or
+                "GOV_CLASSIFY_INTENT") and type(marker.serial)=="number" and
+              marker.serial>verification.classify.barrierSerial)) and
             (not verification.capacity or
              (marker.phase==(verification.stage=="READ_BARRIER_SENT" and "READ" or
                 verification.capacity.resume and "RESUME_READ" or "COMMAND") and

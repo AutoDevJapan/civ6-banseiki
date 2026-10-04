@@ -24,6 +24,8 @@ local GOV_WINDOW_MARKER = "JAC_BOUNDARY_GOV_WINDOW_CIVIC";
 local CAPACITY_GOVERNMENT_INTENTS = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS";
 local CAPACITY_GOVERNMENT_READ = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_READ";
 local CAPACITY_GOVERNMENT_API_PROBE = "JAC_BOUNDARY_CAPACITY_GOVERNMENT_API_PROBE";
+local GOV_CLASSIFY_INTENT = "JAC_BOUNDARY_GOV_CLASSIFY_INTENT";
+local GOV_CLASSIFY_READ = "JAC_BOUNDARY_GOV_CLASSIFY_READ";
 
 -- This callback lives in AddGameplayScripts. A FireTuner GameCore state has a
 -- different lifetime and can expose methods unavailable to the gameplay VM.
@@ -509,6 +511,8 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
         params.Action=="RESUME_TIER2_CAPACITY_CIVIC_READ" or
         params.Action=="PREPARE_TIER1_GOV_WINDOW_CIVIC" or
         params.Action=="CHANGE_CAPACITY_GOVERNMENT" or
+        params.Action=="CLASSIFY_CAPACITY_GOVERNMENT" or
+        params.Action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION" or
         params.Action=="PROBE_CAPACITY_GOVERNMENT_API" or
         params.Action=="PROGRESS_CAPACITY_DISTRICT",
         "unknown enemy fixture barrier");
@@ -1289,6 +1293,108 @@ GameEvents.JAC_BoundaryCapacityGovernmentProbe.Add(function(controller,params)
     end
     Game:SetProperty(CAPACITY_GOVERNMENT_API_PROBE,result);
     print("JAC_BOUNDARY CORE_CAPACITY_GOVERNMENT_API_PROBE "..R.Serialize(result));
+end);
+
+-- Classify the official UI Government request independently of the screen's
+-- CivicCompletedThisTurn convenience gate. This records intent only; Gameplay
+-- never sets a Government or invents a policy slot.
+GameEvents.JAC_BoundaryClassifyCapacityGovernmentIntent.Add(function(controller,params)
+    if Game:GetProperty(GOV_CLASSIFY_INTENT) then
+        print("JAC_BOUNDARY CORE_GOV_CLASSIFY_DUPLICATE_SUPPRESSED");
+        return;
+    end
+    local receipt={owner=controller,token=type(params)=="table" and params.Token or -1,
+        turn=Game.GetCurrentGameTurn(),status="ENTERED"};
+    Game:SetProperty(GOV_CLASSIFY_INTENT,receipt);
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"CLASSIFY_CAPACITY_GOVERNMENT");
+        EnemyConfig(controller);
+        local target=assert(GameInfo.Governments["GOVERNMENT_OLIGARCHY"],
+            "retained Oligarchy Government missing");
+        local nativeType=assert(GameInfo.Types[target.GovernmentType],
+            "native Oligarchy type missing");
+        local prerequisite=assert(GameInfo.Civics[target.PrereqCivic],
+            "Oligarchy Civic prerequisite missing");
+        local player=assert(Players[controller],"classification actor missing");
+        local culture=player:GetCulture();
+        local bridge=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader missing")(controller);
+        assert(target.Tier=="Tier1" and params.TargetGovernment==target.GovernmentType and
+            params.TargetIndex==target.Index and params.TargetHash==nativeType.Hash and
+            params.PrereqCivicIndex==prerequisite.Index and
+            culture:HasCivic(prerequisite.Index) and
+            params.Turn==24 and params.BeforeTotal==1 and params.BeforeSpent==0 and
+            params.BeforeCivicCompleted==false and
+            bridge.owner==controller and bridge.turn==params.Turn and
+            bridge.index==params.BeforeGovernment and
+            bridge.governmentType=="GOVERNMENT_CHIEFDOM" and bridge.tier=="NONE" and
+            bridge.frame>=params.Frame and bridge.publishEpoch>=params.PublishEpoch and
+            player:GetGovernors():GetGovernorPoints()==params.BeforeTotal and
+            player:GetGovernors():GetGovernorPointsSpent()==params.BeforeSpent,
+            "classification baseline differs from the saved native actor");
+        receipt.targetGovernment=target.GovernmentType;
+        receipt.targetIndex=target.Index; receipt.targetHash=nativeType.Hash;
+        receipt.beforeGovernment=bridge.index;
+        receipt.beforeTotal=params.BeforeTotal;
+        receipt.beforeSpent=params.BeforeSpent;
+        receipt.frame=params.Frame; receipt.publishEpoch=params.PublishEpoch;
+        receipt.status="PREPARED";
+        Game:SetProperty(GOV_CLASSIFY_INTENT,receipt);
+    end);
+    if not ok then
+        receipt.status="ERROR"; receipt.error="INTENT_FAILED";
+        Game:SetProperty(GOV_CLASSIFY_INTENT,receipt);
+        print("JAC_BOUNDARY CORE_GOV_CLASSIFY_INTENT_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_GOV_CLASSIFY_INTENT "..R.Serialize(receipt));
+end);
+
+GameEvents.JAC_BoundaryReadCapacityGovernmentClassification.Add(function(controller,params)
+    local previous=Game:GetProperty(GOV_CLASSIFY_READ);
+    if previous then
+        print("JAC_BOUNDARY CORE_GOV_CLASSIFY_READ_DUPLICATE_SUPPRESSED");
+        return;
+    end
+    local intent=Game:GetProperty(GOV_CLASSIFY_INTENT);
+    local read={owner=controller,token=type(params)=="table" and params.Token or -1,
+        turn=Game.GetCurrentGameTurn(),frame=type(params)=="table" and params.Frame or -1,
+        publishEpoch=type(params)=="table" and params.PublishEpoch or -1,
+        status="ENTERED"};
+    Game:SetProperty(GOV_CLASSIFY_READ,read);
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"READ_CAPACITY_GOVERNMENT_CLASSIFICATION");
+        assert(intent and intent.status=="PREPARED" and intent.owner==controller and
+            intent.token==params.OriginalToken and intent.turn==params.OriginalTurn and
+            params.Turn==intent.turn+1 and params.Token>intent.token and
+            params.TargetGovernment==intent.targetGovernment and
+            params.TargetIndex==intent.targetIndex and
+            params.TargetHash==intent.targetHash and
+            params.BeforeGovernment==intent.beforeGovernment and
+            params.BeforeTotal==intent.beforeTotal and
+            params.BeforeSpent==intent.beforeSpent,
+            "classification read does not match the original attempt");
+        local bridge=assert(ExposedMembers.JAC_PersonaBoundaryGovernmentNativeRead,
+            "UI native Government reader unavailable at classification read")(controller);
+        assert(bridge.owner==controller and bridge.turn==params.Turn and
+            bridge.frame>=params.Frame and bridge.publishEpoch>=params.PublishEpoch,
+            "classification native Government read is stale");
+        local titles=Players[controller]:GetGovernors();
+        read.originalToken=intent.token; read.originalTurn=intent.turn;
+        read.index=bridge.index; read.governmentType=bridge.governmentType;
+        read.tier=bridge.tier; read.nativeFrame=bridge.frame;
+        read.nativePublishEpoch=bridge.publishEpoch;
+        read.nativeSource="UI_NATIVE_CULTURE";
+        read.total=titles:GetGovernorPoints();
+        read.spent=titles:GetGovernorPointsSpent();
+        read.status="OBSERVED";
+        Game:SetProperty(GOV_CLASSIFY_READ,read);
+    end);
+    if not ok then
+        read.status="ERROR"; read.error="READ_FAILED";
+        Game:SetProperty(GOV_CLASSIFY_READ,read);
+        print("JAC_BOUNDARY CORE_GOV_CLASSIFY_READ_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_GOV_CLASSIFY_READ "..R.Serialize(read));
 end);
 
 -- This callback only reads the native Government after a real turn. It never

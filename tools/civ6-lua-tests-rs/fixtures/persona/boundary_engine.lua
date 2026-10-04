@@ -25,6 +25,8 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryPrepareTier1GovernmentWindowCivic',
  'JAC_BoundaryReadTier1GovernmentWindowCivic',
  'JAC_BoundaryCapacityGovernmentIntent','JAC_BoundaryCapacityGovernmentRead',
+ 'JAC_BoundaryClassifyCapacityGovernmentIntent',
+ 'JAC_BoundaryReadCapacityGovernmentClassification',
  'JAC_BoundaryCapacityGovernmentProbe',
  'JAC_BoundaryProgressCapacityDistrict'}) do GameEvents[k]=event() end
 function fire(e,...) for _,f in ipairs(e) do f(...) end end
