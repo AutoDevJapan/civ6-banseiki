@@ -35,7 +35,7 @@ fn completed_building_before_turn_is_accepted_without_weakening_final_confirmati
         ("BUILDING_GOV_SPIES", "CAPACITY_READY", 2),
     ] {
         let completed = json!({"buildingType":building,"stage":stage,"capacity":capacity,
-            "targetBuilt":true,"occupied":1,"captured":1,"turn":25,"progressTurn":25});
+            "targetBuilt":true,"occupied":1,"captured":1,"mapSpies":0,"turn":25,"progressTurn":25});
         assert!(accepts(before, completed.clone()));
         assert!(!accepts(after, completed.clone()));
         let mut next_turn = completed.clone();
@@ -61,9 +61,15 @@ fn completed_building_before_turn_is_accepted_without_weakening_final_confirmati
         }
     }
     let pending = json!({"buildingType":"BUILDING_GOV_SPIES","stage":"PROGRESS_PENDING",
-        "capacity":1,"targetBuilt":false,"occupied":1,"captured":1,"turn":25,"progressTurn":25});
+        "capacity":1,"targetBuilt":false,"occupied":1,"captured":1,"mapSpies":0,
+        "turn":25,"progressTurn":25});
     assert!(accepts(before, pending.clone()));
     assert!(!accepts(after, pending));
+    let produced = json!({"buildingType":"BUILDING_GOV_SPIES","stage":"CAPACITY_READY",
+        "capacity":2,"targetBuilt":true,"occupied":2,"captured":1,"mapSpies":1,
+        "turn":26,"progressTurn":25});
+    assert!(!accepts(before, produced.clone()));
+    assert!(accepts(after, produced));
     let turn = actions.iter().find(|s| action(s, "end_turn")).unwrap();
     assert_eq!(turn["turns"], 1);
 }

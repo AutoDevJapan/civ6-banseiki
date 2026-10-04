@@ -731,6 +731,29 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         && code.contains("d.eventID==0")
         && code.contains("d.eventTurn==23")
         && code.contains("Queue('BEGIN_SPY_RETRY')")));
+    assert!(codes
+        .iter()
+        .any(|code| code.contains("d.mode=='CAPACITY_MAP'")
+            && code.contains("d.currentID~=d.spyID")
+            && code.contains("d.capacity==2")
+            && code.contains("d.roster.capturedPlaceholder")));
+    assert!(codes
+        .iter()
+        .any(|code| code.contains("r.archive.spyID==655368")
+            && code.contains("r.binding.spyID==r.spyID")
+            && code.contains("s.spyRoster.physicalCount==2")));
+    let prepare_steps = steps(&prepare);
+    let verified = prepare_steps
+        .iter()
+        .position(|step| {
+            embedded_lua(step).is_some_and(|code| code.contains("r.binding.spyID==r.spyID"))
+        })
+        .unwrap();
+    let saved = prepare_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(verified < saved);
     let produce = scenario("leader-persona-spy-neutralization-retry-produce.json");
     let codes: Vec<_> = steps(&produce).iter().filter_map(embedded_lua).collect();
     let index = |needle: &str| codes.iter().position(|code| code.contains(needle)).unwrap();
@@ -743,6 +766,25 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             .count(),
         1
     );
+}
+
+#[test]
+fn travel_tick_distinguishes_old_captive_placeholder_from_moving_spy() {
+    let data = scenario("leader-persona-spy-neutralization-travel-tick.json");
+    let source = ui_codes(&data).last().copied().unwrap();
+    let lua = Lua::new();
+    lua.load(
+        "moving=false; ExposedMembers={JAC_PersonaBoundary={\
+         ReadEnemy=function() return {spyRoster={offMap={{returnTurn=-1}},\
+         activeOffMap=moving and {{returnTurn=30}} or {}}} end,\
+         EnemyTarget=function() return {owner=1,city=20} end,\
+         Probe=function(owner,city) assert(owner==1 and city==20); return {canStart=true} end}}",
+    )
+    .exec()
+    .unwrap();
+    assert_eq!(lua.load(source).eval::<String>().unwrap(), "MISSION_READY");
+    lua.load("moving=true").exec().unwrap();
+    assert_eq!(lua.load(source).eval::<String>().unwrap(), "TRAVEL");
 }
 
 #[test]
