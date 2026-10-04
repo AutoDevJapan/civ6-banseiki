@@ -887,6 +887,75 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
 }
 
 #[test]
+fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let transfer = steps
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_CENTER_MOVED"))
+        .expect("fixture unit preservation");
+    let verify = steps
+        .iter()
+        .filter_map(|s| s["condition"]["code"].as_str())
+        .find(|s| s.contains("local before=assert(t.Records"))
+        .expect("fixture record comparison");
+    let lua = Lua::new();
+    lua.load(r#"
+      PX,PY,DAMAGE,MOVES,OWNER,TRANSFERS,PLACE=10,10,7,2,2,0,true
+      local unit={GetX=function() return PX end,GetY=function() return PY end,
+        GetOwner=function() return 2 end,GetID=function() return 88 end,GetType=function() return 4 end,
+        GetDamage=function() return DAMAGE end,GetMovesRemaining=function() return MOVES end,
+        SetDamage=function(_,n) DAMAGE=n end,ChangeMovesRemaining=function(_,n) MOVES=MOVES+n end}
+      local city={GetOwner=function() return OWNER end,GetID=function() return 5 end}
+      local t={To=1,Cities={{Owner=2,City=5,X=10,Y=10}},Plots={1,2,3},
+        Records={['1']={Era=2},['2']={Era=2},['3']={Era=2}}}
+      ExposedMembers={JAC_ArtifactSiteCity=t};PROPS={};ERA=2
+      Game={SetProperty=function(_,key,value) PROPS[key]=value end,
+        GetProperty=function(_,key) return PROPS[key] end,
+        GetArtifactAtPlot=function() return {Era=ERA} end}
+      GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
+      JAC_AbsorptionGameplay={Rules={Copy=function(value) return value end}}
+      PlayerManager={GetAliveIDs=function() return {2} end}
+      Players={[2]={GetUnits=function() return {Members=function()
+        local done=false;return function() if not done then done=true;return 88,unit end end
+      end} end}}
+      UnitManager={GetUnit=function(owner,id) assert(owner==2 and id==88);return unit end,
+        PlaceUnit=function(u,x,y) assert(u==unit);if PLACE then PX,PY,DAMAGE,MOVES=x,y,0,0 end end}
+      CityManager={GetCityAt=function(x,y) assert(x==10 and y==10);return city end,
+        TransferCity=function(c,owner)
+          assert(c==city and owner==1 and (PX~=10 or PY~=10));OWNER=owner;TRANSFERS=TRANSFERS+1
+        end}
+      Map={GetPlot=function(x,y) return {GetOwner=function() return 2 end,
+        IsWater=function() return false end,IsImpassable=function() return false end} end,
+        GetUnitsAt=function() return {GetCount=function() return 0 end} end,
+        GetPlotByIndex=function() return {GetOwner=function() return OWNER end,
+          GetResourceType=function() return 9 end} end}
+    "#).exec()?;
+    lua.load(transfer).exec()?;
+    assert!(lua.load("return TRANSFERS==1 and OWNER==1 and DAMAGE==7 and MOVES==2 and #PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED==1 and PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED[1].ID==88").eval::<bool>()?);
+    assert!(lua.load(verify).eval::<bool>()?);
+    lua.load("ERA=3").exec()?;
+    assert!(
+        !lua.load(verify).eval::<bool>()?,
+        "accepted a changed artifact record"
+    );
+    lua.load("PX,PY,OWNER,TRANSFERS,PLACE=10,10,2,0,false;PROPS={}")
+        .exec()?;
+    assert!(
+        lua.load(transfer).exec().is_err(),
+        "transferred without clearing the center"
+    );
+    assert!(
+        lua.load(
+            "return TRANSFERS==0 and OWNER==2 and PX==10 and PY==10 and DAMAGE==7 and MOVES==2"
+        )
+        .eval::<bool>()?
+    );
+    Ok(())
+}
+
+#[test]
 fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() -> mlua::Result<()> {
     let scenario = native_scenario("absorption-native-artifact-full.json");
     let code = scenario["steps"]
@@ -933,11 +1002,11 @@ fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() ->
         .exec()?;
     lua.load(code).exec()?;
     assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return #t.Cities==2 and t.Cities[1].City==4 and t.Cities[2].City==5 and #t.Plots==4 and t.Plots[1]==6 and t.Plots[4]==9").eval::<bool>()?);
-    lua.load("SAFE=false;ExposedMembers.JAC_ArtifactSiteCity=nil")
+    lua.load("Game.GetArtifactAtPlot=function(i) if i==6 or i==7 then return {} end end;ExposedMembers.JAC_ArtifactSiteCity=nil")
         .exec()?;
     assert!(
         lua.load(code).exec().is_err(),
-        "accepted an occupied center, existing original, or fewer than three sites"
+        "accepted existing original or fewer than three sites"
     );
     assert!(
         lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
