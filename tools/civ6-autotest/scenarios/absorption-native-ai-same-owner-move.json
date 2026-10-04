@@ -1,0 +1,60 @@
+{
+  "name": "Native AI same-owner MOVE with human operation actor and AI work owner",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-ai-same-owner-move-probe-absorb-flow-72-61ce93a15dd6",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage then return false end\nlocal city=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal source=CityManager.GetCityAt(stage.Source.X,stage.Source.Y)\nreturn city and city:GetOwner()==stage.Carrier.Owner and city:GetBuildings():HasBuilding(stage.Carrier.Building)\n and city:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==-1\n and source and source:GetOwner()==stage.Carrier.Owner and source:GetBuildings():GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)==stage.Index"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nlocal city=assert(CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y))\nlocal source=assert(CityManager.GetCityAt(stage.Source.X,stage.Source.Y))\nassert(city:GetOwner()==stage.Carrier.Owner and source:GetOwner()==stage.Carrier.Owner\n and city:GetID()~=source:GetID(),'same-owner cities did not publish distinct IDs')\nlocal b=city:GetBuildings()\nassert(b:HasBuilding(stage.Carrier.Building) and not b:IsPillaged(stage.Carrier.Building)\n and b:GetNumGreatWorkSlots(stage.Carrier.Building)==1\n and b:GetGreatWorkInSlot(stage.Carrier.Building,0)==-1,'carrier Temple changed')\nlocal sourceBuilding=source:GetBuildings()\nassert(sourceBuilding:GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)==stage.Index,'original Palace source changed')\nlocal object=assert(GameInfo.GreatWorks[sourceBuilding:GetGreatWorkTypeFromIndex(stage.Index)]).GreatWorkObjectType\nlocal slotType=assert(GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(stage.Carrier.Building,0)]).GreatWorkSlotType\nlocal valid=false\nfor row in GameInfo.GreatWork_ValidSubTypes() do if row.GreatWorkObjectType==object and row.GreatWorkSlotType==slotType then valid=true end end\nassert(valid,'official Temple incompatible with original relic')\nlocal params={}\nparams[PlayerOperations.PARAM_PLAYER_ONE]=stage.Carrier.Owner\nparams[PlayerOperations.PARAM_CITY_SRC]=source:GetID()\nparams[PlayerOperations.PARAM_CITY_DEST]=city:GetID()\nparams[PlayerOperations.PARAM_BUILDING_SRC]=stage.Source.Building\nparams[PlayerOperations.PARAM_BUILDING_DEST]=stage.Carrier.Building\nparams[PlayerOperations.PARAM_GREAT_WORK_INDEX]=stage.Index\nparams[PlayerOperations.PARAM_SLOT]=stage.Carrier.Slot\nEvents.GreatWorkMoved.Add(function(...) local args={...};for i=1,#args do args[i]=tostring(args[i]) end;print('[JAC_NATIVE_AI_MOVE_EVENT] '..table.concat(args,',')) end)\nlocal returned=UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.MOVE_GREAT_WORK,params)\nExposedMembers.JAC_NativeAIMoveTarget={Owner=stage.Carrier.Owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=stage.Carrier.Building,Slot=stage.Carrier.Slot}\nprint('[JAC_NATIVE_AI_SAME_OWNER_MOVE_REQUEST] actor='..stage.Carrier.Owner..' local='..Game.GetLocalPlayer()..' result='..tostring(returned)..' source='..source:GetID()..' target='..city:GetID())\nreturn 'same-owner AI official MOVE requested; no physical success claimed'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nlocal target=assert(ExposedMembers.JAC_NativeAIMoveTarget)\nlocal source=assert(CityManager.GetCityAt(stage.Source.X,stage.Source.Y))\nlocal city=assert(CityManager.GetCityAt(target.X,target.Y))\nlocal src=source:GetBuildings():GetGreatWorkInSlot(stage.Source.Building,stage.Source.Slot)\nlocal dest=city:GetBuildings():GetGreatWorkInSlot(target.Building,target.Slot)\nlocal count=0;local found\nlocal owners,seen={},{};for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[stage.Carrier.Free] then owners[#owners+1]=stage.Carrier.Free end\nfor _,owner in ipairs(owners) do\n local p=Players[owner]\n if p then for _,c in p:GetCities():Members() do\n  local b=c:GetBuildings()\n  for def in GameInfo.Buildings() do if b:HasBuilding(def.Index) then\n   for slot=0,b:GetNumGreatWorkSlots(def.Index)-1 do if b:GetGreatWorkInSlot(def.Index,slot)==stage.Index then count=count+1;found={Owner=owner,City=c:GetID(),X=c:GetX(),Y=c:GetY(),Building=def.Index,Slot=slot} end end\n  end end\n end end\nend\nExposedMembers.JAC_NativeAIMovePhysical={Count=count,Found=found,Source=src,Dest=dest,Target=target}\nprint('[JAC_NATIVE_AI_SAME_OWNER_MOVE_PHYSICAL] count='..count..' source='..tostring(src)..' dest='..tostring(dest)..' found='..tostring(found and found.Owner))\nreturn 'AI same-owner MOVE physical comparison count='..count..' source='..tostring(src)..' dest='..tostring(dest)"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-ai-human-actor-move-probe"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local result=assert(ExposedMembers.JAC_NativeAIMovePhysical)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nassert(result.Count==1 and result.Source==-1 and result.Dest==stage.Index,'AI same-owner MOVE did not physically move original work')\nlocal f=assert(result.Found);local t=result.Target\nassert(f.Owner==t.Owner and f.City==t.City and f.X==t.X and f.Y==t.Y and f.Building==t.Building and f.Slot==t.Slot,'AI same-owner MOVE landed in another official slot')\nreturn 'same index uniquely moved Palace to AI-owned official Temple'"
+    }
+  ]
+}

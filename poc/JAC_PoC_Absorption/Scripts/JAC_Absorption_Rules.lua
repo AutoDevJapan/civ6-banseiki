@@ -8,13 +8,68 @@ R.CITY_FAITH_KEY = "JAC_ABSORPTION_CITY_FAITH_V1"
 R.GOVERNANCE_KEY = "JAC_ABSORPTION_GOVERNANCE_V1"
 R.TOKEN_KEY = "JAC_ABSORPTION_UNIT_TOKEN_V1"
 R.REQUIRE_EXPLICIT_DISPOSITIONS_POC = true
-R.CITY_LOYALTY_DELTA_POC = 0
-R.CULTURAL_FRICTION_TURNS_POC = 0
+-- Provisional magnitudes. The official Expansion1_GlobalParameters.xml uses
+-- 50 after combat transfer and 100 after cultural-identity transfer; espionage
+-- foment unrest is -15 (-5 per promotion level). Friction is a separate,
+-- once-per-turn loyalty change, never a culture/science yield from a person.
+R.CITY_POLICY = {
+  CONQUEST = { Immediate = -15, Friction = -2, Turns = 3 },
+  SMALL_STATE = { Immediate = -5, Friction = -1, Turns = 2 },
+  MERGER = { Immediate = 0, Friction = 0, Turns = 0 },
+}
 R.UNIT_SEARCH_RADIUS_POC = 8
 R.LEADER_UNIT_TYPE_POC = "UNIT_GREAT_GENERAL"
 R.LEADER_REPRESENTATION_POC = "PERSISTENT_PERSON_WITH_GENERAL_PROXY"
 R.NATIVE_HERO_POLICY_POC = "TRANSFER_OR_ARCHIVE_SUICIDE_WITH_CAUSE"
 R.ENTRY_MODES = { CONQUEST = true, SMALL_STATE = true, MERGER = true }
+
+-- SSOT 9.1 provisional flow policy; all rates are basis points (0..10000).
+R.FLOW_FIRST_ESCAPE = { CONQUEST = 2400, SMALL_STATE = 1400, MERGER = 700 }
+R.FLOW_METHOD_ACTION = { CONQUEST = -700, SMALL_STATE = 0, MERGER = 600 }
+R.FLOW_ACTION_SUCCESS = {
+  CAPTURE = 8800, RECRUIT = 6800, SUBMIT = 7800, EXECUTE = 9500,
+  PROTECT = 8200, RECONTRACT = 7000, SUICIDE = 9500,
+  TRANSFER = 9400, LOOT = 8800, SEIZE = 8600, RETURN = 9000,
+  SURRENDER = 9100, INCORPORATE = 8500, DISSOLVE = 9500,
+  INHERIT = 10000, PRESERVE = 10000,
+}
+R.FLOW_RATE = {
+  RollRange = 10000, AttitudeMinimum = 0, AttitudeMaximum = 100,
+  NeutralAttitude = 50, LoyaltyEscapeWeight = 22, RelationEscapeWeight = 12,
+  ProtectedEscapeDelta = -500, BrokenEscapeDelta = 500,
+  ItemEscapeNumerator = 3, ItemEscapeDenominator = 4,
+  RetryEscapeDelta = 500, EscapeMaximum = 9500,
+  LoyaltyActionWeight = 15, RelationActionWeight = 10,
+  ActionMinimum = 500, ActionMaximum = 9900,
+  WorldDelayTurns = 2,
+}
+
+function R.UnitKind(unit)
+  local person = unit:GetProperty(R.PERSON_KEY)
+  if unit.IsHero and unit:IsHero() then return "HERO" end
+  local info = assert(GameInfo.Units[unit:GetType()], "unknown unit definition")
+  local gp = unit:GetGreatPerson()
+  local individual = gp and gp:GetIndividual() or -1
+  if person and person.Kind == "GREAT_PERSON" then
+    assert((individual >= 0 and GameInfo.GreatPersonIndividuals[individual]
+      and GameInfo.GreatPersonIndividuals[individual].GreatPersonClassType)
+      or (person.Persistent and person.Representation == R.LEADER_REPRESENTATION_POC),
+      "Great Person record has no native individual or explicit leader provenance")
+    return "GREAT_PERSON"
+  end
+  if person and person.Kind and person.Kind ~= "UNIT" then return person.Kind end
+  if info.UnitType == "UNIT_GREAT_GENERAL" or unit:GetProperty("JAC_POC_GROWTHUI_WARLORD") then
+    return "PERSON"
+  end
+  if person and person.Kind then return person.Kind end
+  if individual >= 0 then
+    assert(GameInfo.GreatPersonIndividuals[individual]
+      and GameInfo.GreatPersonIndividuals[individual].GreatPersonClassType,
+      "native Great Person individual definition missing")
+    return "GREAT_PERSON"
+  end
+  return "UNIT"
+end
 
 -- Database rows supply the dispositions, so a missing/invalid decision fails before mutation.
 function R.Destination(kind, outcome)
@@ -74,7 +129,8 @@ function R.Equal(a, b) return R.Canonical(a) == R.Canonical(b) end
 function R.UnitKey(owner, id) return tostring(owner) .. ":" .. tostring(id) end
 function R.KeepUnit(kind, outcome)
   return (kind == "UNIT" and (outcome == "SURRENDER" or outcome == "INCORPORATE"))
-    or (kind == "PERSON" and (outcome == "CAPTURE" or outcome == "RECRUIT" or outcome == "SUBMIT"))
+    or ((kind == "PERSON" or kind == "GOVERNOR")
+      and (outcome == "CAPTURE" or outcome == "RECRUIT" or outcome == "SUBMIT"))
     or (kind == "HERO" and (outcome == "RECRUIT" or outcome == "PROTECT" or outcome == "RECONTRACT"))
     or (kind == "GREAT_PERSON" and outcome == "RECRUIT")
 end

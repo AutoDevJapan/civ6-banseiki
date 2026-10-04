@@ -36,4 +36,6 @@ jobs:
           cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-hero-recall.json --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-priest-diagnostic.json --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo +stable run --locked -- ../civ6-autotest/scenarios/absorption-flow.json --check
           exit $LASTEXITCODE

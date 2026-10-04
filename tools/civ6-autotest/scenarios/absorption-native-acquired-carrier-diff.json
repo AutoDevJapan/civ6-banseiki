@@ -1,0 +1,41 @@
+{
+  "name": "Acquired Palace recipient carrier state difference diagnosis",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-acquired-carrier-stage-absorb-flow-95-47efb215632a",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local a=ExposedMembers.JAC_Absorption\nlocal tx=a and a.GetState().Transactions['native-acquired-palace-route']\nfor _,work in ipairs(tx and tx.NativeWorks or {}) do\n if work.Source.Index==2 then\n  local carrier=work.Carrier\n  local city=carrier and CityManager.GetCityAt(carrier.X,carrier.Y)\n  return carrier and carrier.Phase=='RETURN' and city and city:GetOwner()==carrier.Owner\n   and city:GetBuildings():GetGreatWorkInSlot(carrier.Building,carrier.Slot)==2\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal F=assert(JAC_AbsorptionFlowGameplay)\nlocal flow=assert(F.Get('native-acquired-palace-route'))\nlocal tx=assert(A.GetState().Transactions[flow.ID])\nlocal snap\nfor _,work in ipairs(tx.NativeWorks or {}) do if work.Source.Index==2 then snap=work end end\nassert(snap and snap.Carrier and snap.Carrier.Phase=='RETURN'\n and not snap.PhysicalMoved,'diagnostic did not stop at carrier RETURN')\nlocal carrier=snap.Carrier\nlocal city=assert(CityManager.GetCityAt(carrier.X,carrier.Y))\nassert(city:GetOwner()==1,'recipient carrier has not returned to its original owner')\nlocal current=A.NativeWorkLocations(2)\nassert(#current==1 and current[1].Owner==1 and current[1].X==carrier.X\n and current[1].Y==carrier.Y and current[1].Building==carrier.Building\n and current[1].Slot==carrier.Slot,'original index lost during carrier diagnostic')\nlocal before=carrier.Before\nlocal governance=city:GetProperty(A.Rules.GOVERNANCE_KEY)\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_GOVERNANCE] before='..A.Canonical(before.Governance or {})\n ..' after='..A.Canonical(governance or {}))\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_OTHER] loyalty='..A.Canonical({Before=before.Loyalty,After=A.CityLoyalty(city)})\n ..' faith='..A.Canonical({Before=before.Faith,After=city:GetProperty(A.Rules.CITY_FAITH_KEY)})\n ..' religion='..A.Canonical({Before=before.Religion,After=A.CityReligion(city)}))\nprint('[JAC_NATIVE_ACQUIRED_CARRIER_STATUS] tx='..tx.Status\n ..' flow='..flow.Phase..' reason='..tostring(tx.Error or flow.Error))\nassert(not A.Rules.Equal(before.Governance,governance),\n 'Governance mismatch from live95 was not reproduced')\nreturn 'original index remains one in recipient Temple; governance before/after logged'"
+    }
+  ]
+}

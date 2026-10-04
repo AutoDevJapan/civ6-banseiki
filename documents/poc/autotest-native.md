@@ -24,6 +24,8 @@ PR87の検証ではPythonを新たに実行せず、`tools/civ6-autotest-native/
 
 標準ツールが再起動を加える場合も、元の127・101・13手順を全て照合する。結果は `result.json`、`steps.jsonl`、通信出力、ゲームの3ログへ保存する。結果の保存に失敗した検証を合格にしない。
 
+全シナリオのLua構文をゲーム操作なしで確認する場合は、`cargo +stable run --locked --manifest-path tools/civ6-autotest-native/Cargo.toml --bin scenario-lua-audit -- tools/civ6-autotest/scenarios <期待するJSON件数>` を使う。JSON内の命令・待機条件を再帰的に収集してLua 5.1としてコンパイルする。件数の不一致、命令が一件もない場合、構文エラーは失敗にする。これは構文確認であり、実機でAPIが公開されることや操作が成立することの証拠にはしない。
+
 ## 検査と現状
 
 最終候補 `402bb309f05178d85e0e7adc591b33b612002ac1` では、本体52件・英雄観測生成器4件・日本受入生成器5件の61件が成功し、省略0件だった。形式検査、警告0件の静的解析、実機用releaseビルド、元の127・101・13手順の全Lua片の構文検査も成功した。候補のWindows Rust CIとCodeQLも成功した。

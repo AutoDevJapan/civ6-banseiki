@@ -532,23 +532,68 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "leader-persona-spy-neutralization-reassign.json",
                 "leader-persona-spy-neutralization-reassign-tick.json",
                 "absorption-japan.json",
+                "absorption-japan-recall-continuation.json",
+                "absorption-japan-owner-turn-diagnostic.json",
+                "absorption-japan-owner-turn-isolated.json",
                 "absorption-hero-recall.json",
                 "absorption-priest-diagnostic.json",
                 "absorption-faith-precision.json",
                 "absorption-hero-window-diagnostic.json",
                 "absorption-japan-native.json",
+                "absorption-context-probe.json",
+                "absorption-flow.json",
+                "absorption-native-custody.json",
+                "absorption-native-deal.json",
+                "absorption-native-product-probe.json",
+                "absorption-native-product-resume.json",
+                "absorption-native-product-finish.json",
+                "absorption-native-scatter-inventory.json",
+                "absorption-native-scatter-carrier.json",
+                "absorption-native-scatter-flow-start.json",
+                "absorption-native-scatter-physical-probe.json",
+                "absorption-native-bridge-probe.json",
+                "absorption-native-ai-same-owner-move.json",
+                "absorption-native-ai-carrier-return.json",
+                "absorption-native-carrier-side-effects.json",
+                "absorption-native-cross-owner-freecity.json",
+                "absorption-native-freecity-recover-original.json",
+                "absorption-native-reverse-carrier-recovery.json",
+                "absorption-native-scatter-reward-site.json",
+                "absorption-native-scatter-recovery.json",
+                "absorption-native-acquired-palace-product.json",
+                "absorption-native-acquired-carrier-diff.json",
+                "absorption-native-acquired-carrier-resume.json",
+                "absorption-native-acquired-result-final.json",
+                "absorption-native-work-probe.json",
+                "absorption-native-artwork-locks.json",
+                "absorption-native-artwork-aged.json",
+                "absorption-native-artifact-full.json",
+                "absorption-native-production-core-probe.json",
+                "absorption-native-excavation-resume.json",
+                "absorption-native-type-art-prepare.json",
+                "absorption-native-type-artifact-prepare.json",
+                "absorption-native-type-city-owner-transfer.json",
+                "absorption-native-type-return.json",
+                "absorption-native-type-scatter.json",
+                "absorption-native-type-run-art-city-fresh.json",
+                "absorption-native-type-run-art-return-fresh.json",
+                "absorption-native-type-run-art-scatter-fresh.json",
+                "absorption-native-type-run-artifact-city.json",
+                "absorption-native-type-run-artifact-return.json",
+                "absorption-native-type-run-artifact-scatter.json",
+                "absorption-return-boundary.json",
             ]
             .into_iter()
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 92);
+    assert_eq!(expected.len(), 137);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| name.ends_with(".json"))
         .collect();
-    // Preserve the historical 92-scenario inventory. Task853 adds finite
+    // Preserve the combined historical inventory from both branches. Task853 adds finite
     // diagnostics and retry stages without rewriting that baseline.
     assert_eq!(expected.difference(&actual).count(), 0);
     assert_eq!(

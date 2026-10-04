@@ -1,0 +1,51 @@
+{
+  "name": "Absorption native Great Work API availability on the saved PR87 game",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "jac-absorption-after-turn-absorb-34-0675c70c359e",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal function method(object,name)\n local ok,value=pcall(function() return object and object[name] end)\n return ok and type(value)=='function'\nend\nlocal function dispatchMethods()\n return {RequestPlayerOperation=method(UI,'RequestPlayerOperation'),GetWorkingDeal=method(DealManager,'GetWorkingDeal'),GetPossibleDealItems=method(DealManager,'GetPossibleDealItems'),EnactWorkingDeal=method(DealManager,'EnactWorkingDeal'),SendWorkingDeal=method(DealManager,'SendWorkingDeal')}\nend\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal selected,first=nil,nil\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n local ok,slots=pcall(A.OwnedGreatWorkSlots,owner)\n if ok and #slots>0 then selected=owner;first=slots[1];break end\nend\nselected=selected or Game.GetLocalPlayer()\nlocal ok,core=pcall(A.NativeWorkCapabilities,selected)\nlocal result={SelectedOwner=selected,FirstWork=first,GameplayOK=ok,Gameplay=ok and core or nil,GameplayError=not ok and tostring(core) or nil}\nresult.Context='Gameplay';result.Dispatch=dispatchMethods();Game:SetProperty('JAC_NATIVE_WORK_CONTEXT_PROBE',{SelectedOwner=selected,FirstWork=first,GameplayDispatch=result.Dispatch});print('[JAC_NATIVE_WORK_CORE_API] '..A.Canonical(result))\nreturn A.Canonical(result)"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal function method(object,name)\n local ok,value=pcall(function() return object and object[name] end)\n return ok and type(value)=='function'\nend\nlocal function dispatchMethods()\n return {RequestPlayerOperation=method(UI,'RequestPlayerOperation'),GetWorkingDeal=method(DealManager,'GetWorkingDeal'),GetPossibleDealItems=method(DealManager,'GetPossibleDealItems'),EnactWorkingDeal=method(DealManager,'EnactWorkingDeal'),SendWorkingDeal=method(DealManager,'SendWorkingDeal')}\nend\n\nlocal A=assert(ExposedMembers.JAC_Absorption)\nlocal snapshot=assert(Game:GetProperty('JAC_NATIVE_WORK_CONTEXT_PROBE'),'paired Gameplay sample missing')\nlocal owner=snapshot.SelectedOwner\nlocal player=assert(Players[owner])\nlocal result={Context='InGame',SelectedOwner=owner,LocalPlayer=Game.GetLocalPlayer(),FirstWork=snapshot.FirstWork,Methods={},Operations={},GameplayDispatch=snapshot.GameplayDispatch,UIDispatch=dispatchMethods()}\nlocal objects={UI=UI,Game=Game,DealManager=DealManager}\nlocal names={'RequestPlayerOperation','GetWorkingDeal','GetPossibleDealItems','EnactWorkingDeal','SendWorkingDeal'}\nfor _,label in ipairs({'UI','Game','DealManager'}) do\n result.Methods[label]={}\n for _,name in ipairs(names) do result.Methods[label][name]=method(objects[label],name) end\nend\nfor _,name in ipairs({'MOVE_GREAT_WORK','PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST','PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT'}) do\n result.Operations[name]=PlayerOperations and PlayerOperations[name]~=nil or false\nend\nif snapshot.FirstWork then\n local w=snapshot.FirstWork\n local physical=assert(CityManager.GetCityAt(w.X,w.Y),'paired source city missing')\n assert(physical:GetOwner()==owner and physical:GetID()==w.CityID,'paired source owner/ID changed')\n result.PhysicalIndex=physical:GetBuildings():GetGreatWorkInSlot(w.Building,w.Slot)\n assert(result.PhysicalIndex==w.Index,'Gameplay/UI samples refer to different physical work')\nend\nprint('[JAC_NATIVE_WORK_UI_API] '..A.Canonical(result))\nreturn A.Canonical(result)\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local from=Game.GetLocalPlayer();local working,to;for _,p in ipairs(PlayerManager.GetAliveMajors()) do if p:GetID()~=from then local ok,value=pcall(DealManager.GetWorkingDeal,DealDirection.OUTGOING,from,p:GetID());if ok and value then working,to=value,p:GetID();break end end end;assert(working,'no Core working deal for replay API probe');local result={From=from,To=to,Count=working:GetItemCount(),FindItemsByType=type(working.FindItemsByType),ClearWorkingDeal=type(DealManager.ClearWorkingDeal)};print('[JAC_NATIVE_DEAL_REPLAY_API] '..assert(JAC_AbsorptionGameplay).Canonical(result));return assert(JAC_AbsorptionGameplay).Canonical(result)"
+    }
+  ]
+}

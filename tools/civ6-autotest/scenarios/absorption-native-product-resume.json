@@ -1,0 +1,46 @@
+{
+  "name": "Absorption product verifies second native deal after Palace escrow",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-after-palace-proof-absorb-flow-60-2e25a3f9c37d",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal reads=ExposedMembers.JAC_HeroReadAPI\nreturn tx and tx.NativeDealUI and reads and reads.GetObservation(tx.NativeDealUI.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal before=assert(A.GetState().Transactions[id])\nlocal palace,returned\nfor _,work in ipairs(before.NativeWorks or {}) do\n if work.Source.BuildingType=='BUILDING_PALACE' then palace=work\n elseif work.Custodian and work.Custodian~=before.To then returned=work end\nend\nassert(palace and returned and palace.PhysicalMoved and returned.DealSubmitted and before.NativeDealUI.Index==returned.Source.Index,'saved Palace proof or return intent absent')\nlocal tx=A.Resume(id)\nfor _,work in ipairs(tx.NativeWorks or {}) do\n if work.Source.Index==palace.Source.Index then palace=work elseif work.Source.Index==returned.Source.Index then returned=work end\nend\nassert(palace.PhysicalMoved and returned.PhysicalMoved,'one of the two original native works was not physically proved')\nlocal moved=0\nfor _,snap in ipairs(tx.Cities or {}) do local city=CityManager.GetCityAt(snap.X,snap.Y);if city and city:GetOwner()==tx.To then moved=moved+1 end end\nprint('[JAC_NATIVE_PRODUCT_BOTH_WORKS] palace='..palace.Source.Index..' return='..returned.Source.Index..' cities='..moved..'/'..#tx.Cities..' status='..tx.Status..' finalUI='..tostring(tx.AwaitingFinalUI))\nreturn 'both native works physically proved; saved transaction '..tx.Status"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-after-both-deals"
+    }
+  ]
+}

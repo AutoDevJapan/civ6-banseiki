@@ -1,0 +1,116 @@
+{
+  "name": "Previously returned original work recovered by human same-owner MOVE and empty Free Cities carrier return",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-ai-city-mediated-custody-absorb-flow-74-2ad5d4375304",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage or stage.Stage~='FREE_CUSTODY_PROVED' then return false end\nlocal free=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal human=CityManager.GetCityAt(129,35)\nreturn free and free:GetOwner()==stage.Carrier.Free and free:GetID()==stage.Carrier.FreeCity\n and free:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==stage.Index\n and human and human:GetOwner()==1 and human:GetBuildings():GetGreatWorkInSlot(12,0)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nlocal city=assert(CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y))\nassert(city:GetOwner()==stage.Carrier.Free and city:GetID()==stage.Carrier.FreeCity,'original Free Cities carrier identity changed')\nlocal original=A.NativeWorkLocations(stage.Index)\nassert(#original==1 and original[1].Owner==stage.Carrier.Free and original[1].CityID==city:GetID()\n and original[1].Building==stage.Carrier.Building and original[1].Slot==stage.Carrier.Slot,'original work not uniquely at Free Cities source')\nlocal human=assert(CityManager.GetCityAt(129,35))\nassert(human:GetOwner()==1 and A.CityAssets(human).BUILDING_TEMPLE.Works[0]==-1,'human recovery Temple occupied')\nlocal assets=A.CityAssets(city)\nassets.BUILDING_TEMPLE.Works[0]=-1\nlocal plan={Index=stage.Index,Source={Owner=stage.Carrier.Free,City=stage.Carrier.FreeCity,X=stage.Carrier.X,Y=stage.Carrier.Y,Building=stage.Carrier.Building,Slot=stage.Carrier.Slot},\n Dest={Owner=1,City=human:GetID(),X=human:GetX(),Y=human:GetY(),Building=12,Slot=0},\n Original=stage.Source,Before={Population=city:GetPopulation(),Name=city:GetName(),Assets=assets,Loyalty=A.CityLoyalty(city),Religion=A.CityReligion(city)},Stage='BORROW_INTENT'}\nGame:SetProperty('JAC_NATIVE_REVERSE_CARRIER',plan)\nCityManager.TransferCity(city,1)\nreturn 'work-bearing Free Cities carrier transferred to human before same-owner recovery MOVE'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER')\nif not plan then return false end\nlocal carrier=CityManager.GetCityAt(plan.Source.X,plan.Source.Y)\nlocal dest=CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y)\nreturn carrier and carrier:GetOwner()==1 and carrier:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)==plan.Index\n and dest and dest:GetOwner()==1 and dest:GetBuildings():GetGreatWorkInSlot(plan.Dest.Building,plan.Dest.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER'))\nlocal carrier=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal dest=assert(CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y))\nassert(carrier:GetOwner()==1 and dest:GetOwner()==1 and carrier:GetID()~=dest:GetID(),'human same-owner recovery cities not distinct')\nassert(carrier:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)==plan.Index and dest:GetBuildings():GetGreatWorkInSlot(plan.Dest.Building,plan.Dest.Slot)==-1,'recovery source or destination changed')\nlocal params={}\nparams[PlayerOperations.PARAM_PLAYER_ONE]=1\nparams[PlayerOperations.PARAM_CITY_SRC]=carrier:GetID()\nparams[PlayerOperations.PARAM_CITY_DEST]=dest:GetID()\nparams[PlayerOperations.PARAM_BUILDING_SRC]=plan.Source.Building\nparams[PlayerOperations.PARAM_BUILDING_DEST]=plan.Dest.Building\nparams[PlayerOperations.PARAM_GREAT_WORK_INDEX]=plan.Index\nparams[PlayerOperations.PARAM_SLOT]=plan.Dest.Slot\nlocal returned=UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.MOVE_GREAT_WORK,params)\nExposedMembers.JAC_NativeReverseMove={SourceCity=carrier:GetID(),TargetCity=dest:GetID(),Index=plan.Index}\nprint('[JAC_NATIVE_REVERSE_MOVE_REQUEST] actor='..Game.GetLocalPlayer()..' result='..tostring(returned)..' source='..carrier:GetID()..' target='..dest:GetID())\nreturn 'human same-owner MOVE requested; physical recovery still unproven'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER'))\nlocal carrier=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal human=assert(CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y))\nlocal src=carrier:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)\nlocal dst=human:GetBuildings():GetGreatWorkInSlot(plan.Dest.Building,plan.Dest.Slot)\nlocal count=0;local found\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[plan.Source.Owner] then owners[#owners+1]=plan.Source.Owner end\nfor _,owner in ipairs(owners) do local p=Players[owner];if p then for _,city in p:GetCities():Members() do\n local b=city:GetBuildings();for def in GameInfo.Buildings() do if b:HasBuilding(def.Index) then\n  for slot=0,b:GetNumGreatWorkSlots(def.Index)-1 do if b:GetGreatWorkInSlot(def.Index,slot)==plan.Index then count=count+1;found={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot} end end\n end end end end end\nExposedMembers.JAC_NativeReversePhysical={Count=count,Source=src,Dest=dst,Found=found}\nprint('[JAC_NATIVE_REVERSE_MOVE_PHYSICAL] count='..count..' source='..tostring(src)..' dest='..tostring(dst))\nreturn 'human same-owner recovery scan count='..count"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-reverse-after-human-move"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER'))\nlocal proof=assert(ExposedMembers.JAC_NativeReversePhysical)\nassert(proof.Count==1 and proof.Source==-1 and proof.Dest==plan.Index,'human same-owner recovery MOVE did not physically finish')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==1 and found[1].CityID==plan.Dest.City and found[1].X==plan.Dest.X and found[1].Y==plan.Dest.Y and found[1].Building==plan.Dest.Building and found[1].Slot==plan.Dest.Slot,'original work missed exact human recovery Temple')\nlocal carrier=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nassert(carrier:GetOwner()==1 and A.CityAssets(carrier).BUILDING_TEMPLE.Works[0]==-1,'borrowed carrier still holds a work')\nplan.Stage='RETURN_INTENT';plan.BorrowedCity=carrier:GetID();Game:SetProperty('JAC_NATIVE_REVERSE_CARRIER',plan)\nCityManager.TransferCity(carrier,plan.Source.Owner)\nreturn 'empty carrier returned to Free Cities after original work reached human Temple'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER')\nif not plan then return false end\nlocal carrier=CityManager.GetCityAt(plan.Source.X,plan.Source.Y)\nlocal human=CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y)\nreturn carrier and carrier:GetOwner()==plan.Source.Owner and carrier:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)==-1\n and human and human:GetOwner()==1 and human:GetBuildings():GetGreatWorkInSlot(plan.Dest.Building,plan.Dest.Slot)==plan.Index"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER'))\nlocal carrier=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal human=assert(CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y))\nassert(carrier:GetOwner()==plan.Source.Owner and human:GetOwner()==1,'carrier or recovery destination owner changed')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==1 and found[1].CityID==human:GetID() and found[1].X==plan.Dest.X and found[1].Y==plan.Dest.Y and found[1].Building==plan.Dest.Building and found[1].Slot==plan.Dest.Slot,'original index not uniquely at human Temple')\nassert(A.CityAssets(carrier).BUILDING_TEMPLE.Works[0]==-1,'Free Cities original carrier slot not empty')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Original[key]==found[1][key],'original recovered metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Original.Effects,found[1].Effects),'original recovered effects changed')\nlocal after={Population=carrier:GetPopulation(),Name=carrier:GetName(),Assets=A.CityAssets(carrier),Loyalty=A.CityLoyalty(carrier),Religion=A.CityReligion(carrier)}\nprint('[JAC_NATIVE_REVERSE_CARRIER_EFFECTS] before='..A.Canonical(plan.Before)..' after='..A.Canonical(after))\nassert(A.Rules.Equal(plan.Before,after),'Free Cities carrier changed after empty return')\nplan.Stage='RECOVERY_PHYSICAL_PROVED';plan.FreeCity=carrier:GetID();Game:SetProperty('JAC_NATIVE_REVERSE_CARRIER',plan)\nprint('[JAC_NATIVE_REVERSE_RECOVERED] index='..plan.Index..' owner='..found[1].Owner..' city='..found[1].CityID)\nreturn 'original index physically recovered and empty carrier restored to Free Cities'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-reverse-recovered"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-reverse-recovered"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER')\nif not plan then return false end\nlocal carrier=CityManager.GetCityAt(plan.Source.X,plan.Source.Y)\nlocal human=CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y)\nreturn carrier and carrier:GetOwner()==plan.Source.Owner and carrier:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)==-1\n and human and human:GetOwner()==1 and human:GetBuildings():GetGreatWorkInSlot(plan.Dest.Building,plan.Dest.Slot)==plan.Index"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_REVERSE_CARRIER'))\nlocal carrier=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal human=assert(CityManager.GetCityAt(plan.Dest.X,plan.Dest.Y))\nassert(carrier:GetOwner()==plan.Source.Owner and human:GetOwner()==1,'carrier or recovery destination owner changed')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==1 and found[1].CityID==human:GetID() and found[1].X==plan.Dest.X and found[1].Y==plan.Dest.Y and found[1].Building==plan.Dest.Building and found[1].Slot==plan.Dest.Slot,'original index not uniquely at human Temple')\nassert(A.CityAssets(carrier).BUILDING_TEMPLE.Works[0]==-1,'Free Cities original carrier slot not empty')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Original[key]==found[1][key],'original recovered metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Original.Effects,found[1].Effects),'original recovered effects changed')\nlocal after={Population=carrier:GetPopulation(),Name=carrier:GetName(),Assets=A.CityAssets(carrier),Loyalty=A.CityLoyalty(carrier),Religion=A.CityReligion(carrier)}\nprint('[JAC_NATIVE_REVERSE_CARRIER_EFFECTS] before='..A.Canonical(plan.Before)..' after='..A.Canonical(after))\nassert(A.Rules.Equal(plan.Before,after),'Free Cities carrier changed after empty return')\nplan.Stage='RECOVERY_PHYSICAL_PROVED';plan.FreeCity=carrier:GetID();Game:SetProperty('JAC_NATIVE_REVERSE_CARRIER',plan)\nprint('[JAC_NATIVE_REVERSE_RECOVERED] index='..plan.Index..' owner='..found[1].Owner..' city='..found[1].CityID)\nreturn 'original index physically recovered and empty carrier restored to Free Cities'"
+    }
+  ]
+}

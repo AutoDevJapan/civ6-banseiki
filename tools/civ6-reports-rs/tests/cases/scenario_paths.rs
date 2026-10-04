@@ -103,8 +103,15 @@ fn moved_binary(root: &Path) -> PathBuf {
     let folder = root.join("tools/target/debug");
     fs::create_dir_all(&folder).unwrap();
     let binary = folder.join(original.file_name().unwrap());
-    fs::copy(original, &binary).unwrap();
-    fs::set_permissions(&binary, fs::metadata(original).unwrap().permissions()).unwrap();
+    // Keep the compiled executable inode immutable. Linux can reject an
+    // immediate exec of a newly written copy with ETXTBSY.
+    #[cfg(unix)]
+    fs::hard_link(original, &binary).unwrap();
+    #[cfg(not(unix))]
+    {
+        fs::copy(original, &binary).unwrap();
+        fs::set_permissions(&binary, fs::metadata(original).unwrap().permissions()).unwrap();
+    }
     binary
 }
 

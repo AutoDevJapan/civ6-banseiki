@@ -1,0 +1,93 @@
+{
+  "name": "Previously returned original relic recovered from Free Cities by Core deal",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-ai-city-mediated-custody-absorb-flow-74-2ad5d4375304",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local stage=Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE')\nif not stage or stage.Stage~='FREE_CUSTODY_PROVED' then return false end\nlocal free=CityManager.GetCityAt(stage.Carrier.X,stage.Carrier.Y)\nlocal human=CityManager.GetCityAt(129,35)\nreturn free and free:GetOwner()==stage.Carrier.Free and free:GetID()==stage.Carrier.FreeCity\n and free:GetBuildings():GetGreatWorkInSlot(stage.Carrier.Building,stage.Carrier.Slot)==stage.Index\n and human and human:GetOwner()==1 and human:GetBuildings():GetGreatWorkInSlot(12,0)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal stage=assert(Game:GetProperty('JAC_NATIVE_AI_MOVE_PROBE'))\nassert(stage.Stage=='FREE_CUSTODY_PROVED','same original work was not proved in Free Cities')\nlocal found=A.NativeWorkLocations(stage.Index)\nassert(#found==1 and found[1].Owner==stage.Carrier.Free and found[1].CityID==stage.Carrier.FreeCity\n and found[1].X==stage.Carrier.X and found[1].Y==stage.Carrier.Y\n and found[1].Building==stage.Carrier.Building and found[1].Slot==stage.Carrier.Slot,'Free Cities original work location changed')\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nlocal slots=reads.FindCompatibleNativeSlots(1,found[1].ObjectType)\nassert(#slots==1 and slots[1].Owner==1 and slots[1].City==196610 and slots[1].X==129 and slots[1].Y==35 and slots[1].Building==12 and slots[1].Slot==0,'human recovery Temple not exactly empty')\nlocal from,to=stage.Carrier.Free,1\nlocal deal=assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,from,to))\nassert(deal:GetItemCount()==0,'Free Cities recovery working deal contains another item')\nlocal choices=DealManager.GetPossibleDealItems(from,to,DealItemTypes.GREATWORK,deal)\nlocal candidate\nfor _,item in ipairs(choices or {}) do if item.ForType==stage.Index then candidate=item end end\nassert(candidate and candidate.IsValid,'Free Cities original work is not a valid recovery item')\nlocal subtype=assert(GameInfo.GreatWorks[found[1].GreatWorkType]).Index\nlocal item=assert(deal:AddItemOfType(DealItemTypes.GREATWORK,from))\nitem:SetSubType(subtype);item:SetValueType(stage.Index)\ndeal:Validate();assert(deal:IsValid(),'Free Cities original recovery deal invalid')\nlocal proof={Index=stage.Index,Source={Owner=stage.Carrier.Free,City=stage.Carrier.FreeCity,X=stage.Carrier.X,Y=stage.Carrier.Y,Building=stage.Carrier.Building,Slot=stage.Carrier.Slot},Target=slots[1],Original=stage.Source,Stage='SENT'}\nGame:SetProperty('JAC_NATIVE_FREE_RECOVER_PROBE',proof)\nlocal result=DealManager.EnactWorkingDeal(from,to)\nprint('[JAC_NATIVE_FREE_RECOVER_SEND] index='..stage.Index..' result='..tostring(result))\nreturn 'Free Cities original work recovery submitted; physical check follows'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_RECOVER_PROBE'))\nlocal free=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal human=assert(CityManager.GetCityAt(plan.Target.X,plan.Target.Y))\nlocal src=free:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)\nlocal dst=human:GetBuildings():GetGreatWorkInSlot(plan.Target.Building,plan.Target.Slot)\nlocal count=0;local found\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[plan.Source.Owner] then owners[#owners+1]=plan.Source.Owner end\nfor _,owner in ipairs(owners) do local p=Players[owner];if p then for _,city in p:GetCities():Members() do\n local b=city:GetBuildings();for def in GameInfo.Buildings() do if b:HasBuilding(def.Index) then\n  for slot=0,b:GetNumGreatWorkSlots(def.Index)-1 do if b:GetGreatWorkInSlot(def.Index,slot)==plan.Index then count=count+1;found={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot} end end\n end end end end end\nExposedMembers.JAC_FreeRecoverPhysical={Count=count,Source=src,Dest=dst,Found=found}\nprint('[JAC_NATIVE_FREE_RECOVER_PHYSICAL] count='..count..' source='..tostring(src)..' dest='..tostring(dst)..' foundOwner='..tostring(found and found.Owner))\nreturn 'Free Cities original recovery physical scan count='..count"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-freecity-original-recovery-probe"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_RECOVER_PROBE'))\nlocal proof=assert(ExposedMembers.JAC_FreeRecoverPhysical)\nassert(proof.Count==1 and proof.Source==-1 and proof.Dest==plan.Index,'original Free Cities work did not recover to human Temple')\nlocal w=assert(proof.Found);local t=plan.Target\nassert(w.Owner==t.Owner and w.City==t.City and w.X==t.X and w.Y==t.Y and w.Building==t.Building and w.Slot==t.Slot,'original recovered work missed exact human Temple')\nreturn 'same original index physically recovered from Free Cities to human Temple'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_FREE_RECOVER_PROBE'))\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==plan.Target.Owner and found[1].CityID==plan.Target.City\n and found[1].X==plan.Target.X and found[1].Y==plan.Target.Y\n and found[1].Building==plan.Target.Building and found[1].Slot==plan.Target.Slot,'Core original index recovery location changed')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Original[key]==found[1][key],'original recovered metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Original.Effects,found[1].Effects),'original recovered effects changed')\nplan.Stage='PROVED';Game:SetProperty('JAC_NATIVE_FREE_RECOVER_PROBE',plan)\nprint('[JAC_NATIVE_FREE_RECOVER_PROVED] '..A.Canonical(plan))\nreturn 'same original index and metadata survived Free Cities recovery'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-freecity-original-recovered"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-freecity-original-recovered"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_FREE_RECOVER_PROBE')\nif not plan or plan.Stage~='PROVED' then return false end\nlocal free=CityManager.GetCityAt(plan.Source.X,plan.Source.Y)\nlocal human=CityManager.GetCityAt(plan.Target.X,plan.Target.Y)\nreturn free and free:GetOwner()==plan.Source.Owner and free:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)==-1\n and human and human:GetOwner()==plan.Target.Owner and human:GetBuildings():GetGreatWorkInSlot(plan.Target.Building,plan.Target.Slot)==plan.Index"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_FREE_RECOVER_PROBE'))\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==plan.Target.Owner and found[1].CityID==plan.Target.City\n and found[1].X==plan.Target.X and found[1].Y==plan.Target.Y\n and found[1].Building==plan.Target.Building and found[1].Slot==plan.Target.Slot,'Core original index recovery location changed')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Original[key]==found[1][key],'original recovered metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Original.Effects,found[1].Effects),'original recovered effects changed')\nplan.Stage='PROVED';Game:SetProperty('JAC_NATIVE_FREE_RECOVER_PROBE',plan)\nprint('[JAC_NATIVE_FREE_RECOVER_PROVED] '..A.Canonical(plan))\nreturn 'same original index and metadata survived Free Cities recovery'"
+    }
+  ]
+}

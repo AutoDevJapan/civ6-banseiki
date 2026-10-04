@@ -1,0 +1,60 @@
+{
+  "name": "Native original work direct cross-owner UI MOVE into Free Cities exact Temple",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_FREE_CARRIER')\nif not plan or not plan.WorkIndex then return false end\nlocal donor=CityManager.GetCityAt(plan.Work.X,plan.Work.Y)\nlocal free=CityManager.GetCityAt(plan.X,plan.Y)\nreturn donor and donor:GetOwner()==plan.Work.Owner and donor:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot)==plan.WorkIndex\n and free and free:GetOwner()==plan.Free and free:GetID()==plan.ID and free:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal donor=assert(CityManager.GetCityAt(plan.Work.X,plan.Work.Y))\nlocal free=assert(CityManager.GetCityAt(plan.X,plan.Y))\nassert(donor:GetOwner()==plan.Work.Owner and donor:GetID()==plan.Work.CityID and free:GetOwner()==plan.Free and free:GetID()==plan.ID,'cross-owner city identity changed')\nassert(donor:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot)==plan.WorkIndex and free:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot)==-1,'cross-owner source or recipient slot changed')\nlocal params={}\nparams[PlayerOperations.PARAM_PLAYER_ONE]=plan.Work.Owner\nparams[PlayerOperations.PARAM_CITY_SRC]=donor:GetID()\nparams[PlayerOperations.PARAM_CITY_DEST]=free:GetID()\nparams[PlayerOperations.PARAM_BUILDING_SRC]=plan.Work.Building\nparams[PlayerOperations.PARAM_BUILDING_DEST]=plan.Building\nparams[PlayerOperations.PARAM_GREAT_WORK_INDEX]=plan.WorkIndex\nparams[PlayerOperations.PARAM_SLOT]=plan.Slot\nEvents.GreatWorkMoved.Add(function(...) local args={...};for i=1,#args do args[i]=tostring(args[i]) end;print('[JAC_NATIVE_CROSS_FREE_EVENT] '..table.concat(args,',')) end)\nlocal returned=UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.MOVE_GREAT_WORK,params)\nprint('[JAC_NATIVE_CROSS_FREE_REQUEST] actor='..Game.GetLocalPlayer()..' owner='..plan.Work.Owner..' free='..plan.Free..' result='..tostring(returned)..' srcCity='..donor:GetID()..' dstCity='..free:GetID())\nreturn 'cross-owner official MOVE requested; physical result unproven'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal donor=assert(CityManager.GetCityAt(plan.Work.X,plan.Work.Y))\nlocal free=assert(CityManager.GetCityAt(plan.X,plan.Y))\nlocal src=donor:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot)\nlocal dst=free:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot)\nlocal count=0;local found\nlocal owners,seen={},{}\nfor _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\nif not seen[plan.Free] then owners[#owners+1]=plan.Free end\nfor _,owner in ipairs(owners) do\n local p=Players[owner]\n if p then for _,city in p:GetCities():Members() do\n  local b=city:GetBuildings()\n  for def in GameInfo.Buildings() do if b:HasBuilding(def.Index) then\n   for slot=0,b:GetNumGreatWorkSlots(def.Index)-1 do if b:GetGreatWorkInSlot(def.Index,slot)==plan.WorkIndex then count=count+1;found={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot} end end\n  end end\n end end\nend\nExposedMembers.JAC_CrossFreePhysical={Count=count,Found=found,Source=src,Dest=dst}\nprint('[JAC_NATIVE_CROSS_FREE_PHYSICAL] count='..count..' source='..tostring(src)..' dest='..tostring(dst)..' owner='..tostring(found and found.Owner))\nreturn 'cross-owner work physical scan count='..count..' source='..tostring(src)..' dest='..tostring(dst)"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-cross-freecity-move-probe"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal result=assert(ExposedMembers.JAC_CrossFreePhysical)\nassert(result.Count==1 and result.Source==-1 and result.Dest==plan.WorkIndex,'cross-owner MOVE did not physically put original work in Free Cities Temple')\nlocal found=assert(result.Found)\nassert(found.Owner==plan.Free and found.City==plan.ID and found.X==plan.X and found.Y==plan.Y and found.Building==plan.Building and found.Slot==plan.Slot,'cross-owner MOVE reached a different slot')\nreturn 'same original index moved directly to the exact Free Cities Temple'"
+    }
+  ]
+}

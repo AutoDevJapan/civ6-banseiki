@@ -159,8 +159,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "JAC_ABSORPTION_PHASE=coroutine.create(function()\nlocal A=assert(ExposedMembers.JAC_Absorption);local R=A.Rules\nlocal from,to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()\n if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman() and to==Game.GetLocalPlayer(),'AI Ashina and human Oda required')\nassert(#PlayerManager.GetAliveMajors()==22 and Players[from]:GetCities():GetCount()>=2,'Japan houses or Ashina cities missing')\nlocal count=0\nfor def in GameInfo.HeroClasses() do\n count=count+1\n assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','non-Banseiki Hero class enabled')\nend\nassert(count==2,'expected exactly two Banseiki native Heroes')\nlocal def=assert(GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'])\nassert(def.UnitType=='UNIT_HERO_JAC_WARLORD_A','custom native Hero definition missing')\nlocal manager=assert(A.GetHeroesManager());assert(manager:GetHeroClaimPlayer(def.Index)==-1,'test Hero already claimed')\nlocal city=assert(Players[from]:GetCities():GetCapitalCity())\nlocal building=manager:GetPlayerHeroOriginBuildingType(from)\nif not city:GetBuildings():HasBuilding(building) then city:GetBuildQueue():CreateIncompleteBuilding(building,Map.GetPlot(city:GetX(),city:GetY()):GetIndex(),100) end\nassert(city:GetBuildings():HasBuilding(building),'Hero origin building missing')\nlocal before={}\nfor _,u in Players[from]:GetUnits():Members() do before[u:GetID()]=true end\nmanager:SetHeroDiscovered(from,def.Index,true)\nmanager:CreateHero(from,def.Index,city:GetX(),city:GetY())\nlocal hero\nfor _,u in Players[from]:GetUnits():Members() do\n if not before[u:GetID()] and u:IsHero() and u:GetHeroClassType()==def.Index then assert(not hero,'multiple new Heroes');hero=u end\nend\nassert(hero,'custom native Hero creation failed')\nif Game.GetHeroesManager().GetHeroClaimPlayer==nil then\n Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='FIXTURE',Token='fixture:'..def.Index..':'..hero:GetID(),Class=def.Index})\n coroutine.yield('waiting for native fixture UI publication')\nend\n\nlocal lifeKey=assert(ExposedMembers.JAC_HeroLifespanKey)\nhero:SetProperty(lifeKey,19);hero:ChangeActionCharges(2-hero:GetActionCharges())\nlocal record={ID='recall:person',Kind='HERO',Owner=from,Unit={Owner=from,ID=hero:GetID()},\n Contract='RECONTRACT',Loyalty=71,Relations={friend=29},Lifespan=19}\nhero:SetProperty(R.PERSON_KEY,record)\nPlayers[from]:SetProperty(R.ROSTER_KEY,{[record.ID]=record})\nlocal plan={ID='japan-human-recall',From=from,To=to,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,\n Leader='RECRUIT',Units={},Assets={[record.ID]='RECONTRACT'}}\nfor _,u in Players[from]:GetUnits():Members() do\n local snap=A.SnapshotUnit(u)\n plan.Units[R.UnitKey(from,u:GetID())]=snap.Kind=='HERO' and 'RECONTRACT'\n   or snap.Kind=='PERSON' and 'RECRUIT' or snap.Kind=='GREAT_PERSON' and 'RECRUIT' or 'INCORPORATE'\nend\nlocal function works()\n local result={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\n local ids={}\n for _,owner in ipairs({from,to}) do for id in pairs(A.OwnedGreatWorks(owner)) do ids[id]=true end end\n for id in pairs(ids) do\n  result.Total=result.Total+1\n  if result.HeroCountAvailable then\n   local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n   if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then result.Hero=result.Hero+1 end\n  end\n end\n return result\nend\nGame:SetProperty('JAC_ABSORPTION_RECALL_PLAN_V1',plan)\nlocal costBefore=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,GameInfo.Units[def.UnitType].Hash)\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',{From=from,To=to,Class=def.Index,RecordID=record.ID,\n  OriginalID=hero:GetID(),Before=works(),CostBeforeAbsorption=costBefore})\nreturn 'custom native warlord seeded for human Oda inheritance'\nend)\nif JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' "
+      "state_name": "JAC_Absorption_Entry",
+      "code": "JAC_ABSORPTION_PHASE=coroutine.create(function()\nlocal A=assert(JAC_AbsorptionGameplay);local R=A.Rules\nlocal from,to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()\n if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman() and to==Game.GetLocalPlayer(),'AI Ashina and human Oda required')\nassert(#PlayerManager.GetAliveMajors()==22 and Players[from]:GetCities():GetCount()>=2,'Japan houses or Ashina cities missing')\nlocal count=0\nfor def in GameInfo.HeroClasses() do\n count=count+1\n assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','non-Banseiki Hero class enabled')\nend\nassert(count==2,'expected exactly two Banseiki native Heroes')\nlocal def=assert(GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'])\nassert(def.UnitType=='UNIT_HERO_JAC_WARLORD_A','custom native Hero definition missing')\nlocal manager=assert(A.GetHeroesManager());assert(manager:GetHeroClaimPlayer(def.Index)==-1,'test Hero already claimed')\nlocal city=assert(Players[from]:GetCities():GetCapitalCity())\nlocal building=manager:GetPlayerHeroOriginBuildingType(from)\nif not city:GetBuildings():HasBuilding(building) then city:GetBuildQueue():CreateIncompleteBuilding(building,Map.GetPlot(city:GetX(),city:GetY()):GetIndex(),100) end\nassert(city:GetBuildings():HasBuilding(building),'Hero origin building missing')\nlocal before={}\nfor _,u in Players[from]:GetUnits():Members() do before[u:GetID()]=true end\nmanager:SetHeroDiscovered(from,def.Index,true)\nmanager:CreateHero(from,def.Index,city:GetX(),city:GetY())\nlocal hero\nfor _,u in Players[from]:GetUnits():Members() do\n if not before[u:GetID()] and u:IsHero() and u:GetHeroClassType()==def.Index then assert(not hero,'multiple new Heroes');hero=u end\nend\nassert(hero,'custom native Hero creation failed')\nif Game.GetHeroesManager().GetHeroClaimPlayer==nil then\n Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='FIXTURE',Token='fixture:'..def.Index..':'..hero:GetID(),Class=def.Index})\n coroutine.yield('waiting for native fixture UI publication')\nend\n\nlocal lifeKey=assert(ExposedMembers.JAC_HeroLifespanKey)\nhero:SetProperty(lifeKey,19);hero:ChangeActionCharges(2-hero:GetActionCharges())\nlocal record={ID='recall:person',Kind='HERO',Owner=from,Unit={Owner=from,ID=hero:GetID()},\n Contract='RECONTRACT',Loyalty=71,Relations={friend=29},Lifespan=19}\nhero:SetProperty(R.PERSON_KEY,record)\nPlayers[from]:SetProperty(R.ROSTER_KEY,{[record.ID]=record})\nlocal plan={ID='japan-human-recall',From=from,To=to,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,\n Leader='RECRUIT',Units={},Assets={[record.ID]='RECONTRACT'}}\nfor _,u in Players[from]:GetUnits():Members() do\n local snap=A.SnapshotUnit(u)\n plan.Units[R.UnitKey(from,u:GetID())]=snap.Kind=='HERO' and 'RECONTRACT'\n   or snap.Kind=='PERSON' and 'RECRUIT' or snap.Kind=='GREAT_PERSON' and 'RECRUIT' or 'INCORPORATE'\nend\nlocal function works()\n local result={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\n local ids={}\n for _,owner in ipairs({from,to}) do for id in pairs(A.OwnedGreatWorks(owner)) do ids[id]=true end end\n for id in pairs(ids) do\n  result.Total=result.Total+1\n  if result.HeroCountAvailable then\n   local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n   if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then result.Hero=result.Hero+1 end\n  end\n end\n return result\nend\nGame:SetProperty('JAC_ABSORPTION_RECALL_PLAN_V1',plan)\nlocal costBefore=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,GameInfo.Units[def.UnitType].Hash)\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',{From=from,To=to,Class=def.Index,RecordID=record.ID,\n  OriginalID=hero:GetID(),Before=works(),CostBeforeAbsorption=costBefore})\nreturn 'custom native warlord seeded for human Oda inheritance'\nend)\nif JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' "
     },
     {
       "action": "wait_for",
@@ -173,14 +173,14 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n assert(coroutine.status(JAC_ABSORPTION_PHASE)=='dead','fixture or transfer exceeded publication phases');return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_1"
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local function ApplyAndWait(plan)\n local A=ExposedMembers.JAC_Absorption\n for _,city in Players[plan.From]:GetCities():Members() do\n  assert(next(A.CityAssets(city).Districts),'native district fixture absent')\n end\n local tx=A.Apply(plan)\n while tx.Status=='WAITING_UI' do\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='TRANSFER',ID=plan.ID})\n  coroutine.yield('waiting for native transfer UI publication')\n  tx=A.Resume(plan.ID)\n end\n local request=A.RequestVerification(plan.ID)\n if request then\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='VERIFY',ID=plan.ID})\n  coroutine.yield('waiting for native verification UI publication')\n end\n return tx\nend\nJAC_ABSORPTION_PHASE=coroutine.create(function()\nlocal A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=ApplyAndWait(assert(Game:GetProperty('JAC_ABSORPTION_RECALL_PLAN_V1')))\nassert(tx.Status=='COMPLETE' and A.Verify(tx.ID,true),'native Hero absorption failed')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID])\nassert(record.Outcome=='RECONTRACT' and record.Contract=='RECONTRACT' and record.Loyalty==71 and record.Relations.friend==29,'Hero became suicide or lost person state')\nassert(record.Unit.ID~=e.OriginalID and A.FindUnit(e.To,record.Unit.Token),'replacement native Hero missing')\nlocal works={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\nfor id in pairs(A.OwnedGreatWorks(e.To)) do\n works.Total=works.Total+1\n if works.HeroCountAvailable then\n  local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n  if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then works.Hero=works.Hero+1 end\n end\nend\nassert(works.Total>=e.Before.Total and (not works.HeroCountAvailable or works.Hero>=e.Before.Hero),'Hero Great Works lost on absorption')\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal def=assert(GameInfo.HeroClasses[e.Class])\ne.CostAfterTransfer=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,GameInfo.Units[def.UnitType].Hash)\ne.TransferID=record.Unit.ID;e.AfterTransfer=works\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'Hero transferred; Great Works total '..e.Before.Total..' -> '..works.Total..', Hero '..e.Before.Hero..' -> '..works.Hero..'; cost '..tostring(e.CostBeforeAbsorption)..' -> '..tostring(e.CostAfterTransfer)\nend)\nif JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' "
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local function ApplyAndWait(plan)\n local A=JAC_AbsorptionGameplay\n for _,city in Players[plan.From]:GetCities():Members() do\n  assert(next(A.CityAssets(city).Districts),'native district fixture absent')\n end\n local tx=A.Apply(plan)\n while tx.Status=='WAITING_UI' do\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='TRANSFER',ID=plan.ID})\n  coroutine.yield('waiting for native transfer UI publication')\n  tx=A.Resume(plan.ID)\n end\n local request=A.RequestVerification(plan.ID)\n if request then\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='VERIFY',ID=plan.ID})\n  coroutine.yield('waiting for native verification UI publication')\n end\n return tx\nend\nJAC_ABSORPTION_PHASE=coroutine.create(function()\nlocal A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=ApplyAndWait(assert(Game:GetProperty('JAC_ABSORPTION_RECALL_PLAN_V1')))\nassert(tx.Status=='COMPLETE' and A.Verify(tx.ID,true),'native Hero absorption failed')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID])\nassert(record.Outcome=='RECONTRACT' and record.Contract=='RECONTRACT' and record.Loyalty==71 and record.Relations.friend==29,'Hero became suicide or lost person state')\nassert(record.Unit.ID~=e.OriginalID and A.FindUnit(e.To,record.Unit.Token),'replacement native Hero missing')\nlocal works={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\nfor id in pairs(A.OwnedGreatWorks(e.To)) do\n works.Total=works.Total+1\n if works.HeroCountAvailable then\n  local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n  if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then works.Hero=works.Hero+1 end\n end\nend\nassert(works.Total>=e.Before.Total and (not works.HeroCountAvailable or works.Hero>=e.Before.Hero),'Hero Great Works lost on absorption')\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal def=assert(GameInfo.HeroClasses[e.Class])\ne.CostAfterTransfer=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,GameInfo.Units[def.UnitType].Hash)\ne.TransferID=record.Unit.ID;e.AfterTransfer=works\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'Hero transferred; Great Works total '..e.Before.Total..' -> '..works.Total..', Hero '..e.Before.Hero..' -> '..works.Hero..'; cost '..tostring(e.CostBeforeAbsorption)..' -> '..tostring(e.CostAfterTransfer)\nend)\nif JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' "
     },
     {
       "action": "wait_for",
@@ -193,7 +193,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_1"
     },
@@ -208,7 +208,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_2"
     },
@@ -223,7 +223,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_3"
     },
@@ -238,7 +238,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_4"
     },
@@ -253,7 +253,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_5"
     },
@@ -268,7 +268,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_6"
     },
@@ -283,7 +283,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_7"
     },
@@ -298,7 +298,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_8"
     },
@@ -313,7 +313,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_9"
     },
@@ -328,7 +328,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_10"
     },
@@ -343,7 +343,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_11"
     },
@@ -358,7 +358,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_12"
     },
@@ -373,7 +373,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_13"
     },
@@ -388,7 +388,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_14"
     },
@@ -403,7 +403,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_15"
     },
@@ -418,7 +418,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_16"
     },
@@ -433,7 +433,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_17"
     },
@@ -448,7 +448,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_18"
     },
@@ -463,7 +463,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_19"
     },
@@ -478,7 +478,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_20"
     },
@@ -493,7 +493,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_21"
     },
@@ -508,7 +508,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_22"
     },
@@ -523,7 +523,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_23"
     },
@@ -538,7 +538,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_24"
     },
@@ -553,7 +553,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_25"
     },
@@ -568,7 +568,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_26"
     },
@@ -583,7 +583,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_27"
     },
@@ -598,7 +598,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_28"
     },
@@ -613,7 +613,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_29"
     },
@@ -628,7 +628,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_30"
     },
@@ -643,7 +643,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_31"
     },
@@ -658,7 +658,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n assert(coroutine.status(JAC_ABSORPTION_PHASE)=='dead','fixture or transfer exceeded publication phases');return tostring(v)\nend\nreturn 'phase already complete' ",
       "capture_as": "JAC_ABSORPTION_SYNC_32"
     },
@@ -685,9 +685,9 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "capture_as": "JAC_ABSORPTION_SYNC_VERIFY_1",
-      "code": "local A=ExposedMembers.JAC_Absorption;A.RequestVerification('japan-human-recall');return 'verification requested'"
+      "code": "local A=JAC_AbsorptionGameplay;A.RequestVerification('japan-human-recall');return 'verification requested'"
     },
     {
       "action": "wait_for",
@@ -700,8 +700,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(A.Verify('japan-human-recall',true) and A.GetRoster(e.To)[e.RecordID].Unit.ID==e.TransferID,'save/load changed native Hero')\nreturn 'same-turn Hero transfer survived save/load'"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(A.Verify('japan-human-recall',true) and A.GetRoster(e.To)[e.RecordID].Unit.ID==e.TransferID,'save/load changed native Hero')\nreturn 'same-turn Hero transfer survived save/load'"
     },
     {
       "action": "end_turn",
@@ -719,8 +719,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=A.GetState().Transactions['japan-human-recall']\nassert(Game.GetCurrentGameTurn()>tx.Turn,'real turn did not advance')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID]);local unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(unit:GetProperty(ExposedMembers.JAC_HeroLifespanKey)==19-(Game.GetCurrentGameTurn()-tx.Turn),'native lifespan did not advance')\nUnitManager.Kill(unit)\nassert(A.GetHeroesManager():GetHeroClaimPlayer(e.Class)==e.To,'Hero claim lost on retirement')\ne.PreRecallEra=Game.GetEras():GetCurrentEra()\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'native Hero retired after one real turn; waiting for global era boundary'"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal tx=A.GetState().Transactions['japan-human-recall']\nassert(Game.GetCurrentGameTurn()>tx.Turn,'real turn did not advance')\nlocal record=assert(A.GetRoster(e.To)[e.RecordID]);local unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(unit:GetProperty(ExposedMembers.JAC_HeroLifespanKey)==19-(Game.GetCurrentGameTurn()-tx.Turn),'native lifespan did not advance')\nUnitManager.Kill(unit)\nassert(A.GetHeroesManager():GetHeroClaimPlayer(e.Class)==e.To,'Hero claim lost on retirement')\ne.PreRecallEra=Game.GetEras():GetCurrentEra()\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'native Hero retired after one real turn; waiting for global era boundary'"
     },
     {
       "action": "autoplay",
@@ -730,13 +730,13 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.To]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.To and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal class=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType].FormationClass)\nlocal blockers={}\nfor _,u in Players[e.To]:GetUnits():Members() do\n if u:GetX()==city:GetX() and u:GetY()==city:GetY() and GameInfo.Units[u:GetType()].FormationClass==class then blockers[#blockers+1]=u end\nend\ntable.sort(blockers,function(a,b) return a:GetID()<b:GetID() end)\nfor _,u in ipairs(blockers) do\n local placed=false;local damage=u:GetDamage();local moves=u:GetMovesRemaining()\n for x=city:GetX()-6,city:GetX()+6 do\n  for y=city:GetY()-6,city:GetY()+6 do\n   local plot=Map.GetPlot(x,y)\n   if not placed and plot and plot:GetOwner()==e.To and not plot:IsWater() and not plot:IsImpassable() and (x~=city:GetX() or y~=city:GetY()) then\n    local units=Map.GetUnitsAt(plot)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(u,x,y)\n     if u:GetX()==x and u:GetY()==y then u:SetDamage(damage);u:ChangeMovesRemaining(moves-u:GetMovesRemaining());placed=true end\n    end\n   end\n  end\n end\n assert(placed,'no empty owned plot for recall spawn blocker '..u:GetID())\nend\nreturn 'recall spawn blockers relocated without deletion: '..#blockers"
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.PreRecallEra,'global era boundary not processed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'global era advanced through test-mode autoplay; recall intent saved'"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nassert(Game.GetEras():GetCurrentEra()>e.PreRecallEra,'global era boundary not processed')\nPlayers[e.To]:GetReligion():ChangeFaithBalance(1000000)\nA.BeginHeroRecall('japan-human-recall:1','japan-human-recall',e.RecordID)\nreturn 'global era advanced through test-mode autoplay; recall intent saved'"
     },
     {
       "action": "wait_for",
@@ -749,9 +749,9 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "capture_as": "JAC_ABSORPTION_SYNC_RECALL_COST",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class));local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal native=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType])\nlocal cost=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,native.Hash)\nlocal balance=A.PlayerFaithBalance(e.To)\nassert(type(cost)=='number' and cost>0 and type(balance)=='number' and balance>=cost,'recall snapshot faith/cost invalid')\nGame:SetProperty('JAC_ABSORPTION_RECALL_COST_V1',{CostBefore=cost,FaithBefore=balance})\nreturn 'recall cost and faith snapshot saved in gameplay'"
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class));local city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal native=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType])\nlocal cost=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,native.Hash)\nlocal balance=A.PlayerFaithBalance(e.To)\nassert(type(cost)=='number' and cost>0 and type(balance)=='number' and balance>=cost,'recall snapshot faith/cost invalid')\nGame:SetProperty('JAC_ABSORPTION_RECALL_COST_V1',{CostBefore=cost,FaithBefore=balance})\nreturn 'recall cost and faith snapshot saved in gameplay'"
     },
     {
       "action": "wait_for",
@@ -778,9 +778,9 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "capture_as": "JAC_ABSORPTION_SYNC_VERIFY_2",
-      "code": "local A=ExposedMembers.JAC_Absorption;A.CompleteHeroRecall('japan-human-recall:1');A.RequestVerification('japan-human-recall');return 'verification requested'"
+      "code": "local A=JAC_AbsorptionGameplay;A.CompleteHeroRecall('japan-human-recall:1');A.RequestVerification('japan-human-recall');return 'verification requested'"
     },
     {
       "action": "wait_for",
@@ -793,8 +793,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal cost=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_COST_V1'))\nlocal record=assert(A.GetRoster(e.To)[e.RecordID])\nlocal unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(record.Unit.ID==unit:GetID() and unit:GetID()~=e.TransferID,'new recall Unit ID not bound')\nassert(record.FormerUnit.ID==e.TransferID and record.Contract=='RECONTRACT' and record.Loyalty==71\n and record.Relations.friend==29,'recalled person identity changed')\nassert(unit:GetProperty(A.Rules.PERSON_KEY).Unit.ID==unit:GetID(),'native Unit/person record not reattached')\nassert(A.Verify('japan-human-recall',false),'completed recall not verified')\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal native=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType])\nlocal costAfter=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,native.Hash)\nlocal faithAfter=A.PlayerFaithBalance(e.To)\nlocal works={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\nfor id in pairs(A.OwnedGreatWorks(e.To)) do\n works.Total=works.Total+1\n if works.HeroCountAvailable then\n  local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n  if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then works.Hero=works.Hero+1 end\n end\nend\nassert(cost.FaithBefore-faithAfter==cost.CostBefore,'native recall faith payment changed')\nassert(works.Total>=e.AfterTransfer.Total and\n (not works.HeroCountAvailable or works.Hero>=e.AfterTransfer.Hero),'Hero Great Works lost on recall')\ne.RecallID=unit:GetID();e.AfterRecall=works;e.FaithAfter=faithAfter;e.CostAfter=costAfter\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'recall bound new Unit '..unit:GetID()..'; faith spent='..(cost.FaithBefore-faithAfter)..\n '; purchase cost before='..cost.CostBefore..', after='..tostring(costAfter)..'; Great Works total '..e.AfterTransfer.Total..' -> '..works.Total..\n ', Hero '..e.AfterTransfer.Hero..' -> '..works.Hero"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal cost=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_COST_V1'))\nlocal record=assert(A.GetRoster(e.To)[e.RecordID])\nlocal unit=assert(A.FindUnit(e.To,record.Unit.Token))\nassert(record.Unit.ID==unit:GetID() and unit:GetID()~=e.TransferID,'new recall Unit ID not bound')\nassert(record.FormerUnit.ID==e.TransferID and record.Contract=='RECONTRACT' and record.Loyalty==71\n and record.Relations.friend==29,'recalled person identity changed')\nassert(unit:GetProperty(A.Rules.PERSON_KEY).Unit.ID==unit:GetID(),'native Unit/person record not reattached')\nassert(A.Verify('japan-human-recall',false),'completed recall not verified')\nlocal origin=assert(A.GetHeroesManager():GetHeroOriginCityID(e.Class))\nlocal city=assert(Players[e.To]:GetCities():FindID(origin.id))\nlocal native=assert(GameInfo.Units[GameInfo.HeroClasses[e.Class].UnitType])\nlocal costAfter=A.CityPurchaseCost(city,GameInfo.Yields['YIELD_FAITH'].Index,native.Hash)\nlocal faithAfter=A.PlayerFaithBalance(e.To)\nlocal works={Total=0,Hero=0,HeroCountAvailable=Game.GetGreatWorkType~=nil}\nfor id in pairs(A.OwnedGreatWorks(e.To)) do\n works.Total=works.Total+1\n if works.HeroCountAvailable then\n  local kind=GameInfo.GreatWorks[Game.GetGreatWorkType(id)]\n  if kind and kind.GreatWorkObjectType=='GREATWORKOBJECT_HERO' then works.Hero=works.Hero+1 end\n end\nend\nassert(cost.FaithBefore-faithAfter==cost.CostBefore,'native recall faith payment changed')\nassert(works.Total>=e.AfterTransfer.Total and\n (not works.HeroCountAvailable or works.Hero>=e.AfterTransfer.Hero),'Hero Great Works lost on recall')\ne.RecallID=unit:GetID();e.AfterRecall=works;e.FaithAfter=faithAfter;e.CostAfter=costAfter\nGame:SetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1',e)\nreturn 'recall bound new Unit '..unit:GetID()..'; faith spent='..(cost.FaithBefore-faithAfter)..\n '; purchase cost before='..cost.CostBefore..', after='..tostring(costAfter)..'; Great Works total '..e.AfterTransfer.Total..' -> '..works.Total..\n ', Hero '..e.AfterTransfer.Hero..' -> '..works.Hero"
     },
     {
       "action": "save",
@@ -819,9 +819,9 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
+      "state_name": "JAC_Absorption_Entry",
       "capture_as": "JAC_ABSORPTION_SYNC_VERIFY_3",
-      "code": "local A=ExposedMembers.JAC_Absorption;A.RequestVerification('japan-human-recall');return 'verification requested'"
+      "code": "local A=JAC_AbsorptionGameplay;A.RequestVerification('japan-human-recall');return 'verification requested'"
     },
     {
       "action": "wait_for",
@@ -834,8 +834,8 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "GameCore_Tuner",
-      "code": "local A=assert(ExposedMembers.JAC_Absorption);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal r=A.GetRoster(e.To)[e.RecordID];local u=assert(A.FindUnit(e.To,r.Unit.Token))\nassert(r.Unit.ID==e.RecallID and u:GetID()==e.RecallID and #r.RecallHistory==1,'recalled identity changed after load')\nassert(r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29,'person state lost after load')\nassert(A.Verify('japan-human-recall',false),'recalled absorption failed after load')\nreturn 'real native recall and person record survived save/load'"
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_RECALL_EXPECT_V1'))\nlocal r=A.GetRoster(e.To)[e.RecordID];local u=assert(A.FindUnit(e.To,r.Unit.Token))\nassert(r.Unit.ID==e.RecallID and u:GetID()==e.RecallID and #r.RecallHistory==1,'recalled identity changed after load')\nassert(r.Contract=='RECONTRACT' and r.Loyalty==71 and r.Relations.friend==29,'person state lost after load')\nassert(A.Verify('japan-human-recall',false),'recalled absorption failed after load')\nreturn 'real native recall and person record survived save/load'"
     }
   ],
   "test_mode": {

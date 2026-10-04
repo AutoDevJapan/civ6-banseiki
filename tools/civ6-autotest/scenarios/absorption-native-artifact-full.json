@@ -1,0 +1,538 @@
+{
+  "name": "PR96 genuine excavation into full archaeology museum and original direct MOVE",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);GameConfiguration.SetValue('JAC_ABSORPTION_ARTIFACT_TEST',1);assert(GameConfiguration.GetValue('JAC_ABSORPTION_ARTIFACT_TEST')==1,'archaeology test opt-in not saved');return 'fresh archaeology test game explicitly configured'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer();return p and p>=0 and Players[p] and Players[p]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "state_name": "InGame",
+      "code": "local owner=Game.GetLocalPlayer()\nlocal player=assert(Players[owner])\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nlocal museumArt=assert(GameInfo.Buildings.BUILDING_MUSEUM_ART).Index\nlocal function prepare(city)\n assert(city:GetOwner()==owner,'fixture city not locally owned')\n assert(not city:GetBuildings():HasBuilding(museumArt),'mutually exclusive artifact museum')\n local site,present\n for _,district in city:GetDistricts():Members() do\n  if district:GetType()==theater then\n   assert(district:IsComplete(),'existing Theatre is incomplete')\n   site=assert(Map.GetPlot(district:GetX(),district:GetY()));present=true\n  end\n end\n if not site then\n  local ids={}\n  for _,index in pairs(assert(Map.GetCityPlots():GetPurchasedPlots(city))) do ids[#ids+1]=index end\n  table.sort(ids)\n  for _,index in ipairs(ids) do local q=Map.GetPlotByIndex(index)\n   if q and q:GetOwner()==owner and Cities.GetPlotPurchaseCity(q)==city\n     and Map.GetPlotDistance(city:GetX(),city:GetY(),q:GetX(),q:GetY())<=3\n     and q:GetDistrictType()==-1 and q:GetImprovementType()==-1\n     and not q:IsCity() and not q:IsWater() and not q:IsMountain()\n     and not q:IsImpassable() and not q:IsNaturalWonder() then site=q;break end\n  end\n end\n assert(site,'fixture city has no purchased Theatre plot')\n local t={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plot=site:GetIndex(),TheaterPresent=present}\n print('[JAC_ARTWORK_THEATER_PLAN] owner='..owner..' city='..t.City..' plot='..t.Plot..' present='..tostring(present))\n return t\nend\nlocal cities={}\nfor _,city in player:GetCities():Members() do\n local art=city:GetBuildings():HasBuilding(museumArt)\n print('[JAC_ARTIFACT_CITY_CANDIDATE] city='..city:GetID()..' artMuseum='..tostring(art))\n if not art then cities[#cities+1]=city end\nend\ntable.sort(cities,function(a,b) return a:GetID()<b:GetID() end)\nassert(#cities>=2,'two distinct locally owned cities without art museums required; count='..#cities)\nlocal plan={Owner=owner,Fixtures={}}\nplan.Fixtures.artifact_source=prepare(cities[1])\nplan.Fixtures.artifact_target=prepare(cities[2])\nExposedMembers.JAC_ArtworkPlan=plan\nreturn 'two exact archaeology museum cities selected without replacing art originals'",
+      "action": "ui_lua"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(ExposedMembers.JAC_ArtworkPlan,'UI Theatre plan missing')\nassert(plan.Owner==Game.GetLocalPlayer(),'Theatre plan owner mismatch')\nlocal t=assert(plan.Fixtures.artifact_source)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'Theatre city identity changed')\nif not t.TheaterPresent then\n city:GetBuildQueue():CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_THEATER).Index,t.Plot,100)\nend\nGame:SetProperty('JAC_ARTWORK_CASE_PLAN',JAC_AbsorptionGameplay.Rules.Copy(plan))\nreturn 'requested real capital Theatre on its purchased plot'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_source\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nfor _,district in city:GetDistricts():Members() do\n local q=Map.GetPlot(district:GetX(),district:GetY())\n if district:GetType()==theater and q and q:GetIndex()==t.Plot then\n  return district:IsComplete() and not city:GetDistricts():IsPillaged(theater,t.Plot)\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.artifact_source\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'amphitheater city changed')\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested real amphitheater in capital Theatre'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_source\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nreturn at and b:HasBuilding(kind) and not b:IsPillaged(kind)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.artifact_source\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'art museum city changed')\nlocal definition=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT)\nlocal kind=definition.Index\nprint('[JAC_ARTWORK_MUSEUM_SETUP] internal='..tostring(definition.InternalOnly)..' civic='..tostring(definition.PrereqCivic)..' building='..kind)\nassert(not city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ART.Index),\n 'mutually exclusive artifact museum exists')\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested test-only art museum through real city build queue; await actual slots'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_source\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nif not at or not b:HasBuilding(kind) or b:IsPillaged(kind)\n  or b:GetNumGreatWorkSlots(kind)~=3 then return false end\nfor slot=0,2 do\n local row=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(kind,slot)]\n if not row or row.GreatWorkSlotType~='GREATWORKSLOT_ARTIFACT' then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(ExposedMembers.JAC_ArtworkPlan,'UI Theatre plan missing')\nassert(plan.Owner==Game.GetLocalPlayer(),'Theatre plan owner mismatch')\nlocal t=assert(plan.Fixtures.artifact_target)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'Theatre city identity changed')\nif not t.TheaterPresent then\n city:GetBuildQueue():CreateIncompleteDistrict(assert(GameInfo.Districts.DISTRICT_THEATER).Index,t.Plot,100)\nend\nGame:SetProperty('JAC_ARTWORK_CASE_PLAN',JAC_AbsorptionGameplay.Rules.Copy(plan))\nreturn 'requested real capital Theatre on its purchased plot'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal theater=assert(GameInfo.Districts.DISTRICT_THEATER).Index\nfor _,district in city:GetDistricts():Members() do\n local q=Map.GetPlot(district:GetX(),district:GetY())\n if district:GetType()==theater and q and q:GetIndex()==t.Plot then\n  return district:IsComplete() and not city:GetDistricts():IsPillaged(theater,t.Plot)\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.artifact_target\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'amphitheater city changed')\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested real amphitheater in capital Theatre'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_AMPHITHEATER).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nreturn at and b:HasBuilding(kind) and not b:IsPillaged(kind)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.artifact_target\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'art museum city changed')\nlocal definition=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT)\nlocal kind=definition.Index\nprint('[JAC_ARTWORK_MUSEUM_SETUP] internal='..tostring(definition.InternalOnly)..' civic='..tostring(definition.PrereqCivic)..' building='..kind)\nassert(not city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ART.Index),\n 'mutually exclusive artifact museum exists')\nif not city:GetBuildings():HasBuilding(kind) then\n city:GetBuildQueue():CreateIncompleteBuilding(kind,t.Plot,100)\nend\nreturn 'requested test-only art museum through real city build queue; await actual slots'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nif not plan then return false end\nlocal t=plan.Fixtures.artifact_target\nlocal city=CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City then return false end\nlocal kind=assert(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT).Index\nlocal b=city:GetBuildings();local at=false\nfor _,index in ipairs(b:GetBuildingsAtLocation(t.Plot)) do if index==kind then at=true end end\nif not at or not b:HasBuilding(kind) or b:IsPillaged(kind)\n  or b:GetNumGreatWorkSlots(kind)~=3 then return false end\nfor slot=0,2 do\n local row=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(kind,slot)]\n if not row or row.GreatWorkSlotType~='GREATWORKSLOT_ARTIFACT' then return false end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "-- Civics.xml defines this retained engine modifier; BlackDeathScenario uses AttachModifierByID.\n-- This is site preparation only, never an artifact-work or carrier success claim.\nlocal key='CIVIC_GENERATE_LAND_ANTIQUITIES'\nlocal row=assert(GameInfo.Modifiers[key],key..' removed from active Gameplay database')\nassert(row.ModifierType=='MODIFIER_GAME_TRIGGER_MECHANIC','land antiquity modifier changed type')\nassert(not Game:GetProperty('JAC_ARTWORK_LAND_TRIGGER'),'land antiquity trigger already attempted')\nlocal resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal function count()\n local sites,records=0,0\n for index=0,Map.GetPlotCount()-1 do\n  local q=Map.GetPlotByIndex(index)\n  if q and q:GetResourceType()==resource then\n   sites=sites+1\n   if Game.GetArtifactAtPlot then\n    local ok,value=pcall(Game.GetArtifactAtPlot,index)\n    if ok and value then records=records+1 end\n   end\n  end\n end\n return sites,records\nend\nlocal before,records=count()\nlocal player=assert(Players[Game.GetLocalPlayer()])\nassert(type(player.AttachModifierByID)=='function','official AttachModifierByID absent')\nplayer:AttachModifierByID(key)\nGame:SetProperty('JAC_ARTWORK_LAND_TRIGGER',{Modifier=key,Before=before,BeforeRecords=records,\n Turn=Game.GetCurrentGameTurn()})\nprint('[JAC_ARTWORK_LAND_TRIGGER] modifier='..key..' beforeSites='..before..' beforeRecords='..records)\nreturn 'existing land antiquity mechanic attached once; await actual map records'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "state_name": "InGame",
+      "action": "ui_lua",
+      "code": "local owner=Game.GetLocalPlayer()\nlocal resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal candidates={}\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==resource and q:GetOwner()>=0 and q:GetOwner()~=owner\n  and not q:IsWater() and not q:IsImpassable() and Game.GetArtifactAtPlot(index) then\n  local units=Map.GetUnitsAt(q)\n  local city=Cities.GetPlotPurchaseCity(q)\n  if city and (not units or units:GetCount()==0) then\n   local key=city:GetOwner()..':'..city:GetID()\n   local t=candidates[key] or {Owner=city:GetOwner(),City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots={}}\n   t.Plots[#t.Plots+1]=index;candidates[key]=t\n  end\n end\nend\nlocal options={};local groups,blocked,works=0,0,0\nfor _,t in pairs(candidates) do\n groups=groups+1\n local city=assert(CityManager.GetCityAt(t.X,t.Y))\n local units=Map.GetUnitsAt(assert(Map.GetPlot(t.X,t.Y)))\n if groups<=12 then print('[JAC_ARTIFACT_SITE_CITY_CANDIDATE] owner='..t.Owner..' city='..t.City..' sites='..#t.Plots..' centerUnits='..(units and units:GetCount() or 0)) end\n if units and units:GetCount()>0 then blocked=blocked+1 end\n local cityCount=0\n for _,ownedCity in Players[t.Owner]:GetCities():Members() do cityCount=cityCount+1 end\n t.CityCount=cityCount\n if #t.Plots>=1 and cityCount>1 then\n  local empty=true;local b=city:GetBuildings()\n  for definition in GameInfo.Buildings() do\n   if b:HasBuilding(definition.Index) then\n    for slot=0,b:GetNumGreatWorkSlots(definition.Index)-1 do\n     local work=b:GetGreatWorkInSlot(definition.Index,slot)\n     if work and work>=0 then empty=false end\n    end\n   end\n  end\n  t.CenterCount=units and units:GetCount() or 0\n  if empty then options[#options+1]=t else works=works+1 end\n end\nend\nprint('[JAC_ARTIFACT_SITE_CITY_OPTIONS] groups='..groups..' eligible='..#options..' centers='..blocked..' works='..works)\ntable.sort(options,function(a,b)\n if a.CenterCount~=b.CenterCount then return a.CenterCount<b.CenterCount end\n if #a.Plots~=#b.Plots then return #a.Plots>#b.Plots end\n if a.Owner~=b.Owner then return a.Owner<b.Owner end\n return a.City<b.City\nend)\nlocal t={To=owner,Cities={},Plots={},Records={}};local reserved={}\nfor _,candidate in ipairs(options) do\n local used=reserved[candidate.Owner] or 0\n if used+1<candidate.CityCount then\n  reserved[candidate.Owner]=used+1\n  t.Cities[#t.Cities+1]=candidate\n  for _,index in ipairs(candidate.Plots) do t.Plots[#t.Plots+1]=index end\n  if #t.Plots>=3 then break end\n end\nend\nassert(#t.Plots>=3,'no works-empty cities with a surviving donor and three recorded antiquities in total')\ntable.sort(t.Plots)\nfor _,index in ipairs(t.Plots) do\n local record=assert(Game.GetArtifactAtPlot(index))\n local copy={}\n for key,value in pairs(record) do\n  assert(type(value)=='number' or type(value)=='string' or type(value)=='boolean','non-scalar artifact field: '..tostring(key))\n  copy[key]=value\n end\n t.Records[tostring(index)]=copy\nend\nExposedMembers.JAC_ArtifactSiteCity=t\nprint('[JAC_ARTIFACT_SITE_CITY_PLAN] cities='..#t.Cities..' sites='..#t.Plots..' to='..owner)\nreturn 'selected real antiquity cities with movable center units and no existing works'"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua",
+      "code": "local t=assert(ExposedMembers.JAC_ArtifactSiteCity)\nlocal moved={}\nfor _,candidate in ipairs(t.Cities) do\n local city=assert(CityManager.GetCityAt(candidate.X,candidate.Y))\n assert(city:GetOwner()==candidate.Owner and city:GetID()==candidate.City,'antiquity city changed before transfer')\n local cityCount=0\n for _,ownedCity in Players[candidate.Owner]:GetCities():Members() do cityCount=cityCount+1 end\n assert(cityCount>1,'fixture would transfer donor last city')\n local blockers={}\n for _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n  for _,unit in Players[owner]:GetUnits():Members() do\n   if unit:GetX()==candidate.X and unit:GetY()==candidate.Y then\n    blockers[#blockers+1]={Owner=owner,ID=unit:GetID(),Type=unit:GetType(),Damage=unit:GetDamage(),Moves=unit:GetMovesRemaining()}\n   end\n  end\n end\n table.sort(blockers,function(a,b) if a.Owner~=b.Owner then return a.Owner<b.Owner end return a.ID<b.ID end)\n for _,entry in ipairs(blockers) do\n  local unit=assert(UnitManager.GetUnit(entry.Owner,entry.ID))\n  local placed=false\n  for x=candidate.X-6,candidate.X+6 do for y=candidate.Y-6,candidate.Y+6 do\n   local q=Map.GetPlot(x,y)\n   if not placed and q and q:GetOwner()==entry.Owner and not q:IsWater() and not q:IsImpassable()\n    and (x~=candidate.X or y~=candidate.Y) then\n    local units=Map.GetUnitsAt(q)\n    if not units or units:GetCount()==0 then\n     UnitManager.PlaceUnit(unit,x,y)\n     if unit:GetX()==x and unit:GetY()==y then\n      unit:SetDamage(entry.Damage)\n      unit:ChangeMovesRemaining(entry.Moves-unit:GetMovesRemaining())\n      assert(unit:GetOwner()==entry.Owner and unit:GetID()==entry.ID and unit:GetType()==entry.Type\n       and unit:GetDamage()==entry.Damage and unit:GetMovesRemaining()==entry.Moves,'fixture center unit state changed')\n      entry.X,entry.Y=x,y;moved[#moved+1]=entry;placed=true\n     end\n    end\n   end\n  end end\n  assert(placed,'no empty owned land to preserve city center unit '..entry.Owner..':'..entry.ID)\n end\n for _,owner in ipairs(PlayerManager.GetAliveIDs()) do\n  for _,unit in Players[owner]:GetUnits():Members() do\n   assert(unit:GetX()~=candidate.X or unit:GetY()~=candidate.Y,'antiquity city center remains occupied')\n  end\n end\n CityManager.TransferCity(city,t.To)\nend\nGame:SetProperty('JAC_ARTIFACT_SITE_CENTER_MOVED',moved)\nGame:SetProperty('JAC_ARTIFACT_SITE_CITY',JAC_AbsorptionGameplay.Rules.Copy(t))\nprint('[JAC_ARTIFACT_SITE_CENTER_MOVED] count='..#moved)\nreturn 'requested fixture city transfers after preserving center units; await unchanged artifact records'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_SITE_CITY')\nif not t then return false end\nfor _,candidate in ipairs(t.Cities) do\n local city=CityManager.GetCityAt(candidate.X,candidate.Y)\n if not city or city:GetOwner()~=t.To then return false end\nend\nfor _,index in ipairs(t.Plots) do\n local q=Map.GetPlotByIndex(index)\n if not q or q:GetOwner()~=t.To or q:GetResourceType()~=GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index\n  or not Game.GetArtifactAtPlot(index) then return false end\n local before=assert(t.Records[tostring(index)])\n local after=Game.GetArtifactAtPlot(index)\n for key,value in pairs(before) do if after[key]~=value then return false end end\n for key,value in pairs(after) do if before[key]~=value then return false end end\nend\nlocal moved=assert(Game:GetProperty('JAC_ARTIFACT_SITE_CENTER_MOVED'),'center relocation evidence missing')\nfor _,entry in ipairs(moved) do\n local unit=assert(UnitManager.GetUnit(entry.Owner,entry.ID),'relocated original guard missing')\n assert(unit:GetOwner()==entry.Owner and unit:GetID()==entry.ID and unit:GetType()==entry.Type\n  and unit:GetX()==entry.X and unit:GetY()==entry.Y and unit:GetDamage()==entry.Damage\n  and unit:GetMovesRemaining()==entry.Moves,'relocated original guard state changed')\nend\nreturn #t.Plots>=3"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local total,records,count,owned=0,0,0,0\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n if q and q:GetResourceType()==GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index then\n  total=total+1\n  local artifact=Game.GetArtifactAtPlot(index)\n  if artifact then records=records+1 end\n  if q:GetOwner()==Game.GetLocalPlayer() then owned=owned+1 end\n  local units=Map.GetUnitsAt(q)\n  if artifact and (q:GetOwner()==Game.GetLocalPlayer() or q:GetOwner()==-1)\n   and not q:IsWater() and not q:IsImpassable() and (not units or units:GetCount()==0) then count=count+1 end\n end\nend\nif not ExposedMembers.JAC_ArtifactSiteBreakdown then\n ExposedMembers.JAC_ArtifactSiteBreakdown=true\n local owners={};local water,blocked,occupied,neutral,shown=0,0,0,0,0\n for index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n  if q and q:GetResourceType()==GameInfo.Resources.RESOURCE_ANTIQUITY_SITE.Index then\n   local id=q:GetOwner();owners[tostring(id)]=(owners[tostring(id)] or 0)+1\n   local units=Map.GetUnitsAt(q);local n=units and units:GetCount() or 0\n   if q:IsWater() then water=water+1 end\n   if q:IsImpassable() then blocked=blocked+1 end\n   if n>0 then occupied=occupied+1 end\n   if id==-1 then neutral=neutral+1 end\n   if shown<8 then shown=shown+1;print('[JAC_ARTIFACT_SITE_DETAIL] plot='..index..' owner='..id..' water='..tostring(q:IsWater())..' impassable='..tostring(q:IsImpassable())..' units='..n..' artifact='..tostring(Game.GetArtifactAtPlot(index))) end\n  end\n end\n local ids={};for id in pairs(owners) do ids[#ids+1]=id end;table.sort(ids)\n local parts={};for _,id in ipairs(ids) do parts[#parts+1]=id..'='..owners[id] end\n print('[JAC_ARTIFACT_SITE_BREAKDOWN] owners='..table.concat(parts,',')..' water='..water..' impassable='..blocked..' occupied='..occupied..' neutral='..neutral)\nend\nlocal report=total..':'..records..':'..count..':'..owned\nif ExposedMembers.JAC_ArtifactSiteCounts~=report then\n ExposedMembers.JAC_ArtifactSiteCounts=report\n print('[JAC_ARTIFACT_SITE_COUNTS] total='..total..' records='..records..' eligible='..count..' owned='..owned)\nend\nreturn count>=3"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal t=assert(plan.Fixtures.artifact_source)\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==plan.Owner and city:GetID()==t.City,'production source city changed')\nassert(city:GetBuildings():HasBuilding(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index),'production museum missing')\nlocal units={}\nfor _,unit in Players[plan.Owner]:GetUnits():Members() do units[tostring(unit:GetID())]=true end\nGame:SetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE',{Owner=plan.Owner,City=t.City,X=t.X,Y=t.Y,Units=units})\nreturn 'captured existing unit IDs before official city production'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City,'production source city changed')\nlocal row=assert(GameInfo.Units.UNIT_ARCHAEOLOGIST)\nassert(row.CanTrain==true or row.CanTrain==1,'explicit archaeology test database action did not enable production')\nprint('[JAC_ARTIFACT_PRODUCTION_REQUEST] owner='..t.Owner..' city='..t.City..' hash='..row.Hash..' canTrain='..tostring(row.CanTrain)..' prerequisite='..tostring(row.PrereqCivic))\nlocal params={}\nparams[CityOperationTypes.PARAM_UNIT_TYPE]=row.Hash\nparams[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT\nparams[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0\nCityManager.RequestOperation(city,CityOperationTypes.BUILD,params)\nreturn 'official BUILD request dispatched; production queue still unproven'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City\n or city:GetBuildQueue():GetCurrentProductionTypeHash()~=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash then return false end\nExposedMembers.JAC_ArtifactProductionProof={Owner=t.Owner,City=t.City,X=t.X,Y=t.Y,\n Hash=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,Turn=Game.GetCurrentGameTurn()}\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "-- Debug/City.ltp:AddProgress needs writable city bindings. Production Hash is a UI-only read.\nlocal t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal proof=assert(ExposedMembers.JAC_ArtifactProductionProof,'UI production proof unavailable')\nassert(proof.Owner==t.Owner and proof.City==t.City and proof.X==t.X and proof.Y==t.Y\n and proof.Turn==Game.GetCurrentGameTurn() and proof.Hash==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,\n 'production source or publication changed')\nlocal city=assert(Players[t.Owner]:GetCities():FindID(t.City))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City and city:GetX()==t.X and city:GetY()==t.Y,\n 'production source city changed')\nlocal queue=city:GetBuildQueue()\nassert(type(queue.AddProgress)=='function','official game-core tuner production API missing')\nprint('[JAC_ARTIFACT_CORE_QUEUE] current='..tostring(queue:CurrentlyBuilding())..' progress='..tostring(queue.AddProgress))\nqueue:AddProgress(1000)\nreturn 'advanced active official production in writable game-core tuner'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nif not t then return false end\nlocal count=0\nfor _,unit in Players[t.Owner]:GetUnits():Members() do\n if unit:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(unit:GetID())]\n  and unit:GetX()==t.X and unit:GetY()==t.Y then count=count+1 end\nend\nreturn count==1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal unit,count=nil,0\nfor _,candidate in Players[t.Owner]:GetUnits():Members() do\n if candidate:GetType()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Index and not t.Units[tostring(candidate:GetID())]\n  and candidate:GetX()==t.X and candidate:GetY()==t.Y then unit=candidate;count=count+1 end\nend\nassert(count==1 and unit,'one newly produced source-city archaeologist required')\nGame:SetProperty('JAC_ARTIFACT_EXCAVATOR',{Owner=t.Owner,Unit=unit:GetID(),City=t.City,Completed=0,Produced=true})\nprint('[JAC_ARTIFACT_EXCAVATOR_PRODUCED] owner='..t.Owner..' unit='..unit:GetID()..' city='..t.City)\nreturn 'bound the actual newly produced archaeologist; no direct InitUnit fixture'"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal visited=Game:GetProperty(\"JAC_ARTIFACT_VISITED_SITES\") or {}\r\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and not visited[tostring(index)] and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal site=assert(ExposedMembers.JAC_ArtifactSite)\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit),'excavator missing before museum full')\nUnitManager.PlaceUnit(unit,site.X,site.Y)\nassert(unit:GetX()==site.X and unit:GetY()==site.Y,'excavator placement failed')\nlocal full=assert(GameInfo.Units[unit:GetType()].BaseMoves)\nunit:ChangeMovesRemaining(full-unit:GetMovesRemaining())\nGame:SetProperty('JAC_ARTIFACT_ACTIVE_SITE',JAC_AbsorptionGameplay.Rules.Copy(site))\nlocal visited=Game:GetProperty('JAC_ARTIFACT_VISITED_SITES') or {}\nassert(not visited[tostring(site.Plot)],'excavation fixture selected the same site twice')\nvisited[tostring(site.Plot)]=true\nGame:SetProperty('JAC_ARTIFACT_VISITED_SITES',visited)\nreturn 'new fixture excavator placed at a distinct original site without modifying its record'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal site=Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE')\nlocal unit=t and Players[t.Owner]:GetUnits():FindID(t.Unit)\nreturn unit and site and unit:GetX()==site.X and unit:GetY()==site.Y\n and unit:GetMovesRemaining()==GameInfo.Units[unit:GetType()].BaseMoves",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal site=assert(Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE'))\nlocal q=assert(Map.GetPlot(site.X,site.Y))\nlocal artifact=Game.GetArtifactAtPlot(q:GetIndex())\nlocal fields={};for key,value in pairs(artifact or {}) do fields[#fields+1]=tostring(key)..'='..tostring(value) end;table.sort(fields)\nlocal archaeology=unit:GetArchaeology()\nlocal pending=Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nprint('[JAC_ARTIFACT_SITE_OPERATION] plot='..q:GetIndex()..' owner='..q:GetOwner()..' resource='..q:GetResourceType()..' district='..q:GetDistrictType()..' improvement='..q:GetImprovementType()..' moves='..unit:GetMovesRemaining()..' pending='..tostring(pending and pending:GetID())..' artifactIndex='..tostring(archaeology:GetArtifactIndex())..' data='..table.concat(fields,','))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal unit=t and Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nreturn unit and unit:GetID()==t.Unit and Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex())~=nil",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist())\nassert(unit:GetID()==t.Unit,'another excavation is pending')\nlocal artifact=assert(Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex()))\nlocal params={};params[PlayerOperations.PARAM_PLAYER_ONE]=artifact.ActingPlayerID\nUI.RequestPlayerOperation(t.Owner,PlayerOperations.CHOOSE_ARTIFACT_PLAYER,params)\nreturn 'official artifact creator choice requested; await exact museum slot'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nlocal t=plan and plan.Fixtures.artifact_source\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=plan.Owner or city:GetID()~=t.City then return false end\nlocal b=city:GetBuildings();local kind=GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index\nlocal count=0\nfor slot=0,2 do local index=b:GetGreatWorkInSlot(kind,slot);if index and index>=0 then\n local row=GameInfo.GreatWorks[b:GetGreatWorkTypeFromIndex(index)]\n if not row or row.GreatWorkObjectType~='GREATWORKOBJECT_ARTIFACT' then return false end\n count=count+1 end end\nreturn count==1",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal visited=Game:GetProperty(\"JAC_ARTIFACT_VISITED_SITES\") or {}\r\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and not visited[tostring(index)] and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal site=assert(ExposedMembers.JAC_ArtifactSite)\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit),'excavator missing before museum full')\nUnitManager.PlaceUnit(unit,site.X,site.Y)\nassert(unit:GetX()==site.X and unit:GetY()==site.Y,'excavator placement failed')\nlocal full=assert(GameInfo.Units[unit:GetType()].BaseMoves)\nunit:ChangeMovesRemaining(full-unit:GetMovesRemaining())\nGame:SetProperty('JAC_ARTIFACT_ACTIVE_SITE',JAC_AbsorptionGameplay.Rules.Copy(site))\nlocal visited=Game:GetProperty('JAC_ARTIFACT_VISITED_SITES') or {}\nassert(not visited[tostring(site.Plot)],'excavation fixture selected the same site twice')\nvisited[tostring(site.Plot)]=true\nGame:SetProperty('JAC_ARTIFACT_VISITED_SITES',visited)\nreturn 'new fixture excavator placed at a distinct original site without modifying its record'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal site=Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE')\nlocal unit=t and Players[t.Owner]:GetUnits():FindID(t.Unit)\nreturn unit and site and unit:GetX()==site.X and unit:GetY()==site.Y\n and unit:GetMovesRemaining()==GameInfo.Units[unit:GetType()].BaseMoves",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal site=assert(Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE'))\nlocal q=assert(Map.GetPlot(site.X,site.Y))\nlocal artifact=Game.GetArtifactAtPlot(q:GetIndex())\nlocal fields={};for key,value in pairs(artifact or {}) do fields[#fields+1]=tostring(key)..'='..tostring(value) end;table.sort(fields)\nlocal archaeology=unit:GetArchaeology()\nlocal pending=Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nprint('[JAC_ARTIFACT_SITE_OPERATION] plot='..q:GetIndex()..' owner='..q:GetOwner()..' resource='..q:GetResourceType()..' district='..q:GetDistrictType()..' improvement='..q:GetImprovementType()..' moves='..unit:GetMovesRemaining()..' pending='..tostring(pending and pending:GetID())..' artifactIndex='..tostring(archaeology:GetArtifactIndex())..' data='..table.concat(fields,','))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal unit=t and Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nreturn unit and unit:GetID()==t.Unit and Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex())~=nil",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist())\nassert(unit:GetID()==t.Unit,'another excavation is pending')\nlocal artifact=assert(Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex()))\nlocal params={};params[PlayerOperations.PARAM_PLAYER_ONE]=artifact.ActingPlayerID\nUI.RequestPlayerOperation(t.Owner,PlayerOperations.CHOOSE_ARTIFACT_PLAYER,params)\nreturn 'official artifact creator choice requested; await exact museum slot'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nlocal t=plan and plan.Fixtures.artifact_source\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=plan.Owner or city:GetID()~=t.City then return false end\nlocal b=city:GetBuildings();local kind=GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index\nlocal count=0\nfor slot=0,2 do local index=b:GetGreatWorkInSlot(kind,slot);if index and index>=0 then\n local row=GameInfo.GreatWorks[b:GetGreatWorkTypeFromIndex(index)]\n if not row or row.GreatWorkObjectType~='GREATWORKOBJECT_ARTIFACT' then return false end\n count=count+1 end end\nreturn count==2",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-artifact-two-genuine-ready"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local resource=assert(GameInfo.Resources.RESOURCE_ANTIQUITY_SITE).Index\nlocal owner=Game.GetLocalPlayer()\nlocal visited=Game:GetProperty(\"JAC_ARTIFACT_VISITED_SITES\") or {}\r\nlocal found\nfor index=0,Map.GetPlotCount()-1 do local q=Map.GetPlotByIndex(index)\n local units=q and Map.GetUnitsAt(q)\n if q and q:GetResourceType()==resource and (q:GetOwner()==owner or q:GetOwner()==-1) and not q:IsWater()\n   and not q:IsImpassable() and (not units or units:GetCount()==0)\n   and not visited[tostring(index)] and Game.GetArtifactAtPlot(index) then found=q;break end\nend\nassert(found,'no unoccupied local-or-neutral genuine land antiquity site')\nExposedMembers.JAC_ArtifactSite={X=found:GetX(),Y=found:GetY(),Plot=found:GetIndex()}\nreturn 'genuine extraction site selected with existing artifact record'",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal site=assert(ExposedMembers.JAC_ArtifactSite)\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit),'excavator missing before museum full')\nUnitManager.PlaceUnit(unit,site.X,site.Y)\nassert(unit:GetX()==site.X and unit:GetY()==site.Y,'excavator placement failed')\nlocal full=assert(GameInfo.Units[unit:GetType()].BaseMoves)\nunit:ChangeMovesRemaining(full-unit:GetMovesRemaining())\nGame:SetProperty('JAC_ARTIFACT_ACTIVE_SITE',JAC_AbsorptionGameplay.Rules.Copy(site))\nlocal visited=Game:GetProperty('JAC_ARTIFACT_VISITED_SITES') or {}\nassert(not visited[tostring(site.Plot)],'excavation fixture selected the same site twice')\nvisited[tostring(site.Plot)]=true\nGame:SetProperty('JAC_ARTIFACT_VISITED_SITES',visited)\nreturn 'new fixture excavator placed at a distinct original site without modifying its record'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal site=Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE')\nlocal unit=t and Players[t.Owner]:GetUnits():FindID(t.Unit)\nreturn unit and site and unit:GetX()==site.X and unit:GetY()==site.Y\n and unit:GetMovesRemaining()==GameInfo.Units[unit:GetType()].BaseMoves",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():FindID(t.Unit))\nlocal site=assert(Game:GetProperty('JAC_ARTIFACT_ACTIVE_SITE'))\nlocal q=assert(Map.GetPlot(site.X,site.Y))\nlocal artifact=Game.GetArtifactAtPlot(q:GetIndex())\nlocal fields={};for key,value in pairs(artifact or {}) do fields[#fields+1]=tostring(key)..'='..tostring(value) end;table.sort(fields)\nlocal archaeology=unit:GetArchaeology()\nlocal pending=Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nprint('[JAC_ARTIFACT_SITE_OPERATION] plot='..q:GetIndex()..' owner='..q:GetOwner()..' resource='..q:GetResourceType()..' district='..q:GetDistrictType()..' improvement='..q:GetImprovementType()..' moves='..unit:GetMovesRemaining()..' pending='..tostring(pending and pending:GetID())..' artifactIndex='..tostring(archaeology:GetArtifactIndex())..' data='..table.concat(fields,','))\nlocal hash=assert(GameInfo.UnitOperations.UNITOPERATION_EXCAVATE).Hash\nlocal can,results=UnitManager.CanStartOperation(unit,hash,nil,false,true)\nlocal reasons=results and results[UnitOperationResults.FAILURE_REASONS] or {}\nlocal out={};for _,reason in ipairs(reasons) do out[#out+1]=Locale.Lookup(reason) end\nprint('[JAC_ARTIFACT_EXCAVATE_CHECK] unit='..t.Unit..' can='..tostring(can)..' reasons='..table.concat(out,'|'))\nassert(can,'official excavation unavailable: '..table.concat(out,'|'))\nUnitManager.RequestOperation(unit,hash)\nreturn 'official excavation requested; no artifact work claimed yet'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_EXCAVATOR')\nlocal unit=t and Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist()\nreturn unit and unit:GetID()==t.Unit and Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex())~=nil",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local t=assert(Game:GetProperty('JAC_ARTIFACT_EXCAVATOR'))\nlocal unit=assert(Players[t.Owner]:GetUnits():GetNextExtractingArchaeologist())\nassert(unit:GetID()==t.Unit,'another excavation is pending')\nlocal artifact=assert(Game.GetArtifactByIndex(unit:GetArchaeology():GetArtifactIndex()))\nlocal params={};params[PlayerOperations.PARAM_PLAYER_ONE]=artifact.ActingPlayerID\nUI.RequestPlayerOperation(t.Owner,PlayerOperations.CHOOSE_ARTIFACT_PLAYER,params)\nreturn 'official artifact creator choice requested; await exact museum slot'",
+      "action": "ui_lua"
+    },
+    {
+      "condition": {
+        "code": "local plan=Game:GetProperty('JAC_ARTWORK_CASE_PLAN')\nlocal t=plan and plan.Fixtures.artifact_source\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=plan.Owner or city:GetID()~=t.City then return false end\nlocal b=city:GetBuildings();local kind=GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index\nlocal count=0\nfor slot=0,2 do local index=b:GetGreatWorkInSlot(kind,slot);if index and index>=0 then\n local row=GameInfo.GreatWorks[b:GetGreatWorkTypeFromIndex(index)]\n if not row or row.GreatWorkObjectType~='GREATWORKOBJECT_ARTIFACT' then return false end\n count=count+1 end end\nreturn count==3",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "timeout": 60,
+      "action": "wait_for"
+    },
+    {
+      "state_name": "InGame",
+      "code": "-- Physical oracle: dispatch return values and GreatWorkMoved notifications never prove a move.\nlocal M={Cases={},Events=0}\nlocal plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal function same(a,b)\n return a.Owner==b.Owner and a.City==b.City and a.X==b.X and a.Y==b.Y\n  and a.Building==b.Building and a.Slot==b.Slot\nend\nlocal function loc(city,building,slot)\n return {Owner=city:GetOwner(),City=city:GetID(),X=city:GetX(),Y=city:GetY(),\n  Building=building,Slot=slot}\nend\nfunction M.Locations(index)\n assert(type(index)=='number' and index>=0,'original index required')\n local found,owners,seen={},{},{}\n for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\n local free=Game:GetProperty('JAC_ARTWORK_FREE_OWNER')\n if free and not seen[free] then owners[#owners+1]=free end\n for _,owner in ipairs(owners) do\n  local player=Players[owner]\n  if player and player.GetCities then\n   for _,city in player:GetCities():Members() do local b=city:GetBuildings()\n    for row in GameInfo.Buildings() do if b:HasBuilding(row.Index) then\n     for slot=0,b:GetNumGreatWorkSlots(row.Index)-1 do\n      if b:GetGreatWorkInSlot(row.Index,slot)==index then\n       found[#found+1]=loc(city,row.Index,slot)\n      end\n     end\n    end end\n   end\n  end\n end\n return found\nend\nfunction M.Value(place)\n local city=assert(CityManager.GetCityAt(place.X,place.Y),'observed city missing')\n assert(city:GetOwner()==place.Owner and city:GetID()==place.City,'observed city identity changed')\n return city:GetBuildings():GetGreatWorkInSlot(place.Building,place.Slot)\nend\nfunction M.Metadata(index,place)\n local city=assert(CityManager.GetCityAt(place.X,place.Y))\n local b=city:GetBuildings()\n assert(b:GetGreatWorkInSlot(place.Building,place.Slot)==index,'metadata read from wrong real slot')\n local definition=assert(GameInfo.GreatWorks[b:GetGreatWorkTypeFromIndex(index)])\n return {Index=index,GreatWorkType=definition.GreatWorkType,ObjectType=definition.GreatWorkObjectType,\n  Name=definition.Name,CreatorName=b:GetCreatorNameFromIndex(index),\n  TurnCreated=b:GetTurnFromIndex(index),CreatedByPlayer=Game.GetGreatWorkPlayer(index)}\nend\nfunction M.Target(source,object,label)\n local compatible={}\n for row in GameInfo.GreatWork_ValidSubTypes() do\n  if row.GreatWorkObjectType==object then compatible[row.GreatWorkSlotType]=true end\n end\n local options={}\n for _,city in Players[source.Owner]:GetCities():Members() do local b=city:GetBuildings()\n  for row in GameInfo.Buildings() do if b:HasBuilding(row.Index)\n    and (not b.IsPillaged or not b:IsPillaged(row.Index)) then\n   for slot=0,b:GetNumGreatWorkSlots(row.Index)-1 do\n    local slotRow=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(row.Index,slot)]\n    local next=loc(city,row.Index,slot)\n    if slotRow and compatible[slotRow.GreatWorkSlotType] and not same(next,source)\n      and b:GetGreatWorkInSlot(row.Index,slot)==-1\n      and (next.City~=source.City or next.Building~=source.Building) then\n     local intended=label=='art_fresh' and plan.Fixtures.art_target\n      or label=='art_aged' and plan.Fixtures.art\n      or label=='artifact_full_empty' and plan.Fixtures.artifact_target\n     local kind=label=='artifact_full_empty' and 'BUILDING_MUSEUM_ARTIFACT' or 'BUILDING_MUSEUM_ART'\n     if intended and city:GetID()==intended.City and row.BuildingType==kind then\n      options[#options+1]=next\n     end\n    end\n   end\n  end end\n end\n table.sort(options,function(a,b)\n  local am=a.Building==source.Building and 1 or 0\n  local bm=b.Building==source.Building and 1 or 0\n  if am~=bm then return am<bm end\n  if a.City~=b.City then return a.City<b.City end\n  if a.Building~=b.Building then return a.Building<b.Building end\n  return a.Slot<b.Slot\n end)\n return assert(options[1],'no exact compatible empty target slot for '..label)\nend\nfunction M.Begin(label,index)\n assert(not M.Cases[label],'duplicate native MOVE case '..label)\n local found=M.Locations(index)\n assert(#found==1,'original index is not world-unique before '..label..': '..#found)\n local source=found[1]\n assert(source.Owner==Game.GetLocalPlayer(),'direct MOVE needs local human owner')\n local metadata=M.Metadata(index,source)\n local target=M.Target(source,metadata.ObjectType,label)\n local age=Game.GetCurrentGameTurn()-metadata.TurnCreated\n local lock=tonumber(GlobalParameters.GREATWORK_ART_LOCK_TIME) or 10\n local sourceFull=nil\n if label=='artifact_full_empty' then\n  assert(metadata.ObjectType=='GREATWORKOBJECT_ARTIFACT','artifact case selected another object')\n  assert(source.Building==GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index\n    and source.City==plan.Fixtures.artifact_source.City,'artifact source is not the exact archaeology museum')\n  local b=CityManager.GetCityAt(source.X,source.Y):GetBuildings()\n  sourceFull=true\n  for slot=0,b:GetNumGreatWorkSlots(source.Building)-1 do\n   if b:GetGreatWorkInSlot(source.Building,slot)<0 then sourceFull=false end\n  end\n  assert(b:GetNumGreatWorkSlots(source.Building)==3 and sourceFull,\n   'artifact source museum is not genuinely full')\n else\n  local art={GREATWORKOBJECT_SCULPTURE=true,GREATWORKOBJECT_LANDSCAPE=true,\n   GREATWORKOBJECT_PORTRAIT=true,GREATWORKOBJECT_RELIGIOUS=true}\n  assert(art[metadata.ObjectType],'art case selected another object')\n  local original=assert(Game:GetProperty('JAC_ARTWORK_FRESH_ORIGINAL'))\n  assert(original.Index==index and original.TurnCreated==metadata.TurnCreated\n    and original.GreatWorkType==metadata.GreatWorkType\n    and original.CreatorName==metadata.CreatorName\n    and original.CreatedByPlayer==metadata.CreatedByPlayer,\n    'art original provenance changed before '..label)\n  if label=='art_fresh' then assert(age>=0 and age<lock,'art was not within official creation lock')\n  elseif label=='art_aged' then assert(age>=lock,'art lock has not expired') end\n end\n assert(M.Value(source)==index and M.Value(target)==-1,'source or target changed before request')\n M.Cases[label]={Label=label,Index=index,Source=source,Target=target,Before=metadata,\n  Turn=Game.GetCurrentGameTurn(),Age=age,Lock=lock,SourceFull=sourceFull,RequestOnly=true}\n print('[JAC_ARTWORK_MOVE_BEFORE] case='..label..' index='..index..' source='..source.City..':'..source.Building..':'..source.Slot..' target='..target.City..':'..target.Building..':'..target.Slot..' age='..age..' lock='..lock..' sourceFull='..tostring(sourceFull))\nend\nfunction M.Request(label)\n local c=assert(M.Cases[label])\n assert(c.RequestOnly and M.Value(c.Source)==c.Index and M.Value(c.Target)==-1,\n  'request source/target changed before dispatch')\n local params={}\n params[PlayerOperations.PARAM_PLAYER_ONE]=c.Source.Owner\n params[PlayerOperations.PARAM_CITY_SRC]=c.Source.City\n params[PlayerOperations.PARAM_CITY_DEST]=c.Target.City\n params[PlayerOperations.PARAM_BUILDING_SRC]=c.Source.Building\n params[PlayerOperations.PARAM_BUILDING_DEST]=c.Target.Building\n params[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index\n params[PlayerOperations.PARAM_SLOT]=c.Target.Slot\n local ok,value=pcall(UI.RequestPlayerOperation,Game.GetLocalPlayer(),\n  PlayerOperations.MOVE_GREAT_WORK,params)\n c.RequestOK=ok;c.RequestValue=tostring(value)\n print('[JAC_ARTWORK_MOVE_REQUEST] case='..label..' ok='..tostring(ok)..' value='..tostring(value))\n assert(ok,'native MOVE dispatch failed: '..tostring(value))\n return 'MOVE dispatched; physical state will be read after publication'\nend\nfunction M.Reconcile(label)\n local c=assert(M.Cases[label])\n assert(c.RequestOK,'MOVE was never dispatched')\n local found=M.Locations(c.Index)\n assert(#found==1,'original index must occupy exactly one world slot after '..label..': '..#found)\n local current=found[1]\n local atSource=same(current,c.Source) and M.Value(c.Source)==c.Index and M.Value(c.Target)==-1\n local atTarget=same(current,c.Target) and M.Value(c.Source)==-1 and M.Value(c.Target)==c.Index\n assert(atSource or atTarget,'original index left source without reaching exact target')\n local now=M.Metadata(c.Index,current)\n for _,key in ipairs({'GreatWorkType','ObjectType','Name','CreatorName','TurnCreated','CreatedByPlayer'}) do\n  assert(c.Before[key]==now[key],'native provenance changed at '..label..':'..key)\n end\n c.Moved=atTarget;c.After=current;c.AfterTurn=Game.GetCurrentGameTurn()\n c.RequestOnly=false;c.GlobalCount=#found;c.SourceAfter=M.Value(c.Source);c.TargetAfter=M.Value(c.Target)\n print('[JAC_ARTWORK_MOVE_PROOF] case='..label..' moved='..tostring(c.Moved)..' index='..c.Index..' count='..#found..' source='..c.SourceAfter..' target='..c.TargetAfter..' events='..M.Events)\n return c.Moved\nend\nEvents.GreatWorkMoved.Add(function(...) M.Events=M.Events+1 end)\nExposedMembers.JAC_ArtworkMoveOracle=M\nExposedMembers.JAC_ArtworkEvidence=M.Cases\nreturn 'real-slot MOVE oracle installed; events and request return are non-evidence'",
+      "action": "ui_lua"
+    },
+    {
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN')).Fixtures.artifact_source\nlocal original\nfor _,work in ipairs(A.OwnedGreatWorkSlots(Game.GetLocalPlayer())) do\n if work.CityID==t.City and work.BuildingType=='BUILDING_MUSEUM_ARTIFACT' and work.Slot==0 then\n  assert(not original,'multiple source originals');original=work\n end\nend\nassert(original and original.ObjectType=='GREATWORKOBJECT_ARTIFACT','exact source artifact missing')\nassert(type(original.Effects)=='table','artifact effects were not captured')\nGame:SetProperty('JAC_ARTIFACT_FULL_ORIGINAL',A.Rules.Copy(original))\nreturn 'exact artifact original and yield/tourism effects persisted before MOVE'",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_ARTWORK_CASE_PLAN'))\nlocal t=plan.Fixtures.artifact_source\nlocal city=assert(CityManager.GetCityAt(t.X,t.Y))\nlocal index=city:GetBuildings():GetGreatWorkInSlot(GameInfo.Buildings.BUILDING_MUSEUM_ARTIFACT.Index,0)\nlocal M=assert(ExposedMembers.JAC_ArtworkMoveOracle)\nM.Begin('artifact_full_empty',index)\nreturn M.Request('artifact_full_empty')",
+      "action": "ui_lua"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "state_name": "InGame",
+      "code": "assert(assert(ExposedMembers.JAC_ArtworkMoveOracle).Reconcile('artifact_full_empty'),'artifact original did not move from full source museum')\nreturn 'full museum original physically moved into exact compatible empty target'",
+      "action": "ui_lua"
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal c=assert(assert(ExposedMembers.JAC_ArtworkEvidence).artifact_full_empty)\nlocal original=assert(Game:GetProperty('JAC_ARTIFACT_FULL_ORIGINAL'))\nassert(c.Index==original.Index and c.Moved and c.RequestOnly==false,'artifact physical MOVE missing')\nlocal found=A.NativeWorkLocations(c.Index)\nassert(#found==1 and found[1].Owner==c.Target.Owner and found[1].CityID==c.Target.City\n and found[1].Building==c.Target.Building and found[1].Slot==c.Target.Slot,'artifact target changed')\nassert(A.Rules.Equal(found[1].Effects,original.Effects),'artifact effects changed during MOVE')\nGame:SetProperty('JAC_ARTIFACT_FULL_EVIDENCE',A.Rules.Copy(ExposedMembers.JAC_ArtworkEvidence))\nreturn 'full museum artifact original and unchanged effects persisted after MOVE'",
+      "action": "ui_lua"
+    },
+    {
+      "code": "local moved=assert(Game:GetProperty('JAC_ARTIFACT_SITE_CENTER_MOVED'),'center relocation evidence missing')\nfor _,entry in ipairs(moved) do\n local unit=assert(UnitManager.GetUnit(entry.Owner,entry.ID),'relocated original guard missing')\n assert(unit:GetOwner()==entry.Owner and unit:GetID()==entry.ID and unit:GetType()==entry.Type\n  and unit:GetX()==entry.X and unit:GetY()==entry.Y and unit:GetDamage()==entry.Damage\n  and unit:GetMovesRemaining()==entry.Moves,'relocated original guard state changed')\nend\nprint('[JAC_ARTIFACT_SITE_GUARDS_VERIFIED] count='..#moved)\nreturn 'original guards remain at recorded positions with the same owner, identity, damage and movement'",
+      "action": "ui_lua",
+      "state_name": "InGame"
+    },
+    {
+      "name": "JAC-artifact-full-direct-probe",
+      "timeout": 90,
+      "action": "save"
+    },
+    {
+      "timeout": 90,
+      "action": "exit_to_menu"
+    },
+    {
+      "name": "JAC-artifact-full-direct-probe",
+      "action": "load",
+      "timeout": 600
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "state_name": "InGame",
+        "code": "local cases=Game:GetProperty('JAC_ARTIFACT_FULL_EVIDENCE')\nlocal c=cases and cases.artifact_full_empty\nif not c or not c.Moved or c.RequestOnly~=false then return false end\nlocal source=CityManager.GetCityAt(c.Source.X,c.Source.Y)\nlocal target=CityManager.GetCityAt(c.Target.X,c.Target.Y)\nreturn source and target and source:GetOwner()==c.Source.Owner and target:GetOwner()==c.Target.Owner\n and source:GetID()==c.Source.City and target:GetID()==c.Target.City\n and source:GetBuildings():GetGreatWorkInSlot(c.Source.Building,c.Source.Slot)==-1\n and target:GetBuildings():GetGreatWorkInSlot(c.Target.Building,c.Target.Slot)==c.Index",
+        "type": "lua"
+      }
+    },
+    {
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal c=assert(assert(Game:GetProperty('JAC_ARTIFACT_FULL_EVIDENCE')).artifact_full_empty)\nlocal original=assert(Game:GetProperty('JAC_ARTIFACT_FULL_ORIGINAL'))\nassert(c.RequestOnly==false and c.GlobalCount==1 and type(c.Moved)=='boolean',\n 'dispatch return or notification was mistaken for a physical result')\nlocal found=A.NativeWorkLocations(c.Index)\nassert(#found==1,'original work not world-unique after save/load')\nlocal location=c.Moved and c.Target or c.Source\nassert(found[1].Owner==location.Owner and found[1].CityID==location.City\n and found[1].X==location.X and found[1].Y==location.Y\n and found[1].Building==location.Building and found[1].Slot==location.Slot,\n 'original work left its proven real slot after reload')\nfor _,key in ipairs({'Index','GreatWorkType','ObjectType','Name','CreatorName','TurnCreated','CreatedByPlayer'}) do\n assert(found[1][key]==original[key],'original art provenance changed after reload: '..key)\nend\n\nassert(A.Rules.Equal(found[1].Effects,original.Effects),'artifact effects changed after reload')\nprint('[JAC_ARTIFACT_FULL_RELOAD_PROOF] index='..c.Index..' moved='..tostring(c.Moved)..' worldCount='..#found..' city='..found[1].CityID..' building='..found[1].Building..' slot='..found[1].Slot)\nreturn 'new art direct MOVE physical result and original metadata survived save/load'",
+      "action": "ui_lua"
+    },
+    {
+      "code": "local moved=assert(Game:GetProperty('JAC_ARTIFACT_SITE_CENTER_MOVED'),'center relocation evidence missing')\nfor _,entry in ipairs(moved) do\n local unit=assert(UnitManager.GetUnit(entry.Owner,entry.ID),'relocated original guard missing')\n assert(unit:GetOwner()==entry.Owner and unit:GetID()==entry.ID and unit:GetType()==entry.Type\n  and unit:GetX()==entry.X and unit:GetY()==entry.Y and unit:GetDamage()==entry.Damage\n  and unit:GetMovesRemaining()==entry.Moves,'relocated original guard state changed')\nend\nprint('[JAC_ARTIFACT_SITE_GUARDS_VERIFIED] count='..#moved)\nreturn 'original guards remain at recorded positions with the same owner, identity, damage and movement'",
+      "action": "ui_lua",
+      "state_name": "InGame"
+    }
+  ],
+  "judge_profile": "generic"
+}
