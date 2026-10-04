@@ -823,24 +823,22 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
         GameInfo={Units={UNIT_ARCHAEOLOGIST={Index=3,Hash=2468,CanTrain=false}}}
         CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,
           PARAM_QUEUE_DESTINATION_LOCATION=3,VALUE_REPLACE_AT=4,BUILD=5}
-        local queue={GetCurrentProductionTypeHash=function() return HASH end,
+        local queue={CurrentlyBuilding=function() return 'archaeologist' end,
           AddProgress=function(_,value) assert(value==1000);PROGRESS=PROGRESS+1 end}
         QUEUE=queue
         local city={GetOwner=function() return OWNER end,GetID=function() return CITY end,
           GetX=function() return 4 end,GetY=function() return 5 end,
           GetBuildQueue=function() return queue end}
-        g_PlacementSettings={}
-        GetSelectedCity=function()
-          assert(g_PlacementSettings.Player==1 and g_PlacementSettings.CityID==10)
-          return city
-        end
+        Game.GetCurrentGameTurn=function() return 1 end
+        ExposedMembers={JAC_ArtifactProductionProof={Owner=1,City=10,X=4,Y=5,Hash=0,Turn=1}}
         CityManager={GetCityAt=function(x,y) assert(x==4 and y==5);return city end,
           RequestOperation=function(c,kind,p)
             assert(c==city and kind==5 and p[1]==2468 and p[2]==4 and p[3]==0)
             REQUESTS=REQUESTS+1
           end}
         UNITS={}
-        Players={[1]={GetUnits=function() return {Members=function()
+        Players={[1]={GetCities=function() return {FindID=function(_,id)
+          assert(id==10);return city end} end,GetUnits=function() return {Members=function()
           local i=0;return function() i=i+1;if UNITS[i] then return i,UNITS[i] end end
         end} end}}
         function makeUnit(id,x,y,kind)
@@ -856,7 +854,7 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
         .iter()
         .find(|s| s["code"].as_str() == Some(progress))
         .expect("progress step");
-    assert_eq!(progress_step["state_name"], "TunerCityPanel");
+    assert_eq!(progress_step["state_name"], "GameCore_Tuner");
     let bind = code("JAC_ARTIFACT_EXCAVATOR_PRODUCED");
     assert!(lua.load(request).exec().is_err());
     assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
@@ -866,7 +864,8 @@ fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit()
     assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
     assert!(lua.load(progress).exec().is_err());
     assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
-    lua.load("HASH=2468").exec()?;
+    lua.load("ExposedMembers.JAC_ArtifactProductionProof.Hash=2468")
+        .exec()?;
     lua.load("SAVED_PROGRESS=QUEUE.AddProgress;QUEUE.AddProgress=nil")
         .exec()?;
     assert!(

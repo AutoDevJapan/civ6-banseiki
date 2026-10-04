@@ -81,6 +81,58 @@ fn setup() -> mlua::Result<Lua> {
 }
 
 #[test]
+fn inherited_native_types_use_city_owner_change_without_individual_move() -> mlua::Result<()> {
+    for object_type in [
+        "GREATWORKOBJECT_ARTIFACT",
+        "GREATWORKOBJECT_SCULPTURE",
+        "GREATWORKOBJECT_LANDSCAPE",
+        "GREATWORKOBJECT_PORTRAIT",
+        "GREATWORKOBJECT_RELIGIOUS",
+        "GREATWORKOBJECT_RELIC",
+        "GREATWORKOBJECT_WRITING",
+    ] {
+        let lua = setup()?;
+        lua.globals().set("TEST_OBJECT_TYPE", object_type)?;
+        lua.load(r#"
+            GameInfo.GreatWorks[4].GreatWorkObjectType=TEST_OBJECT_TYPE
+            Players[1].units={}
+            Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+            DealManager=nil
+            UI={RequestPlayerOperation=function() error('individual MOVE called for inherited work') end}
+            GameInfo.JAC_AbsorptionOutcomes=function()
+              local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+                {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}}
+              local i=0;return function() i=i+1;return rows[i] end
+            end
+            local original=assert(A.NativeWorkLocations(900)[1])
+            local plan={ID='inherited-type',From=1,To=2,Mode='MERGER',
+              EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT'}
+            local tx=A.Apply(plan)
+            if tx.Status=='WAITING_UI' then
+              ExposedMembers.JAC_HeroReadAPI.GetObservation=function() return {Published=true} end
+              tx=A.Resume(plan.ID)
+            end
+            assert(tx.Status=='COMPLETE',TEST_OBJECT_TYPE..' inheritance did not finish')
+            local snap=assert(tx.NativeWorks[1])
+            assert(snap.NativeRoute=='CITY' and snap.Custodian==nil
+              and snap.TargetSlot==nil and snap.Carrier==nil and not snap.DealSubmitted,
+              'inherited original was routed through an individual transfer')
+            local locations=A.NativeWorkLocations(900)
+            assert(#locations==1 and locations[1].Owner==2 and locations[1].Index==original.Index
+              and locations[1].X==original.X and locations[1].Y==original.Y
+              and locations[1].Building==original.Building and locations[1].Slot==original.Slot,
+              'engine owner change moved the inherited original out of its source slot')
+            for _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do
+              assert(locations[1][key]==original[key],'inherited metadata changed: '..key)
+            end
+            assert(A.Rules.Equal(locations[1].Effects,original.Effects))
+            assert(A.Verify(plan.ID,true))
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn recovery_rejects_native_work_still_held_by_another_player() -> mlua::Result<()> {
     let lua = setup()?;
     lua.load("assert(not pcall(recover));assert_retained()")

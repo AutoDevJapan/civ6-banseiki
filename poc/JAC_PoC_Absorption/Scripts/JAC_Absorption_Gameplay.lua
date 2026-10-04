@@ -478,11 +478,16 @@ local function RecoveredArchiveOwnedByDonor(state, id, original, donor)
   end
   return true
 end
-local function NeedsNativeCarrier(source, tracked, donor, destination, custodian)
-  return custodian and (destination < 0
-    or (tracked and tracked.NativeOwnerMoves or 0) > 0
-    or source.BuildingType == "BUILDING_PALACE"
-      and source.CreatedByPlayer ~= donor)
+-- A city already carries every installed work through the engine's owner change.
+-- Only an outcome outside the absorber (or a Palace replaced by the engine)
+-- needs an independent physical movement before that change.
+local function NativeWorkRoute(source, tracked, donor, destination, custodian)
+  if not custodian then return "CITY" end
+  if destination < 0 or (tracked and tracked.NativeOwnerMoves or 0) > 0
+    or source.BuildingType == "BUILDING_PALACE" and source.CreatedByPlayer ~= donor then
+    return "CARRIER"
+  end
+  return "DEAL"
 end
 local NativeWorkAtTarget, NativeWorkAtAbsorber, NativeWorkSourceEmpty
 
@@ -1042,7 +1047,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
       and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
       "native Great Work roster identity mismatch: " .. id)
     if asset.NativeWork then SameNativeWorkIdentity(asset.NativeWork, work) end
-    local carrierRoute = NeedsNativeCarrier(work, asset, tx.From, destination, custodian)
+    local nativeRoute = NativeWorkRoute(work, asset, tx.From, destination, custodian)
     asset.NativeWork, asset.Type = R.Copy(work), work.ObjectType or "NATIVE_GREAT_WORK"
     asset.Name = asset.Name or work.Name or work.GreatWorkType or id
     asset.City = { Owner = tx.From, X = work.X, Y = work.Y }
@@ -1052,7 +1057,7 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
     generatedDecisions[id] = decision
     tx.NativeWorks[#tx.NativeWorks + 1] = { ID = id, Source = R.Copy(work),
       Outcome = decision.Outcome, Destination = destination,
-      Custodian = custodian, NativeRoute = carrierRoute and "CARRIER" or "CORE" }
+      Custodian = custodian, NativeRoute = nativeRoute }
   end
   for id, asset in pairs(tx.SourceRoster) do
     assert(not asset.NativeWork or seenNative[id],
@@ -2139,16 +2144,23 @@ end
 
 local function MoveNativeWorks(state, tx)
   for _, snap in ipairs(tx.NativeWorks or {}) do
-    if not snap.NativeRoute then
+    if not snap.NativeRoute or snap.NativeRoute == "CORE" then
       if snap.DealSubmitted or snap.PhysicalMoved then
-        snap.NativeRoute = snap.Carrier and "CARRIER" or "CORE"
+        snap.NativeRoute = snap.Carrier and "CARRIER" or snap.Custodian and "DEAL" or "CITY"
       else
-        snap.NativeRoute = NeedsNativeCarrier(snap.Source, tx.SourceRoster[snap.ID],
-          tx.From, snap.Destination, snap.Custodian) and "CARRIER" or "CORE"
+        snap.NativeRoute = NativeWorkRoute(snap.Source, tx.SourceRoster[snap.ID],
+          tx.From, snap.Destination, snap.Custodian)
         if snap.NativeRoute == "CARRIER" and snap.Destination >= 0
           and not snap.Carrier then snap.TargetSlot = nil end
       end
       Save(state) -- old saved plans choose the route before a native mutation
+    end
+    assert(snap.NativeRoute == "CITY" or snap.NativeRoute == "DEAL" or snap.NativeRoute == "CARRIER",
+      "native Great Work has an unknown physical route")
+    assert((snap.NativeRoute == "CITY") == (snap.Custodian == nil),
+      "native Great Work route contradicts its custody intent")
+    if snap.NativeRoute == "CITY" then
+      assert(snap.Destination == tx.To, "native city inheritance has an external destination")
     end
   end
   local reserved = {}

@@ -298,21 +298,13 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nreturn city and city:GetOwner()==t.Owner and city:GetID()==t.City\n and city:GetBuildQueue():GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash"
+        "code": "local t=Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE')\nlocal city=t and CityManager.GetCityAt(t.X,t.Y)\nif not city or city:GetOwner()~=t.Owner or city:GetID()~=t.City\n or city:GetBuildQueue():GetCurrentProductionTypeHash()~=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash then return false end\nExposedMembers.JAC_ArtifactProductionProof={Owner=t.Owner,City=t.City,X=t.X,Y=t.Y,\n Hash=GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,Turn=Game.GetCurrentGameTurn()}\nreturn true"
       }
     },
     {
-      "action": "wait_for",
-      "condition": {
-        "name": "TunerCityPanel",
-        "type": "state"
-      },
-      "timeout": 60
-    },
-    {
       "action": "ui_lua",
-      "state_name": "TunerCityPanel",
-      "code": "-- Debug/City.ltp declares TunerCityPanel as its CompatibleState.\n-- TunerCityPanel.lua:GetSelectedCity resolves the player collection's city.\nlocal t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nassert(g_PlacementSettings and type(GetSelectedCity)=='function','official Tuner city panel not initialized')\ng_PlacementSettings.Player=t.Owner\ng_PlacementSettings.CityID=t.City\nlocal city=assert(GetSelectedCity(),'source city unavailable in official Tuner panel')\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City and city:GetX()==t.X and city:GetY()==t.Y,'production source city changed')\nlocal queue=city:GetBuildQueue()\nassert(queue:GetCurrentProductionTypeHash()==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,'official archaeologist BUILD not active')\nassert(type(queue.AddProgress)=='function','production progress API unavailable in official Tuner city panel')\nqueue:AddProgress(1000)\nreturn 'advanced active official production; wait for a newly published unit'"
+      "state_name": "GameCore_Tuner",
+      "code": "-- Debug/City.ltp:AddProgress needs writable city bindings. Production Hash is a UI-only read.\nlocal t=assert(Game:GetProperty('JAC_ARTIFACT_PRODUCTION_BASELINE'))\nlocal proof=assert(ExposedMembers.JAC_ArtifactProductionProof,'UI production proof unavailable')\nassert(proof.Owner==t.Owner and proof.City==t.City and proof.X==t.X and proof.Y==t.Y\n and proof.Turn==Game.GetCurrentGameTurn() and proof.Hash==GameInfo.Units.UNIT_ARCHAEOLOGIST.Hash,\n 'production source or publication changed')\nlocal city=assert(Players[t.Owner]:GetCities():FindID(t.City))\nassert(city:GetOwner()==t.Owner and city:GetID()==t.City and city:GetX()==t.X and city:GetY()==t.Y,\n 'production source city changed')\nlocal queue=city:GetBuildQueue()\nassert(type(queue.AddProgress)=='function','official game-core tuner production API missing')\nprint('[JAC_ARTIFACT_CORE_QUEUE] current='..tostring(queue:CurrentlyBuilding())..' progress='..tostring(queue.AddProgress))\nqueue:AddProgress(1000)\nreturn 'advanced active official production in writable game-core tuner'"
     },
     {
       "action": "wait_for",
