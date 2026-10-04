@@ -60,18 +60,46 @@ fn success(cmd: &mut Command) -> Output {
 }
 fn install_process_fixture(destination: &Path) {
     let source = Path::new(env!("CARGO_BIN_EXE_jac-process-fixture"));
-    // Reuse the immutable compiled inode: publishing copied executable bytes can
-    // race exec with a write-open file on Linux (ETXTBSY), even in unique temp dirs.
+    // Reuse the immutable compiled inode. A writable executable copy can fail
+    // with ETXTBSY on Linux even when each test has a separate directory.
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink(source, destination).unwrap();
-        assert_eq!(
-            destination.canonicalize().unwrap(),
-            source.canonicalize().unwrap()
-        );
+        let compiled = fs::canonicalize(source).unwrap();
+        std::os::unix::fs::symlink(&compiled, destination).unwrap();
+        assert_eq!(destination.canonicalize().unwrap(), compiled);
     }
     #[cfg(not(unix))]
     fs::copy(source, destination).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn fixture_alias_runs_when_a_writable_executable_copy_would_be_busy() {
+    let t = temp();
+    let legacy = t.path().join("legacy-copy");
+    fs::copy(env!("CARGO_BIN_EXE_jac-process-fixture"), &legacy).unwrap();
+    let writer = fs::OpenOptions::new().write(true).open(&legacy).unwrap();
+    let mut legacy_command = Command::new(&legacy);
+    legacy_command
+        .current_dir(t.path())
+        .arg("login")
+        .env("JAC_ASSETS_TEST_PROCESS", "1");
+    assert_eq!(
+        legacy_command.output().unwrap_err().raw_os_error(),
+        Some(26)
+    );
+    let alias = t.path().join("fixture-alias");
+    install_process_fixture(&alias);
+    let mut command = Command::new(&alias);
+    command
+        .current_dir(t.path())
+        .arg("login")
+        .env("JAC_ASSETS_TEST_PROCESS", "1");
+    let output = success(&mut command);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Logged in using ChatGPT"));
+    drop(writer);
+    legacy_command.current_dir(t.path());
+    success(&mut legacy_command);
 }
 fn normalized(e: &xmltree::Element) -> Value {
     json!({"tag":e.name,"attrs":e.attributes.iter().collect::<std::collections::BTreeMap<_,_>>(),"text":e.get_text().filter(|t|!t.trim().is_empty()),"children":civ6_assets_rs::elements(e).map(normalized).collect::<Vec<_>>()})

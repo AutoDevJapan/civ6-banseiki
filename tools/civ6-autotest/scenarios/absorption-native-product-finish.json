@@ -1,0 +1,116 @@
+{
+  "name": "Absorption product completes both original works and survives save reload",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-after-city-stage-absorb-flow-62-38a597e471b0",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nfor _,snap in ipairs(tx.Cities or {}) do\n local city=CityManager.GetCityAt(snap.X,snap.Y)\n if not city or city:GetOwner()~=tx.To then return false end\n local ok,value=pcall(reads.ReadCity,tx.To,city:GetID(),'LOYALTY')\n if not ok or type(value)~='number' then return false end\nend\nfor _,unit in ipairs(tx.Units or {}) do\n for _,read in pairs(unit.SpreadReads or {}) do\n  if read.AwaitingUI and reads.GetUnitObservation(read.Token)==nil then return false end\n end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal before=assert(A.GetState().Transactions[id])\nlocal palace,returned\nfor _,work in ipairs(before.NativeWorks or {}) do\n if work.Source.BuildingType=='BUILDING_PALACE' then palace=work\n elseif work.Custodian and work.Custodian~=before.To then returned=work end\nend\nassert(palace and returned and palace.PhysicalMoved and returned.PhysicalMoved,'saved original works lost their physical proof')\nlocal tx=A.Resume(id)\nlocal moved=0\nfor _,snap in ipairs(tx.Cities or {}) do\n local city=assert(CityManager.GetCityAt(snap.X,snap.Y))\n if city:GetOwner()==tx.To then moved=moved+1 else assert(city:GetOwner()==tx.From,'old city changed to a third owner') end\nend\nfor _,work in ipairs(tx.NativeWorks or {}) do assert(work.PhysicalMoved,'native work proof was replayed or dropped') end\nprint('[JAC_NATIVE_PRODUCT_CITY_STAGE] status='..tx.Status..' cities='..moved..'/'..#tx.Cities..' finalUI='..tostring(tx.AwaitingFinalUI)..' units='..#tx.Units)\nreturn 'native product city stage '..tx.Status..' '..moved..'/'..#tx.Cities"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-after-final-request"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe'];local reads=ExposedMembers.JAC_HeroReadAPI;return tx.Status=='COMPLETE' or tx.AwaitingFinalUI and reads and reads.GetObservation(tx.ID..':final')~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal tx=A.Resume(id)\nassert(tx.Status=='COMPLETE','native product absorption did not complete after final publication: '..tx.Status)\nlocal verification=A.RequestVerification(id)\nassert(verification and verification.Token,'native product verification publication request absent')\nlocal count=0\nfor _,snap in ipairs(tx.NativeWorks or {}) do\n if snap.Custodian then\n  local found=A.NativeWorkLocations(snap.Source.Index)\n  assert(#found==1,'native work index missing or duplicated after absorption')\n  local w=found[1];local slot=snap.TargetSlot\n  assert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'native work left its exact reserved official slot')\n  local source=assert(CityManager.GetCityAt(snap.Source.X,snap.Source.Y))\n  if source:GetBuildings():HasBuilding(snap.Source.Building) then\n   local assets=A.CityAssets(source)\n   if snap.Source.BuildingType~='BUILDING_PALACE' then assert(assets[snap.Source.BuildingType].Works[snap.Source.Slot]==-1,'source Temple slot reused') end\n  end\n  local record=assert(A.GetRoster(snap.Destination)[snap.ID])\n  assert(record.NativeWork.Index==w.Index and record.NativeCustody.Owner==w.Owner and record.NativeCustody.City==w.CityID and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'native work ledger differs from actual slot')\n  count=count+1\n end\nend\nassert(count==2,'both original works were not verified')\nfor _,snap in ipairs(tx.Cities or {}) do assert(CityManager.GetCityAt(snap.X,snap.Y):GetOwner()==tx.To,'old city not transferred') end\nassert(Players[tx.From]:GetCities():GetCount()==0,'old faction still owns a city')\nprint('[JAC_NATIVE_PRODUCT_COMPLETE] id='..id..' works='..count..' cities='..#tx.Cities)\nreturn 'same original Palace and returned work complete after save and reload'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal request=tx.VerificationUI\nlocal reads=ExposedMembers.JAC_HeroReadAPI\nreturn request and request.Turn==Game.GetCurrentGameTurn() and reads and reads.GetObservation(request.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay);local id='native-product-return-probe';assert(A.GetState().Transactions[id].Status=='COMPLETE','product transaction not complete');assert(A.Verify(id,true),'published exact native product verification failed');return 'native product exact verification complete'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-product-complete"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-product-complete"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nlocal tx=assert(A.GetState().Transactions[id])\nassert(tx.Status=='COMPLETE' and Players[tx.From]:GetCities():GetCount()==0,'completed absorption changed after reload')\nlocal request=A.RequestVerification(id)\nassert(request and request.Token,'reloaded native product verification request absent')\nreturn 'completed native absorption reloaded and requested fresh UI verification'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local tx=assert(ExposedMembers.JAC_Absorption).GetState().Transactions['native-product-return-probe']\nlocal request=tx.VerificationUI\nlocal reads=ExposedMembers.JAC_HeroReadAPI\nreturn request and request.Turn==Game.GetCurrentGameTurn() and reads and reads.GetObservation(request.Token)~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal id='native-product-return-probe'\nassert(A.Verify(id,true),'reloaded native product verification failed')\nlocal tx=assert(A.GetState().Transactions[id])\nassert(tx.Status=='COMPLETE' and Players[tx.From]:GetCities():GetCount()==0,'reloaded absorption lost completion')\nlocal count=0\nfor _,snap in ipairs(tx.NativeWorks or {}) do\n if snap.Custodian then\n  local found=A.NativeWorkLocations(snap.Source.Index)\n  assert(#found==1,'reloaded native index missing or duplicated')\n  local w=found[1];local slot=snap.TargetSlot\n  assert(w.Owner==slot.Owner and w.CityID==slot.City and w.X==slot.X and w.Y==slot.Y and w.Building==slot.Building and w.Slot==slot.Slot,'reloaded original work left its exact reserved slot')\n  local record=assert(A.GetRoster(snap.Destination)[snap.ID])\n  assert(record.NativeWork.Index==w.Index and record.NativeCustody.Owner==w.Owner and record.NativeCustody.City==w.CityID and record.NativeCustody.Building==w.Building and record.NativeCustody.Slot==w.Slot,'reloaded original work ledger changed')\n  count=count+1\n end\nend\nassert(count==2,'two original works not retained after reload')\nprint('[JAC_NATIVE_PRODUCT_RELOADED_COMPLETE] id='..id..' works='..count..' cities='..#tx.Cities)\nreturn 'two original works and all donor cities preserved after save reload'"
+    }
+  ]
+}

@@ -1,0 +1,1458 @@
+//! Real Lua boundary checks for native-work inventory and native person state.
+//! The world fixture's repeated fake work index is corrected only inside this
+//! test: a native Great Work index can occupy exactly one slot globally.
+
+use mlua::Lua;
+use std::{fs, path::PathBuf};
+
+const WORLD: &str = include_str!("fixtures/absorption_world.lua");
+
+fn path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("poc/JAC_PoC_Absorption/Scripts")
+        .join(name)
+}
+
+fn load(lua: &Lua, name: &str) -> mlua::Result<()> {
+    let source = fs::read_to_string(path(name)).map_err(mlua::Error::external)?;
+    let result: mlua::Value = lua.load(&source).set_name(name).eval()?;
+    match name {
+        "JAC_Absorption_Flow.lua" => lua.globals().set("TEST_FLOW", result)?,
+        "JAC_Absorption_Gameplay.lua" => lua.globals().set("TEST_ABSORPTION", result)?,
+        _ => {}
+    }
+    Ok(())
+}
+
+fn load_hero_keys(lua: &Lua) -> mlua::Result<()> {
+    let source = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua"),
+    )
+    .map_err(mlua::Error::external)?;
+    lua.load(&source)
+        .set_name("JAC_Absorption_HeroKeys.lua")
+        .exec()
+}
+
+#[test]
+fn native_carrier_ui_uses_local_actor_once_and_publishes_only_after_physical_move()
+-> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        local function event()
+          local callbacks={}
+          return {Add=function(fn) callbacks[#callbacks+1]=fn end,
+            Emit=function(...) for _,fn in ipairs(callbacks) do fn(...) end end}
+        end
+        Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),
+          LocalPlayerTurnBegin=event()}
+        PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
+        CityManager.TransferCity(CITIES[16],1)
+        WORK_CITIES={[4]=true}
+        for _,city in ipairs({CITIES[4],CITIES[16]}) do
+          local original=city.GetBuildings
+          city.GetBuildings=function(self)
+            local buildings=original(self)
+            buildings.GetGreatWorkInSlot=function(_,building,slot)
+              return building==1 and slot==0 and WORK_CITIES[city:GetX()] and 900 or -1
+            end
+            buildings.GetGreatWorkTypeFromIndex=function(_,index)
+              assert(index==900);return 4
+            end
+            buildings.GetGreatWorkSlotType=function(_,building,slot)
+              assert(building==1 and slot==0);return 1
+            end
+            return buildings
+          end
+        end
+        GameInfo.GreatWorks={[4]={GreatWorkObjectType='GREATWORKOBJECT_RELIC'}}
+        GameInfo.GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}}
+        GameInfo.GreatWork_ValidSubTypes=function()
+          local read=false;return function()
+            if not read then read=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+              GreatWorkSlotType='GREATWORKSLOT_RELIC'} end
+          end
+        end
+        PlayerOperations={MOVE_GREAT_WORK='move',PARAM_PLAYER_ONE='owner',
+          PARAM_CITY_SRC='source',PARAM_CITY_DEST='target',
+          PARAM_BUILDING_SRC='source-building',PARAM_BUILDING_DEST='target-building',
+          PARAM_GREAT_WORK_INDEX='index',PARAM_SLOT='slot'}
+        UI_REQUESTS=0
+        MOVE_EFFECT=true
+        UI={RequestPlayerOperation=function(actor,operation,params)
+          assert(actor==2 and operation=='move' and params.owner==1
+            and params.source==CITIES[4]:GetID()
+            and params.target==CITIES[16]:GetID()
+            and params['source-building']==1 and params['target-building']==1
+            and params.index==900 and params.slot==0,
+            'UI MOVE did not use local human actor with AI owner and exact slots')
+          UI_REQUESTS=UI_REQUESTS+1
+          if MOVE_EFFECT then WORK_CITIES[4],WORK_CITIES[16]=nil,true end
+          return true
+        end}
+        local carrier={Route='TO_FREE',Phase='MOVE',Borrower=1,
+          BorrowedCity=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0,Index=900,
+          MoveToken='native:move:1',
+          MoveSource={Owner=1,City=CITIES[4]:GetID(),X=4,Y=0,Building=1,Slot=0},
+          MoveTarget={Owner=1,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0}}
+        local state=JAC_AbsorptionGameplay.GetState()
+        state.Transactions['carrier-ui']={ID='carrier-ui',NativeWorks={{Carrier=carrier}}}
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        "#,
+    )
+    .exec()?;
+    load_hero_keys(&lua)?;
+    lua.load(
+        r#"
+        local reads=assert(ExposedMembers.JAC_HeroReadAPI)
+        assert(reads.NativeMoveAvailable)
+        local multiplayer=GameConfiguration.IsAnyMultiplayer
+        GameConfiguration.IsAnyMultiplayer=function() return true end
+        for _=1,3 do Events.GameCoreEventPublishComplete.Emit() end
+        assert(UI_REQUESTS==0 and WORK_CITIES[4] and not WORK_CITIES[16]
+          and not reads.GetObservation('native:move:1'),
+          'saved MOVE dispatched or published in unsupported multiplayer')
+        GameConfiguration.IsAnyMultiplayer=multiplayer
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1 and WORK_CITIES[16] and not WORK_CITIES[4])
+        assert(reads.GetObservation('native:move:1')==nil,
+          'UI claimed physical success in the same event as dispatch')
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('native:move:1').Published
+          and not reads.GetObservation('native:move:1').Unchanged)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1,'published work sent another MOVE')
+
+        WORK_CITIES[4],WORK_CITIES[16]=true,nil
+        MOVE_EFFECT=false
+        local state=JAC_AbsorptionGameplay.GetState()
+        state.Transactions['carrier-ui'].NativeWorks[1].Carrier.MoveToken='native:move:2'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==2 and not reads.GetObservation('native:move:2'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(not reads.GetObservation('native:move:2'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('native:move:2').Unchanged
+          and WORK_CITIES[4] and not WORK_CITIES[16],
+          'true without physical movement was reported as success')
+        assert(UI_REQUESTS==2,'unchanged work retried without a saved new token')
+
+        local state=JAC_AbsorptionGameplay.GetState()
+        local carrier=state.Transactions['carrier-ui'].NativeWorks[1].Carrier
+        carrier.Phase='RETURN';carrier.Owner=3;carrier.ReturnToken='missing:return'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],3)
+        CITIES[16].monument=false
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(not reads.GetObservation('missing:return'))
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('missing:return').Unchanged,
+          'missing carrier building left the return token unpublished forever')
+
+        CITIES[16].monument=true
+        WORK_CITIES[16]=nil
+        local state=JAC_AbsorptionGameplay.GetState()
+        local carrier=state.Transactions['carrier-ui'].NativeWorks[1].Carrier
+        carrier.Route,carrier.Phase,carrier.Owner='TO_OWNER','BORROW',2
+        carrier.BorrowToken='owner:borrow'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],1)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:borrow').Published,
+          'empty recipient-owned carrier was not published after borrowing')
+
+        WORK_CITIES[16]=true
+        carrier.Phase,carrier.ReturnToken='RETURN','owner:return'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        CityManager.TransferCity(CITIES[16],2)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:return').Published,
+          'work-bearing recipient carrier was not published after return')
+
+        for _,route in ipairs({'TO_OWNER','TO_FREE','FROM_FREE'}) do
+          carrier.Route,carrier.Phase,carrier.RefreshRequested=route,'PROVED',true
+          carrier.ReturnToken='proved:refresh:'..route
+          local slot={Owner=2,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0}
+          carrier.FinalSlot=route~='FROM_FREE' and slot or nil
+          carrier.Target=route=='FROM_FREE' and slot or nil
+          Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+          Events.GameCoreEventPublishComplete.Emit()
+          local observed=assert(reads.GetObservation(carrier.ReturnToken),
+            'proved carrier did not refresh from its saved final physical slot: '..route)
+          assert(observed.Published and not observed.Unchanged,
+            'proved final slot was mistaken for a carrier mismatch: '..route)
+        end
+
+        WORK_CITIES[16]=nil
+        carrier.Route='TO_OWNER'
+        carrier.Phase,carrier.ReturnToken='RESTORE','owner:restore'
+        Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,state)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(reads.GetObservation('owner:restore').Published,
+          'empty recipient carrier rollback was not published')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn native_work_metadata_survives_ui_only_getters() -> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        for _,city in pairs(CITIES) do
+          local original=city.GetBuildings
+          city.GetBuildings=function(self)
+            local buildings=original(self)
+            buildings.GetGreatWorkInSlot=function(_,building)
+              return city:GetX()==4 and building==1 and 1007 or -1
+            end
+            return buildings
+          end
+        end
+        GameInfo.GreatWorks={[3]={GreatWorkType='GREATWORK_TEST_RELIC',
+          GreatWorkObjectType='GREATWORKOBJECT_RELIC',Name='LOC_TEST_RELIC',Tourism=8}}
+        ExposedMembers.JAC_HeroReadAPI={ReadNativeWork=function(owner,id,index)
+          assert(owner==1 and id==CITIES[4]:GetID() and index==1007)
+          return {Type=3,CreatorName='Original creator',TurnCreated=2,CreatedByPlayer=0}
+        end}
+        assert(CITIES[4]:GetBuildings().GetGreatWorkTypeFromIndex==nil)
+        local works=TEST_ABSORPTION.OwnedGreatWorkSlots(1)
+        assert(#works==1 and works[1].Index==1007)
+        local work=works[1]
+        assert(work.GreatWorkType=='GREATWORK_TEST_RELIC' and work.Name=='LOC_TEST_RELIC')
+        assert(work.ObjectType=='GREATWORKOBJECT_RELIC' and work.Effects[1]=='TOURISM 8')
+        assert(work.CreatedByPlayer==0 and work.CreatorName=='Original creator'
+          and work.TurnCreated==2,'native work provenance was lost across UI reads')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn native_work_is_one_sorted_item_and_survives_pending_choice_reload() -> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        for _,city in ipairs({CITIES[8],CITIES[12],CITIES[16]}) do
+          local original=city.GetBuildings
+          city.GetBuildings=function(self)
+            local buildings=original(self)
+            buildings.GetGreatWorkInSlot=function() return -1 end
+            return buildings
+          end
+        end
+        Game:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',1)
+        local general=assert(UnitManager.GetUnit(1,8))
+        local row={UnitAbilityType='ABILITY_NATIVE_GENERAL',
+          Description='LOC_TEST_NATIVE_GENERAL_ABILITY'}
+        GameInfo.UnitAbilities=setmetatable({ABILITY_NATIVE_GENERAL=row},
+          {__call=function()
+            local called=false
+            return function()
+              if called then return nil end
+              called=true
+              return row
+            end
+          end})
+        general.GetAbility=function()
+          return {GetAbilityCount=function(_,name)
+            return name=='ABILITY_NATIVE_GENERAL' and 2 or 0
+          end}
+        end
+        GameInfo.GreatPersonIndividuals[42].ActionEffectTextOverride=
+          'LOC_TEST_NATIVE_GENERAL_ACTION'
+        local A=assert(TEST_ABSORPTION)
+        local R=A.Rules
+        assert(R.UnitKind(general)=='PERSON')
+        assert(R.UnitKind(assert(UnitManager.GetUnit(1,3)))=='PERSON')
+        local scientist=UNIT(1,30,'UNIT_GREAT_SCIENTIST',4);scientist.individual=43
+        local engineer=UNIT(1,31,'UNIT_GREAT_ENGINEER',4);engineer.individual=44
+        assert(R.UnitKind(scientist)=='GREAT_PERSON' and R.UnitKind(engineer)=='GREAT_PERSON')
+        scientist.individual=-1
+        assert(R.UnitKind(scientist)=='UNIT','metadata-only Great Person was accepted')
+        UnitManager.Kill(scientist);UnitManager.Kill(engineer)
+        local snap=A.SnapshotUnit(general)
+        assert(snap.Kind=='PERSON' and snap.Individual==42)
+        assert(snap.AbilityCounts.ABILITY_NATIVE_GENERAL==2)
+        local labels=A.UnitAbilityLabels(general)
+        assert(labels[1]=='LOC_TEST_NATIVE_GENERAL_ABILITY'
+          and labels[2]=='LOC_TEST_NATIVE_GENERAL_ACTION')
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local F=assert(TEST_FLOW)
+        local work=assert(A.OwnedGreatWorkSlots(1)[1])
+        local roster=A.GetRoster(1)
+        roster['native-work:1007']={ID='native-work:1007',Kind='ITEM',Owner=1,
+          Outcome='RECOVERED',NativeWork=A.Rules.Copy(work),
+          NativeCustody={Owner=1,City=work.CityID,X=work.X,Y=work.Y,
+            Building=work.Building,Slot=work.Slot},City={Owner=1,X=work.X,Y=work.Y}}
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
+        for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+        local plan={ID='native-pending',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true}
+        local corrupted=A.Rules.Copy(roster)
+        corrupted['native-work:1007'].NativeWork.CreatorName='forged creator'
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,corrupted)
+        assert(not pcall(F.Begin,plan),'changed creator was accepted for a tracked work')
+        Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
+        local flow=F.Begin(plan)
+        assert(flow.Phase=='CHOICE' and flow.Phase1Complete)
+        local native,previous,count=nil,nil,0
+        for _,entry in ipairs(flow.Entries) do
+          assert(not previous or previous<entry.ID,'inventory lost stable-ID order')
+          previous=entry.ID
+          if entry.ID=='native-work:1007' then native=entry;count=count+1 end
+        end
+        assert(count==1 and native and native.Kind=='ITEM' and native.NativeWork.Index==1007,
+          'recovered work was duplicated or rejected in the next absorption')
+        assert(native.EscapeOutcome==nil)
+        assert(native.NativeWork.Owner==1 and native.NativeWork.X==4)
+        assert(native.Rolls.P1_ESCAPE and native.Rolls.P1_ESCAPE.Label)
+        assert(A.OwnedGreatWorks(1)[1007] and not A.OwnedGreatWorks(2)[1007],
+          'phase-one inventory changed the original native work')
+        local before=A.Canonical(flow)
+        local rolls=#RANDOM_CALLS
+        Game.props=A.Rules.Copy(Game.props)
+        for owner=0,3 do Players[owner].props=A.Rules.Copy(Players[owner].props) end
+        NATIVE_PENDING_EXPECT={Before=before,Rolls=rolls,Plan=plan}
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
+        assert(A.Canonical(F.Get('native-pending'))==NATIVE_PENDING_EXPECT.Before)
+        assert(A.Canonical(F.Begin(NATIVE_PENDING_EXPECT.Plan))==NATIVE_PENDING_EXPECT.Before)
+        assert(#RANDOM_CALLS==NATIVE_PENDING_EXPECT.Rolls,
+          'pending native work rerolled after save/load')
+        assert(A.OwnedGreatWorks(1)[1007])
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn recovered_native_hero_waits_for_published_claim_after_reload() -> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local R=A.Rules
+        local state=A.GetState()
+        state.Archive.dormant={ID='dormant',Kind='HERO',Owner=-1,
+          NativeHero={Class=0,ClassType='HEROCLASS_JAC_WARLORD_A',
+            Origin={Owner=1,ID=12,X=12,Y=0}}}
+        Game:SetProperty(R.STATE_KEY,state)
+        local first=A.RecoverArchived('dormant',2,'recovery:dormant',nil)
+        assert(first.Status=='WAITING_UI' and first.AwaitingUI)
+        assert(first.HeroClass==0 and first.ObservationToken and first.CandidateID)
+        assert(HERO_CREATIONS==1 and A.GetRoster(2).dormant==nil,
+          'unpublished Hero was reported as recovered')
+        assert(UnitManager.GetUnit(2,first.CandidateID),
+          'unpublished native candidate was incorrectly removed')
+        Game.props=R.Copy(Game.props)
+        for owner=0,3 do Players[owner].props=R.Copy(Players[owner].props) end
+        NATIVE_HERO_OBSERVATION={Token=first.ObservationToken,ID=first.CandidateID}
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        ExposedMembers.JAC_HeroReadAPI={GetObservation=function(token)
+          if token==NATIVE_HERO_OBSERVATION.Token then
+            return {Claim=2,Origin={player=2,id=12}}
+          end
+        end}
+        local A=TEST_ABSORPTION
+        local complete=A.RecoverArchived('dormant',2,'recovery:dormant',nil)
+        assert(complete.Status=='COMPLETE' and HERO_CREATIONS==1)
+        assert(complete.Record.Unit.ID==NATIVE_HERO_OBSERVATION.ID)
+        assert(A.GetRoster(2).dormant.RecoveryToken=='recovery:dormant')
+        assert(A.RecoverArchived('dormant',2,'recovery:dormant',nil).Status=='COMPLETE')
+        assert(HERO_CREATIONS==1,'recovery duplicated the native Hero')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn live_hero_recovery_restores_native_charges_before_publication() -> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local R=A.Rules
+        local hero=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
+        hero.lifespan=17;hero.charges=2;hero.renown=13
+        hero.damage=7;hero.moves=1
+        HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
+        HERO_DISCOVERED['1:0']=true
+        local record={ID='escaped',Kind='HERO',Owner=1,Unit={Owner=1,ID=13}}
+        hero:SetProperty(R.PERSON_KEY,record)
+        local snapshot=A.SnapshotUnit(hero)
+        UnitManager.Kill(hero)
+        CityManager.TransferCity(CITIES[4],2)
+        record.Owner=-1;record.NativeHero=R.Copy(snapshot.Hero)
+        local state=A.GetState();state.Archive.escaped=record
+        Game:SetProperty(R.STATE_KEY,state)
+        local pending=A.RecoverArchived('escaped',2,'recovery:escaped',snapshot)
+        assert(pending.Status=='WAITING_UI' and pending.CoreRestored
+          and HERO_CREATIONS==1 and A.GetRoster(2).escaped==nil)
+        local candidate=assert(UnitManager.GetUnit(2,pending.CandidateID))
+        assert(candidate.lifespan==17 and candidate.charges==2
+          and candidate.renown==13 and candidate.damage==7 and candidate.moves==1,
+          'unpublished native Hero became usable with fresh default state')
+        local pendingPerson=assert(candidate:GetProperty(R.PERSON_KEY))
+        assert(pendingPerson.ID=='escaped' and pendingPerson.Owner==2
+          and pendingPerson.Unit.ID==candidate:GetID(),
+          'unpublished Hero lacked its recovered person identity')
+        local token=pending.ObservationToken
+        ExposedMembers.JAC_HeroReadAPI={GetObservation=function(wanted)
+          if wanted==token then return {Claim=2,Origin={player=2,id=CITIES[4].id}} end
+        end}
+        local complete=A.RecoverArchived('escaped',2,'recovery:escaped',snapshot)
+        assert(complete.Status=='COMPLETE' and HERO_CREATIONS==1)
+        assert(A.GetRoster(2).escaped.Unit.ID==candidate:GetID())
+        assert(candidate.lifespan==17 and candidate.charges==2 and candidate.renown==13)
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn ui_publication_resumes_claimed_hero_without_extra_creation_and_delays_city_reads()
+-> mlua::Result<()> {
+    let lua = Lua::new();
+    lua.load(WORLD).call::<()>(lua.create_table()?)?;
+    lua.load("function include(_) end").exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local R=A.Rules
+        local state=A.GetState()
+        state.Archive.dormant={ID='dormant',Kind='HERO',Owner=-1,
+          NativeHero={Class=0,ClassType='HEROCLASS_JAC_WARLORD_A',
+            Origin={Owner=1,ID=12,X=12,Y=0}}}
+        Game:SetProperty(R.STATE_KEY,state)
+        local first=A.RecoverArchived('dormant',2,'recovery:world:dormant',nil)
+        assert(first.Status=='WAITING_UI' and first.AwaitingUI and HERO_CREATIONS==1)
+        local flow={Version=1,Flows={},World={
+          ['world:dormant']={ID='world:dormant',AssetID='dormant',Kind='HERO',
+            Status='CLAIMED',Recipient=2,WaitingFor=first.ObservationToken}}}
+        Game:SetProperty('JAC_ABSORPTION_FLOW_V1',flow)
+        Game.props=R.Copy(Game.props)
+        for owner=0,3 do Players[owner].props=R.Copy(Players[owner].props) end
+        "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Rules.lua")?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    load(&lua, "JAC_Absorption_Flow.lua")?;
+    lua.load(
+        r#"
+        local function event()
+          local handlers={}
+          return {Add=function(fn) handlers[#handlers+1]=fn end,
+            Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
+        end
+        Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),LocalPlayerTurnBegin=event()}
+        PlayerManager.GetAlive=function() return {Players[1],Players[2],Players[3]} end
+        PlayerOperations={EXECUTE_SCRIPT=1}
+        UI_REQUESTS=0
+        UI={RequestPlayerOperation=function(actor,kind,payload)
+          assert(actor==2 and kind==1)
+          UI_REQUESTS=UI_REQUESTS+1
+          GameEvents.JAC_AbsorptionFlow_Operation.Emit(actor,payload)
+        end}
+        UI_CACHE_READY=false
+        local manager=HERO_MANAGER
+        local cache=setmetatable({GetHeroOriginCityID=function(_,class)
+          if UI_CACHE_READY then return manager:GetHeroOriginCityID(class) end
+          return nil
+        end},{__index=manager})
+        Game.GetHeroesManager=function() return cache end
+        "#,
+    )
+    .exec()?;
+    load_hero_keys(&lua)?;
+    lua.load(
+        r#"
+        local A=TEST_ABSORPTION
+        local F=TEST_FLOW
+        local reads=assert(ExposedMembers.JAC_HeroReadAPI)
+        local R=A.Rules
+        assert(reads.ReadCity(2,CITIES[12].id,'LOYALTY')==87)
+        local cities=Players[2].GetCities
+        Players[2].GetCities=function(self)
+          local collection=cities(self)
+          collection.FindID=function() return nil end
+          return collection
+        end
+        local request={Token='city-delay',Owner=2,ID=CITIES[12].id,Turn=CURRENT_TURN}
+        reads.ObserveCity(request)
+        assert(reads.GetObservation(request.Token)==nil,'unpublished city cache was accepted')
+        Players[2].GetCities=cities
+        reads.ObserveCity(request)
+        assert(reads.GetObservation(request.Token).Value==87)
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(F.GetWorld('world:dormant').Status=='CLAIMED' and UI_REQUESTS==0)
+        assert(A.GetState().Recoveries['recovery:world:dormant'].Status=='WAITING_UI')
+        local waiting=F.GetWorld('world:dormant')
+        assert(not pcall(F.ResumeWorldFor,1,'world:dormant',waiting.WaitingFor))
+        assert(not pcall(F.ResumeWorldFor,2,'world:dormant',waiting.WaitingFor),
+          'unpublished Hero was resumed')
+        local ownedCities=Players[2].cities
+        local pending=R.Copy(A.GetState().Recoveries['recovery:world:dormant'])
+        Players[2].cities={};Players[2].IsAlive=function() return true end
+        assert(pcall(F.Tick),'cityless recipient stopped the world tick')
+        local blocked=F.GetWorld('world:dormant')
+        assert(blocked.Status=='BLOCKED' and blocked.Recipient==2
+          and blocked.WaitingFor==waiting.WaitingFor)
+        assert(R.Equal(pending,A.GetState().Recoveries['recovery:world:dormant'])
+          and HERO_CREATIONS==1,'lost recipient changed the pending native Hero')
+        assert(pcall(F.Tick) and F.GetWorld('world:dormant').Status=='BLOCKED')
+        Game.props=R.Copy(Game.props)
+        Players[2].cities=ownedCities
+        local ok,why=pcall(F.Tick)
+        local resumed=F.GetWorld('world:dormant')
+        assert(ok and resumed.Status=='CLAIMED',tostring(why)..':'..resumed.Status..':'..tostring(resumed.Error))
+        UI_CACHE_READY=true
+        Events.GameCoreEventPublishComplete.Emit()
+        local world=F.GetWorld('world:dormant')
+        assert(world.Status=='COMPLETE' and UI_REQUESTS==1,tostring(world.Error))
+        assert(HERO_CREATIONS==1 and A.GetRoster(2).dormant.RecoveryToken=='recovery:world:dormant')
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(HERO_CREATIONS==1 and UI_REQUESTS==1 and #F.GetPendingWorlds(2)==0,
+          'duplicate publication made another Hero or operation')
+        assert(not pcall(F.ResumeWorldFor,1,'world:dormant',world.WaitingFor),
+          'another actor resumed a human reward')
+        local state=A.GetState()
+        state.Archive.manual={ID='manual',Kind='HERO',Owner=-1,
+          NativeHero={Class=1,ClassType='HEROCLASS_JAC_WARLORD_B',Origin={Owner=1,ID=12,X=12,Y=0}}}
+        Game:SetProperty(A.Rules.STATE_KEY,state)
+        assert(A.RecoverArchived('manual',2,'manual:recovery',nil).Status=='WAITING_UI')
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(UI_REQUESTS==1,'manual Tuner intent caused an automatic operation loop')
+        assert(A.GetState().Recoveries['manual:recovery'].Status=='WAITING_UI')
+        assert(A.RecoverArchived('manual',2,'manual:recovery',nil).Status=='COMPLETE',
+          'manual Tuner intent did not retain its published observation')
+        "#,
+    )
+    .exec()
+}
+
+fn native_scenario(name: &str) -> serde_json::Value {
+    let source = fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../civ6-autotest/scenarios")
+            .join(name),
+    )
+    .expect("native experiment scenario");
+    serde_json::from_str(&source).expect("valid native scenario JSON")
+}
+
+#[test]
+fn native_experiment_scripts_compile_in_lua51() -> mlua::Result<()> {
+    let lua = Lua::new();
+    let mut checked = 0;
+    for name in [
+        "absorption-native-custody.json",
+        "absorption-native-deal.json",
+        "absorption-native-product-probe.json",
+        "absorption-native-product-resume.json",
+        "absorption-native-product-finish.json",
+        "absorption-native-scatter-inventory.json",
+        "absorption-native-scatter-carrier.json",
+        "absorption-native-scatter-flow-start.json",
+        "absorption-native-scatter-physical-probe.json",
+        "absorption-native-scatter-reward-site.json",
+        "absorption-native-scatter-recovery.json",
+        "absorption-native-acquired-palace-product.json",
+        "absorption-native-acquired-carrier-diff.json",
+        "absorption-native-acquired-carrier-resume.json",
+        "absorption-native-acquired-result-final.json",
+        "absorption-return-boundary.json",
+        "absorption-japan.json",
+        "absorption-japan-native.json",
+        "absorption-japan-recall-continuation.json",
+        "absorption-japan-owner-turn-diagnostic.json",
+        "absorption-japan-owner-turn-isolated.json",
+        "absorption-hero-recall.json",
+        "absorption-native-bridge-probe.json",
+        "absorption-native-ai-same-owner-move.json",
+        "absorption-native-ai-carrier-return.json",
+        "absorption-native-carrier-side-effects.json",
+        "absorption-native-cross-owner-freecity.json",
+        "absorption-native-freecity-recover-original.json",
+        "absorption-native-reverse-carrier-recovery.json",
+        "absorption-native-work-probe.json",
+        "absorption-native-artwork-locks.json",
+        "absorption-native-artwork-aged.json",
+        "absorption-native-artifact-full.json",
+    ] {
+        let scenario = native_scenario(name);
+        for step in scenario["steps"].as_array().expect("scenario steps") {
+            for code in [step["code"].as_str(), step["condition"]["code"].as_str()]
+                .into_iter()
+                .flatten()
+            {
+                lua.load(code).set_name(name).into_function()?;
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked >= 25, "experiment scripts were not collected");
+    Ok(())
+}
+
+#[test]
+fn artwork_targets_are_the_two_prepared_museums() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|code| code.contains("local M={Cases={}"))
+        .expect("artwork oracle");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        ExposedMembers={};OCCUPIED=-1
+        Game={GetProperty=function() return {Fixtures={art={City=10},art_target={City=20}}} end}
+        local function rows(list)
+          local n=0;return function() n=n+1;return list[n] end
+        end
+        GameInfo={GreatWork_ValidSubTypes=function() return rows({
+          {GreatWorkObjectType='ART',GreatWorkSlotType='ART_SLOT'}}) end,
+          GreatWorkSlotTypes={[1]={GreatWorkSlotType='ART_SLOT'}},
+          Buildings=function() return rows({{Index=23,BuildingType='BUILDING_MUSEUM_ART'},
+            {Index=24,BuildingType='OTHER_COMPATIBLE_BUILDING'}}) end}
+        local function city(id)
+          return {GetOwner=function() return 1 end,GetID=function() return id end,
+            GetX=function() return id end,GetY=function() return 0 end,
+            GetBuildings=function() return {HasBuilding=function() return true end,
+              IsPillaged=function() return false end,GetNumGreatWorkSlots=function() return 1 end,
+              GetGreatWorkSlotType=function() return 1 end,
+              GetGreatWorkInSlot=function() return id==OCCUPIED and 99 or -1 end} end}
+        end
+        Players={[1]={GetCities=function() return {Members=function()
+          return ipairs({city(5),city(10),city(20)}) end} end}}
+        Events={GreatWorkMoved={Add=function() end}}
+    "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    lua.load(
+        r#"
+        local M=ExposedMembers.JAC_ArtworkMoveOracle
+        local fresh=M.Target({Owner=1,City=10,X=10,Y=0,Building=23,Slot=0},'ART','art_fresh')
+        assert(fresh.City==20 and fresh.Building==23)
+        local aged=M.Target({Owner=1,City=20,X=20,Y=0,Building=23,Slot=0},'ART','art_aged')
+        assert(aged.City==10 and aged.Building==23)
+        OCCUPIED=20
+        assert(not pcall(M.Target,{Owner=1,City=10,X=10,Y=0,Building=23,Slot=0},'ART','art_fresh'))
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
+fn artifact_effect_changes_fail_before_save_and_after_reload() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let scripts: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .collect();
+    let before = scripts
+        .iter()
+        .find(|s| s.contains("persisted before MOVE"))
+        .expect("before proof");
+    let after = scripts
+        .iter()
+        .find(|s| s.contains("effects persisted after MOVE"))
+        .expect("after proof");
+    let reload = scripts
+        .iter()
+        .find(|s| s.contains("JAC_ARTIFACT_FULL_RELOAD_PROOF"))
+        .expect("reload proof");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local props={JAC_ARTWORK_CASE_PLAN={Fixtures={artifact_source={City=10}}}}
+        Game={GetLocalPlayer=function() return 1 end,GetProperty=function(_,k) return props[k] end,
+          SetProperty=function(_,k,v) props[k]=v end}
+        EFFECTS={'CULTURE 2','TOURISM 3'}
+        local function work(city)
+          return {Index=4,Owner=1,CityID=city,X=city,Y=0,Building=24,
+            BuildingType='BUILDING_MUSEUM_ARTIFACT',Slot=0,GreatWorkType='GW',
+            ObjectType='GREATWORKOBJECT_ARTIFACT',Name='Name',CreatorName='Creator',
+            TurnCreated=1,CreatedByPlayer=1,Effects=EFFECTS}
+        end
+        local function copy(t)
+          if type(t)~='table' then return t end
+          local result={};for k,v in pairs(t) do result[k]=copy(v) end;return result
+        end
+        JAC_AbsorptionGameplay={OwnedGreatWorkSlots=function() return {work(10)} end,
+          NativeWorkLocations=function() return {work(20)} end,
+          Rules={Copy=copy,Equal=function(a,b) return table.concat(a,'|')==table.concat(b,'|') end}}
+        ExposedMembers={JAC_ArtworkEvidence={artifact_full_empty={Index=4,Moved=true,
+          RequestOnly=false,GlobalCount=1,Target={Owner=1,City=20,X=20,Y=0,Building=24,Slot=0}}}}
+    "#,
+    )
+    .exec()?;
+    lua.load(*before).exec()?;
+    lua.load(*after).exec()?;
+    lua.load(*reload).exec()?;
+    lua.load("EFFECTS={'CULTURE 99','TOURISM 3'}").exec()?;
+    for code in [*after, *reload] {
+        assert!(
+            lua.load(code)
+                .exec()
+                .expect_err("changed effects accepted")
+                .to_string()
+                .contains("artifact effects changed")
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn excavation_checks_use_operation_parameters_before_visibility_flags() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let codes: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .filter(|code| code.contains("JAC_ARTIFACT_EXCAVATE_CHECK"))
+        .collect();
+    assert_eq!(codes.len(), 3);
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local unit={GetArchaeology=function() return {GetArtifactIndex=function() return -1 end} end,
+          GetMovesRemaining=function() return 4 end}
+        Game={GetProperty=function() return {Owner=1,Unit=77} end}
+        Game.GetArtifactAtPlot=function() return {Type=1,ActingPlayerID=1} end
+        Map={GetPlot=function() return {GetIndex=function() return 8 end,
+          GetOwner=function() return 1 end,GetResourceType=function() return 9 end,
+          GetDistrictType=function() return -1 end,GetImprovementType=function() return -1 end} end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end,GetNextExtractingArchaeologist=function() return nil end} end}}
+        GameInfo={UnitOperations={UNITOPERATION_EXCAVATE={Hash=2468}}}
+        UnitOperationResults={FAILURE_REASONS=2}
+        Locale={Lookup=function(value) return value end}
+        CAN_EXCAVATE=true;REQUESTS=0
+        UnitManager={CanStartOperation=function(u,hash,params,visible,results)
+          assert(u==unit and hash==2468)
+          assert(params==nil and visible==false and results==true,'wrong operation argument order')
+          return CAN_EXCAVATE, {[2]={'BLOCKED'}} end,
+          RequestOperation=function(u,hash)
+            assert(u==unit and hash==2468);REQUESTS=REQUESTS+1 end}
+        "#,
+    )
+    .exec()?;
+    for code in &codes {
+        lua.load(*code).exec()?;
+    }
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 3);
+    lua.load("REQUESTS=0").exec()?;
+    let old_call = codes[0].replace("unit,hash,nil,false,true", "unit,hash,false,nil,true");
+    assert!(
+        lua.load(&old_call)
+            .exec()
+            .expect_err("old argument order accepted")
+            .to_string()
+            .contains("wrong operation argument order")
+    );
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    lua.load("CAN_EXCAVATE=false;REQUESTS=0").exec()?;
+    for code in codes {
+        let error = lua
+            .load(code)
+            .exec()
+            .expect_err("rejected excavation dispatched");
+        assert!(error.to_string().contains("BLOCKED"));
+    }
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    Ok(())
+}
+
+#[test]
+fn archaeologist_production_waits_for_queue_and_binds_only_one_new_source_unit() -> mlua::Result<()>
+{
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let code = |marker: &str| {
+        steps
+            .iter()
+            .find_map(|s| s["code"].as_str().filter(|text| text.contains(marker)))
+            .expect("production step")
+    };
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        REQUESTS=0;PROGRESS=0;HASH=0;OWNER=1;CITY=10
+        local baseline={Owner=1,City=10,X=4,Y=5,Units={['7']=true}}
+        PROPS={JAC_ARTIFACT_PRODUCTION_BASELINE=baseline}
+        Game={GetProperty=function(_,key) return PROPS[key] end,
+          SetProperty=function(_,key,value) PROPS[key]=value end}
+        GameInfo={Units={UNIT_ARCHAEOLOGIST={Index=3,Hash=2468,CanTrain=false}}}
+        CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,
+          PARAM_QUEUE_DESTINATION_LOCATION=3,VALUE_REPLACE_AT=4,BUILD=5}
+        local queue={CurrentlyBuilding=function() return 'archaeologist' end,
+          AddProgress=function(_,value) assert(value==1000);PROGRESS=PROGRESS+1 end}
+        QUEUE=queue
+        local city={GetOwner=function() return OWNER end,GetID=function() return CITY end,
+          GetX=function() return 4 end,GetY=function() return 5 end,
+          GetBuildQueue=function() return queue end}
+        Game.GetCurrentGameTurn=function() return 1 end
+        ExposedMembers={JAC_ArtifactProductionProof={Owner=1,City=10,X=4,Y=5,Hash=0,Turn=1}}
+        CityManager={GetCityAt=function(x,y) assert(x==4 and y==5);return city end,
+          RequestOperation=function(c,kind,p)
+            assert(c==city and kind==5 and p[1]==2468 and p[2]==4 and p[3]==0)
+            REQUESTS=REQUESTS+1
+          end}
+        UNITS={}
+        Players={[1]={GetCities=function() return {FindID=function(_,id)
+          assert(id==10);return city end} end,GetUnits=function() return {Members=function()
+          local i=0;return function() i=i+1;if UNITS[i] then return i,UNITS[i] end end
+        end} end}}
+        function makeUnit(id,x,y,kind)
+          return {GetID=function() return id end,GetX=function() return x end,
+            GetY=function() return y end,GetType=function() return kind end}
+        end
+        "#,
+    )
+    .exec()?;
+    let request = code("JAC_ARTIFACT_PRODUCTION_REQUEST");
+    let progress = code("advanced active official production");
+    let progress_step = steps
+        .iter()
+        .find(|s| s["code"].as_str() == Some(progress))
+        .expect("progress step");
+    assert_eq!(progress_step["state_name"], "GameCore_Tuner");
+    let bind = code("JAC_ARTIFACT_EXCAVATOR_PRODUCED");
+    assert!(lua.load(request).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    lua.load("GameInfo.Units.UNIT_ARCHAEOLOGIST.CanTrain=true")
+        .exec()?;
+    lua.load(request).exec()?;
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert!(lua.load(progress).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
+    lua.load("ExposedMembers.JAC_ArtifactProductionProof.Hash=2468")
+        .exec()?;
+    lua.load("SAVED_PROGRESS=QUEUE.AddProgress;QUEUE.AddProgress=nil")
+        .exec()?;
+    assert!(
+        lua.load(progress).exec().is_err(),
+        "advanced production without the official API"
+    );
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 0);
+    lua.load("QUEUE.AddProgress=SAVED_PROGRESS").exec()?;
+    lua.load(progress).exec()?;
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 1);
+    for units in [
+        "{}",
+        "{makeUnit(7,4,5,3)}",
+        "{makeUnit(8,40,5,3)}",
+        "{makeUnit(8,4,5,9)}",
+        "{makeUnit(8,4,5,3),makeUnit(9,4,5,3)}",
+    ] {
+        lua.load(format!("UNITS={units}")).exec()?;
+        assert!(
+            lua.load(bind).exec().is_err(),
+            "bound invalid units {units}"
+        );
+        assert!(
+            lua.load("return PROPS.JAC_ARTIFACT_EXCAVATOR==nil")
+                .eval::<bool>()?
+        );
+    }
+    lua.load("UNITS={makeUnit(7,4,5,3),makeUnit(8,4,5,3)}")
+        .exec()?;
+    lua.load(bind).exec()?;
+    assert!(lua.load("local p=PROPS.JAC_ARTIFACT_EXCAVATOR;return p.Unit==8 and p.City==10 and p.Produced==true").eval::<bool>()?);
+    lua.load("OWNER=2").exec()?;
+    assert!(lua.load(request).exec().is_err());
+    assert!(lua.load(progress).exec().is_err());
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert_eq!(lua.globals().get::<i64>("PROGRESS")?, 1);
+    Ok(())
+}
+
+#[test]
+fn antiquity_city_moves_center_unit_without_loss_and_rejects_changed_records() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let transfer = steps
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_CENTER_MOVED"))
+        .expect("fixture unit preservation");
+    let verify = steps
+        .iter()
+        .filter_map(|s| s["condition"]["code"].as_str())
+        .find(|s| s.contains("local before=assert(t.Records"))
+        .expect("fixture record comparison");
+    let guard = steps
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_GUARDS_VERIFIED"))
+        .expect("guard preservation after save/load");
+    let lua = Lua::new();
+    lua.load(r#"
+      PX,PY,DAMAGE,MOVES,OWNER,TRANSFERS,PLACE=10,10,7,2,2,0,true
+      local unit={GetX=function() return PX end,GetY=function() return PY end,
+        GetOwner=function() return 2 end,GetID=function() return 88 end,GetType=function() return 4 end,
+        GetDamage=function() return DAMAGE end,GetMovesRemaining=function() return MOVES end,
+        SetDamage=function(_,n) DAMAGE=n end,ChangeMovesRemaining=function(_,n) MOVES=MOVES+n end}
+      local city={GetOwner=function() return OWNER end,GetID=function() return 5 end}
+      local t={To=1,Cities={{Owner=2,City=5,X=10,Y=10}},Plots={1,2,3},
+        Records={['1']={Era=2},['2']={Era=2},['3']={Era=2}}}
+      ExposedMembers={JAC_ArtifactSiteCity=t};PROPS={};ERA=2
+      Game={SetProperty=function(_,key,value) PROPS[key]=value end,
+        GetProperty=function(_,key) return PROPS[key] end,
+        GetArtifactAtPlot=function() return {Era=ERA} end}
+      GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
+      JAC_AbsorptionGameplay={Rules={Copy=function(value) return value end}}
+      PlayerManager={GetAliveIDs=function() return {2} end}
+      CITY_COUNT=2
+      Players={[2]={GetCities=function() return {Members=function()
+        local n=0;return function() n=n+1;if n<=CITY_COUNT then return n,city end end
+      end} end,GetUnits=function() return {Members=function()
+        local done=false;return function() if not done then done=true;return 88,unit end end
+      end} end}}
+      UnitManager={GetUnit=function(owner,id) assert(owner==2 and id==88);return unit end,
+        PlaceUnit=function(u,x,y) assert(u==unit);if PLACE then PX,PY,DAMAGE,MOVES=x,y,0,0 end end}
+      CityManager={GetCityAt=function(x,y) assert(x==10 and y==10);return city end,
+        TransferCity=function(c,owner)
+          assert(c==city and owner==1 and (PX~=10 or PY~=10));OWNER=owner;TRANSFERS=TRANSFERS+1
+        end}
+      Map={GetPlot=function(x,y) return {GetOwner=function() return 2 end,
+        IsWater=function() return false end,IsImpassable=function() return false end} end,
+        GetUnitsAt=function() return {GetCount=function() return 0 end} end,
+        GetPlotByIndex=function() return {GetOwner=function() return OWNER end,
+          GetResourceType=function() return 9 end} end}
+    "#).exec()?;
+    lua.load(transfer).exec()?;
+    assert!(lua.load("return TRANSFERS==1 and OWNER==1 and DAMAGE==7 and MOVES==2 and #PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED==1 and PROPS.JAC_ARTIFACT_SITE_CENTER_MOVED[1].ID==88").eval::<bool>()?);
+    assert!(lua.load(verify).eval::<bool>()?);
+    lua.load(guard).exec()?;
+    lua.load("DAMAGE=8").exec()?;
+    assert!(
+        lua.load(guard).exec().is_err(),
+        "accepted altered guard damage after reload"
+    );
+    lua.load("DAMAGE=7;Game.GetArtifactAtPlot=function() return {Era=2,Extra=1} end")
+        .exec()?;
+    assert!(
+        !lua.load(verify).eval::<bool>()?,
+        "accepted an added artifact record field"
+    );
+    lua.load("Game.GetArtifactAtPlot=function() return {Era=ERA} end")
+        .exec()?;
+    lua.load("ERA=3").exec()?;
+    assert!(
+        !lua.load(verify).eval::<bool>()?,
+        "accepted a changed artifact record"
+    );
+    lua.load("PX,PY,OWNER,TRANSFERS,PLACE=10,10,2,0,false;PROPS={}")
+        .exec()?;
+    assert!(
+        lua.load(transfer).exec().is_err(),
+        "transferred without clearing the center"
+    );
+    assert!(
+        lua.load(
+            "return TRANSFERS==0 and OWNER==2 and PX==10 and PY==10 and DAMAGE==7 and MOVES==2"
+        )
+        .eval::<bool>()?
+    );
+    lua.load("PLACE=true;CITY_COUNT=1").exec()?;
+    assert!(
+        lua.load(transfer).exec().is_err(),
+        "transferred a city after the donor lost its remaining city"
+    );
+    assert!(
+        lua.load("return TRANSFERS==0 and OWNER==2 and PX==10 and PY==10")
+            .eval::<bool>()?
+    );
+    Ok(())
+}
+
+#[test]
+fn antiquity_city_fixture_preserves_occupied_centers_and_existing_originals() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|s| s.contains("JAC_ARTIFACT_SITE_CITY_PLAN"))
+        .expect("genuine antiquity city preparation");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+      ExposedMembers={}; SAFE=true
+      Game={GetLocalPlayer=function() return 1 end,GetArtifactAtPlot=function() return {} end}
+      GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}},Buildings=function()
+        local done=false;return function() if not done then done=true;return {Index=0} end end
+      end}
+      local cities={}
+      for id=2,5 do
+        local n=id
+        cities[n]={GetOwner=function() return 2 end,GetID=function() return n end,
+          GetX=function() return n+100 end,GetY=function() return 0 end,
+          GetBuildings=function() return {HasBuilding=function() return true end,
+            GetNumGreatWorkSlots=function() return 1 end,
+            GetGreatWorkInSlot=function() return n==3 and 99 or -1 end} end}
+      end
+      Map={GetPlotCount=function() return 11 end,GetPlotByIndex=function(i)
+        local city=i<3 and 2 or i<6 and 3 or i<8 and 4 or 5
+        return {City=city,GetIndex=function() return i end,GetResourceType=function() return 9 end,
+          GetOwner=function() return 2 end,IsWater=function() return false end,
+          IsImpassable=function() return false end}
+      end,GetPlot=function(x) return {Center=x-100} end}
+      Map.GetUnitsAt=function(q) return {GetCount=function()
+        if q.Center==2 or (q.Center==5 and not SAFE) then return 1 end;return 0
+      end} end
+      Cities={GetPlotPurchaseCity=function(q) return cities[q.City] end}
+      CityManager={GetCityAt=function(x) return cities[x-100] end}
+      Players={[2]={GetCities=function() return {Members=function()
+        local n=1;return function() n=n+1;if cities[n] then return n,cities[n] end end
+      end} end}}
+    "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return t.Cities[1].City==5 and t.Cities[1].Owner==2 and #t.Cities==1 and t.To==1 and #t.Plots==3 and t.Plots[1]==8 and t.Plots[3]==10").eval::<bool>()?);
+    lua.load("Game.GetArtifactAtPlot=function(i) if i~=10 then return {} end end")
+        .exec()?;
+    lua.load(code).exec()?;
+    assert!(lua.load("local t=ExposedMembers.JAC_ArtifactSiteCity;return #t.Cities==2 and t.Cities[1].City==4 and t.Cities[2].City==5 and #t.Plots==4 and t.Plots[1]==6 and t.Plots[4]==9").eval::<bool>()?);
+    lua.load("Game.GetArtifactAtPlot=function(i) if i==6 or i==7 then return {} end end;ExposedMembers.JAC_ArtifactSiteCity=nil")
+        .exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "accepted existing original or fewer than three sites"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    lua.load("Game.GetArtifactAtPlot=function(i) if i>=6 and i<10 then return {} end end;Players[2].GetCities=function() return {Members=function() local n=3;return function() n=n+1;if n<=5 then return n,{} end end end} end").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "reserved both of a donor's two cities"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    let unreserved = code.replace("if used+1<candidate.CityCount then", "if true then");
+    assert_ne!(unreserved, code, "reservation gate not found");
+    lua.load(&unreserved).exec()?;
+    assert!(lua.load("return #ExposedMembers.JAC_ArtifactSiteCity.Cities==2 and #ExposedMembers.JAC_ArtifactSiteCity.Plots==4").eval::<bool>()?);
+    lua.load("ExposedMembers.JAC_ArtifactSiteCity=nil").exec()?;
+    lua.load("Game.GetArtifactAtPlot=function() return {} end;Players[2].GetCities=function() return {Members=function() local done=false;return function() if not done then done=true;return 5,{} end end end} end").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "selected the donor's last city"
+    );
+    assert!(
+        lua.load("return ExposedMembers.JAC_ArtifactSiteCity==nil")
+            .eval::<bool>()?
+    );
+    Ok(())
+}
+
+#[test]
+fn excavation_fixture_selects_recorded_unoccupied_local_or_neutral_land() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artifact-full.json");
+    let codes: Vec<_> = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .filter(|code| code.contains("no unoccupied local-or-neutral genuine land antiquity site"))
+        .collect();
+    assert_eq!(codes.len(), 3);
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        GameInfo={Resources={RESOURCE_ANTIQUITY_SITE={Index=9}}}
+        Game={GetLocalPlayer=function() return 1 end,
+          GetProperty=function() return VISITED end,
+          GetArtifactAtPlot=function(index) return index~=1 and {} or nil end}
+        ExposedMembers={}
+        local owners={2,-1,-1,-1,-1}
+        Map={GetPlotCount=function() return 5 end,GetPlotByIndex=function(index)
+          return {GetResourceType=function() return 9 end,
+            GetOwner=function() return owners[index+1] end,
+            IsWater=function() return index==2 end,IsImpassable=function() return false end,
+            GetIndex=function() return index end,GetX=function() return index end,
+            GetY=function() return 4 end}
+          end,GetUnitsAt=function(q) return {GetCount=function()
+            return q:GetIndex()==3 and 1 or 0 end} end}
+        "#,
+    )
+    .exec()?;
+    for code in codes {
+        lua.load(code).exec()?;
+        assert!(
+            lua.load("return ExposedMembers.JAC_ArtifactSite.Plot==4")
+                .eval::<bool>()?
+        );
+        lua.load("VISITED={['4']=true}").exec()?;
+        assert!(
+            lua.load(code).exec().is_err(),
+            "reused a previously excavated site"
+        );
+        lua.load("VISITED=nil").exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn artist_activation_uses_the_published_command_hash_without_an_enum_alias() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|code| code.contains("JAC_ARTWORK_ACTIVATE_CHECK"))
+        .expect("artist activation");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        local unit={GetGreatPerson=function() return {
+          GetIndividual=function() return 9 end,GetActionCharges=function() return 0 end} end,
+          GetMovesRemaining=function() return 4 end,
+          GetX=function() return 7 end,GetY=function() return 8 end}
+        Game={GetProperty=function() return {Owner=1,Unit=77,Individual=9,Turn=1} end,
+          GetCurrentGameTurn=function() return 1 end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end} end}}
+        GameInfo={GreatPersonIndividuals={[9]={GreatPersonIndividualType='ARTIST'}},
+          GreatWorks=function() return function() return nil end end,
+          UnitCommands={UNITCOMMAND_ACTIVATE_GREAT_PERSON={Hash=123456}}}
+        UnitCommandTypes={};UnitOperationResults={FAILURE_REASONS=2}
+        Locale={Lookup=function(value) return value end}
+        CAN_ACTIVATE=true;REQUESTS=0;CHECKS=0
+        UnitManager={CanStartCommand=function(u,hash,loose,results)
+          assert(u==unit and hash==123456,'wrong activation command');CHECKS=CHECKS+1
+          return CAN_ACTIVATE, {[2]={'REJECTED'}} end,
+          RequestCommand=function(u,hash)
+            assert(u==unit and hash==123456,'wrong request command');REQUESTS=REQUESTS+1 end}
+        "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 1);
+    assert_eq!(lua.globals().get::<i64>("CHECKS")?, 2);
+    lua.load("CAN_ACTIVATE=false;REQUESTS=0").exec()?;
+    assert!(
+        lua.load(code).exec().is_err(),
+        "rejected activation dispatched"
+    );
+    assert_eq!(lua.globals().get::<i64>("REQUESTS")?, 0);
+    Ok(())
+}
+
+#[test]
+fn artist_activation_waits_for_the_exact_published_unit_and_placement() -> mlua::Result<()> {
+    let scenario = native_scenario("absorption-native-artwork-locks.json");
+    let code = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|s| s["condition"]["code"].as_str())
+        .find(|code| code.contains("LATE_ARTIST_PUBLICATION"))
+        .expect("artist publication gate");
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        OWNER=1;X=2;MOVES=0;PERSON=9
+        local unit={GetOwner=function() return OWNER end,GetX=function() return X end,
+          GetY=function() return 8 end,GetType=function() return 3 end,
+          GetMovesRemaining=function() return MOVES end,
+          GetGreatPerson=function() return {GetIndividual=function() return PERSON end} end}
+        Players={[1]={GetUnits=function() return {FindID=function(_,id)
+          assert(id==77);return unit end} end}}
+        Game={GetProperty=function(_,key)
+          if key=='JAC_ARTWORK_FRESH_PREP' then return {Owner=1,Unit=77,Individual=9} end
+          assert(key=='JAC_ARTWORK_CASE_PLAN');return {Fixtures={art={Plot=4}}}
+        end}
+        Map={GetPlotByIndex=function(index)
+          assert(index==4);return {GetX=function() return 7 end,GetY=function() return 8 end}
+        end}
+        GameInfo={Units={[3]={BaseMoves=2}}}
+        "#,
+    )
+    .exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "stale placement accepted");
+    lua.load("X=7").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "stale movement accepted");
+    lua.load("MOVES=2;OWNER=2").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "other owner accepted");
+    lua.load("OWNER=1;PERSON=10").exec()?;
+    assert!(!lua.load(code).eval::<bool>()?, "other individual accepted");
+    lua.load("PERSON=9").exec()?;
+    assert!(lua.load(code).eval::<bool>()?);
+    Ok(())
+}
+
+#[test]
+fn acquired_palace_result_proof_is_identical_after_reload() {
+    let scenario = native_scenario("absorption-native-acquired-palace-product.json");
+    let steps = scenario["steps"].as_array().expect("scenario steps");
+    assert_eq!(steps[10]["action"], "ui_lua");
+    assert_eq!(steps[15]["action"], "ui_lua");
+    assert_eq!(steps[10]["code"], steps[15]["code"]);
+}
+
+#[test]
+fn japanese_recall_continuation_keeps_every_remaining_original_check() {
+    let original = native_scenario("absorption-japan.json");
+    let continued = native_scenario("absorption-japan-recall-continuation.json");
+    let original_steps = original["steps"].as_array().expect("original steps");
+    let continued_steps = continued["steps"].as_array().expect("continued steps");
+    assert_eq!(original_steps.len(), 129);
+    assert_eq!(continued_steps.len(), 31);
+    assert_eq!(continued_steps[1]["exact_name"], true);
+    assert_eq!(continued_steps[2], original_steps[100]);
+    assert_eq!(
+        original_steps[101]["equals_capture"],
+        "ABSORPTION_AFTER_AI_TURN"
+    );
+    assert_eq!(continued_steps[3]["code"], original_steps[101]["code"]);
+    assert_eq!(
+        continued_steps[3]["capture"],
+        "ABSORPTION_AFTER_AI_TURN_CONTINUATION"
+    );
+    assert_eq!(&continued_steps[4..], &original_steps[102..]);
+    let diagnostic = native_scenario("absorption-japan-owner-turn-diagnostic.json");
+    let diagnostic_steps = diagnostic["steps"].as_array().expect("diagnostic steps");
+    assert_eq!(diagnostic_steps.len(), 19);
+    assert_eq!(&diagnostic_steps[2..13], &continued_steps[2..13]);
+    assert_eq!(diagnostic_steps[13], continued_steps[14]);
+    assert_eq!(&diagnostic_steps[14..], &continued_steps[16..21]);
+    let native = native_scenario("absorption-japan-native.json");
+    let native_steps = native["steps"].as_array().expect("native steps");
+    assert_eq!(original_steps[111], native_steps[113]);
+    assert_eq!(original_steps[113], native_steps[116]);
+}
+
+// This fixture tests the scenario's physical oracle, not engine API availability.
+// No operation in this fixture moves a work; nil dispatch and events alone must
+// never be accepted as physical success.
+fn native_matrix_oracle() -> mlua::Result<Lua> {
+    let lua = Lua::new();
+    lua.load(
+        r#"
+        ExposedMembers={}
+        Game={GetProperty=function() return {FreeCity=3} end,GetLocalPlayer=function() return 1 end}
+        local function city(owner,id,x)
+          local c={owner=owner,id=id,x=x,slots={[1]={[0]=-1,[1]=-1},[2]={[0]=-1,[1]=-1}}}
+          function c:GetOwner() return self.owner end
+          function c:GetID() return self.id end
+          function c:GetX() return self.x end
+          function c:GetY() return 0 end
+          function c:GetBuildings()
+            return {
+              HasBuilding=function() return true end,
+              GetNumGreatWorkSlots=function() return 2 end,
+              GetGreatWorkInSlot=function(_,b,s) return c.slots[b][s] end,
+              GetGreatWorkTypeFromIndex=function() return 1 end,
+              GetGreatWorkSlotType=function() return 1 end
+            }
+          end
+          return c
+        end
+        ORACLE_CITIES={city(1,10,1),city(1,20,2),city(2,30,3),city(3,40,4)}
+        ORACLE_CITIES[1].slots[1][0]=0
+        Players={}
+        for owner=1,3 do
+          local owned={}
+          for _,c in ipairs(ORACLE_CITIES) do if c.owner==owner then owned[#owned+1]=c end end
+          Players[owner]={GetCities=function()
+            return {Members=function() return ipairs(owned) end}
+          end}
+        end
+        PlayerManager={GetAliveIDs=function() return {1,2} end}
+        CityManager={GetCityAt=function(x,y) return ORACLE_CITIES[x] end}
+        GameInfo={
+          Buildings=function() local i=0;return function() i=i+1;if i<=2 then return {Index=i} end end end,
+          GreatWorks={[1]={GreatWorkObjectType='GREATWORKOBJECT_RELIC'}},
+          GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}},
+          GreatWork_ValidSubTypes=function()
+            local once=false;return function()
+              if not once then once=true;return {GreatWorkSlotType='GREATWORKSLOT_RELIC',GreatWorkObjectType='GREATWORKOBJECT_RELIC'} end
+            end
+          end
+        }
+        Events={GreatWorkMoved={Add=function(fn) ORACLE_EVENT=fn end}}
+        PlayerOperations={}
+        for _,name in ipairs({'PARAM_PLAYER_ONE','PARAM_CITY_SRC','PARAM_CITY_DEST',
+          'PARAM_BUILDING_SRC','PARAM_BUILDING_DEST','PARAM_GREAT_WORK_INDEX','PARAM_SLOT','MOVE_GREAT_WORK'}) do
+          PlayerOperations[name]=name
+        end
+        UI={RequestPlayerOperation=function(actor,operation,params)
+          assert(actor==1 and params.PARAM_PLAYER_ONE==1 and params.PARAM_GREAT_WORK_INDEX==0)
+          return nil
+        end}
+        ORACLE_SOURCE={Owner=1,City=10,X=1,Y=0,Building=1,Slot=0}
+        ORACLE_DEST={Owner=1,City=20,X=2,Y=0,Building=1,Slot=0}
+        "#,
+    )
+    .exec()?;
+    let scenario = native_scenario("absorption-native-custody.json");
+    let helper = scenario["steps"]
+        .as_array()
+        .expect("steps")
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .find(|code| code.contains("function M.Check("))
+        .expect("physical oracle");
+    let prefix = helper
+        .split("\nlocal found\n")
+        .next()
+        .expect("oracle prefix");
+    assert!(
+        prefix.len() < helper.len(),
+        "fixture must not dispatch the experiment"
+    );
+    lua.load(prefix).exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn native_matrix_requires_unique_exact_index_and_empty_source() -> mlua::Result<()> {
+    let lua = native_matrix_oracle()?;
+    lua.load(
+        r#"
+        local M=ExposedMembers.JAC_NativeMatrix
+        local s,d=ORACLE_SOURCE,ORACLE_DEST
+        assert(PlayerManager.GetFreeCitiesPlayerID==nil,'UI-only oracle gained a Core getter')
+        assert(not M.Check('unchanged',0,s,d))
+        assert(M.Request('local-official',1,1,0,s,d))
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil)
+        ORACLE_EVENT(0,1,10,20)
+        assert(not M.Verify(),'nil return or unrelated event proved movement')
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil,'event alone created official move proof')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=0
+        assert(M.Verify(),'exact index zero in destination was rejected')
+        local proof=assert(ExposedMembers.JAC_NativeOfficialMoveProof)
+        assert(proof.Label=='local-official' and proof.Index==0 and
+          proof.Source.City==10 and proof.Dest.City==20 and proof.Dest.Slot==0)
+        ORACLE_CITIES[1].slots[1][0]=0
+        assert(not pcall(M.Verify),'duplicate source index was accepted')
+        assert(ExposedMembers.JAC_NativeOfficialMoveProof==nil,'stale physical proof survived a failed read')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[4].slots[1][0]=0
+        assert(not pcall(M.Verify),'duplicate index in Free Cities was ignored')
+        ORACLE_CITIES[4].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=7
+        assert(not pcall(M.Verify),'replacement work was accepted')
+        ORACLE_CITIES[2].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][1]=0
+        assert(not pcall(M.Verify),'wrong physical slot was accepted')
+        ORACLE_CITIES[2].slots[1][1]=-1
+        ORACLE_CITIES[3].slots[1][0]=0
+        assert(not pcall(M.Verify),'wrong physical owner was accepted')
+        ORACLE_CITIES[3].slots[1][0]=-1
+        ORACLE_CITIES[2].slots[1][0]=0
+        ORACLE_CITIES[1].slots[1][0]=7
+        assert(not pcall(M.Verify),'nonempty source was accepted')
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[2].id=99
+        assert(not pcall(M.Verify),'stale city ID after transfer was accepted')
+        "#,
+    )
+    .exec()
+}
+
+#[test]
+fn native_deal_rejects_an_unreserved_destination_slot() -> mlua::Result<()> {
+    let lua = native_matrix_oracle()?;
+    lua.load(
+        r#"
+        Game.GetProperty=function(_,key)
+          if key=='JAC_NATIVE_DEAL_TARGET' then return 2 end
+          if key=='JAC_NATIVE_DEAL_SLOT' then
+            return {Owner=2,City=30,X=3,Y=0,Building=1,Slot=0}
+          end
+        end
+        ExposedMembers.JAC_NativeDealData=function()
+          return {Owner=1,Work={Index=0,City=10,X=1,Y=0,Building=1,Slot=0}}
+        end
+        ExposedMembers.JAC_NativeDealLocations=ExposedMembers.JAC_NativeMatrix.Locate
+        ORACLE_CITIES[1].slots[1][0]=-1
+        ORACLE_CITIES[3].slots[1][1]=0
+    "#,
+    )
+    .exec()?;
+    let scenario = native_scenario("absorption-native-deal.json");
+    let steps = scenario["steps"].as_array().expect("steps");
+    let condition = steps[steps.len() - 2]["condition"]["code"]
+        .as_str()
+        .expect("deal physical condition");
+    let error = lua.load(condition).eval::<bool>().unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("deal ignored reserved destination slot"),
+        "{error}"
+    );
+    lua.load("ORACLE_CITIES[3].slots[1][1]=-1;ORACLE_CITIES[3].slots[1][0]=0")
+        .exec()?;
+    assert!(lua.load(condition).eval::<bool>()?);
+    Ok(())
+}

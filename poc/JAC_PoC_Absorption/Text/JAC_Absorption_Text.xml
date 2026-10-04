@@ -12,4 +12,322 @@
   <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="ja_JP"><Text>勢力の吸収が完了しました。</Text></Row>
   <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="en_US"><Text>Faction absorption is complete.</Text></Row>
   <Row Tag="LOC_JAC_ABSORPTION_COMPLETE" Language="ru_RU"><Text>Поглощение державы завершено.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN" Language="ja_JP"><Text>吸収の選択を開く</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN" Language="en_US"><Text>Open absorption choices</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN" Language="ru_RU"><Text>Открыть выбор при поглощении</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TITLE" Language="ja_JP"><Text>勢力吸収：人物と資産</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TITLE" Language="en_US"><Text>Faction absorption: people and assets</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TITLE" Language="ru_RU"><Text>Поглощение: люди и имущество</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_TITLE" Language="ja_JP"><Text>勢力吸収の結果</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_TITLE" Language="en_US"><Text>Faction absorption results</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_TITLE" Language="ru_RU"><Text>Итоги поглощения</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CLOSE" Language="ja_JP"><Text>閉じる</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CLOSE" Language="en_US"><Text>Close</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CLOSE" Language="ru_RU"><Text>Закрыть</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PARTIES" Language="ja_JP"><Text>{1_From} → {2_To}　方式：{3_Mode}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PARTIES" Language="en_US"><Text>{1_From} → {2_To} · {3_Mode}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PARTIES" Language="ru_RU"><Text>{1_From} → {2_To} · {3_Mode}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PROGRESS" Language="ja_JP"><Text>選択済み {1_Selected} / {2_Total}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PROGRESS" Language="en_US"><Text>Chosen {1_Selected} / {2_Total}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PROGRESS" Language="ru_RU"><Text>Выбрано {1_Selected} из {2_Total}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_CHOICE" Language="ja_JP"><Text>対象を開いて処遇を選んでください。↑↓・Tabで移動、Enterで選択、Escで閉じます。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_CHOICE" Language="en_US"><Text>Open an entry and choose its disposition. Arrows or Tab move; Enter selects; Esc closes.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_CHOICE" Language="ru_RU"><Text>Выберите объект и его судьбу. Стрелки или Tab — переход; Enter — выбор; Esc — закрыть.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_RESULT" Language="ja_JP"><Text>各対象の結果を確認してください。Enterで決定、Escで閉じます。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_RESULT" Language="en_US"><Text>Review each result. Enter acknowledges; Esc closes.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KEYS_RESULT" Language="ru_RU"><Text>Проверьте каждый итог. Enter — подтвердить; Esc — закрыть.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PLAYER" Language="ja_JP"><Text>勢力 {1_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PLAYER" Language="en_US"><Text>Faction {1_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PLAYER" Language="ru_RU"><Text>Держава {1_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNKNOWN" Language="ja_JP"><Text>不明：{1_Value}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNKNOWN" Language="en_US"><Text>Unknown: {1_Value}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNKNOWN" Language="ru_RU"><Text>Неизвестно: {1_Value}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NONE" Language="ja_JP"><Text>なし</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NONE" Language="en_US"><Text>None</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NONE" Language="ru_RU"><Text>Нет</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNNAMED" Language="ja_JP"><Text>名称なし（{1_ID}）</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNNAMED" Language="en_US"><Text>Unnamed ({1_ID})</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNNAMED" Language="ru_RU"><Text>Без названия ({1_ID})</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_IDENTITY" Language="ja_JP"><Text>{1_Kind} · 身元：{2_Identity}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_IDENTITY" Language="en_US"><Text>{1_Kind} · identity: {2_Identity}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_IDENTITY" Language="ru_RU"><Text>{1_Kind} · личность: {2_Identity}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ABILITIES" Language="ja_JP"><Text>能力：{1_Abilities}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ABILITIES" Language="en_US"><Text>Abilities: {1_Abilities}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ABILITIES" Language="ru_RU"><Text>Способности: {1_Abilities}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT" Language="ja_JP"><Text>肖像参照：{1_Reference}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT" Language="en_US"><Text>Portrait reference: {1_Reference}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT" Language="ru_RU"><Text>Ссылка на портрет: {1_Reference}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT_NONE" Language="ja_JP"><Text>肖像なし</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT_NONE" Language="en_US"><Text>No portrait</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PORTRAIT_NONE" Language="ru_RU"><Text>Нет портрета</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FINAL" Language="ja_JP"><Text>{1_Result}：{2_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FINAL" Language="en_US"><Text>{1_Result}: {2_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FINAL" Language="ru_RU"><Text>{1_Result}: {2_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FAILURE" Language="ja_JP"><Text>失敗</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FAILURE" Language="en_US"><Text>Failed</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FAILURE" Language="ru_RU"><Text>Неудача</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SUCCESS" Language="ja_JP"><Text>成功</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SUCCESS" Language="en_US"><Text>Succeeded</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SUCCESS" Language="ru_RU"><Text>Успех</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_PENDING" Language="ja_JP"><Text>結果待ち</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_PENDING" Language="en_US"><Text>Pending</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RESULT_PENDING" Language="ru_RU"><Text>Ожидание</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REASON" Language="ja_JP"><Text>理由：{1_Reason}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REASON" Language="en_US"><Text>Reason: {1_Reason}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REASON" Language="ru_RU"><Text>Причина: {1_Reason}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED" Language="ja_JP"><Text>逃亡済み：{1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED" Language="en_US"><Text>Already escaped: {1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED" Language="ru_RU"><Text>Уже сбежал: {1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECTED" Language="ja_JP"><Text>選択：{1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECTED" Language="en_US"><Text>Chosen: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECTED" Language="ru_RU"><Text>Выбрано: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TO_OWNER" Language="ja_JP"><Text>行き先：{1_Owner}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TO_OWNER" Language="en_US"><Text>Destination: {1_Owner}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TO_OWNER" Language="ru_RU"><Text>Получатель: {1_Owner}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNSELECTED" Language="ja_JP"><Text>未選択</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNSELECTED" Language="en_US"><Text>Choose a disposition</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_UNSELECTED" Language="ru_RU"><Text>Выберите судьбу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_INSPECT" Language="ja_JP"><Text>見る</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_INSPECT" Language="en_US"><Text>View</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_INSPECT" Language="ru_RU"><Text>Смотреть</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_OWNER" Language="ja_JP"><Text>{1_Action}先の勢力を選ぶ</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_OWNER" Language="en_US"><Text>Choose a faction for {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_OWNER" Language="ru_RU"><Text>Выберите державу для «{1_Action}»</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BACK" Language="ja_JP"><Text>処遇へ戻る</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BACK" Language="en_US"><Text>Back to dispositions</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BACK" Language="ru_RU"><Text>Назад к вариантам</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_ACTION" Language="ja_JP"><Text>{1_Name}の処遇</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_ACTION" Language="en_US"><Text>Disposition for {1_Name}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CHOOSE_ACTION" Language="ru_RU"><Text>Судьба: {1_Name}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_WITH_OWNER" Language="ja_JP"><Text>{1_Action}（行き先を選択）</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_WITH_OWNER" Language="en_US"><Text>{1_Action} (choose destination)</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_WITH_OWNER" Language="ru_RU"><Text>{1_Action} (выбрать получателя)</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL" Language="ja_JP"><Text>{1_Name}の詳細</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL" Language="en_US"><Text>Details: {1_Name}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL" Language="ru_RU"><Text>Сведения: {1_Name}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL_NONE" Language="ja_JP"><Text>対象なし</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL_NONE" Language="en_US"><Text>No entry</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_DETAIL_NONE" Language="ru_RU"><Text>Нет объектов</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECT" Language="ja_JP"><Text>選ぶ</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECT" Language="en_US"><Text>Select</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_SELECT" Language="ru_RU"><Text>Выбрать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONFIRM" Language="ja_JP"><Text>選択を確定</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONFIRM" Language="en_US"><Text>Confirm choices</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONFIRM" Language="ru_RU"><Text>Подтвердить выбор</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK" Language="ja_JP"><Text>結果を確認</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK" Language="en_US"><Text>Acknowledge results</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK" Language="ru_RU"><Text>Подтвердить итоги</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_READY" Language="ja_JP"><Text>全件選択済み。確定すると移管処理が始まります。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_READY" Language="en_US"><Text>All entries chosen. Confirm to begin the transfer.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_READY" Language="ru_RU"><Text>Все объекты выбраны. Подтвердите для начала передачи.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NEED_CHOICES" Language="ja_JP"><Text>未選択の対象があります。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NEED_CHOICES" Language="en_US"><Text>Some entries still need a choice.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NEED_CHOICES" Language="ru_RU"><Text>Некоторые объекты ещё не выбраны.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK_HINT" Language="ja_JP"><Text>結果は確認するまで保存されます。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK_HINT" Language="en_US"><Text>Results stay saved until acknowledged.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACK_HINT" Language="ru_RU"><Text>Итоги сохраняются до подтверждения.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BLOCKED_HINT" Language="ja_JP"><Text>移管が停止しました。結果と理由を確認してください。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BLOCKED_HINT" Language="en_US"><Text>Transfer stopped. Review the results and reason.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_BLOCKED_HINT" Language="ru_RU"><Text>Передача остановлена. Проверьте итоги и причину.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_WAIT_HINT" Language="ja_JP"><Text>移管処理中です。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_WAIT_HINT" Language="en_US"><Text>Transfer in progress.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_WAIT_HINT" Language="ru_RU"><Text>Передача выполняется.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNIT" Language="ja_JP"><Text>部隊</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNIT" Language="en_US"><Text>Unit</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNIT" Language="ru_RU"><Text>Отряд</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_PERSON" Language="ja_JP"><Text>人物</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_PERSON" Language="en_US"><Text>Person</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_PERSON" Language="ru_RU"><Text>Персонаж</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_HERO" Language="ja_JP"><Text>英雄</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_HERO" Language="en_US"><Text>Hero</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_HERO" Language="ru_RU"><Text>Герой</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="ja_JP"><Text>偉人</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="en_US"><Text>Great Person</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GREAT_PERSON" Language="ru_RU"><Text>Великий человек</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="ja_JP"><Text>総督</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="en_US"><Text>Governor</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_GOVERNOR" Language="ru_RU"><Text>Губернатор</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ja_JP"><Text>移管を続ける</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="en_US"><Text>Continue transfer</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CONTINUE" Language="ru_RU"><Text>Продолжить передачу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="ja_JP"><Text>移管を再試行</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="en_US"><Text>Retry transfer</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY" Language="ru_RU"><Text>Повторить передачу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="ja_JP"><Text>保存済みの移管計画から再試行できます。</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="en_US"><Text>Retry the saved transfer plan.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_RETRY_HINT" Language="ru_RU"><Text>Повторите сохранённый план передачи.</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ja_JP"><Text>所持品</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="en_US"><Text>Item</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_ITEM" Language="ru_RU"><Text>Предмет</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNLOCK" Language="ja_JP"><Text>知識</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNLOCK" Language="en_US"><Text>Knowledge</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_UNLOCK" Language="ru_RU"><Text>Знание</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_RELIGION" Language="ja_JP"><Text>宗教</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_RELIGION" Language="en_US"><Text>Religion</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_RELIGION" Language="ru_RU"><Text>Религия</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_LEADER" Language="ja_JP"><Text>当主</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_LEADER" Language="en_US"><Text>Leader</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_KIND_LEADER" Language="ru_RU"><Text>Правитель</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_CONQUEST" Language="ja_JP"><Text>軍事征服</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_CONQUEST" Language="en_US"><Text>Conquest</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_CONQUEST" Language="ru_RU"><Text>Завоевание</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_SMALL_STATE" Language="ja_JP"><Text>小国懐柔</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_SMALL_STATE" Language="en_US"><Text>Small state accession</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_SMALL_STATE" Language="ru_RU"><Text>Присоединение малой державы</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_MERGER" Language="ja_JP"><Text>合併</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_MERGER" Language="en_US"><Text>Merger</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_MODE_MERGER" Language="ru_RU"><Text>Объединение</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_CHOICE" Language="ja_JP"><Text>処遇を選択中</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_CHOICE" Language="en_US"><Text>Choosing dispositions</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_CHOICE" Language="ru_RU"><Text>Выбор судьбы</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_RESULT" Language="ja_JP"><Text>移管の結果</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_RESULT" Language="en_US"><Text>Transfer results</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_RESULT" Language="ru_RU"><Text>Итоги передачи</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_DONE" Language="ja_JP"><Text>確認済み</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_DONE" Language="en_US"><Text>Acknowledged</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_DONE" Language="ru_RU"><Text>Подтверждено</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_APPLYING" Language="ja_JP"><Text>移管処理中</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_APPLYING" Language="en_US"><Text>Transfer in progress</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_APPLYING" Language="ru_RU"><Text>Передача выполняется</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_BLOCKED" Language="ja_JP"><Text>移管停止</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_BLOCKED" Language="en_US"><Text>Transfer blocked</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_PHASE_BLOCKED" Language="ru_RU"><Text>Передача остановлена</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SURRENDER" Language="ja_JP"><Text>降伏</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SURRENDER" Language="en_US"><Text>Surrender</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SURRENDER" Language="ru_RU"><Text>Капитуляция</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INCORPORATE" Language="ja_JP"><Text>編入</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INCORPORATE" Language="en_US"><Text>Incorporate</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INCORPORATE" Language="ru_RU"><Text>Включить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DISSOLVE" Language="ja_JP"><Text>解散</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DISSOLVE" Language="en_US"><Text>Disband</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DISSOLVE" Language="ru_RU"><Text>Расформировать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_ESCAPE" Language="ja_JP"><Text>逃亡</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_ESCAPE" Language="en_US"><Text>Escape</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_ESCAPE" Language="ru_RU"><Text>Бежать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RESIST" Language="ja_JP"><Text>抵抗</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RESIST" Language="en_US"><Text>Resist</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RESIST" Language="ru_RU"><Text>Сопротивляться</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_CAPTURE" Language="ja_JP"><Text>捕縛</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_CAPTURE" Language="en_US"><Text>Capture</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_CAPTURE" Language="ru_RU"><Text>Пленить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECRUIT" Language="ja_JP"><Text>登用</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECRUIT" Language="en_US"><Text>Recruit</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECRUIT" Language="ru_RU"><Text>Принять на службу</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUBMIT" Language="ja_JP"><Text>臣従</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUBMIT" Language="en_US"><Text>Submit</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUBMIT" Language="ru_RU"><Text>Присягнуть</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXILE" Language="ja_JP"><Text>亡命</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXILE" Language="en_US"><Text>Exile</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXILE" Language="ru_RU"><Text>Эмигрировать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXECUTE" Language="ja_JP"><Text>処刑</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXECUTE" Language="en_US"><Text>Execute</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_EXECUTE" Language="ru_RU"><Text>Казнить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETIRE" Language="ja_JP"><Text>隠遁</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETIRE" Language="en_US"><Text>Retire</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETIRE" Language="ru_RU"><Text>Удалиться от дел</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DEFECT" Language="ja_JP"><Text>離反</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DEFECT" Language="en_US"><Text>Defect</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_DEFECT" Language="ru_RU"><Text>Перейти на другую сторону</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PROTECT" Language="ja_JP"><Text>保護</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PROTECT" Language="en_US"><Text>Protect</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PROTECT" Language="ru_RU"><Text>Защитить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECONTRACT" Language="ja_JP"><Text>再契約</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECONTRACT" Language="en_US"><Text>Renew contract</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RECONTRACT" Language="ru_RU"><Text>Перезаключить договор</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_HIDE" Language="ja_JP"><Text>潜伏</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_HIDE" Language="en_US"><Text>Hide</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_HIDE" Language="ru_RU"><Text>Скрыться</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUICIDE" Language="ja_JP"><Text>自害</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUICIDE" Language="en_US"><Text>Suicide</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SUICIDE" Language="ru_RU"><Text>Самоубийство</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_TRANSFER" Language="ja_JP"><Text>移管</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_TRANSFER" Language="en_US"><Text>Transfer</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_TRANSFER" Language="ru_RU"><Text>Передать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_LOOT" Language="ja_JP"><Text>略奪</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_LOOT" Language="en_US"><Text>Loot</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_LOOT" Language="ru_RU"><Text>Разграбить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SEIZE" Language="ja_JP"><Text>接収</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SEIZE" Language="en_US"><Text>Seize</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SEIZE" Language="ru_RU"><Text>Конфисковать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETURN" Language="ja_JP"><Text>返還</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETURN" Language="en_US"><Text>Return</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RETURN" Language="ru_RU"><Text>Вернуть</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SCATTER" Language="ja_JP"><Text>散逸</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SCATTER" Language="en_US"><Text>Scatter</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_SCATTER" Language="ru_RU"><Text>Утратить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INHERIT" Language="ja_JP"><Text>継承</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INHERIT" Language="en_US"><Text>Inherit</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_INHERIT" Language="ru_RU"><Text>Унаследовать</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PRESERVE" Language="ja_JP"><Text>保持</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PRESERVE" Language="en_US"><Text>Preserve</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_PRESERVE" Language="ru_RU"><Text>Сохранить</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_REESCAPE" Language="ja_JP"><Text>再逃亡</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_REESCAPE" Language="en_US"><Text>Escaped again</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_REESCAPE" Language="ru_RU"><Text>Снова сбежал</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RE_ESCAPE" Language="ja_JP"><Text>再逃亡</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RE_ESCAPE" Language="en_US"><Text>Escaped again</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_RE_ESCAPE" Language="ru_RU"><Text>Снова сбежал</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_FAILED" Language="ja_JP"><Text>失敗</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_FAILED" Language="en_US"><Text>Failed</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_FAILED" Language="ru_RU"><Text>Не удалось</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_BLOCKED" Language="ja_JP"><Text>停止</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_BLOCKED" Language="en_US"><Text>Blocked</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ACTION_BLOCKED" Language="ru_RU"><Text>Заблокировано</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FOCUSED" Language="ja_JP"><Text>操作：{1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FOCUSED" Language="en_US"><Text>Focused: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_FOCUSED" Language="ru_RU"><Text>Выделено: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ROLE_ID" Language="ja_JP"><Text>{1_Role} · {2_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ROLE_ID" Language="en_US"><Text>{1_Role} · {2_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ROLE_ID" Language="ru_RU"><Text>{1_Role} · {2_ID}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NOT_RECORDED" Language="ja_JP"><Text>記録なし</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NOT_RECORDED" Language="en_US"><Text>Not recorded</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_NOT_RECORDED" Language="ru_RU"><Text>Нет записи</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ADMINISTRATION" Language="ja_JP"><Text>統治</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ADMINISTRATION" Language="en_US"><Text>Administration</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ADMINISTRATION" Language="ru_RU"><Text>Управление</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DILIGENT" Language="ja_JP"><Text>勤勉</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DILIGENT" Language="en_US"><Text>Diligent</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DILIGENT" Language="ru_RU"><Text>Старательность</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_LOYAL" Language="ja_JP"><Text>忠実</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_LOYAL" Language="en_US"><Text>Loyal</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_LOYAL" Language="ru_RU"><Text>Верность</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DEVOUT" Language="ja_JP"><Text>信心深い</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DEVOUT" Language="en_US"><Text>Devout</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_DEVOUT" Language="ru_RU"><Text>Набожность</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARMOR" Language="ja_JP"><Text>防具</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARMOR" Language="en_US"><Text>Armor</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARMOR" Language="ru_RU"><Text>Доспехи</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_GOVERNOR" Language="ja_JP"><Text>総督</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_GOVERNOR" Language="en_US"><Text>Governor</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_GOVERNOR" Language="ru_RU"><Text>Губернатор</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_EQUIPMENT" Language="ja_JP"><Text>装備</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_EQUIPMENT" Language="en_US"><Text>Equipment</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_EQUIPMENT" Language="ru_RU"><Text>Снаряжение</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARTIFACT" Language="ja_JP"><Text>遺物</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARTIFACT" Language="en_US"><Text>Artifact</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_ARTIFACT" Language="ru_RU"><Text>Артефакт</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_COLLECTION" Language="ja_JP"><Text>収蔵品</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_COLLECTION" Language="en_US"><Text>Collection</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_VALUE_COLLECTION" Language="ru_RU"><Text>Коллекция</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED_RESULT" Language="ja_JP"><Text>逃亡済み</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED_RESULT" Language="en_US"><Text>Escaped</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_ESCAPED_RESULT" Language="ru_RU"><Text>Сбежал</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REQUESTED" Language="ja_JP"><Text>希望：{1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REQUESTED" Language="en_US"><Text>Requested: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REQUESTED" Language="ru_RU"><Text>Выбрано ранее: {1_Action}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REESCAPE" Language="ja_JP"><Text>再逃亡：{1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REESCAPE" Language="en_US"><Text>Escaped again: {1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_REESCAPE" Language="ru_RU"><Text>Снова сбежал: {1_Outcome}</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_RESULT" Language="ja_JP"><Text>吸収の結果を開く</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_RESULT" Language="en_US"><Text>Open absorption results</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_RESULT" Language="ru_RU"><Text>Открыть итоги поглощения</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_STATUS" Language="ja_JP"><Text>吸収の状況を開く</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_STATUS" Language="en_US"><Text>Open absorption status</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_OPEN_STATUS" Language="ru_RU"><Text>Открыть состояние поглощения</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="ja_JP"><Text>英雄の移管で問題が起きました</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="en_US"><Text>Hero transfer encountered a problem</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_TRANSFER_FAILURE" Language="ru_RU"><Text>При передаче героя возникла ошибка</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="ja_JP"><Text>遺産保管庫</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="en_US"><Text>Heritage cache</Text></Row>
+  <Row Tag="LOC_JAC_ABS_FLOW_CACHE" Language="ru_RU"><Text>Хранилище наследия</Text></Row>
 </LocalizedText></GameData>

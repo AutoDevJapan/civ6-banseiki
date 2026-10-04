@@ -34,8 +34,8 @@
     },
     {
       "action": "ui_lua",
-      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local r=Players[e.To]:GetReligion();r:ChangeFaithBalance(1000000);local before=r:GetFaithBalance();local whole=math.floor(before);r:ChangeFaithBalance(-whole);local remainder=r:GetFaithBalance();Game:SetProperty('JAC_NATIVE_FAITH_PRECISION',{Owner=e.To,Before=before,Whole=whole,Remainder=remainder});return ExposedMembers.JAC_Absorption.Canonical(Game:GetProperty('JAC_NATIVE_FAITH_PRECISION'))",
-      "state_name": "GameCore_Tuner"
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'));local r=Players[e.To]:GetReligion();r:ChangeFaithBalance(1000000);local before=r:GetFaithBalance();local whole=math.floor(before);r:ChangeFaithBalance(-whole);local remainder=r:GetFaithBalance();Game:SetProperty('JAC_NATIVE_FAITH_PRECISION',{Owner=e.To,Before=before,Whole=whole,Remainder=remainder});return JAC_AbsorptionGameplay.Canonical(Game:GetProperty('JAC_NATIVE_FAITH_PRECISION'))",
+      "state_name": "JAC_Absorption_Entry"
     },
     {
       "action": "autoplay",
@@ -44,8 +44,8 @@
     },
     {
       "action": "ui_lua",
-      "code": "local p=assert(Game:GetProperty('JAC_NATIVE_FAITH_PRECISION'));local r=Players[p.Owner]:GetReligion();p.Income=r:GetFaithBalance();p.Expected=p.Whole+p.Income;r:ChangeFaithBalance(p.Whole);p.Actual=r:GetFaithBalance();p.Difference=p.Actual-p.Expected;print('[JAC_NATIVE_FAITH_PRECISION] '..ExposedMembers.JAC_Absorption.Canonical(p));return ExposedMembers.JAC_Absorption.Canonical(p)",
-      "state_name": "GameCore_Tuner"
+      "code": "local p=assert(Game:GetProperty('JAC_NATIVE_FAITH_PRECISION'));local r=Players[p.Owner]:GetReligion();p.Income=r:GetFaithBalance();p.Expected=p.Whole+p.Income;r:ChangeFaithBalance(p.Whole);p.Actual=r:GetFaithBalance();p.Difference=p.Actual-p.Expected;print('[JAC_NATIVE_FAITH_PRECISION] '..JAC_AbsorptionGameplay.Canonical(p));return JAC_AbsorptionGameplay.Canonical(p)",
+      "state_name": "JAC_Absorption_Entry"
     }
   ],
   "test_mode": {

@@ -1,0 +1,70 @@
+{
+  "name": "Absorption prepares one empty official Free Cities Temple for original work custody",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-product-complete-absorb-flow-64-017b286619e2",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local state=assert(ExposedMembers.JAC_Absorption).GetState()\nlocal tx=state.Transactions['native-product-return-probe']\nif not tx or tx.Status~='COMPLETE' then return false end\nfor _,work in ipairs(tx.NativeWorks or {}) do\n if work.Custodian then\n  local slot=work.TargetSlot\n  local p=Players[slot.Owner]\n  local city=p and p:GetCities():FindID(slot.City)\n  if not city or city:GetX()~=slot.X or city:GetY()~=slot.Y\n    or city:GetBuildings():GetGreatWorkInSlot(slot.Building,slot.Slot)~=work.Source.Index then return false end\n end\nend\nreturn true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local owner,id,x,y,building=10,327684,114,45,12\nlocal city=assert(Players[owner]:GetCities():FindID(id),'official carrier city not published')\nassert(city:GetX()==x and city:GetY()==y,'official carrier city position changed')\nlocal buildings=city:GetBuildings()\nassert(buildings:HasBuilding(building) and not buildings:IsPillaged(building),'official carrier Temple unavailable')\nassert(buildings:GetNumGreatWorkSlots(building)==1 and buildings:GetGreatWorkInSlot(building,0)==-1,'official carrier Temple slot not empty')\nlocal slotType=assert(GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(building,0)]).GreatWorkSlotType\nassert(slotType=='GREATWORKSLOT_RELIC','carrier is not an official relic slot')\nfor def in GameInfo.Buildings() do\n if buildings:HasBuilding(def.Index) then\n  for slot=0,buildings:GetNumGreatWorkSlots(def.Index)-1 do\n   assert(buildings:GetGreatWorkInSlot(def.Index,slot)==-1,'carrier city contains another official work')\n  end\n end\nend\nlocal state=assert(ExposedMembers.JAC_Absorption).GetState()\nlocal tx=assert(state.Transactions['native-product-return-probe'])\nassert(tx.Status=='COMPLETE','prior absorption not complete')\nExposedMembers.JAC_FreeCarrierPlan={Owner=owner,ID=id,X=x,Y=y,Building=building,Slot=0,SlotType=slotType}\nreturn 'empty official Temple carrier observed without other works'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal observed=assert(ExposedMembers.JAC_FreeCarrierPlan,'UI carrier observation absent')\nlocal city=assert(CityManager.GetCityAt(observed.X,observed.Y))\nassert(city:GetOwner()==observed.Owner and city:GetID()==observed.ID,'carrier identity changed')\nassert(Players[observed.Owner]:GetCities():GetCount()>=2,'carrier would eliminate its owner')\nlocal occupied={}\nfor _,work in ipairs(A.OwnedGreatWorkSlots(observed.Owner)) do\n if work.X==observed.X and work.Y==observed.Y then occupied[#occupied+1]=work.Index end\nend\nassert(#occupied==0,'carrier holds an untracked official work')\nlocal free=assert(PlayerManager.GetFreeCitiesPlayerID())\nassert(Players[free] and Players[free]:GetCities():GetCount()==0,'Free Cities carrier already exists')\nlocal plan=A.Rules.Copy(observed)\nplan.Free=free\nGame:SetProperty('JAC_NATIVE_FREE_CARRIER',plan)\nCityManager.TransferCity(city,free)\nreturn 'empty official Temple city transfer requested for Free Cities custody'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 40,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_FREE_CARRIER')\nlocal city=plan and CityManager.GetCityAt(plan.X,plan.Y)\nif not city or city:GetOwner()~=plan.Free then return false end\nlocal b=city:GetBuildings()\nreturn b:HasBuilding(plan.Building) and b:GetNumGreatWorkSlots(plan.Building)==1\n  and b:GetGreatWorkInSlot(plan.Building,plan.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal city=assert(CityManager.GetCityAt(plan.X,plan.Y))\nassert(city:GetOwner()==plan.Free,'carrier was not published as Free Cities')\nlocal b=city:GetBuildings()\nassert(b:HasBuilding(plan.Building) and not b:IsPillaged(plan.Building)\n  and b:GetNumGreatWorkSlots(plan.Building)==1\n  and b:GetGreatWorkInSlot(plan.Building,plan.Slot)==-1,'official carrier slot changed')\nExposedMembers.JAC_FreeCarrierPublished={Owner=plan.Free,ID=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=plan.Building,Slot=plan.Slot}\nreturn 'Free Cities owns the same empty official Temple slot'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal published=assert(ExposedMembers.JAC_FreeCarrierPublished)\nlocal city=assert(CityManager.GetCityAt(plan.X,plan.Y))\nassert(city:GetOwner()==plan.Free and city:GetID()==published.ID\n  and city:GetX()==published.X and city:GetY()==published.Y,'Free Cities carrier identity changed')\nassert(#A.OwnedGreatWorkSlots(plan.Free)==0,'Free Cities carrier unexpectedly holds a work')\nlocal returned=A.NativeWorkLocations(2)\nassert(#returned==1 and returned[1].Owner==2 and returned[1].CityID==196610\n  and returned[1].X==147 and returned[1].Y==41 and returned[1].Building==1 and returned[1].Slot==0,'original returned work changed during carrier setup')\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nlocal freeSlots=reads.FindCompatibleNativeSlots(plan.Free,returned[1].ObjectType)\nlocal humanSlots=reads.FindCompatibleNativeSlots(1,returned[1].ObjectType)\nassert(#freeSlots==1 and freeSlots[1].Owner==plan.Free and freeSlots[1].City==city:GetID()\n  and freeSlots[1].X==plan.X and freeSlots[1].Y==plan.Y\n  and freeSlots[1].Building==plan.Building and freeSlots[1].Slot==plan.Slot,'Free Cities compatible slot was not unique and exact')\nassert(#humanSlots==1 and humanSlots[1].Owner==1 and humanSlots[1].City==196610\n  and humanSlots[1].X==129 and humanSlots[1].Y==35\n  and humanSlots[1].Building==12 and humanSlots[1].Slot==0,'human recovery Temple slot changed')\nplan.ID=city:GetID()\nplan.Recovery=humanSlots[1]\nplan.WorkIndex=returned[1].Index\nplan.Work=returned[1]\nGame:SetProperty('JAC_NATIVE_FREE_CARRIER',plan)\nprint('[JAC_NATIVE_FREE_CARRIER_READY] '..A.Canonical(plan))\nreturn 'Free Cities carrier and human recovery slot exact; original work still unique at AI2'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-freecity-carrier-ready"
+    }
+  ]
+}

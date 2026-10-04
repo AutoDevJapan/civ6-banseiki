@@ -1,0 +1,629 @@
+{
+  "name": "JAC absorption post-roll return destination invalidation",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "state_name": "InGame",
+      "code": "local p=Players[Game.GetLocalPlayer()];local city=p:GetCities():GetCapitalCity();local objects={Buildings=city:GetBuildings(),PlayerCulture=p:GetCulture(),GreatPeople=Game.GetGreatPeople()};if Game.GetCulture then objects.GameCulture=Game.GetCulture() end;if Game.GetGreatWorks then objects.GreatWorks=Game.GetGreatWorks() end;local out={};for name,obj in pairs(objects) do for _,method in ipairs({'CreateGreatWork','RemoveGreatWork','MoveGreatWork','TransferGreatWork','SetGreatWork','SetGreatWorkInSlot','GetGreatWorkInSlot','GetGreatWorkType'}) do local ok,value=pcall(function() return obj[method] end);out[#out+1]=name..'.'..method..'='..(ok and type(value) or 'unavailable') end end;table.sort(out);print('[JAC_NATIVE_WORK_METHODS] '..table.concat(out,','));return table.concat(out,',')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
+      "code": "local from,to;for _,p in ipairs(PlayerManager.GetAliveMajors()) do local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName();if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end end;assert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman() and Game.GetLocalPlayer()==to,'AI Ashina and human Oda required');local count=0;for def in GameInfo.HeroClasses() do count=count+1;assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','stock Hero enabled') end;assert(count==2,'two Sengoku Heroes required');Game:SetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST',{From=from,To=to});return 'human Oda, AI Ashina and two custom Heroes verified'",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "action": "ui_lua",
+      "code": "JAC_ABSORPTION_PHASE=coroutine.create(function()\nlocal A=assert(JAC_AbsorptionGameplay,'absorption mod not loaded'); local R=A.Rules\nlocal from,to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()\n  if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman(),'need AI Ashina and human Oda')\nassert(Players[from]:GetCities():GetCount()>=2,'Ashina must have two cities')\nassert(#PlayerManager.GetAliveMajors()==22,'expected Japan map with 22 houses')\nlocal cap=Players[from]:GetCities():GetCapitalCity(); local x,y=cap:GetX(),cap:GetY()\nlocal function newlyCreated(create,kind)\n  local before={};for _,u in Players[from]:GetUnits():Members() do before[u:GetID()]=true end\n  create()\n  local result\n  for _,u in Players[from]:GetUnits():Members() do\n    if not before[u:GetID()] and GameInfo.Units[u:GetType()].UnitType==kind then assert(not result,'multiple new test units');result=u end\n  end\n  assert(result,'no new test '..kind);return result\nend\nlocal manager=assert(A.GetHeroesManager(),'Heroes & Legends manager missing')\nlocal lifeKey=assert(ExposedMembers.JAC_HeroLifespanKey or (UnitPropertyKeys and UnitPropertyKeys.LifespanRemaining),'native remaining lifespan property missing')\nlocal warlordA=assert(GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_A'],'Heroes & Legends data not enabled')\nlocal warlordB=assert(GameInfo.HeroClasses['HEROCLASS_JAC_WARLORD_B'],'Warlord B class missing')\nlocal heroClassCount=0\nfor def in GameInfo.HeroClasses() do\n heroClassCount=heroClassCount+1\n assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','non-Banseiki Hero class enabled')\nend\nassert(heroClassCount==2,'expected only two custom Hero classes')\nlocal otherCity\nfor _,c in Players[from]:GetCities():Members() do\n if c:GetID()~=cap:GetID() and (not otherCity or c:GetID()<otherCity:GetID()) then otherCity=c end\nend\nassert(otherCity,'need distinct hero origin cities')\nlocal function createHero(def,city,life,charges,renown)\n assert(manager:GetHeroClaimPlayer(def.Index)==-1,'fixture hero already claimed')\n local building=manager:GetPlayerHeroOriginBuildingType(from)\n if not city:GetBuildings():HasBuilding(building) then\n  city:GetBuildQueue():CreateIncompleteBuilding(building,Map.GetPlot(city:GetX(),city:GetY()):GetIndex(),100)\n end\n assert(city:GetBuildings():HasBuilding(building),'hero origin building creation failed')\n manager:SetHeroDiscovered(from,def.Index,true)\n local u=newlyCreated(function() manager:CreateHero(from,def.Index,city:GetX(),city:GetY()) end,def.UnitType)\n assert(u:IsHero() and u:GetHeroClassType()==def.Index,'CreateHero produced a proxy')\n u:SetProperty(lifeKey,life);u:ChangeActionCharges(charges-u:GetActionCharges())\n if u.GetRenown and u.SetRenown then u:SetRenown(renown) end\n assert(u:GetProperty(lifeKey)==life and u:GetActionCharges()==charges,'native fixture state not applied')\n if Game.GetHeroesManager().GetHeroClaimPlayer==nil then\n   Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='FIXTURE',Token='fixture:'..def.Index..':'..u:GetID(),Class=def.Index})\n   coroutine.yield('waiting for native fixture UI publication')\n end\n local origin=assert(manager:GetHeroOriginCityID(def.Index))\n assert(manager:GetHeroClaimPlayer(def.Index)==from and origin.player==from and origin.id==city:GetID(),'native fixture manager/origin mismatch')\n return u\nend\nlocal hero=createHero(warlordA,cap,19,2,13)\nlocal heroWarlordB=createHero(warlordB,otherCity,21,0,9)\nlocal person=newlyCreated(function() UnitManager.InitUnitValidAdjacentHex(from,'UNIT_WARRIOR',x,y,8) end,'UNIT_WARRIOR')\nlocal individual\nfor row in GameInfo.GreatPersonIndividuals() do\n  if row.GreatPersonClassType=='GREAT_PERSON_CLASS_GENERAL' and (not individual or row.Index<individual.Index) then individual=row end\nend\nassert(individual,'no native general individual in database')\nlocal great=newlyCreated(function() Game.GetGreatPeople():CreatePerson(from,individual.Index,x,y) end,'UNIT_GREAT_GENERAL')\nassert(great:GetGreatPerson():GetIndividual()==individual.Index,'CreatePerson individual mismatch')\nlocal native=assert(GameInfo.Religions['RELIGION_CUSTOM_1'],'native test religion missing')\nassert(Players[from]:GetReligion():GetReligionTypeCreated()<0,'unexpected founded religion at Japan start')\n-- Official VikingScenario.lua:239-242 initializes the holy city and beliefs too.\nPlayers[from]:GetReligion():SetHolyCity(cap)\nGame.GetReligion():FoundReligion(from,native.Index)\nfor _,kind in ipairs({'BELIEF_DIVINE_INSPIRATION','BELIEF_CATHEDRAL'}) do\n Game.GetReligion():AddBelief(from,assert(GameInfo.Beliefs[kind],'fixture belief missing').Index)\nend\nassert(Players[from]:GetReligion():GetReligionTypeCreated()==native.Index,'FoundReligion failed')\nfor _,city in Players[from]:GetCities():Members() do city:GetReligion():AddReligiousPressure(0,native.Index,10000,from) end\nif not cap:GetReligion().GetReligionsInCity then\n Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='CITY',Token='fixture:religion:'..from})\n coroutine.yield('waiting for native believers UI publication')\nend\nassert((A.CityReligion(cap)[tostring(native.Index)] or 0)>0,'native believers were not seeded')\nlocal priest=newlyCreated(function() UnitManager.InitUnitValidAdjacentHex(from,'UNIT_MISSIONARY',x,y,8) end,'UNIT_MISSIONARY')\npriest:GetReligion():SetReligionType(native.ReligionType)\nif not priest.GetSpreadCharges then\n Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='CITY',Token='fixture:units:'..from})\n coroutine.yield('waiting for native fixture unit UI publication')\nend\nhero:SetProperty(R.PERSON_KEY,{ID='live:hero',Kind='HERO',Owner=from,Unit={Owner=from,ID=hero:GetID()},Contract='PROTECT',Loyalty=73,Lifespan=19,Renown=13,Relations={friend=25}})\nheroWarlordB:SetProperty(R.PERSON_KEY,{ID='live:hero-warlordB',Kind='HERO',Owner=from,Unit={Owner=from,ID=heroWarlordB:GetID()},Contract='RECONTRACT',Loyalty=61,Lifespan=21,Renown=9,Relations={rival=-4}})\nperson:SetProperty(R.PERSON_KEY,{ID='live:person',Kind='PERSON',Owner=from,Unit={Owner=from,ID=person:GetID()},Level=6,XP=17,Personality='LOYAL',Trait='DEVOUT',Equipment={'ARMOR'}})\nperson:SetProperty('JAC_POC_GROWTHUI_WARLORD',{Level=6,XP=17,Personality='LOYAL',Trait='DEVOUT',Equipment={'ARMOR'},Artifact='live:artifact'})\nperson:SetDamage(17);person:ChangeMovesRemaining(-1)\nlocal roster={\n ['live:hero']=hero:GetProperty(R.PERSON_KEY),['live:hero-warlordB']=heroWarlordB:GetProperty(R.PERSON_KEY),['live:person']=person:GetProperty(R.PERSON_KEY),\n ['live:equipment']={ID='live:equipment',Kind='ITEM',Owner=from,Type='EQUIPMENT',Anchor={Kind='PERSON',ID='live:person'}},\n ['live:artifact']={ID='live:artifact',Kind='ITEM',Owner=from,Type='ARTIFACT',Name='Ashina Relic',Abilities={'RELIC_POWER'},Anchor={Kind='VAULT',ID='live:vault'}},\n ['live:collection']={ID='live:collection',Kind='ITEM',Owner=from,Type='COLLECTION',City={Owner=from,X=x,Y=y}},\n ['live:religion']={ID='live:religion',Kind='RELIGION',Owner=from,ReligionID='POC_SECT',Founder=from,State='PUBLIC',Followers=9,\n   HolySites={{X=x,Y=y}},Clergy={'live:priest'},Scriptures={'live:scripture'},Relics={'live:artifact'},Sects={'POC_SECT'}},\n ['live:unlock']={ID='live:unlock',Kind='UNLOCK',Owner=from,Jobs={'POC_MONK'},Document='live:scripture'}\n}\nroster['live:governor']={ID='live:governor',Kind='PERSON',Owner=from,Role='GOVERNOR',Name='Test Governor',Abilities={'ADMINISTRATION'},Traits={'DILIGENT'}}\nPlayers[from]:SetProperty(R.ROSTER_KEY,roster)\nPlayers[to]:SetProperty(R.ROSTER_KEY,{\n ['live:existing']={ID='live:existing',Kind='ITEM',Owner=to,Type='EQUIPMENT'},\n ['live:other-community']={ID='live:other-community',Kind='RELIGION',Owner=to,ReligionID='POC_SECT',Founder=from,State='UNDERGROUND',Followers=2}})\ncap:SetProperty(R.CITY_FAITH_KEY,{ReligionID='POC_SECT',Followers=4,HolySite=true,Clergy={'live:priest'},Scriptures={'live:scripture'},Relics={'live:artifact'},State='PUBLIC'})\nA.RegisterUnitProperty('JAC_ABSORPTION_LIVE_BELONGINGS')\npriest:SetProperty('JAC_ABSORPTION_LIVE_BELONGINGS',{Scripture='live:scripture',Relic='live:artifact'})\nlocal plan={ID='japan-live-absorption-flow',From=from,To=to,Mode='CONQUEST',EntryConditionsMet=true,RelationsResolved=true,Leader='RECRUIT',Units={},Assets={}}\nlocal expected={From=from,To=to,Individual=individual.Index,Religion=native.Index,SourceRoster=A.GetRoster(from),TargetRoster=A.GetRoster(to),\n Units={},Cities={},Plots={},OriginalToCities=Players[to]:GetCities():GetCount(),OriginalToUnits=Players[to]:GetUnits():GetCount()}\nfor _,u in Players[from]:GetUnits():Members() do\n  local snap=A.SnapshotUnit(u);expected.Units[#expected.Units+1]=snap\n  plan.Units[R.UnitKey(from,u:GetID())]=snap.Kind=='UNIT' and 'INCORPORATE' or snap.Kind=='HERO' and 'PROTECT' or 'RECRUIT'\nend\nfor id,asset in pairs(roster) do plan.Assets[id]=asset.Kind=='HERO' and 'PROTECT' or asset.Kind=='PERSON' and 'RECRUIT' or asset.Kind=='RELIGION' and 'PRESERVE' or asset.Kind=='UNLOCK' and 'INHERIT' or 'TRANSFER' end\nfor _,c in Players[from]:GetCities():Members() do\n  expected.Cities[#expected.Cities+1]={X=c:GetX(),Y=c:GetY(),Name=c:GetName(),Population=c:GetPopulation(),Faith=A.CityReligion(c),Assets=A.CityAssets(c),PalaceWorks=A.PalaceWorks(c),Property=c:GetProperty(R.CITY_FAITH_KEY),Loyalty=A.CityLoyalty(c)}\nend\nfor i=0,Map.GetPlotCount()-1 do if Map.GetPlotByIndex(i):GetOwner()==from then expected.Plots[#expected.Plots+1]=i end end\nassert(#expected.Units>=4 and #expected.Plots>0,'empty source fixtures')\nlocal nativeDefinition\nfor _,row in ipairs(Game.GetReligion():GetReligions()) do if row.Religion==native.Index then nativeDefinition={Religion=row.Religion,Founder=row.Founder,Beliefs=R.Copy(row.Beliefs or {})} end end\nassert(nativeDefinition and nativeDefinition.Founder==from,'native religion definition not created')\nexpected.NativeDefinition=nativeDefinition\nGame:SetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1',expected)\nGame:SetProperty('JAC_ABSORPTION_LIVE_PLAN_V1',plan)\nGame:SetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST',{ID=plan.ID,From=from,To=to,NativeHero=hero:GetID(),GreatPerson=great:GetID(),Persona=person:GetID(),Governor='live:governor',Artifact='live:artifact'})\nreturn 'seeded native Warlord A/Warlord B with spent charges, native lifespan, record renown, two AI houses, general/religion and persistent assets'\n\nend)\nif JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 45
+    },
+    {
+      "action": "ui_lua",
+      "capture_as": "JAC_ABSORPTION_SYNC_1",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 45
+    },
+    {
+      "action": "ui_lua",
+      "capture_as": "JAC_ABSORPTION_SYNC_2",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 45
+    },
+    {
+      "action": "ui_lua",
+      "capture_as": "JAC_ABSORPTION_SYNC_3",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n return tostring(v)\nend\nreturn 'phase already complete' ",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "timeout": 45
+    },
+    {
+      "action": "ui_lua",
+      "capture_as": "JAC_ABSORPTION_SYNC_4",
+      "code": "if JAC_ABSORPTION_PHASE and coroutine.status(JAC_ABSORPTION_PHASE)=='suspended' then\n local ok,v=coroutine.resume(JAC_ABSORPTION_PHASE);assert(ok,tostring(v))\n if coroutine.status(JAC_ABSORPTION_PHASE)=='dead' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil) end\n assert(coroutine.status(JAC_ABSORPTION_PHASE)=='dead','fixture or transfer exceeded publication phases');return tostring(v)\nend\nreturn 'phase already complete' ",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal test=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST'))\nlocal plan=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_PLAN_V1'))\nassert(plan.ID==test.ID and plan.From==test.From and plan.To==test.To and plan.Mode=='CONQUEST')\nassert(Game.GetLocalPlayer()==plan.To and Players[plan.To]:IsHuman() and not Players[plan.From]:IsHuman())\nGame:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',1)\nF.DebugSetSpawnDelay(0)\nlocal ids={['leader:'..plan.From]=true}\nfor id in pairs(A.GetRoster(plan.From)) do ids[id]=true end\nfor _,unit in Players[plan.From]:GetUnits():Members() do\n  local person=unit:GetProperty(A.Rules.PERSON_KEY)\n  local snap=A.SnapshotUnit(unit)\n  local id=person and person.ID or snap.Kind=='UNIT' and ('unit:'..plan.From..':'..unit:GetID())\n    or ('native-person:'..plan.From..':'..unit:GetID())\n  ids[id]=true\nend\nfor id in pairs(ids) do F.DebugSetRoll(plan.ID,id,'P1_ESCAPE',9999) end\nfor _,id in ipairs({'live:person','live:artifact'}) do\n  F.DebugSetRoll(plan.ID,id,'P1_ESCAPE',0)\n  F.DebugSetRoll(plan.ID,id,'P1_BRANCH',0)\nend\nlocal flow=F.Begin(plan)\nassert(flow.Phase=='CHOICE' and flow.Phase1Complete and F.GetPending(plan.To).ID==plan.ID)\nlocal seen,escaped={},{}\nfor i,entry in ipairs(flow.Entries) do\n  assert(i==1 or flow.Entries[i-1].ID<entry.ID,'asset IDs not sorted')\n  seen[entry.Kind]=true\n  if entry.Rolls and entry.Rolls.P1_ESCAPE then\n    assert(entry.Rolls.P1_ESCAPE.Label=='JAC absorption P1_ESCAPE '..plan.ID..'/'..entry.ID)\n    if entry.EscapeOutcome then escaped[entry.ID]=entry.EscapeOutcome end\n  end\n  if not entry.EscapeOutcome then F.DebugSetRoll(plan.ID,entry.ID,'P3_SUCCESS',0) end\nend\nfor _,kind in ipairs({'UNIT','PERSON','HERO','GREAT_PERSON','ITEM','UNLOCK','RELIGION'}) do assert(seen[kind],kind..' asset absent') end\nassert(escaped['live:person']=='EXILE' and escaped['live:artifact']=='SCATTER')\nassert(Players[plan.From]:GetCities():GetCount()>=2 and Players[plan.To]:GetCities():GetCount()>0,'phase one changed cities')\nF.DebugSetRoll(plan.ID,'live:governor','P3_SUCCESS',9999)\nF.DebugSetRoll(plan.ID,'live:governor','P3_RETRY_ESCAPE',0)\nF.DebugSetRoll(plan.ID,'live:governor','P3_RETRY_BRANCH',0)\nF.DebugSetRoll(plan.ID,'live:equipment','P3_SUCCESS',9999)\nF.DebugSetRoll(plan.ID,'live:equipment','P3_RETRY_ESCAPE',9999)\nlocal initialRolls={};for _,entry in ipairs(flow.Entries) do initialRolls[entry.ID]=A.Rules.Copy(entry.Rolls or {}) end\nGame:SetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1',{ID=plan.ID,From=plan.From,To=plan.To,Escaped=escaped,InitialRolls=initialRolls})\nreturn 'phase one saved sorted labelled rolls, known escapes, and seven asset kinds'",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(expected.ID))\nassert(flow.Phase=='CHOICE' and flow.Phase1Complete)\nassert(flow.From==expected.From and flow.To==expected.To)\nfor _,entry in ipairs(flow.Entries) do assert(A.Rules.Equal(entry.Rolls or {},expected.InitialRolls[entry.ID] or {}),'first-stage roll changed') end\nreturn A.Canonical(flow)",
+      "state_name": "JAC_Absorption_Entry",
+      "capture_as": "FLOW_CHOICE_BEFORE_SAVE",
+      "action": "ui_lua"
+    },
+    {
+      "name": "JAC-flow-choice",
+      "timeout": 90,
+      "action": "save"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "name": "JAC-flow-choice",
+      "timeout": 600,
+      "action": "load"
+    },
+    {
+      "timeout": 600,
+      "condition": {
+        "code": "local p=Players[Game.GetLocalPlayer()];return p and p:IsTurnActive() and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "type": "lua",
+        "state_name": "InGame"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(expected.ID))\nassert(flow.Phase=='CHOICE' and flow.Phase1Complete)\nassert(flow.From==expected.From and flow.To==expected.To)\nfor _,entry in ipairs(flow.Entries) do assert(A.Rules.Equal(entry.Rolls or {},expected.InitialRolls[entry.ID] or {}),'first-stage roll changed') end\nreturn A.Canonical(flow)",
+      "equals_capture": "FLOW_CHOICE_BEFORE_SAVE",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 90,
+      "condition": {
+        "type": "lua",
+        "code": "return JAC_AbsorptionFlow_UI~=nil and not Controls.OpenButton:IsHidden()",
+        "state_name": "JAC_AbsorptionFlow"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden(),'absorption UI context hidden')\nassert(panel.Open() and not Controls.Panel:IsHidden(),'human absorption panel did not open')\nlocal first=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer()))\nlocal view=panel.GetView()\nassert(view.visible and view.phase=='CHOICE' and #view.rows==#first.Entries)\nlocal portraits=0\nfor _,row in ipairs(view.rows) do\n  assert(row.name and row.name~='' and row.identity and row.abilities and row.outcome,'asset row incomplete')\n  if row.portrait then portraits=portraits+1 end\nend\nassert(portraits>0,'no native portraits rendered')\nJAC_FLOW_LIVE_SENT={}\nlocal function nextChoice()\n  local flow=ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer())\n  if not flow or flow.Phase~='CHOICE' then return end\n  for _,entry in ipairs(flow.Entries) do\n    if not entry.EscapeOutcome and not entry.SelectedAction then\n      if JAC_FLOW_LIVE_SENT[entry.ID] then return end\n      assert(panel.SelectEntry(entry.ID),'UI could not select '..tostring(entry.ID))\n      local action=entry.Kind=='UNIT' and 'INCORPORATE'\n        or entry.Kind=='PERSON' and 'RECRUIT'\n        or entry.Kind=='HERO' and 'RECONTRACT'\n        or entry.Kind=='GREAT_PERSON' and 'RECRUIT'\n        or entry.Kind=='ITEM' and (entry.ID=='live:collection' and 'RETURN' or 'TRANSFER')\n        or entry.Kind=='UNLOCK' and 'INHERIT' or 'PRESERVE'\n      assert(panel.ChooseAction(action),'real UI rejected '..tostring(entry.ID)..'/'..action)\n      if action=='RETURN' then\n        local third\n        for _,player in ipairs(PlayerManager.GetAlive()) do\n          local id=player:GetID()\n          if id~=flow.From and id~=flow.To and player:IsAlive() and (not third or id<third) then third=id end\n        end\n        assert(third and panel.ChooseOwner(third),'real return-owner control rejected')\n        JAC_FLOW_LIVE_RETURN_OWNER=third\n      end\n      JAC_FLOW_LIVE_SENT[entry.ID]=true\n      return\n    end\n  end\nend\nEvents.GameCoreEventPublishComplete.Add(nextChoice)\nnextChoice()\nreturn 'human panel started real selection callbacks; '..#view.rows..' entries'",
+      "state_name": "JAC_AbsorptionFlow"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "condition": {
+        "type": "lua",
+        "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=F.Get(expected.ID)\nif not flow or flow.Phase~='CHOICE' then return false end\nfor _,entry in ipairs(flow.Entries) do\n  if not entry.EscapeOutcome and not entry.SelectedAction then return false end\nend\nreturn true",
+        "state_name": "JAC_Absorption_Entry"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "capture_as": "FLOW_SELECTED",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(expected.ID))\nassert(flow.Phase=='CHOICE')\nfor _,entry in ipairs(flow.Entries) do\n  assert(A.Rules.Equal(entry.Rolls or {},expected.InitialRolls[entry.ID] or {}),'human UI rerolled an asset')\n  if not entry.EscapeOutcome then assert(entry.SelectedAction,'surviving asset was not chosen') end\nend\nassert(Players[expected.From]:GetCities():GetCount()>=2,'UI selection changed native cities')\nreturn A.Canonical(flow)",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal reads=assert(ExposedMembers.JAC_HeroReadAPI)\nassert(type(reads.GetObservation)=='function','UI observation reader absent')\nassert(not ExposedMembers.JAC_ReturnBoundaryOriginalObservation,'source gate already installed')\nExposedMembers.JAC_ReturnBoundaryOriginalObservation=reads.GetObservation\nreads.GetObservation=function(token)\n if type(token)=='string' and token:find(expected.ID..':source-ready:',1,true) then return nil end\n return ExposedMembers.JAC_ReturnBoundaryOriginalObservation(token)\nend\nreturn 'withheld the saved source-ready publication until return recipient changes'"
+    },
+    {
+     "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and not Controls.Panel:IsHidden(),'human choice panel hidden')\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),\n  'real confirmation control not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human clicked the real confirm control to resolve saved choices'",
+      "state_name": "JAC_AbsorptionFlow",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local t=Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1');local f=t and JAC_AbsorptionFlowGameplay.Get(t.ID);return f and (f.Phase=='APPLYING' or f.Phase=='RESULT' or f.Phase=='BLOCKED')"
+      },
+      "action": "wait_for"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal expected=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(expected.ID))\nassert(flow.Phase=='APPLYING' and flow.FinalRollsComplete and flow.AppliedPlan,\n 'final rolls did not freeze before UI preparation wait')\nlocal tx=assert(A.GetState().Transactions[expected.ID],'unprepared transaction absent')\nassert(tx.Status=='WAITING_UI' and A.CanCancelUnprepared(expected.ID,flow.AppliedPlan),\n 'return destination must expire before mutation; status='..tostring(tx.Status)\n  ..' awaiting='..tostring(tx.AwaitingPreparation))\nlocal selected\nlocal frozen={}\nfor _,entry in ipairs(flow.Entries) do\n frozen[entry.ID]={Rolls=R.Copy(entry.Rolls or {}),Outcome=entry.FinalOutcome,\n  Action=entry.SelectedAction,Owner=entry.ReturnOwner,Success=entry.Success}\n if entry.ID=='live:collection' then selected=entry end\nend\nassert(selected and selected.FinalOutcome=='RETURN' and selected.SelectedAction=='RETURN'\n and type(selected.ReturnOwner)=='number','known successful RETURN absent')\nlocal recipient=selected.ReturnOwner\nassert(recipient~=expected.From and recipient~=expected.To)\nlocal third=assert(Players[recipient])\nlocal cities={}\nfor _,city in third:GetCities():Members() do\n cities[#cities+1]={ID=city:GetID(),X=city:GetX(),Y=city:GetY()}\nend\nassert(#cities>0,'selected return recipient already lacks a city')\nlocal free=assert(PlayerManager.GetFreeCitiesPlayerID())\nassert(free>=0 and free~=recipient)\nGame:SetProperty('JAC_ABSORPTION_RETURN_BOUNDARY',{\n ID=expected.ID,Recipient=recipient,Asset='live:collection',Frozen=frozen,\n FromCities=Players[expected.From]:GetCities():GetCount(),\n ToCities=Players[expected.To]:GetCities():GetCount()})\nfor _,location in ipairs(cities) do\n local city=assert(CityManager.GetCityAt(location.X,location.Y))\n assert(city:GetOwner()==recipient and city:GetID()==location.ID,\n  'recipient city changed before invalidation')\n CityManager.TransferCity(city,free)\nend\nassert(third:GetCities():GetCount()==0,'return recipient still owns a city')\nreturn 'post-roll successful RETURN recipient lost all cities while transfer is untouched'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+     "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal flow=assert(F.Get(snapshot.ID))\nif flow.Phase~='CHOICE' then flow=assert(F.Resume(snapshot.ID)) end\nassert(flow.Phase=='CHOICE' and flow.FinalRollsComplete and flow.AppliedPlan==nil,\n 'untouched return did not reopen only destination selection')\nassert(A.GetState().Transactions[snapshot.ID]==nil,\n 'unprepared transaction reservation was not released')\nassert(Players[flow.From]:GetCities():GetCount()==snapshot.FromCities and\n Players[flow.To]:GetCities():GetCount()==snapshot.ToCities,\n 'reopening return destination changed source or absorber cities')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'final random draw or outcome changed')\n if entry.ID==snapshot.Asset then\n  assert(entry.ReturnOwnerPending==true and entry.SelectedAction==nil and entry.ReturnOwner==nil,\n   'lost return owner was not offered for reselection')\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'another settled choice was cleared')\n end\nend\nreturn 'only the invalid return owner reopened; frozen rolls and all other choices retained'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local reads=assert(ExposedMembers.JAC_HeroReadAPI)\nlocal original=assert(ExposedMembers.JAC_ReturnBoundaryOriginalObservation)\nreads.GetObservation=original\nExposedMembers.JAC_ReturnBoundaryOriginalObservation=nil\nreturn 'restored native source observation after safe destination correction'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local flow=ExposedMembers.JAC_AbsorptionFlow and\n ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer())\nif not flow or flow.Phase~='CHOICE' then return false end\nfor _,entry in ipairs(flow.Entries) do\n if entry.ID=='live:collection' then return entry.ReturnOwnerPending==true end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and panel.Open() and not Controls.Panel:IsHidden(),\n 'return correction panel did not open')\nlocal flow=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(Game.GetLocalPlayer()))\nlocal old=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nassert(flow.ID==old.ID and flow.Phase=='CHOICE')\nlocal replacement\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n local id=player:GetID()\n if id~=flow.From and id~=flow.To and id~=old.Recipient and\n  player:IsAlive() and player:GetCities():GetCount()>0 and\n  (not replacement or id<replacement) then replacement=id end\nend\nassert(replacement,'no surviving third party for return correction')\nassert(panel.SelectEntry(old.Asset),'lost return asset not selectable')\nassert(panel.ChooseAction('RETURN'),'frozen RETURN action was not selectable')\nassert(panel.ChooseOwner(replacement),'new living return owner was not accepted')\nExposedMembers.JAC_ReturnBoundaryNewOwner=replacement\nreturn 'selected a new living third-party destination for frozen RETURN'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local snapshot=Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY')\nlocal owner=ExposedMembers.JAC_ReturnBoundaryNewOwner\nlocal flow=snapshot and JAC_AbsorptionFlowGameplay.Get(snapshot.ID)\nif not flow or flow.Phase~='CHOICE' or not owner then return false end\nfor _,entry in ipairs(flow.Entries) do\n if entry.ID==snapshot.Asset then\n  return entry.SelectedAction=='RETURN' and entry.ReturnOwner==owner and\n   not entry.ReturnOwnerPending\n end\nend\nreturn false"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_AbsorptionFlow",
+        "code": "local panel=JAC_AbsorptionFlow_UI\nif not panel or ContextPtr:IsHidden() or Controls.Panel:IsHidden() then return false end\nlocal view=panel.GetView()\nreturn view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AbsorptionFlow",
+      "code": "local panel=assert(JAC_AbsorptionFlow_UI)\nassert(not ContextPtr:IsHidden() and not Controls.Panel:IsHidden(),\n 'corrected return panel hidden before confirmation')\nlocal view=panel.GetView()\nassert(view.phase=='CHOICE' and view.canResolve and not Controls.ConfirmButton:IsDisabled(),\n 'corrected return confirmation is not ready')\nControls.ConfirmButton:DoLeftClick()\nreturn 'human confirmed the corrected return destination through the real UI'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_Absorption_Entry",
+        "code": "local snapshot=Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY')\nlocal flow=snapshot and JAC_AbsorptionFlowGameplay.Get(snapshot.ID)\nreturn flow and (flow.Phase=='APPLYING' or flow.Phase=='RESULT' or flow.Phase=='BLOCKED')"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal R=A.Rules\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal owner=assert(ExposedMembers.JAC_ReturnBoundaryNewOwner)\nassert(owner~=snapshot.Recipient and Players[owner]:IsAlive() and\n Players[owner]:GetCities():GetCount()>0)\nlocal flow=assert(F.Get(snapshot.ID))\nassert(flow.Phase=='APPLYING' or flow.Phase=='RESULT',\n 'corrected return did not resume the frozen result')\nassert(flow.FinalRollsComplete,'final result was not frozen after reselection')\nlocal decision=assert(flow.AppliedPlan and flow.AppliedPlan.Assets and\n flow.AppliedPlan.Assets[snapshot.Asset],'corrected return decision absent from applied plan')\nassert(decision.Outcome=='RETURN' and decision.ReturnOwner==owner,\n 'applied plan did not use the corrected return owner')\nfor _,entry in ipairs(flow.Entries) do\n local old=assert(snapshot.Frozen[entry.ID])\n assert(R.Equal(entry.Rolls or {},old.Rolls) and entry.FinalOutcome==old.Outcome and\n  entry.Success==old.Success,'reselection changed a final draw or outcome')\n if entry.ID==snapshot.Asset then\n  assert(entry.SelectedAction=='RETURN' and entry.ReturnOwner==owner)\n else\n  assert(entry.SelectedAction==old.Action and entry.ReturnOwner==old.Owner,\n   'reselection changed an unrelated choice')\n end\nend\nreturn 'successful RETURN resumed with a new owner and the same final random result'"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind='TRANSFER',ID=t.ID})\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 90,
+      "condition": {
+        "code": "local reads=ExposedMembers.JAC_HeroReadAPI\nlocal pending=ExposedMembers.JAC_Absorption.GetUIPhase()\nif not pending then return true end\nif not reads or not reads.GetObservation then return false end\nif pending.Kind=='FIXTURE' or pending.Kind=='CITY' then return reads.GetObservation(pending.Token)~=nil end\nlocal tx=ExposedMembers.JAC_Absorption.GetState().Transactions[pending.ID]\nif pending.Kind=='VERIFY' then local r=tx.VerificationUI;return r and reads.GetObservation(r.Token)~=nil end\nif tx.AwaitingPreparation then\n if tx.SourceReadyToken and not reads.GetObservation(tx.SourceReadyToken) then return false end\n for _,r in pairs(tx.SourceSpreadReads or {}) do\n  if not reads.GetUnitObservation or reads.GetUnitObservation(r.Token)==nil then return false end\n end\n return true\nend\nif tx.CityLoyaltyPending and not reads.GetObservation(tx.CityLoyaltyPending.Token) then return false end\nif tx.AwaitingFinalUI and not reads.GetObservation(tx.ID..':final') then return false end\nfor _,snap in ipairs(tx.Units) do\n for _,spread in pairs(snap.SpreadReads or {}) do\n  if spread.AwaitingUI and (not reads.GetUnitObservation or reads.GetUnitObservation(spread.Token)==nil) then return false end\n end\n local i=snap.HeroSpawnIntent\n if i and i.AwaitingUI and not reads.GetObservation(snap.Token..':created:'..i.CreatedID) then return false end\nend\nreturn true",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for"
+    },
+    {
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nif flow.Phase=='RESULT' then Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil);return 'RESULT' end\nassert(flow.Phase=='APPLYING',flow.Phase..':'..tostring(flow.Error))\nflow=F.Resume(t.ID)\nassert(flow.Phase~='BLOCKED',tostring(flow.Error))\nif flow.Phase=='APPLYING' then\n  local tx=A.GetState().Transactions[t.ID]\n  local kind=tx and tx.VerificationUI and 'VERIFY' or 'TRANSFER'\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',{Kind=kind,ID=t.ID})\nelse\n  Game:SetProperty('JAC_ABSORPTION_FIXTURE_UI_WAIT',nil)\nend\nreturn flow.Phase",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "action": "ui_lua",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_EXPECT_V1'))\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))\nlocal flow=assert(F.Get(t.ID))\nassert(flow.Phase=='RESULT',flow.Phase..':'..tostring(flow.Error))\nlocal tx=assert(A.GetState().Transactions[t.ID])\nassert(tx.Status=='COMPLETE','native absorption still incomplete')\nlocal byID={};for _,entry in ipairs(flow.Entries) do byID[entry.ID]=entry end\nassert(byID['live:person'].EscapeOutcome=='EXILE' and byID['live:person'].FinalOutcome=='EXILE')\nassert(byID['live:artifact'].EscapeOutcome=='SCATTER' and byID['live:artifact'].FinalOutcome=='SCATTER')\nassert(byID['live:governor'].Success==false and byID['live:governor'].RetryEscapeOutcome=='EXILE')\nassert(byID['live:equipment'].Success==false and not byID['live:equipment'].RetryEscapeOutcome)\nassert(byID['live:equipment'].FinalOutcome=='SEIZE' and byID['live:equipment'].Rolls.P3_RETRY_ESCAPE.Used==9999)\nlocal roster=A.GetRoster(t.To)\nassert(roster['live:equipment'] and roster['live:equipment'].Outcome=='SEIZE','neutral fallback did not seize equipment')\nlocal returned=assert(byID['live:collection'])\nassert(returned.SelectedAction=='RETURN' and returned.Success==true and returned.ReturnOwner~=t.From and returned.ReturnOwner~=t.To)\nassert(A.GetRoster(returned.ReturnOwner)['live:collection'].Owner==returned.ReturnOwner,'return did not change real owner')\nassert(roster['leader:'..t.From] and roster['live:religion'] and roster['live:unlock'],'leader/religion/unlock absent')\nlocal fixture=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST'))\nlocal gp=assert(roster['native-person:'..t.From..':'..fixture.GreatPerson])\nassert(gp.Kind=='PERSON' and gp.Unit and gp.Unit.Owner==t.To,'native General person not transferred')\nlocal gpUnit=assert(A.FindUnit(t.To,gp.Unit.Token))\nassert(gpUnit:GetGreatPerson():GetIndividual()==e.Individual,'native Great Person individual changed')\nfor _,id in ipairs({'live:hero','live:hero-warlordB'}) do\n  local entry=assert(byID[id])\n  if entry.FinalOutcome=='SUICIDE' then\n    assert(entry.TransferCause and A.GetState().Archive[id].SuicideCause==entry.TransferCause,\n      'native Hero suicide lost cause')\n  else\n    local person=assert(roster[id],'native Hero missing from absorber')\n    assert(person.Unit and A.FindUnit(t.To,person.Unit.Token),'native Hero has no live unit')\n  end\nend\nfor _,snapshot in ipairs(e.Cities) do\n  local city=assert(CityManager.GetCityAt(snapshot.X,snapshot.Y))\n  assert(city:GetOwner()==t.To,'source city not transferred')\n  local g=assert(city:GetProperty(A.Rules.GOVERNANCE_KEY))\n  assert(g.Mode=='CONQUEST' and g.LoyaltyDelta==-15 and g.FrictionPerTurn==-2 and g.FrictionTurns==3)\n  assert(g.ImmediateApplied and A.CityLoyalty(city)==math.max(0,math.min(100,g.ImmediateBefore-15)),\n    'conquest loyalty method not applied to native city')\nend\nF.Tick()\nfor _,id in ipairs({'live:person','live:artifact','live:governor'}) do\n  local world=assert(F.GetWorld(t.ID..':'..id),'escaped identity has no world reward')\n  assert(world.AssetID==id and world.Status=='WAIT_CLEAR','escaped reward site not in native world: '..tostring(world.Error))\n  local plot=assert(Map.GetPlotByIndex(world.Site))\n  assert(plot:GetImprovementType()==world.Improvement,'native reward improvement missing')\nend\nreturn 'results applied to native units, assets, cities and world reward sites'",
+      "state_name": "JAC_Absorption_Entry"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local F=assert(JAC_AbsorptionFlowGameplay)\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal snapshot=assert(Game:GetProperty('JAC_ABSORPTION_RETURN_BOUNDARY'))\nlocal owner=assert(ExposedMembers.JAC_ReturnBoundaryNewOwner)\nlocal flow=assert(F.Get(snapshot.ID))\nassert(flow.Phase=='RESULT','corrected return never reached the result screen')\nlocal tx=assert(A.GetState().Transactions[snapshot.ID])\nassert(tx.Status=='COMPLETE','corrected absorption transaction is incomplete')\nlocal returned\nfor _,entry in ipairs(flow.Entries) do\n if entry.ID==snapshot.Asset then returned=entry;break end\nend\nassert(returned and returned.SelectedAction=='RETURN' and returned.Success==true and\n returned.FinalOutcome=='RETURN' and returned.ReturnOwner==owner,\n 'final successful return did not keep the corrected owner')\nassert(A.Rules.Equal(returned.Rolls or {},snapshot.Frozen[snapshot.Asset].Rolls),\n 'final return rerolled after destination invalidation')\nassert(Players[snapshot.Recipient]:GetCities():GetCount()==0,\n 'invalidated recipient acquired a city before completion')\nlocal record=assert(A.GetRoster(owner)[snapshot.Asset])\nassert(record.Owner==owner and record.Outcome=='RETURN',\n 'actual returned collection did not reach the new recipient')\nreturn 'reselected frozen RETURN completed with the same rolls and actual new owner'"
+    }
+  ]
+}

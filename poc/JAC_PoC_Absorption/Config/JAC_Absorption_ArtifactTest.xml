@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameInfo>
+  <!-- Save the explicit test opt-in. Ordinary games default to disabled. -->
+  <Parameters>
+    <Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_AbsorptionArtifactTest"
+         Name="LOC_JAC_ABSORPTION_MOD_NAME" Domain="bool" DefaultValue="0"
+         ConfigurationGroup="Game" ConfigurationId="JAC_ABSORPTION_ARTIFACT_TEST"
+         GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0"
+         SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/>
+  </Parameters>
+</GameInfo>

@@ -1,0 +1,118 @@
+{
+  "name": "Native original work bridge after one ordinary turn",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-freecity-carrier-ready-absorb-flow-66-e55121899171",
+      "timeout": 600
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "test_turns": 1,
+      "timeout": 900
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local plan=Game:GetProperty('JAC_NATIVE_FREE_CARRIER')\nif not plan or not plan.WorkIndex or not plan.ID then return false end\nlocal donor=CityManager.GetCityAt(plan.Work.X,plan.Work.Y)\nlocal bridge=CityManager.GetCityAt(plan.Recovery.X,plan.Recovery.Y)\nlocal free=CityManager.GetCityAt(plan.X,plan.Y)\nreturn donor and donor:GetOwner()==plan.Work.Owner\n and donor:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot)==plan.WorkIndex\n and bridge and bridge:GetOwner()==plan.Recovery.Owner\n and bridge:GetBuildings():GetGreatWorkInSlot(plan.Recovery.Building,plan.Recovery.Slot)==-1\n and free and free:GetOwner()==plan.Free and free:GetID()==plan.ID\n and free:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot)==-1"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal function locate(index)\n local owners,seen,found={}, {}, {}\n for _,owner in ipairs(PlayerManager.GetAliveIDs()) do if not seen[owner] then owners[#owners+1]=owner;seen[owner]=true end end\n if not seen[plan.Free] then owners[#owners+1]=plan.Free end\n for _,owner in ipairs(owners) do\n  local p=Players[owner]\n  if p then for _,city in p:GetCities():Members() do\n   local b=city:GetBuildings()\n   for def in GameInfo.Buildings() do\n    if b:HasBuilding(def.Index) then\n     for slot=0,b:GetNumGreatWorkSlots(def.Index)-1 do\n      if b:GetGreatWorkInSlot(def.Index,slot)==index then\n       found[#found+1]={Owner=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Building=def.Index,Slot=slot}\n      end\n     end\n    end\n   end\n  end end\n end\n return found\nend\nExposedMembers.JAC_NativeBridgeLocate=locate\nlocal found=locate(plan.WorkIndex)\nassert(#found==1 and found[1].Owner==plan.Work.Owner and found[1].City==plan.Work.CityID and found[1].X==plan.Work.X and found[1].Y==plan.Work.Y and found[1].Building==plan.Work.Building and found[1].Slot==plan.Work.Slot,'original work not uniquely at AI Palace before bridge')\nreturn 'original AI Palace index unique; human and Free Cities Temples empty'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal from,to=plan.Work.Owner,plan.Recovery.Owner\nlocal found=A.NativeWorkLocations(plan.WorkIndex)\nassert(#found==1 and A.Rules.Equal(found[1],plan.Work),'AI original work changed before bridge')\nlocal working=assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,from,to))\nassert(working:GetItemCount()==0,'AI-to-human working deal has another item')\nlocal choices=DealManager.GetPossibleDealItems(from,to,DealItemTypes.GREATWORK,working)\nlocal candidate\nfor _,item in ipairs(choices or {}) do if item.ForType==plan.WorkIndex then candidate=item end end\nassert(candidate and candidate.IsValid,'AI-to-human original relic is not a valid Core deal item')\nlocal subtype=assert(GameInfo.GreatWorks[plan.Work.GreatWorkType]).Index\nlocal item=assert(working:AddItemOfType(DealItemTypes.GREATWORK,from))\nitem:SetSubType(subtype);item:SetValueType(plan.WorkIndex)\nworking:Validate();assert(working:IsValid(),'AI-to-human bridge deal invalid')\nGame:SetProperty('JAC_NATIVE_BRIDGE_PROBE',{Index=plan.WorkIndex,Source=plan.Work,Bridge=plan.Recovery,Free={Owner=plan.Free,City=plan.ID,X=plan.X,Y=plan.Y,Building=plan.Building,Slot=plan.Slot},Stage='AI_SENT'})\nlocal result=DealManager.EnactWorkingDeal(from,to)\nprint('[JAC_NATIVE_BRIDGE_AI_SEND] index='..plan.WorkIndex..' result='..tostring(result))\nreturn 'AI-to-human Core bridge submitted; no physical success claimed'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_FREE_CARRIER'))\nlocal found=assert(ExposedMembers.JAC_NativeBridgeLocate)(plan.WorkIndex)\nlocal source=assert(CityManager.GetCityAt(plan.Work.X,plan.Work.Y))\nlocal bridge=assert(CityManager.GetCityAt(plan.Recovery.X,plan.Recovery.Y))\nlocal free=assert(CityManager.GetCityAt(plan.X,plan.Y))\nlocal src=source:GetBuildings():GetGreatWorkInSlot(plan.Work.Building,plan.Work.Slot)\nlocal mid=bridge:GetBuildings():GetGreatWorkInSlot(plan.Recovery.Building,plan.Recovery.Slot)\nlocal dst=free:GetBuildings():GetGreatWorkInSlot(plan.Building,plan.Slot)\nprint('[JAC_NATIVE_BRIDGE_AI_PHYSICAL] count='..#found..' source='..tostring(src)..' bridge='..tostring(mid)..' free='..tostring(dst))\nassert(#found==1 and src==-1 and mid==plan.WorkIndex and dst==-1,'AI-to-human bridge did not move the original work exactly once')\nlocal w=found[1]\nassert(w.Owner==plan.Recovery.Owner and w.City==plan.Recovery.City and w.X==plan.Recovery.X and w.Y==plan.Recovery.Y and w.Building==plan.Recovery.Building and w.Slot==plan.Recovery.Slot,'AI-to-human bridge missed reserved Temple')\nExposedMembers.JAC_NativeBridgeFirstProof={Index=w.Index or plan.WorkIndex,Source=plan.Work,Bridge=plan.Recovery,Free={Owner=plan.Free,City=plan.ID,X=plan.X,Y=plan.Y,Building=plan.Building,Slot=plan.Slot}}\nreturn 'same original index reached human Temple; AI Palace empty'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal proof=assert(ExposedMembers.JAC_NativeBridgeFirstProof)\nlocal found=A.NativeWorkLocations(proof.Index)\nassert(#found==1 and found[1].Owner==proof.Bridge.Owner and found[1].CityID==proof.Bridge.City and found[1].X==proof.Bridge.X and found[1].Y==proof.Bridge.Y and found[1].Building==proof.Bridge.Building and found[1].Slot==proof.Bridge.Slot,'Core bridge source did not match UI physical proof')\nGame:SetProperty('JAC_NATIVE_BRIDGE_PROBE',{Index=proof.Index,Source=proof.Source,Bridge=proof.Bridge,Free=proof.Free,Stage='HUMAN_HELD'})\nreturn 'first physical proof persisted for a separate second deal'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-bridge-after-ai-to-human"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_BRIDGE_PROBE'))\nassert(plan.Stage=='HUMAN_HELD','first bridge proof was not saved')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==plan.Bridge.Owner and found[1].CityID==plan.Bridge.City and found[1].X==plan.Bridge.X and found[1].Y==plan.Bridge.Y and found[1].Building==plan.Bridge.Building and found[1].Slot==plan.Bridge.Slot,'original work left human bridge before second deal')\nlocal from,to=plan.Bridge.Owner,plan.Free.Owner\nlocal working=assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,from,to))\nassert(working:GetItemCount()==0,'human-to-Free Cities working deal has another item')\nlocal choices=DealManager.GetPossibleDealItems(from,to,DealItemTypes.GREATWORK,working)\nlocal candidate\nfor _,item in ipairs(choices or {}) do if item.ForType==plan.Index then candidate=item end end\nassert(candidate and candidate.IsValid,'human-to-Free Cities original relic is not a valid Core deal item')\nlocal subtype=assert(GameInfo.GreatWorks[found[1].GreatWorkType]).Index\nlocal item=assert(working:AddItemOfType(DealItemTypes.GREATWORK,from))\nitem:SetSubType(subtype);item:SetValueType(plan.Index)\nworking:Validate();assert(working:IsValid(),'human-to-Free Cities bridge deal invalid')\nplan.Stage='FREE_SENT';Game:SetProperty('JAC_NATIVE_BRIDGE_PROBE',plan)\nlocal result=DealManager.EnactWorkingDeal(from,to)\nprint('[JAC_NATIVE_BRIDGE_FREE_SEND] index='..plan.Index..' result='..tostring(result))\nreturn 'human-to-Free Cities Core bridge submitted; physical proof follows'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local plan=assert(Game:GetProperty('JAC_NATIVE_BRIDGE_PROBE'))\nlocal locate=assert(ExposedMembers.JAC_NativeBridgeLocate)\nlocal found=locate(plan.Index)\nlocal source=assert(CityManager.GetCityAt(plan.Source.X,plan.Source.Y))\nlocal bridge=assert(CityManager.GetCityAt(plan.Bridge.X,plan.Bridge.Y))\nlocal free=assert(CityManager.GetCityAt(plan.Free.X,plan.Free.Y))\nlocal src=source:GetBuildings():GetGreatWorkInSlot(plan.Source.Building,plan.Source.Slot)\nlocal mid=bridge:GetBuildings():GetGreatWorkInSlot(plan.Bridge.Building,plan.Bridge.Slot)\nlocal dst=free:GetBuildings():GetGreatWorkInSlot(plan.Free.Building,plan.Free.Slot)\nprint('[JAC_NATIVE_BRIDGE_FREE_PHYSICAL] count='..#found..' source='..tostring(src)..' bridge='..tostring(mid)..' free='..tostring(dst))\nassert(#found==1 and src==-1 and mid==-1 and dst==plan.Index,'human-to-Free Cities bridge did not keep the original work')\nlocal w=found[1]\nassert(w.Owner==plan.Free.Owner and w.City==plan.Free.City and w.X==plan.Free.X and w.Y==plan.Free.Y and w.Building==plan.Free.Building and w.Slot==plan.Free.Slot,'original work missed exact Free Cities Temple')\nreturn 'original index uniquely stored in Free Cities Temple after two official deals'"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_BRIDGE_PROBE'))\nassert(plan.Stage=='FREE_SENT','two-stage bridge was not submitted')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==plan.Free.Owner and found[1].CityID==plan.Free.City and found[1].X==plan.Free.X and found[1].Y==plan.Free.Y and found[1].Building==plan.Free.Building and found[1].Slot==plan.Free.Slot,'Core did not observe the original work in Free Cities Temple')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Source[key]==found[1][key],'original metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Source.Effects,found[1].Effects),'original work effects changed')\nplan.Stage='PROVED';Game:SetProperty('JAC_NATIVE_BRIDGE_PROBE',plan)\nprint('[JAC_NATIVE_BRIDGE_PROVED] '..A.Canonical(plan))\nreturn 'same original index, metadata and effects verified through AI-human-Free Cities deals'"
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-native-bridge-freecity-proved"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-native-bridge-freecity-proved"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game:GetProperty('JAC_NATIVE_BRIDGE_PROBE');local c=p and CityManager.GetCityAt(p.Free.X,p.Free.Y);return p and p.Stage=='PROVED' and c and c:GetOwner()==p.Free.Owner and c:GetBuildings():GetGreatWorkInSlot(p.Free.Building,p.Free.Slot)==p.Index"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local A=assert(JAC_AbsorptionGameplay)\nlocal plan=assert(Game:GetProperty('JAC_NATIVE_BRIDGE_PROBE'))\nassert(plan.Stage=='FREE_SENT','two-stage bridge was not submitted')\nlocal found=A.NativeWorkLocations(plan.Index)\nassert(#found==1 and found[1].Owner==plan.Free.Owner and found[1].CityID==plan.Free.City and found[1].X==plan.Free.X and found[1].Y==plan.Free.Y and found[1].Building==plan.Free.Building and found[1].Slot==plan.Free.Slot,'Core did not observe the original work in Free Cities Temple')\nfor _,key in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer'}) do assert(plan.Source[key]==found[1][key],'original metadata changed: '..key) end\nassert(A.Rules.Equal(plan.Source.Effects,found[1].Effects),'original work effects changed')\nplan.Stage='PROVED';Game:SetProperty('JAC_NATIVE_BRIDGE_PROBE',plan)\nprint('[JAC_NATIVE_BRIDGE_PROVED] '..A.Canonical(plan))\nreturn 'same original index, metadata and effects verified through AI-human-Free Cities deals'"
+    }
+  ]
+}

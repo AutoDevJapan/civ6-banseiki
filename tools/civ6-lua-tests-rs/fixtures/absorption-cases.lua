@@ -29,6 +29,9 @@ function T.test_non_transfer_branches_keep_original_snapshots_and_detach_person_
   APPLY()
   TRUTH(function() return VERIFY(L[2], true) end,true)
   RUN(L[3])
+  local retired=A.GetState().Archive['native-person:1:3']
+  EQ(function() return retired.Outcome end,function() return 'RETIRE' end)
+  EQ(function() return retired.Warlord.Level end,function() return 4 end)
 end
 
 function T.test_returned_belonging_goes_to_explicit_surviving_third_party()

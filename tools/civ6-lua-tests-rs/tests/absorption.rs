@@ -5,10 +5,10 @@ use civ6_lua_tests_rs::strict::{self, ChunkExt, Data, FromLua, TableExt};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Function, Lua, MultiValue, Table, Value};
 use regex::Regex;
-use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value as Json;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::LazyLock;
 
 #[path = "support/inventory.rs"]
 mod inventory;
@@ -380,15 +380,16 @@ fn boundaries(lua: &Lua) {
 }
 
 fn outcomes() -> Vec<Json> {
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER)")
-        .unwrap();
-    db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
-        .unwrap();
-    query_json(
-        &db,
-        "SELECT Kind,Outcome,Destination FROM JAC_AbsorptionOutcomes",
-    )
+    static ROWS: LazyLock<Vec<Json>> = LazyLock::new(|| {
+        let db = civ6_lua_tests_rs::official::official_db();
+        db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
+            .unwrap();
+        query_json(
+            &db,
+            "SELECT Kind,Outcome,Destination FROM JAC_AbsorptionOutcomes",
+        )
+    });
+    ROWS.clone()
 }
 
 struct Harness {
@@ -413,8 +414,17 @@ impl Harness {
             let rows = json_to_lua(&lua, &Json::Array(outcomes()));
             lua.globals().set("OUTCOMES", rows.clone()).unwrap();
             lua.load(&engine).call::<MultiValue>(rows).unwrap();
+            lua.load("PlayerManager.GetAliveIDs=function() local ids={} for _,player in ipairs(PlayerManager.GetAlive()) do ids[#ids+1]=player:GetID() end return ids end")
+                .exec()
+                .unwrap();
         }
-        lua.load(include_str!("../fixtures/absorption-support.lua"))
+        // Frozen historical fragments expect the old game-core table name.
+        // This test-only alias is installed after loading the real module;
+        // native boundary tests inspect the unmodified product exports.
+        lua.load(include_str!("../fixtures/absorption-support.lua").replace(
+            "  A=proxy(ExposedMembers.JAC_Absorption)",
+            "  ExposedMembers.JAC_Absorption=JAC_AbsorptionGameplay\n  A=proxy(JAC_AbsorptionGameplay)",
+        ))
             .exec()
             .unwrap();
         if gameplay {
@@ -553,7 +563,7 @@ fn context_spread() {
         let data = scenario(name);
         let chunks: Vec<_> = steps(&data)
             .iter()
-            .filter(|s| optional_json(s, "state_name").is_some_and(|v| v == "GameCore_Tuner"))
+            .filter(|s| optional_json(s, "state_name").is_some_and(|v| v == "JAC_Absorption_Entry"))
             .map(|s| s["code"].as_str().unwrap())
             .collect();
         assert!(!chunks.is_empty());
@@ -570,7 +580,7 @@ fn context_lifespan() {
 }
 fn check_context_lifespan(data: &Json, name: &str) {
     for step in steps(data) {
-        if optional_json(step, "state_name").is_some_and(|v| v == "GameCore_Tuner") {
+        if optional_json(step, "state_name").is_some_and(|v| v == "JAC_Absorption_Entry") {
             assert!(
                 !optional_text(step, "code")
                     .unwrap_or("")
@@ -704,12 +714,16 @@ fn node<'a>(root: roxmltree::Node<'a, 'a>, path: &str) -> roxmltree::Node<'a, 'a
     })
 }
 fn package_units() {
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch("CREATE TABLE Units (UnitType TEXT PRIMARY KEY, CanTrain INTEGER); INSERT INTO Units VALUES ('UNIT_MISSIONARY',0),('UNIT_APOSTLE',0),('UNIT_HERO_HERCULES',0),('UNIT_WARRIOR',1);").unwrap();
+    let db = civ6_lua_tests_rs::official::official_db();
+    db.execute_batch("UPDATE Units SET CanTrain=0 WHERE UnitType IN ('UNIT_MISSIONARY','UNIT_APOSTLE'); UPDATE Units SET CanTrain=1 WHERE UnitType='UNIT_WARRIOR';").unwrap();
+    let other_units = query_json(
+        &db,
+        "SELECT UnitType,CanTrain FROM Units WHERE UnitType<>'UNIT_MISSIONARY' ORDER BY UnitType",
+    );
     db.execute_batch(&read_repo(format!("{MOD}/Data/JAC_Absorption.sql")))
         .unwrap();
     let actual: BTreeMap<String, i64> = db
-        .prepare("SELECT UnitType,CanTrain FROM Units")
+        .prepare("SELECT UnitType,CanTrain FROM Units WHERE UnitType IN ('UNIT_MISSIONARY','UNIT_APOSTLE','UNIT_WARRIOR')")
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
         .unwrap()
@@ -720,10 +734,10 @@ fn package_units() {
         BTreeMap::from([
             ("UNIT_MISSIONARY".into(), 1),
             ("UNIT_APOSTLE".into(), 0),
-            ("UNIT_HERO_HERCULES".into(), 0),
             ("UNIT_WARRIOR".into(), 1)
         ])
     );
+    assert_eq!(query_json(&db, "SELECT UnitType,CanTrain FROM Units WHERE UnitType<>'UNIT_MISSIONARY' ORDER BY UnitType"), other_units);
     let source = read_repo(format!("{MOD}/JAC_PoC_Absorption.modinfo"));
     let doc = roxmltree::Document::parse(&source).unwrap();
     let action = node(doc.root_element(), "InGameActions/UpdateDatabase");
@@ -752,10 +766,16 @@ fn package_manifest() {
     assert_eq!(
         files,
         string_set([
+            "Config/JAC_Absorption_ArtifactTest.xml",
             "Data/JAC_Absorption.sql",
+            "Data/JAC_Absorption_ArtifactTest.sql",
             "Text/JAC_Absorption_Text.xml",
             "Scripts/JAC_Absorption_Rules.lua",
             "Scripts/JAC_Absorption_Gameplay.lua",
+            "Scripts/JAC_Absorption_Flow.lua",
+            "Scripts/JAC_Absorption_Entry.lua",
+            "UI/JAC_AbsorptionFlow.lua",
+            "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
             "UI/JAC_Absorption_HeroKeys.xml"
         ])
@@ -780,6 +800,78 @@ fn package_manifest() {
         node(root, "ActionCriteria/Criteria/RuleSetInUse").text(),
         Some("RULESET_JAC_BANSEIKI")
     );
+    let test_action = node(root, "InGameActions")
+        .children()
+        .find(|n| n.attribute("id") == Some("JAC_Absorption_ArtifactTest_Data"))
+        .unwrap();
+    assert_eq!(
+        test_action.attribute("criteria"),
+        Some("JAC_Absorption_ArtifactTest")
+    );
+    assert_eq!(
+        node(test_action, "File").text(),
+        Some("Data/JAC_Absorption_ArtifactTest.sql")
+    );
+    assert_eq!(
+        node(test_action, "Properties/LoadOrder").text(),
+        Some("301")
+    );
+    let criteria = node(root, "ActionCriteria")
+        .children()
+        .find(|n| n.attribute("id") == Some("JAC_Absorption_ArtifactTest"))
+        .unwrap();
+    assert_eq!(
+        node(criteria, "RuleSetInUse").text(),
+        Some("RULESET_JAC_BANSEIKI")
+    );
+    let flag = node(criteria, "ConfigurationValueMatches");
+    assert_eq!(node(flag, "Group").text(), Some("Game"));
+    assert_eq!(
+        node(flag, "ConfigurationId").text(),
+        Some("JAC_ABSORPTION_ARTIFACT_TEST")
+    );
+    assert_eq!(node(flag, "Value").text(), Some("1"));
+    let config_source = read_repo(format!("{MOD}/Config/JAC_Absorption_ArtifactTest.xml"));
+    let config = roxmltree::Document::parse(&config_source).unwrap();
+    let parameter = node(config.root_element(), "Parameters/Row");
+    assert_eq!(parameter.attribute("ConfigurationGroup"), Some("Game"));
+    assert_eq!(
+        parameter.attribute("ConfigurationId"),
+        Some("JAC_ABSORPTION_ARTIFACT_TEST")
+    );
+    assert_eq!(parameter.attribute("DefaultValue"), Some("0"));
+    assert_eq!(parameter.attribute("Visible"), Some("0"));
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY, CanTrain INTEGER, PrereqCivic TEXT);
+      INSERT INTO Units VALUES('UNIT_ARCHAEOLOGIST',0,'CIVIC_ORIGINAL'),('UNIT_MISSIONARY',0,NULL),('UNIT_WARRIOR',1,NULL);").unwrap();
+    conn.execute_batch(&read_repo(format!(
+        "{MOD}/Data/JAC_Absorption_ArtifactTest.sql"
+    )))
+    .unwrap();
+    let values: Vec<(String, i64)> = conn
+        .prepare("SELECT UnitType,CanTrain FROM Units ORDER BY UnitType")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        values,
+        vec![
+            ("UNIT_ARCHAEOLOGIST".into(), 1),
+            ("UNIT_MISSIONARY".into(), 0),
+            ("UNIT_WARRIOR".into(), 1)
+        ]
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT PrereqCivic FROM Units WHERE UnitType='UNIT_ARCHAEOLOGIST'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        "CIVIC_ORIGINAL"
+    );
 }
 fn package_text() {
     let source = read_repo(format!("{MOD}/Text/JAC_Absorption_Text.xml"));
@@ -797,7 +889,7 @@ fn package_text() {
             .insert(row.attribute("Language").unwrap().to_owned(), text)
             .is_none());
     }
-    assert_eq!(texts.len(), 4);
+    assert_eq!(texts.len(), 110);
     for languages in texts.values() {
         assert_eq!(
             languages.keys().cloned().collect::<BTreeSet<_>>(),
@@ -891,7 +983,7 @@ fn absorption_boundaries_keep_python_values_and_raw_lua_errors_distinct() {
         IS_NIL(function() return Players[1].units[3] end,false)
         IS_NIL(function() end,true)
         ERROR(function() error('real Lua failure') end,'real Lua failure')
-        ExposedMembers.JAC_Absorption.BoundaryProbe=function() return 1,2,nil end
+        JAC_AbsorptionGameplay.BoundaryProbe=function() return 1,2,nil end
         EQ(function() return A.BoundaryProbe() end,function() return TUPLE(1,2,nil) end)
     "#).exec().unwrap();
     for (source, expected) in [
@@ -918,7 +1010,7 @@ fn legacy_table_length_rejects_string_keys_and_sparse_recall_history() {
         "{[3]=record.RecallHistory[1]}",
     ] {
         let h = Harness::new();
-        h.lua.load(format!("local reload=RELOAD;RELOAD=function() reload();local api=ExposedMembers.JAC_Absorption;local complete=api.CompleteHeroRecall;api.CompleteHeroRecall=function(id) local record=complete(id);record.RecallHistory={history};return record end end;RELOAD()")).exec().unwrap();
+        h.lua.load(format!("local reload=RELOAD;RELOAD=function() reload();local api=JAC_AbsorptionGameplay;local complete=api.CompleteHeroRecall;api.CompleteHeroRecall=function(id) local record=complete(id);record.RecallHistory={history};return record end end;RELOAD()")).exec().unwrap();
         let error = h
             .lua
             .load("CASES.test_recall_resumes_after_token_write_and_does_not_duplicate_history()")
