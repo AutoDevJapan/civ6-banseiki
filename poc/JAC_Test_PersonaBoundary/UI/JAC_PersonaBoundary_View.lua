@@ -795,16 +795,66 @@ function B.CaptiveExchangeSessionReadOnly()
         tostring(x.proposed).."|"..tostring(x.sessionID);
 end
 
+local function PreparedCaptiveIntent(x)
+    local c=EnemyConfig();
+    assert(Game.GetLocalPlayer()==x.attacker and c.attacker==x.attacker and
+        c.owner==x.captor and x.captor~=x.attacker,
+        "native captive exchange actor roles changed");
+    local d=B.EnemyRetryDiagnosis();
+    assert(d.mode=="UNAVAILABLE_CAPACITY" and d.outcome=="CAPTURED" and
+        d.occupied==1 and d.capacity==1 and d.spyID==x.spyID and
+        d.eventID==x.eventID and d.eventTurn==x.eventTurn and
+        d.captive and d.captive.captor==x.captor and
+        d.captive.nameIndex==x.nameIndex and d.captive.name==x.captiveName and
+        d.captive.level==x.captiveLevel,
+        "native captive no longer matches the prepared original operative");
+    local deal=assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,
+        x.attacker,x.captor),"native prepared captive deal missing");
+    local item=assert(ExactCaptiveDealItem(deal,x.captor,x.attacker,x.nameIndex),
+        "native prepared captive deal terms changed");
+    assert(item:GetID()==x.itemID and item:IsLocked() and item:IsValid(),
+        "native prepared captive item identity or validity changed");
+    return deal,item;
+end
+
+-- Only this explicit step binds the prepared captive item to an independently
+-- observed native session ID. Native getters and UI state are the only inputs.
+function B.PinObservedCaptiveExchangeSession(expectedID)
+    local x=assert(captiveExchange,"native captive exchange session missing");
+    assert(type(expectedID)=="number" and expectedID>=0 and
+        expectedID%1==0 and expectedID<9007199254740992,
+        "observed native captive session ID is not an exact integer");
+    assert(x.sessionRequested and not x.sessionID and not x.proposed and
+        not x.finalSent and not x.closed and
+        not Game:GetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT"),
+        "native captive session is not awaiting first ownership binding");
+    assert(not DealManager.HasPendingDeal(x.attacker,x.captor) and
+        not Players[x.attacker]:GetDiplomacy():IsAtWarWith(x.captor),
+        "native captive session became unavailable before binding");
+    PreparedCaptiveIntent(x);
+    local current=DiplomacyManager.FindOpenSessionID(x.attacker,x.captor);
+    assert(current==expectedID,
+        "observed native captive session ID changed before binding");
+    local info=assert(DiplomacyManager.GetSessionInfo(expectedID),
+        "observed native captive session info missing before binding");
+    assert(info.FromPlayer==x.attacker,
+        "observed native captive session initiator changed before binding");
+    x.sessionID=expectedID;
+    Log("ENEMY_CAPTIVE_EXCHANGE_SESSION_BOUND",{sessionID=expectedID,
+        attacker=x.attacker,captor=x.captor,itemID=x.itemID,
+        spyID=x.spyID,eventID=x.eventID});
+    return expectedID;
+end
+
 local function CaptiveExchangeSession()
     local x=assert(captiveExchange,"native captive exchange session missing");
+    assert(type(x.sessionID)=="number",
+        "native captive session has no observed ownership binding");
     local id=DiplomacyManager.FindOpenSessionID(x.attacker,x.captor);
-    if id==nil then return nil; end
+    assert(id==x.sessionID,"native captive diplomacy session identity changed");
     local info=assert(DiplomacyManager.GetSessionInfo(id),
         "native captive diplomacy session info missing");
     assert(info.FromPlayer==x.attacker,"native captive deal was not initiated by the attacker");
-    assert(x.sessionID==nil or x.sessionID==id,
-        "native captive diplomacy session identity changed");
-    x.sessionID=id;
     return id;
 end
 
@@ -835,7 +885,8 @@ function B.CaptiveExchangeState()
             "ATTEMPT_RECORDED" or "NOT_STARTED"};
     end
     if not x.proposed then
-        return {stage=CaptiveExchangeSession() and "SESSION_OPEN" or "SESSION_PENDING"};
+        if not x.sessionID then return {stage="SESSION_UNBOUND"}; end
+        return {stage=CaptiveExchangeSession() and "SESSION_OPEN"};
     end
     local marker=Game:GetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT");
     if not marker then return {stage="PROPOSAL_RECEIPT_PENDING"}; end
@@ -911,12 +962,7 @@ function B.ProposeCaptiveExchange()
         "native captive exchange attempt was not recorded");
     assert(marker.spyID==x.spyID and marker.captor==x.captor and
         marker.nameIndex==x.nameIndex,"native captive exchange receipt differs");
-    local deal=assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,x.attacker,x.captor),
-        "native captive deal missing before proposal");
-    local item=assert(ExactCaptiveDealItem(deal,x.captor,x.attacker,x.nameIndex),
-        "native captive deal terms changed before proposal");
-    assert(item:IsLocked() and item:GetID()==x.itemID,
-        "native captive deal lock or item identity changed");
+    local deal,item=PreparedCaptiveIntent(x);
     assert(not DealManager.HasPendingDeal(x.attacker,x.captor) and
         not Players[x.attacker]:GetDiplomacy():IsAtWarWith(x.captor),
         "native captive proposal became unavailable");
@@ -968,7 +1014,7 @@ function B.CloseCaptiveExchangeSession()
         stage=="FINAL_REFUSED",
         "native captive deal is not in a classified terminal state");
     local id=CaptiveExchangeSession();
-    if id then DiplomacyManager.CloseSession(id); end
+    DiplomacyManager.CloseSession(id);
     x.closed=true;
     Log("ENEMY_CAPTIVE_EXCHANGE_SESSION_CLOSED",{stage=stage,sessionID=id});
     return stage;
@@ -1692,7 +1738,8 @@ function B.Queue(action, params)
     end
     if action=="MARK_CAPTIVE_EXCHANGE" then
         assert(captiveExchange and not captiveExchange.proposed and
-            not Game:GetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT"),
+            not Game:GetProperty("JAC_BOUNDARY_CAPTIVE_DEAL_ATTEMPT") and
+            CaptiveExchangeSession(),
             "native captive exchange attempt already recorded");
     end
     if action=="PREPARE_DISTRICT_CIVIC" then

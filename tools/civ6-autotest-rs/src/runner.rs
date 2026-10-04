@@ -872,10 +872,9 @@ impl Runner {
         let same_native_id =
             parsed_id(&in_game_id).is_some() && parsed_id(&in_game_id) == parsed_id(&deal_id);
         let snapshot_prefix = format!("{attacker}|{captor}|");
-        let same_snapshot = in_game_snapshot
-            .as_deref()
-            .is_some_and(|s| s.starts_with(&snapshot_prefix) && s.contains("|true|false|"))
-            && in_game_snapshot == deal_snapshot;
+        let same_snapshot = in_game_snapshot.as_deref().is_some_and(|s| {
+            s.starts_with(&snapshot_prefix) && s.contains("|true|false|") && s.ends_with("|nil")
+        }) && in_game_snapshot == deal_snapshot;
         let expected_from = attacker.to_string();
         if in_game
             && deal_view
@@ -885,9 +884,34 @@ impl Runner {
             && in_game_from.as_deref() == Some(expected_from.as_str())
             && deal_from.as_deref() == Some(expected_from.as_str())
         {
+            let observed_id = parsed_id(&in_game_id).unwrap();
+            let code=format!("return ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession({observed_id})");
+            let ack = match self.lua("InGame", &code, self.budget(deadline, per_lua)?) {
+                Ok(value) => value,
+                Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    self.log(
+                        "captive_session_probe",
+                        "UNAVAILABLE",
+                        &format!(
+                            "binding acknowledgment unknown for native session {observed_id}: {e}"
+                        ),
+                    )?;
+                    return Err(e);
+                }
+                Err(e) => return Err(e),
+            };
+            if ack.parse::<u64>().ok() != Some(observed_id) {
+                return Err(Error::scenario(format!(
+                    "native captive session binding returned {ack:?}, expected exact ID {observed_id}"
+                )));
+            }
+            self.log(
+                "captive_session_probe",
+                "OK",
+                &format!("bound native session {observed_id} to prepared captive item"),
+            )?;
             return Ok(format!(
-                "native captive diplomacy session {} observed in both contexts",
-                parsed_id(&in_game_id).unwrap()
+                "native captive diplomacy session {observed_id} observed and bound",
             ));
         }
         Err(Error::scenario(format!("captive session observation incomplete: visible={hidden:?}, native_ids={in_game_id:?}/{deal_id:?}, from={in_game_from:?}/{deal_from:?}, snapshots={in_game_snapshot:?}/{deal_snapshot:?}; observation made no proposal")))

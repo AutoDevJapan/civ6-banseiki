@@ -351,7 +351,15 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
                 })
         })
         .unwrap();
-    assert!(screen_ready < session_observed && session_observed < outcome);
+    let mark = exchange_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step)
+                    .is_some_and(|code| code.contains("Queue('MARK_CAPTIVE_EXCHANGE')"))
+        })
+        .unwrap();
+    assert!(screen_ready < session_observed && session_observed < mark && mark < outcome);
     assert!(exchange_steps[session_observed + 1..=outcome]
         .iter()
         .all(|step| {
