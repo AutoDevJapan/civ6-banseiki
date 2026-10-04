@@ -288,6 +288,34 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             < exchange_index("ProposeCaptiveExchange()")
     );
     assert!(exchange_index("ProposeCaptiveExchange()") < exchange_index("AcceptCaptiveExchange()"));
+    assert!(
+        exchange_index("ProposeCaptiveExchange()")
+            < exchange_index("CaptiveExchangeReplyDiagnostic()")
+            && exchange_index("CaptiveExchangeReplyDiagnostic()")
+                < exchange_index("AcceptCaptiveExchange()")
+    );
+    let reply_wait = exchange_steps
+        .iter()
+        .position(|step| {
+            action(step, "wait_for")
+                && embedded_lua(step)
+                    .is_some_and(|code| code.contains("CaptiveExchangeReplyWaitElapsed(30)"))
+        })
+        .unwrap();
+    assert_eq!(exchange_steps[reply_wait]["timeout"], 45);
+    let reply_diagnostic = exchange_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua")
+                && embedded_lua(step).is_some_and(|code| {
+                    code.contains("CaptiveExchangeReplyDiagnostic()")
+                        && code.contains("r.sessionMatches")
+                        && code.contains("r.stage=='AI_ACCEPTED_EXACT'")
+                        && code.contains("r.stage=='AI_REFUSED'")
+                })
+        })
+        .unwrap();
+    assert!(reply_wait < reply_diagnostic);
     assert!(exchange_index("AcceptCaptiveExchange()") < exchange_index("#d.roster.captured==0"));
     let screen_ready = exchange_steps
         .iter()

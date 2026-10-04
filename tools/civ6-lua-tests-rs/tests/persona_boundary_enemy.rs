@@ -859,6 +859,32 @@ fn captive_exchange_requires_native_ai_acceptance_and_actual_returned_spy() {
 }
 
 #[test]
+fn silent_native_reply_is_diagnosed_without_relabeling_deal_view_update_as_ai_acceptance() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("AI_REPLY='SILENT'; ELAPSED=100; assert(ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()=='SESSION_REQUESTED')");
+    h.pin_captive_session();
+    h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; assert(b.ProposeCaptiveExchange()=='PROPOSED_WAIT_AI'); assert(#SENDS==1 and SENDS[1]==DealProposalAction.PROPOSED); assert(not b.CaptiveExchangeReplyWaitElapsed(30)); ELAPSED=129.999; assert(not b.CaptiveExchangeReplyWaitElapsed(30)); ELAPSED=130; assert(b.CaptiveExchangeReplyWaitElapsed(30)); fire(LuaEvents.DiploPopup_DealUpdated,0,DealProposalAction.ACCEPTED); assert(b.CaptiveExchangeReplyDiagnostic().dealViewAction=='UNOBSERVED'); fire(LuaEvents.DiploPopup_DealUpdated,1,DealProposalAction.ACCEPTED); local r=b.CaptiveExchangeReplyDiagnostic(); assert(r.stage=='PROPOSED_WAIT_AI' and r.coreResponse=='UNOBSERVED' and r.dealViewAction==DealProposalAction.ACCEPTED and not r.pending and r.outgoing.exactCaptive and r.incoming.itemCount==0 and not r.workingDealsEqual and r.elapsedSeconds==30); assert(#SENDS==1 and #CAPTURED[1]==1 and HISTORY[0][0].InitialResult==EspionageResultTypes.FAIL_UNDETECTED)");
+    h.run("INCOMING={makeDealItem(4,1,0,-1,true)}; IN_DEAL=makeDeal(INCOMING); local r=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeReplyDiagnostic(); assert(r.incoming.exactCaptive and r.workingDealsEqual and r.stage=='PROPOSED_WAIT_AI' and r.coreResponse=='UNOBSERVED'); assert(#SENDS==1 and #CAPTURED[1]==1)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange()",
+        "native AI did not accept",
+    );
+    h.run("assert(#SENDS==1 and #CAPTURED[1]==1)");
+}
+
+#[test]
+fn deal_view_update_from_replacement_session_cannot_change_captive_reply() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("AI_REPLY='SILENT'; ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    h.pin_captive_session();
+    h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    h.run("ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange(); SESSION_ID=45; fire(LuaEvents.DiploPopup_DealUpdated,1,DealProposalAction.ACCEPTED); local r=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeReplyDiagnostic(); assert(r.stage=='PROPOSED_WAIT_AI' and not r.sessionMatches and r.dealViewAction=='UNOBSERVED' and #SENDS==1 and #CAPTURED[1]==1)");
+}
+
+#[test]
 fn unnamed_captive_tooltip_key_requires_the_exact_native_locked_item() {
     let h = Enemy::new();
     h.captured_deal();

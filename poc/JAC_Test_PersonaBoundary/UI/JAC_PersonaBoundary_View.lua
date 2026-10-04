@@ -954,6 +954,51 @@ function B.CaptiveExchangeState()
         occupied=d.occupied,operationReady=ready};
 end
 
+-- UI.GetElapsedTime was measured in seconds in live 96. A bounded wait can
+-- finish with an honest unresolved result and inspect the native deal once.
+function B.CaptiveExchangeReplyWaitElapsed(seconds)
+    local x=assert(captiveExchange,"native captive exchange session missing");
+    assert(x.proposed and type(x.proposedAt)=="number" and
+        type(seconds)=="number" and seconds>=1 and seconds<=120,
+        "native captive proposal clock unavailable");
+    local now=UI.GetElapsedTime();
+    assert(type(now)=="number" and now>=x.proposedAt,
+        "native captive proposal clock changed");
+    return now-x.proposedAt>=seconds;
+end
+
+-- Neither pending status nor the deal-view update proves AI acceptance.
+-- Keep both visible when the engine's response event did not arrive.
+function B.CaptiveExchangeReplyDiagnostic()
+    local x=assert(captiveExchange,"native captive exchange session missing");
+    assert(x.proposed and type(x.sessionID)=="number",
+        "native captive proposal is not bound to a session");
+    local sessionOK,session=pcall(CaptiveExchangeSession);
+    local incoming=DealManager.GetWorkingDeal(DealDirection.INCOMING,x.attacker,x.captor);
+    local outgoing=DealManager.GetWorkingDeal(DealDirection.OUTGOING,x.attacker,x.captor);
+    local function ObserveDeal(deal)
+        if not deal then return {available=false}; end
+        local ids=WorkingDealItemIDs(deal);
+        return {available=true,itemCount=#ids,
+            exactCaptive=ExactCaptiveDealItem(deal,x.captor,x.attacker,
+                x.nameIndex)~=nil};
+    end
+    local stageOK,state=pcall(B.CaptiveExchangeState);
+    local result={stage=stageOK and state.stage or "READ_ERROR",
+        stageError=not stageOK and tostring(state) or "",
+        boundSessionID=x.sessionID,sessionMatches=sessionOK and
+            session==x.sessionID or false,
+        sessionError=not sessionOK and tostring(session) or "",
+        coreResponse=x.response==nil and "UNOBSERVED" or x.response,
+        dealViewAction=x.dealViewAction==nil and "UNOBSERVED" or x.dealViewAction,
+        pending=DealManager.HasPendingDeal(x.attacker,x.captor),
+        incoming=ObserveDeal(incoming),outgoing=ObserveDeal(outgoing),
+        workingDealsEqual=DealManager.AreWorkingDealsEqual(x.attacker,x.captor),
+        elapsedSeconds=UI.GetElapsedTime()-x.proposedAt};
+    Log("ENEMY_CAPTIVE_EXCHANGE_REPLY_DIAGNOSTIC",result);
+    return result;
+end
+
 function B.ProposeCaptiveExchange()
     local x=assert(captiveExchange,"native captive exchange session missing");
     assert(not x.proposed and CaptiveExchangeSession(),
@@ -983,6 +1028,7 @@ function B.ProposeCaptiveExchange()
         RemovePreparedCaptiveItem(item,x.captor,x.attacker);
         return "DEAL_INVALID";
     end
+    x.proposedAt=UI.GetElapsedTime();
     DealManager.SendWorkingDeal(DealProposalAction.PROPOSED,x.attacker,x.captor);
     Log("ENEMY_CAPTIVE_EXCHANGE_PROPOSED",{attacker=x.attacker,captor=x.captor,
         spyID=x.spyID,eventID=x.eventID,nameIndex=x.nameIndex});
@@ -2366,6 +2412,20 @@ Events.DiplomacyIncomingDeal.Add(function(fromPlayer,toPlayer,action)
         x.response=action;
         Log("ENEMY_CAPTIVE_EXCHANGE_AI_RESPONSE",{from=fromPlayer,to=toPlayer,
             action=action,finalSent=x.finalSent});
+    end
+end);
+-- Official DiplomacyActionView emits this UI update from a diplomacy
+-- statement. It lacks RespondingToDealAction, so it is diagnostic evidence
+-- only and cannot authorize ACCEPTED or classify a refusal.
+LuaEvents.DiploPopup_DealUpdated.Add(function(otherPlayer,action)
+    local x=captiveExchange;
+    if x and x.proposed and x.sessionID and otherPlayer==x.captor then
+        local ok,id=pcall(CaptiveExchangeSession);
+        if ok and id==x.sessionID then
+            x.dealViewAction=action;
+            Log("ENEMY_CAPTIVE_DEAL_VIEW_UPDATE",{sessionID=id,
+                otherPlayer=otherPlayer,action=action});
+        end
     end
 end);
 
