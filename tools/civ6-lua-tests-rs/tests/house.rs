@@ -8,6 +8,63 @@ const UI: &str = "poc/JAC_PoC_BanseikiRuleset/UI";
 const DESC: &str = "LOC_JAC_TEST_PERIOD_DESCRIPTION";
 const ERA: &str = "LOC_JAC_TEST_PERIOD_NAME";
 
+#[test]
+fn packaged_diplomacy_wildcard_installs_the_captive_tooltip_adapter() {
+    let xml = read_repo("poc/JAC_PoC_BanseikiRuleset/JAC_PoC_BanseikiRuleset.modinfo");
+    let doc = roxmltree::Document::parse(&xml).unwrap();
+    let imports = doc
+        .descendants()
+        .find(|n| {
+            n.has_tag_name("ImportFiles")
+                && n.attribute("id") == Some("JAC_Banseiki_HouseNamesFiles")
+        })
+        .unwrap();
+    assert_eq!(imports.attribute("criteria"), Some("JAC_Banseiki_Ruleset"));
+    let files = doc
+        .root_element()
+        .children()
+        .find(|n| n.has_tag_name("Files"))
+        .unwrap();
+    let mut loaded = sources();
+    let mut extensions = 0;
+    for file in imports.children().filter(|n| n.has_tag_name("File")) {
+        let path = file.text().unwrap();
+        if path.starts_with("UI/DiplomacyDealView_") {
+            assert!(files
+                .children()
+                .any(|n| n.has_tag_name("File") && n.text() == Some(path)));
+            let name = path
+                .strip_prefix("UI/")
+                .unwrap()
+                .strip_suffix(".lua")
+                .unwrap();
+            loaded.insert(
+                name.into(),
+                Json::from(read_repo(format!("poc/JAC_PoC_BanseikiRuleset/{path}"))),
+            );
+            extensions += 1;
+        }
+    }
+    assert_eq!(
+        extensions, 1,
+        "diplomacy extension must be imported and packaged"
+    );
+    let lua = new_lua();
+    let texts = load_texts("ja_JP");
+    House::init(&lua, &texts, loaded, Some("CIVILIZATION_JAC_ODA"), "ja_JP");
+    exec(&lua, "ExposedMembers={JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=function() return 'LOC_UNIT_SPY_NAME' end}; include('DiplomacyDealView_',true)");
+    let shown: String = lua.load("return Locale.Lookup(nil)").strict_eval().unwrap();
+    assert_eq!(shown, texts["LOC_UNIT_SPY_NAME"]);
+    exec(
+        &lua,
+        "ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=function() return nil end",
+    );
+    assert!(lua
+        .load("return Locale.Lookup(nil)")
+        .strict_eval::<String>()
+        .is_err());
+}
+
 fn moment_data(lua: &Lua) -> mlua::Result<(Table, String)> {
     lua.load("return CHECK:GetMomentData(7)").strict_eval()
 }
