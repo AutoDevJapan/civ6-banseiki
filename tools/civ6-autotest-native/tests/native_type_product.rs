@@ -902,6 +902,52 @@ fn render_type_scenario() {
 }
 
 #[test]
+fn committed_six_type_cases_equal_their_current_template_and_saved_input() {
+    for (template, file, age) in [
+        (
+            "city-owner-transfer",
+            "absorption-native-type-run-art-city-fresh.json",
+            "fresh",
+        ),
+        (
+            "return",
+            "absorption-native-type-run-art-return-fresh.json",
+            "fresh",
+        ),
+        (
+            "scatter",
+            "absorption-native-type-run-art-scatter-fresh.json",
+            "fresh",
+        ),
+        (
+            "city-owner-transfer",
+            "absorption-native-type-run-artifact-city.json",
+            "artifact",
+        ),
+        (
+            "return",
+            "absorption-native-type-run-artifact-return.json",
+            "artifact",
+        ),
+        (
+            "scatter",
+            "absorption-native-type-run-artifact-scatter.json",
+            "artifact",
+        ),
+    ] {
+        let actual: Value =
+            serde_json::from_slice(&fs::read(scenario_dir().join(file)).unwrap()).unwrap();
+        let save = actual["parameters"]["source_save"].as_str().unwrap();
+        assert_eq!(actual["parameters"]["age"], age);
+        let expected = render(scenario(template), save, Some(age), 11).unwrap();
+        assert_eq!(
+            actual, expected,
+            "committed case diverged from its source template: {file}"
+        );
+    }
+}
+
+#[test]
 fn native_intent_waits_only_for_actual_city_cache_readiness_and_one_original() -> mlua::Result<()> {
     for name in ["city-owner-transfer", "return", "scatter"] {
         let lua = model("artifact", "artifact")?;
