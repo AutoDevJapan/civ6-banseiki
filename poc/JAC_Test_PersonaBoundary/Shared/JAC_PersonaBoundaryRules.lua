@@ -14,6 +14,21 @@ function R.FindSpy(owner, id)
     end
     return spy, lookupID;
 end
+-- A rejected lookup is not an absence receipt. Production requires a fresh
+-- complete map inventory in Gameplay, independently of FindID's aliases.
+function R.MapSpyCount(owner)
+    local player = assert(Players[owner], "native map roster owner unavailable");
+    local units = assert(player:GetUnits(), "native map roster unavailable");
+    local count = 0;
+    for _, unit in units:Members() do
+        local def = assert(GameInfo.Units[unit:GetType()], "native map unit type unavailable");
+        if def.Spy then
+            assert(unit:GetOwner() == owner, "native map spy owner differs");
+            count = count + 1;
+        end
+    end
+    return count;
+end
 function R.Property(leader, field)
     local value = Game:GetProperty("JAC_PERSONA_" .. leader .. "_" .. field);
     return value;

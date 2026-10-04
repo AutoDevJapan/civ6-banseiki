@@ -896,6 +896,18 @@ fn cascaded_official_spy_capacity_has_one_civic_and_one_government_building_rout
 }
 
 #[test]
+fn native_production_retry_rechecks_the_map_roster_before_clearing_history() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; ELAPSED=0; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='OBSERVATION_PENDING'); ELAPSED=61; ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); RETRY_PARAMS=REQUESTS[#REQUESTS].params; assert(RETRY_PARAMS.Mode=='PRODUCE'); local replacement=makeSpy(0,786440); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==15 then return replacement end; return find(self,id) end; return units end");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',RETRY_PARAMS)",
+        "native map spy",
+    );
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==15 and Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL')~=nil and Game:GetProperty('JAC_BOUNDARY_SPY_BARRIER')~=nil,'rejected production retry cleared the original history')");
+}
+
+#[test]
 fn failed_native_history_and_empty_roster_require_finite_observation_before_retry() {
     let h = Enemy::new();
     h.failed();
@@ -2225,6 +2237,21 @@ fn capacity_tier_two_stale_ui_still_rejects_invalid_core_receipts_and_native_gat
         );
         h.run("assert(GOV_REQUEST_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_CAPACITY_GOVERNMENT_INTENTS')==nil)");
     }
+}
+
+#[test]
+fn result_diagnostic_checks_the_saved_identity_against_the_actual_native_unit() {
+    let scene: Value = serde_json::from_str(&read_repo(
+        "tools/civ6-autotest/scenarios/leader-persona-spy-result-diagnostic.json",
+    ))
+    .unwrap();
+    let code = scene_phase_lua(&scene, "ui_lua", "saved spy identity checked");
+    let h = Enemy::new();
+    h.actual_captive_at_turn_24();
+    h.run("local old=Game:GetProperty('JAC_BOUNDARY_SPY').id; local replacement=makeSpy(0,786440); local original=Players[0].GetUnits; Players[0].GetUnits=function() local units=original(); local find=units.FindID; units.FindID=function(self,id) if id==old then return replacement end; return find(self,id) end; return units end");
+    h.run(code);
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; local read=b.ReadEnemy; b.ReadEnemy=function() local s=read(); s.spy.present=true; return s end");
+    h.reject(code, "lookup resolved another native spy");
 }
 
 #[test]
