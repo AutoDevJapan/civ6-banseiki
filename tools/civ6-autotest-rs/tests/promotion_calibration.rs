@@ -31,7 +31,7 @@ fn engine() -> Lua {
             GetProperty=function(_,key) assert(key=='JAC_TEST853_ADMISSION_RECEIPT'); return {spent=0} end};
         GameInfo={JAC_LeaderPersonas={LEADER_JAC_ASHINA_MORIKIYO={GovernorType='ASHINA',BasePromotionType='BASE'}},
             Governors={ASHINA={Index=4,Hash=84}},GovernorPromotions={BASE={Index=7,Hash=91}},
-            Civics={TITLE={Index=12}}};
+            Civics={TITLE={Index=12}},CivicPrereqs=function() return function() end end};
         GameInfo.JAC_PersonaTitleCivics=function() local done=false; return function()
             if not done then done=true; return {CivicType='TITLE'} end end end;
         local physical={HasPromotion=function(_,h) assert(h==91); return baseOwned end};
@@ -39,13 +39,13 @@ fn engine() -> Lua {
             GetGovernor=function(_,h) assert(h==84); return physical end};
         local culture={HasCivic=function(_,i) assert(i==12); return civicCalls>0 end,
             GetCultureCost=function(_,i) assert(i==12); return 100 end,
-            SetCulturalProgress=function(_,i,cost) assert(i==12 and cost==100); civicCalls=civicCalls+1; total=total+1 end};
+            SetCivic=function(_,i,value) assert(i==12 and value==true); civicCalls=civicCalls+1; total=total+1 end};
         Players={[0]={IsHuman=function() return true end,IsTurnActive=function() return active end,
             GetGovernors=function() return gov end,GetCulture=function() return culture end}};
         PlayerOperations={PROMOTE_GOVERNOR=9,PARAM_GOVERNOR_TYPE='gov',PARAM_GOVERNOR_PROMOTION_TYPE='promotion'};
         UI={RequestPlayerOperation=function(owner,op,args)
             assert(owner==0 and op==9 and args.gov==4 and args.promotion==7);
-            requests=requests+1; assert(baseOwned and not canEarn);
+            requests=requests+1; assert(baseOwned);
             -- The original native rejection is modeled without changing its account.
         end};
     "#).exec().unwrap();
@@ -123,7 +123,7 @@ fn calibration_lua_uses_a_real_civic_spare_title_and_detects_an_extra_payment() 
     lua.load(snippet(&scene, "Core official Spent remains"))
         .exec()
         .unwrap();
-    lua.load(snippet(&scene, "owned-base request rejected"))
+    lua.load(snippet(&scene, "owned-base request checked"))
         .exec()
         .unwrap();
     lua.load("assert(total==2 and spent==1 and requests==1 and civicCalls==1); spent=2")
@@ -134,20 +134,15 @@ fn calibration_lua_uses_a_real_civic_spare_title_and_detects_an_extra_payment() 
         .exec()
         .is_err());
     assert!(lua
-        .load(snippet(&scene, "owned-base request rejected"))
+        .load(snippet(&scene, "owned-base request checked"))
         .exec()
         .is_err());
 }
 
 #[test]
-fn calibration_lua_refuses_foreign_owner_missing_base_and_an_earnable_promotion() {
+fn calibration_lua_refuses_foreign_owner_missing_base_and_accepts_either_query_result() {
     let scene = calibration();
-    for change in [
-        "LOCAL_PLAYER=1",
-        "active=false",
-        "baseOwned=false",
-        "canEarn=true",
-    ] {
+    for change in ["LOCAL_PLAYER=1", "active=false", "baseOwned=false"] {
         let lua = engine();
         lua.load(change).exec().unwrap();
         assert!(
@@ -157,5 +152,19 @@ fn calibration_lua_refuses_foreign_owner_missing_base_and_an_earnable_promotion(
             "{change}"
         );
         lua.load("assert(requests==0 and spent==1)").exec().unwrap();
+    }
+    for query in [false, true] {
+        let lua = engine();
+        lua.load(format!("canEarn={query}")).exec().unwrap();
+        lua.load(snippet(&scene, "one official spare title prepared"))
+            .exec()
+            .unwrap();
+        lua.load(snippet(&scene, "one formal PROMOTE request"))
+            .exec()
+            .unwrap();
+        lua.load(snippet(&scene, "owned-base request checked"))
+            .exec()
+            .unwrap();
+        lua.load("assert(requests==1 and spent==1)").exec().unwrap();
     }
 }
