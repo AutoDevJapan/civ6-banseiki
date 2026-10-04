@@ -8,11 +8,11 @@ fn collect<'a>(value: &'a Value, path: &str, chunks: &mut Vec<(String, &'a str)>
         Value::Object(values) => {
             for (key, value) in values {
                 let next = format!("{path}.{key}");
-                if key == "code" {
-                    if let Some(code) = value.as_str() {
-                        chunks.push((next, code));
-                        continue;
-                    }
+                if key == "code"
+                    && let Some(code) = value.as_str()
+                {
+                    chunks.push((next, code));
+                    continue;
                 }
                 collect(value, &next, chunks);
             }
