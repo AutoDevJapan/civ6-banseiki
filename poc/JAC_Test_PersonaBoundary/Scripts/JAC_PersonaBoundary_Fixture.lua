@@ -10,6 +10,8 @@ local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local PRODUCTION = "JAC_BOUNDARY_SPY_PRODUCTION";
 local GAMEPLAY_API_PROBE = "JAC_BOUNDARY_GAMEPLAY_API_PROBE";
+local CAPACITY_CIVIC_RECEIPT = "JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT";
+local CAPACITY_CIVIC_READ = "JAC_BOUNDARY_CAPACITY_CIVIC_READ";
 
 -- This callback lives in AddGameplayScripts. A FireTuner GameCore state has a
 -- different lifetime and can expose methods unavailable to the gameplay VM.
@@ -467,8 +469,14 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
         params.Action=="PREPARE_DISTRICT_CIVIC" or
         params.Action=="PROGRESS_CAPACITY_DISTRICT",
         "unknown enemy fixture barrier");
-    Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",
-        {action=params.Action,token=params.Token,turn=params.Turn,attacker=controller});
+    local previous=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
+    local marker={action=params.Action,token=params.Token,turn=params.Turn,
+        attacker=controller,phase=params.Phase,
+        serial=(previous and previous.serial or 0)+1};
+    Game:SetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER",marker);
+    if params.Action=="PREPARE_DISTRICT_CIVIC" then
+        print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_BARRIER "..R.Serialize(marker));
+    end
 end);
 
 GameEvents.JAC_BoundaryEnemyBarrier.Add(function(controller,params)
@@ -633,30 +641,100 @@ GameEvents.JAC_BoundaryMarkCaptiveExchange.Add(function(controller,params)
 end);
 
 GameEvents.JAC_BoundaryPrepareCapacityCivic.Add(function(controller,params)
-    EnemyReceipt(controller,params,"PREPARE_DISTRICT_CIVIC");
-    local c=EnemyConfig(controller);
-    assert(c.cityID and not Game:GetProperty(RETRY) and
-        not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC"),
-        "native capacity Civic was already prepared");
-    local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"],
-        "native Government Plaza Civic missing");
-    local player=assert(Players[controller],"capacity Civic owner missing");
-    local culture=player:GetCulture();
-    local titles=player:GetGovernors();
-    assert(params.CivicIndex==civic.Index and not culture:HasCivic(civic.Index) and
-        titles:GetGovernorPoints()==params.Total and
-        titles:GetGovernorPointsSpent()==params.Spent,
-        "native capacity Civic or title accounting changed");
-    assert(type(culture.SetCivic)=="function","native civic research API missing");
-    culture:SetCivic(civic.Index,true);
-    assert(culture:HasCivic(civic.Index) and
-        titles:GetGovernorPointsSpent()==params.Spent,
-        "normal native Civic research or title accounting failed");
-    Game:SetProperty("JAC_BOUNDARY_CAPACITY_CIVIC",{
-        owner=controller,index=civic.Index,token=params.Token,
-        beforeTotal=params.Total,beforeSpent=params.Spent,
-        afterTotal=titles:GetGovernorPoints(),
-        afterSpent=titles:GetGovernorPointsSpent(),turn=Game.GetCurrentGameTurn()});
+    -- This durable entry distinguishes a missing callback from a callback that
+    -- reached SetCivic and returned before the native culture cache published.
+    -- A saved or uncertain attempt is never sent to SetCivic a second time.
+    if Game:GetProperty(CAPACITY_CIVIC_RECEIPT) then
+        print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_DUPLICATE_SUPPRESSED");
+        return;
+    end
+    local receipt={action="PREPARE_DISTRICT_CIVIC",owner=controller,
+        token=type(params)=="table" and params.Token or -1,
+        turn=Game.GetCurrentGameTurn(),generation=1,phase="ENTERED",status="ENTERED"};
+    Game:SetProperty(CAPACITY_CIVIC_RECEIPT,receipt);
+    print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_ENTRY "..R.Serialize(receipt));
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"PREPARE_DISTRICT_CIVIC");
+        local c=EnemyConfig(controller);
+        assert(c.cityID and not Game:GetProperty(RETRY) and
+            not Game:GetProperty("JAC_BOUNDARY_CAPACITY_CIVIC"),
+            "native capacity Civic was already prepared");
+        local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"],
+            "native Government Plaza Civic missing");
+        local player=assert(Players[controller],"capacity Civic owner missing");
+        local culture=player:GetCulture();
+        local titles=player:GetGovernors();
+        local total,spent=titles:GetGovernorPoints(),titles:GetGovernorPointsSpent();
+        assert(params.CivicIndex==civic.Index and not culture:HasCivic(civic.Index) and
+            total==params.Total and spent==params.Spent,
+            "native capacity Civic or title accounting changed");
+        assert(type(culture.SetCivic)=="function","native civic research API missing");
+        receipt.index=civic.Index;
+        receipt.beforeTotal=total; receipt.beforeSpent=spent;
+        receipt.phase="VALIDATED";
+        Game:SetProperty(CAPACITY_CIVIC_RECEIPT,receipt);
+        receipt.phase="SETTER_ENTERED";
+        Game:SetProperty(CAPACITY_CIVIC_RECEIPT,receipt);
+        print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_SETTER_ENTRY "..R.Serialize(receipt));
+        culture:SetCivic(civic.Index,true);
+        receipt.phase="SETTER_RETURNED";
+        receipt.afterTotal=titles:GetGovernorPoints();
+        receipt.afterSpent=titles:GetGovernorPointsSpent();
+        receipt.owned=culture:HasCivic(civic.Index);
+        receipt.status=receipt.owned and "OBSERVED" or "PENDING_NATIVE";
+        Game:SetProperty(CAPACITY_CIVIC_RECEIPT,receipt);
+    end);
+    if not ok then
+        receipt.status="ERROR"; receipt.error="CALLBACK_FAILED";
+        Game:SetProperty(CAPACITY_CIVIC_RECEIPT,receipt);
+        print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_RESULT "..R.Serialize(receipt));
+end);
+
+-- A separate, ordered Gameplay read proves what the engine exposes after the
+-- command barrier. It does not repeat the setter or manufacture Civic ownership.
+GameEvents.JAC_BoundaryReadCapacityCivic.Add(function(controller,params)
+    local previous=Game:GetProperty(CAPACITY_CIVIC_READ);
+    local receipt=Game:GetProperty(CAPACITY_CIVIC_RECEIPT);
+    local read={owner=controller,token=type(params)=="table" and params.Token or -1,
+        generation=receipt and receipt.generation or -1,
+        serial=(previous and previous.serial or 0)+1,
+        turn=Game.GetCurrentGameTurn(),status="ENTERED"};
+    Game:SetProperty(CAPACITY_CIVIC_READ,read);
+    print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_READ_ENTRY "..R.Serialize(read));
+    local ok,err=pcall(function()
+        EnemyReceipt(controller,params,"PREPARE_DISTRICT_CIVIC");
+        assert(params.Phase=="READ" and receipt and
+            receipt.owner==controller and receipt.token==params.Token and
+            receipt.turn==params.Turn and receipt.phase=="SETTER_RETURNED" and
+            receipt.status~="ERROR", "capacity Civic command receipt missing or incomplete");
+        local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_DOMAIN_LAW"],
+            "native Government Plaza Civic missing at read");
+        assert(receipt.index==civic.Index,"capacity Civic command index changed");
+        local player=assert(Players[controller],"capacity Civic read owner missing");
+        local titles=player:GetGovernors();
+        read.index=civic.Index;
+        read.owned=player:GetCulture():HasCivic(civic.Index);
+        read.total=titles:GetGovernorPoints();
+        read.spent=titles:GetGovernorPointsSpent();
+        read.status=read.owned and "OBSERVED" or "PENDING_NATIVE";
+        if read.owned and read.spent==receipt.beforeSpent then
+            Game:SetProperty("JAC_BOUNDARY_CAPACITY_CIVIC",{
+                owner=controller,index=civic.Index,token=params.Token,
+                generation=receipt.generation,readSerial=read.serial,
+                beforeTotal=receipt.beforeTotal,beforeSpent=receipt.beforeSpent,
+                afterTotal=read.total,afterSpent=read.spent,
+                commandTurn=receipt.turn,turn=read.turn});
+        end
+        Game:SetProperty(CAPACITY_CIVIC_READ,read);
+    end);
+    if not ok then
+        read.status="ERROR"; read.error="READ_FAILED";
+        Game:SetProperty(CAPACITY_CIVIC_READ,read);
+        print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_READ_ERROR "..tostring(err));
+    end
+    print("JAC_BOUNDARY CORE_CAPACITY_CIVIC_READ_RESULT "..R.Serialize(read));
 end);
 
 GameEvents.JAC_BoundaryProgressCapacityDistrict.Add(function(controller,params)
