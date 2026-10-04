@@ -11,7 +11,7 @@ function event() local e={}; e.Add=function(f) e[#e+1]=f end; return e end
 LuaEvents={DiploPopup_DealUpdated=event()}
 Events,GameEvents={},{}
 for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted',
- 'CityProductionQueueChanged','UnitOperationStarted','DiplomacyIncomingDeal'}) do Events[k]=event() end
+ 'CityProductionQueueChanged','UnitOperationStarted','DiplomacyIncomingDeal','DiplomacyStatement'}) do Events[k]=event() end
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
  'JAC_BoundaryGameplayApiProbe',
  'JAC_BoundaryProgressSpy','JAC_BoundaryBindSpy','JAC_BoundarySpyBarrier',

@@ -1197,6 +1197,83 @@ fn silent_native_reply_is_diagnosed_without_relabeling_deal_view_update_as_ai_ac
 }
 
 #[test]
+fn native_statement_metadata_diagnoses_a_lost_ui_update_without_accepting_a_deal() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("AI_REPLY='SILENT'; ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    h.pin_captive_session();
+    h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    h.run(
+        r#"
+        local b=ExposedMembers.JAC_PersonaBoundary;
+        b.ProposeCaptiveExchange(); local writes=#WRITES;
+        local r=b.CaptiveExchangeReplyDiagnostic();
+        assert(r.statementCount==0 and r.statementDropped==0 and r.statement=='UNOBSERVED' and #r.statements==0);
+        fire(Events.DiplomacyStatement,1,0,{SessionID=SESSION_ID,
+            FromPlayer=1,StatementType=100,StatementSubType=101,
+            DealAction=DealProposalAction.ACCEPTED,
+            RespondingToDealAction=DealProposalAction.PROPOSED,ResponseType=2,
+            Text='not part of the diagnostic'});
+        r=b.CaptiveExchangeReplyDiagnostic();
+        assert(r.statementCount==1 and r.statementDropped==0 and #r.statements==1);
+        assert(r.statement.sessionID==SESSION_ID and r.statement.from==1 and r.statement.to==0);
+        assert(r.statement.statementType==100 and r.statement.statementSubType==101);
+        assert(r.statement.dealAction==DealProposalAction.ACCEPTED and
+            r.statement.respondingToDealAction==DealProposalAction.PROPOSED and
+            r.statement.responseType==2 and r.statement.Text==nil);
+        assert(r.stage=='PROPOSED_WAIT_AI' and r.coreResponse=='UNOBSERVED' and
+            r.dealViewAction=='UNOBSERVED' and #SENDS==1 and #WRITES==writes and #CAPTURED[1]==1);
+        r.statement.dealAction=-900; r.statements[1].sessionID=0; r.statements[2]={};
+        r=b.CaptiveExchangeReplyDiagnostic();
+        assert(#r.statements==1 and r.statement.sessionID==SESSION_ID and
+            r.statement.dealAction==DealProposalAction.ACCEPTED);
+        for i=1,20 do fire(Events.DiplomacyStatement,1,0,{SessionID=SESSION_ID}) end;
+        r=b.CaptiveExchangeReplyDiagnostic();
+        assert(r.statementCount==16 and r.statementDropped==5 and
+            r.statement.dealAction=='UNAVAILABLE' and r.statement.statementType=='UNAVAILABLE');
+        assert(#r.statements==16 and r.statements[1].dealAction==DealProposalAction.ACCEPTED and
+            r.statements[1].respondingToDealAction==DealProposalAction.PROPOSED);
+        for i=2,16 do assert(r.statements[i].dealAction=='UNAVAILABLE' and
+            r.statements[i].sessionID==SESSION_ID) end;
+    "#,
+    );
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.AcceptCaptiveExchange()",
+        "native AI did not accept",
+    );
+}
+
+#[test]
+fn native_statement_metadata_ignores_foreign_malformed_and_replacement_sessions() {
+    let h = Enemy::new();
+    h.captured_deal();
+    h.run("AI_REPLY='SILENT'; ExposedMembers.JAC_PersonaBoundary.BeginCaptiveExchange()");
+    h.pin_captive_session();
+    h.sync("MARK_CAPTIVE_EXCHANGE", "JAC_BoundaryMarkCaptiveExchange");
+    h.run(
+        r#"
+        local b=ExposedMembers.JAC_PersonaBoundary;
+        fire(Events.DiplomacyStatement,1,0,{SessionID=SESSION_ID});
+        b.ProposeCaptiveExchange();
+        fire(Events.DiplomacyStatement,0,1,{SessionID=SESSION_ID});
+        fire(Events.DiplomacyStatement,2,0,{SessionID=SESSION_ID});
+        fire(Events.DiplomacyStatement,1,2,{SessionID=SESSION_ID});
+        fire(Events.DiplomacyStatement,1,0,nil);
+        fire(Events.DiplomacyStatement,1,0,{SessionID=tostring(SESSION_ID)});
+        fire(Events.DiplomacyStatement,1,0,{SessionID=45});
+        local oldID=SESSION_ID; SESSION_ID=45;
+        fire(Events.DiplomacyStatement,1,0,{SessionID=oldID});
+        SESSION_ID=oldID; local readInfo=DiplomacyManager.GetSessionInfo;
+        DiplomacyManager.GetSessionInfo=function() return {FromPlayer=1} end;
+        fire(Events.DiplomacyStatement,1,0,{SessionID=oldID});
+        DiplomacyManager.GetSessionInfo=readInfo;
+        local r=b.CaptiveExchangeReplyDiagnostic();
+        assert(r.statementCount==0 and r.statement=='UNOBSERVED' and #SENDS==1 and #CAPTURED[1]==1);
+    "#,
+    );
+}
+
+#[test]
 fn deal_view_update_from_replacement_session_cannot_change_captive_reply() {
     let h = Enemy::new();
     h.captured_deal();

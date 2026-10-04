@@ -1040,6 +1040,11 @@ function B.CaptiveExchangeReplyDiagnostic()
                 x.nameIndex)~=nil};
     end
     local stageOK,state=pcall(B.CaptiveExchangeState);
+    local statements={};
+    for i,record in ipairs(x.statements or {}) do
+        statements[i]={};
+        for key,value in pairs(record) do statements[i][key]=value; end
+    end
     local result={stage=stageOK and state.stage or "READ_ERROR",
         stageError=not stageOK and tostring(state) or "",
         boundSessionID=x.sessionID,submittedItemID=x.itemID,
@@ -1048,6 +1053,8 @@ function B.CaptiveExchangeReplyDiagnostic()
         sessionError=not sessionOK and tostring(session) or "",
         coreResponse=x.response==nil and "UNOBSERVED" or x.response,
         dealViewAction=x.dealViewAction==nil and "UNOBSERVED" or x.dealViewAction,
+        statementCount=x.statementCount or 0,statementDropped=x.statementDropped or 0,
+        statement=statements[#statements] or "UNOBSERVED",statements=statements,
         pending=DealManager.HasPendingDeal(x.attacker,x.captor),
         incoming=ObserveDeal(incoming),outgoing=ObserveDeal(outgoing),
         workingDealsEqual=DealManager.AreWorkingDealsEqual(x.attacker,x.captor),
@@ -3820,6 +3827,38 @@ Events.DiplomacyIncomingDeal.Add(function(fromPlayer,toPlayer,action)
         Log("ENEMY_CAPTIVE_EXCHANGE_AI_RESPONSE",{from=fromPlayer,to=toPlayer,
             action=action,finalSent=x.finalSent});
     end
+end);
+-- Official DiplomacyActionView receives these native statement fields before
+-- projecting DealAction to DiploPopup_DealUpdated. Keep this independent
+-- observation diagnostic-only, including an ACCEPTED-looking statement.
+Events.DiplomacyStatement.Add(function(fromPlayer,toPlayer,variants)
+    local x=captiveExchange;
+    if not (x and x.proposed and x.sessionID and fromPlayer==x.captor and
+        toPlayer==x.attacker and type(variants)=="table" and
+        type(variants.SessionID)=="number" and variants.SessionID==x.sessionID) then
+        return;
+    end
+    local ok,id=pcall(CaptiveExchangeSession);
+    if not ok or id~=x.sessionID then return; end
+    local count=x.statementCount or 0;
+    if count>=16 then
+        x.statementDropped=(x.statementDropped or 0)+1;
+        return;
+    end
+    local function NumberField(key)
+        local value=variants[key];
+        return type(value)=="number" and value or "UNAVAILABLE";
+    end
+    x.statementCount=count+1;
+    local statement={sessionID=id,from=fromPlayer,to=toPlayer,
+        statementType=NumberField("StatementType"),
+        statementSubType=NumberField("StatementSubType"),
+        dealAction=NumberField("DealAction"),
+        respondingToDealAction=NumberField("RespondingToDealAction"),
+        responseType=NumberField("ResponseType")};
+    x.statements=x.statements or {};
+    x.statements[#x.statements+1]=statement;
+    Log("ENEMY_CAPTIVE_NATIVE_STATEMENT",statement);
 end);
 -- Official DiplomacyActionView emits this UI update from a diplomacy
 -- statement. It lacks RespondingToDealAction, so it is diagnostic evidence
