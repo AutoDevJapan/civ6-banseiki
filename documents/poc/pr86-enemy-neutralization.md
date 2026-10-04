@@ -159,3 +159,13 @@ UI確認後、Gameplay確認前に別のスパイが盤上または移動中一�
 3. 派遣が受理されたら`travel-tick`を実ターンごとに行い、捕虜placeholderとは別の移動中スパイが到着したことを確認する。到着後は既存の`mission`・`mission-tick`で正式中和任務の成功履歴を確認し、成功時だけ`recovery`・`recovery-tick`へ進める。結果は実機で決まり、失敗を成功へ読み替えない。
 
 この変更のRustからのLua回帰は107件、関連シナリオは55件、容量tickは1件、出荷シナリオ一覧とJSONは各1件が成功した。関連クレートの`cargo check --tests`、`cargo fmt --check`、`git diff --check`も成功した。実機の新しい結果は含まない。通常のAI任命資格と称号支払い、マルチプレイのMust判定はこのスパイ経路の検査結果へ含めない。
+
+### 追加レビュー後のロスター分類
+
+診断時の物理人数2は、旧捕虜1・盤上の新スパイ1・一致するplaceholder1がそろう`CAPACITY_MAP`だけで許可する。捕虜のいない`MAP`は盤上1・移動中0、`RETURN`は盤上0・移動中1、消失後の`PRODUCE`は物理0、捕虜後の`PRODUCE`は捕虜1・移動中0を要求する。UIで盤上1・移動中1の通常`MAP`を拒否し、Gameplayでも正式な記録を作る直前に盤上人数を全経路で読み直す。捕虜・offMapのGameplay getterが利用可能なら通常経路でも一致を照合し、利用不能なら読み取れた範囲を`retry.coreRoster`に記録する。`CAPACITY_MAP`だけは両getterの存在と値を必須にする。
+
+再開時は通常経路の物理人数を最大1、`CAPACITY_MAP`を旧捕虜込みで最大2とする。`MAP`と`CAPACITY_MAP`の正式派遣中は保存済みの移動先・名前・階級と別のoffMap記録を照合し、到着時にIDが変われば既存の明示的な到着採用へ進む。派遣記録のない盤上スパイ消失を到着待ちと呼ばない。`retry-prepare`は`CAPACITY_MAP`で`HOME_READY`か`WAIT_NATIVE_READY`を確認してから保存し、従来の`MAP`・`RETURN`・`PRODUCE`経路の終了値は従来どおり扱う。
+
+レビュー再現では、通常`MAP`の盤上1・移動中1、UI読取後に増えた移動中スパイ、`RETURN`のCore確認前に現れた盤上スパイ、準備シナリオの`ARRIVAL_UNOBSERVED`受理が修正前に失敗した。修正後はそれぞれ旧イベント0・本体履歴・元の参照を保って拒否し、元から捕虜がある経路では捕虜も保つ。容量2でも追加盤上スパイ・追加移動記録とUI/Core間の人数変化を拒否する。Gameplayの捕虜getterを欠く場合の履歴保持検査は残した。
+
+[14559801](https://github.com/AutoDevJapan/civ6-banseiki/commit/1455980134bdd0598e231e52be01ed90688071c9)の記録はシナリオ検査55件と容量tick検査1件を別々に記載しており、合計56件である。今回追加したシナリオ意味検査を含めると56件＋容量tick1件の計57件となる。Lua回帰は敵側112件・人物境界25件・スパイ境界19件の計156件、出荷シナリオ一覧とJSONは各1件が成功した。これらは模擬検査であり、Gameplayの捕虜・offMap getterの可用性は親担当の実機142で確認するMustとして残す。getterが無ければ旧履歴を保って採用を拒否し、未実証のsetterで代用しない。

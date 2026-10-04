@@ -788,6 +788,40 @@ fn travel_tick_distinguishes_old_captive_placeholder_from_moving_spy() {
 }
 
 #[test]
+fn retry_prepare_saves_only_a_ready_or_waiting_capacity_spy() {
+    let data = scenario("leader-persona-spy-neutralization-retry-prepare.json");
+    let source = ui_codes(&data).last().copied().unwrap();
+    let lua = Lua::new();
+    lua.load(
+        "mode='CAPACITY_MAP'; stage='HOME_READY'; Game={GetProperty=function(_,key)\
+         assert(key=='JAC_BOUNDARY_ENEMY_SPY_RETRY'); return {current=2,mode=mode,spyID=786440,\
+         archive={spyID=655368,eventID=0,eventTurn=23},\
+         binding={source='BUILDING_GOV_SPIES',spyID=786440}} end};\
+         ExposedMembers={JAC_PersonaBoundary={\
+         ReadEnemy=function() return {spy={present=true,id=786440},\
+         spyRoster={captured={{}},capturedPlaceholder={offMapIndex=1},physicalCount=2}} end,\
+         RetryLivingSpy=function() return stage end}}",
+    )
+    .exec()
+    .unwrap();
+    assert_eq!(
+        lua.load(source).eval::<String>().unwrap(),
+        "CAPACITY_MAP HOME_READY"
+    );
+    lua.load("stage='WAIT_NATIVE_READY'").exec().unwrap();
+    assert_eq!(
+        lua.load(source).eval::<String>().unwrap(),
+        "CAPACITY_MAP WAIT_NATIVE_READY"
+    );
+    lua.load("stage='ARRIVAL_UNOBSERVED'").exec().unwrap();
+    assert!(lua.load(source).eval::<String>().is_err());
+    for route in ["MAP", "RETURN", "PRODUCE"] {
+        lua.globals().set("mode", route).unwrap();
+        assert_eq!(lua.load(source).eval::<String>().unwrap(), route);
+    }
+}
+
+#[test]
 fn produced_spy_comparison_uses_native_build_and_a_short_acceptance_barrier() {
     let data = scenario("leader-persona-spy-production-15km.json");
     let steps = steps(&data);

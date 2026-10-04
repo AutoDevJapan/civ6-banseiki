@@ -623,9 +623,61 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         GameInfo.UnitOperations[params.Operation].Hash==GameInfo.UnitOperations[
             "UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR"].Hash,
         "failed native history, Governor or official title receipt changed");
+    local mapCount=R.MapSpyCount(controller);
+    local attackerDiplomacy=assert(Players[controller]:GetDiplomacy(),
+        "native attacker diplomacy missing");
+    local rosterCaptorID=c.owner;
+    if params.Mode=="PRODUCE" and params.Outcome=="CAPTURED" then
+        rosterCaptorID=params.CaptiveCaptor;
+    end
+    local rosterCaptor=assert(Players[rosterCaptorID],
+        "native retry captor missing");
+    local captorDiplomacy=assert(rosterCaptor:GetDiplomacy(),
+        "native captor diplomacy missing");
+    -- Captive/off-map getters are still unproved in live Gameplay. Keep the
+    -- historical routes usable if absent, but recheck the attacker's off-map
+    -- records and the original captor's count when available. CAPACITY_MAP
+    -- requires both getters below.
+    local offMapAPI=type(attackerDiplomacy.GetNumSpiesOffMap)=="function";
+    local captiveAPI=type(captorDiplomacy.GetNumSpiesCaptured)=="function";
+    local offMapCount,captiveCount;
+    if offMapAPI then
+        offMapCount=attackerDiplomacy:GetNumSpiesOffMap();
+    end
+    if captiveAPI then
+        captiveCount=captorDiplomacy:GetNumSpiesCaptured();
+    end
+    assert((not offMapAPI or (type(offMapCount)=="number" and offMapCount>=0)) and
+        (not captiveAPI or (type(captiveCount)=="number" and captiveCount>=0)),
+        "native Core retry roster count unavailable");
     if params.Mode=="PRODUCE" then
-        assert(R.MapSpyCount(controller)==0,
+        assert(mapCount==0,
             "production retry requires a complete roster without a native map spy");
+        if captiveCount~=nil then
+            assert(captiveCount==(params.Outcome=="CAPTURED" and 1 or 0),
+                "native PRODUCE captive roster changed");
+            if captiveCount==1 and type(captorDiplomacy.GetNthCapturedSpy)=="function" then
+                local held=assert(captorDiplomacy:GetNthCapturedSpy(rosterCaptorID,0),
+                    "native PRODUCE captive record missing");
+                assert(held.OwningPlayer==controller and
+                    held.Name==params.CaptiveName and
+                    held.NameIndex==params.CaptiveNameIndex and
+                    held.Level==params.CaptiveLevel,
+                    "native PRODUCE captive roster changed");
+            end
+        end
+        if offMapCount~=nil then
+            assert((params.Outcome=="CAPTURED" and offMapCount<=1) or
+                (params.Outcome=="GONE_NO_CAPTURE_RECORD" and offMapCount==0),
+                "native PRODUCE off-map roster changed");
+            if offMapCount==1 and type(attackerDiplomacy.GetNthOffMapSpy)=="function" then
+                local placeholder=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
+                    "native PRODUCE captive placeholder missing");
+                assert(placeholder.ReturnTurn==-1 and
+                    placeholder.XLocation==-9999 and placeholder.YLocation==-9999,
+                    "native PRODUCE off-map roster changed");
+            end
+        end
     elseif params.Mode=="CAPACITY_MAP" then
         local building=assert(GameInfo.Buildings["BUILDING_GOV_SPIES"],
             "native Intelligence Agency definition missing");
@@ -651,22 +703,18 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             city:GetOwner()==controller and
             city:GetBuildings():HasBuilding(building.Index),
             "new spy is not tied to the completed native Intelligence Agency");
-        local diplomacy=assert(Players[controller]:GetDiplomacy(),
-            "native attacker diplomacy missing");
-        local captor=assert(Players[c.owner]:GetDiplomacy(),
-            "native captor diplomacy missing");
-        assert(type(diplomacy.GetSpyCapacity)=="function" and
-            type(diplomacy.GetNumSpiesOffMap)=="function" and
-            type(diplomacy.GetNthOffMapSpy)=="function" and
-            type(captor.GetNumSpiesCaptured)=="function" and
-            type(captor.GetNthCapturedSpy)=="function",
+        assert(type(attackerDiplomacy.GetSpyCapacity)=="function" and
+            type(attackerDiplomacy.GetNumSpiesOffMap)=="function" and
+            type(attackerDiplomacy.GetNthOffMapSpy)=="function" and
+            type(captorDiplomacy.GetNumSpiesCaptured)=="function" and
+            type(captorDiplomacy.GetNthCapturedSpy)=="function",
             "native Core captive or off-map roster API unavailable");
-        assert(diplomacy:GetSpyCapacity()==2 and
-            captor:GetNumSpiesCaptured()==1 and
+        assert(attackerDiplomacy:GetSpyCapacity()==2 and
+            captiveCount==1 and
             params.CaptiveCaptor==c.owner and
-            R.MapSpyCount(controller)==1,
+            mapCount==1,
             "capacity retry needs exactly one native map spy and one old captive");
-        local captive=assert(captor:GetNthCapturedSpy(c.owner,0),
+        local captive=assert(captorDiplomacy:GetNthCapturedSpy(c.owner,0),
             "original native captive unavailable in Gameplay");
         assert(captive.OwningPlayer==controller and
             captive.Name==params.CaptiveName and
@@ -674,9 +722,9 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             captive.Level==params.CaptiveLevel and
             captive.Level==travel.level,
             "original native captive differs in Gameplay");
-        assert(diplomacy:GetNumSpiesOffMap()==1,
+        assert(offMapCount==1,
             "native off-map roster changed between UI and Gameplay");
-        local placeholder=assert(diplomacy:GetNthOffMapSpy(controller,0),
+        local placeholder=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
             "original captive placeholder unavailable in Gameplay");
         local defaultName=GameInfo.Units["UNIT_SPY"].Name;
         local sameName=placeholder.Name==captive.Name or
@@ -694,11 +742,28 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
             Map.GetPlot(current:GetX(),current:GetY()),
             "new native map spy type, owner or plot changed in Gameplay");
     elseif params.Mode=="MAP" then
+        assert(mapCount==1 and (offMapCount==nil or offMapCount==0) and
+            (captiveCount==nil or captiveCount==0),
+            "native MAP roster changed between UI and Gameplay");
         local current=assert(R.FindSpy(controller,params.CurrentID),
             "living native map spy missing at archive");
         assert(current:GetOwner()==controller and
             current:GetType()==GameInfo.Units["UNIT_SPY"].Index,
             "living native map spy identity differs at archive");
+    elseif params.Mode=="RETURN" then
+        assert(mapCount==0 and (offMapCount==nil or offMapCount==1) and
+            (captiveCount==nil or captiveCount==0),
+            "native RETURN roster changed between UI and Gameplay");
+        if offMapCount==1 and type(attackerDiplomacy.GetNthOffMapSpy)=="function" then
+            local returning=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
+                "native RETURN off-map record missing");
+            assert(returning.Name==params.ReturnName and
+                returning.Level==params.ReturnLevel and
+                returning.ReturnTurn==params.ReturnTurn and
+                returning.XLocation==params.ReturnX and
+                returning.YLocation==params.ReturnY,
+                "native RETURN roster changed between UI and Gameplay");
+        end
     end
     local archive={spyID=spy.id,eventID=event.id,eventTurn=event.turn,
         operation=params.Operation,plot=params.Plot,initial=params.Initial,
@@ -713,6 +778,8 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         capacity=params.Capacity,occupied=params.Occupied,archivedTurn=Game.GetCurrentGameTurn()};
     local retry={current=2,mode=params.Mode,archive=archive,
         spyID=spy.id,
+        coreRoster={map=mapCount,offMap=offMapCount,captured=captiveCount,
+            offMapAPI=offMapAPI,captiveAPI=captiveAPI},
         returnName=params.ReturnName,returnLevel=params.ReturnLevel,
         returnTurn=params.ReturnTurn,returnX=params.ReturnX,returnY=params.ReturnY};
     if params.Mode=="PRODUCE" then retry.spyID=nil; end
