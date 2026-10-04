@@ -93,6 +93,170 @@ local function SyncAshinaAdmission(forceClosed)
     end
 end
 
+-- Normal admission uses only synchronized Game ledger, Core units and official
+-- title totals. Each numeric key is derived from this run's GameInfo Index;
+-- neither a caller's UI property nor the private 853304 experiment is input.
+-- The separate native consumer accepts only the two reserved key ranges.
+local ADMISSION_MANIFEST = 900000;
+local ADMISSION_ALLOW = 901000;
+local ADMISSION_RESET = 902000;
+local ADMISSION_LIMIT = 256;
+local ADMISSION_SCHEMA = "JAC_PERSONA_ADMISSION_SCHEMA_V1";
+local function AdmissionRows()
+    local rows, seen, leaders = {}, {}, {};
+    for row in GameInfo.JAC_LeaderPersonas() do
+        local def = row and GameInfo.Governors[row.GovernorType];
+        local index = def and def.Index;
+        if type(index) ~= "number" or index % 1 ~= 0 or index < 0 or index >= ADMISSION_LIMIT or
+           seen[index] or type(row.LeaderType) ~= "string" or leaders[row.LeaderType] or
+           row.GovernorType ~= "GOVERNOR_JAC_PERSONA_" .. string.sub(row.LeaderType, 12) then
+            return nil;
+        end
+        seen[index] = true;
+        leaders[row.LeaderType] = true;
+        rows[#rows + 1] = {row=row, index=index};
+    end
+    if #rows ~= 22 then return nil; end
+    table.sort(rows, function(a, b) return a.index < b.index; end);
+    return rows;
+end
+
+local function OfficialTitleBalance(owner)
+    local p = Player(owner, true);
+    local governors = p and p:GetGovernors();
+    if not governors or type(governors.GetGovernorPoints) ~= "function" or
+       type(governors.GetGovernorPointsSpent) ~= "function" then return nil; end
+    local earnedOK, earned = pcall(governors.GetGovernorPoints, governors);
+    local spentOK, spent = pcall(governors.GetGovernorPointsSpent, governors);
+    if not earnedOK or not spentOK or type(earned) ~= "number" or type(spent) ~= "number" or earned % 1 ~= 0 or
+       spent % 1 ~= 0 or spent < 0 or earned < spent then return nil; end
+    return earned - spent, spent;
+end
+
+local function ReservedFullCost(owner, rows)
+    local total = 0;
+    for _,entry in ipairs(rows) do
+        local row = entry.row;
+        if Get(row.LeaderType, "OWNER") == owner and Get(row.LeaderType, "STATE") == "EVOLVING" then
+            local cost = Get(row.LeaderType, "EVOLUTION_COST");
+            if type(cost) ~= "number" or cost % 1 ~= 0 or cost < 1 or cost > 3 or
+               cost ~= row.EvolutionCost then return nil; end
+            total = total + cost;
+        end
+    end
+    return total;
+end
+
+local function CorePaymentComplete(owner, row, cost, spent)
+    -- GameCore availability differs from UI. If its official Governor getter
+    -- is absent, a finalized record cannot manufacture an authorization.
+    local p = Player(owner, true);
+    local governors = p and p:GetGovernors();
+    local def = GameInfo.Governors[row.GovernorType];
+    local base = GameInfo.GovernorPromotions[row.BasePromotionType];
+    if not governors or not def or not base or spent < cost or
+       type(governors.HasGovernor) ~= "function" or
+       type(governors.GetGovernor) ~= "function" then return false; end
+    local ok, governor = pcall(governors.GetGovernor, governors, def.Hash);
+    local present, has = pcall(governors.HasGovernor, governors, def.Hash);
+    if not ok or not present or has ~= true or not governor or
+       type(governor.HasPromotion) ~= "function" then return false; end
+    local baseOK, baseOwned = pcall(governor.HasPromotion, governor, base.Hash);
+    if not baseOK or baseOwned ~= true then return false; end
+    for step = 1, cost - 1 do
+        local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
+        if not payment then return false; end
+        local paymentOK, paid = pcall(governor.HasPromotion, governor, payment.Hash);
+        if not paymentOK or paid ~= true then return false; end
+    end
+    return true;
+end
+
+local function AdmissionAllowed(owner, row, rows, forceClosed)
+    if forceClosed or Get(row.LeaderType, "OWNER") ~= owner then return false; end
+    local cost = Get(row.LeaderType, "EVOLUTION_COST");
+    if type(cost) ~= "number" or cost ~= row.EvolutionCost or cost % 1 ~= 0 or
+       cost < 1 or cost > 3 then return false; end
+    local available, spent = OfficialTitleBalance(owner);
+    if not available then return false; end
+    local person, ready, count = FindPerson(owner, row);
+    local state = Get(row.LeaderType, "STATE");
+    if state == "EVOLVING" then
+        local reserved = ReservedFullCost(owner, rows);
+        return ready and person ~= nil and count == 1 and
+            Get(row.LeaderType, "UNIT") == person:GetID() and
+            reserved ~= nil and available >= reserved;
+    end
+    if state == "GOVERNOR" then
+        return ready and person == nil and count == 0 and
+            Get(row.LeaderType, "UNIT") == nil and
+            CorePaymentComplete(owner, row, cost, spent);
+    end
+    return false;
+end
+
+local function SyncProductionAdmission(forceClosed)
+    local schema = Game:GetProperty(ADMISSION_SCHEMA);
+    if schema == nil then
+        for owner = 0, 63 do
+            local p = Player(owner, false);
+            if p and p:GetProperty(ADMISSION_RESET) ~= nil then return; end
+        end
+    elseif schema ~= 1 then return; end
+    -- A natural read of this reset key invalidates all earlier atomic cells
+    -- for the bound Core receiver, even when a load reuses its address.
+    for owner = 0, 63 do
+        local p = Player(owner, false);
+        if p then
+            p:SetProperty(ADMISSION_RESET, true);
+            p:GetProperty(ADMISSION_RESET);
+        end
+    end
+    local rows = AdmissionRows();
+    if not rows then return; end
+    local ids = PlayerManager.GetAliveMajorIDs();
+    if type(ids) ~= "table" then return; end
+    if schema == nil then
+        -- A dedicated numeric namespace must not overwrite another mod's data.
+        for _,owner in ipairs(ids) do
+            local p = Player(owner, true);
+            if not p or owner >= 64 then return; end
+            for _,entry in ipairs(rows) do
+                if p:GetProperty(ADMISSION_MANIFEST + entry.index) ~= nil or
+                   p:GetProperty(ADMISSION_ALLOW + entry.index) ~= nil then return; end
+            end
+        end
+        Game:SetProperty(ADMISSION_SCHEMA, 1);
+    elseif schema ~= 1 then return; end
+    for _,owner in ipairs(ids) do
+        local p = Player(owner, true);
+        if p and owner < 64 then
+            -- Publish closure first. A natural Core getter captures each raw
+            -- false before any true can be granted for this owner.
+            for _,entry in ipairs(rows) do
+                local key = ADMISSION_ALLOW + entry.index;
+                p:SetProperty(key, false);
+                p:GetProperty(key);
+            end
+            for _,entry in ipairs(rows) do
+                local key = ADMISSION_MANIFEST + entry.index;
+                p:SetProperty(key, true);
+                p:GetProperty(key);
+            end
+            for _,entry in ipairs(rows) do
+                if AdmissionAllowed(owner, entry.row, rows, forceClosed) then
+                    local key = ADMISSION_ALLOW + entry.index;
+                    p:SetProperty(key, true);
+                    if p:GetProperty(key) ~= true then
+                        p:SetProperty(key, false);
+                        p:GetProperty(key);
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function Join(owner, source, personality, trait)
     local p, other = Player(owner, true), Player(source, false);
     if not p or not other or owner == source then return Finish(owner, "INVALID"); end
@@ -143,6 +307,7 @@ local function Join(owner, source, personality, trait)
     Set(leader, "STATE", "GREAT_PERSON");
     Set(leader, "MERIT", 0);
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
+    SyncProductionAdmission(false);
     return Finish(owner, "JOINED");
 end
 
@@ -182,6 +347,7 @@ local function PrepareEvolution(owner, leader)
     Set(leader, "EVOLUTION_SURCHARGE", cost - 1);
     Set(leader, "STATE", "EVOLVING");
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
+    SyncProductionAdmission(false);
     return Finish(owner, "EVOLVING");
 end
 
@@ -199,12 +365,14 @@ local function CompleteEvolution(owner, leader)
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "REMOVAL_PENDING"); end
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
+    SyncProductionAdmission(true);
     if unit then p:GetUnits():Destroy(unit); end -- TunerMapPanel.lua:199, also accepts no return value
     local remaining, observed = FindPerson(owner, row);
     if remaining or not observed then return Finish(owner, "REMOVAL_PENDING"); end
     Set(leader, "UNIT", nil);
     Set(leader, "STATE", "GOVERNOR");
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
+    SyncProductionAdmission(false);
     SnapshotAlliances(owner, leader);
     return Finish(owner, "EVOLVED");
 end
@@ -239,6 +407,7 @@ local function Reconcile()
             end
         end
     end
+    SyncProductionAdmission(false);
 end
 
 local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
@@ -562,3 +731,4 @@ ExposedMembers.JAC_LeaderPersona = {
     OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
 };
 print("JAC_LeaderPersona_Gameplay: ready");
+SyncProductionAdmission(true);

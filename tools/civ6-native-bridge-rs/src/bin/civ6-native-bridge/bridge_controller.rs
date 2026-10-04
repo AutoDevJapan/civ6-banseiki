@@ -236,6 +236,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "can-ever-calibration" => BridgeMode::CanEverCalibration,
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
         "joined-admission" => BridgeMode::JoinedAdmission,
+        "production-admission" => BridgeMode::ProductionAdmission,
         _ => return Err("invalid bridge mode".into()),
     };
     if pid == 0
@@ -574,9 +575,10 @@ fn bridge_dll() -> Result<PathBuf, String> {
 fn pinned_entry_bytes(game: &Handle, target: usize, mode: BridgeMode) -> Result<[u8; 8], String> {
     let mut file = File::open(GAMECORE).map_err(|e| format!("pinned GameCore read: {e}"))?;
     let (offset, prologue): (u64, &[u8]) = match mode {
-        BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission => {
-            (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE)
-        }
+        BridgeMode::CanEver
+        | BridgeMode::CanEverCalibration
+        | BridgeMode::JoinedAdmission
+        | BridgeMode::ProductionAdmission => (CAN_EVER_FILE_OFFSET, &CAN_EVER_PROLOGUE),
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             (PROPERTY_GET_FILE_OFFSET, &PROPERTY_PROLOGUE)
         }
@@ -783,14 +785,20 @@ pub fn run() -> Result<(), String> {
     }
     let target = pinned_target(parsed.pid, &game, parsed.mode)?;
     let original = pinned_entry_bytes(&game, target, parsed.mode)?;
-    let property_target = if parsed.mode == BridgeMode::JoinedAdmission {
+    let property_target = if matches!(
+        parsed.mode,
+        BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+    ) {
         Some(target - PINNED_CAN_EVER_RVA + PINNED_PROPERTY_GET_RVA)
     } else if parsed.mode.is_property() {
         Some(target)
     } else {
         None
     };
-    let property_original = if parsed.mode == BridgeMode::JoinedAdmission {
+    let property_original = if matches!(
+        parsed.mode,
+        BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+    ) {
         Some(pinned_entry_bytes(
             &game,
             property_target.unwrap(),
@@ -814,21 +822,33 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::PropertyScoped => "property-scoped",
                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
-                BridgeMode::JoinedAdmission => "joined-admission"},
+                BridgeMode::JoinedAdmission => "joined-admission",
+                BridgeMode::ProductionAdmission => "production-admission"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
             "duration_limit_seconds":parsed.duration});
     if matches!(
         parsed.mode,
-        BridgeMode::CanEver | BridgeMode::CanEverCalibration | BridgeMode::JoinedAdmission
+        BridgeMode::CanEver
+            | BridgeMode::CanEverCalibration
+            | BridgeMode::JoinedAdmission
+            | BridgeMode::ProductionAdmission
     ) {
         identity["can_ever_rva"] = json!(PINNED_CAN_EVER_RVA);
-        if parsed.mode == BridgeMode::JoinedAdmission {
+        if matches!(
+            parsed.mode,
+            BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+        ) {
             identity["property_rva"] = json!(PINNED_PROPERTY_GET_RVA);
             identity["property_entry_bytes"] =
                 json!(format!("{:02x?}", property_original.unwrap()));
             identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
-            identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
+            if parsed.mode == BridgeMode::ProductionAdmission {
+                identity["scope_key_ranges"] = json!([[900000, 900255], [901000, 901255]]);
+                identity["reset_key_id"] = json!(902000);
+            } else {
+                identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
+            }
         }
     } else {
         identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
@@ -881,6 +901,9 @@ pub fn run() -> Result<(), String> {
             BridgeMode::JoinedAdmission => {
                 BridgeConfig::for_joined(parsed.pid, parsed.created, trace_remote as u64)
             }
+            BridgeMode::ProductionAdmission => {
+                BridgeConfig::for_production(parsed.pid, parsed.created, trace_remote as u64)
+            }
         };
         config.max_seconds = parsed.duration;
         let config_bytes = unsafe {
@@ -920,7 +943,10 @@ pub fn run() -> Result<(), String> {
             {
                 return Err("property hotpatch did not preserve entry+2..+7".into());
             }
-            if parsed.mode == BridgeMode::JoinedAdmission {
+            if matches!(
+                parsed.mode,
+                BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
+            ) {
                 let mut can_entry = [0u8; 8];
                 read_remote(&game, target, &mut can_entry)?;
                 if can_entry[0] != 0xe9 || can_entry[5..] != original[5..] {
@@ -1099,7 +1125,7 @@ pub fn run() -> Result<(), String> {
                     snapshot.filtered.load(std::sync::atomic::Ordering::Acquire),
                 )
             }
-            BridgeMode::JoinedAdmission => {
+            BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission => {
                 let calibration = drained_calibration_trace(
                     &game,
                     trace_remote + std::mem::offset_of!(JoinedTrace, calibration),
@@ -1108,7 +1134,7 @@ pub fn run() -> Result<(), String> {
                     &game,
                     trace_remote + std::mem::offset_of!(JoinedTrace, property),
                 )?;
-                if properties.scope != BridgeMode::JoinedAdmission as u32 {
+                if properties.scope != parsed.mode as u32 {
                     return Err("joined property scope differs".into());
                 }
                 let calls = calibration.complete_rows().map_err(str::to_string)?;
@@ -1188,6 +1214,7 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::CanEver => "can_ever_entry",
                 BridgeMode::CanEverCalibration => "can_ever_calibration",
                 BridgeMode::JoinedAdmission => "joined_admission",
+                BridgeMode::ProductionAdmission => "production_admission",
                 _ => "raw_collection",
             },
             "prefix_retained_until_exit":installed_prefix.is_some(),
