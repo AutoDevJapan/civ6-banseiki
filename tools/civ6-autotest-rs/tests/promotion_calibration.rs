@@ -34,9 +34,8 @@ fn engine() -> Lua {
             Civics={TITLE={Index=12}}};
         GameInfo.JAC_PersonaTitleCivics=function() local done=false; return function()
             if not done then done=true; return {CivicType='TITLE'} end end end;
-        local physical={HasPromotion=function(_,h) assert(h==91); return baseOwned end,
-            CanEarnPromotion=function(_,h) assert(h==91); return canEarn end};
-        local gov={GetGovernorPoints=function() return total end,GetGovernorPointsSpent=function() return spent end,
+        local physical={HasPromotion=function(_,h) assert(h==91); return baseOwned end};
+        local gov={CanEarnPromotion=function(_,governor,promotion) assert(governor==84 and promotion==91); return canEarn end,GetGovernorPoints=function() return total end,GetGovernorPointsSpent=function() return spent end,
             GetGovernor=function(_,h) assert(h==84); return physical end};
         local culture={HasCivic=function(_,i) assert(i==12); return civicCalls>0 end,
             GetCultureCost=function(_,i) assert(i==12); return 100 end,
