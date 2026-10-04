@@ -1078,7 +1078,8 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 88);
+    // main added 45 absorption scenarios with isolated new-game selection.
+    assert_eq!(count, 133);
 }
 
 #[test]
