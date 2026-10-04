@@ -529,7 +529,11 @@ fn render(
             }
         }
         if age == "aged" {
-            steps.insert(3, json!({"action":"end_turn","id":"age-original","turns":aged_turns,"test_turns":aged_turns,"timeout":1800}));
+            let begin = steps
+                .iter()
+                .position(|s| s["id"] == "begin")
+                .ok_or("branch begin required")?;
+            steps.insert(begin, json!({"action":"end_turn","id":"age-original","turns":aged_turns,"test_turns":aged_turns,"timeout":1800}));
         }
         data["parameters"]["age"] = age.into();
     } else if steps.iter().any(|s| {
@@ -560,8 +564,18 @@ fn renderer_uses_exact_external_save_and_ages_only_the_independent_branch() {
         );
         let aged = render(scenario(branch), art, Some("aged"), 11).unwrap();
         assert_eq!(aged["steps"][1]["name"], fresh["steps"][1]["name"]);
-        assert_eq!(aged["steps"][3]["action"], "end_turn");
-        assert_eq!(aged["steps"][3]["turns"], 11);
+        let steps = aged["steps"].as_array().unwrap();
+        let age = steps
+            .iter()
+            .position(|s| s["id"] == "age-original")
+            .unwrap();
+        let handoff = steps
+            .iter()
+            .position(|s| s["id"] == "old-results-history-proof")
+            .unwrap();
+        assert!(age > handoff);
+        assert_eq!(steps[age]["turns"], 11);
+        assert_eq!(steps[age + 1]["id"], "begin");
         assert!(render(scenario(branch), art, None, 11).is_err());
     }
     assert!(
@@ -576,9 +590,107 @@ fn renderer_uses_exact_external_save_and_ages_only_the_independent_branch() {
     assert!(render(scenario("artifact-prepare"), "../another-save", None, 11).is_err());
 }
 
+fn normalize_rendered_inputs(mut case: Value, template: &Value, age: &str) -> Value {
+    let steps = case["steps"].as_array_mut().unwrap();
+    let input = steps.iter_mut().find(|s| s["action"] == "load").unwrap();
+    input["name"] = template["parameters"]["source_save"].clone();
+    for step in steps {
+        if let Some(source) = step["code"].as_str() {
+            step["code"] = source
+                .replace(
+                    &format!("local ageCase='{age}'"),
+                    "local ageCase='__TYPE_AGE__'",
+                )
+                .into();
+        }
+    }
+    case["parameters"]["source_save"] = template["parameters"]["source_save"].clone();
+    case["parameters"]["age"] = template["parameters"]["age"].clone();
+    case
+}
+
+#[test]
+fn all_six_art_and_artifact_renderings_preserve_every_template_step_except_save_and_age() {
+    let mut count = 0;
+    for name in ["city-owner-transfer", "return", "scatter"] {
+        let template = scenario(name);
+        for (save, age) in [
+            (
+                "JAC-type-art-prepared-absorb-flow-155-777473861537",
+                "fresh",
+            ),
+            (
+                "JAC-type-artifact-prepared-absorb-flow-160-4ec876518338",
+                "artifact",
+            ),
+        ] {
+            let rendered = render(template.clone(), save, Some(age), 11).unwrap();
+            assert_eq!(
+                normalize_rendered_inputs(rendered.clone(), &template, age),
+                template,
+                "{name}/{age}: rendering failed to propagate a template step"
+            );
+            let steps = rendered["steps"].as_array().unwrap();
+            for required in [
+                "old-results-snapshot",
+                "old-results-screen-ack",
+                "old-results-history-proof",
+                "native-intent-source-published",
+            ] {
+                assert!(
+                    steps.iter().any(|s| s["id"] == required),
+                    "{name}/{age}: missing {required}"
+                );
+            }
+            let checks = steps.iter().find(|s| s["id"] == "checks").unwrap()["code"]
+                .as_str()
+                .unwrap();
+            assert!(
+                checks.contains("if t.Role~='Human' then"),
+                "kept human recovery land fix missing"
+            );
+            let begin = steps.iter().find(|s| s["id"] == "begin").unwrap()["code"]
+                .as_str()
+                .unwrap();
+            assert!(
+                begin.contains("center.Role=role"),
+                "prepared save roles were not bound to guard relocation"
+            );
+            let mut stale = rendered.clone();
+            stale["steps"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|s| s["id"] != "old-results-screen-ack");
+            assert_ne!(
+                normalize_rendered_inputs(stale, &template, age),
+                template,
+                "parity accepted a rendered case missing the actual old-result UI handoff"
+            );
+            let mut stale_guard = rendered;
+            for s in stale_guard["steps"].as_array_mut().unwrap() {
+                if s["id"] == "checks" {
+                    s["code"] = s["code"]
+                        .as_str()
+                        .unwrap()
+                        .replace("if t.Role~='Human' then", "if true then")
+                        .into();
+                }
+            }
+            assert_ne!(
+                normalize_rendered_inputs(stale_guard, &template, age),
+                template,
+                "parity accepted a rendered case using the old guard prohibition"
+            );
+            count += 1;
+        }
+    }
+    assert_eq!(count, 6);
+}
+
 fn product_to_intent(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
     let lua = model(kind, age)?;
     execute(&lua, "art-prepare", "prepare-proof")?;
+    result_handoff(&lua, name)?;
     lua.globals().set("CONTEXT", "Gameplay")?;
     lua.load(
         step(name, "begin")["code"]
@@ -602,8 +714,82 @@ fn product_to_intent(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
     execute(&lua, name, "hold-native-publication")?;
     execute(&lua, name, "screen-confirm")?;
     drive(&lua, name, "native-intent-ready")?;
+    drive(&lua, name, "native-intent-source-published")?;
     execute(&lua, name, "native-intent-proof")?;
     Ok(lua)
+}
+
+fn result_handoff(lua: &Lua, name: &str) -> mlua::Result<()> {
+    execute(lua, name, "old-results-snapshot")?;
+    execute(lua, name, "old-results-screen-ack")?;
+    drive(lua, name, "old-results-acknowledged")?;
+    execute(lua, name, "old-results-history-proof")
+}
+
+fn old_flow(lua: &Lua, phase: &str, status: &str) -> mlua::Result<()> {
+    lua.globals().set("OLD_PHASE", phase)?;
+    lua.globals().set("OLD_STATUS", status)?;
+    lua.load(r#"
+    local A=JAC_AbsorptionGameplay
+    local state=A.GetState()
+    state.Transactions['old-result']={ID='old-result',From=0,To=2,Status=OLD_STATUS,Units={},NativeWorks={},HistoricalMarker='keep'}
+    Game:SetProperty(A.Rules.STATE_KEY,state)
+    Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows={
+      ['old-result']={ID='old-result',From=0,To=2,Phase=OLD_PHASE,Phase1Complete=true,
+       Request={ID='old-result',From=0,To=2,Mode='MERGER'},CompletedTurn=4,
+       Entries={{ID='old-item',Kind='ITEM',Name='Old item',FinalOutcome='TRANSFER',
+        Rolls={P1_ESCAPE={Raw=13,Used=13},P3_SUCCESS={Raw=23,Used=23}}}}},
+      ['old-done']={ID='old-done',From=3,To=0,Phase='DONE',Phase1Complete=true,
+       AcknowledgedTurn=1,History={Original='retained'}}},
+      World={['old-world']={ID='old-world',FlowID='old-result',Status='COMPLETE',
+       Recipient=2,AssetID='old-item',HistoricalMarker='world retained'}}})
+    "#).exec()
+}
+
+#[test]
+fn old_completed_results_are_acknowledged_via_real_ui_without_erasing_history() -> mlua::Result<()>
+{
+    for name in ["city-owner-transfer", "return", "scatter"] {
+        let lua = model("art", "fresh")?;
+        old_flow(&lua, "RESULT", "COMPLETE")?;
+        lua.load("local R=JAC_AbsorptionGameplay.Rules;local state=JAC_AbsorptionGameplay.GetState();state.Transactions['old-result-2']=R.Copy(state.Transactions['old-result']);state.Transactions['old-result-2'].ID='old-result-2';state.Transactions['old-result-2'].From=3;Game:SetProperty(R.STATE_KEY,state);local f=Game:GetProperty('JAC_ABSORPTION_FLOW_V1');f.Flows['old-result-2']=R.Copy(f.Flows['old-result']);f.Flows['old-result-2'].ID='old-result-2';f.Flows['old-result-2'].From=3;Game:SetProperty('JAC_ABSORPTION_FLOW_V1',f)").exec()?;
+        let calls = lua.load("return #RANDOM_CALLS").eval::<usize>()?;
+        result_handoff(&lua, name)?;
+        lua.load("assert(JAC_AbsorptionFlowGameplay.Get('old-result-2').Phase=='DONE','second old result was not acknowledged')").exec()?;
+        assert_eq!(lua.load("return #RANDOM_CALLS").eval::<usize>()?, calls);
+        lua.load("assert(JAC_AbsorptionFlowGameplay.Get('old-result').Phase=='DONE');assert(Game:GetProperty('JAC_ABSORPTION_FLOW_V1').World['old-world'].HistoricalMarker=='world retained')").exec()?;
+        result_handoff(&lua, name)?;
+        lua.globals().set("CONTEXT", "Gameplay")?;
+        lua.load(
+            step(name, "begin")["code"]
+                .as_str()
+                .unwrap()
+                .replace("__TYPE_AGE__", "fresh"),
+        )
+        .exec()?;
+        lua.load("assert(JAC_AbsorptionFlowGameplay.Get(Game:GetProperty('JAC_TYPE_CASE').ID).Phase=='CHOICE')").exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn old_choice_applying_and_incomplete_results_cannot_be_acknowledged_or_reset() -> mlua::Result<()>
+{
+    for (phase, status) in [
+        ("CHOICE", "COMPLETE"),
+        ("APPLYING", "STAGED"),
+        ("RESULT", "STAGED"),
+    ] {
+        let lua = model("art", "fresh")?;
+        old_flow(&lua, phase, status)?;
+        lua.load("local R=JAC_AbsorptionGameplay.Rules;local state=JAC_AbsorptionGameplay.GetState();state.Transactions['a-completed']=R.Copy(state.Transactions['old-result']);state.Transactions['a-completed'].ID='a-completed';state.Transactions['a-completed'].From=3;state.Transactions['a-completed'].Status='COMPLETE';Game:SetProperty(R.STATE_KEY,state);local f=Game:GetProperty('JAC_ABSORPTION_FLOW_V1');f.Flows['a-completed']=R.Copy(f.Flows['old-result']);f.Flows['a-completed'].ID='a-completed';f.Flows['a-completed'].From=3;f.Flows['a-completed'].Phase='RESULT';Game:SetProperty('JAC_ABSORPTION_FLOW_V1',f);ACK_CALLS=0;local send=UI.RequestPlayerOperation;UI.RequestPlayerOperation=function(actor,operation,params) if params.Command=='ACK' then ACK_CALLS=ACK_CALLS+1 end return send(actor,operation,params) end").exec()?;
+        let before: String=lua.load("return JAC_AbsorptionGameplay.Canonical({Flow=Game:GetProperty('JAC_ABSORPTION_FLOW_V1'),State=JAC_AbsorptionGameplay.GetState()})").eval()?;
+        assert!(execute(&lua, "city-owner-transfer", "old-results-snapshot").is_err());
+        assert_eq!(lua.load("return JAC_AbsorptionGameplay.Canonical({Flow=Game:GetProperty('JAC_ABSORPTION_FLOW_V1'),State=JAC_AbsorptionGameplay.GetState()})").eval::<String>()?,before);
+        lua.load("assert(Game:GetProperty('JAC_TYPE_RESULT_HANDOFF')==nil,'failed preflight changed saved state')").exec()?;
+        lua.load("assert(ACK_CALLS==0 and JAC_AbsorptionFlowGameplay.Get('a-completed').Phase=='RESULT','mixed preflight acknowledged a completed result before rejecting the unfinished flow')").exec()?;
+    }
+    Ok(())
 }
 
 fn run_product_branch(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
@@ -713,4 +899,23 @@ fn render_type_scenario() {
         render(scenario(&name), &save, age.as_deref(), turns).expect("valid source save and age");
     fs::write(&output, serde_json::to_vec_pretty(&data).unwrap()).unwrap();
     println!("rendered {}", output.display());
+}
+
+#[test]
+fn native_intent_waits_only_for_actual_city_cache_readiness_and_one_original() -> mlua::Result<()> {
+    for name in ["city-owner-transfer", "return", "scatter"] {
+        let lua = model("artifact", "artifact")?;
+        lua.load("ORIGINAL_NATIVE_READ=ExposedMembers.JAC_HeroReadAPI.ReadNativeWork;ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function() error('UI city cache is not ready') end").exec()?;
+        assert!(!condition(&lua, name, "native-intent-source-published")?);
+        lua.load("ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=function() error('native provenance corruption') end").exec()?;
+        assert!(condition(&lua, name, "native-intent-source-published").is_err());
+        lua.load("ExposedMembers.JAC_HeroReadAPI.ReadNativeWork=ORIGINAL_NATIVE_READ")
+            .exec()?;
+        assert!(condition(&lua, name, "native-intent-source-published")?);
+        lua.load("WORKS[10]={[0]=INDEX}").exec()?;
+        assert!(!condition(&lua, name, "native-intent-source-published")?);
+        lua.load("WORKS[10]={};WORKS[4]={}").exec()?;
+        assert!(!condition(&lua, name, "native-intent-source-published")?);
+    }
+    Ok(())
 }
