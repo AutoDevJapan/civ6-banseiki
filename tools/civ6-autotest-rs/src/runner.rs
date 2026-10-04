@@ -808,7 +808,7 @@ impl Runner {
             "OK",
             &format!("contexts InGame={in_game} DiplomacyDealView={deal_view}"),
         )?;
-        let hidden = self.captive_session_read(
+        let mut hidden = self.captive_session_read(
             "deal_view_hidden",
             "DiplomacyDealView",
             "return ContextPtr:IsHidden()",
@@ -876,6 +876,26 @@ impl Runner {
             s.starts_with(&snapshot_prefix) && s.contains("|true|false|") && s.ends_with("|nil")
         }) && in_game_snapshot == deal_snapshot;
         let expected_from = attacker.to_string();
+        // Visibility is a read-only getter. The native session can become
+        // responsive while its opening animation completes (live 105). Read
+        // visibility once more after the other evidence, within the same
+        // deadline; the final binding still revalidates the exact native ID.
+        if in_game
+            && deal_view
+            && same_native_id
+            && same_snapshot
+            && in_game_from.as_deref() == Some(expected_from.as_str())
+            && deal_from.as_deref() == Some(expected_from.as_str())
+            && hidden.as_deref() != Some("false")
+        {
+            hidden = self.captive_session_read(
+                "deal_view_hidden_recheck",
+                "DiplomacyDealView",
+                "return ContextPtr:IsHidden()",
+                deadline,
+                per_lua,
+            )?;
+        }
         if in_game
             && deal_view
             && hidden.as_deref() == Some("false")

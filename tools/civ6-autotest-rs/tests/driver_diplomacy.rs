@@ -388,8 +388,25 @@ fn captive_session_probe_backend(
     deal_view_from: &str,
     binding_noack: bool,
 ) -> FakeBackend {
+    captive_session_probe_with_visibility_failures(
+        deal_view_reply,
+        deal_view_id,
+        deal_view_from,
+        binding_noack,
+        0,
+    )
+}
+
+fn captive_session_probe_with_visibility_failures(
+    deal_view_reply: bool,
+    deal_view_id: &str,
+    deal_view_from: &str,
+    binding_noack: bool,
+    visibility_failures: usize,
+) -> FakeBackend {
     let deal_view_id = deal_view_id.to_owned();
     let deal_view_from = deal_view_from.to_owned();
+    let visibility_failures = Mutex::new(visibility_failures);
     FakeBackend::new()
         .states(|| Ok(vec!["InGame".into(), "DiplomacyDealView".into()]))
         .lua(move |state, code| {
@@ -399,6 +416,11 @@ fn captive_session_probe_backend(
                 ));
             }
             if code == "return ContextPtr:IsHidden()" {
+                let mut left = visibility_failures.lock().unwrap();
+                if *left > 0 {
+                    *left -= 1;
+                    return Err(Error::unknown("visibility acknowledgment unavailable"));
+                }
                 return Ok("false".into());
             }
             if code.contains("CaptiveExchangeSessionReadOnly()") {
@@ -429,6 +451,52 @@ fn captive_session_probe_backend(
             }
             panic!("unexpected captive session query: {state} {code}");
         })
+}
+
+#[test]
+fn visibility_is_rechecked_once_after_live_session_evidence_without_replaying_binding() {
+    let step = json!({"action":"observe_captive_session","attacker":0,"captor":1,"timeout":120,"lua_timeout":12});
+    let mut recovered = Harness::new(
+        json!({}),
+        captive_session_probe_with_visibility_failures(true, "44", "0", false, 1),
+    );
+    assert!(recovered
+        .runner
+        .run_step(&step)
+        .unwrap()
+        .contains("observed and bound"));
+    assert_eq!(recovered.calls().len(), 9);
+    assert_eq!(
+        recovered
+            .calls()
+            .iter()
+            .filter(|(_, c)| c == "return ContextPtr:IsHidden()")
+            .count(),
+        2
+    );
+    assert_eq!(
+        recovered
+            .calls()
+            .iter()
+            .filter(|(_, c)| c.contains("PinObservedCaptiveExchangeSession"))
+            .count(),
+        1
+    );
+    assert!(recovered.log().contains("deal_view_hidden_recheck=false"));
+    let mut unavailable = Harness::new(
+        json!({}),
+        captive_session_probe_with_visibility_failures(true, "44", "0", false, 2),
+    );
+    assert_eq!(
+        unavailable.runner.run_step(&step).unwrap_err().kind,
+        ErrorKind::Scenario
+    );
+    assert_eq!(unavailable.calls().len(), 8);
+    assert!(unavailable
+        .calls()
+        .iter()
+        .all(|(_, c)| !c.contains("PinObservedCaptiveExchangeSession")
+            && !c.contains("SendWorkingDeal")));
 }
 
 #[test]
