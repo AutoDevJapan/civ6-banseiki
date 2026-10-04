@@ -168,12 +168,6 @@ b025c32の比較は再起動を含む17手順と6種類のログ判定に成功�
 
 ### 元の判定を保つ接続の実測（実機100）
 
-### 本体propertyの値を測る次の接続
-
-d958059では、固定DLLのproperty getter RVA `0x99F5C0`を観測する別モードを追加した。元の関数を一度だけ呼び、戻る値ポインタを変えずに返す。タグ・値・フラグ・呼出しスレッド・受信先・キーIDを有限のバッファへコピーする。これは加入資格を書き換える接続ではない。Actorの人物台帳や称号数は変更しない。
-
-テストMOD `JAC_Test_PropertyObserver`（UUID `d8532710-f853-4c53-8853-271000000001`）は自動変更を行わず、同期操作でGameとPlayerの専用キーだけを欠損→真→偽→853271→-853271→削除へ切り替える。専用シナリオは`leader-persona-property-observer-15km.json`の23手順で、観測中は保存・ロード・実ターンを行わない。各状態を公式Lua getterで読み、本体で記録した型と値、キーIDと受信先を実機で照合する。入口の命令境界と合成Win64関数の返値保持は検査済みだが、このモードの実機結果、値の寿命・同時読取・AIの読取順は未確認である。
-
 73aa00dの実機100は10手順と6ログ検査に成功した。新しい共有ロックで、人間0とAI1の同じ人物Governor Index 4について公式UIの資格を設置前と設置中に読み、両方とも偽を維持した。実際の本体入口から2件を記録し、呼出し元の戻り先はともにRVA `0xBA523`（UI wrapperの`0xBA51E`からの呼出しの直後）だった。installとuninstallは0、欠落・処理中件数は0で、元の入口の復元を確認した。安定したスナップショットであり、全呼出し履歴の完全性やAI実手番での呼出しを示す結果ではない。
 
 成果物は`tools/civ6-autotest/artifacts/leaderperson-100/can-ever-original.jsonl`。DLLのSHA-256は`8a4c0fcfd9052ccb27b159b8101767a0dbb9275f006aa653b68e34a818ed8888`。共有実行器はゲームを閉じ、ゲームとロックの不在を確認した。シナリオの結果は成功だが、実行器は完了表示後にファイル使用中のエラー32を返したため、この終了処理の原因確認は別に残す。正式任命の受理・本体propertyの値形式・AIの費用2/3・中和と回復は未達のまま維持する。
@@ -191,3 +185,9 @@ Windows上の自分の合成関数では、先頭5バイトの差替え前後で
 失敗時の保護は待機時間に依存しない。controllerは遠隔確保・DLL読込・入口変更より前に、照合済みの対象PIDだけを匿名の[Windows Job Object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)へ割り当てる。所属PIDが1件と確認できなければ遠隔変更せず失敗する。Jobには`KILL_ON_JOB_CLOSE`と子プロセスの`SILENT_BREAKAWAY_OK`を設定し、controllerの異常終了時も最後のJobハンドルが閉じると対象だけが終了する。remote call timeoutや復元失敗ではJobを終了・閉鎖し、保持した対象プロセスハンドルで終了を確認する。共有leaseに30秒の復旧枠を予約する。正常時だけ、install/uninstallの両遠隔スレッドの終了と元の入口8バイトの読戻し、記録の検査を経てからKill-on-closeを解除する。実機ABI・並行動作の安全性はこの合成試験で証明できない。
 
 親担当がsourceRootを組み込む際、`cargo build --locked --release --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --bin civ6-native-bridge --lib --target-dir tools/target`でDLLとcontrollerを作り、実行器の隣へ置く。固定テストは`tools/civ6-autotest/scenarios/leader-persona-bridge-original-15km.json`で、未加入の蘆名盛舜について人間0とAI1の公式UI判定を設置前と設置中に各1回読む。設置中も資格が元の偽を保つこと、入口・復元の成功と呼出し元RVAを確認する。実行は親の共有leaseで`D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-bridge-original-15km.json --stop-on-failure`の1回とする。正常完走後に `can-ever-original.jsonl` の `identity/install/entry/uninstall/stop`、Index、戻り先RVA、行数と欠落数を検査する。実機での資格真、AIの費用2・3の公式PROMOTE、GameCore property値のABI・寿命・同時実行安全性は未確認である。この確認を経る前に資格を真へ変えるhookは実装しない。
+
+### 本体propertyの値を測る次の接続
+
+d958059では、固定DLLのproperty getter RVA `0x99F5C0`を観測する別モードを追加した。元の関数を一度だけ呼び、戻る値ポインタを変えずに返す。タグ・値・フラグ・呼出しスレッド・受信先・キーIDを有限のバッファへコピーする。これは加入資格を書き換える接続ではない。Actorの人物台帳や称号数は変更しない。
+
+テストMOD `JAC_Test_PropertyObserver`（UUID `d8532710-f853-4c53-8853-271000000001`）は自動変更を行わず、同期操作でGameとPlayerの専用キーだけを欠損→真→偽→853271→-853271→削除へ切り替える。専用シナリオは`leader-persona-property-observer-15km.json`の23手順で、観測中は保存・ロード・実ターンを行わない。各状態を公式Lua getterで読み、本体で記録した型と値、キーIDと受信先を実機で照合する。入口の命令境界と合成Win64関数の返値保持は検査済みだが、このモードの実機結果、値の寿命・同時読取・AIの読取順は未確認である。
