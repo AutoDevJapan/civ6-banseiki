@@ -552,8 +552,15 @@ fn joined_deactivate() {
     JOINED_RECEIVER_PERMISSION.store(joined_word(0, session, 0, false));
 }
 
-fn joined_bind(receiver: u64, session: u32) {
-    if receiver == 0 || receiver & 7 != 0 {
+#[cfg(test)]
+static JOINED_TEST_BIND_RECEIVER: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+static JOINED_TEST_BIND_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static JOINED_TEST_BIND_RELEASE: AtomicBool = AtomicBool::new(false);
+
+fn joined_bind(receiver: u64, session: u32, ticket: u32) {
+    if receiver == 0 || receiver & 7 != 0 || ticket == 0 {
         return;
     }
     loop {
@@ -565,13 +572,19 @@ fn joined_bind(receiver: u64, session: u32) {
         if joined_session(current) != session || joined_receiver(current) == receiver {
             return;
         }
-        let Some(ticket) = joined_next_ticket() else {
-            return;
-        };
         if ticket <= joined_ticket(current) {
-            continue;
+            return;
         }
         let replacement = joined_word(receiver, session, ticket, false);
+        #[cfg(test)]
+        if receiver == JOINED_TEST_BIND_RECEIVER.load(Ordering::Acquire)
+            && !JOINED_TEST_BIND_RELEASE.load(Ordering::Acquire)
+        {
+            JOINED_TEST_BIND_PAUSED.store(true, Ordering::Release);
+            while !JOINED_TEST_BIND_RELEASE.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+        }
         if JOINED_RECEIVER_PERMISSION
             .compare_exchange(current, replacement)
             .is_ok()
@@ -654,6 +667,13 @@ unsafe extern "system" fn calibration_begin(
         return null_mut();
     }
     let session = joined_session(JOINED_RECEIVER_PERMISSION.load());
+    // One order for the whole observation, before reading its owner pointer.
+    // A compare-exchange retry keeps this order and cannot become newer work.
+    let bind_ticket = if JOINED_ACTIVE.load(Ordering::Acquire) {
+        joined_next_ticket().unwrap_or(0)
+    } else {
+        0
+    };
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return null_mut();
@@ -701,7 +721,11 @@ unsafe extern "system" fn calibration_begin(
         && row.owner_read_state.load(Ordering::Relaxed) == 1
         && row.player_id.load(Ordering::Relaxed) == 0
     {
-        joined_bind(row.property_receiver.load(Ordering::Relaxed), session);
+        joined_bind(
+            row.property_receiver.load(Ordering::Relaxed),
+            session,
+            bind_ticket,
+        );
     }
     row as *const CalibrationRow
 }
@@ -1912,6 +1936,45 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn delayed_receiver_bind_cannot_replace_a_newer_published_receiver() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        joined_deactivate();
+        assert!(joined_activate());
+        let session = joined_session(JOINED_RECEIVER_PERMISSION.load());
+        joined_bind(0x1000, session, joined_next_ticket().unwrap());
+        JOINED_TEST_BIND_RECEIVER.store(0x2000, Ordering::Release);
+        JOINED_TEST_BIND_PAUSED.store(false, Ordering::Release);
+        JOINED_TEST_BIND_RELEASE.store(false, Ordering::Release);
+        let old_ticket = joined_next_ticket().unwrap();
+        let old = std::thread::spawn(move || joined_bind(0x2000, session, old_ticket));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !JOINED_TEST_BIND_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        if !JOINED_TEST_BIND_PAUSED.load(Ordering::Acquire) {
+            JOINED_TEST_BIND_RELEASE.store(true, Ordering::Release);
+            old.join().unwrap();
+            joined_deactivate();
+            panic!("old receiver bind did not pause before its compare-exchange");
+        }
+        joined_bind(0x3000, session, joined_next_ticket().unwrap());
+        let token = unsafe { joined_property_begin(0x3000, ASHINA_ADMISSION_KEY_ID) };
+        joined_observe_property(0x3000, ASHINA_ADMISSION_KEY_ID, token, 1, 1, 1, 0);
+        let newest = JOINED_RECEIVER_PERMISSION.load();
+        assert_eq!(joined_receiver(newest), 0x3000);
+        assert!(joined_permitted(newest));
+        JOINED_TEST_BIND_RELEASE.store(true, Ordering::Release);
+        old.join().unwrap();
+        let after = JOINED_RECEIVER_PERMISSION.load();
+        JOINED_TEST_BIND_RECEIVER.store(0, Ordering::Release);
+        joined_deactivate();
+        assert_eq!(
+            after, newest,
+            "a stale receiver replaced a newer admitted receiver"
+        );
+    }
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Diagnostics::Debug::RtlLookupFunctionEntry;
     use windows_sys::Win32::System::Threading::{
