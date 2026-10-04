@@ -16,6 +16,7 @@ const NATIVE_SLOTS_MOD: &str = "a1faab65-5371-4e25-9a46-7522075f865d";
 const NATIVE_SLOT_ONLY_MOD: &str = "8c615430-5a09-4431-877a-bfd03bca9e80";
 const STATIC_GATE_MOD: &str = "c678a216-58ab-4d40-a614-8f309d36ac86";
 const ENEMY_GATE_MOD: &str = "bba3a0d2-8f08-4715-9263-00a773e6ae86";
+const TRAIT_GRANT_MOD: &str = "2b20f0d9-64cd-42b8-9841-74067419b81e";
 const NEW_SCENARIOS: [&str; 7] = [
     "japan-15km-20turn-full-metrics.json",
     "japan-15km-300turn-full-metrics.json",
@@ -505,6 +506,7 @@ fn persona_native_turn_observations_allow_the_15km_map_to_finish() {
         "leader-persona-native-slots-activation-15km.json",
         "leader-persona-native-slot-ai-only-15km.json",
         "leader-persona-static-gate-15km.json",
+        "leader-persona-trait-grant-15km.json",
     ] {
         let data = scenario(name);
         let turns: Vec<_> = steps(&data)
@@ -590,6 +592,11 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             } else {
                 assert!(isolated.iter().any(|id| id == ENEMY_GATE_MOD), "{name}");
             }
+            if name == "leader-persona-trait-grant-15km.json" {
+                assert!(strings("ids").iter().any(|id| id == TRAIT_GRANT_MOD));
+            } else {
+                assert!(isolated.iter().any(|id| id == TRAIT_GRANT_MOD), "{name}");
+            }
             assert!(
                 !first["ids"]
                     .as_array()
@@ -600,7 +607,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    assert_eq!(count, 81);
+    assert_eq!(count, 83);
 }
 
 #[test]

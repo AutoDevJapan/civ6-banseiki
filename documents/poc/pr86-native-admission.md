@@ -140,3 +140,25 @@ llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1806
 llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1800152f0 --stop-address=0x18001539b $d
 llvm-objdump -d --no-show-raw-insn --x86-asm-syntax=intel --start-address=0x1800be3b9 --stop-address=0x1800be3d4 $d
 ```
+
+## 持続するGameplay APIと所有者別特性付与の実機検証
+
+実機89では、テスト専用`AddGameplayScripts`の同期イベントを公式`EXECUTE_SCRIPT`から呼んだ。9手順と6ログ検査に合格し、`leaderperson-89/steps.jsonl`の8手順目に`source=persistent_gameplay`の結果が残った。本体Gameplayの`Player:AttachModifierByID`、総督の`GetGovernorPoints`と`GetGovernorPointsSpent`は関数だった。一方、同じGameplayコンテキストでは総督の`Appoint`・`Promote`・`Assign`、Playerの`GetTraits`・`GrantTrait`・`AddTrait`、Gameの`RequestPlayerOperation`はnilだった。イベント表の生の要素は見つからなかったが、`__index`から生成されるイベントの有無は判定していない。UIの公式操作APIの有無と混同しない。
+
+実機89の後、`poc/JAC_Test_PersonaTraitGrant`を追加した。これは15kmマップで明示的に有効化するテストMODで、本番の22人のSQLは変更しない。蘆名盛舜1人だけに未割当の専用Traitを設定し、所有者の同期Gameplayが正規Joinと費用全額予約に成功した後、`Player:AttachModifierByID`で`COLLECTION_OWNER`の効果候補を接続する。候補の`EFFECT_GRANT_TRAIT`は公式データの写しに実装例がなく、SQL行が通っても本体の効果handlerが存在する証拠にはならない。偽人事・称号残高・公式総督は書き換えない。
+
+実機92では、試験前の22人×22勢力の本体資格がすべて偽だった。正規Join・公式称号1個の予約・所有者への`AttachModifierByID`を経た後も、UIの本体`CanEverAppointGovernor`は偽で、30秒待っても変わらなかった。公式`APPOINT_GOVERNOR`は送っていない。`leaderperson-92/steps.jsonl`の9手順目と`Lua.log`の接続記録が根拠である。実ターンは進めていないため、ターン境界で初めて反映する可能性と、効果handlerの不存在はこの1実験では区別できない。`GameEffects.log`も同成果物には含まれていない。
+
+この後、1実ターンを挟む比較と、資格が偽のままでも一度だけ公式任命を送る分類試験を行った。結果と次の実験は以下に記す。元の`leader-persona-trait-grant-15km.json`は失敗経路の証跡として残す。
+
+別の公式の入口として秘密結社を調べた。[公式データの公開写し](https://github.com/mrobaczyk/civ6/blob/main/DLC/Ethiopia/Data/Ethiopia_SecretSocieties_MODE.xml)では、結社4種がそれぞれGovernor型へ対応し、4総督すべてに`GovernorsCannotAssign=true`を付けている。[ゲーム内の説明の公開表示](https://www.civilopedia.net/en-US/gathering-storm/concepts/secretsocieties/)は、一つの結社へ加入すると他への加入が固定的に閉じると説明する。登録行と派遣禁止行が独立しているため、カスタム総督で派遣禁止を外せるかは未判定だが、一勢力が複数の人物総督を持つ9.4の仕様に、結社への加入をそのまま使うことはできない。
+
+## 実機94の拒否と独立native bridgeの最初の境界
+
+実機94は17手順と6ログ検査に合格したが、機能の成功ではない。正規Join・実Great Person・公式称号1の予約・`AttachModifierByID`の接続後、実ターンを1回進めても資格は偽だった。対象の公式`APPOINT_GOVERNOR`を一度送った後に、本体使用済み称号0・Governor不在・`CanEver=false`を同期GameplayとUIで読んだため、この操作は拒否と分類した。成果物は`leaderperson-94/result.json`と`steps.jsonl`である。`EFFECT_GRANT_TRAIT`候補を製品の22人へ展開しない。効果handlerの登録成否はこの記録だけでは確定せず、別の公式接続の全否定でもない。
+
+`tools/civ6-native-bridge-rs`は既存の読取専用debuggerとは別のRust DLLと、期限付きの専用controllerである。**現段階は受理を一切変えない。** 固定DX11実行ファイル、GameCoreのSHA-256、DLLファイルとメモリの関数先頭8バイト、実PID・作成FILETIME、標準`live_chain`のleaseを照合してから、対象RVA `0x2DDDD0`の先頭5バイトだけを同じ長さのjumpへ原子的に置く。元の5バイトを近傍trampolineに置き、入口ではRCX・EDX・戻り先だけを上限4096行の専用領域へ記録してから、元の処理へtail jumpする。Lua状態、Player propertyの値や未知のC++値型は読まない。停止時は元の8バイトを原子的に復元して照合する。DLLとtrampolineはゲーム終了まで保持し、復元失敗時は親の同一PID・作成時刻のゲームを閉じる。ハードウェアbreakpoint、debug register、DRM、Steamファイル、kernel/driverは扱わない。
+
+Windows上の自分の合成関数では、先頭5バイトの差替え前後でRCX/EDX由来の戻り値が等しく、実呼出し元とIndexが記録され、4096件の上限超過が数えられ、復元後も元の関数が動いた。複数スレッドが同じ合成関数を呼ぶ間の原子的な復元も検査した。専用controllerは自分のテストプロセスへのDLL読込を検査し、bridge本体のinstallは実Civ6以外を拒否する。これらは実ゲームのABI・スレッド安全性を証明しない。Controllerは別の`start_native_can_ever_trace`/`stop_native_can_ever_trace` actionでのみ動き、最大300秒、無関係なプロセスメモリは読まない。
+
+親担当がsourceRootを組み込む際、`cargo build --locked --release --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --bin civ6-native-bridge --lib --target-dir tools/target`でDLLとcontrollerを作り、実行器の隣へ置く。固定テストは`tools/civ6-autotest/scenarios/leader-persona-bridge-original-15km.json`で、未加入の蘆名盛舜について人間0とAI1の公式UI判定を設置前と設置中に各1回読む。設置中も資格が元の偽を保つこと、入口・復元の成功と呼出し元RVAを確認する。実行は親の共有leaseで`D:/CC/Tools/civ6-live/live_chain.exe leaderperson:leader-persona-bridge-original-15km.json --stop-on-failure`の1回とする。正常完走後に `can-ever-original.jsonl` の `identity/install/entry/uninstall/stop`、Index、戻り先RVA、行数と欠落数を検査する。実機での資格真、AIの費用2・3の公式PROMOTE、GameCore property値のABI・寿命・同時実行安全性は未確認である。この確認を経る前に資格を真へ変えるhookは実装しない。

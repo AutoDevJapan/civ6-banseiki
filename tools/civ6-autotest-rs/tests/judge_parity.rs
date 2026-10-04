@@ -181,9 +181,10 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     assert!(ids.contains("8C615430-5A09-4431-877A-BFD03BCA9E80"));
     assert!(ids.contains("C678A216-58AB-4D40-A614-8F309D36AC86"));
     assert!(ids.contains("BBA3A0D2-8F08-4715-9263-00A773E6AE86"));
+    assert!(ids.contains("2B20F0D9-64CD-42B8-9841-74067419B81E"));
     assert_eq!(
         ids.len(),
-        20,
+        21,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -568,6 +569,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-neutralization-retry-adopt.json".to_string(),
             "leader-persona-lifecycle-15km.json".to_string(),
             "leader-persona-gameplay-api-probe-15km.json".to_string(),
+            "leader-persona-trait-grant-15km.json".to_string(),
+            "leader-persona-bridge-original-15km.json".to_string(),
         ])
     );
     for name in &actual {

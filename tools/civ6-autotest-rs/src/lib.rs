@@ -6,6 +6,7 @@ pub mod error;
 pub mod judge;
 pub mod live_lease;
 pub mod metrics;
+pub mod native_bridge;
 pub mod native_trace;
 pub mod restart;
 pub mod runner;

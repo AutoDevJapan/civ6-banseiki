@@ -99,6 +99,14 @@ pub trait Backend: Send {
     fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
+    fn start_native_bridge(&mut self, _output: &Path, _name: &str, _seconds: u64) -> Result<()> {
+        Err(Error::input(
+            "backend cannot start native CanEver bridge telemetry",
+        ))
+    }
+    fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -221,6 +229,47 @@ mod native_trace_step_tests {
             ["start:governor:25:governor", "stop"]
         );
     }
+
+    struct BridgeBackend(Arc<Mutex<Vec<String>>>);
+    impl Backend for BridgeBackend {
+        fn start_native_bridge(&mut self, _: &Path, name: &str, seconds: u64) -> Result<()> {
+            self.0
+                .lock()
+                .unwrap()
+                .push(format!("start:{name}:{seconds}"));
+            Ok(())
+        }
+        fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+            self.0.lock().unwrap().push("stop".into());
+            Ok(Some(PathBuf::from("bridge.jsonl")))
+        }
+    }
+
+    #[test]
+    fn runner_dispatches_separate_can_ever_bridge_with_an_artifact() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-bridge-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        let detail = runner
+            .run_step(
+                &json!({"action":"start_native_can_ever_trace","name":"can-ever","max_seconds":25}),
+            )
+            .unwrap();
+        assert!(detail.contains("can-ever.jsonl"));
+        let detail = runner
+            .run_step(&json!({"action":"stop_native_can_ever_trace"}))
+            .unwrap();
+        assert!(detail.contains("bridge.jsonl"));
+        assert_eq!(*calls.lock().unwrap(), ["start:can-ever:25", "stop"]);
+    }
 }
 
 #[derive(Default)]
@@ -231,6 +280,7 @@ pub struct SystemBackend {
     startup_pin: Option<crate::startup::PinnedGame>,
     diagnostic_session: crate::startup::DiagnosticSession,
     native_trace: Option<crate::native_trace::Session>,
+    native_bridge: Option<crate::native_bridge::Session>,
 }
 impl Backend for SystemBackend {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
@@ -369,6 +419,38 @@ impl Backend for SystemBackend {
     fn stop_native_trace(&mut self) -> Result<Option<PathBuf>> {
         match self.native_trace.take() {
             Some(mut trace) => trace.stop().map(Some),
+            None => Ok(None),
+        }
+    }
+    fn start_native_bridge(&mut self, output: &Path, name: &str, seconds: u64) -> Result<()> {
+        if self.native_bridge.is_some() || self.native_trace.is_some() {
+            return Err(Error::scenario("another native observation is active"));
+        }
+        if self
+            .live_lease_budget()?
+            .is_some_and(|remaining| remaining <= seconds as f64 + 15.0)
+        {
+            return Err(Error::input(
+                "live_chain lease cannot cover native bridge telemetry",
+            ));
+        }
+        self.require_single_process()?;
+        let (pid, start) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("Civ6 is absent"))?;
+        self.native_bridge = Some(crate::native_bridge::Session::start(
+            pid,
+            start,
+            output,
+            name,
+            seconds,
+            Box::new(crate::restart::terminate_civ_process),
+        )?);
+        Ok(())
+    }
+    fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+        match self.native_bridge.take() {
+            Some(mut bridge) => bridge.stop().map(Some),
             None => Ok(None),
         }
     }
@@ -1597,6 +1679,29 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "start_native_can_ever_trace" => {
+                self.remaining(deadline)?;
+                self.backend.start_native_bridge(
+                    &self.output,
+                    text(step, "name"),
+                    step["max_seconds"].as_u64().unwrap(),
+                )?;
+                Ok(format!(
+                    "native CanEver original-return telemetry ready; artifact {}.jsonl",
+                    text(step, "name")
+                ))
+            }
+            "stop_native_can_ever_trace" => {
+                self.remaining(deadline)?;
+                let artifact = self
+                    .backend
+                    .stop_native_bridge()?
+                    .ok_or_else(|| Error::scenario("native CanEver bridge was not active"))?;
+                Ok(format!(
+                    "native CanEver entry restored; artifact {}",
+                    artifact.display()
+                ))
+            }
             "start_native_governor_trace" => {
                 self.remaining(deadline)?;
                 self.backend.start_native_trace(
@@ -2523,6 +2628,12 @@ impl Runner {
             self.result_passed = false;
             self.failure = Some(format!("native governor observer cleanup: {e}"));
             println!("Native governor observer cleanup failed: {e}");
+        }
+        if let Err(e) = self.backend.stop_native_bridge() {
+            code = 1;
+            self.result_passed = false;
+            self.failure = Some(format!("native CanEver bridge cleanup: {e}"));
+            println!("Native CanEver bridge cleanup failed: {e}");
         }
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());
