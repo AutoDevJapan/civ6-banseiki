@@ -1,8 +1,8 @@
 use civ6_native_bridge_rs::{
     BridgeConfig, BridgeMode, BridgeStatus, CalibrationTrace, JoinedTrace, PropertyTrace,
-    SharedTrace, ASHINA_ADMISSION_KEY_ID, GAMECORE, GAME_EXE, MAX_ACTIVE_SECONDS,
-    PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROPERTY_GET_RVA,
-    PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID,
+    SharedTrace, ASHINA_ADMISSION_KEY_ID, CALIBRATION_CAPACITY, GAMECORE, GAME_EXE,
+    MAX_ACTIVE_SECONDS, PINNED_CAN_EVER_RVA, PINNED_GAMECORE_SHA256, PINNED_PROPERTY_GET_RVA,
+    PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID, TRACE_CAPACITY,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -196,7 +196,7 @@ struct Args {
 
 fn args(raw: &[String]) -> Result<Args, String> {
     if raw.len() != 8 && raw.len() != 10 {
-        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property|property-scoped]".into());
+        return Err("usage: civ6-native-bridge --pid N --created-filetime N --duration 1..300 --out ABSOLUTE.jsonl [--mode can-ever|property|property-scoped|can-ever-calibration|property-admission-scoped|joined-admission|production-admission]".into());
     }
     let mut fields = std::collections::BTreeMap::new();
     for pair in raw.chunks_exact(2) {
@@ -844,7 +844,8 @@ pub fn run() -> Result<(), String> {
                 json!(format!("{:02x?}", property_original.unwrap()));
             identity["prefix_bytes"] = json!(format!("{:02x?}", original_prefix.unwrap()));
             if parsed.mode == BridgeMode::ProductionAdmission {
-                identity["scope_key_ranges"] = json!([[900000, 900255], [901000, 901255]]);
+                identity["scope_key_ranges"] =
+                    json!([[900000, 900255], [901000, 901255], [903000, 903255]]);
                 identity["reset_key_id"] = json!(902000);
             } else {
                 identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
@@ -1165,7 +1166,9 @@ pub fn run() -> Result<(), String> {
                         "thread_id":row.thread_id,"read_state":row.read_state,
                         "tag":copied.then_some(row.tag),
                         "payload8":copied.then(|| format!("0x{:016x}",row.payload)),
-                        "flags14":copied.then_some(row.flags)}),
+                        "flags14":copied.then_some(row.flags),
+"denial_owner":row.denial_owner,"denial_index":row.denial_index,
+"denial_checked":row.denial_checked == 1}),
                     )?;
                 }
                 (
@@ -1206,7 +1209,11 @@ pub fn run() -> Result<(), String> {
             "observed_calls":observed_calls,
             "filtered_calls":filtered_calls,
             "getter_calls_seen":u64::from(observed_calls) + u64::from(filtered_calls),
-            "counter_scope":"snapshot_observation_not_complete_call_history",
+            "counter_scope":if parsed.mode == BridgeMode::ProductionAdmission {
+                "bounded_prefix_samples_not_complete_call_history"
+            } else { "snapshot_observation_not_complete_call_history" },
+            "calibration_sample_limit":CALIBRATION_CAPACITY,
+            "property_sample_limit":TRACE_CAPACITY,
             "in_flight":in_flight,
             "snapshot_stable":true,
             "quiescence_proven":false,

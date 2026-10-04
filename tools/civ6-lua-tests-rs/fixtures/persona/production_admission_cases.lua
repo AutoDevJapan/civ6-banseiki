@@ -108,3 +108,251 @@ function PRODUCTION_ADMISSION_CASES.cost_three_needs_two_ordered_official_promot
     expect('EVOLVED', Players[1]:GetProperty('JAC_PERSONA_RESULT'), 'cost-three Finalize')
     expect(true, gate(1, 21), 'Core confirms both ordered promotions')
 end
+
+function PRODUCTION_ADMISSION_CASES.unchanged_turns_do_not_republish_numeric_keys()
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    local reads, writes = 0, 0
+    for owner=0,2 do
+        local p = Players[owner]
+        local get, set = p.GetProperty, p.SetProperty
+        p.GetProperty = function(self, key)
+            if type(key) == 'number' then reads = reads + 1 end
+            return get(self, key)
+        end
+        p.SetProperty = function(self, key, value)
+            if type(key) == 'number' then writes = writes + 1 end
+            return set(self, key, value)
+        end
+    end
+    for turn=1,300 do
+        TURN = turn
+        ExposedMembers.JAC_LeaderPersona.Reconcile()
+    end
+    expect(0, writes, '300 unchanged turns publish no numeric deltas')
+    expect(0, reads, '300 unchanged turns read no numeric admission keys')
+end
+
+function PRODUCTION_ADMISSION_CASES.stale_true_during_closure_aborts_owner_publication()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    expect(true, gate(1, 4), 'opened before injected delayed false')
+    local p, resetReads = Players[1], 0
+    local set, get = p.SetProperty, p.GetProperty
+    p.SetProperty = function(self, key, value)
+        if key == 901004 and value == false then return end
+        return set(self, key, value)
+    end
+    p.GetProperty = function(self, key)
+        if key == 902000 then resetReads = resetReads + 1 end
+        return get(self, key)
+    end
+    p.points = 0
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    assert(resetReads > 0, 'stale true must cause a naturally read owner reset')
+end
+
+function PRODUCTION_ADMISSION_CASES.owner_reuse_and_reload_reclose_saved_true()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    expect(true, gate(1,4), 'current owner grant')
+    Players[1].points = 0
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect(false, gate(1,4), 'reload must close saved true before any grant')
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false, gate(1,4), 'insufficient balance remains closed')
+    Players[1].points = 1
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(true, gate(1,4), 'fresh proof after reload')
+    local replacement = {}
+    for k,v in pairs(Players[1]) do replacement[k]=v end
+    replacement.GetProperty,replacement.SetProperty=store()
+    Players[1]=replacement
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(true, manifest(1,4), 'new owner object gets a complete manifest')
+end
+function PRODUCTION_ADMISSION_CASES.missing_core_has_governor_stays_closed_and_diagnostic_reports_it()
+    local leader = 'LEADER_JAC_DATE_TANEMUNE'
+    FIRE('JAC_LeaderPersonaJoin', 2, {Source=1})
+    Players[2].points = 2
+    FIRE('JAC_LeaderPersonaEvolve', 2, {Leader=leader})
+    local p, core = Players[2], Players[2].GetGovernors
+    local gets = 0
+    p.GetGovernors = function()
+        local governors = core()
+        governors.HasGovernor = nil -- actually observed missing in Gameplay
+        local original = governors.GetGovernor
+        governors.GetGovernor = function(self, hash)
+            gets = gets + 1
+            return original(self, hash)
+        end
+        return governors
+    end
+    Game:SetProperty('JAC_PERSONA_' .. leader .. '_STATE', 'GOVERNOR')
+    Game:SetProperty('JAC_PERSONA_' .. leader .. '_UNIT', nil)
+    NATIVE_UNITS[2] = {}
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false, gate(2,22), 'missing HasGovernor must never borrow UI proof')
+    gets = 0
+    local result = ExposedMembers.JAC_LeaderPersona.CoreAdmissionCapabilities(2, leader)
+    expect(false, result.hasGovernorBinding, 'diagnostic measures absent binding')
+    expect(true, result.getGovernorBinding, 'diagnostic distinguishes available GetGovernor')
+    expect(true, result.getGovernorOK, 'natural bound getter was called')
+    expect(false, result.governorReturned, 'fixture has no actual governor')
+    expect(1, gets, 'diagnostic invokes natural GetGovernor exactly once')
+end
+
+function PRODUCTION_ADMISSION_CASES.failed_reset_and_false_ack_never_publish_manifest()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    local p, manifestWrites = Players[1], 0
+    local get, set = p.GetProperty, p.SetProperty
+    p.GetProperty = function(self, key)
+        if key == 901004 then return true end -- old true after attempted false
+        if key == 902000 then return 'wrong-type' end
+        return get(self, key)
+    end
+    p.SetProperty = function(self, key, value)
+        if type(key) == "number" and key >= 900000 and key < 900256 then manifestWrites = manifestWrites + 1 end
+        return set(self, key, value)
+    end
+    p.points = 0
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(0, manifestWrites, 'failed false ACK must abort before manifest publication')
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(0, manifestWrites, 'failed reset ACK must abort next initialization too')
+end
+
+function PRODUCTION_ADMISSION_CASES.owner_operation_publishes_only_changed_cells()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    local writes, byOwner = 0, {}
+    for owner=0,2 do
+        local p, id = Players[owner], owner
+        local set = p.SetProperty
+        p.SetProperty = function(self,key,value)
+            if type(key) == 'number' then
+                writes = writes + 1
+                byOwner[id] = (byOwner[id] or 0) + 1
+            end
+            return set(self,key,value)
+        end
+    end
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    expect(4, writes, 'only close/false/manifest/true for the changed person')
+    expect(4, byOwner[1], 'only authoritative owner publishes')
+    expect(nil, byOwner[0], 'other owner untouched')
+    expect(nil, byOwner[2], 'source owner untouched')
+end
+
+function PRODUCTION_ADMISSION_CASES.twenty_two_owners_initialize_once_and_keep_300_turns_bounded()
+    for id=3,21 do
+        local p={points=0,spent=0}
+        p.GetID=function() return id end
+        p.IsAlive=function() return true end
+        p.IsMajor=function() return true end
+        p.GetProperty,p.SetProperty=store()
+        p.GetGovernors=function() return {
+            CanEverAppointGovernor=function() return false end,
+            GetGovernorPoints=function() return 0 end,
+            GetGovernorPointsSpent=function() return 0 end
+        } end
+        Players[id]=p
+    end
+    PlayerManager.GetAliveMajorIDs=function()
+        local ids={}
+        for id=0,21 do ids[#ids+1]=id end
+        return ids
+    end
+    local writes, reads, anchors = 0,0,0
+    for id=0,21 do
+        local p=Players[id]
+        local get,set,governors = p.GetProperty,p.SetProperty,p.GetGovernors
+        p.GetProperty=function(self,key)
+            if type(key)=='number' then reads=reads+1 end
+            return get(self,key)
+        end
+        p.SetProperty=function(self,key,value)
+            if type(key)=='number' then writes=writes+1 end
+            return set(self,key,value)
+        end
+        p.GetGovernors=function()
+            local g=governors()
+            local original=g.CanEverAppointGovernor
+            g.CanEverAppointGovernor=function(self,hash)
+                anchors=anchors+1
+                return original(self,hash)
+            end
+            return g
+        end
+    end
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect(22*(1+22*3),writes,'one reset and three phases per owner/index on reload')
+    expect(writes,reads,'every initialization write has one natural ACK')
+    expect(22,anchors,'one natural Core binding anchor per owner')
+    for id=0,21 do
+        for row in GameInfo.JAC_LeaderPersonas() do
+            expect(false,gate(id,GameInfo.Governors[row.GovernorType].Index),'unjoined matrix closed')
+        end
+    end
+    writes,reads,anchors=0,0,0
+    for turn=1,300 do
+        TURN=turn
+        ExposedMembers.JAC_LeaderPersona.Reconcile()
+        for id=0,21 do ExposedMembers.JAC_LeaderPersona.Reconcile(id) end
+    end
+    expect(0,writes,'whole and all player turns have no unchanged publication')
+    expect(0,reads,'whole and all player turns have no admission getter traffic')
+    expect(0,anchors,'Core binding anchor is not repeated per turn')
+end
+function PRODUCTION_ADMISSION_CASES.reload_reset_failure_still_closes_every_owner_before_aborting()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points=1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    local resetReads={}
+    for id=0,2 do
+        local p,owner=Players[id],id
+        local get=p.GetProperty
+        p.GetProperty=function(self,key)
+            if key==902000 then
+                resetReads[owner]=(resetReads[owner] or 0)+1
+                if owner==0 then return 'invalid-reset' end
+            end
+            return get(self,key)
+        end
+    end
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    for owner=0,2 do
+        assert((resetReads[owner] or 0)>0,'failed first reset left another owner open: '..owner)
+    end
+end
+
+function PRODUCTION_ADMISSION_CASES.legacy_schema_does_not_overwrite_a_foreign_close_key()
+    for owner=0,2 do
+        for row in GameInfo.JAC_LeaderPersonas() do
+            Players[owner]:SetProperty(903000+GameInfo.Governors[row.GovernorType].Index,nil)
+        end
+    end
+    Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',1)
+    Players[1]:SetProperty(903004,'foreign-owner-data')
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect('foreign-owner-data',Players[1]:GetProperty(903004),'legacy schema never owned new close range')
+    expect(1,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'collision aborts migration')
+end
+
+function PRODUCTION_ADMISSION_CASES.legacy_schema_claims_empty_close_range_before_republishing()
+    for owner=0,2 do
+        for row in GameInfo.JAC_LeaderPersonas() do
+            Players[owner]:SetProperty(903000+GameInfo.Governors[row.GovernorType].Index,nil)
+        end
+    end
+    Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',1)
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect(2,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'empty legacy range safely migrates')
+    for owner=0,2 do
+        expect(false,gate(owner,4),'migration closes any earlier permission')
+        expect(true,manifest(owner,4),'current manifest after migration')
+    end
+end

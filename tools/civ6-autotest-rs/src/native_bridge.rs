@@ -54,6 +54,7 @@ mod platform {
         let mut joined_true_property_receivers = std::collections::BTreeSet::new();
         let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
+        let mut production_bindings = std::collections::BTreeSet::new();
         let mut calibrated_owners = std::collections::BTreeSet::new();
         let mut admission_values = std::collections::BTreeSet::new();
         let mut admission_threads = std::collections::BTreeSet::new();
@@ -97,7 +98,8 @@ mod platform {
                                 && row["scope_key_ranges"]
                                     == serde_json::json!([
                                         [900000, 900255],
-                                        [901000, 901255]
+                                        [901000, 901255],
+                                        [903000, 903255]
                                     ])
                                 && row["reset_key_id"]
                                     == civ6_native_bridge_rs::PRODUCTION_RESET_KEY))
@@ -152,6 +154,14 @@ mod platform {
                         && row["original_al"].as_u64().is_some_and(|n| n <= 1)
                         && (!dual || row["effective_al"].as_u64().is_some_and(|n| n <= 1)) =>
                 {
+                    if mode == BridgeMode::ProductionAdmission {
+                        if let (Some(owner), Some(receiver)) = (
+                            row["player_id"].as_u64(),
+                            hex_address(&row["property_receiver"]),
+                        ) {
+                            production_bindings.insert((owner, receiver));
+                        }
+                    }
                     if dual {
                         joined_calibrations += 1;
                         if row["player_id"] == 0
@@ -207,7 +217,8 @@ mod platform {
                                 && (mode != BridgeMode::ProductionAdmission
                                     || n == u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
                                     || (900000..900256).contains(&n)
-                                    || (901000..901256).contains(&n))
+                                    || (901000..901256).contains(&n)
+                                    || (903000..903256).contains(&n))
                         })
                         && row["thread_id"]
                             .as_u64()
@@ -276,6 +287,38 @@ mod platform {
                     {
                         return Err(Error::input("invalid unreadable property row"));
                     }
+                    if mode == BridgeMode::ProductionAdmission {
+                        let key = row["key_id"].as_u64().unwrap();
+                        let cell_index = if (900000..900256).contains(&key) {
+                            Some(key - 900000)
+                        } else if (901000..901256).contains(&key) {
+                            Some(key - 901000)
+                        } else {
+                            None
+                        };
+                        let malformed = row["read_state"] == 1
+                            && (row["tag"] != 1
+                                || row["flags14"] != 0
+                                || !matches!(
+                                    row["payload8"].as_str(),
+                                    Some("0x0000000000000000" | "0x0000000000000001")
+                                ));
+                        if let Some(index) = cell_index.filter(|_| malformed) {
+                            // Captured immediately after applying this raw observation,
+                            // by the native consumer for this same receiver/owner/index.
+                            if row["denial_checked"] != true
+                                || row["denial_index"] != index
+                                || !row["denial_owner"].as_u64().is_some_and(|owner| {
+                                    owner < 64
+                                        && hex_address(&row["property"]).is_some_and(|receiver| {
+                                            production_bindings.contains(&(owner, receiver))
+                                        })
+                                })
+                            {
+                                return Err(Error::input("malformed production property lacks same-cell native closure proof"));
+                            }
+                        }
+                    }
                     if dual {
                         joined_properties += 1;
                     }
@@ -296,7 +339,12 @@ mod platform {
                                 | BridgeMode::ProductionAdmission
                         ) {
                             row["result"] == "ok"
-                                && row["dropped"] == 0
+                                && (row["dropped"] == 0
+                                    || (mode == BridgeMode::ProductionAdmission
+                                        && row["counter_scope"]
+                                            == "bounded_prefix_samples_not_complete_call_history"
+                                        && row["calibration_sample_limit"] == 1024
+                                        && row["property_sample_limit"] == 4096))
                                 && row["classification"]
                                     == if mode == BridgeMode::CanEver {
                                         "can_ever_entry"
@@ -1212,7 +1260,7 @@ mod platform {
                 json!({"kind":"identity","pid":7,"created_filetime":123,
                     "mode":"production-admission","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
                     "property_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
-                    "scope_key_ranges":[[900000,900255],[901000,901255]],
+                    "scope_key_ranges":[[900000,900255],[901000,901255],[903000,903255]],
                     "reset_key_id":902000,"prefix_bytes":"[cc, cc, cc, cc, cc]",
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
@@ -1243,9 +1291,46 @@ mod platform {
             };
             write(&rows);
             assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                true
+            );
+            let mut verified = rows.to_vec();
+            verified[4]["denial_checked"] = json!(true);
+            verified[4]["denial_owner"] = json!(2);
+            verified[4]["denial_index"] = json!(77);
+            write(&verified);
+            assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
                 2
             );
+            for (field, value) in [
+                ("denial_checked", json!(false)),
+                ("denial_index", json!(78)),
+                ("denial_owner", json!(64)),
+                ("denial_owner", json!(1)),
+            ] {
+                let mut bad = verified.clone();
+                bad[4][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                    "{field}"
+                );
+            }
+            let mut sampled = verified.clone();
+            sampled[5]["dropped"] = json!(80);
+            sampled[5]["observed_calls"] = json!(82);
+            sampled[5]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
+            sampled[5]["calibration_sample_limit"] = json!(1024);
+            sampled[5]["property_sample_limit"] = json!(4096);
+            write(&sampled);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
+                2
+            );
+            sampled[5]["counter_scope"] = json!("complete_history");
+            write(&sampled);
+            assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
             let mut foreign = rows.to_vec();
             foreign[4]["key_id"] = json!(853304);
             write(&foreign);

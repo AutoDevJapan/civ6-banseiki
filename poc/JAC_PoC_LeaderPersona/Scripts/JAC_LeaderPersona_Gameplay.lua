@@ -172,6 +172,42 @@ local function CorePaymentComplete(owner, row, cost, spent)
     return true;
 end
 
+-- Read-only diagnostic for the parent's bounded Gameplay probe. API presence
+-- is measured here, never inferred from a UI fixture or a native RVA call.
+local function CoreAdmissionCapabilities(owner, leader)
+    local row = Definition(leader);
+    local p = Player(owner, true);
+    local governors = p and p:GetGovernors();
+    local def = row and GameInfo.Governors[row.GovernorType];
+    local result = {owner=owner, leader=leader, context="Gameplay",
+        hasGovernorBinding=governors ~= nil and type(governors.HasGovernor) == "function",
+        getGovernorBinding=governors ~= nil and type(governors.GetGovernor) == "function"};
+    if not governors or not def then return result; end
+    result.index = def.Index;
+    result.state = Get(leader, "STATE");
+    result.ledgerOwner = Get(leader, "OWNER");
+    result.available, result.spent = OfficialTitleBalance(owner);
+    if result.hasGovernorBinding then
+        result.hasGovernorOK, result.hasGovernor = pcall(governors.HasGovernor, governors, def.Hash);
+    end
+    if result.getGovernorBinding then
+        local ok, governor = pcall(governors.GetGovernor, governors, def.Hash);
+        result.getGovernorOK = ok;
+        result.governorReturned = ok and governor ~= nil;
+        if ok and governor and type(governor.HasPromotion) == "function" then
+            local base = GameInfo.GovernorPromotions[row.BasePromotionType];
+            if base then result.baseOK, result.base = pcall(governor.HasPromotion, governor, base.Hash); end
+            for step=1,row.EvolutionCost-1 do
+                local promotion = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
+                if promotion then
+                    result["paymentOK" .. step], result["payment" .. step] =
+                        pcall(governor.HasPromotion, governor, promotion.Hash);
+                end
+            end
+        end
+    end
+    return result;
+end
 local function AdmissionAllowed(owner, row, rows, forceClosed)
     if forceClosed or Get(row.LeaderType, "OWNER") ~= owner then return false; end
     local cost = Get(row.LeaderType, "EVOLUTION_COST");
@@ -195,68 +231,136 @@ local function AdmissionAllowed(owner, row, rows, forceClosed)
     return false;
 end
 
-local function SyncProductionAdmission(forceClosed)
-    local schema = Game:GetProperty(ADMISSION_SCHEMA);
-    if schema == nil then
-        for owner = 0, 63 do
-            local p = Player(owner, false);
-            if p and p:GetProperty(ADMISSION_RESET) ~= nil then return; end
-        end
-    elseif schema ~= 1 then return; end
-    -- A natural read of this reset key invalidates all earlier atomic cells
-    -- for the bound Core receiver, even when a load reuses its address.
-    for owner = 0, 63 do
+-- Volatile publication snapshots, never an authority. A script reload loses
+-- them and must reset all current owners before publishing saved Game values.
+local ADMISSION_CLOSE = 903000;
+local admissionSnapshots = {};
+local admissionRowsFingerprint;
+local function CloseAdmissionOwner(p)
+    p:SetProperty(ADMISSION_RESET, true);
+    local closed = p:GetProperty(ADMISSION_RESET) == true;
+    admissionSnapshots[p:GetID()] = nil;
+    return closed;
+end
+
+local function CloseAllAdmissionOwners()
+    local confirmed = true;
+    for owner=0,63 do
         local p = Player(owner, false);
         if p then
-            p:SetProperty(ADMISSION_RESET, true);
-            p:GetProperty(ADMISSION_RESET);
+            local ok, value = pcall(p.GetProperty, p, ADMISSION_RESET);
+            if not ok or value ~= true then confirmed = false; end
         end
     end
+    admissionSnapshots = {};
+    return confirmed;
+end
+
+local function SyncProductionAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
-    if not rows then return; end
     local ids = PlayerManager.GetAliveMajorIDs();
-    if type(ids) ~= "table" then return; end
-    if schema == nil then
-        -- A dedicated numeric namespace must not overwrite another mod's data.
-        for _,owner in ipairs(ids) do
-            local p = Player(owner, true);
-            if not p or owner >= 64 then return; end
-            for _,entry in ipairs(rows) do
-                if p:GetProperty(ADMISSION_MANIFEST + entry.index) ~= nil or
-                   p:GetProperty(ADMISSION_ALLOW + entry.index) ~= nil then return; end
-            end
-        end
-        Game:SetProperty(ADMISSION_SCHEMA, 1);
-    elseif schema ~= 1 then return; end
-    for _,owner in ipairs(ids) do
-        local p = Player(owner, true);
-        if p and owner < 64 then
-            -- Publish closure first. A natural Core getter captures each raw
-            -- false before any true can be granted for this owner.
-            for _,entry in ipairs(rows) do
-                local key = ADMISSION_ALLOW + entry.index;
-                p:SetProperty(key, false);
-                p:GetProperty(key);
-            end
-            for _,entry in ipairs(rows) do
-                local key = ADMISSION_MANIFEST + entry.index;
-                p:SetProperty(key, true);
-                p:GetProperty(key);
-            end
-            for _,entry in ipairs(rows) do
-                if AdmissionAllowed(owner, entry.row, rows, forceClosed) then
-                    local key = ADMISSION_ALLOW + entry.index;
-                    p:SetProperty(key, true);
-                    if p:GetProperty(key) ~= true then
-                        p:SetProperty(key, false);
-                        p:GetProperty(key);
+    if type(ids) ~= "table" then CloseAllAdmissionOwners(); return; end
+    local schema = Game:GetProperty(ADMISSION_SCHEMA);
+    if (schema ~= nil and schema ~= 1 and schema ~= 2) or not rows then
+        -- Even an invalid table/schema after reload must invalidate the old
+        -- native generation. A reset read closes it without owning the value.
+        CloseAllAdmissionOwners();
+        return;
+    end
+    if schema == 1 then
+        for owner=0,63 do
+            local p = Player(owner, false);
+            if p then
+                for _,entry in ipairs(rows) do
+                    if p:GetProperty(ADMISSION_CLOSE + entry.index) ~= nil then
+                        CloseAllAdmissionOwners(); return;
                     end
                 end
             end
         end
+        Game:SetProperty(ADMISSION_SCHEMA, 2);
+        schema = 2;
+    end
+    local fingerprint = "JAC:";
+    for _,entry in ipairs(rows) do
+        fingerprint = fingerprint .. entry.row.LeaderType .. ":" .. tostring(entry.index) .. ";";
+    end
+    if admissionRowsFingerprint and admissionRowsFingerprint ~= fingerprint then
+        for _,snapshot in pairs(admissionSnapshots) do CloseAdmissionOwner(snapshot.player); end
+    end
+    admissionRowsFingerprint = fingerprint;
+    if schema == nil then
+        -- Check every reserved namespace before taking it, including close.
+        for _,owner in ipairs(ids) do
+            local p = Player(owner, true);
+            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET) ~= nil then CloseAllAdmissionOwners(); return; end
+            for _,entry in ipairs(rows) do
+                for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
+                    if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return; end
+                end
+            end
+        end
+        Game:SetProperty(ADMISSION_SCHEMA, 2);
+    end
+    local alive = {};
+    for _,owner in ipairs(ids) do alive[owner] = true; end
+    for owner,snapshot in pairs(admissionSnapshots) do
+        if not alive[owner] then CloseAdmissionOwner(snapshot.player); end
+    end
+    -- Attempt every initialization reset even if an earlier owner fails.
+    -- No manifest can be published until the whole close phase is confirmed.
+    local initialized = true;
+    for _,owner in ipairs(ids) do
+        local p = Player(owner, true);
+        local snapshot = admissionSnapshots[owner];
+        if not p or owner >= 64 then initialized = false;
+        elseif not snapshot or snapshot.player ~= p then
+            local governors = p:GetGovernors();
+            local def = GameInfo.Governors[rows[1].row.GovernorType];
+            local ok = governors and type(governors.CanEverAppointGovernor) == "function" and
+                pcall(governors.CanEverAppointGovernor, governors, def.Hash);
+            local resetOK, closed = pcall(CloseAdmissionOwner, p);
+            if not ok or not resetOK or not closed then initialized = false;
+            else admissionSnapshots[owner] = {player=p, values={}}; end
+        end
+    end
+    if not initialized then CloseAllAdmissionOwners(); return; end
+    for _,owner in ipairs(ids) do
+        local p = Player(owner, true);
+        local snapshot = admissionSnapshots[owner];
+        if p and snapshot and (onlyOwner == nil or onlyOwner == owner) then
+            local changes = {};
+            for _,entry in ipairs(rows) do
+                local desired = AdmissionAllowed(owner, entry.row, rows, forceClosed) == true;
+                if snapshot.values[entry.index] ~= desired then
+                    changes[#changes + 1] = {entry=entry, desired=desired};
+                end
+            end
+            -- Close every affected cell before exposing any new value. Reading
+            -- close invalidates it in the native consumer before the getter.
+            local valid = true;
+            for _,change in ipairs(changes) do
+                local index = change.entry.index;
+                p:SetProperty(ADMISSION_CLOSE + index, true);
+                if p:GetProperty(ADMISSION_CLOSE + index) ~= true then valid = false; break; end
+                p:SetProperty(ADMISSION_ALLOW + index, false);
+                if p:GetProperty(ADMISSION_ALLOW + index) ~= false then valid = false; break; end
+            end
+            if not valid then CloseAdmissionOwner(p); return; end
+            for _,change in ipairs(changes) do
+                local index = change.entry.index;
+                p:SetProperty(ADMISSION_MANIFEST + index, true);
+                if p:GetProperty(ADMISSION_MANIFEST + index) ~= true then valid = false; break; end
+                if change.desired then
+                    p:SetProperty(ADMISSION_ALLOW + index, true);
+                    if p:GetProperty(ADMISSION_ALLOW + index) ~= true then valid = false; break; end
+                end
+                snapshot.values[index] = change.desired;
+            end
+            if not valid then CloseAdmissionOwner(p); return; end
+        end
     end
 end
-
 local function Join(owner, source, personality, trait)
     local p, other = Player(owner, true), Player(source, false);
     if not p or not other or owner == source then return Finish(owner, "INVALID"); end
@@ -307,7 +411,7 @@ local function Join(owner, source, personality, trait)
     Set(leader, "STATE", "GREAT_PERSON");
     Set(leader, "MERIT", 0);
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
-    SyncProductionAdmission(false);
+    SyncProductionAdmission(false, owner);
     return Finish(owner, "JOINED");
 end
 
@@ -347,7 +451,7 @@ local function PrepareEvolution(owner, leader)
     Set(leader, "EVOLUTION_SURCHARGE", cost - 1);
     Set(leader, "STATE", "EVOLVING");
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
-    SyncProductionAdmission(false);
+    SyncProductionAdmission(false, owner);
     return Finish(owner, "EVOLVING");
 end
 
@@ -365,23 +469,23 @@ local function CompleteEvolution(owner, leader)
     local unit, ready = FindPerson(owner, row);
     if not ready then return Finish(owner, "REMOVAL_PENDING"); end
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
-    SyncProductionAdmission(true);
+    SyncProductionAdmission(true, owner);
     if unit then p:GetUnits():Destroy(unit); end -- TunerMapPanel.lua:199, also accepts no return value
     local remaining, observed = FindPerson(owner, row);
     if remaining or not observed then return Finish(owner, "REMOVAL_PENDING"); end
     Set(leader, "UNIT", nil);
     Set(leader, "STATE", "GOVERNOR");
     if leader == ASHINA_ADMISSION then SyncAshinaAdmission(false); end
-    SyncProductionAdmission(false);
+    SyncProductionAdmission(false, owner);
     SnapshotAlliances(owner, leader);
     return Finish(owner, "EVOLVED");
 end
 
-local function Reconcile()
+local function Reconcile(onlyOwner)
     SyncAshinaAdmission(false);
     for row in GameInfo.JAC_LeaderPersonas() do
         local owner = Get(row.LeaderType, "OWNER");
-        if owner ~= nil and Get(row.LeaderType, "STATE") == "EVOLVING" then
+        if owner ~= nil and (onlyOwner == nil or onlyOwner == owner) and Get(row.LeaderType, "STATE") == "EVOLVING" then
             local native = NativeGovernor(owner, row);
             local unit, ready = FindPerson(owner, row);
             if native and not native.appointed and ready and not unit then
@@ -407,7 +511,7 @@ local function Reconcile()
             end
         end
     end
-    SyncProductionAdmission(false);
+    SyncProductionAdmission(false, onlyOwner);
 end
 
 local function Parameter(name) return GameInfo.JAC_PersonaTreeParameters[name].Value; end
@@ -616,7 +720,7 @@ local function ChooseAI(owner, row)
 end
 
 OnPlayerTurnStarted = function(owner)
-    Reconcile(); SyncEffects();
+    Reconcile(owner); SyncEffects();
     local p = Player(owner, true);
     if not p then return; end
     local turn = Game.GetCurrentGameTurn();
@@ -699,7 +803,7 @@ end);
 GameEvents.JAC_LeaderPersonaFinalize.Add(function(owner, params)
     CompleteEvolution(owner, type(params) == "table" and params.Leader or nil);
 end);
-GameEvents.OnGameTurnStarted.Add(Reconcile);
+GameEvents.OnGameTurnStarted.Add(function() Reconcile(); end);
 GameEvents.OnGameTurnStarted.Add(SyncEffects);
 GameEvents.PlayerTurnStarted.Add(OnPlayerTurnStarted);
 GameEvents.BuildingConstructed.Add(OnBuildingConstructed);
@@ -728,6 +832,7 @@ end);
 ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
     Reconcile = Reconcile, EvolutionCost = EvolutionCost,
+    CoreAdmissionCapabilities = CoreAdmissionCapabilities,
     OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
 };
 print("JAC_LeaderPersona_Gameplay: ready");

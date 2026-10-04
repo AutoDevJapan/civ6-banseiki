@@ -269,16 +269,39 @@ DLLのSHA-256はC87FC1D16D4C93CCEB8AB0515114764259916A3B58D8D16DDD9E51A269AD6CEA
 同コミットに対する親担当の全件検査は、111実行対象と10文書対象、1,707件成功、失敗・ignored・filtered outは0件だった。別の作業フォルダーの先行検査へ読み替えず、記録`D:/CC/Work/pr86-redesign-853/workspace-c3102fd8-summary.json`と対応する実行ログで照合した。mainとの差分に含まれる58シナリオも、Rust実行器の`--check`ですべて成功した。形式検査は実機の完走を意味しない。
 
 AIが費用2・3の支払い用昇進を自発的に選ぶ経路は、引き続き未実証である。公式昇進定義にはAI選好の列がなく、汎用のAI選好設定から総督昇進へ届く公式の接続も確認していない。人間のアクティブ手番だけで動く人物画面を、AIの支払い実装として扱わない。次の確認は通常の加入資格と配置観測の接続後、伊達稙宗（費用2）と上杉憲政（費用3）のAI所有者について、画面から昇進要求を送らず本体の可否・取得反映・使用済み称号を有限の実手番で照合する。取得しない場合も、正式な昇進会計を通る本体操作入口を実測するまで、架空の減算や未確認の関数呼出しで成功を作らない。
-## ToDo1399: 通常22人の派生資格の有限実装
+## 通常22人の派生資格（ToDo1399・1447）
 
-通常のGameplayは試験flagなしで、生存中の各主要所有者について22人の資格を同期して公開する。対応するGovernorのIndexは、その実行中の`GameInfo.JAC_LeaderPersonas`と`GameInfo.Governors`から取得する。重複・欠損・範囲外を拒否し、Index 4からほかの21人を推測しない。対応表は`900000+Index`、資格は`901000+Index`、失効は`902000`という専用の数値キーでCore Playerに置く。初回は衝突を検査する。私的Bの`853304`とその試験flagは独立のまま残した。
+通常Gameplayの権限源は同期Game台帳、実Great Person、Coreの公式称号である。UI cache・私的Bの853304・UI人物資格は入力にしない。Governor Indexは実行中のGameInfoから求め、22人の重複・欠損・範囲外を拒否する。
 
-同期側は毎回、所有者の失効キーを元のgetterで自然読取し、全資格のfalseと対応表のtrueを読んでから、資格を再計算する。開放前にはGameの加入台帳に記録された同じ所有者、`EVOLVING`、本人の唯一の実Great Personと台帳のUnit ID、保存済み費用、Coreの公式獲得称号・使用済み称号と全員分の全額予約を照合する。AI所有者も同じ処理である。`GOVERNOR`段階はCoreから正式Governor、基礎昇進、費用2・3の支払昇進を直接読める場合だけ真にする。Coreでgetterが利用できなければ閉じ、UI cacheの読みを代用しない。このCore読取が実機で使えるかは未確認である。
+公開キーは、対応表900000+Index、資格901000+Index、所有者の失効902000、人物セルの閉鎖903000+Indexである。初回は3範囲と失効キーの衝突を確認する。同期Gameの既存schemaキーは値2で新しい閉鎖範囲も所有する。旧保存の値1では全主要所有者の新閉鎖キーが未使用であることを確認してから値2へ移す。衝突なら元の値を上書きせず、全所有者を失効して中断する。Luaの揮発性スナップショットは前回公開値の比較だけに使い、権限源にしない。所有者の操作はその所有者を、各PlayerTurnはその所有者を、全体Turnは全員を再計算する。変化のないセルの数値propertyは読み書きしない。加入直後・EVOLVING前後・正式Finalize前後も同じ処理である。
 
-nativeの`production-admission`は従来のOS所有セッション、二つの入口の照合と復元、期限付きcontrollerを使う別モードである。フックは元の関数とproperty getterを各1回だけ呼び、Lua VMや新たなC++ getterを呼ばない。最大64所有者・256 Indexを扱い、自然読取された二つのboolだけを所有者・Index別の有界キャッシュへ公開する。各セルはCore受信先・session・入口で一度採番したticket・許可を128bitで交換する。所有者の受信先変更、別所有者による再利用、失効キー、再設置では古いセルのticketまたはsessionが一致しなくなる。manifestがない通常のGovernorは元の判定を返す。manifestのある人物は不正タグ・欠損・false・別受信先を資格真にしない。記録上限やticket枯渇でも開放しない。
+初回・Lua再作成・所有者オブジェクトの変更は、各所有者につき自然なCore CanEverAppointGovernorを1回読み、Core受信先を結ぶ。その後、全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、親は接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
 
-校正記録は1,024件へ拡げ、全484組を2巡しても記録できるが、追加呼出しを含む長いセッションの容量は保証しない。限界を超えると通常経路の許可を全件閉じ、記録行が得られなかった既知の人物Indexも元の真へ戻さない。無関係なGovernorは元の結果を保つ。別人物の古い許可と記録行欠損時の元の真は、それぞれ修正前に失敗する合成試験で捕捉した。行構造の変更に合わせて校正trace版を3へ上げた。記録上限を超えた実機成果物は合格証拠にならない。
+変更されたセルは、閉鎖キーの読取、資格falseの読取確認、対応表trueの読取確認、必要な場合だけ資格trueの読取確認の順で公開する。全変更セルを閉じてから新しい値を公開する。falseまたは対応表の確認に失敗すれば所有者全体を失効し、その自然読取も確認して中断する。失敗したスナップショットは捨てる。失効の読取が不正型でもnative側は入口で失効する。古いtrueがfalseの直後に戻る場合、nativeは新しい閉鎖世代のfalse確認がないため許可しない。
 
-検査は、Luaの新規2件を修正前に実行して、未加入の対応表欠損と未払い資格欠損を捕捉した。修正後は4件が通り、AI所有者、疎なGameInfo Index、所有者違い、費用2・3の全額予約と正式APPOINT/PROMOTE後の照合、Core getter欠損時の閉鎖を確認した。私的Bの10件も通った。nativeの合成試験は所有者・Indexの分離、古いtrueより新しいfalseを優先するticket、同じ受信先の失効、A→B→A、元の2関数を1回ずつ呼ぶ入口と復元を確認した。これらは実ゲーム合格の代用ではない。
+nativeは各owner/Indexに受信先・session・ticketを持つ閉鎖、false確認、対応表、許可の有界セルを使う。閉鎖はgetter入口でticketを進め、返値の正誤に依存しない。新世代の正しいbool falseを確認した後でだけ対応表を公開でき、その後の資格trueだけを許可とする。旧世代・遅れた読取・所有者再利用・旧session・不正tag/flags/payloadを拒否する。許可を返す直前に、所有者・閉鎖・対応表・資格が変わっていないことを再確認する。別MODの通常Governorは元ALを保ち、対応済み人物の未知の所有者は閉じる。
 
-この段階の通常producerはflagなしだが、nativeの接続は最大300秒のcontrollerモードで、最終製品が自動管理する常駐経路ではない。Core受信先が最初のCanEverより先に読まれた場合は、次の同期読取まで許可は開かない。保存・ロード時のLua再初期化とnative入口の順序、消失通知から失効読取までの窓、複数端末の同一同期状態、Coreでの任命済みGovernor読取、4,096件の観測上限を実機で確認していない。ここを解消してから製品の起動・復元・終了へ接続する。今回の合成試験だけをもって全22人の本体資格、費用2・3のAI実支払い、未払いASSIGN拒否、元の人物化通し、スパイ中和と回復のMustを完了とはしない。未知の内部任命関数`30CBE0`/`30C100`は呼ばない。
+22所有者×22人の再ロード初期化は、失効22回と3段階×484回で1,474回の対象getterになる。初回の名前空間確認も含めると2,948回で、property観測4,096件以内である。変更のない300ターンで全体と全22 PlayerTurnを実行しても追加の対象getter・公開・Core binding anchorは0回である。この数値はLua 5.1合成試験の測定で、実機時間の測定ではない。
+
+観測と資格判定を分離した。通常mode6の校正は1,024行、propertyは4,096行の先頭サンプルだけを保存する。超過呼出しも原関数を1回呼び、資格判定を行う。原関数の前後の本人情報は各呼出しのスタックに持ち、サンプル行がなくても同じactor/sessionで判定する。自然なproperty返値はサンプルの残量に関係なく消費する。容量不足で許可を閉じたりcontrollerを失敗させたりしない。ticketの実際の枯渇は別であり、許可を閉じる。
+
+校正traceは版4、property traceは版3であり、DLLとcontrollerは同じ型のVERSIONとサイズを照合する。mode6のcounter_scopeはbounded_prefix_samples_not_complete_call_history、sample limitは1,024/4,096、droppedは未保存の呼出し数である。全履歴の完全性・全22人の動作成功をこのサンプルだけから主張しない。他の診断・私的Bモードの厳密な記録契約は保持する。有限接続時間は最大300秒のままで、原関数1回・全入口復元・所有プロセス回収の契約を変えない。
+
+不正型の公開行には、その自然返値を消費した直後の同じ所有者・Indexについてnative consumerが閉鎖を確認した結果を添える。成果物検査はその結果とCore受信先の所有者対応を照合する。該当Indexや所有者が違う閉鎖、確認の欠落、完全履歴を装う上限超過は受理しない。サンプルにない後続イベントまで閉鎖済みとは扱わない。
+
+### Core Governor getterの実機診断と残り
+
+GOVERNOR段階の本人への支払照合は未解決である。Gameplay HasGovernorは実機54/89で不在、GetGovernorの存在は未確認である。CorePaymentCompleteは両正式bindingと本人の基礎・必要な追加昇進を読める場合だけ許可し、UIの値で代用しない。fixtureで両メソッドがあることは本体の証明ではない。HasGovernor欠損のnegativeを維持する。
+
+親の限定診断は、live_chain所有セッションで費用1の本人が正式APPOINTされた直後とFinalize直後に、Gameplay内の次の関数を1回ずつ呼ぶ。任命・称号・配置・記録の書換えは行わない。
+
+    local r = ExposedMembers.JAC_LeaderPersona.CoreAdmissionCapabilities(0, "LEADER_JAC_ASHINA_MORIKIYO")
+    for _,k in ipairs({"context","owner","leader","index","state","ledgerOwner","available","spent","hasGovernorBinding","hasGovernorOK","hasGovernor","getGovernorBinding","getGovernorOK","governorReturned","baseOK","base","paymentOK1","payment1","paymentOK2","payment2"}) do
+        print("JAC_CORE_GOV_BINDING " .. k .. "=" .. tostring(r[k]))
+    end
+
+診断は自然な正式Lua bindingのHasGovernor/GetGovernorを各1回だけ呼び、取得できた本人の昇進を読む。bindingがない場合もその不在を返し、別のgetter・未確認RVAを呼ばない。両bindingが存在するなら費用2・3の同じ本人について支払昇進を実測する。存在しなければ、親は本体の正式イベントまたは自然なnative queryの本人情報を用いた支払証明へ次段の設計を進める。総使用済み数だけ、UI cache、未確認30CBE0/30C100の呼出しでは紐付けを作らない。
+
+配置担当1433への契約: 901000+Indexは未任命EVOLVINGの全額予約もtrueになり、追加称号の支払済み配置資格ではない。PaidAssignmentは別の派生bool/manifest範囲と閉鎖キーを設け、同じCore actor/Index・session・getter入口ticket・false ACKの原子的な公開契約を使う必要がある。今回その配置範囲を予約・公開しない。配置の4引数ABIへ任命のIndex入口を流用しない。
+
+実機の通常22人、AI追加公式PROMOTE、未払いAssign、保存/MP、元113通し、中和・回復、常時の製品接続、別モデルの固定全差分レビューは親853/1399/1433の未完了である。04b単体を統合せず、今回の修正も合成成功だけで製品完了・マージ可とは扱わない。私的manual fixtureの親8d/099修正と最新spy修正は、親が3-way統合で保持する。

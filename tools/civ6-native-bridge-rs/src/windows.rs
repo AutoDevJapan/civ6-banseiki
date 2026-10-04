@@ -26,9 +26,9 @@ pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
 const TRACE_VERSION: u32 = 2;
 const PROPERTY_TRACE_MAGIC: u32 = 0x4a41_4350; // JACP
-const PROPERTY_TRACE_VERSION: u32 = 2;
+const PROPERTY_TRACE_VERSION: u32 = 3;
 const CALIBRATION_TRACE_MAGIC: u32 = 0x4a41_4341; // JACA
-const CALIBRATION_TRACE_VERSION: u32 = 3;
+const CALIBRATION_TRACE_VERSION: u32 = 4;
 pub const CALIBRATION_CAPACITY: usize = 1024;
 pub const PROPERTY_TEST_VALUE_KEY_ID: u32 = 853_271;
 pub const PROPERTY_TEST_PHASE_KEY_ID: u32 = 853_272;
@@ -36,6 +36,7 @@ pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
 pub const PRODUCTION_MANIFEST_BASE: u32 = 900_000;
 pub const PRODUCTION_ALLOW_BASE: u32 = 901_000;
 pub const PRODUCTION_RESET_KEY: u32 = 902_000;
+pub const PRODUCTION_CLOSE_BASE: u32 = 903_000;
 pub const PRODUCTION_INDEX_LIMIT: usize = 256;
 pub const PRODUCTION_OWNER_LIMIT: usize = 64;
 const CODE_PAGE: usize = 4096;
@@ -373,11 +374,16 @@ impl CalibrationTrace {
         if self.in_flight.load(Ordering::Acquire) != 0 {
             return Err("calibration calls remain in flight");
         }
-        if self.dropped.load(Ordering::Acquire) != 0 {
+        if self.reserved != BridgeMode::ProductionAdmission as u32
+            && self.dropped.load(Ordering::Acquire) != 0
+        {
             return Err("calibration capacity exceeded");
         }
-        let next = self.next.load(Ordering::Acquire) as usize;
-        if next > CALIBRATION_CAPACITY {
+        let observed = self.next.load(Ordering::Acquire) as usize;
+        let next = observed.min(CALIBRATION_CAPACITY);
+        if observed.saturating_sub(CALIBRATION_CAPACITY)
+            != self.dropped.load(Ordering::Acquire) as usize
+        {
             return Err("calibration sequence exceeded capacity");
         }
         let mut rows = Vec::with_capacity(next);
@@ -585,6 +591,10 @@ static PRODUCT_MANIFEST: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
     [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
 static PRODUCT_PERMISSION: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
     [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_CLOSURE: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
+static PRODUCT_CLOSED_ACK: [AtomicJoinedWord; PRODUCT_CELL_COUNT] =
+    [const { AtomicJoinedWord::new() }; PRODUCT_CELL_COUNT];
 static PRODUCT_SESSION: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_NEXT_TICKET: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -697,8 +707,43 @@ fn product_key(key: u32) -> Option<(usize, bool)> {
     }
 }
 
+fn product_close_index(key: u32) -> Option<usize> {
+    (PRODUCTION_CLOSE_BASE..PRODUCTION_CLOSE_BASE + PRODUCTION_INDEX_LIMIT as u32)
+        .contains(&key)
+        .then(|| (key - PRODUCTION_CLOSE_BASE) as usize)
+}
+
+fn product_publish_word(
+    cell: &AtomicJoinedWord,
+    receiver: u64,
+    session: u32,
+    ticket: u32,
+    bit: bool,
+) {
+    loop {
+        if !PRODUCT_ACTIVE.load(Ordering::Acquire)
+            || PRODUCT_SESSION.load(Ordering::Acquire) != session
+            || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+        {
+            return;
+        }
+        let current = cell.load();
+        if joined_session(current) == session && joined_ticket(current) >= ticket {
+            return;
+        }
+        if cell
+            .compare_exchange(current, joined_word(receiver, session, ticket, bit))
+            .is_ok()
+        {
+            return;
+        }
+    }
+}
+
 fn product_property_begin(receiver: u64, key: u32) -> u64 {
-    if (product_key(key).is_none() && key != PRODUCTION_RESET_KEY)
+    if (product_key(key).is_none()
+        && product_close_index(key).is_none()
+        && key != PRODUCTION_RESET_KEY)
         || receiver == 0
         || !PRODUCT_ACTIVE.load(Ordering::Acquire)
         || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
@@ -732,6 +777,18 @@ fn product_property_begin(receiver: u64, key: u32) -> u64 {
     {
         return 0;
     }
+    // Closure happens at entry, independent of the getter's stale/raw return.
+    if key == PRODUCTION_RESET_KEY {
+        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+    } else if let Some(index) = product_close_index(key) {
+        product_publish_word(
+            &PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index],
+            receiver,
+            session,
+            ticket,
+            false,
+        );
+    }
     (u64::from(session) << 37) | ((owner as u64) << 31) | u64::from(ticket)
 }
 
@@ -745,7 +802,7 @@ fn product_observe_property(
     flags: u32,
 ) {
     let cell_key = product_key(key);
-    if cell_key.is_none() && key != PRODUCTION_RESET_KEY {
+    if cell_key.is_none() && product_close_index(key).is_none() && key != PRODUCTION_RESET_KEY {
         return;
     }
     if token == 0
@@ -765,6 +822,9 @@ fn product_observe_property(
         || joined_receiver(binding) != receiver
         || joined_ticket(binding) >= ticket
     {
+        return;
+    }
+    if product_close_index(key).is_some() {
         return;
     }
     if key == PRODUCTION_RESET_KEY {
@@ -788,60 +848,92 @@ fn product_observe_property(
         }
     }
     let (index, manifest) = cell_key.expect("validated production property key");
-    let permitted = state == 1 && tag == 1 && flags == 0 && payload == 1;
-    let cell = product_cell(owner, index, manifest);
-    loop {
-        let current = cell.load();
-        if joined_session(current) == session && joined_ticket(current) >= ticket {
-            return;
-        }
-        let replacement = joined_word(receiver, session, ticket, permitted);
-        if cell.compare_exchange(current, replacement).is_ok() {
-            return;
-        }
+    let offset = owner * PRODUCTION_INDEX_LIMIT + index;
+    let closure = PRODUCT_CLOSURE[offset].load();
+    if joined_receiver(closure) != receiver
+        || joined_session(closure) != session
+        || joined_ticket(closure) <= joined_ticket(binding)
+        || ticket <= joined_ticket(closure)
+    {
+        return;
     }
+    let valid_bool = state == 1 && tag == 1 && flags == 0 && payload <= 1;
+    if !manifest && valid_bool && payload == 0 {
+        product_publish_word(&PRODUCT_CLOSED_ACK[offset], receiver, session, ticket, true);
+    }
+    let ack = PRODUCT_CLOSED_ACK[offset].load();
+    let closed_ack = joined_receiver(ack) == receiver
+        && joined_session(ack) == session
+        && joined_ticket(ack) > joined_ticket(closure)
+        && joined_permitted(ack);
+    let permit = valid_bool && payload == 1 && closed_ack;
+    product_publish_word(
+        product_cell(owner, index, manifest),
+        receiver,
+        session,
+        ticket,
+        permit,
+    );
+}
+fn product_index_known(index: usize, session: u32) -> bool {
+    index < PRODUCTION_INDEX_LIMIT
+        && (0..PRODUCTION_OWNER_LIMIT).any(|owner| {
+            let manifest = product_cell(owner, index, true).load();
+            let closure = PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load();
+            (joined_session(manifest) == session && joined_receiver(manifest) != 0)
+                || (joined_session(closure) == session && joined_receiver(closure) != 0)
+        })
 }
 
 // None means a non-persona governor: preserve GameCore's own result.
 // Some(false) means a manifested persona with no current positive permission.
 fn product_permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
-    if owner >= PRODUCTION_OWNER_LIMIT
-        || index >= PRODUCTION_INDEX_LIMIT
-        || receiver == 0
-        || !PRODUCT_ACTIVE.load(Ordering::Acquire)
-        || PRODUCT_SESSION.load(Ordering::Acquire) != session
-    {
+    if index >= PRODUCTION_INDEX_LIMIT || !PRODUCT_ACTIVE.load(Ordering::Acquire) {
         return None;
     }
+    let active_session = PRODUCT_SESSION.load(Ordering::Acquire);
+    if session != active_session || owner >= PRODUCTION_OWNER_LIMIT {
+        return product_index_known(index, active_session).then_some(false);
+    }
     let binding = PRODUCT_OWNERS[owner].load();
-    if joined_receiver(binding) != receiver || joined_session(binding) != session {
-        return None;
+    if receiver == 0 || joined_receiver(binding) != receiver || joined_session(binding) != session {
+        return product_index_known(index, session).then_some(false);
     }
     for (other, row) in PRODUCT_OWNERS.iter().enumerate() {
         if other != owner && joined_receiver(row.load()) == receiver {
             return Some(false);
         }
     }
+    let closure = PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load();
     let manifest = product_cell(owner, index, true).load();
     if joined_receiver(manifest) != receiver || joined_session(manifest) != session {
-        return None;
+        return product_index_known(index, session).then_some(false);
     }
     if PRODUCT_EXHAUSTED.load(Ordering::Acquire) {
         return Some(false);
     }
-    if joined_ticket(manifest) <= joined_ticket(binding) || !joined_permitted(manifest) {
+    if joined_ticket(manifest) <= joined_ticket(binding)
+        || !joined_permitted(manifest)
+        || joined_session(closure) != session
+        || joined_receiver(closure) != receiver
+        || joined_ticket(closure) <= joined_ticket(binding)
+        || joined_ticket(manifest) <= joined_ticket(closure)
+    {
         return Some(false);
     }
     let permission = product_cell(owner, index, false).load();
     let allowed = joined_receiver(permission) == receiver
         && joined_session(permission) == session
-        && joined_ticket(permission) > joined_ticket(binding)
+        && joined_ticket(permission) > joined_ticket(manifest)
         && joined_permitted(permission);
     // A concurrent reset/rebind cannot be combined with a prior true cell.
     let final_binding = PRODUCT_OWNERS[owner].load();
     Some(
         allowed
             && final_binding == binding
+            && product_cell(owner, index, true).load() == manifest
+            && product_cell(owner, index, false).load() == permission
+            && PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index].load() == closure
             && PRODUCT_ACTIVE.load(Ordering::Acquire)
             && !PRODUCT_EXHAUSTED.load(Ordering::Acquire),
     )
@@ -956,10 +1048,12 @@ fn joined_observe_property(
 // No Lua/C++ calls, allocation, formatting or lock acquisition in the hook.
 // The original function receives its saved argument registers immediately after
 // this bounded copy. A failed copy is recorded, never treated as permission.
+const _: () = assert!(std::mem::size_of::<CalibrationRow>() <= 0x58);
 unsafe extern "system" fn calibration_begin(
     governors_this: u64,
     governor_index: u32,
     return_address: u64,
+    scratch: *mut CalibrationRow,
 ) -> *const CalibrationRow {
     if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index != 4 {
         return null_mut();
@@ -985,16 +1079,24 @@ unsafe extern "system" fn calibration_begin(
     }
     let trace = unsafe { &*trace };
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
-    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
-    if slot >= CALIBRATION_CAPACITY {
-        if production {
-            PRODUCT_EXHAUSTED.store(true, Ordering::Release);
+    let row = if production {
+        // A per-call stack object carries the decision even after the prefix
+        // observation sample fills. Never use shared telemetry as authority.
+        if scratch.is_null() {
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+            return null_mut();
         }
-        trace.dropped.fetch_add(1, Ordering::Relaxed);
-        trace.in_flight.fetch_sub(1, Ordering::Release);
-        return null_mut();
-    }
-    let row = &trace.rows[slot];
+        unsafe { ptr::write(scratch, CalibrationRow::default()) };
+        unsafe { &*scratch }
+    } else {
+        let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+        if slot >= CALIBRATION_CAPACITY {
+            trace.dropped.fetch_add(1, Ordering::Relaxed);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+            return null_mut();
+        }
+        &trace.rows[slot]
+    };
     row.joined_session.store(session, Ordering::Relaxed);
     row.governor_index.store(governor_index, Ordering::Relaxed);
     row.governors_this.store(governors_this, Ordering::Relaxed);
@@ -1103,9 +1205,7 @@ unsafe extern "system" fn calibration_end(
             && joined_receiver(admission) == receiver
             && joined_permitted(admission);
         result = (original_rax & !0xff) | u64::from(permitted);
-    } else if PRODUCT_ACTIVE.load(Ordering::Acquire)
-        && row.owner_read_state.load(Ordering::Relaxed) == 1
-    {
+    } else if PRODUCT_ACTIVE.load(Ordering::Acquire) {
         if let Some(permitted) = product_permission(
             row.player_id.load(Ordering::Relaxed) as usize,
             row.governor_index.load(Ordering::Relaxed) as usize,
@@ -1120,7 +1220,33 @@ unsafe extern "system" fn calibration_end(
     row.sequence.store(1, Ordering::Release);
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if !trace.is_null() {
-        unsafe { &*trace }.in_flight.fetch_sub(1, Ordering::Release);
+        let trace = unsafe { &*trace };
+        if trace.reserved == BridgeMode::ProductionAdmission as u32 {
+            let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+            if slot < CALIBRATION_CAPACITY {
+                let target = &trace.rows[slot];
+                macro_rules! copy_field {
+                    ($($field:ident),*) => { $(target.$field.store(row.$field.load(Ordering::Relaxed), Ordering::Relaxed);)* };
+                }
+                copy_field!(
+                    governor_index,
+                    thread_id,
+                    owner_read_state,
+                    governors_this,
+                    return_address,
+                    player_address,
+                    player_id,
+                    original_al,
+                    effective_al,
+                    property_receiver,
+                    joined_session
+                );
+                target.sequence.store(1, Ordering::Release);
+            } else {
+                trace.dropped.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        trace.in_flight.fetch_sub(1, Ordering::Release);
     }
     result
 }
@@ -1213,11 +1339,16 @@ pub struct PropertyValueTrace {
     pub tag: u16,
     pub payload: u64,
     pub flags: u32,
+    pub denial_owner: u32,
+    pub denial_index: u32,
+    pub denial_checked: u32,
 }
 
 impl PropertyTrace {
     pub fn complete_rows(&self) -> Result<Vec<PropertyValueTrace>, &'static str> {
-        if self.dropped.load(Ordering::Acquire) != 0 {
+        if self.scope != BridgeMode::ProductionAdmission as u32
+            && self.dropped.load(Ordering::Acquire) != 0
+        {
             return Err("property getter trace capacity exceeded");
         }
         self.snapshot_rows()
@@ -1250,6 +1381,9 @@ impl PropertyTrace {
                 tag: row.tag.load(Ordering::Relaxed) as u16,
                 payload: row.payload.load(Ordering::Relaxed),
                 flags: row.flags.load(Ordering::Relaxed),
+                denial_owner: (row.tag.load(Ordering::Relaxed) >> 25) & 63,
+                denial_index: (row.tag.load(Ordering::Relaxed) >> 17) & 255,
+                denial_checked: (row.tag.load(Ordering::Relaxed) >> 16) & 1,
             });
         }
         Ok(rows)
@@ -1267,6 +1401,8 @@ static JOINED_TEST_PAUSED: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static JOINED_TEST_RELEASE: AtomicBool = AtomicBool::new(false);
 
+#[cfg(test)]
+static PROPERTY_TEST_RAW_MUTATE_RETURNED: AtomicU64 = AtomicU64::new(0);
 unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
     let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
@@ -1291,6 +1427,7 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
             && key_id != ASHINA_ADMISSION_KEY_ID)
         || (trace.scope == BridgeMode::ProductionAdmission as u32
             && product_key(key_id).is_none()
+            && product_close_index(key_id).is_none()
             && key_id != PRODUCTION_RESET_KEY)
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
@@ -1298,13 +1435,33 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
-    if slot >= TRACE_CAPACITY {
+    if slot >= TRACE_CAPACITY && trace.scope != BridgeMode::ProductionAdmission as u32 {
         if trace.scope == BridgeMode::JoinedAdmission as u32 {
             joined_observe_property(property, key_id, token, 0, 0, 0, 0);
-        } else if trace.scope == BridgeMode::ProductionAdmission as u32 {
-            PRODUCT_EXHAUSTED.store(true, Ordering::Release);
-            product_observe_property(property, key_id, token, 0, 0, 0, 0);
         }
+        trace.dropped.fetch_add(1, Ordering::Relaxed);
+        trace.in_flight.fetch_sub(1, Ordering::Release);
+        return;
+    }
+    // One synchronous copy of borrowed native storage. Authority and telemetry
+    // consume exactly these same bytes, even if the source is then replaced.
+    let (state, tag, payload, flags) = match copy_current::<24>(returned) {
+        Some(bytes) => (
+            1,
+            u16::from_le_bytes(bytes[0..2].try_into().unwrap()) as u32,
+            u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            u32::from_le_bytes(bytes[20..24].try_into().unwrap()),
+        ),
+        None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
+    };
+    if trace.scope == BridgeMode::ProductionAdmission as u32 {
+        product_observe_property(property, key_id, token, state, tag, payload, flags);
+    }
+    #[cfg(test)]
+    if returned != 0 && returned == PROPERTY_TEST_RAW_MUTATE_RETURNED.load(Ordering::Acquire) {
+        unsafe { ((returned + 8) as *mut u64).write_unaligned(0) };
+    }
+    if slot >= TRACE_CAPACITY {
         trace.dropped.fetch_add(1, Ordering::Relaxed);
         trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
@@ -1315,67 +1472,29 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     row.returned.store(returned, Ordering::Relaxed);
     row.thread_id
         .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
-    if returned == 0 {
-        row.read_state.store(0, Ordering::Relaxed);
-    } else {
-        let mut bytes = [0u8; 24];
-        let mut read = 0usize;
-        let ok = unsafe {
-            ReadProcessMemory(
-                GetCurrentProcess(),
-                returned as *const c_void,
-                bytes.as_mut_ptr().cast(),
-                bytes.len(),
-                &mut read,
-            )
-        } != 0
-            && read == bytes.len();
-        if ok {
-            row.tag.store(
-                u16::from_le_bytes([bytes[0], bytes[1]]) as u32,
-                Ordering::Relaxed,
-            );
-            row.payload.store(
-                u64::from_le_bytes([
-                    bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
-                    bytes[15],
-                ]),
-                Ordering::Relaxed,
-            );
-            row.flags.store(
-                u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
-                Ordering::Relaxed,
-            );
-            row.read_state.store(1, Ordering::Relaxed);
-        } else {
-            row.read_state.store(2, Ordering::Relaxed);
-        }
-    }
+    row.read_state.store(state, Ordering::Relaxed);
+    row.tag.store(tag, Ordering::Relaxed);
+    row.payload.store(payload, Ordering::Relaxed);
+    row.flags.store(flags, Ordering::Relaxed);
     if trace.scope == BridgeMode::JoinedAdmission as u32 {
-        joined_observe_property(
-            property,
-            key_id,
-            token,
-            row.read_state.load(Ordering::Relaxed),
-            row.tag.load(Ordering::Relaxed),
-            row.payload.load(Ordering::Relaxed),
-            row.flags.load(Ordering::Relaxed),
-        );
-    } else if trace.scope == BridgeMode::ProductionAdmission as u32 {
-        product_observe_property(
-            property,
-            key_id,
-            token,
-            row.read_state.load(Ordering::Relaxed),
-            row.tag.load(Ordering::Relaxed),
-            row.payload.load(Ordering::Relaxed),
-            row.flags.load(Ordering::Relaxed),
-        );
+        joined_observe_property(property, key_id, token, state, tag, payload, flags);
+    }
+    if trace.scope == BridgeMode::ProductionAdmission as u32 && token != 0 {
+        if let Some((index, _)) = product_key(key_id) {
+            let owner = ((token >> 31) & 63) as usize;
+            let session = (token >> 37) as u32;
+            // The native tag is u16; its unused high half stores the closure
+            // proof without enlarging the original 48-byte diagnostic row.
+            let denied = product_permission(owner, index, property, session) == Some(false);
+            row.tag.store(
+                tag | ((owner as u32) << 25) | ((index as u32) << 17) | (u32::from(denied) << 16),
+                Ordering::Relaxed,
+            );
+        }
     }
     row.sequence.store(1, Ordering::Release);
     trace.in_flight.fetch_sub(1, Ordering::Release);
 }
-
 // Win64 entry: RCX=property, EDX=key. .seh_* emits pdata/xdata for this
 // nonleaf frame. The pinned 0x99F5C0 getter has no covering pdata entry and
 // only leaf instructions; the allocated trampoline is a MOV plus direct JMP.
@@ -1499,8 +1618,8 @@ global_asm!(
     ".globl calibration_gateway",
     ".seh_proc calibration_gateway",
     "calibration_gateway:",
-    "sub rsp, 0xd8",
-    ".seh_stackalloc 0xd8",
+    "sub rsp, 0x138",
+    ".seh_stackalloc 0x138",
     ".seh_endprologue",
     "mov qword ptr [rsp + 0x20], rcx",
     "mov qword ptr [rsp + 0x28], rdx",
@@ -1515,7 +1634,8 @@ global_asm!(
     "movdqu xmmword ptr [rsp + 0xa0], xmm3",
     "movdqu xmmword ptr [rsp + 0xb0], xmm4",
     "movdqu xmmword ptr [rsp + 0xc0], xmm5",
-    "mov r8, qword ptr [rsp + 0xd8]",
+    "mov r8, qword ptr [rsp + 0x138]",
+    "lea r9, [rsp + 0xe0]",
     "call {begin}",
     "mov qword ptr [rsp + 0x58], rax",
     "mov rcx, qword ptr [rsp + 0x20]",
@@ -1538,7 +1658,7 @@ global_asm!(
     "mov r8d, dword ptr [rsp + 0x28]",
     "mov r9, qword ptr [rsp + 0x20]",
     "call {end}",
-    "add rsp, 0xd8",
+    "add rsp, 0x138",
     "ret",
     ".seh_endproc",
     begin = sym calibration_begin,
@@ -1865,6 +1985,11 @@ unsafe fn install_hook(
         BridgeMode::CanEverCalibration
         | BridgeMode::JoinedAdmission
         | BridgeMode::ProductionAdmission => {
+            if mode == BridgeMode::ProductionAdmission {
+                unsafe {
+                    (*trace.cast::<CalibrationTrace>()).reserved = mode as u32;
+                }
+            }
             CALIBRATION_TRACE_PTR.store(trace.cast(), Ordering::Release)
         }
         _ => unreachable!(),
@@ -2345,72 +2470,164 @@ mod tests {
     use std::time::{Duration, Instant};
 
     #[test]
+    fn production_stale_true_cannot_open_without_closed_ack() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        let publish = |key, payload| {
+            let token = product_property_begin(0x1000, key);
+            product_observe_property(0x1000, key, token, 1, 1, payload, 0);
+        };
+        publish(903077, 1);
+        publish(901077, 1); // stale true while Lua attempted false
+        publish(900077, 1);
+        publish(901077, 1);
+        assert_eq!(
+            product_permission(2, 77, 0x1000, session),
+            Some(false),
+            "manifest and stale true cannot replace a verified closed acknowledgment"
+        );
+        product_deactivate();
+    }
+    fn publish_product(receiver: u64, key: u32, payload: u64) {
+        let token = product_property_begin(receiver, key);
+        product_observe_property(receiver, key, token, 1, 1, payload, 0);
+    }
+
+    fn open_product(receiver: u64, index: u32) {
+        publish_product(receiver, PRODUCTION_CLOSE_BASE + index, 1);
+        publish_product(receiver, PRODUCTION_ALLOW_BASE + index, 0);
+        publish_product(receiver, PRODUCTION_MANIFEST_BASE + index, 1);
+        publish_product(receiver, PRODUCTION_ALLOW_BASE + index, 1);
+    }
+
+    #[test]
     fn production_cache_keys_owner_and_gameinfo_index_and_rejects_old_reads() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         product_deactivate();
         assert!(product_activate());
         let session = PRODUCT_SESSION.load(Ordering::Acquire);
-        let first = product_next_ticket().unwrap();
-        product_bind(1, 0x1000, session, first);
-        let second = product_next_ticket().unwrap();
-        product_bind(2, 0x2000, session, second);
-        let index = 77;
-        let manifest = PRODUCTION_MANIFEST_BASE + index;
-        let allow = PRODUCTION_ALLOW_BASE + index;
-        let old_yes = product_property_begin(0x1000, allow);
-        let manifest_token = product_property_begin(0x1000, manifest);
-        product_observe_property(0x1000, manifest, manifest_token, 1, 1, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
-        let no = product_property_begin(0x1000, allow);
-        product_observe_property(0x1000, allow, no, 1, 1, 0, 0);
-        product_observe_property(0x1000, allow, old_yes, 1, 1, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
-        let yes = product_property_begin(0x1000, allow);
-        product_observe_property(0x1000, allow, yes, 1, 1, 1, 0);
+        product_bind(1, 0x1000, session, product_next_ticket().unwrap());
+        product_bind(2, 0x2000, session, product_next_ticket().unwrap());
+        open_product(0x1000, 77);
+        open_product(0x1000, 78);
         assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
-        assert_eq!(product_permission(2, 77, 0x2000, session), None);
-        assert_eq!(product_permission(1, 78, 0x1000, session), None);
+        assert_eq!(product_permission(2, 77, 0x2000, session), Some(false));
+        assert_eq!(product_permission(1, 79, 0x1000, session), None);
+        let delayed = product_property_begin(0x1000, 901077);
+        // Closure is effective before the close getter returns.
+        let close = product_property_begin(0x1000, 903077);
+        assert_ne!(close, 0);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(true));
+        product_observe_property(0x1000, 901077, delayed, 1, 1, 1, 0);
+        publish_product(0x1000, 901077, 0);
+        publish_product(0x1000, 900077, 1);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        publish_product(0x1000, 901077, 1);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
+        let bad = product_property_begin(0x1000, 901077);
+        product_observe_property(0x1000, 901077, bad, 1, 2, 1, 0);
+        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
+        let stale = product_property_begin(0x1000, 901078);
         let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY);
-        product_observe_property(0x1000, PRODUCTION_RESET_KEY, reset, 0, 0, 0, 0);
-        assert_eq!(
-            product_permission(1, 77, 0x1000, session),
-            Some(false),
-            "load/reset invalidates earlier grant even with the same receiver"
-        );
-        let new_manifest = product_property_begin(0x1000, manifest);
-        product_observe_property(0x1000, manifest, new_manifest, 1, 1, 1, 0);
-        let new_allow = product_property_begin(0x1000, allow);
-        product_observe_property(0x1000, allow, new_allow, 1, 1, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
-        assert_eq!(
-            product_property_begin(0x3000, allow),
-            0,
-            "UI receiver is not Core"
-        );
-        let bad = product_property_begin(0x1000, allow);
-        product_observe_property(0x1000, allow, bad, 1, 2, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
-        let stale = product_property_begin(0x1000, allow);
-        let rebind = product_next_ticket().unwrap();
-        product_bind(1, 0x3000, session, rebind);
-        let back = product_next_ticket().unwrap();
-        product_bind(1, 0x1000, session, back);
-        product_observe_property(0x1000, allow, stale, 1, 1, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
-        let fresh_manifest = product_property_begin(0x1000, manifest);
-        product_observe_property(0x1000, manifest, fresh_manifest, 1, 1, 1, 0);
-        let fresh_allow = product_property_begin(0x1000, allow);
-        product_observe_property(0x1000, allow, fresh_allow, 1, 1, 1, 0);
-        assert_eq!(product_permission(1, 77, 0x1000, session), Some(true));
+        assert_ne!(reset, 0);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        // True-only publications after a reset cannot use old false ACKs.
+        publish_product(0x1000, 900078, 1);
+        publish_product(0x1000, 901078, 1);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
+        open_product(0x1000, 78);
+        assert_eq!(product_permission(1, 78, 0x1000, session), Some(true));
+        let stale = product_property_begin(0x1000, 901078);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_ne!(product_permission(2, 78, 0x1000, session), Some(true));
+        open_product(0x1000, 78);
+        assert_eq!(product_permission(2, 78, 0x1000, session), Some(true));
+        assert_ne!(product_permission(1, 78, 0x1000, session), Some(true));
+        assert_eq!(product_property_begin(0x3000, 901078), 0, "UI is not Core");
+        let stale = product_property_begin(0x1000, 901078);
         product_deactivate();
         assert!(product_activate());
-        assert_eq!(
-            product_permission(1, 77, 0x1000, PRODUCT_SESSION.load(Ordering::Acquire)),
-            None
+        product_bind(
+            2,
+            0x1000,
+            PRODUCT_SESSION.load(Ordering::Acquire),
+            product_next_ticket().unwrap(),
+        );
+        product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
+        assert_ne!(
+            product_permission(2, 78, 0x1000, PRODUCT_SESSION.load(Ordering::Acquire)),
+            Some(true)
         );
         product_deactivate();
     }
-
+    #[test]
+    fn production_malformed_raw_observation_records_the_same_cell_closed() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        let mut trace = Box::new(PropertyTrace::production_scoped());
+        PROPERTY_TRACE_PTR.store(&mut *trace, Ordering::Release);
+        for (tag, payload, flags) in [(2u16, 1u64, 0u32), (1, 2, 0), (1, 1, 7)] {
+            open_product(0x1000, 77);
+            let mut raw = [0u8; 24];
+            raw[0..2].copy_from_slice(&tag.to_le_bytes());
+            raw[8..16].copy_from_slice(&payload.to_le_bytes());
+            raw[20..24].copy_from_slice(&flags.to_le_bytes());
+            let token = product_property_begin(0x1000, 901077);
+            unsafe { record_property(0x1000, 901077, raw.as_ptr() as u64, token) };
+            assert_eq!(product_permission(2, 77, 0x1000, session), Some(false));
+        }
+        let rows = trace.complete_rows().unwrap();
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|row| row.denial_owner == 2
+            && row.denial_index == 77
+            && row.denial_checked == 1
+            && row.property == 0x1000));
+        PROPERTY_TRACE_PTR.store(null_mut(), Ordering::Release);
+        product_deactivate();
+    }
+    #[test]
+    fn production_records_the_consumed_raw_copy_without_rereading_borrowed_storage() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(2, 0x1000, session, product_next_ticket().unwrap());
+        open_product(0x1000, 77);
+        let mut trace = Box::new(PropertyTrace::production_scoped());
+        PROPERTY_TRACE_PTR.store(&mut *trace, Ordering::Release);
+        let mut raw = [0u8; 24];
+        raw[0] = 1;
+        raw[8] = 1;
+        let address = raw.as_ptr() as u64;
+        PROPERTY_TEST_RAW_MUTATE_RETURNED.store(address, Ordering::Release);
+        let token = product_property_begin(0x1000, 901077);
+        unsafe { record_property(0x1000, 901077, address, token) };
+        PROPERTY_TEST_RAW_MUTATE_RETURNED.store(0, Ordering::Release);
+        let actual = trace.complete_rows().unwrap()[0].payload;
+        let permit = product_permission(2, 77, 0x1000, session);
+        PROPERTY_TRACE_PTR.store(null_mut(), Ordering::Release);
+        product_deactivate();
+        assert_eq!(raw[8], 0, "fault changed the borrowed storage");
+        assert_eq!(
+            permit,
+            Some(true),
+            "consumer applied the first captured true"
+        );
+        assert_eq!(
+            actual, 1,
+            "telemetry must contain that same consumed capture"
+        );
+    }
     #[test]
     fn production_mode_uses_two_original_calls_and_preserves_other_governors() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
@@ -2431,7 +2648,9 @@ mod tests {
         let can_bytes = [
             0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
         ];
-        let property_bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        let property_bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0xc3,
+        ];
         unsafe {
             ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
             ptr::copy_nonoverlapping(
@@ -2468,77 +2687,77 @@ mod tests {
         }
         .unwrap();
         assert!(product_activate());
-        assert_eq!(
-            can(gov.as_ptr() as usize, 77),
-            1,
-            "unmanifested index keeps original"
-        );
-        value[8] = 1;
-        assert_eq!(
-            property(receiver, PRODUCTION_MANIFEST_BASE + 77),
-            value.as_ptr() as usize
-        );
-        value[8] = 0;
-        assert_eq!(
-            property(receiver, PRODUCTION_ALLOW_BASE + 77),
-            value.as_ptr() as usize
-        );
-        assert_eq!(
-            can(gov.as_ptr() as usize, 77),
-            0,
-            "manifested unjoined index closes"
-        );
-        value[8] = 1;
-        assert_eq!(
-            property(receiver, PRODUCTION_ALLOW_BASE + 77),
-            value.as_ptr() as usize
-        );
-        assert_eq!(
-            product_permission(
-                2,
-                77,
-                receiver as u64,
-                PRODUCT_SESSION.load(Ordering::Acquire)
-            ),
-            Some(true)
-        );
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
+        let publish = |key, payload| {
+            value[8] = payload;
+            assert_eq!(property(receiver, key), value.as_ptr() as usize);
+        };
+        let mut publish = publish;
+        publish(PRODUCTION_CLOSE_BASE + 77, 1);
+        publish(PRODUCTION_ALLOW_BASE + 77, 0);
+        publish(PRODUCTION_MANIFEST_BASE + 77, 1);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 0);
+        publish(PRODUCTION_ALLOW_BASE + 77, 1);
         assert_eq!(can(gov.as_ptr() as usize, 77), 1);
         assert_eq!(
             can(gov.as_ptr() as usize, 78),
             1,
-            "regular Governor keeps original"
+            "other mod governor keeps original"
         );
-        assert_eq!(
-            property(receiver, PRODUCTION_RESET_KEY),
-            value.as_ptr() as usize
-        );
-        assert_eq!(
-            can(gov.as_ptr() as usize, 77),
-            0,
-            "reset closes old manifest override"
-        );
-        let _ = property(receiver, PRODUCTION_MANIFEST_BASE + 77);
-        let _ = property(receiver, PRODUCTION_ALLOW_BASE + 77);
-        assert_eq!(can(gov.as_ptr() as usize, 77), 1);
-        let _ = property(receiver, PRODUCTION_MANIFEST_BASE + 78);
-        let _ = property(receiver, PRODUCTION_ALLOW_BASE + 78);
-        assert_eq!(can(gov.as_ptr() as usize, 78), 1);
-        let remaining = TRACE_CAPACITY as u32 - trace.property.next.load(Ordering::Acquire);
-        for _ in 0..remaining {
-            let _ = property(receiver, PRODUCTION_ALLOW_BASE + 77);
+        // Property sample exhaustion does not affect authority. Both a false
+        // and a true after the final sampled row still change the actual gate.
+        for _ in 0..TRACE_CAPACITY + 40 {
+            publish(PRODUCTION_ALLOW_BASE + 77, 1);
         }
         assert_eq!(can(gov.as_ptr() as usize, 77), 1);
-        let _ = property(receiver, PRODUCTION_ALLOW_BASE + 77);
+        publish(PRODUCTION_ALLOW_BASE + 77, 0);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 0);
+        publish(PRODUCTION_ALLOW_BASE + 77, 1);
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        for _ in 0..CALIBRATION_CAPACITY + 80 {
+            assert_eq!(can(gov.as_ptr() as usize, 77), 1);
+        }
+        assert_eq!(can(gov.as_ptr() as usize, 78), 1);
+        assert_eq!(
+            u32::from_le_bytes(gov[0x78..0x7c].try_into().unwrap()),
+            trace.calibration.next.load(Ordering::Acquire),
+            "original CanEver once for every sampled and unsampled call"
+        );
+        assert!(trace.calibration.dropped.load(Ordering::Acquire) > 0);
+        assert_eq!(
+            trace.calibration.complete_rows().unwrap().len(),
+            CALIBRATION_CAPACITY
+        );
+        assert_eq!(
+            u32::from_le_bytes(owner.0[0x570..0x574].try_into().unwrap()),
+            trace.property.next.load(Ordering::Acquire),
+            "original getter once; native consumer invokes no additional getter"
+        );
+        gov[0x70..0x78].fill(0);
         assert_eq!(
             can(gov.as_ptr() as usize, 77),
             0,
-            "trace overflow must close every production admission"
+            "unknown owner closes known persona"
         );
         assert_eq!(
             can(gov.as_ptr() as usize, 78),
-            0,
-            "overflow in one key must close the other person's old grant"
+            1,
+            "unknown owner preserves ordinary Governor"
         );
+        assert!(trace.property.dropped.load(Ordering::Acquire) > 0);
+        assert_eq!(
+            trace.property.complete_rows().unwrap().len(),
+            TRACE_CAPACITY
+        );
+        let original_calls = u32::from_le_bytes(gov[0x78..0x7c].try_into().unwrap());
+        let getter_calls = u32::from_le_bytes(owner.0[0x570..0x574].try_into().unwrap());
+        assert_eq!(
+            original_calls,
+            trace.calibration.next.load(Ordering::Acquire)
+        );
+        println!("production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
+            original_calls, getter_calls, trace.calibration.dropped.load(Ordering::Acquire),
+            trace.property.dropped.load(Ordering::Acquire));
         unsafe { uninstall() }.unwrap();
         assert_eq!(
             unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
@@ -2552,59 +2771,8 @@ mod tests {
             trace.property.snapshot_rows().unwrap().len(),
             TRACE_CAPACITY
         );
-        assert_eq!(trace.property.dropped.load(Ordering::Acquire), 1);
+        assert!(trace.property.dropped.load(Ordering::Acquire) > 0);
         assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
-    }
-
-    #[test]
-    fn production_calibration_capacity_closes_known_persona_without_row() {
-        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
-        const { assert!(CALIBRATION_CAPACITY >= 22 * 22 * 2) };
-        product_deactivate();
-        let mut trace = Box::new(CalibrationTrace::default());
-        CALIBRATION_TRACE_PTR.store(&mut *trace, Ordering::Release);
-        assert!(product_activate());
-        #[repr(align(8))]
-        struct PlayerBytes([u8; 0x600]);
-        let mut owner = PlayerBytes([0; 0x600]);
-        owner.0[0xd8..0xdc].copy_from_slice(&2u32.to_le_bytes());
-        let mut gov = [0u8; 0x80];
-        gov[0x70..0x78].copy_from_slice(&(owner.0.as_ptr() as u64).to_le_bytes());
-        let gov_ptr = gov.as_ptr() as u64;
-        let receiver = owner.0.as_ptr() as u64 + 0x528;
-        let row = unsafe { calibration_begin(gov_ptr, 77, 0) };
-        assert!(!row.is_null());
-        assert_eq!(unsafe { calibration_end(row, 1, 77, gov_ptr) }, 1);
-        let manifest = PRODUCTION_MANIFEST_BASE + 77;
-        let allow = PRODUCTION_ALLOW_BASE + 77;
-        let yes_manifest = product_property_begin(receiver, manifest);
-        product_observe_property(receiver, manifest, yes_manifest, 1, 1, 1, 0);
-        let yes_allow = product_property_begin(receiver, allow);
-        product_observe_property(receiver, allow, yes_allow, 1, 1, 1, 0);
-        assert_eq!(
-            product_permission(2, 77, receiver, PRODUCT_SESSION.load(Ordering::Acquire)),
-            Some(true)
-        );
-        for _ in 1..CALIBRATION_CAPACITY {
-            let row = unsafe { calibration_begin(gov_ptr, 77, 0) };
-            assert!(!row.is_null());
-            unsafe { calibration_end(row, 1, 77, gov_ptr) };
-        }
-        let missing = unsafe { calibration_begin(gov_ptr, 77, 0) };
-        assert!(missing.is_null());
-        assert_eq!(
-            unsafe { calibration_end(missing, 1, 77, gov_ptr) },
-            0,
-            "known persona must not pass original true after trace exhaustion"
-        );
-        assert_eq!(
-            unsafe { calibration_end(missing, 1, 78, gov_ptr) },
-            1,
-            "unrelated Governor keeps its original result"
-        );
-        assert_eq!(trace.dropped.load(Ordering::Acquire), 1);
-        product_deactivate();
-        CALIBRATION_TRACE_PTR.store(null_mut(), Ordering::Release);
     }
 
     #[test]
@@ -3113,7 +3281,9 @@ mod tests {
         let can_bytes = [
             0x48, 0x89, 0x5c, 0x24, 0x08, 0xff, 0x41, 0x78, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
         ];
-        let property_bytes = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xc3];
+        let property_bytes = [
+            0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30, 0xff, 0x41, 0x48, 0xc3,
+        ];
         unsafe {
             ptr::copy_nonoverlapping(can_bytes.as_ptr(), can_entry, can_bytes.len());
             ptr::copy_nonoverlapping(
