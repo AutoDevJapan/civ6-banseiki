@@ -819,6 +819,8 @@ fn run_product_branch(name: &str, kind: &str, age: &str) -> mlua::Result<Lua> {
         execute(&lua, name, "prepare-recovery")?;
         execute(&lua, name, "hold-recovery-publication")?;
         execute(&lua, name, "claim-original-site")?;
+        drive(&lua, name, "recovery-source-published")?;
+        execute(&lua, name, "recovery-source-proof")?;
         boot(&lua)?;
         execute(&lua, name, "checks-recovery-reloaded")?;
         execute(&lua, name, "resume-world-recovery")?;
