@@ -355,7 +355,7 @@ GameEvents.JAC_BoundarySaveSpyTravel.Add(function(owner,params)
         not Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),"invalid or repeated travel receipt");
     local city=assert(CityManager.GetCity(params.TargetOwner,params.TargetID),"travel target missing");
     assert(city:GetOwner()~=owner,"travel target is not foreign");
-    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",{oldID=spy.id,name=name,level=params.Level,
+    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",{oldID=spy.id,nameText=R.EncodeText(name),level=params.Level,
         targetOwner=params.TargetOwner,targetID=params.TargetID,x=city:GetX(),y=city:GetY()});
 end);
 
@@ -772,7 +772,7 @@ local function HandleEnemySpyRetry(controller,params,final)
             map=params.MapCount,captured=params.CapturedCount,offMap=params.OffMapCount,
             moving=params.ActiveOffMapCount,placeholder=params.PlaceholderIndex,
             captiveName=captiveName,captiveNameIndex=params.CaptiveNameIndex,
-            captiveLevel=params.CaptiveLevel,travelName=travel.name,travelLevel=travel.level,
+            captiveLevel=params.CaptiveLevel,travelName=R.StoredText(travel,"name"),travelLevel=travel.level,
             defaultName=GameInfo.Units["UNIT_SPY"].Name,
             mapX=params.MapX,mapY=params.MapY,mapLevel=params.MapLevel,mapName=mapName}));
         assert(params.CaptiveCaptor==c.owner and mapCount==1 and
@@ -780,9 +780,9 @@ local function HandleEnemySpyRetry(controller,params,final)
             params.OffMapCount==1 and params.ActiveOffMapCount==0 and
             params.PlaceholderIndex==1 and
             params.CaptiveLevel==travel.level and
-            (captiveName==travel.name or
+            (captiveName==R.StoredText(travel,"name") or
              (captiveName=="" and params.CaptiveNameIndex==-1 and
-              travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
+              R.StoredText(travel,"name")==GameInfo.Units["UNIT_SPY"].Name)) and
             type(params.MapX)=="number" and type(params.MapY)=="number" and
             type(params.MapLevel)=="number" and type(mapName)=="string" and
             params.MapLevel>=0,
@@ -875,18 +875,18 @@ local function HandleEnemySpyRetry(controller,params,final)
     local archive={spyID=spy.id,eventID=event.id,eventTurn=event.turn,
         operation=params.Operation,plot=params.Plot,initial=params.Initial,
         escape=params.Escape,completionTurn=params.CompletionTurn,
-        travelOldID=travel.oldID,travelName=travel.name,travelLevel=travel.level,
+        travelOldID=travel.oldID,travelNameText=R.EncodeText(R.StoredText(travel,"name")),travelLevel=travel.level,
         targetOwner=travel.targetOwner,targetID=travel.targetID,
         governorType=params.GovernorType,governorNeutralized=native.neutralized,
         governorCityID=native.cityID,spent=params.Spent,total=params.Total,
         merit=R.Property(c.leader,"MERIT") or 0,rosterOutcome=params.Outcome,
-        captiveCaptor=params.CaptiveCaptor,captiveName=captiveName,
+        captiveCaptor=params.CaptiveCaptor,captiveNameText=params.CaptiveName,
         captiveNameIndex=params.CaptiveNameIndex,captiveLevel=params.CaptiveLevel,
         capacity=params.Capacity,occupied=params.Occupied,archivedTurn=Game.GetCurrentGameTurn()};
     local retry={current=2,mode=params.Mode,archive=archive,
         spyID=spy.id,
         coreRoster=coreRoster,
-        returnName=returnName,returnLevel=params.ReturnLevel,
+        returnNameText=params.ReturnName,returnLevel=params.ReturnLevel,
         returnTurn=params.ReturnTurn,returnX=params.ReturnX,returnY=params.ReturnY};
     if final then
         retry.attestation={initialToken=pending.token,finalToken=params.Token,
@@ -899,7 +899,7 @@ local function HandleEnemySpyRetry(controller,params,final)
             activeOffMap=params.ActiveOffMapCount,
             placeholderIndex=params.PlaceholderIndex,
             capacity=params.Capacity,mapX=params.MapX,mapY=params.MapY,
-            mapLevel=params.MapLevel,mapName=mapName};
+            mapLevel=params.MapLevel,mapNameText=params.MapName};
     end
     if params.Mode=="PRODUCE" then retry.spyID=nil; end
     if params.Mode=="MAP" or params.Mode=="CAPACITY_MAP" then

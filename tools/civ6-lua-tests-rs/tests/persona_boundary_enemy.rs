@@ -1522,14 +1522,23 @@ fn retry_names_survive_execute_script_empty_and_numeric_string_coercion() {
                      if type(v)=='string' and (v=='' or tonumber(v)) then \
                          wire[k]=tonumber(v) or 0; else wire[k]=v end \
                  end; REQUESTS[#REQUESTS+1]={{owner=owner,op=op,params=wire}} \
-             end",
+             end; \
+             local save=Game.SetProperty; \
+             local function published(v) \
+                 if type(v)=='string' and v=='' then return nil end; \
+                 if type(v)=='string' and tonumber(v) then return tonumber(v) end; \
+                 if type(v)~='table' then return v end; \
+                 local out={{}}; for k,x in pairs(v) do out[k]=published(x) end; return out \
+             end; \
+             Game.SetProperty=function(self,key,value) return save(self,key,published(value)) end",
             serde_json::to_string(name).unwrap()
         ));
         h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
         h.run(&format!(
             "local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); \
-             assert(r.archive.captiveName=={} and r.uiRoster.mapName=={} and \
-             r.spyID==786440 and r.archive.eventID==0 and #CAPTURED[1]==1)",
+             assert(JAC_PersonaBoundaryRules.StoredText(r.archive,'captiveName')=={} and JAC_PersonaBoundaryRules.StoredText(r.uiRoster,'mapName')=={} and \
+             r.spyID==786440 and r.archive.eventID==0 and #CAPTURED[1]==1); \
+             assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='HOME_READY')",
             serde_json::to_string(name).unwrap(),
             serde_json::to_string(name).unwrap()
         ));
@@ -2754,7 +2763,7 @@ fn off_map_return_matches_archived_name_level_turn_and_both_coordinates() {
     h.failed();
     h.run("UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='RETURN')");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
-    h.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(r.returnName=='Spy 15' and r.returnX==CONTROL.x and r.returnY==CONTROL.y and r.returnLevel==1 and r.returnTurn==TURN+2); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name='Other Spy'");
+    h.run("local r=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(JAC_PersonaBoundaryRules.StoredText(r,'returnName')=='Spy 15' and r.returnX==CONTROL.x and r.returnY==CONTROL.y and r.returnLevel==1 and r.returnTurn==TURN+2); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name='Other Spy'");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
         "native return record changed",
@@ -2787,7 +2796,7 @@ fn unnamed_default_spy_uses_the_proven_empty_off_map_name_only_at_intake() {
     h.failed();
     h.run("UNITS[0]={}; local travel=Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'); travel.name=GameInfo.Units['UNIT_SPY'].Name; Game:SetProperty('JAC_BOUNDARY_SPY_TRAVEL',travel); OFF_MAP={{Name='',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}; assert(ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis().mode=='RETURN')");
     h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
-    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').returnName==''); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name=GameInfo.Units['UNIT_SPY'].Name");
+    h.run("assert(JAC_PersonaBoundaryRules.StoredText(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'),'returnName')==''); assert(ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()=='OFF_MAP_RETURN'); OFF_MAP[1].Name=GameInfo.Units['UNIT_SPY'].Name");
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.RetryLivingSpy()",
         "native return record changed",

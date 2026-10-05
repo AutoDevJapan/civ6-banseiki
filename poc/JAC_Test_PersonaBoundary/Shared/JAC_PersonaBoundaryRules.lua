@@ -15,6 +15,14 @@ function R.DecodeText(value)
         "native observation text encoding differs");
     return string.sub(value, #TEXT_PREFIX + 1);
 end
+-- New receipts keep encoded text through Game:SetProperty/save/UI publication.
+-- Earlier nonencoded receipts remain readable only with an actual string.
+function R.StoredText(record, field)
+    local encoded = record[field .. "Text"];
+    if encoded ~= nil then return R.DecodeText(encoded); end
+    assert(type(record[field]) == "string", "saved native observation text unavailable");
+    return record[field];
+end
 -- Resolve a saved identity inside the calling Lua context. FindID alone may
 -- return a different native unit; do not expose it to reads or operations.
 function R.FindSpy(owner, id)

@@ -361,7 +361,7 @@ function B.TryAdoptEnemySpy()
     assert(#roster.activeOffMap==0 and #roster.map==1,
         "arriving spy roster ambiguous or absent");
     local spy=roster.map[1];
-    assert(spy.name==receipt.name and spy.level==receipt.level and
+    assert(spy.name==R.StoredText(receipt,"name") and spy.level==receipt.level and
         InTargetCity(spy.x,spy.y,c.owner,c.cityID),
         "native spy did not arrive in the enemy Governor city");
     local current=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"native spy reference missing");
@@ -534,8 +534,8 @@ function B.EnemyRetryDiagnosis()
         assert(not s.spy.present and #roster.activeOffMap==0,
             "retry requires an unambiguous original operative roster");
         assert(captive.level==travel.level and
-            (captive.name==travel.name or
-             (captive.name=="" and captive.nameIndex==-1 and travel.name==defaultName)),
+            (captive.name==R.StoredText(travel,"name") or
+             (captive.name=="" and captive.nameIndex==-1 and R.StoredText(travel,"name")==defaultName)),
             "captured operative differs from the original spy");
         result.outcome="CAPTURED"; result.captive=captive;
         if #roster.map==1 then
@@ -585,15 +585,15 @@ function B.EnemyRetryDiagnosis()
         local unit=roster.map[1];
         assert(unit.owner==c.attacker and
             unit.unitType==GameInfo.Units["UNIT_SPY"].Index and
-            unit.name==travel.name and unit.level==travel.level,
+            unit.name==R.StoredText(travel,"name") and unit.level==travel.level,
             "living map spy does not match the original operative");
         result.mode="MAP"; result.outcome="LIVING_MAP"; result.currentID=unit.id;
     elseif #roster.activeOffMap==1 then
         assert(#roster.map==0 and occupied==1,
             "retry requires an unambiguous original operative roster");
         local unit=roster.activeOffMap[1];
-        assert((unit.name==travel.name or
-            (unit.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
+        assert((unit.name==R.StoredText(travel,"name") or
+            (unit.name=="" and R.StoredText(travel,"name")==GameInfo.Units["UNIT_SPY"].Name)) and
             unit.level==travel.level and unit.returnTurn>s.turn and
             unit.x>=0 and unit.y>=0 and Map.GetPlot(unit.x,unit.y),
             "off-map native spy differs from the original operative");
@@ -1799,7 +1799,7 @@ function B.RetryLivingSpy()
         local old=retry.archive;
         assert(#roster.captured==1 and captive and
             captive.captor==old.captiveCaptor and
-            captive.name==old.captiveName and
+            captive.name==R.StoredText(old,"captiveName") and
             captive.nameIndex==old.captiveNameIndex and
             captive.level==old.captiveLevel and roster.capturedPlaceholder and
             #roster.offMap==#roster.activeOffMap+1,
@@ -1815,8 +1815,8 @@ function B.RetryLivingSpy()
             local travel=assert(Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),
                 "accepted retry spy travel receipt missing");
             assert(travel.oldID==retry.spyID and
-                (record.name==travel.name or
-                 (record.name=="" and travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
+                (record.name==R.StoredText(travel,"name") or
+                 (record.name=="" and R.StoredText(travel,"name")==GameInfo.Units["UNIT_SPY"].Name)) and
                 record.level==travel.level and
                 record.returnTurn>state.turn and
                 record.x==travel.x and record.y==travel.y,
@@ -1824,7 +1824,7 @@ function B.RetryLivingSpy()
             return "OFF_MAP_TRAVEL";
         end
         assert(retry.mode=="RETURN" and
-            record.name==retry.returnName and record.level==retry.returnLevel and
+            record.name==R.StoredText(retry,"returnName") and record.level==retry.returnLevel and
             record.returnTurn==retry.returnTurn and
             record.x==retry.returnX and record.y==retry.returnY,
             "native return record changed or belongs to another spy");
@@ -1842,8 +1842,8 @@ function B.RetryLivingSpy()
         unit.unitType==GameInfo.Units["UNIT_SPY"].Index,
         "living retry map spy is not the original native owner and type");
     if retry.mode=="RETURN" then
-        local expected=retry.returnName=="" and GameInfo.Units["UNIT_SPY"].Name or
-            retry.returnName;
+        local expected=R.StoredText(retry,"returnName")=="" and GameInfo.Units["UNIT_SPY"].Name or
+            R.StoredText(retry,"returnName");
         assert(unit.name==expected and unit.level==retry.returnLevel and
             unit.x==retry.returnX and unit.y==retry.returnY,
             "returned native operative differs from the off-map receipt");
@@ -1854,7 +1854,7 @@ function B.RetryLivingSpy()
         if unit.id~=retry.spyID and
             (retry.mode=="MAP" or retry.mode=="CAPACITY_MAP") then
             local receipt=Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL");
-            assert(receipt and unit.name==receipt.name and
+            assert(receipt and unit.name==R.StoredText(receipt,"name") and
                 unit.level==receipt.level and
                 InTargetCity(unit.x,unit.y,receipt.targetOwner,receipt.targetID),
                 "new retry spy ID has no matching accepted arrival");
