@@ -48,7 +48,8 @@ local a,b=l.houses.p0,l.houses.p1
 local da=(a.parts.ally or 0)-base.a local db=(b.parts.ally or 0)-base.b local dq=(a.parts.oath or 0)-base.oath
 if l.friends['0-1']~='on' or l.keys['friend:0:1:1']~=true then error('natural ledger intake did not admit friendship') end
 if da~=1 or db~=1 or dq~=1 then error('friendship deltas must be base1/base1/oath1, got '..da..'/'..db..'/'..dq) end
-if Players[0]:GetDiplomacy():HasDeclaredFriendship(1)~=true or Players[0]:GetDiplomacy():HasAllied(1) then error('engine friendship changed') end
+local forward,reverse=Players[0]:GetDiplomacy(),Players[1]:GetDiplomacy()
+if forward:HasDeclaredFriendship(1)~=true or reverse:HasDeclaredFriendship(0)~=true or forward:HasAllied(1) or reverse:HasAllied(0) then error('engine bilateral friendship changed') end
 return 'FRIENDSHIP_POINTS_PASSED base0=1 base1=1 oath0=1 key=once'
 "#;
 
@@ -133,11 +134,16 @@ mod tests {
             }
         }
         assert!(started);
+        let setup = steps
+            .iter()
+            .find(|step| step["state_name"] == "HostGame")
+            .expect("emitted HostGame setup");
+        let setup_code = setup["code"].as_str().unwrap();
         let vm = mlua::Lua::new();
         vm.load("BuildHeadlessGameSetup=function()end; HideGameSetup=function()end; g_GameParameters={FullRefresh=function()end}; civ0='CIVILIZATION_JAC_OUCHI'; PlayerConfigurations={[0]={GetCivilizationTypeName=function()return civ0 end},[1]={GetCivilizationTypeName=function()return 'CIVILIZATION_JAC_TAKEDA' end}}").exec()?;
-        let _: String = vm.load(SETUP).eval()?;
+        let _: String = vm.load(setup_code).eval()?;
         vm.load("civ0='CIVILIZATION_JAC_ODA'").exec()?;
-        assert!(vm.load(SETUP).eval::<String>().is_err());
+        assert!(vm.load(setup_code).eval::<String>().is_err());
         Ok(())
     }
     #[test]
@@ -162,7 +168,7 @@ mod tests {
     #[test]
     fn judge_rejects_missing_oath_reward_and_double_scoring() -> Result<()> {
         let vm = mlua::Lua::new();
-        vm.load(r#"ledger={reign=1,friends={['0-1']='on'},keys={['friend:0:1:1']=true},houses={p0={parts={ally=4,oath=6}},p1={parts={ally=8}}}}; base={a=3,b=7,oath=5}; Game={GetProperty=function(_,key) if key=='JAC_AGES_LEDGER' then return ledger else return base end end}; Players={[0]={GetDiplomacy=function() return {HasDeclaredFriendship=function() return true end,HasAllied=function() return false end} end}}"#).exec()?;
+        vm.load(r#"ledger={reign=1,friends={['0-1']='on'},keys={['friend:0:1:1']=true},houses={p0={parts={ally=4,oath=6}},p1={parts={ally=8}}}}; base={a=3,b=7,oath=5}; Game={GetProperty=function(_,key) if key=='JAC_AGES_LEDGER' then return ledger else return base end end}; Players={[0]={GetDiplomacy=function() return {HasDeclaredFriendship=function() return true end,HasAllied=function() return false end} end}}; Players[1]=Players[0]"#).exec()?;
         let _: String = vm.load(JUDGE).eval()?;
         vm.load("ledger.houses.p0.parts.oath=5").exec()?;
         assert!(vm.load(JUDGE).eval::<String>().is_err());
@@ -171,12 +177,15 @@ mod tests {
         vm.load("ledger.houses.p0.parts.oath=6; ledger.houses.p1.parts.ally=9")
             .exec()?;
         assert!(vm.load(JUDGE).eval::<String>().is_err());
+        vm.load("ledger.houses.p1.parts.ally=8;Players[1]={GetDiplomacy=function()return {HasDeclaredFriendship=function()return false end,HasAllied=function()return false end}end}").exec()?;
+        let error = vm.load(JUDGE).eval::<String>().unwrap_err();
+        assert!(error.to_string().contains("bilateral friendship changed"));
         Ok(())
     }
     #[test]
     fn turn_judges_reject_an_advanced_load_and_skipped_next_turn() -> Result<()> {
         let vm = mlua::Lua::new();
-        vm.load(r#"turn=42; ledger={reign=1,friends={['0-1']='on'},keys={['friend:0:1:1']=true},houses={p0={parts={ally=4,oath=6}},p1={parts={ally=8}}}}; base={a=3,b=7,oath=5,turn=41}; savedTurn=42; Game={GetCurrentGameTurn=function()return turn end,GetProperty=function(_,key)if key=='JAC_AGES_LEDGER' then return ledger elseif key=='JAC_TODO134_FRIEND_SAVE_TURN' then return savedTurn else return base end end}; GameConfiguration={GetStartTurn=function()return 1 end}; Players={[0]={GetDiplomacy=function()return {HasDeclaredFriendship=function()return true end,HasAllied=function()return false end}end}}"#).exec()?;
+        vm.load(r#"turn=42; ledger={reign=1,friends={['0-1']='on'},keys={['friend:0:1:1']=true},houses={p0={parts={ally=4,oath=6}},p1={parts={ally=8}}}}; base={a=3,b=7,oath=5,turn=41}; savedTurn=42; Game={GetCurrentGameTurn=function()return turn end,GetProperty=function(_,key)if key=='JAC_AGES_LEDGER' then return ledger elseif key=='JAC_TODO134_FRIEND_SAVE_TURN' then return savedTurn else return base end end}; GameConfiguration={GetStartTurn=function()return 1 end}; Players={[0]={GetDiplomacy=function()return {HasDeclaredFriendship=function()return true end,HasAllied=function()return false end}end}}; Players[1]=Players[0]"#).exec()?;
         let load = after_load();
         let load_code = load["code"].as_str().unwrap();
         let _: String = vm.load(load_code).eval()?;
