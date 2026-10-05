@@ -174,9 +174,10 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     );
     assert!(ids.contains("BD7A82C5-6B38-4B69-A7F5-8DC9AF534249"));
     assert!(ids.contains("61320778-2E75-4C11-9009-94101B519ABA"));
+    assert!(ids.contains("E4117D8C-4112-4F75-9A50-7D159E361FA4"));
     assert_eq!(
         ids.len(),
-        13,
+        14,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
