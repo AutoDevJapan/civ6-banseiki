@@ -50,7 +50,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)",
+      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nif id ~= 0 or Game.GetCurrentGameTurn() ~= GameConfiguration.GetStartTurn() + 0 then error('unexpected hotseat player or round') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)",
       "capture_as": "START_PLAYER"
     },
     {
@@ -66,7 +66,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)\n"
+      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nif id ~= 1 or Game.GetCurrentGameTurn() ~= GameConfiguration.GetStartTurn() + 0 then error('unexpected hotseat player or round') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)\n"
     },
     {
       "action": "ui_lua",
@@ -101,7 +101,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)"
+      "code": "local id=Game.GetLocalPlayer()\nlocal p=Players[id]\nif not GameConfiguration.IsHotseat() or not p or not p:IsHuman() or not p:IsTurnActive() then error('active human hotseat turn required') end\nif id ~= 0 or Game.GetCurrentGameTurn() ~= GameConfiguration.GetStartTurn() + 1 then error('unexpected hotseat player or round') end\nreturn tostring(Game.GetCurrentGameTurn())..'|'..tostring(id)"
     },
     {
       "action": "ui_lua",
@@ -116,7 +116,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "if not GameConfiguration.IsHotseat() then error('hotseat required') end\nif not Game:GetProperty('JAC_POC_GROWTHUI_INITIALIZED') then error('growth not initialized') end\nlocal rows={tostring(Game.GetCurrentGameTurn()),tostring(Game.GetLocalPlayer())}\nfor pid=0,1 do\n  local p=Players[pid]\n  if not p or not p:IsHuman() then error('two human players required') end\n  local units={}; for _,u in p:GetUnits():Members() do table.insert(units,u) end\n  table.sort(units,function(a,b) return a:GetID()<b:GetID() end)\n  local count=0\n  for _,u in ipairs(units) do\n    local r=u:GetProperty('JAC_POC_GROWTHUI_WARLORD')\n    if r then\n      count=count+1\n      table.insert(rows,table.concat({pid,u:GetID(),r.Level,r.XP,r.Personality,r.Trait,table.concat(r.Equipment,','),r.Artifact or 'none',r.LastXPTurn or -1},'~'))\n    end\n  end\n  if count~=2 then error('expected 2 growth records for player '..pid..', got '..count) end\nend\nreturn table.concat(rows,'|')",
+      "code": "if Game.GetLocalPlayer() ~= 1 or Game.GetCurrentGameTurn() ~= GameConfiguration.GetStartTurn() + 1 then error('second round player 1 required') end\nif not GameConfiguration.IsHotseat() then error('hotseat required') end\nif not Game:GetProperty('JAC_POC_GROWTHUI_INITIALIZED') then error('growth not initialized') end\nlocal rows={tostring(Game.GetCurrentGameTurn()),tostring(Game.GetLocalPlayer())}\nfor pid=0,1 do\n  local p=Players[pid]\n  if not p or not p:IsHuman() then error('two human players required') end\n  local units={}; for _,u in p:GetUnits():Members() do table.insert(units,u) end\n  table.sort(units,function(a,b) return a:GetID()<b:GetID() end)\n  local count=0\n  for _,u in ipairs(units) do\n    local r=u:GetProperty('JAC_POC_GROWTHUI_WARLORD')\n    if r then\n      count=count+1\n      table.insert(rows,table.concat({pid,u:GetID(),r.Level,r.XP,r.Personality,r.Trait,table.concat(r.Equipment,','),r.Artifact or 'none',r.LastXPTurn or -1},'~'))\n    end\n  end\n  if count~=2 then error('expected 2 growth records for player '..pid..', got '..count) end\nend\nreturn table.concat(rows,'|')",
       "capture_as": "NEXT_PLAYER"
     },
     {
