@@ -183,27 +183,36 @@ pub(super) unsafe fn install(
 mod tests {
     use super::*;
     use std::os::windows::process::CommandExt;
+    struct OwnedChild(std::process::Child);
+    impl Drop for OwnedChild {
+        fn drop(&mut self) {
+            if !matches!(self.0.try_wait(), Ok(Some(_))) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+    }
     #[test]
     fn composite_win64_owned_child() {
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args([
-                "--exact",
-                "windows::composite::tests::composite_synthetic_child",
-                "--nocapture",
-            ])
-            .env("JAC_PAID_COMPOSITE_CHILD", "1")
-            .creation_flags(0x08000000)
-            .spawn()
-            .unwrap();
+        let mut child = OwnedChild(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "windows::composite::tests::composite_synthetic_child",
+                    "--nocapture",
+                ])
+                .env("JAC_PAID_COMPOSITE_CHILD", "1")
+                .creation_flags(0x08000000)
+                .spawn()
+                .unwrap(),
+        );
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         loop {
-            if let Some(status) = child.try_wait().unwrap() {
+            if let Some(status) = child.0.try_wait().unwrap() {
                 assert!(status.success());
                 break;
             }
             if std::time::Instant::now() >= deadline {
-                child.kill().unwrap();
-                child.wait().unwrap();
                 panic!("composite child exceeded deadline");
             }
             std::thread::sleep(std::time::Duration::from_millis(10));

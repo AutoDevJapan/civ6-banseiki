@@ -439,7 +439,8 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         if not integer(cost, 4) or cost == 0 then return; end
         local values = {};
         for step=0,cost-1 do
-            local name = row.BasePromotionType .. (step == 0 and "" or "_TITLE_" .. step);
+            local name = row.BasePromotionType;
+            if step > 0 then name = name .. "_TITLE_" .. step; end
             local promotion = GameInfo.GovernorPromotions[name];
             if not promotion or promotion.GovernorPromotionType ~= name or
                not integer(promotion.Index, 4096) or used[promotion.Index] then return; end

@@ -941,6 +941,7 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::CanEverCalibration => "can-ever-calibration",
                 BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                 BridgeMode::AssignCalibration => "assign-calibration", BridgeMode::JoinedAdmission => "joined-admission",
+                BridgeMode::ProductionAdmission if parsed.paid_experiment => "paid-assignment-experimental",
                 BridgeMode::ProductionAdmission => "production-admission",
                 BridgeMode::PromotionCall => "promotion-call"},
             "entry_rva":parsed.mode.rva(),
