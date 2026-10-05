@@ -9,6 +9,7 @@ pub mod metrics;
 pub mod native_bridge;
 pub mod native_trace;
 pub mod payment_scenario;
+pub mod persona_payment;
 pub mod restart;
 pub mod runner;
 pub mod scenario;

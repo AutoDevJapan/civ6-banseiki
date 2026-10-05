@@ -833,6 +833,9 @@ mod platform {
     }
 
     impl Session {
+        pub fn process_identity(&self) -> (u32, u64) {
+            (self.pid, self.created)
+        }
         pub fn start(
             pid: u32,
             started: f64,
@@ -1888,6 +1891,9 @@ impl Session {
         Err(Error::input(
             "native assignment observation requires Windows",
         ))
+    }
+    pub fn process_identity(&self) -> (u32, u64) {
+        (0, 0)
     }
     pub fn start(
         _pid: u32,
