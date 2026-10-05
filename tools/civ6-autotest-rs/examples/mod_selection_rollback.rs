@@ -20,7 +20,7 @@ fn transaction(name: &str, enabled: &[&str], disabled: &[&str]) -> String {
 
 fn code() -> String {
     let mut code = format!(
-        "local MAP, MIDDLE, LEAF, TREES, GROWTH = {MAP:?}, {MIDDLE:?}, {LEAF:?}, {TREES:?}, {GROWTH:?}\n"
+        "local nativeModding = Modding\nlocal Modding = setmetatable({{}}, {{__index=nativeModding}})\nlocal MAP, MIDDLE, LEAF, TREES, GROWTH = {MAP:?}, {MIDDLE:?}, {LEAF:?}, {TREES:?}, {GROWTH:?}\n"
     );
     code.push_str(&transaction("disableCase", &[GROWTH], &[MAP]));
     code.push_str(&transaction("mixedCase", &[LEAF], &[GROWTH]));
@@ -258,6 +258,10 @@ end)
 local reset, resetError = resetApis()
 local cleaned, cleanupError = pcall(restore, original)
 print('TODO241 FINAL ' .. serialize(snapshot()))
+if nativeModding.EnableMod ~= nativeEnable or nativeModding.DisableMod ~= nativeDisable then
+  error('native MOD API changed during diagnostic')
+end
+print('TODO241 ENGINE_API_UNCHANGED')
 if not cleaned then error(tostring(failure) .. '; cleanup failed: ' .. tostring(cleanupError)) end
 if not reset then error(tostring(failure) .. '; API restore failed: ' .. resetError) end
 if not ok then error(failure) end
@@ -337,16 +341,22 @@ mod tests {
     }
 
     #[test]
-    fn read_only_api_is_rejected_before_mod_selection_changes() {
+    fn read_only_native_api_is_preserved_while_real_operations_are_exercised() {
         let lua = fixture(0);
-        lua.load("local api = Modding; Modding = setmetatable({}, {__index=api, __newindex=function() error('read only API') end})")
+        lua.load("local api = Modding; Modding = setmetatable({}, {__index=api, __newindex=function() error('read only API') end}); ORIGINAL_ENABLE = Modding.EnableMod; ORIGINAL_DISABLE = Modding.DisableMod")
             .exec().unwrap();
-        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
-        assert!(failure.contains("API assignment preflight failed"));
+        let result = lua.load(code()).eval::<String>().unwrap();
+        assert!(result.starts_with("TODO241 PASS 5/5"));
+        assert!(lua.load("return Modding.EnableMod == ORIGINAL_ENABLE and Modding.DisableMod == ORIGINAL_DISABLE").eval::<bool>().unwrap());
         let changes: Table = lua.globals().get("ENABLED").unwrap();
-        assert_eq!(changes.raw_len(), 0);
+        assert!(changes.raw_len() > 0);
         let changes: Table = lua.globals().get("DISABLED").unwrap();
-        assert_eq!(changes.raw_len(), 0);
+        assert!(changes.raw_len() > 0);
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        for id in [MAP, MIDDLE, LEAF, TREES, GROWTH] {
+            let info: Table = mods.get(id).unwrap();
+            assert!(!info.get::<bool>("Enabled").unwrap());
+        }
     }
 
     #[test]
@@ -370,19 +380,19 @@ mod tests {
     #[test]
     fn failed_api_restoration_still_attempts_native_selection_cleanup() {
         let lua = fixture(0);
-        lua.load(
-            r#"
-          local api, writes = Modding, 0
-          Modding = setmetatable({}, {__index=api, __newindex=function(_, key, value)
+        let fault = code().replace(
+            "local Modding = setmetatable({}, {__index=nativeModding})",
+            r#"local api, writes = {}, 0
+          local Modding = setmetatable({}, {__index=function(_, key)
+            return api[key] or nativeModding[key]
+          end, __newindex=function(_, key, value)
             writes = writes + 1
             if writes >= 6 then error('restore assignment refused') end
             api[key] = value
           end})
         "#,
-        )
-        .exec()
-        .unwrap();
-        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+        );
+        let failure = lua.load(fault).eval::<String>().unwrap_err().to_string();
         assert!(failure.contains("API restore failed"));
         let mods: Table = lua.globals().get("MODS").unwrap();
         for id in [MAP, MIDDLE, LEAF, TREES, GROWTH] {
