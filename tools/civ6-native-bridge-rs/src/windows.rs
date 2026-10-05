@@ -1,3 +1,4 @@
+use crate::PINNED_GAMECORE_SHA256;
 use core::arch::global_asm;
 use sha2::{Digest, Sha256};
 use std::cell::UnsafeCell;
@@ -67,8 +68,6 @@ const PROPERTY_PREFIX_LEN: usize = 5;
 const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
 // EB F9 jumps from entry+2 to entry-5. Entry+2..+7 are never modified.
 const PROPERTY_SHORT_JUMP: [u8; 2] = [0xeb, 0xf9];
-pub const PINNED_GAMECORE_SHA256: &str =
-    "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const PINNED_CAN_EVER_RVA: usize = 0x2d_ddd0;
 const PINNED_CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 pub const PINNED_PROPERTY_GET_RVA: usize = 0x99_f5c0;
