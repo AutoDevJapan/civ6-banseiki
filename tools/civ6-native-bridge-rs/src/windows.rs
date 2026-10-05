@@ -28,6 +28,9 @@ mod assignment;
 #[path = "windows/composite.rs"]
 mod composite;
 pub use composite::CompositeTrace;
+#[path = "windows/runtime.rs"]
+mod runtime;
+pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
 use assignment::{
@@ -950,6 +953,7 @@ fn product_property_begin(receiver: u64, key: u32) -> u64 {
         return 0;
     };
     if reset_owner.is_some() {
+        runtime::reset_owner(owner, ticket);
         // The synchronized producer reads only its own owner key. Binding and
         // closing at getter entry also work when Gameplay has no CanEver API.
         // Invalidate the previous permission before clearing duplicate owners:
@@ -1072,7 +1076,7 @@ fn product_index_known(index: usize, session: u32) -> bool {
 // Some(false) means a manifested persona with no current positive permission.
 fn product_permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
     if composite::ENABLED.load(Ordering::Acquire) {
-        let Some(catalog) = composite::catalog(owner, receiver, session) else {
+        let Some(catalog) = composite::ready_catalog(owner, receiver, session) else {
             return Some(false);
         };
         if !catalog
@@ -1252,10 +1256,11 @@ unsafe extern "system" fn calibration_begin(
     return_address: u64,
     scratch: *mut CalibrationRow,
 ) -> *const CalibrationRow {
+    let runtime_generation = runtime::generation();
     if JOINED_ACTIVE.load(Ordering::Acquire) && governor_index != 4 {
         return null_mut();
     }
-    let production = PRODUCT_ACTIVE.load(Ordering::Acquire);
+    let production = PRODUCT_ACTIVE.load(Ordering::Acquire) || runtime::owned();
     let session = if production {
         PRODUCT_SESSION.load(Ordering::Acquire)
     } else {
@@ -1263,7 +1268,7 @@ unsafe extern "system" fn calibration_begin(
     };
     // One order for the whole observation, before reading its owner pointer.
     // A compare-exchange retry keeps this order and cannot become newer work.
-    let bind_ticket = if production {
+    let bind_ticket = if production && PRODUCT_ACTIVE.load(Ordering::Acquire) {
         product_next_ticket().unwrap_or(0)
     } else if JOINED_ACTIVE.load(Ordering::Acquire) {
         joined_next_ticket().unwrap_or(0)
@@ -1295,6 +1300,7 @@ unsafe extern "system" fn calibration_begin(
         &trace.rows[slot]
     };
     row.joined_session.store(session, Ordering::Relaxed);
+    row.sequence.store(runtime_generation, Ordering::Relaxed);
     row.governor_index.store(governor_index, Ordering::Relaxed);
     row.governors_this.store(governors_this, Ordering::Relaxed);
     row.return_address.store(return_address, Ordering::Relaxed);
@@ -1355,6 +1361,9 @@ unsafe extern "system" fn calibration_end(
     governors_this: u64,
 ) -> u64 {
     if row.is_null() {
+        if runtime::owned() {
+            return original_rax & !0xff;
+        }
         if PRODUCT_ACTIVE.load(Ordering::Acquire)
             && (governor_index as usize) < PRODUCTION_INDEX_LIMIT
         {
@@ -1388,6 +1397,7 @@ unsafe extern "system" fn calibration_end(
         };
     }
     let row = unsafe { &*row };
+    let runtime_generation = row.sequence.load(Ordering::Relaxed);
     row.original_al
         .store((original_rax & 0xff) as u32, Ordering::Relaxed);
     let mut result = original_rax;
@@ -1409,8 +1419,21 @@ unsafe extern "system" fn calibration_end(
             row.property_receiver.load(Ordering::Relaxed),
             row.joined_session.load(Ordering::Relaxed),
         ) {
-            result = (original_rax & !0xff) | u64::from(permitted);
+            result = if runtime::owned() {
+                if permitted {
+                    original_rax
+                } else {
+                    original_rax & !0xff
+                }
+            } else {
+                (original_rax & !0xff) | u64::from(permitted)
+            };
         }
+    }
+    if runtime::owned()
+        && (!PRODUCT_ACTIVE.load(Ordering::Acquire) || !runtime::current(runtime_generation))
+    {
+        result &= !0xff;
     }
     row.effective_al
         .store((result & 0xff) as u32, Ordering::Relaxed);
@@ -1418,8 +1441,8 @@ unsafe extern "system" fn calibration_end(
     let trace = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
     if !trace.is_null() {
         let trace = unsafe { &*trace };
-        if trace.reserved == BridgeMode::ProductionAdmission as u32 {
-            let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+        if trace.reserved == BridgeMode::ProductionAdmission as u32 && runtime::sample_begin() {
+            let slot = runtime::next_slot(&trace.next, CALIBRATION_CAPACITY);
             if slot < CALIBRATION_CAPACITY {
                 let target = &trace.rows[slot];
                 macro_rules! copy_field {
@@ -1442,6 +1465,7 @@ unsafe extern "system" fn calibration_end(
             } else {
                 trace.dropped.fetch_add(1, Ordering::Relaxed);
             }
+            runtime::sample_end();
         }
         trace.in_flight.fetch_sub(1, Ordering::Release);
     }
@@ -1632,13 +1656,21 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         return;
     }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
-    let slot = trace.next.fetch_add(1, Ordering::AcqRel) as usize;
+    let sampled = runtime::sample_begin();
+    let slot = if sampled {
+        runtime::next_slot(&trace.next, TRACE_CAPACITY)
+    } else {
+        TRACE_CAPACITY
+    };
     if slot >= TRACE_CAPACITY && trace.scope != BridgeMode::ProductionAdmission as u32 {
         if trace.scope == BridgeMode::JoinedAdmission as u32 {
             joined_observe_property(property, key_id, token, 0, 0, 0, 0);
         }
         trace.dropped.fetch_add(1, Ordering::Relaxed);
         trace.in_flight.fetch_sub(1, Ordering::Release);
+        if sampled {
+            runtime::sample_end();
+        }
         return;
     }
     // One synchronous copy of borrowed native storage. Authority and telemetry
@@ -1653,6 +1685,25 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
     };
     if trace.scope == BridgeMode::ProductionAdmission as u32 {
+        if runtime::owned() && token != 0 {
+            let owner = ((token >> 31) & 63) as usize;
+            let session = (token >> 37) as u32;
+            let ticket = token as u32 & JOINED_TICKET_MAX;
+            let binding = PRODUCT_OWNERS[owner].load();
+            if PRODUCT_ACTIVE.load(Ordering::Acquire)
+                && session == PRODUCT_SESSION.load(Ordering::Acquire)
+                && joined_session(binding) == session
+                && joined_receiver(binding) == property
+                && joined_ticket(binding) < ticket
+            {
+                runtime::publication(
+                    owner,
+                    joined_ticket(binding),
+                    state == 1 && tag == 1 && payload <= 1 && flags == 0,
+                    false,
+                );
+            }
+        }
         if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
             composite::observe(property, key_id, token, state, tag, payload, flags);
         } else {
@@ -1664,7 +1715,10 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         unsafe { ((returned + 8) as *mut u64).write_unaligned(0) };
     }
     if slot >= TRACE_CAPACITY {
-        trace.dropped.fetch_add(1, Ordering::Relaxed);
+        if sampled {
+            trace.dropped.fetch_add(1, Ordering::Relaxed);
+            runtime::sample_end();
+        }
         trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
     }
@@ -1696,6 +1750,9 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     }
     row.sequence.store(1, Ordering::Release);
     trace.in_flight.fetch_sub(1, Ordering::Release);
+    if sampled {
+        runtime::sample_end();
+    }
 }
 // Win64 entry: RCX=property, EDX=key. .seh_* emits pdata/xdata for this
 // nonleaf frame. The pinned 0x99F5C0 getter has no covering pdata entry and
@@ -3078,6 +3135,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
 /// Merely loading the DLL has no side effects on the game.
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeInstall(config: *mut c_void) -> u32 {
+    let Ok(_guard) = runtime::INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    if runtime::owned() {
+        return BridgeStatus::InvalidInput as u32;
+    }
     if !committed_range(
         config as usize,
         std::mem::size_of::<BridgeConfig>(),
@@ -3099,6 +3162,13 @@ pub extern "system" fn BridgeInstall(config: *mut c_void) -> u32 {
 /// requires the controller to close that owned game.
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeUninstall(_: *mut c_void) -> u32 {
+    let Ok(_guard) = runtime::INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    // The bounded controller cannot revoke an explicitly installed runtime.
+    if runtime::owned() {
+        return BridgeStatus::InvalidInput as u32;
+    }
     std::panic::catch_unwind(|| match unsafe { uninstall() } {
         Ok(()) => BridgeStatus::Ok as u32,
         Err(_) => BridgeStatus::Critical as u32,

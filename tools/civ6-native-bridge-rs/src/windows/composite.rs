@@ -44,6 +44,7 @@ impl CompositeTrace {
 }
 
 pub(super) fn record_effective(token: u64, result: u64) {
+    let token = token & 0xffff_ffff;
     if token > 0 && token <= assignment::ASSIGN_CAPACITY as u64 {
         if let Some(trace) = unsafe { TRACE.load(Ordering::Acquire).as_ref() } {
             trace.effective_rax[token as usize - 1].store(result, Ordering::Release);
@@ -113,6 +114,14 @@ pub(super) fn observe(
         return;
     };
     product_publish_word(cell, receiver, session, ticket, payload == 1);
+    if key == COMMIT_KEY && runtime::owned() {
+        if payload == 0 {
+            runtime::begin_catalog(owner, joined_ticket(binding));
+        } else {
+            let complete = catalog(owner, receiver, session).is_some();
+            runtime::publication(owner, joined_ticket(binding), complete, complete);
+        }
+    }
 }
 
 pub(super) fn catalog(
@@ -167,6 +176,18 @@ pub(super) fn catalog(
 
 pub(super) fn payment_after_catalog(owner: usize, ticket: u32) -> bool {
     owner < PRODUCTION_OWNER_LIMIT && joined_ticket(COMMIT[owner].load()) < ticket
+}
+
+pub(super) fn ready_catalog(
+    owner: usize,
+    receiver: u64,
+    session: u32,
+) -> Option<[PaymentDefinition; COUNT]> {
+    if !runtime::ready(owner) {
+        return None;
+    }
+    let catalog = catalog(owner, receiver, session)?;
+    runtime::ready(owner).then_some(catalog)
 }
 
 pub(super) unsafe fn install(
@@ -234,6 +255,15 @@ mod tests {
     }
     #[test]
     fn composite_win64_owned_child() {
+        owned_child(false);
+    }
+
+    #[test]
+    fn runtime_win64_owned_child() {
+        owned_child(true);
+    }
+
+    fn owned_child(runtime: bool) {
         let mut child = OwnedChild(
             std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
@@ -242,6 +272,7 @@ mod tests {
                     "--nocapture",
                 ])
                 .env("JAC_PAID_COMPOSITE_CHILD", "1")
+                .env("JAC_RUNTIME_CHILD", if runtime { "1" } else { "0" })
                 .creation_flags(0x08000000)
                 .spawn()
                 .unwrap(),
@@ -295,19 +326,30 @@ mod tests {
         }
         let cbytes = can_code[..8].try_into().unwrap();
         let abytes = assign_code[..8].try_into().unwrap();
-        let mut trace = CompositeTrace::boxed();
+        let is_runtime = std::env::var("JAC_RUNTIME_CHILD").as_deref() == Ok("1");
+        // Runtime and controller both use this process-owned allocation. It
+        // never drops when observation stops, including the failure case.
+        let trace_pointer = if is_runtime {
+            runtime::allocate_trace()
+        } else {
+            Box::into_raw(CompositeTrace::boxed())
+        };
         unsafe {
             install(
                 can,
                 property,
                 assign,
-                trace.as_mut(),
+                trace_pointer,
                 cbytes,
                 PROPERTY_PROLOGUE,
                 abytes,
             )
         }
         .unwrap();
+        let trace = unsafe { &*trace_pointer };
+        if is_runtime {
+            runtime::start_observation(MAX_ACTIVE_SECONDS);
+        }
         let can_call: extern "system" fn(u64, u32) -> u64 = unsafe { std::mem::transmute(can) };
         let get: extern "system" fn(u64, u32) -> u64 = unsafe { std::mem::transmute(property) };
         let assign_call: extern "system" fn(u64, u64, u64, u64) -> u64 =
@@ -332,16 +374,21 @@ mod tests {
         let this = governors.as_ptr() as u64;
         let person = governor.as_ptr() as u64;
         let sentinel = 0xaabb_ccdd_1122_3301;
+        let raw_tag = raw.as_mut_ptr();
         let mut publish = |key, value: bool| {
             raw[1] = u64::from(value);
             assert_eq!(get(receiver, key), raw.as_ptr() as u64);
         };
         publish(PAID_RESET_BASE + 2, true);
+        if is_runtime {
+            assert_eq!(runtime::phase(2), 1, "reset enters rebuilding");
+        }
         assert_eq!(can_call(this, 77), 0, "whole catalog starts closed");
         assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
         let mut words =
             std::array::from_fn::<_, COUNT, _>(|i| i as u64 | 256 | ((100 + i as u64) << 10));
         words[0] = 77 | (3 << 8) | (1 << 10) | (3 << 22) | (7 << 34);
+        publish(COMMIT_KEY, false);
         for bit in 0..BITS - 1 {
             publish(
                 paid_catalog::bit_key(bit),
@@ -354,8 +401,26 @@ mod tests {
             0,
             "21 and a partial record cannot initialize"
         );
+        if is_runtime {
+            assert_eq!(runtime::phase(2), 0, "failed commit closes runtime");
+            publish(PAID_RESET_BASE + 2, true);
+            publish(COMMIT_KEY, false);
+            for bit in 0..BITS - 1 {
+                publish(
+                    paid_catalog::bit_key(bit),
+                    words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                );
+            }
+        }
         publish(paid_catalog::bit_key(BITS - 1), false);
         publish(COMMIT_KEY, true);
+        if is_runtime {
+            assert_eq!(
+                runtime::phase(2),
+                2,
+                "complete copied catalog becomes ready"
+            );
+        }
         for (base, value) in [
             (PRODUCTION_CLOSE_BASE, true),
             (PRODUCTION_ALLOW_BASE, false),
@@ -369,6 +434,31 @@ mod tests {
             publish(base + 77, value);
         }
         assert_eq!(can_call(this, 77), 1);
+        if is_runtime {
+            unsafe {
+                ptr::write_volatile(can.add(9), 0);
+            }
+            assert_eq!(
+                can_call(this, 77),
+                0,
+                "runtime must not promote original false to true"
+            );
+            unsafe {
+                ptr::write_volatile(can.add(9), 1);
+            }
+            unsafe {
+                ptr::write_volatile(governor.as_mut_ptr(), 0x10001 | (200u64 << 32));
+            }
+            assert_eq!(
+                can_call(this, 200),
+                1,
+                "classified ordinary governor keeps original result"
+            );
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            unsafe {
+                ptr::write_volatile(governor.as_mut_ptr(), 0x10001 | (77u64 << 32));
+            }
+        }
         assert_eq!(
             assign_call(this, person, 0, sentinel),
             sentinel & !255,
@@ -400,6 +490,183 @@ mod tests {
             assign_call(this, person, 0, sentinel & !255),
             sentinel & !255
         );
+        if is_runtime {
+            // Fill real gateway samples; do not simulate capacity by editing
+            // counters. Gate decisions still run on caller scratch/current
+            // objects once all three finite record regions are exhausted.
+            for _ in 0..TRACE_CAPACITY + 1 {
+                publish(PAID_ALLOW_BASE + 77, true);
+            }
+            for _ in 0..CALIBRATION_CAPACITY + 1 {
+                assert_eq!(can_call(this, 77), 1);
+            }
+            for _ in 0..assignment::ASSIGN_CAPACITY + 1 {
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            }
+            assert_eq!(
+                trace.joined.property.next.load(Ordering::Acquire),
+                TRACE_CAPACITY as u32
+            );
+            assert_eq!(
+                trace.joined.calibration.next.load(Ordering::Acquire),
+                CALIBRATION_CAPACITY as u32
+            );
+            assert_eq!(
+                trace.assignment.next.load(Ordering::Acquire),
+                assignment::ASSIGN_CAPACITY as u32
+            );
+            assert!(trace.assignment.dropped.load(Ordering::Acquire) > 0);
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 0);
+            }
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel & !255,
+                "unpaid after capacity"
+            );
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 1);
+            }
+            runtime::expire_observation();
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel,
+                "paid after expiry"
+            );
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            assert_eq!(
+                BridgeUninstall(null_mut()),
+                BridgeStatus::InvalidInput as u32
+            );
+            assert!(HOOK.lock().unwrap().is_some());
+            assert!(ASSIGNMENT_HOOK.lock().unwrap().is_some());
+            assert!(JOINED_PROPERTY_HOOK.lock().unwrap().is_some());
+            assert_eq!(
+                CALIBRATION_TRACE_PTR.load(Ordering::Acquire),
+                ptr::addr_of!(trace.joined.calibration).cast_mut()
+            );
+            assert_eq!(
+                ASSIGN_TRACE_PTR.load(Ordering::Acquire),
+                ptr::addr_of!(trace.assignment).cast_mut()
+            );
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 0);
+            }
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel & !255,
+                "unpaid after stop"
+            );
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 1);
+            }
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel,
+                "paid after stop"
+            );
+            // The assignment decision is independent even of the telemetry
+            // pointer. The actual runtime keeps it resident; test the fallback
+            // callback path without redirecting it to another allocation.
+            let assignment_trace = ASSIGN_TRACE_PTR.swap(null_mut(), Ordering::AcqRel);
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 0);
+            }
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+            unsafe {
+                ptr::write_volatile(flags.as_mut_ptr().add(7), 1);
+            }
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            ASSIGN_TRACE_PTR.store(assignment_trace, Ordering::Release);
+            let calibration_trace = CALIBRATION_TRACE_PTR.swap(null_mut(), Ordering::AcqRel);
+            assert_eq!(
+                can_call(this, 77),
+                0,
+                "missing scratch trace must not bypass gate"
+            );
+            CALIBRATION_TRACE_PTR.store(calibration_trace, Ordering::Release);
+            assert_eq!(
+                assign_call(this, person, 0, sentinel & !255),
+                sentinel & !255
+            );
+            // Capture both entry callbacks before reload; finish them only
+            // after a new generation has rebuilt a complete catalog/payment.
+            let old_assign =
+                unsafe { assignment::assign_calibration_begin(this, person, 0, sentinel, 0) };
+            let mut scratch = CalibrationRow::default();
+            let old_can = unsafe { calibration_begin(this, 77, 0, &mut scratch) };
+            let old_property = composite::begin(receiver, PAID_ALLOW_BASE + 77);
+            assert_eq!(
+                runtime::BridgeRuntimeRebuild(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            assert_eq!(can_call(this, 77), 0, "reload begins closed");
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+            publish(PAID_RESET_BASE + 2, true);
+            publish(COMMIT_KEY, false);
+            for bit in 0..BITS {
+                publish(
+                    paid_catalog::bit_key(bit),
+                    words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                );
+            }
+            publish(COMMIT_KEY, true);
+            for (base, value) in [
+                (PRODUCTION_CLOSE_BASE, true),
+                (PRODUCTION_ALLOW_BASE, false),
+                (PRODUCTION_MANIFEST_BASE, true),
+                (PRODUCTION_ALLOW_BASE, true),
+                (PAID_CLOSE_BASE, true),
+                (PAID_ALLOW_BASE, false),
+                (PAID_MANIFEST_BASE, true),
+                (PAID_ALLOW_BASE, true),
+            ] {
+                publish(base + 77, value);
+            }
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            assert_eq!(
+                unsafe { assignment::assign_calibration_end(old_assign, sentinel, this, person) },
+                sentinel & !255
+            );
+            assert_eq!(
+                unsafe { calibration_end(old_can, sentinel, 77, this) },
+                sentinel & !255
+            );
+            composite::observe(receiver, PAID_ALLOW_BASE + 77, old_property, 1, 1, 0, 0);
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel,
+                "old property cannot republish"
+            );
+            assert_eq!(
+                trace.assignment.next.load(Ordering::Acquire),
+                assignment::ASSIGN_CAPACITY as u32
+            );
+            // A malformed publication closes even after observation has ended.
+            unsafe {
+                ptr::write_volatile(raw_tag, 2);
+            }
+            assert_eq!(get(receiver, PAID_ALLOW_BASE + 77), raw_tag as u64);
+            assert_eq!(runtime::phase(2), 0);
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+            unsafe {
+                ptr::write_volatile(governor.as_mut_ptr(), 0x10001 | (200u64 << 32));
+            }
+            assert_eq!(
+                assign_call(this, person, 0, sentinel),
+                sentinel & !255,
+                "closed runtime must not borrow an old ordinary classification"
+            );
+            unsafe {
+                ptr::write_volatile(governor.as_mut_ptr(), 0x10001 | (77u64 << 32));
+            }
+            unsafe {
+                ptr::write_volatile(raw_tag, 1);
+            }
+        }
         unsafe {
             ptr::write_volatile(governor.as_mut_ptr().add(0x18 / 8), 3);
         }
@@ -430,13 +697,27 @@ mod tests {
             trace.joined.calibration.in_flight.load(Ordering::Acquire),
             0
         );
-        let decisions = trace.assignment.complete_rows().unwrap();
-        assert_eq!(decisions.len(), 8);
+        if is_runtime {
+            assert_eq!(
+                trace.assignment.complete_rows().unwrap_err(),
+                "assignment capacity exceeded"
+            );
+            assert!(trace
+                .assignment
+                .rows
+                .iter()
+                .all(|row| row.sequence.load(Ordering::Acquire) == 1));
+        } else {
+            assert_eq!(trace.assignment.complete_rows().unwrap().len(), 8);
+        }
         assert_eq!(
             trace.effective_rax[0].load(Ordering::Acquire),
             sentinel & !255
         );
-        assert_eq!(trace.effective_rax[4].load(Ordering::Acquire), sentinel);
+        assert_eq!(
+            trace.effective_rax[if is_runtime { 5 } else { 4 }].load(Ordering::Acquire),
+            sentinel
+        );
         // A third-entry failure must restore the first two entries as well.
         unsafe {
             ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), property.sub(5), 5);
@@ -448,7 +729,7 @@ mod tests {
                 can,
                 property,
                 assign,
-                trace.as_mut(),
+                trace_pointer,
                 wrong,
                 PROPERTY_PROLOGUE,
                 abytes,

@@ -187,17 +187,21 @@ fn field32(base: u64, offset: u64) -> Option<u32> {
     copy_current::<4>(base.checked_add(offset)?).map(u32::from_le_bytes)
 }
 
-unsafe extern "system" fn assign_calibration_begin(
+pub(super) unsafe extern "system" fn assign_calibration_begin(
     governors: u64,
     governor: u64,
     city: u64,
     raw_r9: u64,
     caller: u64,
 ) -> u64 {
+    let generation = u64::from(runtime::generation()) << 32;
     let Some(trace) = (unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() }) else {
-        return 0;
+        return generation;
     };
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    if !runtime::sample_begin() {
+        return generation;
+    }
     // Saturating sequence: capacity exhaustion cannot wrap and overwrite rows.
     let slot = trace
         .next
@@ -206,7 +210,8 @@ unsafe extern "system" fn assign_calibration_begin(
         });
     let Ok(slot) = slot else {
         trace.dropped.fetch_add(1, Ordering::Relaxed);
-        return 0;
+        runtime::sample_end();
+        return generation;
     };
     let row = &trace.rows[slot as usize];
     row.thread_id
@@ -273,13 +278,13 @@ unsafe extern "system" fn assign_calibration_begin(
             .status
             .store(failure as u32, Ordering::Relaxed),
     }
-    slot as u64 + 1
+    generation | (slot as u64 + 1)
 }
 
 #[cfg(test)]
 static PAID_SYNTHETIC_GATE: AtomicBool = AtomicBool::new(false);
 
-unsafe extern "system" fn assign_calibration_end(
+pub(super) unsafe extern "system" fn assign_calibration_end(
     token: u64,
     original: u64,
     _governors: u64,
@@ -294,7 +299,17 @@ unsafe extern "system" fn assign_calibration_end(
     #[cfg(not(test))]
     let result = original;
     let result = if composite::ENABLED.load(Ordering::Acquire) {
-        PaidAssignmentConsumer::restrict_current(original, _governors, _governor)
+        let generation = (token >> 32) as u32;
+        if !runtime::current(generation) {
+            original & !0xff
+        } else {
+            let result = PaidAssignmentConsumer::restrict_current(original, _governors, _governor);
+            if runtime::current(generation) {
+                result
+            } else {
+                original & !0xff
+            }
+        }
     } else {
         result
     };
@@ -302,12 +317,14 @@ unsafe extern "system" fn assign_calibration_end(
         composite::record_effective(token, result);
     }
     if let Some(trace) = unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() } {
+        let token = token & 0xffff_ffff;
         if token > 0 && token <= ASSIGN_CAPACITY as u64 {
             let row = &trace.rows[token as usize - 1];
             row.original_rax.store(original, Ordering::Relaxed);
             row.original_al
                 .store((original & 0xff) as u32, Ordering::Relaxed);
             row.sequence.store(1, Ordering::Release);
+            runtime::sample_end();
         }
         trace.in_flight.fetch_sub(1, Ordering::Release);
     }
