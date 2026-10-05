@@ -505,6 +505,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-japan-owner-turn-isolated.json",
                 "absorption-hero-recall.json",
                 "absorption-priest-diagnostic.json",
+                "absorption-spent-spread-192.json",
+                "absorption-spent-spread-block-192.json",
                 "absorption-faith-precision.json",
                 "absorption-hero-window-diagnostic.json",
                 "absorption-japan-native.json",
@@ -556,7 +558,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 115);
+    assert_eq!(expected.len(), 117);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
