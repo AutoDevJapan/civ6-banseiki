@@ -30,7 +30,10 @@ for id=0,21 do
    return true
   end
   assert(reset,'natural Core receiver was not bound')
-  if key>=903010 and key<=903031 then closed[key-903000]=true; return true end
+  if key>=903010 and key<=903031 then
+   if FAULT=='close' then return nil end
+   closed[key-903000]=true; return true
+  end
   if key>=901010 and key<=901031 then
    assert(closed[key-901000],'close was not read before ACK'); acked[key-901000]=true
    return FAULT=='allow' and true or false
@@ -84,6 +87,7 @@ fn initial_core_catalog_is_observed_closed_before_the_first_native_query() {
 fn catalog_bootstrap_rejects_stale_permissions_missing_owners_and_untyped_records() {
     for invalid in [
         "FAULT='reset'",
+        "FAULT='close'",
         "FAULT='allow'",
         "FAULT='manifest'",
         "Players[21]=nil",
