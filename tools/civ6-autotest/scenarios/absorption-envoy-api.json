@@ -41,7 +41,7 @@
     {
       "action": "ui_lua",
       "state_name": "FrontEnd",
-      "code": "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+      "code": "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');GameConfiguration.SetValue('CITY_STATE_COUNT',1);assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==1,'diagnostic minor count not selected');GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
     },
     {
       "action": "start_game",
@@ -57,9 +57,50 @@
       }
     },
     {
+      "action": "end_turn",
+      "timeout": 180
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "\nlocal from,to\nfor _,player in ipairs(PlayerManager.GetAliveMinors()) do from=player:GetID();break end\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  if player:IsHuman() then to=player:GetID();break end\nend\nassert(from and to,'one minor and one human major required')\nlocal recipient=Players[from]:GetInfluence()\nlocal sender=Players[to]:GetInfluence()\nassert(type(recipient.GetTokensReceived)=='function','Gameplay GetTokensReceived unavailable')\nassert(type(sender.GiveFreeTokenToPlayer)=='function','official influence grant unavailable')\nlocal before=recipient:GetTokensReceived(to)\nassert(type(before)=='number' and before>=0,'invalid starting envoy count')\nsender:GiveFreeTokenToPlayer(from)\nlocal after=recipient:GetTokensReceived(to)\nassert(after==before+1,'official envoy grant did not increment recipient count once')\nGame:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',{From=from,To=to,Before=before,After=after})\nreturn 'Gameplay positive envoy count verified: '..tostring(before)..' -> '..tostring(after)\n"
+      "code": "\nlocal from,to,candidates=nil,nil,{}\nfor _,player in ipairs(PlayerManager.GetAliveMinors()) do\n  local influence=player:GetInfluence()\n  local receives=influence and type(influence.CanReceiveInfluence)=='function' and influence:CanReceiveInfluence()\n  candidates[#candidates+1]=tostring(player:GetID())..':'..tostring(receives)\n  if receives then\n    from=player:GetID();break\n  end\nend\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  if player:IsHuman() then to=player:GetID();break end\nend\nprint('[JAC_ADMISSION_ENVOY_CANDIDATES] '..table.concat(candidates,','))\nassert(from and to,'one influence-receiving minor and one human major required: '..table.concat(candidates,','))\nPlayers[to]:GetDiplomacy():SetHasMet(from)\nPlayers[from]:GetDiplomacy():SetHasMet(to)\nGame:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',{From=from,To=to})\nreturn 'official influence recipient selected; bilateral contact initialized'\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "\nlocal t=Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1')\nreturn t and Players[t.To]:GetDiplomacy():HasMet(t.From) and Players[t.From]:GetDiplomacy():HasMet(t.To)\n"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))\nlocal from,to=t.From,t.To\nlocal recipient=Players[from]:GetInfluence()\nlocal sender=Players[to]:GetInfluence()\nassert(type(recipient.GetTokensReceived)=='function','Gameplay GetTokensReceived unavailable')\nassert(type(sender.GiveFreeTokenToPlayer)=='function','official influence grant unavailable')\nlocal before=recipient:GetTokensReceived(to)\nassert(type(before)=='number' and before>=0,'invalid starting envoy count')\nassert(t.Before==nil,'diagnostic grant already issued')\nt.Before=before;Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',t)\nsender:GiveFreeTokenToPlayer(from)\nreturn 'one official grant issued to '..tostring(from)..' from '..tostring(to)..'; before='..tostring(before)\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "\nlocal t=Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1')\nreturn t and t.Before~=nil and Players[t.From]:GetInfluence():GetTokensReceived(t.To)>t.Before\n"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))\nlocal after=Players[t.From]:GetInfluence():GetTokensReceived(t.To)\nassert(type(after)=='number' and after>t.Before,\n  'official envoy grant not observed: before='..tostring(t.Before)..' after='..tostring(after))\nt.After=after;Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',t)\nreturn 'Gameplay positive envoy count verified: '..tostring(t.Before)..' -> '..tostring(after)\n"
     },
     {
       "action": "ui_lua",

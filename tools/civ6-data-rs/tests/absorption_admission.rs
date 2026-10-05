@@ -241,3 +241,157 @@ fn malformed_requirements_stale_decision_unknown_mode_and_reused_identity_do_not
         Requirements={{ID='a',Kind='GOLD_MINIMUM'},[3]={ID='b',Kind='GOLD_MINIMUM'}},RelationRequirements={}}))
     "#).exec()
 }
+
+#[test]
+fn cancelled_offer_before_its_first_turn_stays_cancelled_after_reload_and_replay(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      N.DefineOffer(OFFER)
+      local cancelled=N.CancelOffer(OFFER.ID)
+      assert(cancelled.Status=='CANCELLED' and cancelled.CancelledTurn==7)
+      GOLD=100;RELEASE=true
+      N.Tick();N.DefineOffer(OFFER)
+      assert(N.Request('leader-offer',OFFER.ID,1,2).Status=='CANCELLED')
+      assert(BEGIN_COUNT==0)
+    "#,
+    )
+    .exec()?;
+    load(&lua)?;
+    lua.load(
+        "N.Tick();assert(BEGIN_COUNT==0 and N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')",
+    )
+    .exec()
+}
+
+#[test]
+fn replacement_retires_old_terms_and_preserves_new_terms_across_reload_and_replay(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      RELEASE=true;N.DefineOffer(OFFER);N.Tick()
+      NEW=JAC_AbsorptionGameplay.Rules.Copy(OFFER)
+      NEW.ID='leader-1:terms-2';NEW.Requirements[1].Minimum=200
+      N.ReplaceOffer(OFFER.ID,NEW)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')
+      GOLD=100;N.Tick();assert(BEGIN_COUNT==0)
+      assert(N.Get('leader-offer',NEW.ID).Status=='WAITING')
+    "#,
+    )
+    .exec()?;
+    load(&lua)?;
+    lua.load(
+        r#"
+      N.Tick();assert(BEGIN_COUNT==0)
+      N.ReplaceOffer(OFFER.ID,NEW)
+      GOLD=200;N.Tick();assert(BEGIN_COUNT==1)
+      local current=N.Get('leader-offer',NEW.ID)
+      assert(current.Status=='STARTED' and current.Decision.Requirements[1].Met)
+      NEW.RelationsReviewed=false
+      local save=Game.SetProperty
+      Game.SetProperty=function() error('a replacement replay must not write') end
+      N.ReplaceOffer(OFFER.ID,NEW)
+      Game.SetProperty=save
+      assert(N.Get('leader-offer',OFFER.ID).ReplacedBy==NEW.ID)
+      N.Request('leader-offer',OFFER.ID,1,2);N.Tick();assert(BEGIN_COUNT==1)
+      NEW.Requirements[1].Minimum=201
+      assert(not pcall(N.ReplaceOffer,OFFER.ID,NEW))
+      NEW.ID='leader-1:terms-3'
+      assert(not pcall(N.ReplaceOffer,OFFER.ID,NEW))
+      assert(BEGIN_COUNT==1)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn frozen_first_stage_cannot_be_cancelled_or_replaced_and_resumes_its_original_plan(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      GOLD=100;RELEASE=true;FAIL_BEGIN=true
+      N.DefineOffer(OFFER);N.Tick()
+      ORIGINAL=JAC_AbsorptionGameplay.Rules.Copy(N.Get('leader-offer',OFFER.ID).Plan)
+      local newer=JAC_AbsorptionGameplay.Rules.Copy(OFFER);newer.ID='new-terms'
+      assert(not pcall(N.Cancel,'leader-offer',OFFER.ID))
+      assert(not pcall(N.CancelOffer,OFFER.ID))
+      assert(not pcall(N.ReplaceOffer,OFFER.ID,newer))
+      assert(not Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1').Offers[newer.ID])
+      FAIL_BEGIN=false;GOLD=0;RELEASE=false
+    "#,
+    )
+    .exec()?;
+    load(&lua)?;
+    lua.load(
+        r#"
+      N.Tick()
+      local current=N.Get('leader-offer',OFFER.ID)
+      assert(current.Status=='STARTED' and BEGIN_COUNT==2)
+      assert(JAC_AbsorptionGameplay.Rules.Equal(current.Plan,ORIGINAL))
+      assert(not pcall(N.CancelOffer,OFFER.ID))
+      N.Tick();assert(BEGIN_COUNT==2)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn failed_replacement_save_does_not_retire_old_terms_or_publish_new_terms() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(r#"
+      N.DefineOffer(OFFER);N.Tick()
+      local before=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
+      local newer=JAC_AbsorptionGameplay.Rules.Copy(OFFER);newer.ID='new-terms'
+      local save=Game.SetProperty
+      Game.SetProperty=function() error('refused replacement save') end
+      assert(not pcall(N.ReplaceOffer,OFFER.ID,newer))
+      Game.SetProperty=save
+      assert(JAC_AbsorptionGameplay.Rules.Equal(before,Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')))
+      assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING' and BEGIN_COUNT==0)
+      N.ReplaceOffer(OFFER.ID,newer)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')
+    "#).exec()
+}
+
+#[test]
+fn registered_provider_cancellation_prevents_later_reader_changes_from_starting() -> mlua::Result<()>
+{
+    let lua = world()?;
+    lua.load(
+        r#"
+      MET=false
+      N.Register('another-provider',function() return {From=1,To=2,Turn=7,Mode='MERGER',
+        AreaKm2=10000,RelationsResolved=true,Requirements={{ID='a',Met=MET}}} end)
+      N.Request('another-provider','version-1',1,2)
+      N.Cancel('another-provider','version-1');MET=true
+      assert(N.Request('another-provider','version-1',1,2).Status=='CANCELLED')
+      N.Tick();assert(BEGIN_COUNT==0)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn legacy_waiting_save_is_read_without_writing_and_lifecycle_updates_upgrade_its_version(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      N.DefineOffer(OFFER);N.Tick()
+      local saved=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
+      saved.Version=1;Game:SetProperty('JAC_ABSORPTION_ADMISSION_V1',saved)
+      local save=Game.SetProperty
+      Game.SetProperty=function() error('legacy read must not save') end
+      assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING')
+      Game.SetProperty=save
+      assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1').Version==1)
+      N.CancelOffer(OFFER.ID)
+      assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1').Version==2)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED' and BEGIN_COUNT==0)
+    "#,
+    )
+    .exec()
+}

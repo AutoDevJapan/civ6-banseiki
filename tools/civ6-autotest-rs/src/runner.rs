@@ -1373,11 +1373,23 @@ impl Runner {
         }
         let value = self.lua(
             "InGame",
-            "return tostring(GameConfiguration.GetStartTurn())",
+            "local start=GameConfiguration.GetStartTurn();local turn=Game.GetCurrentGameTurn();if GameCapabilities.HasCapability('CAPABILITY_DISPLAY_NORMALIZED_TURN') then turn=turn-start+1 end;return tostring(start)..'|'..tostring(turn)",
             self.budget(deadline, 5.0)?,
         )?;
-        if value.trim().trim_matches('"') != "1" {
-            return Err(Error::scenario(format!("{} start turn is {value}, expected 1: the calendar override was not applied (configure without build_setup?)",scenario::BANSEIKI_RULESET)));
+        // The Sengoku calendar legitimately starts near raw turn 16603.
+        // Match the official TopPanel's normalized display, not its raw epoch.
+        let observation = value.trim().trim_matches('"');
+        let valid = observation
+            .split_once('|')
+            .is_some_and(|(start, displayed)| {
+                start.parse::<i64>().is_ok_and(|start| start >= 1)
+                    && displayed.parse::<i64>() == Ok(1)
+            });
+        if !valid {
+            return Err(Error::scenario(format!(
+                "{} start-turn observation {value} does not display turn 1",
+                scenario::BANSEIKI_RULESET
+            )));
         }
         Ok(())
     }

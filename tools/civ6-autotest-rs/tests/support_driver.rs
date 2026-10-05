@@ -83,6 +83,8 @@ impl FakeBackend {
             on_lua: Box::new(|_, code| {
                 if code.contains("return tostring(startTurn)") {
                     Ok("1|0".into())
+                } else if code.contains("CAPABILITY_DISPLAY_NORMALIZED_TURN") {
+                    Ok("1|1".into())
                 } else if code.contains("IsAlive()") {
                     Ok("true".into())
                 } else if code.contains("Game.GetCurrentGameTurn()") {

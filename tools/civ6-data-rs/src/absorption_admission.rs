@@ -120,7 +120,7 @@ pub fn envoy_probe_scenario(repo: &Repository) -> Result<String> {
     configure["build_setup"] = json!(true);
     let mut setup = base["steps"][2].clone();
     setup["code"] = json!(format!(
-        "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');{}",
+        "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');GameConfiguration.SetValue('CITY_STATE_COUNT',1);assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==1,'diagnostic minor count not selected');{}",
         setup["code"].as_str().unwrap()
     ));
     let mut steps = vec![
@@ -130,25 +130,63 @@ pub fn envoy_probe_scenario(repo: &Repository) -> Result<String> {
         base["steps"][3].clone(),
         base["steps"][5].clone(),
     ];
+    // Let the real minor AI found its capital before testing influence.
+    steps.push(json!({"action":"end_turn","timeout":180}));
+    steps.push(base["steps"][5].clone());
     steps.push(
         json!({"action":"ui_lua", "state_name":"JAC_Absorption_Entry", "code":r#"
-local from,to
-for _,player in ipairs(PlayerManager.GetAliveMinors()) do from=player:GetID();break end
+local from,to,candidates=nil,nil,{}
+for _,player in ipairs(PlayerManager.GetAliveMinors()) do
+  local influence=player:GetInfluence()
+  local receives=influence and type(influence.CanReceiveInfluence)=='function' and influence:CanReceiveInfluence()
+  candidates[#candidates+1]=tostring(player:GetID())..':'..tostring(receives)
+  if receives then
+    from=player:GetID();break
+  end
+end
 for _,player in ipairs(PlayerManager.GetAliveMajors()) do
   if player:IsHuman() then to=player:GetID();break end
 end
-assert(from and to,'one minor and one human major required')
+print('[JAC_ADMISSION_ENVOY_CANDIDATES] '..table.concat(candidates,','))
+assert(from and to,'one influence-receiving minor and one human major required: '..table.concat(candidates,','))
+Players[to]:GetDiplomacy():SetHasMet(from)
+Players[from]:GetDiplomacy():SetHasMet(to)
+Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',{From=from,To=to})
+return 'official influence recipient selected; bilateral contact initialized'
+"#}),
+    );
+    steps.push(json!({"action":"wait_for","timeout":120,"condition":{
+        "type":"lua","state_name":"InGame","code":r#"
+local t=Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1')
+return t and Players[t.To]:GetDiplomacy():HasMet(t.From) and Players[t.From]:GetDiplomacy():HasMet(t.To)
+"#}}));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":r#"
+local t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))
+local from,to=t.From,t.To
 local recipient=Players[from]:GetInfluence()
 local sender=Players[to]:GetInfluence()
 assert(type(recipient.GetTokensReceived)=='function','Gameplay GetTokensReceived unavailable')
 assert(type(sender.GiveFreeTokenToPlayer)=='function','official influence grant unavailable')
 local before=recipient:GetTokensReceived(to)
 assert(type(before)=='number' and before>=0,'invalid starting envoy count')
+assert(t.Before==nil,'diagnostic grant already issued')
+t.Before=before;Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',t)
 sender:GiveFreeTokenToPlayer(from)
-local after=recipient:GetTokensReceived(to)
-assert(after==before+1,'official envoy grant did not increment recipient count once')
-Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',{From=from,To=to,Before=before,After=after})
-return 'Gameplay positive envoy count verified: '..tostring(before)..' -> '..tostring(after)
+return 'one official grant issued to '..tostring(from)..' from '..tostring(to)..'; before='..tostring(before)
+"#}));
+    steps.push(json!({"action":"wait_for","timeout":120,"condition":{
+        "type":"lua","state_name":"InGame","code":r#"
+local t=Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1')
+return t and t.Before~=nil and Players[t.From]:GetInfluence():GetTokensReceived(t.To)>t.Before
+"#}}));
+    steps.push(
+        json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":r#"
+local t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))
+local after=Players[t.From]:GetInfluence():GetTokensReceived(t.To)
+assert(type(after)=='number' and after>t.Before,
+  'official envoy grant not observed: before='..tostring(t.Before)..' after='..tostring(after))
+t.After=after;Game:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',t)
+return 'Gameplay positive envoy count verified: '..tostring(t.Before)..' -> '..tostring(after)
 "#}),
     );
     let ui_check = json!({"action":"ui_lua", "state_name":"InGame", "code":r#"
@@ -184,8 +222,11 @@ local R = A.Rules
 local N, providers, readers = {}, {}, {}
 local KEY = 'JAC_ABSORPTION_ADMISSION_V1'
 local function State()
-  local s = R.Copy(Game:GetProperty(KEY) or {Version=1, Requests={}, Offers={}})
-  assert(s.Version == 1 and type(s.Requests) == 'table', 'unsupported admission save')
+  local s = R.Copy(Game:GetProperty(KEY) or {Version=2, Requests={}, Offers={}})
+  assert((s.Version == 1 or s.Version == 2) and type(s.Requests) == 'table', 'unsupported admission save')
+  -- Retain legacy requests, but write lifecycle changes as v2. Older builds
+  -- must reject the new save rather than retry a CANCELLED v1 request.
+  s.Version = 2
   s.Offers = s.Offers or {}
   return s
 end
@@ -210,6 +251,18 @@ local function Player(value)
 end
 local function Key(source, id)
   return #source .. ':' .. source .. #id .. ':' .. id
+end
+local function NewRequest(source, id, from, to)
+  return {Source=source, ID=id, From=from, To=to,
+    FlowID='normal-admission:' .. Key(source,id), Status='WAITING'}
+end
+local function CancelInState(request)
+  if request.Status == 'CANCELLED' then return end
+  assert((request.Status == 'WAITING' or request.Status == 'UNAVAILABLE')
+    and not request.Plan and not FlowRequest(request.FlowID),
+    'cannot cancel an admission after its plan is frozen')
+  request.Status, request.CancelledTurn = 'CANCELLED', Game.GetCurrentGameTurn()
+  request.LastError = nil
 end
 local function Ready(request, decision)
   assert(type(decision) == 'table', 'normal admission decision required')
@@ -255,7 +308,7 @@ end
 function N.Check(source, id)
   local s, key = State(), Key(source, id)
   local request = assert(s.Requests[key], 'normal admission request missing')
-  if request.Status == 'STARTED' then return R.Copy(request) end
+  if request.Status == 'STARTED' or request.Status == 'CANCELLED' then return R.Copy(request) end
   -- Once F.Begin has journalled P1, retry its frozen plan even if the country
   -- has already been transferred. F owns the saved rolls and asset inventory.
   local existing = FlowRequest(request.FlowID)
@@ -310,12 +363,18 @@ function N.Request(source, id, from, to)
   if request then
     assert(request.From == from and request.To == to, 'normal admission ID reused')
   else
-    request = {Source=source, ID=id, From=from, To=to,
-      FlowID='normal-admission:' .. key, Status='WAITING'}
+    request = NewRequest(source,id,from,to)
     s.Requests[key] = request; Save(s)
   end
-  Try(source, id)
+  if request.Status ~= 'CANCELLED' then Try(source, id) end
   return N.Get(source, id)
+end
+function N.Cancel(source, id)
+  assert(ID(source) and ID(id), 'admission cancellation identity required')
+  local s, key = State(), Key(source,id)
+  local request = assert(s.Requests[key], 'normal admission request missing')
+  if request.Status ~= 'CANCELLED' then CancelInState(request); Save(s) end
+  return R.Copy(request)
 end
 function N.Tick()
   local s = State()
@@ -328,7 +387,7 @@ function N.Tick()
   end
   for _, key in ipairs(R.Keys(s.Requests)) do
     local request = s.Requests[key]
-    if request.Status ~= 'STARTED' then Try(request.Source, request.ID) end
+    if request.Status ~= 'STARTED' and request.Status ~= 'CANCELLED' then Try(request.Source, request.ID) end
   end
 end
 function N.RegisterRequirement(kind, read)
@@ -349,7 +408,7 @@ local function DemandList(list)
 end
 -- Called by normal map/leader rule modules with their explicit demands. Values
 -- are not a universal personality formula and never use the SSOT example costs.
-function N.DefineOffer(offer)
+local function ValidateOffer(offer)
   offer = R.Copy(offer)
   assert(type(offer) == 'table' and ID(offer.ID) and Player(offer.From)
     and Player(offer.To) and offer.From ~= offer.To and Number(offer.AreaKm2),
@@ -357,6 +416,10 @@ function N.DefineOffer(offer)
   DemandList(offer.Requirements); DemandList(offer.RelationRequirements)
   assert(type(offer.RelationsReviewed) == 'boolean', 'explicit relationship review required')
   assert(#offer.Requirements > 0, 'explicit leader demands required')
+  return offer
+end
+function N.DefineOffer(offer)
+  offer = ValidateOffer(offer)
   local s = State()
   if s.Offers[offer.ID] then
     local previous = s.Offers[offer.ID]
@@ -372,6 +435,43 @@ function N.DefineOffer(offer)
       assert(R.Equal(previous, offer), 'leader offer ID reused with changed demands')
     end
   else s.Offers[offer.ID] = offer; Save(s) end
+end
+function N.CancelOffer(id)
+  assert(ID(id), 'leader offer cancellation ID required')
+  local s, key = State(), Key('leader-offer',id)
+  local offer = assert(s.Offers[id], 'leader offer missing')
+  local request = s.Requests[key] or NewRequest('leader-offer',id,offer.From,offer.To)
+  if request.Status ~= 'CANCELLED' then
+    CancelInState(request); s.Requests[key] = request; Save(s)
+  end
+  return R.Copy(request)
+end
+-- A changing leader's terms use a new ID. Retire the old request and publish
+-- the replacement in one saved state, before any turn can evaluate either.
+function N.ReplaceOffer(previousID, offer)
+  assert(ID(previousID), 'previous leader offer ID required')
+  offer = ValidateOffer(offer)
+  assert(previousID ~= offer.ID, 'replacement needs a new offer ID')
+  local s, key = State(), Key('leader-offer',previousID)
+  local previous = assert(s.Offers[previousID], 'previous leader offer missing')
+  assert(previous.From == offer.From and previous.To == offer.To, 'replacement factions changed')
+  local request = s.Requests[key] or NewRequest('leader-offer',previousID,previous.From,previous.To)
+  if request.ReplacedBy then
+    assert(request.Status == 'CANCELLED' and request.ReplacedBy == offer.ID,
+      'previous offer already has a different replacement')
+    local published = R.Copy(assert(s.Offers[offer.ID], 'replacement offer missing'))
+    -- A replay must not undo a newer relation review on the same demands.
+    published.RelationsReviewed = offer.RelationsReviewed
+    assert(R.Equal(published,offer), 'replacement ID reused with changed demands')
+    return R.Copy(request)
+  end
+  assert(not s.Offers[offer.ID] and not s.Requests[Key('leader-offer',offer.ID)],
+    'replacement offer ID already exists')
+  CancelInState(request)
+  request.ReplacedBy = offer.ID
+  s.Requests[key], s.Offers[offer.ID] = request, offer
+  Save(s)
+  return R.Copy(request)
 end
 local function EvaluateDemands(list, from, to)
   local results, all = {}, true

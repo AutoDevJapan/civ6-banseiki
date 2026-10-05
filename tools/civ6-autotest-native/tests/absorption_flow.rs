@@ -189,6 +189,11 @@ fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_rel
       assert(TRANSFERS==0 and SPAWNS==0 and KILLS==0 and #RANDOM_CALLS>0)
       NORMAL_ROLLS=#RANDOM_CALLS
       NORMAL_SNAPSHOT=TEST_ABSORPTION.Canonical(flow)
+      assert(not pcall(N.CancelOffer,NORMAL_OFFER.ID))
+      local replacement=TEST_ABSORPTION.Rules.Copy(NORMAL_OFFER)
+      replacement.ID='replacement-after-choice'
+      assert(not pcall(N.ReplaceOffer,NORMAL_OFFER.ID,replacement))
+      assert(#RANDOM_CALLS==NORMAL_ROLLS and TEST_ABSORPTION.Canonical(TEST_FLOW.Get(NORMAL_FLOW_ID))==NORMAL_SNAPSHOT)
       Game.props=TEST_ABSORPTION.Rules.Copy(Game.props)
     "#,
     )
@@ -235,6 +240,13 @@ fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating
         'phase1='..tostring(flow.Phase1Complete)..' rolls='..#RANDOM_CALLS..' calls='..calls)
       assert(TEST_FLOW.Get(NORMAL_FLOW_ID)==nil,'UI exposed incomplete phase one')
       FIRST_LABEL=RANDOM_CALLS[1].Label
+      local before=TEST_ABSORPTION.Canonical(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1'))
+      assert(not pcall(N.CancelOffer,NORMAL_OFFER.ID))
+      local replacement=TEST_ABSORPTION.Rules.Copy(NORMAL_OFFER)
+      replacement.ID='replacement-during-first-stage'
+      assert(not pcall(N.ReplaceOffer,NORMAL_OFFER.ID,replacement))
+      assert(TEST_ABSORPTION.Canonical(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1'))==before)
+      assert(#RANDOM_CALLS==1)
       Game.GetRandNum=original; NORMAL_GOLD=0;NORMAL_RELEASE=false
       Game.props=TEST_ABSORPTION.Rules.Copy(Game.props)
     "#,

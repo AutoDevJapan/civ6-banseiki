@@ -195,16 +195,40 @@ fn test_start_turn_guard() {
     let mut h = Harness::new(json!({}), FakeBackend::new().lua(|_, _| Ok("16603".into())));
     h.runner.check_start_turn(60.0).unwrap();
     assert!(h.calls().is_empty());
-    h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
-    assert!(h
-        .runner
-        .check_start_turn(60.0)
-        .unwrap_err()
-        .to_string()
-        .contains("start turn is 16603, expected 1"));
-    let mut h = Harness::new(json!({}), FakeBackend::new().lua(|_, _| Ok("1".into())));
-    h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
-    h.runner.check_start_turn(60.0).unwrap();
+    for (start, current, normalized, accepted) in [
+        (16603, 16603, true, true),
+        (1, 1, false, true),
+        (16603, 16603, false, false),
+        (16603, 16604, true, false),
+        (1, 2, false, false),
+        (0, 0, true, false),
+    ] {
+        let backend = FakeBackend::new().lua(move |state, code| {
+            assert_eq!(state, "InGame");
+            let lua = mlua::Lua::new();
+            lua.load(format!(
+                "GameConfiguration={{GetStartTurn=function() return {start} end}};
+                 Game={{GetCurrentGameTurn=function() return {current} end}};
+                 GameCapabilities={{HasCapability=function(_, ...) return {normalized} end}}"
+            ))
+            .exec()
+            .map_err(|e| Error::scenario(e.to_string()))?;
+            lua.load(code)
+                .eval::<String>()
+                .map_err(|e| Error::scenario(e.to_string()))
+        });
+        let mut h = Harness::new(json!({}), backend);
+        h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
+        assert_eq!(h.runner.check_start_turn(60.0).is_ok(), accepted);
+    }
+    for response in ["16603", "1|", "nan|1", "1|1|extra"] {
+        let mut h = Harness::new(
+            json!({}),
+            FakeBackend::new().lua(move |_, _| Ok(response.into())),
+        );
+        h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
+        assert!(h.runner.check_start_turn(60.0).is_err(), "{response}");
+    }
 }
 
 #[test]
