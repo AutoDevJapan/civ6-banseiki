@@ -37,6 +37,53 @@ mod platform {
             .flatten()
     }
 
+    fn valid_promotion_snapshot(row: &Value) -> bool {
+        let Some(status) = row["promotion_snapshot_status"]
+            .as_u64()
+            .filter(|n| *n <= 7)
+        else {
+            return false;
+        };
+        let Some(count) = row["promotion_count"]
+            .as_u64()
+            .filter(|n| *n <= civ6_native_bridge_rs::governor_payment::PROMOTION_LIMIT as u64)
+        else {
+            return false;
+        };
+        let Some(indices) = row["owned_promotion_indices"].as_array() else {
+            return false;
+        };
+        if row["payment_authority"] != false {
+            return false;
+        }
+        if status != 0 {
+            return count == 0
+                && indices.is_empty()
+                && row["promotion_owner"] == u32::MAX
+                && row["promotion_index"] == u32::MAX;
+        }
+        if count == 0
+            || row["promotion_owner"] != row["player_id"]
+            || row["promotion_index"] != row["governor_index"]
+            || !row["promotion_owner"].as_u64().is_some_and(|n| n < 64)
+            || !row["promotion_index"].as_u64().is_some_and(|n| n < 256)
+            || !row["read_flags"].as_u64().is_some_and(|n| n & 3 == 3)
+        {
+            return false;
+        }
+        let mut previous = None;
+        for index in indices {
+            let Some(index) = index
+                .as_u64()
+                .filter(|n| *n < count && previous.is_none_or(|old| old < *n))
+            else {
+                return false;
+            };
+            previous = Some(index);
+        }
+        true
+    }
+
     fn terminal_artifact(path: &Path, pid: u32, created: u64, mode: BridgeMode) -> Result<usize> {
         let dual = matches!(
             mode,
@@ -236,6 +283,9 @@ mod platform {
                         .into_iter()
                         .all(|key| row[key].as_u64().is_some_and(|n| n <= u32::MAX as u64)) =>
                 {
+                    if !valid_promotion_snapshot(&row) {
+                        return Err(Error::input("invalid read-only native promotion snapshot"));
+                    }
                     if row["read_flags"] == 7
                         && row["player_id"] == 0
                         && row["governor_index"] == 4
@@ -1315,7 +1365,9 @@ mod platform {
                 "city_pointer":"0x0000000000004000","raw_r9":"0x0000000000000000",
                 "player_address":"0x0000000000002000","player_id":0,"governor_index":4,
                 "city_a8":19,"city_c0":17,"city_c4":29,"city_d8":0,"return_site_rva":0xba3e2,
-                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1});
+                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1,
+                "promotion_snapshot_status":0,"promotion_owner":0,"promotion_index":4,
+                "promotion_count":4096,"owned_promotion_indices":[0,63,64,4095],"payment_authority":false});
             let mut update = call.clone();
             update["sequence"] = json!(2);
             update["return_site_rva"] = json!(0x2dd375);
@@ -1361,6 +1413,16 @@ mod platform {
                 (5, "counter_scope", json!("complete_call_history")),
                 (2, "entry_restored", json!(false)),
                 (0, "entry_rva", json!(0x2dddd0)),
+                (3, "promotion_snapshot_status", json!(8)),
+                (3, "promotion_owner", json!(1)),
+                (3, "promotion_index", json!(5)),
+                (3, "promotion_count", json!(0)),
+                (3, "promotion_count", json!(4097)),
+                (3, "owned_promotion_indices", json!([0, 63, 63])),
+                (3, "owned_promotion_indices", json!([64, 63])),
+                (3, "owned_promotion_indices", json!([4096])),
+                (3, "owned_promotion_indices", json!(["1"])),
+                (3, "payment_authority", json!(true)),
             ] {
                 let mut bad = rows.clone();
                 bad[index][field] = value;
@@ -1379,6 +1441,35 @@ mod platform {
                     "missing {field}"
                 );
             }
+            for field in [
+                "promotion_snapshot_status",
+                "promotion_owner",
+                "promotion_index",
+                "promotion_count",
+                "owned_promotion_indices",
+                "payment_authority",
+            ] {
+                let mut bad = rows.clone();
+                bad[3].as_object_mut().unwrap().remove(field);
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err(),
+                    "missing {field}"
+                );
+            }
+            let mut unreadable = rows.clone();
+            for row in &mut unreadable[3..5] {
+                row["promotion_snapshot_status"] = json!(1);
+                row["promotion_owner"] = json!(u32::MAX);
+                row["promotion_index"] = json!(u32::MAX);
+                row["promotion_count"] = json!(0);
+                row["owned_promotion_indices"] = json!([]);
+            }
+            write(&unreadable);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
+                2
+            );
         }
 
         #[test]

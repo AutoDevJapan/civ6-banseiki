@@ -1,6 +1,36 @@
 //! Stage A only: observe the natural four-register CanAssign call and preserve
 //! its entire RAX. Addresses are evidence for this invocation, never authority.
 use super::*;
+use crate::governor_payment::{self, CurrentMemory, PROMOTION_WORDS};
+
+#[repr(C)]
+pub struct PromotionRow {
+    /// 0 is a copied snapshot, 1..6 are ReadFailure, 7 means no snapshot.
+    pub status: AtomicU32,
+    pub owner: AtomicU32,
+    pub index: AtomicU32,
+    pub count: AtomicU32,
+    pub owned: [AtomicU64; PROMOTION_WORDS],
+}
+
+impl Default for PromotionRow {
+    fn default() -> Self {
+        Self {
+            status: AtomicU32::new(7),
+            owner: AtomicU32::new(u32::MAX),
+            index: AtomicU32::new(u32::MAX),
+            count: AtomicU32::new(0),
+            owned: std::array::from_fn(|_| AtomicU64::new(0)),
+        }
+    }
+}
+
+struct InvocationMemory;
+impl CurrentMemory for InvocationMemory {
+    fn copy<const N: usize>(&self, address: u64) -> Option<[u8; N]> {
+        copy_current(address)
+    }
+}
 
 pub const PINNED_CAN_ASSIGN_RVA: usize = 0x2d_d880;
 pub const ASSIGN_FILE_OFFSET: u64 = 0x2d_cc80;
@@ -30,6 +60,7 @@ pub struct AssignRow {
     pub city_d8: AtomicU32,
     pub original_al: AtomicU32,
     pub original_rax: AtomicU64,
+    pub promotions: PromotionRow,
 }
 
 #[repr(C)]
@@ -41,20 +72,6 @@ pub struct AssignCalibrationTrace {
     pub in_flight: AtomicU32,
     pub reserved: u32,
     pub rows: [AssignRow; ASSIGN_CAPACITY],
-}
-
-impl Default for AssignCalibrationTrace {
-    fn default() -> Self {
-        Self {
-            magic: ASSIGN_MAGIC,
-            version: Self::VERSION,
-            next: AtomicU32::new(0),
-            dropped: AtomicU32::new(0),
-            in_flight: AtomicU32::new(0),
-            reserved: 0,
-            rows: std::array::from_fn(|_| AssignRow::default()),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,10 +93,41 @@ pub struct AssignCalibrationObservation {
     pub city_d8: u32,
     pub original_al: u32,
     pub original_rax: u64,
+    pub promotion_status: u32,
+    pub promotion_owner: u32,
+    pub promotion_index: u32,
+    pub promotion_count: u32,
+    pub promotion_owned: [u64; PROMOTION_WORDS],
 }
 
 impl AssignCalibrationTrace {
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
+
+    pub fn boxed() -> Box<Self> {
+        let mut trace = Box::<Self>::new_uninit();
+        unsafe {
+            Self::initialize_at(trace.as_mut_ptr());
+            trace.assume_init()
+        }
+    }
+
+    /// # Safety
+    /// `trace` is aligned writable storage for Self, not yet shared with any
+    /// callback. Initialize rows in place without a large Windows stack value.
+    pub(super) unsafe fn initialize_at(trace: *mut Self) {
+        unsafe {
+            ptr::addr_of_mut!((*trace).magic).write(ASSIGN_MAGIC);
+            ptr::addr_of_mut!((*trace).version).write(Self::VERSION);
+            ptr::addr_of_mut!((*trace).next).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*trace).dropped).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*trace).in_flight).write(AtomicU32::new(0));
+            ptr::addr_of_mut!((*trace).reserved).write(0);
+            let rows = ptr::addr_of_mut!((*trace).rows).cast::<AssignRow>();
+            for index in 0..ASSIGN_CAPACITY {
+                rows.add(index).write(AssignRow::default());
+            }
+        }
+    }
     pub fn complete_rows(&self) -> Result<Vec<AssignCalibrationObservation>, &'static str> {
         if self.magic != ASSIGN_MAGIC || self.version != Self::VERSION {
             return Err("assignment mapping version mismatch");
@@ -117,6 +165,13 @@ impl AssignCalibrationTrace {
                 city_d8: row.city_d8.load(Ordering::Relaxed),
                 original_al: row.original_al.load(Ordering::Relaxed),
                 original_rax: row.original_rax.load(Ordering::Relaxed),
+                promotion_status: row.promotions.status.load(Ordering::Relaxed),
+                promotion_owner: row.promotions.owner.load(Ordering::Relaxed),
+                promotion_index: row.promotions.index.load(Ordering::Relaxed),
+                promotion_count: row.promotions.count.load(Ordering::Relaxed),
+                promotion_owned: std::array::from_fn(|i| {
+                    row.promotions.owned[i].load(Ordering::Relaxed)
+                }),
             });
         }
         Ok(rows)
@@ -197,6 +252,27 @@ unsafe extern "system" fn assign_calibration_begin(
         }
     }
     row.read_flags.store(flags, Ordering::Relaxed);
+    match governor_payment::read_current(&InvocationMemory, governors, governor) {
+        Ok(snapshot) => {
+            row.promotions
+                .owner
+                .store(snapshot.owner, Ordering::Relaxed);
+            row.promotions
+                .index
+                .store(snapshot.governor_index, Ordering::Relaxed);
+            row.promotions
+                .count
+                .store(snapshot.count, Ordering::Relaxed);
+            for (field, value) in row.promotions.owned.iter().zip(snapshot.owned) {
+                field.store(value, Ordering::Relaxed);
+            }
+            row.promotions.status.store(0, Ordering::Relaxed);
+        }
+        Err(failure) => row
+            .promotions
+            .status
+            .store(failure as u32, Ordering::Relaxed),
+    }
     slot as u64 + 1
 }
 
@@ -430,7 +506,7 @@ mod tests {
         let original: [u8; 8] = bytes[..8].try_into().unwrap();
         let call: extern "system" fn(u64, u64, u64, u64) -> u64 =
             unsafe { std::mem::transmute(page) };
-        let mut trace = Box::new(AssignCalibrationTrace::default());
+        let mut trace = AssignCalibrationTrace::boxed();
         // Changed second instruction, wrong trace version and unaligned entry
         // must refuse before mutation.
         unsafe {
@@ -458,8 +534,17 @@ mod tests {
         player[0xd8..].copy_from_slice(&7u32.to_le_bytes());
         next_player[0xd8..].copy_from_slice(&13u32.to_le_bytes());
         governors[14] = player.as_ptr() as u64;
-        let mut governor = [0u32; 2];
+        let mut governor = [0u32; 32];
+        governor[0] = 7;
         governor[1] = 22;
+        let promotion_flags = [1u8, 0, 0, 1, 0, 0, 0, 1];
+        let flag_address = promotion_flags.as_ptr() as u64;
+        governor[26] = flag_address as u32;
+        governor[27] = (flag_address >> 32) as u32;
+        governor[28] = 8;
+        governor[30] = 8;
+        let member_node = [governor.as_ptr() as u64, 0, 0];
+        governors[11] = member_node.as_ptr() as u64;
         let mut city = [0u32; 55];
         city[0xa8 / 4] = 91;
         city[0xc0 / 4] = 17;
@@ -478,6 +563,7 @@ mod tests {
             assert_eq!(&governors[16..19], &[0x11223344, 0x22334455, 0x33445566]);
             assert_eq!(&governors[20..32], &[u64::MAX; 12]);
             governors[14] = next_player.as_ptr() as u64;
+            governor[0] = 13;
             governor[1] = 23;
             city[0xd8 / 4] = 13;
         }
@@ -505,6 +591,14 @@ mod tests {
             (13, 23, 13, 7)
         );
         assert_eq!((rows[0].original_al, rows[1].original_al), (0, 1));
+        assert_eq!((rows[0].promotion_status, rows[1].promotion_status), (0, 0));
+        assert_eq!((rows[0].promotion_owner, rows[1].promotion_owner), (7, 13));
+        assert_eq!((rows[0].promotion_index, rows[1].promotion_index), (22, 23));
+        assert_eq!((rows[0].promotion_count, rows[1].promotion_count), (8, 8));
+        assert_eq!(rows[0].promotion_owned[0], 0b1000_1001);
+        assert!(rows[0].promotion_owned[1..].iter().all(|word| *word == 0));
+        assert_ne!(rows[2].promotion_status, 0);
+        assert_ne!(rows[3].promotion_status, 0);
         assert_eq!(rows[2].read_flags, 0);
         assert_eq!(rows[3].read_flags, 0);
         assert!(rows
@@ -541,7 +635,7 @@ mod tests {
         assert_eq!(governors[15], count + 1);
         drop(callers);
 
-        let mut panic_trace = Box::new(AssignCalibrationTrace::default());
+        let mut panic_trace = AssignCalibrationTrace::boxed();
         unsafe { install_assign_calibration_at(page, panic_trace.as_mut(), original) }.unwrap();
         let running = std::sync::Arc::new(AtomicBool::new(true));
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();

@@ -8,6 +8,8 @@
 /// Portable scenario limit; only the Windows module implements execution.
 pub const MAX_ACTIVE_SECONDS: u32 = 300;
 
+pub mod governor_payment;
+
 #[cfg(windows)]
 mod windows;
 

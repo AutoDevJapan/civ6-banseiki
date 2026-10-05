@@ -784,7 +784,7 @@ fn drained_assign_calibration_trace(
     let mut stable = 0u32;
     let mut prior = None;
     while Instant::now() < deadline {
-        let mut snapshot = Box::new(AssignCalibrationTrace::default());
+        let mut snapshot = AssignCalibrationTrace::boxed();
         let bytes = unsafe {
             std::slice::from_raw_parts_mut(
                 (&mut *snapshot as *mut AssignCalibrationTrace).cast::<u8>(),
@@ -1227,7 +1227,14 @@ pub fn run() -> Result<(), String> {
                         "player_id":row.player_id,"governor_index":row.governor_index,
                         "city_a8":row.city_a8,"city_c0":row.city_c0,"city_c4":row.city_c4,"city_d8":row.city_d8,
                         "return_site_rva":return_rva,"original_al":row.original_al,"effective_al":row.original_al,
-                        "original_rax":format!("0x{:016x}",row.original_rax)}),
+                        "original_rax":format!("0x{:016x}",row.original_rax),
+                        "promotion_snapshot_status":row.promotion_status,
+                        "promotion_owner":row.promotion_owner,"promotion_index":row.promotion_index,
+                        "promotion_count":row.promotion_count,
+                        "owned_promotion_indices":(0..row.promotion_count.min(civ6_native_bridge_rs::governor_payment::PROMOTION_LIMIT as u32))
+                            .filter(|index| row.promotion_owned[*index as usize / 64] & (1 << (index % 64)) != 0)
+                            .collect::<Vec<_>>(),
+                        "payment_authority":false}),
                     )?;
                 }
                 (
@@ -1725,7 +1732,7 @@ mod tests {
     #[test]
     fn assignment_controller_checks_current_trace_version_and_mode_ordinal() {
         let process = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
-        let mut trace = Box::new(AssignCalibrationTrace::default());
+        let mut trace = AssignCalibrationTrace::boxed();
         let address = (&*trace as *const AssignCalibrationTrace) as usize;
         assert_eq!(
             drained_assign_calibration_trace(&process, address)

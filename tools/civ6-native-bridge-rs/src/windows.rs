@@ -2886,7 +2886,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                 return BridgeStatus::HookFailure;
             }
             let trace = config.trace_address as *mut AssignCalibrationTrace;
-            unsafe { ptr::write(trace, AssignCalibrationTrace::default()) };
+            unsafe { AssignCalibrationTrace::initialize_at(trace) };
             unsafe { install_assign_calibration_at(entry, trace, disk_bytes) }
         }
         BridgeMode::CanEver => {
