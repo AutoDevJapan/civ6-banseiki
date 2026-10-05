@@ -30,11 +30,13 @@ local function Cities(owner)
   end; return rows
 end
 local before=Rows(actor); local cities=Cities(actor)
-local enemy
+local enemy,enemyX,enemyY
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
   local other=p:GetID(); local capital=p:GetCities():GetCapitalCity()
   if other~=actor and not p:IsHuman() and capital and
-    Map.GetPlotDistance(x,y,capital:GetX(),capital:GetY())>=12 then enemy=other; break end
+    Map.GetPlotDistance(x,y,capital:GetX(),capital:GetY())>=12 then
+    enemy=other; enemyX=capital:GetX(); enemyY=capital:GetY(); break
+  end
 end
 assert(enemy,'distant alive AI major absent')
 local enemyBefore=Rows(enemy); local enemyCities=Cities(enemy)
@@ -97,9 +99,22 @@ local ok,why=xpcall(function()
   assert(Players[enemy]:GetDiplomacy():IsAtWarWith(actor),'native war not established')
   for _,p in ipairs(plots) do
     local old=Rows(enemy)
-    UnitManager.InitUnit(enemy,kind,p:GetX(),p:GetY())
+    UnitManager.InitUnit(enemy,kind,enemyX,enemyY)
     local created=NewUnits(enemy,old,fixtures)
-    assert(#created==1 and created[1].Owner==enemy and created[1].Type==definition.Index and
+    print('[JAC_ASN_OCCUPANCY] create count='..#created..' owner='..enemy..' type='..kind..
+      ' origin='..enemyX..','..enemyY..' target='..p:GetX()..','..p:GetY())
+    assert(#created==1 and created[1].Owner==enemy and created[1].Type==definition.Index,
+      'hostile fixture not created exactly once')
+    local u=Players[enemy]:GetUnits():FindID(created[1].ID)
+    assert(u and u:GetID()==created[1].ID and u:GetOwner()==enemy and u:GetType()==definition.Index and
+      u:GetProperty('JAC_ASN_OCCUPANCY_MARKER')==created[1].Marker,'fixture reference mismatch before placement')
+    UnitManager.PlaceUnit(u,p:GetX(),p:GetY())
+    local placed=Rows(enemy)[tostring(created[1].ID)]
+    print('[JAC_ASN_OCCUPANCY] placement id='..created[1].ID..' actual='..
+      tostring(placed and placed.X)..','..tostring(placed and placed.Y))
+    assert(placed,'fixture disappeared during placement')
+    created[1].X,created[1].Y=placed.X,placed.Y
+    assert(
       created[1].X==p:GetX() and created[1].Y==p:GetY(),'hostile fixture not placed exactly once')
     assert(Same(Rows(actor),before),'fixture changed an existing actor unit')
     CityAndTerrain()
@@ -205,6 +220,7 @@ mod tests {
             "wrong_type",
             "alias",
             "corrupt_marker",
+            "placement_rejected",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -233,7 +249,15 @@ if MODE=='corrupt_marker' then makeUnit=function(d)
   end
   return u
 end end
-UnitManager.InitUnit=function(owner,kind,x,y) GRANT(owner,GameInfo.Units[kind].Index,x,y) end
+UnitManager.InitUnit=function(owner,kind,x,y)
+  assert(owner==1 and kind=='UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' and x==30 and y==0)
+  GRANT(owner,GameInfo.Units[kind].Index,x,y)
+end
+local originalPlace=UnitManager.PlaceUnit
+UnitManager.PlaceUnit=function(u,x,y)
+  assert(u:GetOwner()==1 and x>=0 and x<=6 and y==0)
+  if MODE~='placement_rejected' then originalPlace(u,x,y) end
+end
 UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,radius)
   assert(owner==0 and kind=='UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' and x==0 and y==0 and radius==1)
   if MODE~='blocked' then GRANT(owner,MODE=='wrong_type' and 4 or 0,
@@ -257,7 +281,7 @@ function CheckUnauthenticatedProbe()
 end
 "#).exec()?;
             let outcome = lua.load(PROBE).eval::<String>();
-            if matches!(mode, "wrong_type" | "corrupt_marker") {
+            if matches!(mode, "wrong_type" | "corrupt_marker" | "placement_rejected") {
                 assert!(outcome.is_err(), "{mode}");
             } else {
                 let outcome = outcome?;
