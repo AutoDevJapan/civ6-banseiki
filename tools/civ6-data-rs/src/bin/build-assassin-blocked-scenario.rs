@@ -26,6 +26,10 @@ local function Assassins(owner)
     if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end
   end; return ids
 end
+local function UnitIDs(owner)
+  local ids={}; for _,u in Players[owner]:GetUnits():Members() do ids[tostring(u:GetID())]=true end
+  return ids
+end
 local function Blockers()
   for _,p in ipairs(t.Plots) do
     local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')
@@ -46,6 +50,7 @@ local function Pending()
   assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and
     s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')
   assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')
+  assert(Same(UnitIDs(t.Actor),t.AllBefore),'blocked spawn changed the complete unit inventory')
   print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..
     tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))
   return s
@@ -103,7 +108,7 @@ for _,p in ipairs(plots) do
   rows[#rows+1]=row
 end
 t={Actor=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots=rows,
-  Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner)}
+  Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner),AllBefore=UnitIDs(owner)}
 assert(next(t.Before)==nil,'fresh game already contains assassins')
 Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()
 return 'real combat units occupy every passable radius-one spawn plot'
@@ -137,7 +142,7 @@ for _,p in ipairs(t.Plots) do if p.ID then
   local u=Players[t.Actor]:GetUnits():FindID(p.ID); assert(u and u:GetID()==p.ID,'blocker identity changed')
   UnitManager.Kill(u)
 end end
-t.Released=R.Turn(); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)
+t.Released=R.Turn(); t.AllReleased=UnitIDs(t.Actor); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)
 return 'second blocked real tick verified; fixture blockers removed without touching training'
 "#,
         "GameCore_Tuner",
@@ -151,6 +156,11 @@ for _,u in Players[t.Actor]:GetUnits():Members() do if R.IsAssassin(u) then
   count=count+1; row=Row(u); assert(not t.Before[tostring(row.ID)],'reused production id')
 end end
 assert(count==1 and row.ID==s.LastProducedUnit and row.X>=0 and row.Y>=0,'recovery did not create exactly one placed assassin')
+assert(row.Type==GameInfo.Units[R.UnitForPlayer(t.Actor)].Index,'recovered unit has the wrong civilization-specific type')
+local newCount=0; local all=UnitIDs(t.Actor)
+for id in pairs(all) do if not t.AllReleased[id] then newCount=newCount+1; assert(tonumber(id)==row.ID,'unexpected new unit during recovery') end end
+for id in pairs(t.AllReleased) do assert(all[id],'unrelated unit disappeared during recovery') end
+assert(newCount==1,'native recovery did not create exactly one new unit of any type')
 assert(Map.GetPlotDistance(t.X,t.Y,row.X,row.Y)<=1,'spawn beyond native radius one')
 assert(s.Production==nil and s.LastCompletion==R.Turn() and R.Turn()==t.Released+1,'wrong actual completion turn')
 assert(s.ProductionUnlock==s.LastCompletion+R.Scale(R.PRODUCTION_LOCK),'lock did not start at actual completion')
@@ -245,9 +255,10 @@ mod tests {
     fn pending_check_rejects_premature_completion_and_leaked_units() -> Result<()> {
         let setup = r#"
 local s={Production={City=4,Start=1,Due=2}}
-ExposedMembers={JAC_Assassin={State=function() return s end,Turn=function() return 2 end,IsAssassin=function(u) return u~=nil end}}
+local wrong=false
+ExposedMembers={JAC_Assassin={State=function() return s end,Turn=function() return 2 end,IsAssassin=function(u) return u~=nil and not wrong end}}
 Game={GetProperty=function(_,k) if k=='JAC_ASN_TICK' then return 2 end return
-  {Actor=0,City=4,Start=1,Due=2,Initial={},Before={},Plots={}} end,GetCurrentGameTurn=function() return 2 end}
+  {Actor=0,City=4,Start=1,Due=2,Initial={},Before={},AllBefore={},Plots={}} end,GetCurrentGameTurn=function() return 2 end}
 local leak=false
 Players={[0]={GetUnits=function() return {Members=function() local done=false; return function()
   if leak and not done then done=true; return 1,{GetID=function() return 99 end,GetOwner=function() return 0 end,
@@ -255,8 +266,9 @@ Players={[0]={GetUnits=function() return {Members=function() local done=false; r
 end end} end}}
 function Complete() s.Production=nil; s.LastCompletion=2; s.ProductionUnlock=12 end
 function Leak() leak=true end
+function LeakWrong() leak=true; wrong=true end
 "#;
-        for mutation in ["", "Complete()", "Leak()"] {
+        for mutation in ["", "Complete()", "Leak()", "LeakWrong()"] {
             let lua = Lua::new();
             lua.load(setup).exec()?;
             lua.load(mutation).exec()?;
