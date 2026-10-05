@@ -150,6 +150,30 @@ fn options_state_lookup_recovers_after_both_socket_attempts_fail() {
 }
 
 #[test]
+fn recovered_options_state_is_closed_once_and_verified_hidden() {
+    let mut attempts = 0;
+    let fake = FakeBackend::new()
+        .states(move || {
+            attempts += 1;
+            if attempts <= 2 {
+                Err(Error::tuner("No reply to LSQ from FireTuner"))
+            } else {
+                Ok(vec!["InGameTopOptionsMenu".into()])
+            }
+        })
+        .lua(|_, _| Ok("true".into()));
+    let mut h = Harness::new(json!({}), fake);
+    assert!(h.runner.close_options_menu(60.0).unwrap());
+    let calls = h.calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].0, "InGameTopOptionsMenu");
+    assert!(calls[0].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(calls[1].0, "InGameTopOptionsMenu");
+    assert_eq!(calls[1].1, "return ContextPtr:IsHidden()");
+    assert_eq!(h.clock.at(), 0.5);
+}
+
+#[test]
 fn options_state_lookup_respects_shorter_step_deadline() {
     let fake = FakeBackend::new().states(|| Err(Error::tuner("no LSQ reply")));
     let mut h = Harness::new(json!({}), fake);
