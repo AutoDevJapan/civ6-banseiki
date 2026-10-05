@@ -47,19 +47,25 @@ local function Blockers()
         'blocking unit moved or disappeared')
       assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')
     else
-      assert(plot:IsImpassable() and plot:GetTerrainType()==p.Barrier,'terrain barrier changed')
+      assert(plot:IsImpassable(),'fixture barrier became passable')
+      if p.BarrierFeature then
+        assert(plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.BarrierFeature,'city feature barrier changed')
+      else assert(plot:GetTerrainType()==p.Barrier,'terrain barrier changed') end
     end
   end
 end
 local function RestoreTerrain()
   for _,p in ipairs(t.Plots) do
     local plot=Map.GetPlot(p.X,p.Y)
-    TerrainBuilder.SetTerrainType(plot,p.Terrain); TerrainBuilder.SetFeatureType(plot,p.Feature)
+    if not p.BarrierFeature then TerrainBuilder.SetTerrainType(plot,p.Terrain) end
+    TerrainBuilder.SetFeatureType(plot,p.Feature)
     assert(plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.Feature,'fixture terrain did not restore')
   end
 end
 local function Pending()
   local s=R.State(t.Actor)
+  local city=Players[t.Actor]:GetCities():FindID(t.City)
+  assert(city and city:GetX()==t.X and city:GetY()==t.Y,'blocked training city lost or replaced')
   print('[JAC_ASN_BLOCKED] inspect turn='..R.Turn()..' production='..tostring(s.Production~=nil)..
     ' completion='..tostring(s.LastCompletion)..' produced='..tostring(s.LastProducedUnit))
   for _,u in Players[t.Actor]:GetUnits():Members() do
@@ -114,9 +120,10 @@ fn build(repo: &Repository) -> Result<Value> {
 Game:SetProperty(R.TEST,1)
 local owner=Game.GetLocalPlayer(); assert(Players[owner]:IsHuman(),'human required')
 local city=Players[owner]:GetCities():GetCapitalCity(); assert(city,'capital missing')
+local cityID,cityX,cityY=city:GetID(),city:GetX(),city:GetY()
 assert(next(Assassins(owner))==nil,'fresh game already contains assassins')
-local plots={Map.GetPlot(city:GetX(),city:GetY())}
-for _,p in ipairs(Map.GetAdjacentPlots(city:GetX(),city:GetY())) do plots[#plots+1]=p end
+local plots={Map.GetPlot(cityX,cityY)}
+for _,p in ipairs(Map.GetAdjacentPlots(cityX,cityY)) do plots[#plots+1]=p end
 assert(#plots==7,'complete radius-one footprint required')
 local rows={}; local occupied={}
 local function Occupy(p)
@@ -127,8 +134,14 @@ local function Occupy(p)
     if u:GetX()==row.X and u:GetY()==row.Y then remove[#remove+1]=u:GetID() end
   end
   for _,id in ipairs(remove) do UnitManager.Kill(Players[owner]:GetUnits():FindID(id)) end
-  TerrainBuilder.SetFeatureType(p,-1); TerrainBuilder.SetTerrainType(p,row.Barrier)
+  if p:IsCity() then
+    row.BarrierFeature=GameInfo.Features.FEATURE_TSINGY.Index
+    TerrainBuilder.SetFeatureType(p,row.BarrierFeature)
+  else
+    TerrainBuilder.SetFeatureType(p,-1); TerrainBuilder.SetTerrainType(p,row.Barrier)
+  end
   assert(p:IsImpassable(),'terrain setter did not create an impassable plot')
+  assert(Players[owner]:GetCities():FindID(cityID),'fixture removed the training city')
   print('[JAC_ASN_BLOCKED] terrain-blocker xy='..row.X..','..row.Y..' original='..row.Terrain..' barrier='..row.Barrier)
   rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
@@ -138,7 +151,7 @@ for _,p in ipairs(plots) do Occupy(p) end
 local blocked=false; local kind=R.UnitForPlayer(owner)
 for attempt=1,128 do
   local before=UnitIDs(owner); local probe; local count=0
-  UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)
+  UnitManager.InitUnitValidAdjacentHex(owner,kind,cityX,cityY,1)
   for _,u in Players[owner]:GetUnits():Members() do if not before[tostring(u:GetID())] then
     count=count+1; probe=u
   end end
@@ -161,7 +174,7 @@ for attempt=1,128 do
   Occupy(plot)
 end
 assert(blocked,'native placement did not become blocked within 128 probes')
-t={Actor=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots=rows,
+t={Actor=owner,City=cityID,X=cityX,Y=cityY,Plots=rows,
   Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner),AllBefore=UnitIDs(owner)}
 assert(next(t.Before)==nil,'fresh game already contains assassins')
 Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()
@@ -315,17 +328,24 @@ mod tests {
         let setup = data["steps"][4]["code"].as_str().unwrap();
         let fixture = r#"
 Game.GetLocalPlayer=function() return 0 end
-local terrain={}; local features={}
+local terrain={['2,0']=4}; local features={['0,0']=3}
 GameInfo.Terrains={TERRAIN_GRASS_MOUNTAIN={Index=9}}
+GameInfo.Features={FEATURE_TSINGY={Index=11}}
 local function Plot(x,y)
   local key=x..','..y
   return {GetX=function() return x end,GetY=function() return y end,
     GetTerrainType=function() return terrain[key] or 1 end,
     GetFeatureType=function() return features[key] or -1 end,
-    IsWater=function() return false end,IsImpassable=function() return terrain[key]==9 end}
+    IsCity=function() return x==0 and y==0 end,
+    IsWater=function() return false end,IsImpassable=function() return terrain[key]==9 or features[key]==11 end}
 end
-TerrainBuilder={SetTerrainType=function(p,t) terrain[p:GetX()..','..p:GetY()]=t end,
-  SetFeatureType=function(p,f) features[p:GetX()..','..p:GetY()]=f end}
+TerrainBuilder={SetTerrainType=function(p,t)
+  terrain[p:GetX()..','..p:GetY()]=t
+  if p:IsCity() then DATA[0].Cities[10]=nil end
+end,SetFeatureType=function(p,f)
+  features[p:GetX()..','..p:GetY()]=f
+  if PROBE_MODE=='lost_city' then DATA[0].Cities[10]=nil end
+end}
 Map.GetPlot=Plot
 Map.GetAdjacentPlots=function() local rows={}; for x=1,6 do rows[#rows+1]=Plot(x,0) end; return rows end
 for _,row in pairs(GameInfo.Units) do
@@ -360,8 +380,10 @@ end
 function CheckRestored()
   local t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')
   for _,p in ipairs(t.Plots) do local plot=Map.GetPlot(p.X,p.Y)
-    assert(plot:GetTerrainType()==1 and plot:GetFeatureType()==-1)
+    assert(plot:GetTerrainType()==(p.X==2 and 4 or 1))
+    assert(plot:GetFeatureType()==(p.X==0 and 3 or -1))
   end
+  assert(Players[0]:GetCities():FindID(10))
   assert(Players[0]:GetUnits():GetCount()==1 and Players[0]:GetUnits():FindID(unrelated))
 end
 "#;
@@ -372,6 +394,7 @@ end
             "unbounded",
             "wrong_type",
             "corrupt_cleanup",
+            "lost_city",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -395,9 +418,11 @@ local s={Production={City=4,Start=1,Due=2}}
 local wrong=false
 ExposedMembers={JAC_Assassin={State=function() return s end,Turn=function() return 2 end,IsAssassin=function(u) return u~=nil and not wrong end}}
 Game={GetProperty=function(_,k) if k=='JAC_ASN_TICK' then return 2 end return
-  {Actor=0,City=4,Start=1,Due=2,Initial={},Before={},AllBefore={},Plots={}} end,GetCurrentGameTurn=function() return 2 end}
+  {Actor=0,City=4,X=0,Y=0,Start=1,Due=2,Initial={},Before={},AllBefore={},Plots={}} end,GetCurrentGameTurn=function() return 2 end}
 local leak=false
-Players={[0]={GetUnits=function() return {Members=function() local done=false; return function()
+Players={[0]={GetCities=function() return {FindID=function(_,id)
+  assert(id==4); return {GetX=function() return 0 end,GetY=function() return 0 end}
+end} end,GetUnits=function() return {Members=function() local done=false; return function()
   if leak and not done then done=true; return 1,{GetID=function() return 99 end,GetOwner=function() return 0 end,
     GetType=function() return 116 end,GetX=function() return -9999 end,GetY=function() return -9999 end,GetDamage=function() return 0 end} end
 end end} end}}
@@ -410,7 +435,11 @@ function LeakWrong() leak=true; wrong=true end
             lua.load(setup).exec()?;
             lua.load(mutation).exec()?;
             let result = lua.load(format!("{PREFIX} Pending()")).exec();
-            assert_eq!(result.is_ok(), mutation.is_empty(), "{mutation}");
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
         }
         Ok(())
     }
