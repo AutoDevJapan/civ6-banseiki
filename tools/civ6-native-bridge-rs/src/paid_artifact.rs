@@ -21,6 +21,27 @@ fn hex(value: &Value) -> Option<u64> {
     u64::from_str_radix(text, 16).ok()
 }
 
+fn property_value(row: &Value) -> bool {
+    let Some(returned) = hex(&row["returned"]) else {
+        return false;
+    };
+    match row["read_state"].as_u64() {
+        Some(1) => {
+            returned != 0
+                && row["tag"] == 1
+                && row["flags14"] == 0
+                && hex(&row["payload8"]).is_some_and(|value| value <= 1)
+        }
+        Some(state @ (0 | 2)) => {
+            (returned == 0) == (state == 0)
+                && ["tag", "payload8", "flags14"]
+                    .iter()
+                    .all(|name| row.get(*name).is_some_and(Value::is_null))
+        }
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -34,7 +55,7 @@ mod tests {
             json!({"kind":"install","status":0}),
             json!({"kind":"uninstall","status":0,"entry_restored":true,"assignment_restored":true,"prefix_retained_until_exit":true}),
             json!({"kind":"calibration","sequence":1,"governor_index":77,"original_al":1,"effective_al":0}),
-            json!({"kind":"property_get","sequence":1,"key_id":907002,"read_state":1,"property":"0x0000000000001000","returned":"0x0000000000002000"}),
+            json!({"kind":"property_get","sequence":1,"key_id":907002,"read_state":1,"property":"0x0000000000001000","returned":"0x0000000000002000","tag":1,"payload8":"0x0000000000000001","flags14":0}),
             json!({"kind":"paid_assignment","sequence":1,"player_id":2,"governor_index":77,"original_rax":"0xaabbccdd11223301",
                 "effective_rax":"0xaabbccdd11223300","original_al":1,"effective_al":0,"payment_authority":false,"observation_only":true}),
             json!({"kind":"stop","rows":3,"observed_calls":3,"dropped":0,"in_flight":0,"result":"ok",
@@ -73,6 +94,61 @@ mod tests {
         let mut rows = capture();
         rows.push(json!({"kind":"install","status":0}));
         assert!(validate(&text(&rows), 7, 123).is_err());
+    }
+
+    #[test]
+    fn copied_bool_requires_all_fields_and_rejects_wrong_types_or_non_bool_payload() {
+        for key in ["read_state", "returned", "tag", "payload8", "flags14"] {
+            let mut rows = capture();
+            rows[4].as_object_mut().unwrap().remove(key);
+            assert!(validate(&text(&rows), 7, 123).is_err(), "missing {key}");
+        }
+        for (key, value) in [
+            ("tag", json!(2)),
+            ("tag", json!("1")),
+            ("flags14", json!(1)),
+            ("payload8", json!("0x0000000000000002")),
+            ("payload8", json!(1)),
+            ("returned", json!("0x0000000000000000")),
+        ] {
+            let mut rows = capture();
+            rows[4][key] = value;
+            assert!(validate(&text(&rows), 7, 123).is_err(), "{key}");
+        }
+        let mut rows = capture();
+        rows[4]["payload8"] = json!("0x0000000000000000");
+        assert_eq!(validate(&text(&rows), 7, 123), Ok(1));
+    }
+
+    #[test]
+    fn absent_and_unreadable_values_require_explicit_nulls_and_matching_return_pointer() {
+        for (state, pointer) in [(0, "0x0000000000000000"), (2, "0x0000000000000001")] {
+            let mut rows = capture();
+            rows[4]["read_state"] = json!(state);
+            rows[4]["returned"] = json!(pointer);
+            for key in ["tag", "payload8", "flags14"] {
+                rows[4][key] = Value::Null;
+            }
+            assert_eq!(validate(&text(&rows), 7, 123), Ok(1));
+            for key in ["tag", "payload8", "flags14"] {
+                let mut missing = rows.clone();
+                missing[4].as_object_mut().unwrap().remove(key);
+                assert!(validate(&text(&missing), 7, 123).is_err());
+                let mut fake = rows.clone();
+                fake[4][key] = json!(0);
+                assert!(validate(&text(&fake), 7, 123).is_err());
+            }
+            rows[4]["read_state"] = json!(2 - state);
+            assert!(validate(&text(&rows), 7, 123).is_err());
+        }
+        let mut rows = capture();
+        rows[6]["dropped"] = json!(5);
+        rows[6]["observed_calls"] = json!(8);
+        assert_eq!(
+            validate(&text(&rows), 7, 123),
+            Ok(1),
+            "bounded prefix remains valid capture"
+        );
     }
 }
 
@@ -121,7 +197,7 @@ pub fn validate(text: &str, pid: u32, created: u64) -> Result<usize, String> {
                         .iter()
                         .any(|r| (r[0] as u64..=r[1] as u64).contains(&key))
                     || row["sequence"] != property + 1
-                    || !row["read_state"].as_u64().is_some_and(|v| v <= 2)
+                    || !property_value(&row)
                     || hex(&row["property"]).is_none_or(|p| p == 0 || p & 7 != 0)
                     || hex(&row["returned"]).is_none()
                 {
