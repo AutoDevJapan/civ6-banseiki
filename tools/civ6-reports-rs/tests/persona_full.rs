@@ -170,3 +170,43 @@ fn mixed_runs_clock_jumps_and_missing_log_slices_fail_closed() {
     }
     assert!(verify_directory(directory.path()).is_ok());
 }
+
+#[test]
+fn stopped_observer_receipt_is_separate_from_unchanged_lua_snapshots() {
+    let (mut rows, result) = fixture();
+    // Current runtime records a process receipt while observing. Real event324
+    // artifacts have one before save and none on both later snapshot reads.
+    for index in [28, 54, 80, 132, 160, 198] {
+        let detail = rows[index]["detail"].as_str().unwrap();
+        rows[index]["detail"] = json!(format!(
+            "{detail}; native_process={{\"pid\":139848,\"created_filetime\":134357136841343557}}"
+        ));
+    }
+    let report = verify(&text(&rows), &result.to_string(), "").unwrap();
+    assert_eq!(report.matched_save_load_snapshots, 6);
+    rows[38]["detail"] = json!("ran Lua in InGame; return=STATE=GREAT_PERSON|OWNER=0|UNIT=196610|MERIT=0; native_process={\"pid\":139848,\"created_filetime\":134357136841343557}");
+    assert!(verify(&text(&rows), &result.to_string(), "")
+        .unwrap_err()
+        .to_string()
+        .contains("save/load snapshot mismatch"));
+}
+
+#[test]
+fn incomplete_or_invalid_appended_receipt_is_not_silently_discarded() {
+    for receipt in [
+        "{}",
+        "{\"pid\":139848}",
+        "{\"pid\":0,\"created_filetime\":1}",
+        "{\"pid\":139848,\"created_filetime\":0}",
+        "{\"pid\":139848,\"created_filetime\":134357136841343557,\"extra\":true}",
+        "{\"pid\":139848,\"created_filetime\":134357136841343557} trailing",
+    ] {
+        let (mut rows, result) = fixture();
+        let before = rows[28]["detail"].as_str().unwrap();
+        rows[28]["detail"] = json!(format!("{before}; native_process={receipt}"));
+        assert!(
+            verify(&text(&rows), &result.to_string(), "").is_err(),
+            "accepted {receipt}"
+        );
+    }
+}
