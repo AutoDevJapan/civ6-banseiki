@@ -47,9 +47,8 @@ use windows_sys::Win32::{
             },
             ToolHelp::{
                 CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, Process32FirstW,
-                Process32NextW, Thread32First, Thread32Next, MODULEENTRY32W, PROCESSENTRY32W,
-                TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS, TH32CS_SNAPTHREAD,
-                THREADENTRY32,
+                Process32NextW, MODULEENTRY32W, PROCESSENTRY32W, TH32CS_SNAPMODULE,
+                TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS,
             },
         },
         LibraryLoader::{GetModuleHandleW, GetProcAddress},
@@ -222,13 +221,11 @@ fn announce_critical_and_wait_for_owned_game(
     }
     let deadline = Instant::now() + CRITICAL_CLOSE_BUDGET;
     while Instant::now() < deadline {
-        if matches!(alive(game), Ok(false)) {
-            return Ok(queried_exit_code(game));
-        }
+        let target_exited = matches!(alive(game), Ok(false));
         // An ambiguous exception must remain pending until the controller has
         // successfully requested termination of this pinned game. This avoids
         // treating an application exception as handled while normal play runs.
-        if close_ack.is_some_and(|ack| !ack.load(Ordering::SeqCst)) {
+        if !target_exited && close_ack.is_some_and(|ack| !ack.load(Ordering::SeqCst)) {
             thread::sleep(Duration::from_millis(50));
             continue;
         }
@@ -239,10 +236,16 @@ fn announce_critical_and_wait_for_owned_game(
         if let Some((event, status)) = pending {
             if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } != 0 {
                 pending = None;
+                if let Some(exit) = critical_exit_from_debug_event(&event) {
+                    return Ok(exit);
+                }
             } else {
                 thread::sleep(Duration::from_millis(50));
                 continue;
             }
+        }
+        if target_exited {
+            return Ok(queried_exit_code(game));
         }
         let mut event = DEBUG_EVENT::default();
         if debug_attached && unsafe { WaitForDebugEventEx(&mut event, 50) } != 0 {
@@ -800,29 +803,6 @@ fn set_debug_registers(
 fn thread_handle(tid: u32) -> Result<Handle, String> {
     Handle::new(unsafe { OpenThread(THREAD_RIGHTS, 0, tid) }, "OpenThread")
 }
-fn thread_ids(pid: u32) -> Result<BTreeSet<u32>, String> {
-    let snapshot = Handle::new(
-        unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) },
-        "thread snapshot",
-    )?;
-    let mut entry = THREADENTRY32 {
-        dwSize: size_of::<THREADENTRY32>() as u32,
-        ..Default::default()
-    };
-    if unsafe { Thread32First(snapshot.0, &mut entry) } == 0 {
-        return Err(win_error("Thread32First"));
-    }
-    let mut ids = BTreeSet::new();
-    loop {
-        if entry.th32OwnerProcessID == pid {
-            ids.insert(entry.th32ThreadID);
-        }
-        if unsafe { Thread32Next(snapshot.0, &mut entry) } == 0 {
-            break;
-        }
-    }
-    Ok(ids)
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SuspendFailureState {
     Gone,
@@ -830,8 +810,8 @@ enum SuspendFailureState {
     Unsignaled,
     Unknown,
 }
-fn suspend_failure_state(thread_wait: u32, listed: bool, game_wait: u32) -> SuspendFailureState {
-    if thread_wait == WAIT_OBJECT_0 || !listed {
+fn suspend_failure_state(thread_wait: u32, game_wait: u32) -> SuspendFailureState {
+    if thread_wait == WAIT_OBJECT_0 {
         SuspendFailureState::Gone
     } else if game_wait == WAIT_OBJECT_0 {
         SuspendFailureState::TargetExited
@@ -1107,6 +1087,7 @@ struct CleanupGate {
     phase: CleanupPhase,
     deadline: Instant,
     last_error: String,
+    slowest_step: Option<(CleanupPhase, Duration)>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AttachAbortOutcome {
@@ -1178,9 +1159,11 @@ impl CleanupGate {
             phase: CleanupPhase::Freeze,
             deadline: Instant::now() + RESTORE_BUDGET,
             last_error: String::new(),
+            slowest_step: None,
         }
     }
     fn step(&mut self, ops: &mut impl CleanupOps) -> Result<bool, String> {
+        let started = Instant::now();
         let result = match self.phase {
             CleanupPhase::Freeze => ops.freeze(),
             CleanupPhase::Restore => ops.restore_verified(),
@@ -1189,6 +1172,13 @@ impl CleanupGate {
             CleanupPhase::Resume => ops.resume(),
             CleanupPhase::Done => return Ok(true),
         };
+        let elapsed = started.elapsed();
+        if self
+            .slowest_step
+            .is_none_or(|(_, slowest)| elapsed > slowest)
+        {
+            self.slowest_step = Some((self.phase, elapsed));
+        }
         if let Err(e) = result {
             if self.phase == CleanupPhase::Restore {
                 self.phase = CleanupPhase::Freeze;
@@ -1209,7 +1199,16 @@ impl CleanupGate {
             if ops.game_exited() {
                 return Err("target_exited_during_cleanup".into());
             }
-            match self.step(ops) {
+            let step = self.step(ops);
+            // A synchronous OS call can return after the absolute deadline.
+            // Even a successful final Resume must not convert that into ok.
+            if Instant::now() >= self.deadline {
+                if let Err(error) = step {
+                    self.last_error = error;
+                }
+                break;
+            }
+            match step {
                 Ok(true) => return Ok(()),
                 Ok(false) => {}
                 Err(e) => {
@@ -1219,8 +1218,8 @@ impl CleanupGate {
             }
         }
         Err(format!(
-            "critical_cleanup: {:?} did not finish before the cleanup deadline: {}",
-            self.phase, self.last_error
+            "critical_cleanup: {:?} did not finish before the cleanup deadline: {}; slowest step: {:?}",
+            self.phase, self.last_error, self.slowest_step
         ))
     }
 }
@@ -1285,6 +1284,12 @@ struct Debugger {
     force_reported_rip_mismatch: bool,
     #[cfg(test)]
     force_initial_breakpoint_late: bool,
+    #[cfg(test)]
+    panic_on_owned_event: bool,
+    #[cfg(test)]
+    continue_faults: usize,
+    #[cfg(test)]
+    exit_continue_fault: bool,
 }
 impl Debugger {
     fn record_critical_exit(&mut self, exit: CriticalExit) {
@@ -1403,6 +1408,12 @@ impl Debugger {
             force_reported_rip_mismatch: false,
             #[cfg(test)]
             force_initial_breakpoint_late: false,
+            #[cfg(test)]
+            panic_on_owned_event: false,
+            #[cfg(test)]
+            continue_faults: 0,
+            #[cfg(test)]
+            exit_continue_fault: false,
         })
     }
     fn lifecycle_thread_event(
@@ -2043,6 +2054,11 @@ impl Debugger {
                         )?;
                         return Err(format!("owned hardware breakpoint at 0x{expected:x} has context RIP 0x{:x}; refusing to interpret ABI",c.Rip));
                     }
+                    #[cfg(test)]
+                    assert!(
+                        !self.panic_on_owned_event,
+                        "injected panic while a proven hardware exception is pending"
+                    );
                     let expected_bit = match trap {
                         OwnedTrap::CanEver => 1,
                         OwnedTrap::CanAppoint => 2,
@@ -2115,17 +2131,29 @@ impl Debugger {
             return Ok(());
         }
         if let Some((event, status)) = pending_event {
-            if self.cleanup_event.is_none() {
-                self.cleanup_event = Some((*event, status));
-            }
+            self.cleanup_event = Some((*event, status));
+        } else if let Some((event, _)) = self.cleanup_event {
+            // Also covers unwinding while handle_event owns a stopped target.
+            self.cleanup_event = Some((event, self.status_after_error(&event)));
         }
         let mut gate = self.cleanup_gate.take().unwrap_or_else(CleanupGate::new);
+        if self
+            .cleanup_event
+            .is_some_and(|(event, _)| event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT)
+        {
+            // All target threads have exited. Acknowledge this real terminal
+            // event; do not run restoration or label its exit as a detach.
+            gate.phase = CleanupPhase::Continue;
+        }
         let result = gate.drive(self);
         self.cleanup_gate = Some(gate);
+        if self.terminal == TerminalKind::TargetExited {
+            return Err("target_exited_during_cleanup; exit debug event acknowledged".into());
+        }
         match result {
             Ok(()) => Ok(()),
             Err(reason) => {
-                if matches!(alive(&self.game), Ok(false)) {
+                if matches!(alive(&self.game), Ok(false)) && self.cleanup_event.is_none() {
                     let exit = queried_exit_code(&self.game);
                     self.record_critical_exit(exit);
                     self.attached = false;
@@ -2246,6 +2274,7 @@ impl Debugger {
                 let cleanup = self.cleanup(None);
                 return Err(format!("{error}; detach: {cleanup:?}"));
             }
+            self.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
             let status = match self.handle_event(&event) {
                 Ok(status) => status,
                 Err(e) => {
@@ -2258,18 +2287,15 @@ impl Debugger {
                     return Err(format!("{e}; detach: {cleanup:?}"));
                 }
             };
-            if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
-                unsafe {
-                    ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status);
-                }
-                self.attached = false;
-                self.terminal = TerminalKind::TargetExited;
-                return Err("target process exited during observation".into());
-            }
-            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
-                let error = win_error("ContinueDebugEvent");
+            if let Err(error) = self.continue_pending_with_status(status) {
                 let cleanup = self.cleanup(None);
                 return Err(format!("{error}; detach: {cleanup:?}"));
+            }
+            if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
+                self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
+                self.held.clear();
+                return Err("target process exited during observation".into());
             }
             if self.ready {
                 if self.attach_deadline_expired() {
@@ -2304,6 +2330,7 @@ impl Debugger {
                 let cleanup = self.cleanup(None);
                 return Err(format!("{error}; detach: {cleanup:?}"));
             }
+            self.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
             let status = match self.handle_event(&event) {
                 Ok(v) => v,
                 Err(e) => {
@@ -2316,20 +2343,24 @@ impl Debugger {
                     return Err(format!("{e}; detach: {cleanup:?}"));
                 }
             };
-            if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
-                unsafe {
-                    ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status);
-                }
-                self.attached = false;
-                self.terminal = TerminalKind::TargetExited;
-                return Err("target process exited during observation".into());
-            }
-            if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
-                let error = win_error("ContinueDebugEvent");
+            if let Err(error) = self.continue_pending_with_status(status) {
                 let cleanup = self.cleanup(None);
                 return Err(format!("{error}; detach: {cleanup:?}"));
             }
+            if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
+                self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
+                self.held.clear();
+                return Err("target process exited during observation".into());
+            }
         }
+    }
+
+    fn continue_pending_with_status(&mut self, status: i32) -> Result<(), String> {
+        if let Some((event, _)) = self.cleanup_event {
+            self.cleanup_event = Some((event, status));
+        }
+        self.continue_pending()
     }
 }
 impl CleanupOps for Debugger {
@@ -2340,38 +2371,40 @@ impl CleanupOps for Debugger {
         if self.mode == ProbeMode::Lifecycle {
             return Ok(());
         }
-        for _ in 0..64 {
-            let ids = thread_ids(self.pid)?;
-            let additions: Vec<u32> = ids
-                .iter()
-                .copied()
-                .filter(|tid| self.threads.contains_key(tid) && !self.held.contains(tid))
-                .collect();
-            if additions.is_empty() {
-                return Ok(());
+        // This debugger thread is the sole writer of the tracked set. While
+        // cleaning up it installs no new breakpoints, so only these pinned
+        // handles need restoration. Enumerating *all system threads* twice
+        // consumed the whole six-second budget under parallel Windows tests.
+        for (&tid, state) in &self.threads {
+            if self.held.contains(&tid) {
+                continue; // Do not increment a suspend count again on retry.
             }
-            for tid in additions {
-                // Each installed breakpoint is paired with this handle and an
-                // original register snapshot. Reopening by TID can fail or
-                // pick up a different thread after the original exits.
-                let handle = &self.threads[&tid].handle;
-                if unsafe { SuspendThread(handle.0) } == u32::MAX {
-                    let suspend_error = win_error("SuspendThread");
-                    let thread_wait = unsafe { WaitForSingleObject(handle.0, 0) };
-                    let listed = thread_ids(self.pid)?.contains(&tid);
-                    let game_wait = unsafe { WaitForSingleObject(self.game.0, 0) };
-                    match suspend_failure_state(thread_wait, listed, game_wait) {
-                        SuspendFailureState::Gone => continue,
-                        SuspendFailureState::TargetExited => return Err(format!("target exited while suspending thread {tid}: {suspend_error}")),
-                        SuspendFailureState::Unsignaled => return Err(format!("thread {tid} was listed and unsignaled when suspension failed: {suspend_error}")),
-                        SuspendFailureState::Unknown => return Err(format!("thread {tid} liveness was unconfirmed after suspension failure (thread wait {thread_wait}, game wait {game_wait}): {suspend_error}")),
-                    }
-                } else {
-                    self.held.insert(tid);
+            let handle = &state.handle;
+            match unsafe { WaitForSingleObject(handle.0, 0) } {
+                WAIT_OBJECT_0 => continue,
+                WAIT_TIMEOUT => {}
+                _ => {
+                    return Err(format!(
+                        "cannot confirm thread {tid} liveness before suspension: {}",
+                        win_error("WaitForSingleObject")
+                    ))
                 }
             }
+            if unsafe { SuspendThread(handle.0) } == u32::MAX {
+                let suspend_error = win_error("SuspendThread");
+                let thread_wait = unsafe { WaitForSingleObject(handle.0, 0) };
+                let game_wait = unsafe { WaitForSingleObject(self.game.0, 0) };
+                match suspend_failure_state(thread_wait, game_wait) {
+                    SuspendFailureState::Gone => continue,
+                    SuspendFailureState::TargetExited => return Err(format!("target exited while suspending thread {tid}: {suspend_error}")),
+                    SuspendFailureState::Unsignaled => return Err(format!("thread {tid} was unsignaled when suspension failed: {suspend_error}")),
+                    SuspendFailureState::Unknown => return Err(format!("thread {tid} liveness was unconfirmed after suspension failure (thread wait {thread_wait}, game wait {game_wait}): {suspend_error}")),
+                }
+            } else {
+                self.held.insert(tid);
+            }
         }
-        Err("target threads did not reach a stable suspended set".into())
+        Ok(())
     }
     fn restore_verified(&mut self) -> Result<(), String> {
         if self.mode == ProbeMode::Lifecycle {
@@ -2411,10 +2444,26 @@ impl CleanupOps for Debugger {
     }
     fn continue_pending(&mut self) -> Result<(), String> {
         if let Some((event, status)) = self.cleanup_event {
+            #[cfg(test)]
+            if self.exit_continue_fault && event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
+                self.exit_continue_fault = false;
+                return Err("injected exit ContinueDebugEvent refusal".into());
+            }
+            #[cfg(test)]
+            if self.continue_faults > 0 {
+                self.continue_faults -= 1;
+                return Err("injected ContinueDebugEvent refusal".into());
+            }
             if unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, status) } == 0 {
                 return Err(win_error("ContinueDebugEvent before detach"));
             }
             self.cleanup_event = None;
+            if let Some(exit) = critical_exit_from_debug_event(&event) {
+                self.attached = false;
+                self.terminal = TerminalKind::TargetExited;
+                self.held.clear();
+                self.record_critical_exit(exit);
+            }
         }
         Ok(())
     }
@@ -2452,7 +2501,13 @@ impl CleanupOps for Debugger {
 impl Drop for Debugger {
     fn drop(&mut self) {
         if !self.critical && (self.attached || !self.held.is_empty()) {
-            let _ = self.cleanup(None);
+            if let (Some((event, _)), DispatchOutcome::Ambiguous(reason)) =
+                (self.cleanup_event, self.last_dispatch)
+            {
+                let _ = self.critical_ambiguous_exception(&event, reason);
+            } else {
+                let _ = self.cleanup(None);
+            }
         }
     }
 }
@@ -2558,17 +2613,19 @@ pub fn run_observer(config: ObserverConfig) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "windows/test_support.rs"]
+mod test_support;
+
+#[cfg(test)]
 mod tests {
+    use super::test_support::{
+        enter_worker, isolated_test, join_observer, verify_watchdog_failure, Fixture,
+    };
     use super::*;
-    use std::{
-        io::{BufReader, BufWriter},
-        os::windows::process::CommandExt,
-        process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            mpsc::Sender,
-            Arc,
-        },
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Sender,
+        Arc,
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
         AddVectoredExceptionHandler, RaiseException, RemoveVectoredExceptionHandler,
@@ -2782,6 +2839,9 @@ mod tests {
                     governors[0x70..0x78].fill(0);
                     println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64);
                 }
+                "H" => loop {
+                    thread::park();
+                },
                 "X" => break,
                 _ => panic!("invalid fixture command"),
             }
@@ -2789,81 +2849,12 @@ mod tests {
         }
     }
 
-    struct Fixture {
-        child: Child,
-        input: BufWriter<ChildStdin>,
-        output: BufReader<ChildStdout>,
-        entry: u64,
-        original_regs: String,
-    }
-    impl Fixture {
-        fn start() -> Self {
-            let mut child = Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "windows::tests::fixture_child_worker",
-                    "--nocapture",
-                ])
-                .env("PR86_PROBE_TEST_CHILD", "1")
-                .creation_flags(0x0800_0000)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .unwrap();
-            let input = BufWriter::new(child.stdin.take().unwrap());
-            let mut output = BufReader::new(child.stdout.take().unwrap());
-            let ready = loop {
-                let mut line = String::new();
-                assert_ne!(
-                    output.read_line(&mut line).unwrap(),
-                    0,
-                    "fixture child exited before ready"
-                );
-                if let Some(rest) = line.trim().strip_prefix("PROBE_FIXTURE_READY:") {
-                    break rest.to_string();
-                }
-            };
-            let (address, regs) = ready.split_once(':').unwrap();
-            Self {
-                child,
-                input,
-                output,
-                entry: address.parse().unwrap(),
-                original_regs: regs.into(),
-            }
-        }
-        fn command(&mut self, cmd: &str, prefix: &str) -> String {
-            writeln!(self.input, "{cmd}").unwrap();
-            self.input.flush().unwrap();
-            loop {
-                let mut line = String::new();
-                if self.output.read_line(&mut line).unwrap() == 0 {
-                    let status = self.child.try_wait().unwrap();
-                    let mut stderr = String::new();
-                    if status.is_some() {
-                        if let Some(pipe) = self.child.stderr.as_mut() {
-                            let _ = pipe.read_to_string(&mut stderr);
-                        }
-                    }
-                    panic!("fixture child exited during {cmd}: {status:?}; stderr={stderr}");
-                }
-                if let Some(rest) = line.trim().strip_prefix(prefix) {
-                    return rest.to_string();
-                }
-            }
-        }
-    }
-    impl Drop for Fixture {
-        fn drop(&mut self) {
-            let _ = writeln!(self.input, "X");
-            let _ = self.input.flush();
-            let _ = self.child.wait();
-        }
-    }
-
     #[test]
     fn synthetic_child_owner_data_and_lifetime_are_read_without_stale_pointers() {
+        if isolated_test("synthetic_child_owner_data_and_lifetime_are_read_without_stale_pointers")
+        {
+            return;
+        }
         let mut child = Fixture::start();
         let game = process(child.child.id(), true).unwrap();
         let address = u64::from_str_radix(&child.command("O", "PROBE_OWNER:"), 16).unwrap();
@@ -2885,7 +2876,201 @@ mod tests {
     }
 
     #[test]
+    fn silent_fixture_times_out_and_is_reaped_without_an_unbounded_read() {
+        if isolated_test("silent_fixture_times_out_and_is_reaped_without_an_unbounded_read") {
+            return;
+        }
+        let mut child = Fixture::start();
+        let game = process(child.child.id(), false).unwrap();
+        let started = Instant::now();
+        let response = child.command_with_budget("H", "PROBE_OUT:", Duration::from_millis(100));
+        assert!(response.unwrap_err().contains("did not answer"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(alive(&game).unwrap());
+        drop(child);
+        assert!(!alive(&game).unwrap(), "silent fixture survived cleanup");
+    }
+
+    #[test]
+    fn synchronous_observer_panic_restores_before_the_join_reports_failure() {
+        if isolated_test("synchronous_observer_panic_restores_before_the_join_reports_failure") {
+            return;
+        }
+        panic_child_case(false);
+    }
+
+    #[test]
+    fn panic_with_a_pending_hardware_exception_restores_then_continues_that_event() {
+        if isolated_test(
+            "panic_with_a_pending_hardware_exception_restores_then_continues_that_event",
+        ) {
+            return;
+        }
+        panic_child_case(true);
+    }
+
+    fn panic_child_case(pending: bool) {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path =
+            std::env::temp_dir().join(format!("pr86-panic-{}-{pid}.jsonl", std::process::id()));
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let panic_now = Arc::new(AtomicBool::new(false));
+        let observer_panic = Arc::clone(&panic_now);
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.panic_on_owned_event = pending;
+            debugger.run(stop_rx, Duration::from_secs(10), || {
+                assert!(
+                    !observer_panic.load(Ordering::SeqCst),
+                    "injected synchronous observer panic"
+                );
+                Ok(())
+            })
+        });
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(20));
+        }
+        if pending {
+            assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        } else {
+            panic_now.store(true, Ordering::SeqCst);
+        }
+        assert!(join_observer(observer).is_err());
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn case_watchdog_recovers_stalled_and_panicking_trees_without_masking_failure() {
+        if isolated_test(
+            "case_watchdog_recovers_stalled_and_panicking_trees_without_masking_failure",
+        ) {
+            return;
+        }
+        verify_watchdog_failure();
+    }
+
+    #[test]
+    fn failed_event_continuation_retries_the_pending_event_before_verified_detach() {
+        if isolated_test(
+            "failed_event_continuation_retries_the_pending_event_before_verified_detach",
+        ) {
+            return;
+        }
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path =
+            std::env::temp_dir().join(format!("pr86-continue-{}-{pid}.jsonl", std::process::id()));
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.continue_faults = 1;
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (result, debugger.terminal, debugger.cleanup_event.is_none())
+        });
+        let (result, terminal, acknowledged) = join_observer(observer).unwrap();
+        assert!(result
+            .unwrap_err()
+            .contains("injected ContinueDebugEvent refusal"));
+        assert_eq!(terminal, TerminalKind::Detached);
+        assert!(acknowledged, "detach lost an unacknowledged debug event");
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn refused_exit_acknowledgement_keeps_the_real_event_code_and_reaps_the_child() {
+        if isolated_test(
+            "refused_exit_acknowledgement_keeps_the_real_event_code_and_reaps_the_child",
+        ) {
+            return;
+        }
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-exit-retry-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let game = process(pid, true).unwrap();
+            let mut debugger =
+                Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Lifecycle).unwrap();
+            debugger.exit_continue_fault = true;
+            let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
+            (
+                result,
+                debugger.terminal,
+                debugger.lifecycle.exit_code,
+                debugger.cleanup_event.is_none(),
+            )
+        });
+        let start = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(start.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(20));
+        }
+        let status = child.terminate();
+        let (result, terminal, code, acknowledged) = join_observer(observer).unwrap();
+        assert!(result
+            .unwrap_err()
+            .contains("injected exit ContinueDebugEvent refusal"));
+        assert_eq!(terminal, TerminalKind::TargetExited);
+        assert_eq!(code, status.code().map(|value| value as u32));
+        assert!(acknowledged);
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn watchdog_stalled_fixture_worker() {
+        if !enter_worker("watchdog_stalled_fixture_worker") {
+            return;
+        }
+        let mut child = Fixture::start();
+        child.send("H").unwrap();
+        println!("WATCHDOG_FIXTURE:{}", child.child.id());
+        std::io::stdout().flush().unwrap();
+        join_observer(thread::spawn(|| loop {
+            thread::park();
+        }))
+        .unwrap();
+    }
+
+    #[test]
+    fn watchdog_panicking_fixture_worker() {
+        if !enter_worker("watchdog_panicking_fixture_worker") {
+            return;
+        }
+        let mut child = Fixture::start();
+        child.send("H").unwrap();
+        println!("WATCHDOG_FIXTURE:{}", child.child.id());
+        std::io::stdout().flush().unwrap();
+        panic!("injected fixture-owner panic");
+    }
+
+    #[test]
     fn property_mode_four_breakpoints_restore_after_synthetic_child_hit() {
+        if isolated_test("property_mode_four_breakpoints_restore_after_synthetic_child_hit") {
+            return;
+        }
         let mut child = Fixture::start();
         let path = std::env::temp_dir().join(format!(
             "pr86-property-mode-{}-{}.jsonl",
@@ -2924,7 +3109,7 @@ mod tests {
         assert_eq!(u64::from_str_radix(fields[5], 16).unwrap() & 0xff, 0x55);
         assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
         stop_tx.send(()).unwrap();
-        assert!(observer.join().unwrap().is_ok());
+        assert!(join_observer(observer).unwrap().is_ok());
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
         let trace = fs::read_to_string(&path).unwrap();
         assert!(trace.contains("\"type\":\"player_getter\""));
@@ -3021,7 +3206,7 @@ mod tests {
             stop_tx.send(()).unwrap();
         }
         let (result, attached, thread_events, armed_threads, origin, terminal) =
-            observer.join().unwrap();
+            join_observer(observer).unwrap();
         if guard_failure {
             assert!(result.unwrap_err().contains("synthetic controller closed"));
         } else {
@@ -3117,16 +3302,26 @@ mod tests {
 
     #[test]
     fn lifecycle_stop_keeps_debug_registers_unchanged_and_forwards_foreign_step() {
+        if isolated_test("lifecycle_stop_keeps_debug_registers_unchanged_and_forwards_foreign_step")
+        {
+            return;
+        }
         lifecycle_child_case(false);
     }
 
     #[test]
     fn lifecycle_controller_error_detaches_without_debug_register_writes() {
+        if isolated_test("lifecycle_controller_error_detaches_without_debug_register_writes") {
+            return;
+        }
         lifecycle_child_case(true);
     }
 
     #[test]
     fn lifecycle_parent_close_reports_exit_without_inventing_an_exception() {
+        if isolated_test("lifecycle_parent_close_reports_exit_without_inventing_an_exception") {
+            return;
+        }
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path = std::env::temp_dir().join(format!(
@@ -3150,9 +3345,8 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
-        child.child.kill().unwrap(); // The controller closes only its synthetic child.
-        child.child.wait().unwrap();
-        let (result, terminal, exit_code) = observer.join().unwrap();
+        child.terminate(); // Only this case's synthetic child.
+        let (result, terminal, exit_code) = join_observer(observer).unwrap();
         assert!(result.unwrap_err().contains("target process exited"));
         assert_eq!(terminal, TerminalKind::TargetExited);
         assert!(exit_code.is_some());
@@ -3176,6 +3370,9 @@ mod tests {
 
     #[test]
     fn critical_pump_preserves_exit_event_and_signaled_child_codes() {
+        if isolated_test("critical_pump_preserves_exit_event_and_signaled_child_codes") {
+            return;
+        }
         let mut event = DEBUG_EVENT::default();
         event.dwDebugEventCode = EXIT_PROCESS_DEBUG_EVENT;
         event.u.ExitProcess = EXIT_PROCESS_DEBUG_INFO {
@@ -3187,8 +3384,7 @@ mod tests {
 
         let mut child = Fixture::start();
         let game = process(child.child.id(), false).unwrap();
-        child.child.kill().unwrap();
-        child.child.wait().unwrap();
+        child.terminate(); // Only this case's synthetic child.
         let observed = announce_critical_and_wait_for_owned_game(
             &game,
             child.child.id(),
@@ -3276,7 +3472,7 @@ mod tests {
             assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
             stop_tx.send(()).unwrap();
         }
-        let (result, attached) = observer.join().unwrap();
+        let (result, attached) = join_observer(observer).unwrap();
         if fail_guard || fail_recording {
             assert!(result.is_err(), "failure did not abort the observer");
         } else {
@@ -3341,10 +3537,16 @@ mod tests {
 
     #[test]
     fn entry_return_threads_and_normal_detach_restore_registers() {
+        if isolated_test("entry_return_threads_and_normal_detach_restore_registers") {
+            return;
+        }
         run_case(Duration::from_secs(20), true, false, false, 0, false);
     }
     #[test]
     fn real_child_unwind_and_same_frame_reuse_never_assigns_old_id_a_new_al() {
+        if isolated_test("real_child_unwind_and_same_frame_reuse_never_assigns_old_id_a_new_al") {
+            return;
+        }
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path = std::env::temp_dir().join(format!(
@@ -3368,7 +3570,7 @@ mod tests {
         }
         assert_eq!(child.command("W", "PROBE_OUT:"), "W1");
         stop_tx.send(()).unwrap();
-        assert!(observer.join().unwrap().is_ok());
+        assert!(join_observer(observer).unwrap().is_ok());
         let rows: Vec<Value> = fs::read_to_string(&path)
             .unwrap()
             .lines()
@@ -3401,22 +3603,37 @@ mod tests {
     }
     #[test]
     fn timeout_detach_preserves_the_child_and_registers() {
+        if isolated_test("timeout_detach_preserves_the_child_and_registers") {
+            return;
+        }
         run_case(Duration::from_millis(500), false, false, false, 0, false);
     }
     #[test]
     fn failure_detach_preserves_the_child_and_registers() {
+        if isolated_test("failure_detach_preserves_the_child_and_registers") {
+            return;
+        }
         run_case(Duration::from_secs(20), false, true, false, 0, false);
     }
     #[test]
     fn recording_failure_detaches_without_killing_the_child() {
+        if isolated_test("recording_failure_detaches_without_killing_the_child") {
+            return;
+        }
         run_case(Duration::from_secs(20), false, false, true, 0, false);
     }
     #[test]
     fn one_injected_context_failure_retries_and_restores_the_live_child() {
+        if isolated_test("one_injected_context_failure_retries_and_restores_the_live_child") {
+            return;
+        }
         run_case(Duration::from_millis(500), false, false, false, 1, false);
     }
     #[test]
     fn real_windows_hardware_exception_survives_sanitized_dr6_view() {
+        if isolated_test("real_windows_hardware_exception_survives_sanitized_dr6_view") {
+            return;
+        }
         // The old dispatcher required DR6.B0 and would forward this real
         // STATUS_SINGLE_STEP to the child, which has no handler for it.
         run_case(Duration::from_secs(20), true, false, false, 0, true);
@@ -3457,8 +3674,7 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        writeln!(child.input, "T").unwrap();
-        child.input.flush().unwrap();
+        child.send("T").unwrap();
         while !signal.load(Ordering::SeqCst) {
             assert!(
                 start.elapsed() < Duration::from_secs(5),
@@ -3477,8 +3693,8 @@ mod tests {
         );
         child.child.kill().unwrap();
         close_ack.store(true, Ordering::SeqCst); // Controller acknowledged closing this owned Rust child.
-        child.child.wait().unwrap();
-        let (result, critical, normal_cleanup_gate) = observer.join().unwrap();
+        child.wait_for_exit();
+        let (result, critical, normal_cleanup_gate) = join_observer(observer).unwrap();
         assert!(result.unwrap_err().contains("ambiguous debug exception"));
         assert!(critical);
         assert!(
@@ -3507,16 +3723,25 @@ mod tests {
     }
     #[test]
     fn rip_mismatch_on_real_hardware_event_requires_same_child_close() {
+        if isolated_test("rip_mismatch_on_real_hardware_event_requires_same_child_close") {
+            return;
+        }
         run_ambiguous_real_child_case(ProbeMode::Governor, false);
         run_ambiguous_real_child_case(ProbeMode::Property, false);
     }
     #[test]
     fn unreadable_context_on_real_hardware_event_requires_same_child_close() {
+        if isolated_test("unreadable_context_on_real_hardware_event_requires_same_child_close") {
+            return;
+        }
         run_ambiguous_real_child_case(ProbeMode::Governor, true);
         run_ambiguous_real_child_case(ProbeMode::Property, true);
     }
     #[test]
     fn late_real_windows_attach_breakpoint_never_announces_ready() {
+        if isolated_test("late_real_windows_attach_breakpoint_never_announces_ready") {
+            return;
+        }
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path = std::env::temp_dir().join(format!(
@@ -3535,7 +3760,7 @@ mod tests {
             let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
             (result, debugger.attached)
         });
-        let (result, attached) = observer.join().unwrap();
+        let (result, attached) = join_observer(observer).unwrap();
         assert!(result
             .unwrap_err()
             .contains("initial debugger breakpoint arrived after"));
@@ -3553,6 +3778,9 @@ mod tests {
     }
     #[test]
     fn unrelated_real_single_step_reaches_the_child_exception_handler() {
+        if isolated_test("unrelated_real_single_step_reaches_the_child_exception_handler") {
+            return;
+        }
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path = std::env::temp_dir().join(format!(
@@ -3579,7 +3807,7 @@ mod tests {
         }
         assert_eq!(child.command("U", "PROBE_OUT:"), "Utrue");
         stop_tx.send(()).unwrap();
-        observer.join().unwrap().unwrap();
+        join_observer(observer).unwrap().unwrap();
         let rows: Vec<Value> = fs::read_to_string(&path)
             .unwrap()
             .lines()
@@ -3606,6 +3834,7 @@ mod tests {
         readback_fail: usize,
         detach_fail: usize,
         resume_fail: usize,
+        resume_delay: Duration,
     }
     impl CleanupOps for FaultCleanup {
         fn game_exited(&mut self) -> bool {
@@ -3647,6 +3876,7 @@ mod tests {
         }
         fn resume(&mut self) -> Result<(), String> {
             self.calls.push("resume");
+            thread::sleep(self.resume_delay);
             if self.resume_fail > 0 {
                 self.resume_fail -= 1;
                 Err("ResumeThread refused".into())
@@ -3700,25 +3930,37 @@ mod tests {
         }
     }
     #[test]
+    fn a_successful_resume_after_the_absolute_deadline_is_still_a_failure() {
+        let mut os = FaultCleanup {
+            resume_delay: Duration::from_millis(60),
+            ..Default::default()
+        };
+        let mut gate = CleanupGate::new();
+        gate.deadline = Instant::now() + Duration::from_millis(30);
+        let error = gate.drive(&mut os).unwrap_err();
+        assert!(error.contains("critical_cleanup"));
+        assert!(error.contains("Resume"));
+        assert_eq!(
+            os.calls,
+            ["freeze", "restore_readback", "continue", "detach", "resume"]
+        );
+    }
+    #[test]
     fn suspend_failure_does_not_call_unknown_liveness_alive() {
         assert_eq!(
-            suspend_failure_state(WAIT_OBJECT_0, true, WAIT_TIMEOUT),
+            suspend_failure_state(WAIT_OBJECT_0, WAIT_TIMEOUT),
             SuspendFailureState::Gone
         );
         assert_eq!(
-            suspend_failure_state(WAIT_TIMEOUT, false, WAIT_TIMEOUT),
-            SuspendFailureState::Gone
-        );
-        assert_eq!(
-            suspend_failure_state(WAIT_TIMEOUT, true, WAIT_OBJECT_0),
+            suspend_failure_state(WAIT_TIMEOUT, WAIT_OBJECT_0),
             SuspendFailureState::TargetExited
         );
         assert_eq!(
-            suspend_failure_state(WAIT_TIMEOUT, true, WAIT_TIMEOUT),
+            suspend_failure_state(WAIT_TIMEOUT, WAIT_TIMEOUT),
             SuspendFailureState::Unsignaled
         );
         assert_eq!(
-            suspend_failure_state(u32::MAX, true, WAIT_TIMEOUT),
+            suspend_failure_state(u32::MAX, WAIT_TIMEOUT),
             SuspendFailureState::Unknown
         );
         let mut os = FaultCleanup {
@@ -3745,7 +3987,7 @@ mod tests {
         let wait = unsafe { WaitForSingleObject(pinned.0, 0) };
         assert_eq!(wait, WAIT_OBJECT_0);
         assert_eq!(
-            suspend_failure_state(wait, true, WAIT_TIMEOUT),
+            suspend_failure_state(wait, WAIT_TIMEOUT),
             SuspendFailureState::Gone
         );
     }
@@ -4076,11 +4318,17 @@ mod tests {
     }
     #[test]
     fn fixture_parent_pid_is_the_spawning_test_process() {
+        if isolated_test("fixture_parent_pid_is_the_spawning_test_process") {
+            return;
+        }
         let child = Fixture::start();
         assert_eq!(parent_pid(child.child.id()).unwrap(), std::process::id());
     }
     #[test]
     fn ntdll_origin_records_disk_pe_and_target_module_evidence() {
+        if isolated_test("ntdll_origin_records_disk_pe_and_target_module_evidence") {
+            return;
+        }
         let child = Fixture::start();
         let (origin, _, evidence) = resolve_attach_origin(child.child.id()).unwrap();
         let remote = module_named(child.child.id(), "ntdll.dll").unwrap();
@@ -4102,6 +4350,10 @@ mod tests {
     }
     #[test]
     fn permanent_context_refusal_reports_critical_until_controller_closes_child() {
+        if isolated_test("permanent_context_refusal_reports_critical_until_controller_closes_child")
+        {
+            return;
+        }
         let mut child = Fixture::start();
         let pid = child.child.id();
         let path = std::env::temp_dir().join(format!(
@@ -4124,7 +4376,13 @@ mod tests {
             gate.deadline = Instant::now() + Duration::from_millis(250);
             debugger.cleanup_gate = Some(gate);
             let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
-            (result, debugger.attached, debugger.critical)
+            (
+                result,
+                debugger.attached,
+                debugger.critical,
+                debugger.terminal,
+                debugger.lifecycle.exit_code,
+            )
         });
         let start = Instant::now();
         while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
@@ -4142,14 +4400,18 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        child.child.kill().unwrap(); // The controller closes only its own Rust fixture.
-        child.child.wait().unwrap();
-        let (result, attached, critical) = observer.join().unwrap();
+        let child_status = child.terminate(); // Only this case's synthetic child.
+        let (result, attached, critical, terminal, exit_code) = join_observer(observer).unwrap();
         assert!(result
             .unwrap_err()
             .contains("controller closed the owned game"));
         assert!(critical);
         assert!(!attached);
+        assert_eq!(terminal, TerminalKind::TargetExited);
+        assert_eq!(exit_code, child_status.code().map(|code| code as u32));
+        let trace = fs::read_to_string(&path).unwrap();
+        assert!(trace.contains("injected SetThreadContext refusal"));
+        assert!(trace.contains("\"type\":\"target_exit_observed\""));
         drop(child);
         fs::remove_file(path).unwrap();
     }
