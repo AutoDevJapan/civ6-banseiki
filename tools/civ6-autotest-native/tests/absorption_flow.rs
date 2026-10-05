@@ -248,6 +248,23 @@ fn religion_adapter_collision_rejects_before_native_absorption_mutation() -> mlu
 }
 
 #[test]
+fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation()
+-> mlua::Result<()> {
+    let lua = joint_adapter_world()?;
+    lua.load(r#"
+      local A=TEST_ABSORPTION
+      local state=Game:GetProperty('JAC_RP_STATE_V1')
+      state.heroes['1'].heroClass=99
+      local before=A.Canonical(state)
+      local ok,err=pcall(A.Apply,PLAN)
+      assert(not ok and tostring(err):find('identity mismatch',1,true))
+      assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0,'stale reference refusal damaged native assets')
+      assert(Players[1].units[13] and CITIES[4]:GetOwner()==1)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==before)
+    "#).exec()
+}
+
+#[test]
 fn religion_adapter_failed_property_write_resumes_without_second_native_transfer()
 -> mlua::Result<()> {
     let lua = joint_adapter_world()?;

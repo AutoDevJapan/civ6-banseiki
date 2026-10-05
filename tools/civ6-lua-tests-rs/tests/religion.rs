@@ -74,7 +74,7 @@ fn absorption_tx(h: &Harness, transfer: bool) {
                 &h.lua,
                 &json!({
                     "ID":"rp-absorb-1", "From":0, "To":1,
-                    "Units":[{"ID":77,"Hero":{"Class":10},"KeepUnit":transfer,
+                    "Units":[{"ID":77,"Type":"UNIT_HERO_ANANSI","Hero":{"Class":10},"KeepUnit":transfer,
                         "Destination":1,"Outcome":if transfer {"RECRUIT"} else {"SUICIDE"}}],
                     "UnitMap":{"0:77":{"ID":88,"Token":"rp-absorb-1:unit:77"}}
                 }),
@@ -222,6 +222,14 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
             "revival",
         ),
         ("s.heroes['0'].verification='PENDING'", "hero"),
+        (
+            "s.heroes['0'].heroClass=11",
+            "reused hero ID with another class",
+        ),
+        (
+            "s.heroes['0'].heroUnit='UNIT_HERO_ARTHUR'",
+            "hero type mismatch",
+        ),
         ("s.heroes['1']={unit=99}", "hero collision"),
         ("s.artifacts['1']={asset='other'}", "Vault collision"),
     ] {

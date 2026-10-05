@@ -67,6 +67,8 @@ local function heroSnapshot(state, tx)
   end
   assert(found and found.Hero and found.KeepUnit and found.Destination == tx.To
     and found.Outcome ~= "SUICIDE", "RP hero must transfer with its native unit")
+  assert(hero.heroClass == found.Hero.Class and hero.heroUnit == found.Type,
+    "RP hero native identity mismatch")
   return hero.unit
 end
 
