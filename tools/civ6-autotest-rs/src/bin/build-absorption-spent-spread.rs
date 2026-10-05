@@ -72,6 +72,8 @@ local function activated(owner)
  local unit=assert(Players[owner]:GetUnits():FindID(e.UnitID),'donor absent at AI turn start')
  JAC192_SPREAD.AITurn=Game.GetCurrentGameTurn();JAC192_SPREAD.BeginCharges=unit:GetSpreadCharges()
  assert(JAC192_SPREAD.BeginCharges==3 and #JAC192_SPREAD.Events==0,'donor spent charges before AI turn')
+ local called,can,reasons=pcall(UnitManager.CanStartOperation,unit,UnitOperationTypes.SPREAD_RELIGION,nil,false,true)
+ print('[JAC_SPENT_SPREAD_192] AI turn='..JAC192_SPREAD.AITurn..' charges='..JAC192_SPREAD.BeginCharges..' xy='..unit:GetX()..','..unit:GetY()..' can_call='..tostring(called)..' can='..tostring(can)..' reasons='..tostring(reasons))
 end
 Events.PlayerTurnActivated.Add(activated)
 Events.UnitChargesChanged.Add(charges)
@@ -148,7 +150,7 @@ fn generate(mut base: Value) -> Value {
     steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":SETUP}));
     steps.push(json!({"action":"wait_for","timeout":45,"condition":{"type":"lua","state_name":"InGame","code":FIXTURE_READY}}));
     steps.push(json!({"action":"ui_lua","state_name":"InGame","code":ARM}));
-    steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
+    steps.push(json!({"action":"end_turn","turns":2,"timeout":900}));
     steps.push(json!({"action":"ui_lua","state_name":"InGame","code":VERIFY}));
     steps.push(json!({"action":"save","name":"jac-spent-spread-192"}));
     base["name"] = json!("AI native spread operation diagnostic for ToDo 192");
@@ -257,7 +259,43 @@ mod tests {
             .exec()
             .unwrap();
         assert!(lua.load(VERIFY).eval::<String>().is_err());
+        lua.load("JAC192_SPREAD.Operations[1].Kind=99")
+            .exec()
+            .unwrap();
         lua.globals().set("CHARGES", 0).unwrap();
-        assert!(lua.load(VERIFY).eval::<String>().is_err());
+        let error = lua.load(VERIFY).eval::<String>().unwrap_err();
+        assert!(error.to_string().contains("did not consume native charge"));
+    }
+
+    #[test]
+    fn native_event_handlers_use_official_arguments_and_filter_identity() {
+        for (events, expected) in [
+            ("CHARGES=2;H.charges(4,42,2,3);H.charges(3,43,2,3);H.operation(4,42,99);H.operation(3,43,99);H.operation(3,42,98);H.charges(3,42,2,3);H.operation(3,42,99)", None),
+            ("CHARGES=2;H.operation(3,42,99)", Some("expected one native charge change event")),
+            ("CHARGES=2;H.charges(3,42,2,3);H.operation(3,42,98)", Some("expected one official native spread operation")),
+            ("CHARGES=2;TURN=2;H.charges(3,42,2,3);H.operation(3,42,99)", Some("native operation not on donor AI turn")),
+        ] {
+            let lua = mlua::Lua::new();
+            lua.load(r#"
+                CHARGES=3;TURN=1;H={}
+                local function event(name) return {Add=function(f) H[name]=f end,Remove=function(f) if H[name]==f then H[name]=nil end end} end
+                Events={PlayerTurnActivated=event('activated'),UnitChargesChanged=event('charges'),UnitOperationStarted=event('operation')}
+                local u={GetID=function() return 42 end,GetOwner=function() return 3 end,GetType=function() return 7 end,
+                  GetSpreadCharges=function() return CHARGES end,GetReligionType=function() return 13 end,
+                  GetX=function() return 1 end,GetY=function() return 1 end}
+                Game={GetProperty=function() return {From=3,UnitID=42,Religion=13} end,GetCurrentGameTurn=function() return TURN end}
+                Players={[3]={IsTurnActive=function() return true end,GetUnits=function() return {FindID=function(_,id) if id==42 then return u end end} end}}
+                GameInfo={Units={UNIT_MISSIONARY={Index=7}}};UnitOperationTypes={SPREAD_RELIGION=99}
+                UnitManager={CanStartOperation=function() return true end}
+                ExposedMembers={JAC_Absorption={Canonical=function() return 'verified' end}}
+            "#).exec().unwrap();
+            lua.load(ARM).exec().unwrap();
+            lua.load("H.activated(3)").exec().unwrap();
+            lua.load(events).exec().unwrap();
+            match expected {
+                None => assert_eq!(lua.load(VERIFY).eval::<String>().unwrap(), "verified"),
+                Some(message) => assert!(lua.load(VERIFY).eval::<String>().unwrap_err().to_string().contains(message)),
+            }
+        }
     }
 }
