@@ -114,7 +114,29 @@ impl Third {
             BEFORE_TRAVEL=JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'));
             -- A Core callback cannot regain UI getters by calling an Exposed
             -- function. No proxy swaps the Governor or CORE_READ back to UI.
-            UI_CORE_CALLS=0; CORE_ROSTER_MODE='absent';
+            UI_CORE_CALLS=0; CORE_ROSTER_MODE='absent'; CORE_UNIT_MODE='missing';
+            CORE_UNIT_METHODS={};
+            local unitMethodNames={'GetID','GetOwner','GetType','GetX','GetY','GetName',
+             'GetExperience','GetSpyOperation','GetSpyOperationEndTurn'};
+            local function rememberUnit(u)
+             if not CORE_UNIT_METHODS[u] then local methods={};
+              for _,name in ipairs(unitMethodNames) do methods[name]=u[name] end;
+              CORE_UNIT_METHODS[u]=methods;
+             end
+            end
+            local function coreUnitSurface(u)
+             rememberUnit(u);
+             if CORE_UNIT_MODE=='missing' then
+              u.GetName=nil; u.GetExperience=nil; u.GetSpyOperation=nil; u.GetSpyOperationEndTurn=nil;
+             end
+             if CORE_UNIT_FAULT then CORE_UNIT_FAULT(u) end
+            end
+            local nativeMakeSpy=makeSpy;
+            makeSpy=function(...)
+             local u=nativeMakeSpy(...); rememberUnit(u);
+             if CORE_READ then coreUnitSurface(u) end;
+             return u
+            end;
             local function uiOnly(fn)
              return function(...)
               if CORE_READ then UI_CORE_CALLS=UI_CORE_CALLS+1; error('UI function called from Gameplay') end
@@ -146,7 +168,12 @@ impl Third {
             local coreEvent=ENEMY_CASES.fireCore;
             ENEMY_CASES.fireCore=function(name,params,owner)
              THIRD_CORE_EVENT=name=='JAC_BoundaryThirdSpyStep' or name=='JAC_BoundaryRecordEnemyMission' or name=='JAC_BoundaryProgressSpy';
+             for _,u in ipairs(UNITS[0]) do rememberUnit(u) end;
+             for u in pairs(CORE_UNIT_METHODS) do coreUnitSurface(u) end;
              local ok,err=pcall(coreEvent,name,params,owner); THIRD_CORE_EVENT=false;
+             for u,methods in pairs(CORE_UNIT_METHODS) do
+              for _,method in ipairs(unitMethodNames) do u[method]=methods[method] end
+             end
              if not ok then error(err) end
             end;
             assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyStatus().physicalCount==2);
@@ -199,6 +226,22 @@ impl Third {
              fire(Events.GameCoreEventPublishComplete); FRAME(); \
              assert(Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS') and UI_CORE_CALLS==0); \
              PRODUCED_SPY_ID=983048; ADVANCE_TURN(); assert(TURN==46 and #UNITS[0]==1)"
+        );
+    }
+
+    // The live failure was after AddProgress had already created a map unit.
+    // Model that native side effect before the command acknowledgement.
+    fn enable_immediate_production(&self) {
+        self.run(
+            r#"
+            local queue=CONTROL:GetBuildQueue(); local add=queue.AddProgress;
+            queue.AddProgress=function(self,amount)
+             assert(CORE_READ,'native production mutation belongs in Core');
+             add(self,amount);
+             local spy=makeSpy(0,983048); spy.x=CONTROL.x; spy.y=CONTROL.y; spy.finish=0;
+             BUILD_HEAD=nil;
+            end;
+            "#,
         );
     }
 
@@ -1145,4 +1188,165 @@ fn ui_reload_after_unknown_mission_record_keeps_history_but_does_not_replay() {
         "#,
     );
     t.preserved_failures();
+}
+
+#[test]
+fn immediate_production_core_optional_getters_absent_preserves_public_adoption_and_mission() {
+    let t = Third::new();
+    t.enable_immediate_production();
+    t.third_success(false);
+    t.run(
+        r#"
+        local receipt=Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS');
+        local binding=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding;
+        for _,sources in ipairs({receipt.sources,binding.sources}) do
+         assert(sources.map=='CORE' and sources.unit.identity=='CORE' and sources.unit.position=='CORE');
+         assert(sources.unit.name=='UI' and sources.unit.level=='UI' and
+          sources.unit.operation=='UI' and sources.unit.endTurn=='UI');
+        end
+        assert(PROGRESS_CALLS==1 and UI_CORE_CALLS==0 and #UNIT_REQUESTS==2);
+        assert(UI==ORIGINAL_NATIVE_UI and UI.RequestPlayerOperation==ORIGINAL_NATIVE_REQUEST);
+        "#,
+    );
+    t.preserved_failures();
+}
+
+#[test]
+fn immediate_production_available_core_unit_getters_are_independently_compared() {
+    let t = Third::new();
+    t.run("CORE_UNIT_MODE='available'");
+    t.enable_immediate_production();
+    t.produce();
+    t.bind();
+    t.run(
+        r#"
+        for _,sources in ipairs({Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS').sources,
+         Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding.sources}) do
+         for _,field in ipairs({'identity','position','name','level','operation','endTurn'}) do
+          assert(sources.unit[field]=='CORE',field)
+         end
+        end
+        assert(UI_CORE_CALLS==0 and PROGRESS_CALLS==1);
+        "#,
+    );
+}
+
+#[test]
+fn optional_core_unit_getter_throw_invalid_and_partial_are_not_successful_fallbacks() {
+    for (fault, message) in [
+        (
+            "u.GetName=function() error('Core name getter throws') end",
+            "Core name getter throws",
+        ),
+        (
+            "u.GetExperience=function() error('Core experience getter throws') end",
+            "Core experience getter throws",
+        ),
+        (
+            "u.GetExperience=function() return nil end",
+            "experience object unavailable",
+        ),
+        (
+            "u.GetExperience=function() return {} end",
+            "partial third spy Core experience API",
+        ),
+        (
+            "u.GetExperience=function() return {GetLevel=false} end",
+            "unknown third spy Core unit getter",
+        ),
+        (
+            "u.GetExperience=function() return {GetLevel=function() return -1 end} end",
+            "operative level differs",
+        ),
+        (
+            "u.GetSpyOperation=function() error('Core operation getter throws') end",
+            "Core operation getter throws",
+        ),
+        (
+            "u.GetSpyOperation=function() return nil end",
+            "operative operation differs",
+        ),
+        (
+            "u.GetSpyOperation=false",
+            "unknown third spy Core unit getter",
+        ),
+        (
+            "u.GetSpyOperationEndTurn=function() return -17 end",
+            "operative endTurn differs",
+        ),
+        ("u.GetX=nil", "partial third spy Core unit position API"),
+        (
+            "u.GetX=function() return -9999 end",
+            "operative position differs",
+        ),
+    ] {
+        let t = Third::new();
+        t.produce();
+        t.run(&format!("CORE_UNIT_MODE='available'; CORE_UNIT_FAULT=function(u) {fault} end; ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME()"));
+        t.reject(
+            "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
+            message,
+        );
+        t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').bound and UI_CORE_CALLS==0 and PROGRESS_CALLS==1)");
+    }
+}
+
+#[test]
+fn native_identity_getters_remain_mandatory_for_explicit_adoption() {
+    for fault in [
+        "u.GetID=nil",
+        "u.GetOwner=nil",
+        "u.GetType=nil",
+        "u.GetID=false",
+        "u.GetOwner=function() return 1 end",
+    ] {
+        let t = Third::new();
+        t.produce();
+        t.run(&format!("CORE_UNIT_FAULT=function(u) {fault} end; ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME()"));
+        let error =
+            t.0.load("ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)")
+                .exec()
+                .expect_err("native identity absence or disagreement must reject");
+        assert!(
+            error.to_string().contains("identity") || error.to_string().contains("unit getter"),
+            "{error}"
+        );
+        t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and UI_CORE_CALLS==0)");
+    }
+}
+
+#[test]
+fn missing_core_position_pair_is_ui_witness_only_in_generation_three_binding() {
+    let t = Third::new();
+    t.produce();
+    t.run("CORE_UNIT_FAULT=function(u) u.GetX=nil; u.GetY=nil end");
+    t.bind();
+    t.run("local sources=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding.sources; assert(sources.unit.identity=='CORE' and sources.unit.position=='UI' and UI_CORE_CALLS==0)");
+}
+
+#[test]
+fn core_optional_unit_getter_failure_after_immediate_progress_keeps_one_mutation_and_no_receipt() {
+    let t = Third::new();
+    t.enable_immediate_production();
+    t.begin();
+    t.run(
+        r#"
+        fire(Events.SaveComplete); local b=ExposedMembers.JAC_PersonaBoundary;
+        b.ThirdSpySend('BUILD_SPY'); FRAME(); FRAME();
+        b.Queue('PROGRESS_SPY'); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        assert(PROGRESS_CALLS==1 and #UNITS[0]==1);
+        fire(Events.GameCoreEventPublishComplete); FRAME();
+        CORE_UNIT_FAULT=function(u) u.GetSpyOperation=function() error('Core operation getter throws') end end;
+        "#,
+    );
+    t.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
+        "Core operation getter throws",
+    );
+    t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS') and PROGRESS_CALLS==1 and UI_CORE_CALLS==0); fire(Events.LoadScreenClose)");
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY')",
+        "cannot replay",
+    );
 }

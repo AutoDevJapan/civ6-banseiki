@@ -173,7 +173,8 @@ function T.Read()
  local head=capital:GetBuildQueue():GetAt(0); local row=head and head.UnitType and GameInfo.Units[head.UnitType];
  local placeholderText,placeholderCount=placeholderSet(roster);
  local map=roster.map[1]; local m=map and {id=map.id,owner=map.owner,unitType=map.unitType,
-  x=map.x,y=map.y,nameText=R.EncodeText(map.name),level=map.level,operation=map.operation} or nil;
+  x=map.x,y=map.y,nameText=R.EncodeText(map.name),level=map.level,
+  operation=map.operation,endTurn=map.endTurn} or nil;
  local o={turn=s.turn,owner=c.attacker,defender=c.owner,cityID=c.cityID,x=c.x,y=c.y,
   governorType=s.native.type,appointed=true,base=s.native.base,
   neutralized=s.native.neutralized,established=s.native.established,
@@ -230,6 +231,72 @@ local function coreHistories(owner,histories)
  end
  return 'CORE'
 end
+local function getter(object,name)
+ local kind=type(object[name]);
+ assert(kind=='function' or kind=='nil','unknown third spy Core unit getter: '..name);
+ return kind=='function'
+end
+local function identity(unit,owner)
+ for _,name in ipairs({'GetID','GetOwner','GetType'}) do
+  assert(getter(unit,name),'required third spy Core identity getter unavailable: '..name);
+ end
+ local id,actualOwner,unitType=unit:GetID(),unit:GetOwner(),unit:GetType();
+ assert(integer(id,0) and actualOwner==owner and integer(unitType,0),
+  'third spy Core operative identity differs');
+ return id,actualOwner,unitType
+end
+local function mapInventory(owner)
+ local units=assert(Players[owner]:GetUnits(),'third spy Core map inventory unavailable');
+ assert(getter(units,'Members') and getter(units,'FindID'),
+  'required third spy Core inventory getter unavailable');
+ local count=0;
+ for _,u in units:Members() do
+  assert(getter(u,'GetType'),'required third spy Core identity getter unavailable: GetType');
+  local def=assert(GameInfo.Units[u:GetType()],'native map unit type unavailable');
+  if def.Spy then identity(u,owner); count=count+1 end
+ end
+ return count,units
+end
+local function coreUnit(owner,map,units)
+ assert(integer(map.id,0) and map.owner==owner and map.unitType==GameInfo.Units['UNIT_SPY'].Index and
+  integer(map.level,0) and integer(map.operation,-1) and integer(map.endTurn,-1) and
+  type(map.x)=='number' and type(map.y)=='number' and type(map.nameText)=='string',
+  'third spy scalar operative observation incomplete');
+ local u=assert(units:FindID(map.id),'third spy Core exact unit lookup differs');
+ local id,actualOwner,unitType=identity(u,owner);
+ assert(id==map.id,'third spy Core exact unit lookup differs');
+ assert(actualOwner==map.owner and unitType==map.unitType and T.AllowedID(id),
+  'third spy Core operative identity differs');
+ local source={identity='CORE',position='UI',name='UI',level='UI',operation='UI',endTurn='UI'};
+ local x,y=getter(u,'GetX'),getter(u,'GetY');
+ assert(x==y,'partial third spy Core unit position API');
+ if x then
+  assert(u:GetX()==map.x and u:GetY()==map.y,'third spy Core operative position differs');
+  source.position='CORE'
+ end
+ if getter(u,'GetName') then
+  local name=u:GetName();
+  assert(type(name)=='string' and name==R.DecodeText(map.nameText),'third spy Core operative name differs');
+  source.name='CORE'
+ end
+ if getter(u,'GetExperience') then
+  local experience=u:GetExperience();
+  assert(type(experience)=='table' or type(experience)=='userdata',
+   'third spy Core experience object unavailable');
+  assert(getter(experience,'GetLevel'),'partial third spy Core experience API');
+  local level=experience:GetLevel();
+  assert(integer(level,0) and level==map.level,'third spy Core operative level differs');
+  source.level='CORE'
+ end
+ for _,field in ipairs({{'operation','GetSpyOperation'},{'endTurn','GetSpyOperationEndTurn'}}) do
+  if getter(u,field[2]) then
+   local value=u[field[2]](u);
+   assert(integer(value,-1) and value==map[field[1]],'third spy Core operative '..field[1]..' differs');
+   source[field[1]]='CORE'
+  end
+ end
+ return source
+end
 local function coreCheck(owner,o)
  local c=core.config(owner); local gs=Players[c.owner]:GetGovernors();
  local def=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[c.leader].GovernorType];
@@ -245,16 +312,12 @@ local function coreCheck(owner,o)
   'third spy Core Governor or title accounting differs');
  assert(Players[owner]:GetCulture():HasCivic(GameInfo.Civics[CIVIC].Index)==true,
   'third spy native civic ownership differs');
- assert(R.MapSpyCount(owner)==o.mapCount and o.mapCount<=1,'third spy Core map inventory differs');
- if o.map then
-  local u=assert(R.FindSpy(owner,o.map.id),'third spy Core exact unit lookup differs');
-  assert(u:GetID()==o.map.id and u:GetOwner()==o.map.owner and u:GetType()==o.map.unitType and
-   u:GetX()==o.map.x and u:GetY()==o.map.y and u:GetName()==R.DecodeText(o.map.nameText) and
-   u:GetExperience():GetLevel()==o.map.level and u:GetSpyOperation()==o.map.operation and
-   T.AllowedID(u:GetID()),'third spy Core operative identity differs');
- end
+ local count,units=mapInventory(owner);
+ assert(count==o.mapCount and o.mapCount<=1,'third spy Core map inventory differs');
+ local unitSource=o.map and coreUnit(owner,o.map,units) or {identity='CORE',present=false};
  local source={map='CORE',civic='CORE',person='CORE',city='CORE',titles='CORE',governor='UI',
-  assignment='UI',queue='UI',histories=coreHistories(owner,o.histories),capacity='UI',captives='UI',offMap='UI'};
+  unit=unitSource,assignment='UI',queue='UI',histories=coreHistories(owner,o.histories),
+  capacity='UI',captives='UI',offMap='UI'};
  local d=Players[owner]:GetDiplomacy();
  local capacityKind=type(d.GetSpyCapacity);
  assert(capacityKind=='function' or capacityKind=='nil','unknown native Core capacity API');
@@ -300,12 +363,13 @@ function T.InstallCore(hooks)
     'third spy barrier differs');
    local o=published(owner,p);
    assert(conserved(ack.observed,o,p.Action=='PROGRESS_SPY'),'third spy changed after Core response');
-   checkReady(o); coreCheck(owner,o);
-   ack.phase='BARRIER'; ack.frame=p.Frame; ack.epoch=p.PublishEpoch; ack.observed=copy(o);
+   checkReady(o); local source=coreCheck(owner,o);
+   ack.phase='BARRIER'; ack.frame=p.Frame; ack.epoch=p.PublishEpoch; ack.observed=copy(o); ack.sources=source;
    Game:SetProperty(ACK,ack);
    if p.Action=='PROGRESS_SPY' then
     local production=assert(Game:GetProperty(PRODUCTION));
-    Game:SetProperty('JAC_BOUNDARY_SPY_PROGRESS',{owner=owner,cityID=production.cityID,beforeCount=0,generation=T.generation});
+    Game:SetProperty('JAC_BOUNDARY_SPY_PROGRESS',{owner=owner,cityID=production.cityID,beforeCount=0,
+     generation=T.generation,sources=source});
    end
    return
   end
@@ -394,7 +458,7 @@ function T.InstallCore(hooks)
       p.Turn==first.turn and p.Frame>first.frame and p.PublishEpoch>first.publishEpoch,
       'third spy adoption changed after Core attestation');
      retry.spyID=o.map.id; retry.binding={source='NATIVE_BUILD',generation=T.generation,owner=owner,
-      unitType=o.map.unitType,spyID=o.map.id,cityID=production.cityID,token=p.Token};
+      unitType=o.map.unitType,spyID=o.map.id,cityID=production.cityID,token=p.Token,sources=source};
      s.bound=true; s.spyID=o.map.id; s.binding=copy(retry.binding);
      Game:SetProperty(RETRY,retry); Game:SetProperty('JAC_BOUNDARY_SPY',{owner=owner,id=o.map.id,generation=T.generation});
     end
