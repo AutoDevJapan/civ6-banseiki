@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 17] = [
+pub const ACTIONS: &[&str] = &[
     "restart_game",
     "enable_mods",
     "configure",
