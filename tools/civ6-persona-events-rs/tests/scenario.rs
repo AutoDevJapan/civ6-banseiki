@@ -45,6 +45,41 @@ fn finite_diagnostic_has_one_payment_sender_and_only_its_new_save() {
         }
     }
     assert_eq!((appoint, promote), (1, 1));
+    let attach = steps
+        .iter()
+        .position(|s| s["action"] == "start_native_production_admission")
+        .unwrap();
+    let join = steps
+        .iter()
+        .position(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|s| s.contains("OnStart='JAC_LeaderPersonaJoin'"))
+        })
+        .unwrap();
+    let initial = &steps[attach + 1..join];
+    assert_eq!(
+        initial
+            .iter()
+            .filter(|s| s["code"]
+                .as_str()
+                .is_some_and(|s| s.contains("OnStart='JAC_LeaderPersonaEventsRepublish'")))
+            .count(),
+        1
+    );
+    assert_eq!(
+        initial
+            .iter()
+            .filter(|s| s["capture_as"] == "TODO324_ADMISSION_CORE_READS")
+            .count(),
+        1
+    );
+    assert!(!serde_json::to_string(initial)
+        .unwrap()
+        .contains(".Reconcile("));
+    assert!(!serde_json::to_string(initial)
+        .unwrap()
+        .contains("p:GetProperty("));
     let after = &steps[load_at.unwrap() + 1..];
     assert_eq!(
         after

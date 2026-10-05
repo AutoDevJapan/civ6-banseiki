@@ -96,6 +96,24 @@ fn run(lua: &Lua, s: &str) {
     lua.load(s).exec().unwrap();
 }
 
+fn transfer(lua: &Lua, t: mlua::Table) -> mlua::Table {
+    let result = lua.create_table().unwrap();
+    for item in t.pairs::<mlua::Value, mlua::Value>() {
+        let (k, v) = item.unwrap();
+        fn value(lua: &Lua, v: mlua::Value) -> mlua::Value {
+            match v {
+                mlua::Value::String(s) => {
+                    mlua::Value::String(lua.create_string(s.as_bytes()).unwrap())
+                }
+                mlua::Value::Table(t) => mlua::Value::Table(transfer(lua, t)),
+                x => x,
+            }
+        }
+        result.set(value(lua, k), value(lua, v)).unwrap();
+    }
+    result
+}
+
 #[test]
 fn generated_block_is_current_and_in_the_gameplay_lexical_context() {
     let source = fs::read_to_string(root().join(GAMEPLAY))
@@ -142,6 +160,104 @@ assert(playerProps[0][901001]==true and uiReads==0 and operations==0 and used[0]
 "#,
         );
     }
+}
+
+#[test]
+fn synchronized_probe_republishes_unchanged_closed_cells_after_core_attachment() {
+    let lua = context();
+    run(
+        &lua,
+        r#"
+start(); coreReads={}; local originalEmit=emit
+function emit(bus,name,...)
+ local previous=readContext; readContext='GameplayOperation'
+ originalEmit(bus,name,...); readContext=previous
+end
+for owner=0,21 do
+ local p,id=Players[owner],owner; local original=p.GetProperty
+ p.GetProperty=function(self,key)
+  local value=original(self,key)
+  if readContext=='GameplayOperation' and key>=900000 and key<=903255 then coreReads[#coreReads+1]={owner=id,key=key,value=value} end
+  return value
+ end
+end
+readContext='UI'; ExposedMembers.JAC_LeaderPersona.Reconcile()
+for owner=0,21 do assert(Players[owner]:GetProperty(902000+owner)==true) end
+assert(#coreReads==0,'UI reads/direct Reconcile must not count as Core operation binding')
+emit(GameEvents,'JAC_LeaderPersonaEventsRepublish',0,{Source=1})
+local r=status().admission
+assert(r and r.ok and r.source=='civ6-persona-events-rs/v1/Gameplay' and r.synchronized==true)
+assert(#coreReads==1474 and #r.reads==1474 and r.cells==484)
+local at=0
+for owner=0,21 do
+ at=at+1; local got=coreReads[at]
+ assert(got.owner==owner and got.key==902000+owner and got.value==true and r.reads[at].phase=='reset')
+end
+for owner=0,21 do
+ for index=0,21 do
+  at=at+1; assert(coreReads[at].owner==owner and coreReads[at].key==903000+index and coreReads[at].value==true and r.reads[at].phase=='close')
+  at=at+1; assert(coreReads[at].owner==owner and coreReads[at].key==901000+index and coreReads[at].value==false and r.reads[at].phase=='false')
+ end
+ for index=0,21 do
+  at=at+1; assert(coreReads[at].owner==owner and coreReads[at].key==900000+index and coreReads[at].value==true and r.reads[at].phase=='manifest')
+ end
+end
+assert(at==1474 and status().sequence==0 and used[0]==0 and operations==0)
+local detached=status(); detached.admission.reads[1].key=0; assert(status().admission.reads[1].key==902000)
+"#,
+    );
+}
+
+#[test]
+fn republish_rejects_nonfresh_scope_foreign_schema_and_failed_false_ack() {
+    for setup in [
+        "properties.JAC_PERSONA_ADMISSION_SCHEMA_V1=99",
+        "properties.JAC_PERSONA_ADMISSION_SCHEMA_V1=2",
+        "properties[prefix..'OWNER']=0",
+        "used[0]=1",
+        "properties.JAC_TEST324_EVENTS_PROBE=nil",
+    ] {
+        let lua = context();
+        run(&lua, "start()");
+        run(&lua, setup);
+        run(
+            &lua,
+            r#"
+local reads=0; local old=Players[0].GetProperty
+Players[0].GetProperty=function(self,key) if key>=900000 and key<=903255 then reads=reads+1 end; return old(self,key) end
+emit(GameEvents,'JAC_LeaderPersonaEventsRepublish',0,{Source=1})
+assert(reads==0 and playerProps[0].JAC_PERSONA_RESULT~='EVENT_PROBE_REPUBLISHED')
+"#,
+        );
+    }
+    let lua = context();
+    run(&lua, "start()");
+    run(
+        &lua,
+        r#"
+local old=Players[0].GetProperty
+Players[0].GetProperty=function(self,key) if key==901000 then return true end; return old(self,key) end
+emit(GameEvents,'JAC_LeaderPersonaEventsRepublish',0,{Source=1})
+local r=status().admission
+assert(r and not r.ok and r.cells==0 and r.reason=='read-order-or-ack')
+for _,entry in ipairs(r.reads) do assert(entry.owner~=0 or entry.phase~='manifest','failed false ACK published a manifest') end
+"#,
+    );
+}
+
+#[test]
+fn removing_fresh_cache_reset_is_a_red_republication_mutation() {
+    let source = fs::read_to_string(root().join(GAMEPLAY)).unwrap();
+    let cache = "admissionSnapshots={}";
+    assert_eq!(source.matches(cache).count(), 1);
+    let lua = Lua::new();
+    lua.load(FIXTURE).exec().unwrap();
+    load(&lua, &source.replace(cache, ""));
+    run(&lua,"start(); emit(GameEvents,'JAC_LeaderPersonaEventsRepublish',0,{Source=1}); assert(not status().admission.ok and #status().admission.reads==0)");
+    assert!(lua
+        .load("assert(status().admission.ok, 'installed Core must see every closed natural read')")
+        .exec()
+        .is_err());
 }
 
 #[test]
@@ -339,23 +455,6 @@ fn save_restores_into_a_new_lua_context_without_payment_replay() {
         let saved: mlua::Table = a.globals().get("properties").unwrap();
         let b = Lua::new();
         b.load(FIXTURE).exec().unwrap();
-        fn transfer(lua: &Lua, t: mlua::Table) -> mlua::Table {
-            let result = lua.create_table().unwrap();
-            for item in t.pairs::<mlua::Value, mlua::Value>() {
-                let (k, v) = item.unwrap();
-                fn value(lua: &Lua, v: mlua::Value) -> mlua::Value {
-                    match v {
-                        mlua::Value::String(s) => {
-                            mlua::Value::String(lua.create_string(s.as_bytes()).unwrap())
-                        }
-                        mlua::Value::Table(t) => mlua::Value::Table(transfer(lua, t)),
-                        x => x,
-                    }
-                }
-                result.set(value(lua, k), value(lua, v)).unwrap();
-            }
-            result
-        }
         b.globals().set("properties", transfer(&b, saved)).unwrap();
         run(
             &b,
@@ -377,6 +476,53 @@ assert(properties[prefix..'STATE']=='GOVERNOR' and uiReads==0)
         if lagging {
             run(&b,"assert(status().acquired.base.spent==0 and status().acquired.title.spent==1 and status().settlement.afterSpent==2)");
         }
+    }
+}
+
+#[test]
+fn missing_appointed_or_title_survives_reload_and_never_uses_fullpaid_ui() {
+    for missing in ["appointed", "title"] {
+        let a = context();
+        run(
+            &a,
+            "start(); join(); emit(Events,'GovernorPromoted',0,1,83)",
+        );
+        run(
+            &a,
+            if missing == "appointed" {
+                "used[0]=1; emit(Events,'GovernorPromoted',0,1,84)"
+            } else {
+                "emit(Events,'GovernorAppointed',0,1)"
+            },
+        );
+        run(&a, "used[0]=2; assert(status().paid~=2)");
+        let saved: mlua::Table = a.globals().get("properties").unwrap();
+        let b = Lua::new();
+        b.load(FIXTURE).exec().unwrap();
+        b.globals().set("properties", transfer(&b, saved)).unwrap();
+        run(
+            &b,
+            r#"
+used[0]=2; Game.GetGreatPeople():GrantPerson(201,7,8,0,0)
+ExposedMembers.JAC_LeaderPersonaNativeRead=function() uiReads=uiReads+1; return {appointed=true,base=true,surchargePaid=1} end
+assert(ExposedMembers.JAC_LeaderPersonaNativeRead().surchargePaid==1); uiReads=0
+"#,
+        );
+        load(&b, &fs::read_to_string(root().join(GAMEPLAY)).unwrap());
+        run(
+            &b,
+            r#"
+local sequence=status().sequence
+for n=1,4 do
+ ExposedMembers.JAC_LeaderPersona.Reconcile()
+ emit(GameEvents,'JAC_LeaderPersonaFinalize',0,{Leader=leader})
+ assert(status().paid~=2 and status().sequence==sequence and properties[prefix..'STATE']=='EVOLVING')
+ assert(#unitLists[0]==1 and properties[prefix..'UNIT']==500 and used[0]==2)
+end
+assert(uiReads==0 and operations==0)
+"#,
+        );
+        run(&b, &format!("assert(status().acquired.{missing}==nil)"));
     }
 }
 

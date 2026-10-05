@@ -112,21 +112,22 @@ assert(Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==1 and Game:GetProperty(
 return 'EVENTS324 Gameplay subscriptions remain registered after opt-in; payment sender is manual only'
 "#,head())));
     steps.push(json!({"action":"start_native_production_admission","name":"todo324-events-cost2","max_seconds":300,"timeout":30}));
-    // Republish ordinary closed qualifications after the bounded mode6 attaches.
-    // This invokes the original lexical Gameplay reconcile, not Tuner Events.
-    steps.push(ui(r#"
-ExposedMembers.JAC_LeaderPersona.Reconcile()
-local n=0
-for _,owner in ipairs(PlayerManager.GetAliveMajorIDs()) do
- local p=assert(Players[owner]); assert(p:GetProperty(902000+owner)==true)
- for row in GameInfo.JAC_LeaderPersonas() do
-  local index=assert(GameInfo.Governors[row.GovernorType]).Index
-  assert(p:GetProperty(903000+index)==true and p:GetProperty(901000+index)==false and p:GetProperty(900000+index)==true)
-  n=n+1
- end
-end
-assert(n==484); return 'existing closed Core qualifications read after mode6 attachment'
-"#));
+    // The synchronized operation resets only the fresh closed comparison cache
+    // and reuses the lexical Gameplay publisher. UI property reads cannot bind Core.
+    steps.push(ui("UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaEventsRepublish',Source=1}); return 'fresh synchronized Gameplay closed republish requested after mode6 attachment'"));
+    steps.push(wait(format!("local r=ExposedMembers.JAC_LeaderPersona.EventsProbeStatus(0,'{LEADER}').admission; return r and r.ok==true")));
+    let mut admission = ui(format!(
+        r#"{}
+assert(s.admission and s.admission.ok and s.admission.synchronized and s.admission.context=='Gameplay' and s.admission.schema==3)
+assert(#s.admission.reads==1474 and s.admission.cells==484,'closed natural Core read order incomplete')
+{}
+return serial(s.admission)
+"#,
+        head(),
+        SERIAL
+    ));
+    admission["capture_as"] = "TODO324_ADMISSION_CORE_READS".into();
+    steps.push(admission);
     steps.push(ui("local n=0; for _,id in ipairs(PlayerManager.GetAliveMajorIDs()) do local gs=Players[id]:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do local def=assert(GameInfo.Governors[row.GovernorType]); assert(gs:CanEverAppointGovernor(def.Hash)==false and not gs:HasGovernor(def.Hash)); n=n+1 end end; assert(n==484); return 'all 484 unjoined owner/person pairs closed'"));
     steps.push(ui("UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaJoin',Source=1}); return 'one normal Join requested'"));
     steps.push(wait(format!("return Game:GetProperty('JAC_PERSONA_{LEADER}_OWNER')==0 and Game:GetProperty('JAC_PERSONA_{LEADER}_STATE')=='GREAT_PERSON'")));
