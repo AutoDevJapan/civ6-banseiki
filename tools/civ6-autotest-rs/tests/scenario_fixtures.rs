@@ -277,7 +277,13 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
         .iter()
         .all(|&i| request_steps[i]["checkpoint"] == true));
     assert_eq!(request_steps[reload]["checkpoint"], true);
-    assert!(code(&request_steps[reload + 2]).contains("survive save/load"));
+    assert_eq!(request_steps[8]["action"], "inspect_native_spy_research");
+    assert_eq!(request_steps[8]["phase"], "after_acceptance");
+    assert_eq!(
+        request_steps[reload + 2]["action"],
+        "inspect_native_spy_research"
+    );
+    assert_eq!(request_steps[reload + 2]["phase"], "after_reload");
     assert_eq!(tick_steps[0]["checkpoint"], true);
     assert_eq!(
         tick_steps
@@ -299,8 +305,10 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
     let ready_steps = steps(&ready);
     assert_eq!(ready_steps.len(), 4);
     assert_eq!(ready_steps[0]["checkpoint"], true);
-    assert!(code(&ready_steps[2]).contains("s.capacity==3"));
-    assert!(code(&ready_steps[2]).contains("s.captured==2"));
+    assert_eq!(ready_steps[2]["action"], "inspect_native_spy_research");
+    assert_eq!(ready_steps[2]["phase"], "capacity_ready");
+    assert_eq!(tick_steps[5]["action"], "inspect_native_spy_research");
+    assert_eq!(tick_steps[5]["phase"], "after_turn");
     assert!(ready_steps
         .iter()
         .all(|step| !action(step, "save") && !action(step, "end_turn")));
@@ -316,6 +324,13 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
             }
         }
     }
+    compile_lua(&Lua::new(), &civ6_autotest_rs::spy_research::read());
+    let mut bad = request.clone();
+    bad["steps"][8]["phase"] = json!("../escape");
+    assert!(validate_scenario(&bad).is_err());
+    bad["steps"][8]["phase"] = json!("after_acceptance");
+    bad["steps"][8]["code"] = json!("UI.RequestPlayerOperation(0,1,{})");
+    assert!(validate_scenario(&bad).is_err());
 }
 
 #[test]

@@ -15,11 +15,9 @@
       "seconds": 2
     },
     {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "timeout": 60,
-      "lua_timeout": 20,
-      "code": "local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus(); assert(s.stage=='CAPACITY_READY' and s.owned and s.capacity==3 and s.captured==2,'test-only native spy capacity did not reach three with both captives preserved'); return s.stage"
+      "action": "inspect_native_spy_research",
+      "phase": "capacity_ready",
+      "timeout": 60
     },
     {
       "action": "exit_to_menu"

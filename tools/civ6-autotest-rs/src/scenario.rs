@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 32] = [
+pub const ACTIONS: [&str; 33] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -19,6 +19,7 @@ pub const ACTIONS: [&str; 32] = [
     "wait_for",
     "observe_captive_session",
     "inspect_native_spy_failures",
+    "inspect_native_spy_research",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -428,6 +429,17 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail(
                         "native spy failure inspection only accepts timeout".into(),
                     ));
+                }
+            }
+            "inspect_native_spy_research" => {
+                if step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout", "phase"].contains(&key.as_str()))
+                }) || !crate::spy_research::PHASES
+                    .contains(&step["phase"].as_str().unwrap_or_default())
+                {
+                    return Err(fail("native spy research inspection needs a known phase and only accepts timeout".into()));
                 }
             }
             "ui_lua" => {

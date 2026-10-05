@@ -33,11 +33,9 @@
       "checkpoint": true
     },
     {
-      "action": "ui_lua",
-      "state_name": "InGame",
-      "timeout": 60,
-      "lua_timeout": 20,
-      "code": "local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus(); assert(s.stage=='RESEARCHING' or s.stage=='EFFECT_PENDING' or s.stage=='CAPACITY_READY','third spy Civic research disappeared'); return s.stage"
+      "action": "inspect_native_spy_research",
+      "phase": "after_turn",
+      "timeout": 60
     },
     {
       "action": "exit_to_menu"

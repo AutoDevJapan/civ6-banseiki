@@ -12,6 +12,7 @@ pub mod restart;
 pub mod runner;
 pub mod scenario;
 pub mod spy_failures;
+pub mod spy_research;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;
