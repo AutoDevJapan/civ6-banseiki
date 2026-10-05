@@ -113,7 +113,7 @@ fn main() {
                 .collect::<Vec<_>>()
                 .join(",")
         );
-        recovery.push_str("local expected, handles, enableIDs, disableIDs = {}, {}, {}, {}\nfor _, mod in ipairs(Modding.GetInstalledMods()) do local info = Modding.GetModInfo(mod.Handle); local id = string.lower(info.Id); handles[id]=mod.Handle; expected[id]=info.Enabled end\nfor id, flag in pairs(saved) do if not handles[id] then error('original MOD no longer installed: ' .. id) end; expected[id]=flag end\nfor id, flag in pairs(expected) do if flag then table.insert(enableIDs,id) else table.insert(disableIDs,id) end end\ntable.sort(enableIDs); table.sort(disableIDs)\nlocal function apply()\n");
+        recovery.push_str("local nativeModding = Modding\nlocal Modding = setmetatable({}, {__index=nativeModding})\nlocal expected, handles, enableIDs, disableIDs = {}, {}, {}, {}\nfor _, mod in ipairs(Modding.GetInstalledMods()) do local info = Modding.GetModInfo(mod.Handle); local id = string.lower(info.Id); handles[id]=mod.Handle; expected[id]=info.Enabled end\nModding.GetModHandle = function(id) return handles[string.lower(id)] end\nfor id, flag in pairs(saved) do if not handles[id] then error('original MOD no longer installed: ' .. id) end; expected[id]=flag end\nfor id, flag in pairs(expected) do if flag then table.insert(enableIDs,id) else table.insert(disableIDs,id) end end\ntable.sort(enableIDs); table.sort(disableIDs)\nlocal function apply()\n");
         recovery.push_str(
             &enable_mods_code(&[], &[])
                 .lines()
