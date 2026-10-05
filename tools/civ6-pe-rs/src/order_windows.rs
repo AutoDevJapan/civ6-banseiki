@@ -918,7 +918,8 @@ pub fn parent(mut value: Value) -> Result<(), String> {
     row["game_pid"] = json!(req.pid);
     row["game_created_filetime"] = json!(req.created);
     row["source_dll_sha256"] = json!(req.source_dll_sha);
-    row["live_receipt"] = json!(receipt.permit_granted);
+    row["live_receipt"] = json!(receipt.restored);
+    row["native_order_observed"] = json!(false);
     row["console_lease_generation_verified"] = json!(false);
     emit(&row)?;
     if receipt.cleanup_confirmed && receipt.exit_code == Some(0) && receipt.error.is_none() {

@@ -362,6 +362,7 @@ pub struct Receipt {
     pub child_reaped: bool,
     pub exit_code: Option<i32>,
     pub restored: bool,
+    pub never_attached: bool,
     pub permit_granted: bool,
     pub stop_writes: u32,
     pub target_close_requested: bool,
@@ -371,7 +372,7 @@ pub struct Receipt {
 }
 impl Receipt {
     pub fn json(&self) -> Value {
-        json!({"child_pid":self.child_pid,"child_reaped":self.child_reaped,"child_exit_code":self.exit_code,"restored":self.restored,"permit_granted":self.permit_granted,"stop_writes":self.stop_writes,"target_close_requested":self.target_close_requested,"child_force_terminated":self.child_force_terminated,"cleanup_confirmed":self.cleanup_confirmed,"error":self.error})
+        json!({"child_pid":self.child_pid,"child_reaped":self.child_reaped,"child_exit_code":self.exit_code,"restored":self.restored,"never_attached":self.never_attached,"permit_granted":self.permit_granted,"stop_writes":self.stop_writes,"target_close_requested":self.target_close_requested,"child_force_terminated":self.child_force_terminated,"cleanup_confirmed":self.cleanup_confirmed,"error":self.error})
     }
 }
 
@@ -483,7 +484,8 @@ impl<R: Recovery> ChildGuard<R> {
                 self.ready_at = Some(Instant::now());
             }
         }
-        if self.state.owner().permit() && self.witness.restored(row, self.child.id()) {
+        if self.state.owner() == Ownership::Attached && self.witness.restored(row, self.child.id())
+        {
             self.state.set_owner(Ownership::Restored);
         }
         #[allow(irrefutable_let_patterns)]
@@ -726,6 +728,7 @@ impl<R: Recovery> ChildGuard<R> {
             child_reaped: true,
             exit_code: status.code(),
             restored: owner == Ownership::Restored,
+            never_attached: matches!(owner, Ownership::NeverAttached { .. }),
             permit_granted: owner.permit(),
             stop_writes: self.stop_writes,
             target_close_requested: self.target_close_requested,
