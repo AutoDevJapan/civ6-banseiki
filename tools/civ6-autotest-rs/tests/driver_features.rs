@@ -283,6 +283,9 @@ fn completed_diagnostic_run_has_nonzero_exit_and_false_acceptance() {
     let mut h = Harness::new(data, FakeBackend::new());
     h.runner.output = h.root.path().join("complete-diagnostic");
     h.runner.auto_restart = false;
+    for name in ["Lua.log", "Database.log", "Modding.log"] {
+        std::fs::write(h.runner.logs.join(name), "").unwrap();
+    }
     assert_eq!(h.runner.run().unwrap(), 3);
     let result: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(h.runner.output.join("result.json")).unwrap(),
