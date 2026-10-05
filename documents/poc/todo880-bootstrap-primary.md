@@ -179,3 +179,17 @@ Microsoftの [x86 Flags](https://learn.microsoft.com/en-us/windows-hardware/driv
 追加候補の最終検査：共有cargo_gate・専用targetで `cargo test --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-probe-rs --features bootstrap-order --lib --test order-capture-contract order_capture` を実行し、純粋な否定テスト4件と実CLI/ディスク照合3件が成功。生成済みの同じlib test実行ファイルで `windows::tests::live_hardware_modes_are_rejected_before_attach_or_process_access --exact` も1件成功した。合計8件。いずれもゲーム起動・debug attachは0。request fixtureはvalidateだけに渡し、`manifest_valid=true, process_identity_verified=false`を確認した。形式・差分検査も成功。capture追加差分のClippyおよびworkspace全件は未実行。
 
 commit後の成果物は `D:/CC/Work/todo880/order-observer-snapshot.json`（全8sites、source一覧、生成時HEAD）、`D:/CC/Work/todo880/order-observer-summary.json`（短い同一性結果）、`D:/CC/Work/todo880/order-observer-manifest-validation.json`（構造確認）。いずれもRust CLIの出力をそのまま保存し、runtime counterを作らない。親stubの実際の起動・子回収・例外配送の検証は親の実機receiptに残る。
+
+## review19749944の終了プロトコル修正
+
+`order_protocol.rs`にChildGuardを追加し、入力・出力失敗、panic、通常STOPを同じ終了トランザクションへ集約した。STOPは一度だけ送り、復元済みreceiptとChild終了を待つ。最初の終了要求から絶対20秒を超えて期限を作り直さない。ready待ちは起動8秒、ready失敗の回収も起動から20秒以内。通常capture時間はmanifestの上限内であり、終了要求後の20秒とは分ける。復元が確認できない場合だけ同じ保持HANDLEによる対象終了へ進む。閉鎖要求のackも一度だけ送る。期限時に回収できなければ `cleanup_confirmed=false` を返し、成功とは表示しない。
+
+親のstdoutはすべて `io::Result` で受け、BrokenPipeをpanicにしない。panicが起きてもcatchとRAIIが同じ期限・同じChildハンドルでSTOP／復元／回収を行う。stdout読取threadは廃止し、OS pipeを有界で読む。入力readerは終了時にjoinする。
+
+debug exceptionの所有判定・継続状態保存を最初のログ書込より前に行う。ディスクへの書込が失敗してもowned例外はDBG_CONTINUEを保つ。復元済み `order_stop` はtraceへの書込失敗と独立して親pipeへ送る。証拠の保存失敗は明示し、復元失敗と同一視しない。
+
+失敗テストは自分が起動したRust helperを使う。unknown/空行/reader InvalidData/実OS BrokenPipe/panicは同じChildGuardでSTOPと資源削除・waitを検査する。helperの復元は `helper_resource_restored`、Civ6の復元は `native_debug_restored=false`として区別する。実hardware例外とOSファイル書込拒否の検査も、既存probeの自生成Rust helperだけを使う。固定Civ6 identityを偽装して通さない。ゲーム本体・保存ファイル・DLLは変更しない。console lease generation・Civ6 parent cleanup・native orderは実機成功前のfalse/unknownを維持する。
+
+review19749944の対象検査は13件成功（lib 10件＋実CLI 3件）。helper用subprocess入口1件は直接実行対象から除外し、各親テストから実際に起動した。unknown/empty/reader/BrokenPipe/panicの5ケースはSTOP1回・資源復元・子回収を確認し、強制終了0。実hardware例外の書込失敗ではDBG_CONTINUEとDR復元後、同じRust子を明示終了・waitした。6件の実測行は `D:/CC/Work/todo880/review19749944-owned-helper-receipts.json`。残存helperは0。Civ6の実機復元・lease世代は未検証。
+
+Clippyは実行したが、依存先native-admissionの`question_mark`2件、既存probeの`unnecessary_lazy_evaluations`/`too_many_arguments`/`single_match`/`collapsible_match`/`collapsible_if`計6件で未通過。今回追加部の2件は修正した。元probeのunion読取を含むため、自動提案の`then_some`置換は行っていない。既存native領域はこのworkerの書込対象外であり、Clippy全通過とは報告しない。親による修正版レビューは未受領。
