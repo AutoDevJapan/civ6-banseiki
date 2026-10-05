@@ -122,12 +122,95 @@ fn read_pointer(game: &Handle, address: u64) -> Result<u64, String> {
 fn mark(d: &mut Debugger, mut row: Value) -> Result<(), String> {
     row["sequence"] = json!(d.output.rows + 1);
     d.stamp(&mut row);
-    d.output.row(row.clone())?;
+    let disk = d.output.row(row.clone());
     if row["type"] == "order_stop" {
-        writeln!(std::io::stdout(), "{row}").map_err(|e| e.to_string())?;
-        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        // A full trace disk must not suppress the independently verified
+        // restoration receipt delivered to the parent over its pipe.
+        row["trace_write_error"] = json!(disk.as_ref().err());
+        emit(&row)?;
     }
+    disk
+}
+
+fn emit(row: &Value) -> Result<(), String> {
+    writeln!(std::io::stdout(), "{row}")
+        .and_then(|_| std::io::stdout().flush())
+        .map_err(|e| e.to_string())
+}
+
+fn qualify_exception(
+    d: &mut Debugger,
+    event: &DEBUG_EVENT,
+    steps: &BTreeMap<u32, Step>,
+    phase: Phase,
+    req: &Request,
+) -> Result<(), String> {
+    if event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT {
+        return Ok(());
+    }
+    let info = unsafe { event.u.Exception };
+    let tid = event.dwThreadId;
+    let address = info.ExceptionRecord.ExceptionAddress as u64;
+    match info.ExceptionRecord.ExceptionCode {
+        EXCEPTION_SINGLE_STEP => {
+            d.last_dispatch = DispatchOutcome::Ambiguous("order exception ownership unresolved");
+            let state = d.threads.get(&tid).ok_or("unknown exception thread")?;
+            if unsafe { GetProcessIdOfThread(state.handle.0) } != d.pid {
+                return Err("exception thread ownership changed".into());
+            }
+            let c = context(&state.handle)?;
+            if !installed_sites_match_context(&state.armed_sites, &c) || info.dwFirstChance == 0 {
+                return Err("exception register identity differs".into());
+            }
+            if let Some(step) = steps.get(&tid) {
+                plan::verify_step(step.expected, address, c.Rip, c.Dr6, c.EFlags)?;
+            } else {
+                let sites: Vec<_> = plan::prefix(phase, req.count(phase))?
+                    .iter()
+                    .map(|s| d.module_base + s.rva)
+                    .collect();
+                if c.EFlags & TF != 0
+                    || plan::classify_hit(
+                        address,
+                        c.Rip,
+                        [c.Dr0, c.Dr1, c.Dr2, c.Dr3],
+                        c.Dr7,
+                        c.Dr6,
+                        &sites,
+                    )?
+                    .is_none()
+                {
+                    return Err("unowned order exception".into());
+                }
+            }
+            d.last_dispatch = DispatchOutcome::OwnedProven(OwnedTrap::PropertyBefore);
+        }
+        EXCEPTION_BREAKPOINT => {
+            if steps.contains_key(&tid) {
+                d.last_dispatch = DispatchOutcome::Ambiguous("breakpoint interrupted step");
+                return Err("breakpoint interrupted step".into());
+            }
+            let observed = inspect_thread_origin(d.pid, tid, d.query_thread_start);
+            d.last_attach_breakpoint_owned =
+                d.classify_attach_breakpoint(tid, address, info.dwFirstChance != 0, observed);
+        }
+        _ => {}
+    }
+    d.cleanup_event = Some((*event, d.status_after_error(event)));
     Ok(())
+}
+
+#[cfg(test)]
+fn log_exception(
+    d: &mut Debugger,
+    event: &DEBUG_EVENT,
+    write: impl FnOnce() -> std::io::Result<()>,
+) -> Result<(), String> {
+    let status = d.status_after_error(event);
+    d.cleanup_event = Some((*event, status));
+    let (preserved, result) = plan::protocol::log_classified(status, write);
+    debug_assert_eq!(preserved, status);
+    result.map_err(|e| e.to_string())
 }
 
 fn core_module(pid: u32) -> Result<Option<Module>, String> {
@@ -422,8 +505,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                             *armed_windows.entry(s.name.into()).or_default() += 1;
                         }
                         d.resume()?;
-                        println!("{}", json!({"phase_ready":phase.name(),"pid":req.pid}));
-                        std::io::stdout().flush().map_err(|e| e.to_string())?;
+                        emit(&json!({"phase_ready":phase.name(),"pid":req.pid}))?;
                         continue;
                     }
                 } else {
@@ -497,7 +579,12 @@ pub fn observe(req: Request) -> Result<(), String> {
                 EXCEPTION_DEBUG_EVENT => {
                     let info = unsafe { event.u.Exception };
                     let address = info.ExceptionRecord.ExceptionAddress as u64;
-                    mark(&mut d,json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":address,"first_chance":info.dwFirstChance!=0,"phase":phase.name()}))?;
+                    qualify_exception(&mut d,&event,&steps,phase,&req)?;
+                    let row=json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":address,"first_chance":info.dwFirstChance!=0,"phase":phase.name()});
+                    // Qualification is durable before the first fallible output.
+                    let preserved=d.status_after_error(&event);
+                    let (_,recorded)=plan::protocol::log_classified(preserved,||mark(&mut d,row).map_err(std::io::Error::other));
+                    recorded.map_err(|e|e.to_string())?;
                     if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT {
                         if steps.contains_key(&tid) {
                             d.last_dispatch = DispatchOutcome::Ambiguous(
@@ -505,14 +592,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                             );
                             return Err("breakpoint interrupted original instruction".into());
                         }
-                        let observed = inspect_thread_origin(req.pid, tid, d.query_thread_start);
-                        let owned = d.classify_attach_breakpoint(
-                            tid,
-                            address,
-                            info.dwFirstChance != 0,
-                            observed,
-                        );
-                        d.last_attach_breakpoint_owned = owned;
+                        let owned = d.last_attach_breakpoint_owned;
                         if owned {
                             d.mark_attach_ready()?;
                             d.attach_ready_deadline = None;
@@ -645,8 +725,7 @@ pub fn observe(req: Request) -> Result<(), String> {
             }
             d.continue_pending_with_status(status)?;
             if announce_ready {
-                println!("{}",json!({"ready":true,"pid":req.pid,"phase":phase.name(),"capture_only":true}));
-                std::io::stdout().flush().map_err(|e|e.to_string())?;
+                emit(&json!({"ready":true,"pid":req.pid,"phase":phase.name(),"capture_only":true}))?;
             }
         }
         Ok(())
@@ -746,7 +825,7 @@ pub fn parent(mut value: Value) -> Result<(), String> {
     serde_json::to_writer_pretty(&mut file, &value).map_err(|e| e.to_string())?;
     file.flush().map_err(|e| e.to_string())?;
     drop(file);
-    let mut child = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+    let child = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
         .args([std::ffi::OsStr::new("observe"), manifest.as_os_str()])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -754,145 +833,121 @@ pub fn parent(mut value: Value) -> Result<(), String> {
         .creation_flags(0x08000000)
         .spawn()
         .map_err(|e| e.to_string())?;
-    let child_pid = child.id();
-    let mut child_in = child.stdin.take();
-    let out = child.stdout.take().ok_or("child stdout missing")?;
-    let (tx, rx) = mpsc::channel();
-    let output_reader = thread::spawn(move || {
-        for line in std::io::BufReader::new(out).lines() {
-            if tx.send(line.map_err(|e| e.to_string())).is_err() {
-                break;
-            }
-        }
-    });
-    let (input_reader, input) = reader(Arc::new(AtomicBool::new(false)));
-    let deadline = Instant::now() + Duration::from_secs(req.seconds + 40);
-    let mut recovery_deadline = None;
-    let mut close_requested = false;
-    let mut parent_error = None;
-    let mut stop_restored = false;
-    let mut attach_attempted = false;
-    let mut child_exit = None;
-    let mut output_closed = false;
-    let status = loop {
-        loop {
-            let line = match rx.try_recv() {
-                Ok(line) => line,
-                Err(mpsc::TryRecvError::Empty) => break,
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    output_closed = true;
-                    break;
-                }
-            };
-            match line {
-                Ok(line) => {
-                    println!("{line}");
-                    let _ = std::io::stdout().flush();
-                    if serde_json::from_str::<Value>(&line).ok().is_some_and(|v| {
-                        v["critical_cleanup"] == true
-                            && v["pid"].as_u64() == Some(u64::from(req.pid))
-                    }) {
-                        parent_error = Some("observer critical cleanup".to_string());
-                    }
-                    if let Ok(v) = serde_json::from_str::<Value>(&line) {
-                        if v["type"] == "order_attach_start"
-                            && v["schema"] == plan::SCHEMA
-                            && v["game_pid"].as_u64() == Some(u64::from(req.pid))
-                            && v["game_created_filetime"].as_u64() == Some(req.created)
-                        {
-                            attach_attempted = true;
-                        }
-                        stop_restored |= plan::restored_stop(&v, req.pid, req.created);
-                    }
-                }
-                Err(e) => {
-                    parent_error = Some(e);
-                }
-            }
-        }
-        for cmd in input.try_iter() {
-            match cmd {
-                Ok(cmd) if matches!(cmd.as_str(), "phase front" | "phase load" | "stop") => {
-                    if let Some(pipe) = child_in.as_mut() {
-                        if writeln!(pipe, "{cmd}").and_then(|_| pipe.flush()).is_err() {
-                            parent_error = Some("child command pipe failed".into());
-                        }
-                    }
-                }
-                _ => {
-                    parent_error = Some("parent command rejected".into());
-                }
-            }
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                child_exit = Some(status);
-            }
-            Ok(None) => {}
-            Err(e) => {
-                parent_error = Some(e.to_string());
-            }
-        }
-        if let Some(status) = child_exit {
-            if output_closed {
-                if !attach_attempted && parent_error.is_none() {
-                    break status;
-                }
-                if stop_restored && parent_error.is_none() {
-                    break status;
-                }
-                parent_error
-                    .get_or_insert("child exited without verified restoration receipt".into());
-                if unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0 {
-                    break status;
-                }
-            }
-        }
-        if Instant::now() >= deadline {
-            parent_error.get_or_insert("observer exceeded parent deadline".into());
-        }
-        if parent_error.is_some() && !close_requested {
-            // The original process HANDLE, not a fresh PID lookup, is authority.
-            if unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0
-                || unsafe { TerminateProcess(game.0, 0x880) } != 0
-            {
-                close_requested = true;
-                if let Some(pipe) = child_in.as_mut() {
-                    let _ = writeln!(pipe, "game_close_requested");
-                    let _ = pipe.flush();
-                }
-                recovery_deadline = Some(Instant::now() + Duration::from_secs(15));
-            } else {
-                parent_error = Some(win_error("TerminateProcess(pinned owned game)"));
-                recovery_deadline.get_or_insert(Instant::now() + Duration::from_secs(15));
-            }
-        }
-        if recovery_deadline.is_some_and(|end| Instant::now() >= end) {
-            if unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0 {
-                let _ = child.kill();
-                break child.wait().map_err(|e| e.to_string())?;
-            }
-            // A live debuggee must not be abandoned with a forcibly killed
-            // debugger. The controller stays here retaining both handles.
-            // Report this distinctly; it is not a successful bounded capture.
-            println!(
-                "{}",
-                json!({"critical_cleanup":true,"pid":req.pid,"child_pid":child_pid,"game_close_required":true,"parent_retaining_unresolved_handles":true})
-            );
-            recovery_deadline = Some(Instant::now() + Duration::from_secs(15));
-        }
-        thread::sleep(Duration::from_millis(25));
+    let witness = plan::protocol::Witness::Native {
+        pid: req.pid,
+        created: req.created,
     };
-    drop(child_in.take());
+    let mut termination_requested = false;
+    let mut guard =
+        plan::protocol::ChildGuard::new(child, witness, Duration::from_secs(req.seconds), || {
+            if unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0 {
+                return Ok((termination_requested, true));
+            }
+            if !termination_requested {
+                if unsafe { TerminateProcess(game.0, 0x880) } == 0 {
+                    return Err(win_error("TerminateProcess(pinned owned game)"));
+                }
+                termination_requested = true;
+            }
+            Ok((
+                termination_requested,
+                unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0,
+            ))
+        });
+    let (input_reader, input) = reader(Arc::new(AtomicBool::new(false)));
+    let receipt = guard.run(&mut std::io::stdout(), &input);
     drop(input_reader);
-    let output_joined = output_reader.join().is_ok();
-    println!(
-        "{}",
-        json!({"type":"order_parent_receipt","schema":plan::SCHEMA,"child_pid":child_pid,"child_reaped":true,"child_exit_code":status.code(),"stdout_reader_joined":output_joined,"stdin_reader_joined":true,"attach_attempted":attach_attempted,"preflight_refused":!attach_attempted&&!status.success(),"owned_game_close_requested":close_requested,"game_exit_observed":unsafe{WaitForSingleObject(game.0,0)}==WAIT_OBJECT_0,"parent_error":parent_error,"game_pid":req.pid,"game_created_filetime":req.created,"source_dll_sha256":req.source_dll_sha,"live_receipt":true})
-    );
-    if status.success() && stop_restored && parent_error.is_none() && output_joined {
+    let mut row = receipt.json();
+    row["type"] = json!("order_parent_receipt");
+    row["schema"] = json!(plan::SCHEMA);
+    row["game_pid"] = json!(req.pid);
+    row["game_created_filetime"] = json!(req.created);
+    row["source_dll_sha256"] = json!(req.source_dll_sha);
+    row["live_receipt"] = json!(receipt.attach_attempted);
+    row["console_lease_generation_verified"] = json!(false);
+    emit(&row)?;
+    if receipt.cleanup_confirmed && receipt.exit_code == Some(0) && receipt.error.is_none() {
         Ok(())
     } else {
-        Err("order capture/reaping receipt reports failure".into())
+        Err("order capture failed; consult explicit cleanup receipt".into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::Fixture;
+    use super::*;
+    #[test]
+    fn order_capture_owned_single_step_keeps_continue_when_output_fails() {
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let base = child.entry - CAN_EVER_RVA;
+        let path = std::env::temp_dir().join(format!(
+            "todo880-order-write-failure-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let output = Jsonl::new(&path).unwrap();
+        let (stop_tx, _) = mpsc::channel();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let observer = child.observe(&stop_tx, move |ack| {
+            let mut d = Debugger::attach(
+                pid,
+                process(pid, true).unwrap(),
+                base,
+                0x500000,
+                output,
+                ProbeMode::Governor,
+            )
+            .unwrap();
+            d.close_ack = ack;
+            let deadline = Instant::now() + Duration::from_secs(20);
+            loop {
+                assert!(
+                    Instant::now() < deadline,
+                    "owned helper did not deliver event"
+                );
+                let mut event = DEBUG_EVENT::default();
+                if unsafe { WaitForDebugEventEx(&mut event, 50) } == 0 {
+                    continue;
+                }
+                d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
+                let status = d.handle_event(&event).unwrap();
+                if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
+                    && unsafe { event.u.Exception.ExceptionRecord.ExceptionCode }
+                        == EXCEPTION_SINGLE_STEP
+                {
+                    assert!(matches!(d.last_dispatch, DispatchOutcome::OwnedProven(_)));
+                    // Actual OS file-write refusal while our real Rust child is
+                    // stopped on a real hardware event; no forged game identity.
+                    let mut readonly = File::open(&path).unwrap();
+                    assert!(
+                        log_exception(&mut d, &event, || readonly.write_all(b"cannot write"))
+                            .is_err()
+                    );
+                    assert_eq!(d.status_after_error(&event), DBG_CONTINUE);
+                    assert_eq!(d.cleanup_event.as_ref().unwrap().1, DBG_CONTINUE);
+                    d.cleanup(Some((&event, DBG_CONTINUE))).unwrap();
+                    assert_eq!(d.terminal, TerminalKind::Detached);
+                    return path;
+                }
+                d.continue_pending_with_status(status).unwrap();
+                if d.ready {
+                    d.ready = false;
+                    ready_tx.send(()).unwrap();
+                }
+            }
+        });
+        ready_rx.recv_timeout(Duration::from_secs(8)).unwrap();
+        assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+        let path = observer.join().unwrap();
+        assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+        let status = child.terminate();
+        assert!(!status.success());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"owned_single_step_output_failure","kind":"owned_rust_debug_helper","helper_pid":pid,"owned_exception_continue":true,"debug_registers_restored":true,"child_explicitly_terminated":true,"child_reaped":true,"civ6_live":false,"game_launches":0})
+        );
+        drop(child);
+        fs::remove_file(path).unwrap();
     }
 }

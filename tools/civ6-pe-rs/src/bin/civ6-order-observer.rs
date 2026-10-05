@@ -1,5 +1,11 @@
 use civ6_native_probe_rs::order_capture::{disk_sites, Request};
 use sha2::{Digest, Sha256};
+use std::io::Write;
+fn output(value: &str) -> Result<(), String> {
+    writeln!(std::io::stdout(), "{value}")
+        .and_then(|_| std::io::stdout().flush())
+        .map_err(|e| e.to_string())
+}
 fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 2 {
@@ -50,10 +56,10 @@ fn run() -> Result<(), String> {
         proof["gamecore_identity_verified"] = serde_json::json!(true);
         if args[0] == "summary" {
             let summary = serde_json::json!({"schema":proof["schema"],"checkout_head":proof["checkout_head_at_snapshot"],"compiled_source_sha256":proof["source"]["compiled_source_sha256"],"static_site_count":proof["static_sites"].as_array().unwrap().len(),"source_file_count":proof["source"]["source_files"].as_array().unwrap().len(),"sources_match_binary":true,"gamecore_identity_verified":true,"calibration_cap":4,"runtime_hit_count":null,"common_boundary_proof":"unknown","live_runs":0,"memory_writes":0,"dll_install_calls":0,"old_prefix_clones":0});
-            println!("{}", serde_json::to_string_pretty(&summary).unwrap());
+            output(&serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?)?;
             return Ok(());
         }
-        println!("{}", serde_json::to_string_pretty(&proof).unwrap());
+        output(&serde_json::to_string_pretty(&proof).map_err(|e| e.to_string())?)?;
         return Ok(());
     }
     if args[0] != "observe" && args[0] != "parent" && args[0] != "validate" {
@@ -64,10 +70,7 @@ fn run() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     Request::parse(&request)?;
     if args[0] == "validate" {
-        println!(
-            "{}",
-            serde_json::json!({"schema":"todo880-order-v1","manifest_valid":true,"process_identity_verified":false,"live_runs":0})
-        );
+        output(&serde_json::json!({"schema":"todo880-order-v1","manifest_valid":true,"process_identity_verified":false,"live_runs":0}).to_string())?;
         return Ok(());
     }
     #[cfg(all(windows, target_arch = "x86_64"))]
@@ -86,7 +89,7 @@ fn run() -> Result<(), String> {
 }
 fn main() {
     if let Err(e) = run() {
-        eprintln!("{e}");
+        let _ = writeln!(std::io::stderr(), "{e}");
         std::process::exit(1);
     }
 }
