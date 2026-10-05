@@ -4,7 +4,8 @@ use serde_json::{json, Value};
 use std::{env, fs, path::PathBuf};
 
 const SOURCE_SAVE: &str =
-    "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008";
+    "JAC-Enemy-Neutralization-7c36eb301be4472b9276a61fcd526e8f-0000000000000002";
+const SOURCE_TURN: u32 = 23;
 const READ: &str = r#"
 function JAC158_Read()
  local leader='LEADER_JAC_ASHINA_MORIKIYO'; local owner=1; local key='JAC_PERSONA_'..leader..'_';
@@ -19,7 +20,7 @@ function JAC158_Read()
  assert(city:GetOwner()==owner and g:IsEstablished() and g:GetNeutralizedTurns()==0,'AI Governor not active and established');
  assert(city:GetProperty('JAC_PERSONA_SETTLED_'..leader)==1,'native settlement marker absent');
  local s={turn=Game.GetCurrentGameTurn(),owner=owner,leader=leader,city=city:GetID(),
-  merit=get('MERIT') or 0,category=get('CATEGORY'),branches={},nodes={},spent=gs:GetGovernorPointsSpent(),
+  merit=get('MERIT') or 0,category=get('CATEGORY'),branches={},nodes={},remaining=0,spent=gs:GetGovernorPointsSpent(),
   total=gs:GetGovernorPoints(),ai=get('AI_LAST_TURN'),govern=get('GOVERN_LAST_TURN'),
   deed=get('DEED_GOVERN_TURN_'..tostring(get('AI_LAST_TURN'))),count=get('GOVERN_TURN_COUNT'),
   countTurn=get('GOVERN_TURN_COUNT_TURN'),receipts={}};
@@ -47,12 +48,16 @@ function JAC158_Read()
    s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup]~=n.RouteType then
    assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='BRANCH_LOCKED','sibling branch opened');
   end;
+  if value~=1 then
+   local status=JAC_PersonaTreeRules.Status(owner,leader,n.NodeType);
+   if status=='AVAILABLE' or status=='NO_MERIT' or status=='PREREQ_LOCKED' then s.remaining=s.remaining+1 end;
+  end;
  end end;
  assert(count>0 and next(s.nodes),'non-vacuous person tree required');
  return s;
 end;
 function JAC158_Encode(s)
- local a={}; for _,field in ipairs({'turn','owner','leader','city','merit','category','spent','total','ai','govern','deed','count','countTurn'}) do a[#a+1]=field..'='..tostring(s[field]) end;
+ local a={}; for _,field in ipairs({'turn','owner','leader','city','merit','category','remaining','spent','total','ai','govern','deed','count','countTurn'}) do a[#a+1]=field..'='..tostring(s[field]) end;
  local b={}; for field,value in pairs(s.branches) do b[#b+1]=field..'='..value end; table.sort(b); for _,v in ipairs(b) do a[#a+1]=v end;
  local n={}; for node,cost in pairs(s.nodes) do n[#n+1]=node..'='..cost end; table.sort(n); for _,v in ipairs(n) do a[#a+1]=v end;
  for _,deed in ipairs({'BUILDING','VICTORY','ALLIANCE'}) do local r=s.receipts[deed]; a[#a+1]=deed..'='..tostring(r.turn)..'/'..r.count end;
@@ -101,7 +106,7 @@ fn scenario() -> Value {
     let mut steps = vec![
         json!({"action":"load","name":SOURCE_SAVE,"exact_name":true,"timeout":300}),
         json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"JAC_LeaderPersona_Tree","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsHuman() and p:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersonaNativeRead)=='function' and type(JAC_PersonaTreeRules)=='table'"}}),
-        lua(format!("{READ}\nJAC158_previous=JAC158_Read(); JAC158_purchases=0; assert(JAC158_previous.turn==45,'wrong preserved input turn'); return 'AI_BASELINE|'..JAC158_Encode(JAC158_previous)")),
+        lua(format!("{READ}\nJAC158_previous=JAC158_Read(); JAC158_purchases=0; assert(JAC158_previous.turn=={SOURCE_TURN},'wrong preserved input turn'); assert(JAC158_previous.remaining>0,'source already owns every legal skill'); return 'AI_BASELINE|'..JAC158_Encode(JAC158_previous)")),
     ];
     // No autoplay, direct callback, purchase, merit or lock setters.
     for _ in 0..12 {
@@ -216,11 +221,12 @@ Players={[1]={IsHuman=function() return false end,GetGovernors=function() return
 local nodes={
  {NodeType='A',LeaderType=leader,CategoryType='ADMIN',RouteType='STORES',ExclusiveGroup='FOUNDATION',Cost=8},
  {NodeType='B',LeaderType=leader,CategoryType='MILITARY',RouteType='MUSTER',ExclusiveGroup='STRATEGY',Cost=10},
- {NodeType='C',LeaderType=leader,CategoryType='ADMIN',RouteType='WORKS',ExclusiveGroup='FOUNDATION',Cost=10}};
+ {NodeType='C',LeaderType=leader,CategoryType='ADMIN',RouteType='WORKS',ExclusiveGroup='FOUNDATION',Cost=10},
+ {NodeType='D',LeaderType=leader,CategoryType='ADMIN',RouteType='SIGNATURE',PrereqNode='A',Cost=12}};
 local function iterate(rows) return function() local i=0; return function() i=i+1; return rows[i] end end end;
 GameInfo={JAC_LeaderPersonas={[leader]={GovernorType='G',BasePromotionType='P'}},Governors={G={Hash=1}},GovernorPromotions={P={Hash=2}},
  JAC_PersonaRouteTemplates=iterate({{CategoryType='ADMIN',ExclusiveGroup='FOUNDATION'}}),JAC_PersonaTreeNodes=iterate(nodes)};
-statuses={A='OWNED',B='CATEGORY_LOCKED',C='BRANCH_LOCKED'};
+statuses={A='OWNED',B='CATEGORY_LOCKED',C='BRANCH_LOCKED',D='NO_MERIT'};
 JAC_PersonaTreeRules={Status=function(owner,person,node) return statuses[node] end};
 "#;
         let vm = Lua::new();
@@ -257,6 +263,23 @@ JAC_PersonaTreeRules={Status=function(owner,person,node) return statuses[node] e
             .eval()
             .unwrap();
         assert_ne!(before, changed, "save snapshot concealed a changed balance");
+        let baseline = scenario()["steps"][2]["code"].as_str().unwrap().to_owned();
+        vm.load("Game.GetCurrentGameTurn=function() return 23 end")
+            .exec()
+            .unwrap();
+        assert!(vm
+            .load(&baseline)
+            .eval::<String>()
+            .unwrap()
+            .contains("remaining=1"));
+        vm.load("values.NODE_D=1; statuses.D='OWNED'")
+            .exec()
+            .unwrap();
+        let error = vm.load(&baseline).eval::<String>().unwrap_err().to_string();
+        assert!(
+            error.contains("source already owns every legal skill"),
+            "{error}"
+        );
     }
 
     #[test]
