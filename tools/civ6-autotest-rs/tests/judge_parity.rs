@@ -505,6 +505,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-japan-owner-turn-isolated.json",
                 "absorption-hero-recall.json",
                 "absorption-priest-diagnostic.json",
+                "absorption-religion-persistence.json",
                 "absorption-spent-spread-192.json",
                 "absorption-spent-spread-block-192.json",
                 "absorption-faith-precision.json",
