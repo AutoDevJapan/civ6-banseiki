@@ -160,8 +160,8 @@ fn flags(
     for offset in (bulk..complete).step_by(8) {
         bytes[offset..offset + 8].copy_from_slice(&field::<8>(memory, address, offset as u64)?);
     }
-    for offset in complete..count {
-        bytes[offset] = field::<1>(memory, address, offset as u64)?[0];
+    for (offset, byte) in bytes.iter_mut().enumerate().take(count).skip(complete) {
+        *byte = field::<1>(memory, address, offset as u64)?[0];
     }
     Ok(bytes)
 }

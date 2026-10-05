@@ -276,7 +276,23 @@ unsafe extern "system" fn assign_calibration_begin(
     slot as u64 + 1
 }
 
-unsafe extern "system" fn assign_calibration_end(token: u64, original: u64) {
+#[cfg(test)]
+static PAID_SYNTHETIC_GATE: AtomicBool = AtomicBool::new(false);
+
+unsafe extern "system" fn assign_calibration_end(
+    token: u64,
+    original: u64,
+    _governors: u64,
+    _governor: u64,
+) -> u64 {
+    #[cfg(test)]
+    let result = if PAID_SYNTHETIC_GATE.load(Ordering::Acquire) {
+        PaidAssignmentConsumer::restrict_current(original, _governors, _governor)
+    } else {
+        original
+    };
+    #[cfg(not(test))]
+    let result = original;
     if let Some(trace) = unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() } {
         if token > 0 && token <= ASSIGN_CAPACITY as u64 {
             let row = &trace.rows[token as usize - 1];
@@ -287,6 +303,7 @@ unsafe extern "system" fn assign_calibration_end(token: u64, original: u64) {
         }
         trace.in_flight.fetch_sub(1, Ordering::Release);
     }
+    result
 }
 
 // Dedicated four-argument gateway. The fifth callback argument occupies
@@ -305,8 +322,9 @@ global_asm!(
     "movdqu xmm0, [rsp+0x80]", "movdqu xmm1, [rsp+0x90]", "movdqu xmm2, [rsp+0xa0]",
     "movdqu xmm3, [rsp+0xb0]", "movdqu xmm4, [rsp+0xc0]", "movdqu xmm5, [rsp+0xd0]",
     "call qword ptr [rip+ASSIGN_TRAMPOLINE_PTR]", "mov [rsp+0x70], rax",
-    "mov rcx, [rsp+0x68]", "mov rdx, rax", "call {end}",
-    "mov rax, [rsp+0x70]", "add rsp, 0xe8", "ret", ".seh_endproc",
+    "mov rcx, [rsp+0x68]", "mov rdx, rax",
+    "mov r8, [rsp+0x30]", "mov r9, [rsp+0x38]", "call {end}",
+    "add rsp, 0xe8", "ret", ".seh_endproc",
     begin = sym assign_calibration_begin, end = sym assign_calibration_end,
 );
 unsafe extern "system" {
@@ -634,6 +652,82 @@ mod tests {
         assert_eq!(call(this, gp, cp, 0x1101), 0x1101);
         assert_eq!(governors[15], count + 1);
         drop(callers);
+
+        // B1 uses the real four-argument gateway in this owned child only.
+        // There is no public mode that enables this test switch in a game.
+        let mut paid_trace = AssignCalibrationTrace::boxed();
+        unsafe { install_assign_calibration_at(page, paid_trace.as_mut(), original) }.unwrap();
+        // Use an actually aligned fixture for the Core property receiver.
+        let mut paid_player = [0u64; 0xaa];
+        paid_player[0xd8 / 8] = 7;
+        governors[14] = paid_player.as_ptr() as u64;
+        governor[0] = 7;
+        governor[1] = 22;
+        let receiver = (paid_player.as_ptr() as u64).checked_add(0x528).unwrap();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        product_bind(7, receiver, session, product_next_ticket().unwrap());
+        let publish = |key, value| {
+            let read = PaidAssignmentConsumer::begin(receiver, key).unwrap();
+            PaidAssignmentConsumer::observe(read, 1, 1, value, 0);
+        };
+        publish(PAID_CLOSE_BASE + 22, 1);
+        publish(PAID_ALLOW_BASE + 22, 0);
+        publish(PAID_MANIFEST_BASE + 22, 1);
+        PAID_SYNTHETIC_GATE.store(true, Ordering::Release);
+        let count = governors[15];
+        let sentinel = 0xaabb_ccdd_1122_3301;
+        assert_eq!(
+            unsafe { assign_register_fixture(this, gp, cp, sentinel) },
+            sentinel & !0xff
+        );
+        assert_eq!(governors[15], count + 1, "denied call runs original once");
+        assert_eq!(&governors[4..8], &[this, gp, cp, sentinel]);
+        assert_eq!(&governors[16..19], &[0x11223344, 0x22334455, 0x33445566]);
+        assert_eq!(&governors[20..32], &[u64::MAX; 12]);
+        publish(PAID_ALLOW_BASE + 22, 1);
+        assert_eq!(call(this, gp, cp, sentinel), sentinel);
+        assert_eq!(call(this, gp, cp, sentinel & !0xff), sentinel & !0xff);
+        unsafe { ptr::write_volatile(governor.as_mut_ptr().add(1), 23) };
+        assert_eq!(
+            call(this, gp, cp, sentinel),
+            sentinel,
+            "ordinary governor preserves original"
+        );
+        assert_eq!(
+            paid_trace.rows[3].governor_index.load(Ordering::Acquire),
+            23
+        );
+        assert_eq!(
+            paid_trace.rows[3].promotions.status.load(Ordering::Acquire),
+            0
+        );
+        unsafe { ptr::write_volatile(governor.as_mut_ptr().add(30), 0) };
+        assert_eq!(
+            call(this, gp, cp, sentinel),
+            sentinel,
+            "ordinary governor needs no persona promotion layout"
+        );
+        assert_eq!(
+            paid_trace.rows[4].governor_index.load(Ordering::Acquire),
+            23
+        );
+        assert_ne!(
+            paid_trace.rows[4].promotions.status.load(Ordering::Acquire),
+            0
+        );
+        unsafe { ptr::write_volatile(governor.as_mut_ptr().add(30), 8) };
+        unsafe { ptr::write_volatile(governor.as_mut_ptr().add(1), 22) };
+        publish(PAID_CLOSE_BASE + 22, 1);
+        assert_eq!(call(this, gp, cp, sentinel), sentinel & !0xff);
+        // Capacity exhaustion cannot disable the restrictive decision.
+        for _ in 0..ASSIGN_CAPACITY {
+            assert_eq!(call(this, gp, cp, sentinel), sentinel & !0xff);
+        }
+        assert!(paid_trace.dropped.load(Ordering::Acquire) > 0);
+        PAID_SYNTHETIC_GATE.store(false, Ordering::Release);
+        unsafe { uninstall() }.unwrap();
+        assert_eq!(call(this, gp, cp, sentinel), sentinel);
 
         let mut panic_trace = AssignCalibrationTrace::boxed();
         unsafe { install_assign_calibration_at(page, panic_trace.as_mut(), original) }.unwrap();

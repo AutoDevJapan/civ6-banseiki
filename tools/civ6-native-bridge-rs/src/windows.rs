@@ -24,11 +24,17 @@ use windows_sys::Win32::System::Threading::{
 
 #[path = "windows/assignment.rs"]
 mod assignment;
+#[path = "windows/paid_assignment.rs"]
+mod paid_assignment;
 use assignment::{
     assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
     ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
 };
 pub use assignment::{AssignCalibrationObservation, AssignCalibrationTrace, PINNED_CAN_ASSIGN_RVA};
+pub use paid_assignment::{
+    PaidAssignmentConsumer, PaidAssignmentRead, PAID_ALLOW_BASE, PAID_CLOSE_BASE,
+    PAID_MANIFEST_BASE, PAID_RESET_BASE,
+};
 
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
@@ -3409,9 +3415,13 @@ mod tests {
             original_calls,
             trace.calibration.next.load(Ordering::Acquire)
         );
-        println!("production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
-            original_calls, getter_calls, trace.calibration.dropped.load(Ordering::Acquire),
-            trace.property.dropped.load(Ordering::Acquire));
+        println!(
+            "production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
+            original_calls,
+            getter_calls,
+            trace.calibration.dropped.load(Ordering::Acquire),
+            trace.property.dropped.load(Ordering::Acquire)
+        );
         unsafe { uninstall() }.unwrap();
         assert_eq!(
             unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
@@ -3476,7 +3486,7 @@ mod tests {
         CreateThread, GetExitCodeThread, ResumeThread, WaitForSingleObject, THREAD_CREATE_SUSPENDED,
     };
 
-    static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
+    pub(super) static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     struct PausedFixtureWorker<T> {
         release: &'static AtomicBool,

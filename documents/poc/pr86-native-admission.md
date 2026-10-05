@@ -1,5 +1,34 @@
 # PR86: 加入人物の本体任命資格（共有ToDo 853）
 
+## ToDo1433再開：配置資格の独立受信処理B1
+
+**配置の共通経路は親の実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した担当用作業場所を、親のc21b145fと通常資格修正51cb6b42まで早送りした。親・実機担当の作業場所と本体メモリには接続しない。
+
+実機144の根拠は本書「実機141〜144」の記録とd49d485e。UI戻り先0xBA3E2が2行、本体更新0x2DD375が1行、owner0・Index4・City ID65536・座標134/29・owner0・原AL1で一致した。これは私的な費用1の配置観測で、費用2/3・AI・支払い本人の全昇進の受入へ拡張しない。
+
+`windows/paid_assignment.rs` の `PaidAssignmentConsumer` は、既存の任命資格と同じowner binding、session、一度だけ採番するgetter入口ticket、128bit CASを使う。manifest 904000+Index、paid bool 905000+Index、閉鎖906000+Index、owner reset 907000+ownerの別領域を解析する。各Indexは0..255、ownerは0..63で、producerによるこの範囲の予約・保存・公開はまだ行わない。任命資格901000+Indexのtrueはpaidへ転用しない。
+
+閉鎖はgetter入口で即時に発効する。その後のtyped bool false ACK、同じ本人のmanifest、最後のtyped paid trueが同じreceiver/sessionと新しいticketで揃った場合だけ有効とする。未知receiver、複数ownerへ重複したreceiver、不正型・flags・payload、未払い、古い完了、reset・rebind・cancel・ticket上限は既知の人物を閉じる。owner resetは通常資格と同じbinding閾値を先に進め、二つの資格を同時に失効させる。返値は一回分の非複製トークンへreceiver・key・世代・ticketを束縛し、別人物や別getterへ返値を取り違えない。
+
+現在のCanAssign呼出しへ渡すadapterは、同じ二つの入力ポインターから既存の本人読取器を使い、owner・Index・本体リスト所属・昇進列を照合する。任意getterやLuaは呼ばず、ポインターを保存しない。原RAXを受け取り、拒否時だけALを0へ制限する。元のfalseをtrueに変えず、分類済みの通常総督は人物用の昇進配列を要求せず、原RAXを保持する。人物manifestが揃う前の未分類Indexと通常総督を区別する製品の初期化処理は次工程で必須であり、このadapterを単独で実ゲームへ設置しない。
+
+合成Win64子では、既存の4引数gatewayを検査時だけこのadapterへ接続する。通常のmode7には切替手段を追加せず、原RAXを保持する観測モードを維持する。拒否時の原関数一回、4入力・RAX/R10/R11・XMM0..5、上位RAX保持、全額後の原true保持と原false保持、通常総督、閉鎖後の拒否、trace容量上限でも拒否継続、復元後の原動作を検査する。製品controller・新mode・trace版・三入口の設置処理は未実装である。
+
+### 次の工程と受入条件
+
+1. 親853の現在の本人読取器について、同一実SessionのCore昇進とそのゲームのGameInfo定義を実機で照合する。診断の呼出元が渡したPromotion Indexだけでpaidをtrueにしない。
+2. 同期Gameplayの人物台帳と、実Governor/base/title1/title2/公式Spentの人物別会計からRustでpaidを派生するproducerを接続する。全22人の任命producerを複製せず、範囲の衝突検査・保存schema移行・全owner閉鎖を同じ初期化へ追加する。予約残高とEVOLVING状態だけを支払い証拠にしない。
+3. 完全な人物catalogの初期化前は人物を閉じる共通gateを、CanEver・自然Core getter・4引数CanAssignの三入口として一Job・leaseで設置する。入力が未分類の間にabsenceを通常総督の証拠にしない。第二/第三設置失敗、遅延callback、取り消し、各trace版の終端、三入口の復元を合成試験で確認する。
+4. 同一候補の別モデルレビュー・全件検査・releaseは親が行う。費用2/3の公式APPOINT後の未払いUI/本体ASSIGN拒否、PROMOTEを一個ずつ支払った本人会計、全額後の配置、途中保存/再開、AIの正式支払いと配置、複数端末を親のlive_chainで実証する。B1の合成成功を実機成功へ読み替えない。
+
+### B1の検査結果
+
+最終候補は専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が115実行対象・1,809件成功、失敗・ignored・measured・filtered outが0件だった。Lua5.1を全件実行した。Cargoの各Running区間の最後のsummaryだけを集計し、別Win64子の1件成功・44 filtered outは二重加算しない。最終native45件には受信処理の追加6件と、4引数gatewayの合成拒否・通常総督の昇進配列欠落の直接確認を含む。
+
+native crateは `cargo clippy --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --all-targets --no-deps -- -D warnings` が成功した。初回は既存の本人読取器の末尾byteループでneedless_range_loopを検出したため、同じoffset・一byteずつの読取をiteratorへ変更して修復した。初回45件の検査に出た試験用メモリのunused_assignmentsもvolatile書込みと読取結果の確認へ修復した。さらに通常総督へ人物用昇進配列を要求しないよう判定順を直し、修正前の全件1,809件とは別に最終全件を再実行した。Rust2021の対象整形・差分検査も成功した。依存先まで含むClippy、別モデル、CI、release、製品の配置拒否と追加実機はこの担当では未実行である。
+
+親へ渡すのは51cb6b42を基準にした6ファイルのcommit差分だけ。lib/windows/assignment/新paid_assignment/本人読取器のloop/本書が対象で、任命producer・既存シナリオ・UI・実機の保存は変更しない。検査ログ、集計、候補指紋は担当用 `.task/assignment1433` へ保全し、commitには含めない。
+
 ## ToDo1433の配置観測Aと未払い拒否Bの接続契約
 
 **今回追加するのは原戻り値を保持する配置観測Aで、費用2・3の未払い配置拒否Bは未実装・未実機である。** 基準a29a8717の専用作業フォルダーでmode ordinal 7 `AssignCalibration`を追加する。通常資格のmode 6は担当1399/1447が修正中であり、この差分に複製しない。mode 5、数値getter、ticket/session、128bit原子更新と既存の終了処理は保持する。mode 7だけでは人物を任命可能にしない。
