@@ -561,8 +561,9 @@ mod tests {
         next_player[0xd8..].copy_from_slice(&13u32.to_le_bytes());
         governors[14] = player.as_ptr() as u64;
         let mut governor = [0u32; 32];
-        governor[0] = 7;
+        governor[0] = 0x10001;
         governor[1] = 22;
+        governor[0x18 / 4] = 7;
         let promotion_flags = [1u8, 0, 0, 1, 0, 0, 0, 1];
         let flag_address = promotion_flags.as_ptr() as u64;
         governor[26] = flag_address as u32;
@@ -589,7 +590,7 @@ mod tests {
             assert_eq!(&governors[16..19], &[0x11223344, 0x22334455, 0x33445566]);
             assert_eq!(&governors[20..32], &[u64::MAX; 12]);
             governors[14] = next_player.as_ptr() as u64;
-            governor[0] = 13;
+            governor[0x18 / 4] = 13;
             governor[1] = 23;
             city[0xd8 / 4] = 13;
         }
@@ -669,8 +670,9 @@ mod tests {
         let mut paid_player = [0u64; 0xaa];
         paid_player[0xd8 / 8] = 7;
         governors[14] = paid_player.as_ptr() as u64;
-        governor[0] = 7;
+        governor[0] = 0x10001;
         governor[1] = 22;
+        governor[0x18 / 4] = 7;
         let receiver = (paid_player.as_ptr() as u64).checked_add(0x528).unwrap();
         assert!(product_activate());
         let session = PRODUCT_SESSION.load(Ordering::Acquire);

@@ -312,7 +312,10 @@ impl PaidAssignmentConsumer {
         let identity = (|| {
             let person = copy_current::<8>(governor)?;
             let index = u32::from_le_bytes(person[4..].try_into().ok()?) as usize;
-            let actual_owner = u32::from_le_bytes(person[..4].try_into().ok()?);
+            let owner_bytes = copy_current::<4>(
+                governor.checked_add(crate::governor_payment::CORE_GOVERNOR_OWNER_OFFSET)?,
+            )?;
+            let actual_owner = u32::from_le_bytes(owner_bytes);
             let player = u64::from_le_bytes(copy_current::<8>(governors.checked_add(0x70)?)?);
             let owner = u32::from_le_bytes(copy_current::<4>(player.checked_add(0xd8)?)?);
             let receiver = player.checked_add(0x528)?;
@@ -320,6 +323,9 @@ impl PaidAssignmentConsumer {
                 || owner as usize >= PRODUCTION_OWNER_LIMIT
                 || index >= PRODUCTION_INDEX_LIMIT
                 || copy_current::<8>(governor)? != person
+                || copy_current::<4>(
+                    governor.checked_add(crate::governor_payment::CORE_GOVERNOR_OWNER_OFFSET)?,
+                )? != owner_bytes
             {
                 return None;
             }

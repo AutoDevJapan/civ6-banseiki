@@ -319,7 +319,8 @@ mod tests {
         player[0x568 / 8] = raw.as_ptr() as u64;
         let receiver = player.as_ptr() as u64 + 0x528;
         let mut governor = [0u64; 16];
-        governor[0] = 2 | (77u64 << 32);
+        governor[0] = 0x10001 | (77u64 << 32);
+        governor[0x18 / 8] = 2;
         let mut flags = [0u8; 128];
         governor[0x68 / 8] = flags.as_ptr() as u64;
         governor[0x70 / 8] = flags.len() as u64;
@@ -400,7 +401,7 @@ mod tests {
             sentinel & !255
         );
         unsafe {
-            ptr::write_volatile(governor.as_mut_ptr(), 3 | (77u64 << 32));
+            ptr::write_volatile(governor.as_mut_ptr().add(0x18 / 8), 3);
         }
         assert_eq!(
             assign_call(this, person, 0, sentinel),
@@ -408,7 +409,7 @@ mod tests {
             "other owner cannot borrow payment"
         );
         unsafe {
-            ptr::write_volatile(governor.as_mut_ptr(), 2 | (77u64 << 32));
+            ptr::write_volatile(governor.as_mut_ptr().add(0x18 / 8), 2);
         }
         publish(PAID_RESET_BASE + 2, true);
         assert_eq!(

@@ -5,6 +5,7 @@
 pub const PROMOTION_LIMIT: usize = 4096;
 pub const PROMOTION_WORDS: usize = PROMOTION_LIMIT / 64;
 const GOVERNOR_LIMIT: usize = 256;
+pub(crate) const CORE_GOVERNOR_OWNER_OFFSET: u64 = 0x18;
 
 pub trait CurrentMemory {
     fn copy<const N: usize>(&self, address: u64) -> Option<[u8; N]>;
@@ -184,7 +185,11 @@ pub fn read_current(
     let head = u64::from_le_bytes(head_bytes);
     member(memory, head, governor)?;
     let identity = copy::<8>(memory, governor)?;
-    let actual_owner = u32::from_le_bytes(identity[..4].try_into().unwrap());
+    // Pinned APPOINT 2dd069 writes an instance identifier at +0;
+    // 2dd071..2dd07c copies Player+d8 to the Core Governor owner at +18.
+    // UI CacheGovernor getters have a different layout.
+    let governor_owner = field::<4>(memory, governor, CORE_GOVERNOR_OWNER_OFFSET)?;
+    let actual_owner = u32::from_le_bytes(governor_owner);
     let index = u32::from_le_bytes(identity[4..].try_into().unwrap());
     if actual_owner != owner || index >= GOVERNOR_LIMIT as u32 {
         return Err(ReadFailure::IdentityMismatch);
@@ -218,6 +223,7 @@ pub fn read_current(
         || field::<4>(memory, player, 0xd8)? != owner_bytes
         || field::<8>(memory, governors, 0x58)? != head_bytes
         || copy::<8>(memory, governor)? != identity
+        || field::<4>(memory, governor, CORE_GOVERNOR_OWNER_OFFSET)? != governor_owner
         || field::<20>(memory, governor, 0x68)? != header
     {
         return Err(ReadFailure::Changed);
@@ -267,8 +273,9 @@ mod tests {
         put(&mut m, 0x20d8, &7u32.to_le_bytes());
         put(&mut m, 0x1058, &0x3000u64.to_le_bytes());
         put(&mut m, 0x3000, &0x3800u64.to_le_bytes());
-        put(&mut m, 0x3800, &7u32.to_le_bytes());
+        put(&mut m, 0x3800, &0x10001u32.to_le_bytes());
         put(&mut m, 0x3804, &22u32.to_le_bytes());
+        put(&mut m, 0x3818, &7u32.to_le_bytes());
         put(&mut m, 0x3868, &0x4000u64.to_le_bytes());
         put(&mut m, 0x3870, &4096u32.to_le_bytes());
         put(&mut m, 0x3878, &4096u32.to_le_bytes());
@@ -303,7 +310,7 @@ mod tests {
     #[test]
     fn rejects_wrong_owner_nonmember_and_invalid_lengths_without_getters() {
         let mut m = fixture();
-        put(&mut m, 0x3800, &8u32.to_le_bytes());
+        put(&mut m, 0x3818, &8u32.to_le_bytes());
         assert_eq!(
             read_current(&m, 0x1000, 0x3800),
             Err(ReadFailure::IdentityMismatch)
@@ -343,6 +350,24 @@ mod tests {
         m.mutate.set(Some(0x3868));
         assert_eq!(read_current(&m, 0x1000, 0x3800), Err(ReadFailure::Changed));
     }
+    #[test]
+    fn core_instance_identifier_is_not_owner_and_owner_changes_are_rejected() {
+        let mut m = fixture();
+        assert_eq!(read_current(&m, 0x1000, 0x3800).unwrap().owner, 7);
+        // A misleading instance identifier must not authorize another owner.
+        put(&mut m, 0x3800, &7u32.to_le_bytes());
+        put(&mut m, 0x3818, &13u32.to_le_bytes());
+        assert_eq!(
+            read_current(&m, 0x1000, 0x3800),
+            Err(ReadFailure::IdentityMismatch)
+        );
+        for changed in [0x3800, 0x3818] {
+            let m = fixture();
+            m.mutate.set(Some(changed));
+            assert_eq!(read_current(&m, 0x1000, 0x3800), Err(ReadFailure::Changed));
+        }
+    }
+
     #[test]
     fn rejects_cyclic_membership_with_a_finite_bound() {
         let mut m = fixture();
