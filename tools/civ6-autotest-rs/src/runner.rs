@@ -467,8 +467,8 @@ impl Runner {
         self.backend.disconnect();
     }
     pub fn states(&mut self, timeout: f64) -> Result<Vec<String>> {
-        self.backend.require_single_process()?;
         let deadline = self.clock.now() + timeout;
+        self.backend.require_single_process()?;
         let fetch = |this: &mut Self| -> Result<Vec<String>> {
             let remaining = this.remaining(deadline).map_err(|_| {
                 Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")

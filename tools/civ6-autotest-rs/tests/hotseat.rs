@@ -401,3 +401,42 @@ fn staging_does_not_retry_interruption_or_multiple_process_errors() {
         assert_eq!(h.count_code("DoLeftClick()"), 0);
     }
 }
+
+#[test]
+fn process_inspection_consumes_the_state_request_budget() {
+    for inspection_seconds in [0.4, 1.0] {
+        let mut h = Harness::new(json!({"session_type":"hotseat"}), FakeBackend::new());
+        let clock = h.clock.clone();
+        let mut fake = FakeBackend::new();
+        let events = fake.events.clone();
+        fake.on_require = Box::new(move || {
+            clock.advance(inspection_seconds);
+            Ok(())
+        });
+        if inspection_seconds == 0.4 {
+            let clock = h.clock.clone();
+            fake.on_states = Box::new(move || {
+                clock.advance(0.6);
+                Err(Error::tuner("state response took the remaining budget"))
+            });
+        }
+        h.runner.backend = Box::new(fake);
+        let result = h.runner.states(1.0);
+        assert!(result.is_err());
+        let connections = events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| *e == "connect")
+            .count();
+        if inspection_seconds == 1.0 {
+            assert_eq!(connections, 0, "expired inspection must not connect");
+        } else {
+            assert_eq!(
+                connections, 1,
+                "the first state query used the remaining budget"
+            );
+        }
+        assert_eq!(h.clock.at(), 1.0);
+    }
+}
