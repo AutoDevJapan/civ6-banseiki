@@ -54,7 +54,7 @@ local function Ready(request, decision)
   assert(decision.Turn == Game.GetCurrentGameTurn(), 'stale normal admission decision')
   assert(decision.Mode == 'SMALL_STATE' or decision.Mode == 'MERGER',
     'only small-state admission or merger can start this connection')
-  assert(Number(decision.AreaKm2), 'real country area required')
+  assert(Number(decision.AreaKm2) and decision.AreaKm2 > 0, 'positive real country area required')
   assert((decision.Mode == 'SMALL_STATE') == (decision.AreaKm2 < 10000),
     'country area and admission mode disagree')
   assert(type(decision.Requirements) == 'table' and #decision.Requirements > 0,
@@ -72,6 +72,8 @@ local function Ready(request, decision)
   assert(type(decision.RelationsResolved) == 'boolean', 'relation prerequisites required')
   if not met or not decision.RelationsResolved then return false end
   if decision.Mode == 'SMALL_STATE' then
+    assert(type(decision.CanReceiveInfluence) == 'boolean', 'live influence eligibility required')
+    if not decision.CanReceiveInfluence then return false end
     assert(Number(decision.OwnedTiles) and decision.OwnedTiles == math.floor(decision.OwnedTiles),
       'owned tile count required separately from country area')
     assert(Number(decision.Envoys) and decision.Envoys == math.floor(decision.Envoys),
@@ -95,9 +97,11 @@ function N.Check(source, id)
   -- Once F.Begin has journalled P1, retry its frozen plan even if the country
   -- has already been transferred. F owns the saved rolls and asset inventory.
   local existing = FlowRequest(request.FlowID)
-  if existing then
-    assert(request.Plan and R.Equal(existing, request.Plan),
+  if request.Plan or existing then
+    assert(request.Plan and (not existing or R.Equal(existing, request.Plan)),
       'admission flow journal differs from its saved plan')
+    assert(request.Plan.ID == request.FlowID and request.Plan.From == request.From
+      and request.Plan.To == request.To, 'frozen admission identity changed')
   else
     local read = providers[source]
     if not read then return R.Copy(request) end -- another module may load later
@@ -194,7 +198,7 @@ end
 local function ValidateOffer(offer)
   offer = R.Copy(offer)
   assert(type(offer) == 'table' and ID(offer.ID) and Player(offer.From)
-    and Player(offer.To) and offer.From ~= offer.To and Number(offer.AreaKm2),
+    and Player(offer.To) and offer.From ~= offer.To and Number(offer.AreaKm2) and offer.AreaKm2 > 0,
     'leader offer identity and real country area required')
   DemandList(offer.Requirements); DemandList(offer.RelationRequirements)
   assert(type(offer.RelationsReviewed) == 'boolean', 'explicit relationship review required')
@@ -293,7 +297,9 @@ N.Register('leader-offer', function(id, from, to)
     end
     decision.OwnedTiles = tiles
     -- Official CityStates.lua uses the recipient's GetTokensReceived(sender).
-    decision.Envoys = Players[from]:GetInfluence():GetTokensReceived(to)
+    local influence = Players[from]:GetInfluence()
+    decision.CanReceiveInfluence = influence:CanReceiveInfluence()
+    decision.Envoys = influence:GetTokensReceived(to)
   end
   return decision
 end)

@@ -234,7 +234,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nlocal receipt=assert(N.Get('leader-offer',t.ID))\nassert(receipt.Status=='STARTED',receipt.LastError or receipt.Status)\nlocal flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID))\nassert(flow.Mode=='MERGER' and flow.Phase=='CHOICE' and flow.Phase1Complete)\nassert(flow.From==t.From and flow.To==t.To and #flow.Entries>0)\nassert(Players[t.From]:GetCities():GetCount()>0,'phase one transferred cities')\nGame:SetProperty('JAC_ABSORPTION_ADMISSION_LIVE_FLOW_V1',JAC_AbsorptionGameplay.Canonical(flow))\nreturn 'ordinary turn entered saved three-stage choice'\n"
+      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nlocal receipt=assert(N.Get('leader-offer',t.ID))\nassert(receipt.Status=='STARTED',receipt.LastError or receipt.Status)\nlocal flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID))\nassert(flow.Mode=='MERGER' and flow.Phase=='CHOICE' and flow.Phase1Complete)\nassert(flow.From==t.From and flow.To==t.To and #flow.Entries>0)\nassert(Players[t.From]:GetCities():GetCount()>0,'phase one unexpectedly removed all source cities')\nGame:SetProperty('JAC_ABSORPTION_ADMISSION_LIVE_FLOW_V1',JAC_AbsorptionGameplay.Canonical(flow))\nreturn 'ordinary turn entered saved three-stage choice'\n"
     },
     {
       "action": "save",

@@ -287,6 +287,44 @@ fn fixture_runs_the_actual_lua_transfer_with_no_spawn_return_value() -> mlua::Re
     .exec()
 }
 
+#[test]
+fn saved_normal_start_intent_survives_native_failure_before_the_flow_journal() -> mlua::Result<()> {
+    let lua = admission_world()?;
+    lua.load(
+        r#"
+      NORMAL_GOLD=100;NORMAL_RELEASE=true
+      NORMAL_CLASSES=GameInfo.HeroClasses
+      GameInfo.HeroClasses=function() error('native Hero inventory temporarily unavailable') end
+      N.DefineOffer(NORMAL_OFFER);N.Tick()
+      local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='STARTING' and receipt.Plan and receipt.LastError)
+      NORMAL_FLOW_ID=receipt.FlowID
+      NORMAL_PLAN=TEST_ABSORPTION.Rules.Copy(receipt.Plan)
+      local state=Game:GetProperty('JAC_ABSORPTION_FLOW_V1')
+      assert(not state or not state.Flows[NORMAL_FLOW_ID])
+      assert(#RANDOM_CALLS==0 and TRANSFERS==0)
+      GameInfo.HeroClasses=NORMAL_CLASSES;NORMAL_GOLD=0;NORMAL_RELEASE=false
+      Game.props=TEST_ABSORPTION.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, FLOW)?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+    )?;
+    lua.load(r#"
+      N=JAC_AbsorptionAdmissionGameplay;N.Tick()
+      local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='STARTED',receipt.LastError)
+      assert(TEST_ABSORPTION.Rules.Equal(receipt.Plan,NORMAL_PLAN))
+      assert(TEST_FLOW.Get(NORMAL_FLOW_ID).Phase1Complete and #RANDOM_CALLS>0)
+      local before=TEST_ABSORPTION.Canonical(TEST_FLOW.Get(NORMAL_FLOW_ID))
+      local rolls=#RANDOM_CALLS;N.Tick()
+      assert(#RANDOM_CALLS==rolls and TEST_ABSORPTION.Canonical(TEST_FLOW.Get(NORMAL_FLOW_ID))==before)
+    "#).exec()
+}
+
 // The full absorption engine runs here. RP's Export boundary returns a detached
 // saved ledger; the RP suite separately exercises its real normalization/revival.
 fn joint_adapter_world() -> mlua::Result<Lua> {

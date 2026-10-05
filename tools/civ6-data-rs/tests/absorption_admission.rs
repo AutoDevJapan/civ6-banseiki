@@ -19,6 +19,7 @@ fn world() -> mlua::Result<Lua> {
           table.sort(out); return out end
         JAC_AbsorptionGameplay={Rules={Copy=copy, Equal=equal, Keys=keys}}
         TURN, GOLD, FAITH, ENVOYS, TILES, BEGIN_COUNT, FAIL_BEGIN = 7, 99, 10, 2, 2, 0, false
+        CAN_RECEIVE=true
         local props={}
         Game={GetProperty=function(_,k) return copy(props[k]) end,
           SetProperty=function(_,k,v) props[k]=copy(v) end,
@@ -28,7 +29,8 @@ fn world() -> mlua::Result<Lua> {
           Players[id]={IsAlive=function() return true end,IsHuman=function() return id==2 end,
             GetTreasury=function() return {GetGoldBalance=function() return GOLD end} end,
             GetReligion=function() return {GetFaithBalance=function() return FAITH end} end,
-            GetInfluence=function() return {GetTokensReceived=function(_,sender)
+            GetInfluence=function() return {CanReceiveInfluence=function() return CAN_RECEIVE end,
+              GetTokensReceived=function(_,sender)
               assert(sender==2);return ENVOYS end} end}
         end
         Map={GetPlotCount=function() return TILES end,
@@ -223,7 +225,8 @@ fn malformed_requirements_stale_decision_unknown_mode_and_reused_identity_do_not
         {Turn=6,Mode='MERGER',AreaKm2=10000},
         {Turn=7,Mode='FEDERATION',AreaKm2=10000},
         {Turn=7,Mode='SMALL_STATE',AreaKm2=10000},
-        {Turn=7,Mode='MERGER',AreaKm2=0/0}}) do
+        {Turn=7,Mode='MERGER',AreaKm2=0/0},
+        {Turn=7,Mode='SMALL_STATE',AreaKm2=0}}) do
         bad.From=1;bad.To=2;bad.RelationsResolved=true
         bad.Requirements={{ID='promise',Met=true}}
         local source='invalid'..index
@@ -234,6 +237,8 @@ fn malformed_requirements_stale_decision_unknown_mode_and_reused_identity_do_not
         AreaKm2=10000,RelationsResolved=true,Requirements={{ID='a',Met=1}}} end)
       N.Request('bad-demands','id',1,2); assert(BEGIN_COUNT==0)
       assert(not pcall(N.Request,'bad-demands','id',1,3))
+      local zero=JAC_AbsorptionGameplay.Rules.Copy(OFFER);zero.AreaKm2=0
+      assert(not pcall(N.DefineOffer,zero))
       N.DefineOffer(OFFER); OFFER.Requirements[1].Minimum=0
       assert(not pcall(N.DefineOffer,OFFER))
       assert(not pcall(N.Request,'unregistered','x',1,2))
@@ -369,6 +374,55 @@ fn registered_provider_cancellation_prevents_later_reader_changes_from_starting(
       N.Cancel('another-provider','version-1');MET=true
       assert(N.Request('another-provider','version-1',1,2).Status=='CANCELLED')
       N.Tick();assert(BEGIN_COUNT==0)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn ineligible_influence_recipient_waits_even_with_a_nonzero_existing_envoy_count(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      GOLD=100;RELEASE=true;CAN_RECEIVE=false;ENVOYS=100
+      N.DefineOffer(OFFER);N.Tick()
+      assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING' and BEGIN_COUNT==0)
+      CAN_RECEIVE=true;N.Tick();assert(BEGIN_COUNT==1)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn failure_before_flow_journal_still_resumes_the_saved_start_intent() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      GOLD=100;RELEASE=true;FAIL_BEFORE_JOURNAL=true
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function(plan)
+        if FAIL_BEFORE_JOURNAL then error('inventory snapshot failed before journalling') end
+        return begin(plan)
+      end
+      OFFER.Plan.Label='original-intent'
+      N.DefineOffer(OFFER);N.Tick()
+      local receipt=N.Get('leader-offer',OFFER.ID)
+      assert(receipt.Status=='STARTING' and receipt.Plan.Label=='original-intent')
+      assert(not Game:GetProperty('JAC_ABSORPTION_FLOW_V1') and BEGIN_COUNT==0)
+      ORIGINAL=JAC_AbsorptionGameplay.Rules.Copy(receipt.Plan)
+      GOLD=0;RELEASE=false;FAIL_BEFORE_JOURNAL=false
+    "#,
+    )
+    .exec()?;
+    load(&lua)?;
+    lua.load(
+        r#"
+      N.Tick()
+      local receipt=N.Get('leader-offer',OFFER.ID)
+      assert(receipt.Status=='STARTED' and BEGIN_COUNT==1)
+      assert(JAC_AbsorptionGameplay.Rules.Equal(receipt.Plan,ORIGINAL))
+      N.Tick();assert(BEGIN_COUNT==1)
     "#,
     )
     .exec()
