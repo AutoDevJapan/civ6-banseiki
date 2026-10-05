@@ -103,3 +103,18 @@ fn legacy_schema_does_not_overwrite_a_foreign_close_key() {
 fn legacy_schema_claims_empty_close_range_before_republishing() {
     run_case("legacy_schema_claims_empty_close_range_before_republishing");
 }
+
+#[test]
+fn gameplay_without_can_ever_binding_still_publishes_authoritative_owner() {
+    run_case("gameplay_without_can_ever_binding_still_publishes_authoritative_owner");
+}
+
+#[test]
+fn schema_two_rejects_foreign_owner_reset_key() {
+    run_case("schema_two_rejects_foreign_owner_reset_key");
+}
+
+#[test]
+fn sparse_alive_ids_on_reload_close_omitted_owner() {
+    run_case("sparse_alive_ids_on_reload_close_omitted_owner");
+}

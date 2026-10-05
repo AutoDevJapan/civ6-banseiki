@@ -1,5 +1,34 @@
 # PR86: 加入人物の本体任命資格（共有ToDo 853）
 
+## ToDo1433再開：配置資格の独立受信処理B1
+
+**配置の共通経路は親の実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した担当用作業場所を、親のc21b145fと通常資格修正51cb6b42まで早送りした。親・実機担当の作業場所と本体メモリには接続しない。
+
+実機144の根拠は本書「実機141〜144」の記録とd49d485e。UI戻り先0xBA3E2が2行、本体更新0x2DD375が1行、owner0・Index4・City ID65536・座標134/29・owner0・原AL1で一致した。これは私的な費用1の配置観測で、費用2/3・AI・支払い本人の全昇進の受入へ拡張しない。
+
+`windows/paid_assignment.rs` の `PaidAssignmentConsumer` は、既存の任命資格と同じowner binding、session、一度だけ採番するgetter入口ticket、128bit CASを使う。manifest 904000+Index、paid bool 905000+Index、閉鎖906000+Index、owner reset 907000+ownerの別領域を解析する。各Indexは0..255、ownerは0..63で、producerによるこの範囲の予約・保存・公開はまだ行わない。任命資格901000+Indexのtrueはpaidへ転用しない。
+
+閉鎖はgetter入口で即時に発効する。その後のtyped bool false ACK、同じ本人のmanifest、最後のtyped paid trueが同じreceiver/sessionと新しいticketで揃った場合だけ有効とする。未知receiver、複数ownerへ重複したreceiver、不正型・flags・payload、未払い、古い完了、reset・rebind・cancel・ticket上限は既知の人物を閉じる。owner resetは通常資格と同じbinding閾値を先に進め、二つの資格を同時に失効させる。返値は一回分の非複製トークンへreceiver・key・世代・ticketを束縛し、別人物や別getterへ返値を取り違えない。
+
+現在のCanAssign呼出しへ渡すadapterは、同じ二つの入力ポインターから既存の本人読取器を使い、owner・Index・本体リスト所属・昇進列を照合する。任意getterやLuaは呼ばず、ポインターを保存しない。原RAXを受け取り、拒否時だけALを0へ制限する。元のfalseをtrueに変えず、分類済みの通常総督は人物用の昇進配列を要求せず、原RAXを保持する。人物manifestが揃う前の未分類Indexと通常総督を区別する製品の初期化処理は次工程で必須であり、このadapterを単独で実ゲームへ設置しない。
+
+合成Win64子では、既存の4引数gatewayを検査時だけこのadapterへ接続する。通常のmode7には切替手段を追加せず、原RAXを保持する観測モードを維持する。拒否時の原関数一回、4入力・RAX/R10/R11・XMM0..5、上位RAX保持、全額後の原true保持と原false保持、通常総督、閉鎖後の拒否、trace容量上限でも拒否継続、復元後の原動作を検査する。製品controller・新mode・trace版・三入口の設置処理は未実装である。
+
+### 次の工程と受入条件
+
+1. 親853の現在の本人読取器について、同一実SessionのCore昇進とそのゲームのGameInfo定義を実機で照合する。診断の呼出元が渡したPromotion Indexだけでpaidをtrueにしない。
+2. 同期Gameplayの人物台帳と、実Governor/base/title1/title2/公式Spentの人物別会計からRustでpaidを派生するproducerを接続する。全22人の任命producerを複製せず、範囲の衝突検査・保存schema移行・全owner閉鎖を同じ初期化へ追加する。予約残高とEVOLVING状態だけを支払い証拠にしない。
+3. 完全な人物catalogの初期化前は人物を閉じる共通gateを、CanEver・自然Core getter・4引数CanAssignの三入口として一Job・leaseで設置する。入力が未分類の間にabsenceを通常総督の証拠にしない。第二/第三設置失敗、遅延callback、取り消し、各trace版の終端、三入口の復元を合成試験で確認する。
+4. 同一候補の別モデルレビュー・全件検査・releaseは親が行う。費用2/3の公式APPOINT後の未払いUI/本体ASSIGN拒否、PROMOTEを一個ずつ支払った本人会計、全額後の配置、途中保存/再開、AIの正式支払いと配置、複数端末を親のlive_chainで実証する。B1の合成成功を実機成功へ読み替えない。
+
+### B1の検査結果
+
+最終候補は専用targetで `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets --no-fail-fast` が115実行対象・1,809件成功、失敗・ignored・measured・filtered outが0件だった。Lua5.1を全件実行した。Cargoの各Running区間の最後のsummaryだけを集計し、別Win64子の1件成功・44 filtered outは二重加算しない。最終native45件には受信処理の追加6件と、4引数gatewayの合成拒否・通常総督の昇進配列欠落の直接確認を含む。
+
+native crateは `cargo clippy --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --all-targets --no-deps -- -D warnings` が成功した。初回は既存の本人読取器の末尾byteループでneedless_range_loopを検出したため、同じoffset・一byteずつの読取をiteratorへ変更して修復した。初回45件の検査に出た試験用メモリのunused_assignmentsもvolatile書込みと読取結果の確認へ修復した。さらに通常総督へ人物用昇進配列を要求しないよう判定順を直し、修正前の全件1,809件とは別に最終全件を再実行した。Rust2021の対象整形・差分検査も成功した。依存先まで含むClippy、別モデル、CI、release、製品の配置拒否と追加実機はこの担当では未実行である。
+
+親へ渡すのは51cb6b42を基準にした6ファイルのcommit差分だけ。lib/windows/assignment/新paid_assignment/本人読取器のloop/本書が対象で、任命producer・既存シナリオ・UI・実機の保存は変更しない。検査ログ、集計、候補指紋は担当用 `.task/assignment1433` へ保全し、commitには含めない。
+
 ## ToDo1433の配置観測Aと未払い拒否Bの接続契約
 
 **今回追加するのは原戻り値を保持する配置観測Aで、費用2・3の未払い配置拒否Bは未実装・未実機である。** 基準a29a8717の専用作業フォルダーでmode ordinal 7 `AssignCalibration`を追加する。通常資格のmode 6は担当1399/1447が修正中であり、この差分に複製しない。mode 5、数値getter、ticket/session、128bit原子更新と既存の終了処理は保持する。mode 7だけでは人物を任命可能にしない。
@@ -337,21 +366,21 @@ AIが費用2・3の支払い用昇進を自発的に選ぶ経路は、引き続�
 
 通常Gameplayの権限源は同期Game台帳、実Great Person、Coreの公式称号である。UI cache・私的Bの853304・UI人物資格は入力にしない。Governor Indexは実行中のGameInfoから求め、22人の重複・欠損・範囲外を拒否する。
 
-公開キーは、対応表900000+Index、資格901000+Index、所有者の失効902000、人物セルの閉鎖903000+Indexである。初回は3範囲と失効キーの衝突を確認する。同期Gameの既存schemaキーは値2で新しい閉鎖範囲も所有する。旧保存の値1では全主要所有者の新閉鎖キーが未使用であることを確認してから値2へ移す。衝突なら元の値を上書きせず、全所有者を失効して中断する。Luaの揮発性スナップショットは前回公開値の比較だけに使い、権限源にしない。所有者の操作はその所有者を、各PlayerTurnはその所有者を、全体Turnは全員を再計算する。変化のないセルの数値propertyは読み書きしない。加入直後・EVOLVING前後・正式Finalize前後も同じ処理である。
+公開キーは、対応表900000+Index、資格901000+Index、所有者別の失効902000+owner、人物セルの閉鎖903000+Indexである。初回は各公開範囲と所有者別失効キーの衝突を確認する。同期Gameのschema値3がこの範囲を所有する。旧保存の値1では新閉鎖範囲、値2では新しい所有者別失効キーを確認してから移す。衝突なら元の値を上書きせず、全所有者を失効して中断する。所有者一覧は0〜63の重複しない整数を持つ連続配列と確認し、穴や不正値があれば全所有者を失効して公開を止める。Luaの揮発性スナップショットは前回公開値の比較だけに使い、権限源にしない。所有者の操作はその所有者を、各PlayerTurnはその所有者を、全体Turnは全員を再計算する。変化のないセルの数値propertyは読み書きしない。加入直後・EVOLVING前後・正式Finalize前後も同じ処理である。
 
-初回・Lua再作成・所有者オブジェクトの変更は、各所有者につき自然なCore CanEverAppointGovernorを1回読み、Core受信先を結ぶ。その後、全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、親は接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
+初回・Lua再作成・所有者オブジェクトの変更は、各所有者の失効キーを自然なCore property getterから読む。そのキーに含むownerと今回の受信先をnativeが原子的に結び、同じ入口で旧世代を閉じる。Gameplayに存在するか未実測のCanEverAppointGovernorへ依存しない。全所有者の失効値trueの読取を確認してから公開を開始する。GameInfo対応表が変わった場合と所有者の消滅時も以前の所有者を失効させる。保存されたtrueだけでは再公開しない。native接続がLua初期化より遅かった場合、比較用スナップショットから自動的には再公開しないため、親は接続を先に用意してGameplayを初期化する必要がある。任意の途中接続を製品完成とは扱わない。
 
 変更されたセルは、閉鎖キーの読取、資格falseの読取確認、対応表trueの読取確認、必要な場合だけ資格trueの読取確認の順で公開する。全変更セルを閉じてから新しい値を公開する。falseまたは対応表の確認に失敗すれば所有者全体を失効し、その自然読取も確認して中断する。失敗したスナップショットは捨てる。失効の読取が不正型でもnative側は入口で失効する。古いtrueがfalseの直後に戻る場合、nativeは新しい閉鎖世代のfalse確認がないため許可しない。
 
-nativeは各owner/Indexに受信先・session・ticketを持つ閉鎖、false確認、対応表、許可の有界セルを使う。閉鎖はgetter入口でticketを進め、返値の正誤に依存しない。新世代の正しいbool falseを確認した後でだけ対応表を公開でき、その後の資格trueだけを許可とする。旧世代・遅れた読取・所有者再利用・旧session・不正tag/flags/payloadを拒否する。許可を返す直前に、所有者・閉鎖・対応表・資格が変わっていないことを再確認する。別MODの通常Governorは元ALを保ち、対応済み人物の未知の所有者は閉じる。
+nativeは各owner/Indexに受信先・session・ticketを持つ閉鎖、false確認、対応表、許可の有界セルを使う。所有者別の失効getter入口では、まずownerの原子状態を閉じ、その後に同じ受信先の他owner結合を整理する。同時CanEverがこの間に走っても古い許可を返さない。人物セルの閉鎖もgetter入口でticketを進め、返値の正誤に依存しない。新世代の正しいbool falseを確認した後でだけ対応表を公開でき、その後の資格trueだけを許可とする。旧世代・遅れた読取・所有者再利用・旧session・不正tag/flags/payloadを拒否する。許可を返す直前に、所有者・閉鎖・対応表・資格が変わっていないことを再確認する。別MODの通常Governorは元ALを保ち、対応済み人物の未知の所有者は閉じる。
 
-22所有者×22人の再ロード初期化は、失効22回と3段階×484回で1,474回の対象getterになる。初回の名前空間確認も含めると2,948回で、property観測4,096件以内である。変更のない300ターンで全体と全22 PlayerTurnを実行しても追加の対象getter・公開・Core binding anchorは0回である。この数値はLua 5.1合成試験の測定で、実機時間の測定ではない。
+22所有者×22人の再ロード初期化は、失効22回と3段階×484回で1,474回の対象getterになる。初回の名前空間確認も含めると2,948回で、property観測4,096件以内である。変更のない300ターンで全体と全22 PlayerTurnを実行しても追加の対象getter・公開・Core binding anchorは0回である。所有者の初回bindingは失効getterへ統合した。この数値はLua 5.1合成試験の測定で、実機時間の測定ではない。
 
 観測と資格判定を分離した。通常mode6の校正は1,024行、propertyは4,096行の先頭サンプルだけを保存する。超過呼出しも原関数を1回呼び、資格判定を行う。原関数の前後の本人情報は各呼出しのスタックに持ち、サンプル行がなくても同じactor/sessionで判定する。自然なproperty返値はサンプルの残量に関係なく消費する。容量不足で許可を閉じたりcontrollerを失敗させたりしない。ticketの実際の枯渇は別であり、許可を閉じる。
 
 校正traceは版4、property traceは版3であり、DLLとcontrollerは同じ型のVERSIONとサイズを照合する。mode6のcounter_scopeはbounded_prefix_samples_not_complete_call_history、sample limitは1,024/4,096、droppedは未保存の呼出し数である。全履歴の完全性・全22人の動作成功をこのサンプルだけから主張しない。他の診断・私的Bモードの厳密な記録契約は保持する。有限接続時間は最大300秒のままで、原関数1回・全入口復元・所有プロセス回収の契約を変えない。
 
-不正型の公開行には、その自然返値を消費した直後の同じ所有者・Indexについてnative consumerが閉鎖を確認した結果を添える。成果物検査はその結果とCore受信先の所有者対応を照合する。該当Indexや所有者が違う閉鎖、確認の欠落、完全履歴を装う上限超過は受理しない。サンプルにない後続イベントまで閉鎖済みとは扱わない。
+不正型の公開行には、その自然返値を消費した直後の同じ所有者・Indexについてnative consumerが閉鎖を確認した結果を添える。成果物検査はその結果とCore受信先の所有者対応を照合する。さらに、同じCore受信先・所有者の型付きtrue失効読取が先頭サンプルにあることを要求する。該当Indexや所有者が違う閉鎖、確認の欠落、完全履歴を装う上限超過は受理しない。サンプルにない後続イベントまで閉鎖済みとは扱わない。
 
 ### Core Governor getterの実機診断と残り
 

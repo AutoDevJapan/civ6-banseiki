@@ -166,6 +166,7 @@ mod platform {
         let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
         let mut production_bindings = std::collections::BTreeSet::new();
+        let mut production_resets = std::collections::BTreeSet::new();
         let mut calibrated_owners = std::collections::BTreeSet::new();
         let mut admission_values = std::collections::BTreeSet::new();
         let mut admission_threads = std::collections::BTreeSet::new();
@@ -219,8 +220,11 @@ mod platform {
                                         [901000, 901255],
                                         [903000, 903255]
                                     ])
-                                && row["reset_key_id"]
-                                    == civ6_native_bridge_rs::PRODUCTION_RESET_KEY))
+                                && row["reset_key_range"]
+                                    == serde_json::json!([
+                                        civ6_native_bridge_rs::PRODUCTION_RESET_KEY,
+                                        civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY
+                                    ])))
                         && (mode != BridgeMode::PropertyScoped
                             || row["scope_key_ids"]
                                 == serde_json::json!([
@@ -412,7 +416,9 @@ mod platform {
                                 ) || n
                                     == u64::from(civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID))
                                 && (mode != BridgeMode::ProductionAdmission
-                                    || n == u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                                    || (u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                                        ..=u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY))
+                                        .contains(&n)
                                     || (900000..900256).contains(&n)
                                     || (901000..901256).contains(&n)
                                     || (903000..903256).contains(&n))
@@ -486,6 +492,21 @@ mod platform {
                     }
                     if mode == BridgeMode::ProductionAdmission {
                         let key = row["key_id"].as_u64().unwrap();
+                        if (u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                            ..=u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY))
+                            .contains(&key)
+                            && row["read_state"] == 1
+                            && row["tag"] == 1
+                            && row["flags14"] == 0
+                            && row["payload8"] == "0x0000000000000001"
+                        {
+                            if let Some(receiver) = hex_address(&row["property"]) {
+                                production_resets.insert((
+                                    key - u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY),
+                                    receiver,
+                                ));
+                            }
+                        }
                         let cell_index = if (900000..900256).contains(&key) {
                             Some(key - 900000)
                         } else if (901000..901256).contains(&key) {
@@ -669,10 +690,12 @@ mod platform {
             ));
         }
         if mode == BridgeMode::ProductionAdmission
-            && (joined_calibrations == 0 || joined_properties == 0)
+            && (joined_calibrations == 0
+                || joined_properties == 0
+                || production_bindings.is_disjoint(&production_resets))
         {
             return Err(Error::input(
-                "production admission observed no Core getter or owner",
+                "production admission lacks a sampled owner reset paired with Core getter",
             ));
         }
         Ok(entries)
@@ -1800,7 +1823,7 @@ mod platform {
                     "mode":"production-admission","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
                     "property_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
                     "scope_key_ranges":[[900000,900255],[901000,901255],[903000,903255]],
-                    "reset_key_id":902000,"prefix_bytes":"[cc, cc, cc, cc, cc]",
+                    "reset_key_range":[902000,902063],"prefix_bytes":"[cc, cc, cc, cc, cc]",
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
                 json!({"kind":"uninstall","status":0,"entry_restored":true,
@@ -1838,10 +1861,39 @@ mod platform {
             verified[4]["denial_owner"] = json!(2);
             verified[4]["denial_index"] = json!(77);
             write(&verified);
+            assert!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                "a production artifact without a paired owner reset is incomplete"
+            );
+            verified.insert(
+                4,
+                json!({"kind":"property_get","sequence":1,
+                "property":"0x0000000000002528","key_id":902002,
+                "returned":"0x0000000000006000","thread_id":12,
+                "read_state":1,"tag":1,"payload8":"0x0000000000000001","flags14":0}),
+            );
+            verified[5]["sequence"] = json!(2);
+            verified[6]["rows"] = json!(3);
+            verified[6]["observed_calls"] = json!(3);
+            verified[6]["getter_calls_seen"] = json!(3);
+            write(&verified);
             assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
-                2
+                3
             );
+            for (field, value) in [
+                ("key_id", json!(902001)),
+                ("property", json!("0x0000000000003000")),
+                ("payload8", json!("0x0000000000000000")),
+            ] {
+                let mut bad = verified.clone();
+                bad[4][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                    "reset {field} must identify the calibrated Core owner"
+                );
+            }
             for (field, value) in [
                 ("denial_checked", json!(false)),
                 ("denial_index", json!(78)),
@@ -1849,7 +1901,7 @@ mod platform {
                 ("denial_owner", json!(1)),
             ] {
                 let mut bad = verified.clone();
-                bad[4][field] = value;
+                bad[5][field] = value;
                 write(&bad);
                 assert!(
                     terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
@@ -1857,17 +1909,17 @@ mod platform {
                 );
             }
             let mut sampled = verified.clone();
-            sampled[5]["dropped"] = json!(80);
-            sampled[5]["observed_calls"] = json!(82);
-            sampled[5]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
-            sampled[5]["calibration_sample_limit"] = json!(1024);
-            sampled[5]["property_sample_limit"] = json!(4096);
+            sampled[6]["dropped"] = json!(80);
+            sampled[6]["observed_calls"] = json!(83);
+            sampled[6]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
+            sampled[6]["calibration_sample_limit"] = json!(1024);
+            sampled[6]["property_sample_limit"] = json!(4096);
             write(&sampled);
             assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
-                2
+                3
             );
-            sampled[5]["counter_scope"] = json!("complete_history");
+            sampled[6]["counter_scope"] = json!("complete_history");
             write(&sampled);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
             let mut foreign = rows.to_vec();

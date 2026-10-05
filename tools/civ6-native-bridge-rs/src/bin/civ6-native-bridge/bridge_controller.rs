@@ -963,7 +963,7 @@ pub fn run() -> Result<(), String> {
             if parsed.mode == BridgeMode::ProductionAdmission {
                 identity["scope_key_ranges"] =
                     json!([[900000, 900255], [901000, 901255], [903000, 903255]]);
-                identity["reset_key_id"] = json!(902000);
+                identity["reset_key_range"] = json!([902000, 902063]);
             } else {
                 identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
             }
