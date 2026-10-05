@@ -193,13 +193,18 @@ local function Occupy(p)
   SafePlot(p)
   local row={X=p:GetX(),Y=p:GetY(),Terrain=p:GetTerrainType(),Feature=p:GetFeatureType(),
     Barrier=GameInfo.Terrains.TERRAIN_GRASS_MOUNTAIN.Index}
+  -- Record before either setter so partial mutation can also be restored.
+  rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
   TerrainBuilder.SetFeatureType(p,-1); CheckCity('after-clear-feature-'..row.X..','..row.Y)
   TerrainBuilder.SetTerrainType(p,row.Barrier); CheckCity('after-terrain-'..row.X..','..row.Y)
   assert(p:IsImpassable(),'terrain setter did not create an impassable plot')
   CheckCity('after-barrier')
   print('[JAC_ASN_BLOCKED] terrain-blocker xy='..row.X..','..row.Y..' original='..row.Terrain..' barrier='..row.Barrier)
-  rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
+-- Treat all fixture mutation and native discovery as one transaction.
+-- Every failure restores earlier barriers, including unsafe later candidates,
+-- invalid native placement and exhaustion of the bounded candidate search.
+local prepared,why=xpcall(function()
 for _,p in ipairs(plots) do if not p:IsWater() then Occupy(p) end end
 -- The native API can search past the first ring. Discover its real placement
 -- candidates instead of treating the fifth argument as a maximum radius.
@@ -245,6 +250,12 @@ assert(blocked,'native placement did not become blocked within 128 probes')
 assert(Same(UnitIDs(owner),t.AllBefore),'fixture changed existing unit inventory')
 assert(next(t.Before)==nil,'fresh game already contains assassins')
 Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()
+end,function(err) return tostring(err) end)
+if not prepared then
+  RestoreTerrain()
+  assert(Same(UnitIDs(owner),t.AllBefore),'failed fixture rollback changed existing inventory')
+  error(why)
+end
 return 'real impassable terrain blocks the native API after discovering its actual placement candidates'
 "#,
         "GameCore_Tuner",
@@ -406,6 +417,7 @@ mod tests {
         let fixture = r#"
 Game.GetLocalPlayer=function() return 0 end
 local terrain={['2,0']=4}; local features={['0,0']=3}
+if PROBE_MODE=='natural_wonder' then features['2,0']=99 end
 GameInfo.Terrains={TERRAIN_GRASS_MOUNTAIN={Index=9}}
 local function Plot(x,y)
   local key=x..','..y
@@ -417,7 +429,7 @@ local function Plot(x,y)
     GetImprovementType=function() return PROBE_MODE=='improvement' and x==2 and 1 or -1 end,
     GetDistrictType=function() return PROBE_MODE=='district' and x==2 and 1 or -1 end,
     GetRouteType=function() return PROBE_MODE=='route' and x==2 and 1 or -1 end,
-    IsNaturalWonder=function() return PROBE_MODE=='natural_wonder' and x==2 end,
+    IsNaturalWonder=function() return (PROBE_MODE=='natural_wonder' and x==2) or (PROBE_MODE=='unsafe_candidate' and x==7) end,
     IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
     IsWater=function() return (PROBE_MODE=='water' or PROBE_MODE=='water_candidate') and x==2 end,
     IsImpassable=function() return terrain[key]==9 end}
@@ -447,7 +459,9 @@ if PROBE_MODE=='occupied' or PROBE_MODE=='foreign_occupied' then
   occupiedUnit=GRANT(occupiedOwner,4,2,0):GetID()
 end
 Players[60]={GetUnits=function() return nil end}
-UnitManager.InitUnit=function(owner,kind,x,y) GRANT(owner,GameInfo.Units[kind].Index,x,y) end
+local initialUnits={}; for id,data in pairs(DATA) do initialUnits[id]=clone(data.Units) end
+INIT_CALLS=0
+UnitManager.InitUnit=function(owner,kind,x,y) INIT_CALLS=INIT_CALLS+1; GRANT(owner,GameInfo.Units[kind].Index,x,y) end
 NATIVE_CALLS=0
 UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,arg)
   assert(owner==0 and kind=='UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' and x==0 and y==0 and arg==1)
@@ -494,11 +508,32 @@ function CheckCenterFallbackUnchanged()
   end
 end
 function CheckPreflightUnchanged()
-  assert(NATIVE_CALLS==0 and Players[0]:GetUnits():FindID(garrison) and Players[0]:GetUnits():FindID(unrelated))
+  assert(NATIVE_CALLS==0 and INIT_CALLS==0 and Players[0]:GetUnits():FindID(garrison) and Players[0]:GetUnits():FindID(unrelated))
   for x=1,6 do assert(Map.GetPlot(x,0):GetTerrainType()==(x==2 and 4 or 1)) end
+  for x=0,7 do assert(Map.GetPlot(x,0):GetFeatureType()==(x==0 and 3 or (PROBE_MODE=='natural_wonder' and x==2 and 99 or -1))) end
+  for owner,expected in pairs(initialUnits) do
+    local expectedCount,actualCount=0,0
+    for id,row in pairs(expected) do
+      expectedCount=expectedCount+1
+      local actual=DATA[owner].Units[id]; assert(actual,'preflight removed an existing unit')
+      assert(actual.ID==row.ID and actual.Owner==row.Owner and actual.Type==row.Type and
+        actual.X==row.X and actual.Y==row.Y and actual.Damage==row.Damage,'preflight changed an existing unit')
+    end
+    for _ in pairs(DATA[owner].Units) do actualCount=actualCount+1 end
+    assert(actualCount==expectedCount,'preflight changed the complete unit inventory')
+  end
   if occupiedUnit then
     local u=Players[occupiedOwner]:GetUnits():FindID(occupiedUnit)
     assert(u and u:GetX()==2 and u:GetY()==0 and u:GetType()==4 and u:GetDamage()==0)
+  end
+end
+function CheckUnsafeCandidateRestored()
+  assert(NATIVE_CALLS==1 and Players[0]:GetUnits():GetCount()==2)
+  assert(Players[0]:GetUnits():FindID(garrison) and Players[0]:GetUnits():FindID(unrelated))
+  assert(Players[0]:GetCities():FindID(10))
+  for x=0,7 do local plot=Map.GetPlot(x,0)
+    assert(plot:GetTerrainType()==(x==2 and 4 or 1))
+    assert(plot:GetFeatureType()==(x==0 and 3 or -1))
   end
 end
 function CorruptCenter(field)
@@ -529,6 +564,7 @@ end
             "district",
             "route",
             "natural_wonder",
+            "unsafe_candidate",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -584,6 +620,14 @@ end
                     .to_string()
                     .contains("fixture would modify a natural wonder"));
                 lua.load("CheckPreflightUnchanged()").exec()?;
+            }
+            if mode == "unsafe_candidate" {
+                assert!(result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixture would modify a natural wonder"));
+                lua.load("CheckUnsafeCandidateRestored()").exec()?;
             }
             if mode == "water_candidate" {
                 assert!(result
