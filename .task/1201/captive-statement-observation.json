@@ -1,0 +1,84 @@
+{
+  "name": "Observe one formal captive proposal from the archived turn-24 save without saving or advancing turns",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization-8d7d3b57e45e45cb8bd46264cb36c7d4-0000000000000001",
+      "exact_name": true,
+      "checkpoint": false,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_PersonaBoundary)=='table'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local d=b.EnemyRetryDiagnosis(); assert(d.spyID==655368 and d.eventID==0 and d.eventTurn==23 and d.mode=='UNAVAILABLE_CAPACITY' and d.outcome=='CAPTURED' and d.captive.captor==1 and d.captive.nameIndex==-1 and d.occupied==1 and d.capacity==1,'actual captive checkpoint differs'); return b.BeginCaptiveExchange()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "state",
+        "name": "DiplomacyDealView"
+      }
+    },
+    {
+      "action": "observe_captive_session",
+      "attacker": 0,
+      "captor": 1,
+      "timeout": 120,
+      "lua_timeout": 12
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "preserve_diplomacy_session": true,
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; assert(b.CaptiveExchangeState().stage=='SESSION_OPEN','native captive session did not open'); b.Queue('MARK_CAPTIVE_EXCHANGE'); return 'native captive attempt receipt queued'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "preserve_diplomacy_session": true,
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_MARK_CAPTIVE_EXCHANGE' or a=='UNKNOWN_MARK_CAPTIVE_EXCHANGE' or a=='REJECTED_MARK_CAPTIVE_EXCHANGE' then error(a) end; return a=='ACCEPTED_MARK_CAPTIVE_EXCHANGE'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "preserve_diplomacy_session": true,
+      "code": "return ExposedMembers.JAC_PersonaBoundary.ProposeCaptiveExchange()"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "preserve_diplomacy_session": true,
+        "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.CaptiveExchangeState().stage; return s=='AI_ACCEPTED_EXACT' or s=='AI_REFUSED' or s=='AI_CHANGED_TERMS' or s=='AI_RESPONSE_UNCLASSIFIED' or s=='DEAL_INVALID' or s=='DEAL_VALIDATION_UNKNOWN' or b.CaptiveExchangeReplyWaitElapsed(30)"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "preserve_diplomacy_session": true,
+      "code": "local r=ExposedMembers.JAC_PersonaBoundary.CaptiveExchangeReplyDiagnostic(); assert(r.sessionMatches,\"native captive session changed\"); assert(r.statementCount>0 or r.coreResponse~=\"UNOBSERVED\",\"native reply still absent\"); return r.stage"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}
