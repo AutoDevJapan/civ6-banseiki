@@ -4,6 +4,39 @@ use civ6_autotest_rs::{Error, ErrorKind};
 use serde_json::json;
 use support_driver::{FakeBackend, Harness};
 
+#[test]
+fn mod_selection_and_ui_lua_use_the_requested_step_budget_without_a_five_second_cap() {
+    for action in ["enable_mods", "ui_lua"] {
+        for timeout in [2.0, 90.0] {
+            let fake = FakeBackend::new().lua(|_, _| Ok("true".into()));
+            let budgets = fake.timeouts.clone();
+            let mut h = Harness::new(json!({}), fake);
+            let step = if action == "enable_mods" {
+                json!({"action":action,"ids":["7696e937-2044-4f3c-8e13-4e27632e2710"],"timeout":timeout})
+            } else {
+                json!({"action":action,"state_name":"FrontEnd","code":"return true","timeout":timeout})
+            };
+            h.runner.run_step(&step).unwrap();
+            assert_eq!(*budgets.lock().unwrap(), [timeout]);
+            assert_eq!(h.calls().len(), 1);
+        }
+    }
+}
+
+#[test]
+fn long_budget_ui_command_with_unknown_response_is_never_sent_twice() {
+    let fake = FakeBackend::new().lua(|_, _| Err(Error::unknown("response lost")));
+    let mut h = Harness::new(json!({}), fake);
+    let error = h
+        .runner
+        .run_step(
+            &json!({"action":"ui_lua","state_name":"FrontEnd","code":"mutate()","timeout":90}),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+    assert_eq!(h.calls().len(), 1);
+}
+
 fn timeout_backend(failures: usize, error: Error, reply: &str) -> FakeBackend {
     let mut remaining = failures;
     let reply = reply.to_owned();

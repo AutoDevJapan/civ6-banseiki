@@ -66,7 +66,69 @@ fn scenario() -> serde_json::Value {
 }
 
 fn main() {
-    println!("{}", serde_json::to_string_pretty(&scenario()).unwrap());
+    let mut data = scenario();
+    if let Some(log) = std::env::args().nth(1) {
+        let text = std::fs::read_to_string(log).expect("read original selection log");
+        let mut original = std::collections::BTreeMap::new();
+        for line in text.lines() {
+            if let Some(row) = line.strip_prefix("FrontEnd: TODO241 ORIGINAL ") {
+                let (id, flag) = row.split_once('=').expect("complete original row");
+                assert_eq!(
+                    id.trim_matches(['{', '}']).len(),
+                    36,
+                    "complete original MOD id"
+                );
+                let enabled = match flag {
+                    "true" => true,
+                    "false" => false,
+                    _ => panic!("complete original flag"),
+                };
+                assert!(
+                    original.insert(id.to_string(), enabled).is_none(),
+                    "duplicate original row"
+                );
+            }
+        }
+        assert!(!original.is_empty(), "original snapshot is required");
+        let expected_count = text
+            .lines()
+            .find_map(|line| {
+                line.split_once("installed=")
+                    .and_then(|(_, count)| count.trim().parse::<usize>().ok())
+            })
+            .expect("original installed count is required");
+        assert_eq!(
+            original.len(),
+            expected_count,
+            "every original MOD row is required"
+        );
+        let mut recovery = format!(
+            "if not UI.IsInFrontEnd() then error('main menu required') end\nlocal saved = {{{}}}\n",
+            original
+                .iter()
+                .map(|(id, flag)| format!(
+                    "[{}]={flag}",
+                    civ6_autotest_rs::scenario::lua_string(id)
+                ))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        recovery.push_str("local expected, handles, enableIDs, disableIDs = {}, {}, {}, {}\nfor _, mod in ipairs(Modding.GetInstalledMods()) do local info = Modding.GetModInfo(mod.Handle); local id = string.lower(info.Id); handles[id]=mod.Handle; expected[id]=info.Enabled end\nfor id, flag in pairs(saved) do if not handles[id] then error('original MOD no longer installed: ' .. id) end; expected[id]=flag end\nfor id, flag in pairs(expected) do if flag then table.insert(enableIDs,id) else table.insert(disableIDs,id) end end\ntable.sort(enableIDs); table.sort(disableIDs)\nlocal function apply()\n");
+        recovery.push_str(
+            &enable_mods_code(&[], &[])
+                .lines()
+                .skip(3)
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
+        recovery.push_str("\nend\napply()\nlocal count=0\nfor id, flag in pairs(expected) do if Modding.GetModInfo(handles[id]).Enabled ~= flag then error('original recovery mismatch: ' .. id) end; print('TODO241 RECOVER ' .. id .. '=' .. tostring(flag)); count=count+1 end\nreturn 'TODO241 RECOVERED original selection; installed=' .. count");
+        data["steps"].as_array_mut().unwrap().insert(
+            1,
+            json!({"action":"ui_lua","state_name":"FrontEnd","code":recovery,"timeout":120}),
+        );
+    }
+    validate_scenario(&data).expect("valid recovery diagnostic");
+    println!("{}", serde_json::to_string_pretty(&data).unwrap());
 }
 
 const HARNESS: &str = r#"
