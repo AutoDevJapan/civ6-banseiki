@@ -42,13 +42,13 @@ local function Blockers()
   end
 end
 local function Pending()
-  Blockers()
   local s=R.State(t.Actor)
   print('[JAC_ASN_BLOCKED] inspect turn='..R.Turn()..' production='..tostring(s.Production~=nil)..
     ' completion='..tostring(s.LastCompletion)..' produced='..tostring(s.LastProducedUnit))
   for _,u in Players[t.Actor]:GetUnits():Members() do
     if not t.AllBefore[tostring(u:GetID())] then Trace('unexpected-spawn',Row(u)) end
   end
+  Blockers()
   assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')
   assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),
     'blocked training disappeared or restarted')
@@ -90,8 +90,8 @@ local city=Players[owner]:GetCities():GetCapitalCity(); assert(city,'capital mis
 local plots={Map.GetPlot(city:GetX(),city:GetY())}
 for _,p in ipairs(Map.GetAdjacentPlots(city:GetX(),city:GetY())) do plots[#plots+1]=p end
 assert(#plots==7,'complete radius-one footprint required')
-local rows={}
-for _,p in ipairs(plots) do
+local rows={}; local occupied={}
+local function Occupy(p)
   local row={X=p:GetX(),Y=p:GetY()}
   if not p:IsWater() and not p:IsImpassable() then
     local blocker
@@ -110,13 +110,43 @@ for _,p in ipairs(plots) do
     assert(blocker and blocker:GetX()==row.X and blocker:GetY()==row.Y,'blocker not on requested plot')
     row.ID=blocker:GetID(); Trace('blocker',Row(blocker))
   end
-  rows[#rows+1]=row
+  rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
+for _,p in ipairs(plots) do Occupy(p) end
+-- The native API can search past the first ring. Discover its real placement
+-- candidates instead of treating the fifth argument as a maximum radius.
+local blocked=false; local kind=R.UnitForPlayer(owner)
+for attempt=1,128 do
+  local before=UnitIDs(owner); local probe; local count=0
+  UnitManager.InitUnitValidAdjacentHex(owner,kind,city:GetX(),city:GetY(),1)
+  for _,u in Players[owner]:GetUnits():Members() do if not before[tostring(u:GetID())] then
+    count=count+1; probe=u
+  end end
+  assert(count<=1,'native placement probe created multiple units')
+  if not probe then
+    assert(Same(UnitIDs(owner),before),'failed native probe changed existing inventory')
+    blocked=true; print('[JAC_ASN_BLOCKED] native-blocked attempts='..attempt..' plots='..#rows); break
+  end
+  local row=Row(probe); Trace('native-probe',row)
+  assert(row.Type==GameInfo.Units[kind].Index,'native placement probe has wrong type')
+  UnitManager.Kill(probe)
+  assert(Same(UnitIDs(owner),before),'native probe cleanup changed existing inventory')
+  if row.X<0 or row.Y<0 then
+    blocked=true; print('[JAC_ASN_BLOCKED] native-blocked-unplaced attempts='..attempt..' plots='..#rows); break
+  end
+  local existing=occupied[row.X..','..row.Y]
+  assert(not existing or not existing.ID,'native placement stacked onto an occupied combat plot')
+  local plot=Map.GetPlot(row.X,row.Y)
+  assert(plot and not plot:IsWater() and not plot:IsImpassable(),'native probe selected an invalid land plot')
+  assert(not existing,'native probe selected an impassable footprint plot')
+  Occupy(plot)
+end
+assert(blocked,'native placement did not become blocked within 128 probes')
 t={Actor=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots=rows,
   Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner),AllBefore=UnitIDs(owner)}
 assert(next(t.Before)==nil,'fresh game already contains assassins')
 Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()
-return 'real combat units occupy every passable radius-one spawn plot'
+return 'real combat units block the native API after discovering its actual placement candidates'
 "#,
         "GameCore_Tuner",
     );
@@ -240,6 +270,12 @@ mod tests {
     use super::*;
     use mlua::Lua;
     #[test]
+    fn checked_in_scenario_matches_generator() -> Result<()> {
+        let repo = Repository::checked_in();
+        assert_eq!(build(&repo)?, repo.json(OUTPUT)?);
+        Ok(())
+    }
+    #[test]
     fn all_generated_lua_compiles_in_lua51() -> Result<()> {
         let data = build(&Repository::checked_in())?;
         let lua = Lua::new();
@@ -254,6 +290,69 @@ mod tests {
             }
         }
         assert!(count >= 16);
+        Ok(())
+    }
+    #[test]
+    fn native_footprint_discovery_handles_fallback_and_rejects_unsafe_probes() -> Result<()> {
+        let repo = Repository::checked_in();
+        let data = build(&repo)?;
+        let setup = data["steps"][4]["code"].as_str().unwrap();
+        let fixture = r#"
+Game.GetLocalPlayer=function() return 0 end
+local function Plot(x,y)
+  return {GetX=function() return x end,GetY=function() return y end,
+    IsWater=function() return false end,IsImpassable=function() return false end}
+end
+Map.GetPlot=Plot
+Map.GetAdjacentPlots=function() local rows={}; for x=1,6 do rows[#rows+1]=Plot(x,0) end; return rows end
+for _,row in pairs(GameInfo.Units) do
+  if row.Combat>0 then row.FormationClass='FORMATION_CLASS_LAND_COMBAT' end
+end
+ExposedMembers={JAC_Assassin={TEST='JAC_ASN_TEST_MODE',State=function() return {} end,
+  Turn=function() return NOW end,UnitForPlayer=function() return 'UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' end,
+  IsAssassin=function(u) return u:GetType()==0 or u:GetType()==5 end}}
+local unrelated=GRANT(0,1,1000,0):GetID()
+UnitManager.InitUnit=function(owner,kind,x,y) GRANT(owner,GameInfo.Units[kind].Index,x,y) end
+NATIVE_CALLS=0
+UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,arg)
+  assert(owner==0 and kind=='UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' and x==0 and y==0 and arg==1)
+  NATIVE_CALLS=NATIVE_CALLS+1
+  if PROBE_MODE=='unbounded' then GRANT(owner,0,6+NATIVE_CALLS,0)
+  elseif PROBE_MODE=='stacked' then GRANT(owner,0,0,0)
+  elseif NATIVE_CALLS==1 then GRANT(owner,PROBE_MODE=='wrong_type' and 4 or 0,7,0)
+  elseif PROBE_MODE=='unplaced' then GRANT(owner,0,-9999,-9999) end
+end
+local kill=UnitManager.Kill
+UnitManager.Kill=function(u)
+  kill(u)
+  if PROBE_MODE=='corrupt_cleanup' then DATA[0].Units[unrelated]=nil end
+end
+function CheckFootprint()
+  local t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')
+  assert(NATIVE_CALLS==2 and #t.Plots==8)
+  assert(Players[0]:GetUnits():GetCount()==9 and Players[0]:GetUnits():FindID(unrelated))
+  for _,u in Players[0]:GetUnits():Members() do assert(u:GetType()~=0 and u:GetType()~=5) end
+end
+"#;
+        for mode in [
+            "fallback",
+            "unplaced",
+            "stacked",
+            "unbounded",
+            "wrong_type",
+            "corrupt_cleanup",
+        ] {
+            let lua = Lua::new();
+            lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
+                .exec()?;
+            lua.load(format!("PROBE_MODE='{mode}'\n{fixture}")).exec()?;
+            let result = lua.load(setup).exec();
+            let safe = matches!(mode, "fallback" | "unplaced");
+            assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
+            if safe {
+                lua.load("CheckFootprint()").exec()?;
+            }
+        }
         Ok(())
     }
     #[test]
