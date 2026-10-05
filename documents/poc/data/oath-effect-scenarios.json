@@ -1,0 +1,1518 @@
+{
+  "live_verified": false,
+  "capability_scenario": "tools/civ6-autotest/scenarios/oath-effects/capabilities.json",
+  "oath_count": 66,
+  "house_count": 22,
+  "max_turns": 36,
+  "quantity_acceptance": "requires_documented_or_observed_unmodified_basis; unresolved yields never pass",
+  "scenarios": [
+    {
+      "house": "ODA",
+      "civilization": "CIVILIZATION_JAC_ODA",
+      "oath": "JAC_OATH_ODA_TENKA_FUBU",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_oda_tenka_fubu.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "ODA",
+      "civilization": "CIVILIZATION_JAC_ODA",
+      "oath": "JAC_OATH_ODA_TSUSHIMA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_oda_tsushima.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ODA",
+      "civilization": "CIVILIZATION_JAC_ODA",
+      "oath": "JAC_OATH_ODA_AZUCHI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_oda_azuchi.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "TAKEDA",
+      "civilization": "CIVILIZATION_JAC_TAKEDA",
+      "oath": "JAC_OATH_TAKEDA_TSUTSUJIGASAKI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_takeda_tsutsujigasaki.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "TAKEDA",
+      "civilization": "CIVILIZATION_JAC_TAKEDA",
+      "oath": "JAC_OATH_TAKEDA_KOSHU_LAW",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_takeda_koshu_law.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "TAKEDA",
+      "civilization": "CIVILIZATION_JAC_TAKEDA",
+      "oath": "JAC_OATH_TAKEDA_RYUO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_takeda_ryuo.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "food",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "DATE",
+      "civilization": "CIVILIZATION_JAC_DATE",
+      "oath": "JAC_OATH_DATE_JINKAISHU",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_date_jinkaishu.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "DATE",
+      "civilization": "CIVILIZATION_JAC_DATE",
+      "oath": "JAC_OATH_DATE_BLACK_LACQUER",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_date_black_lacquer.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "DATE",
+      "civilization": "CIVILIZATION_JAC_DATE",
+      "oath": "JAC_OATH_DATE_IWADEYAMA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_date_iwadeyama.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "food",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASHINA",
+      "civilization": "CIVILIZATION_JAC_ASHINA",
+      "oath": "JAC_OATH_ASHINA_KUROKAWA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashina_kurokawa.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASHINA",
+      "civilization": "CIVILIZATION_JAC_ASHINA",
+      "oath": "JAC_OATH_ASHINA_MUKAIHAGURO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashina_mukaihaguro.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "ASHINA",
+      "civilization": "CIVILIZATION_JAC_ASHINA",
+      "oath": "JAC_OATH_ASHINA_AIZU_ALLIANCES",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashina_aizu_alliances.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "HOJO",
+      "civilization": "CIVILIZATION_JAC_HOJO",
+      "oath": "JAC_OATH_HOJO_REVENUE",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_hojo_revenue.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "food",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "HOJO",
+      "civilization": "CIVILIZATION_JAC_HOJO",
+      "oath": "JAC_OATH_HOJO_SERVICE",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_hojo_service.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "HOJO",
+      "civilization": "CIVILIZATION_JAC_HOJO",
+      "oath": "JAC_OATH_HOJO_ODAWARA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_hojo_odawara.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "YAMANOUCHI_UESUGI",
+      "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+      "oath": "JAC_OATH_YAMANOUCHI_UESUGI_KANREI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_yamanouchi_uesugi_kanrei.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "YAMANOUCHI_UESUGI",
+      "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+      "oath": "JAC_OATH_YAMANOUCHI_UESUGI_ASHIKAGA_SCHOOL",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_yamanouchi_uesugi_ashikaga_school.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "science",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "YAMANOUCHI_UESUGI",
+      "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+      "oath": "JAC_OATH_YAMANOUCHI_UESUGI_HIRAI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_yamanouchi_uesugi_hirai.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "NAGAO",
+      "civilization": "CIVILIZATION_JAC_NAGAO",
+      "oath": "JAC_OATH_NAGAO_KASUGAYAMA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_nagao_kasugayama.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "NAGAO",
+      "civilization": "CIVILIZATION_JAC_NAGAO",
+      "oath": "JAC_OATH_NAGAO_DISPATCHES",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_nagao_dispatches.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "NAGAO",
+      "civilization": "CIVILIZATION_JAC_NAGAO",
+      "oath": "JAC_OATH_NAGAO_RINSENJI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_nagao_rinsenji.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "IMAGAWA",
+      "civilization": "CIVILIZATION_JAC_IMAGAWA",
+      "oath": "JAC_OATH_IMAGAWA_KANA_LAW",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_imagawa_kana_law.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "IMAGAWA",
+      "civilization": "CIVILIZATION_JAC_IMAGAWA",
+      "oath": "JAC_OATH_IMAGAWA_RENGA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_imagawa_renga.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "IMAGAWA",
+      "civilization": "CIVILIZATION_JAC_IMAGAWA",
+      "oath": "JAC_OATH_IMAGAWA_SUNPU_CRAFT",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_imagawa_sunpu_craft.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "MATSUDAIRA",
+      "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+      "oath": "JAC_OATH_MATSUDAIRA_ANJO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_matsudaira_anjo.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "MATSUDAIRA",
+      "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+      "oath": "JAC_OATH_MATSUDAIRA_OKAZAKI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_matsudaira_okazaki.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "food",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "MATSUDAIRA",
+      "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
+      "oath": "JAC_OATH_MATSUDAIRA_DAIJUJI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_matsudaira_daijuji.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "faith",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASAKURA",
+      "civilization": "CIVILIZATION_JAC_ASAKURA",
+      "oath": "JAC_OATH_ASAKURA_ICHIJODANI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_asakura_ichijodani.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASAKURA",
+      "civilization": "CIVILIZATION_JAC_ASAKURA",
+      "oath": "JAC_OATH_ASAKURA_ECHIZEN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_asakura_echizen.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASAKURA",
+      "civilization": "CIVILIZATION_JAC_ASAKURA",
+      "oath": "JAC_OATH_ASAKURA_SUWA_GARDEN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_asakura_suwa_garden.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASHIKAGA",
+      "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+      "oath": "JAC_OATH_ASHIKAGA_MEDIATION",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashikaga_mediation.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASHIKAGA",
+      "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+      "oath": "JAC_OATH_ASHIKAGA_HIGASHIYAMA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashikaga_higashiyama.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ASHIKAGA",
+      "civilization": "CIVILIZATION_JAC_ASHIKAGA",
+      "oath": "JAC_OATH_ASHIKAGA_TEMPLE_LANDS",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashikaga_temple_lands.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "faith",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "MIYOSHI",
+      "civilization": "CIVILIZATION_JAC_MIYOSHI",
+      "oath": "JAC_OATH_MIYOSHI_IIMORI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_miyoshi_iimori.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "MIYOSHI",
+      "civilization": "CIVILIZATION_JAC_MIYOSHI",
+      "oath": "JAC_OATH_MIYOSHI_SAKAI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_miyoshi_sakai.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "MIYOSHI",
+      "civilization": "CIVILIZATION_JAC_MIYOSHI",
+      "oath": "JAC_OATH_MIYOSHI_THOUSAND_VERSES",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_miyoshi_thousand_verses.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ROKKAKU",
+      "civilization": "CIVILIZATION_JAC_ROKKAKU",
+      "oath": "JAC_OATH_ROKKAKU_KANNONJI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_rokkaku_kannonji.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "ROKKAKU",
+      "civilization": "CIVILIZATION_JAC_ROKKAKU",
+      "oath": "JAC_OATH_ROKKAKU_ISHIDERA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_rokkaku_ishidera.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "ROKKAKU",
+      "civilization": "CIVILIZATION_JAC_ROKKAKU",
+      "oath": "JAC_OATH_ROKKAKU_OMI_COMPACT",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_rokkaku_omi_compact.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "HONGANJI",
+      "civilization": "CIVILIZATION_JAC_HONGANJI",
+      "oath": "JAC_OATH_HONGANJI_LETTERS",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_honganji_letters.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "faith",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "HONGANJI",
+      "civilization": "CIVILIZATION_JAC_HONGANJI",
+      "oath": "JAC_OATH_HONGANJI_TEMPLE_TOWN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_honganji_temple_town.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "HONGANJI",
+      "civilization": "CIVILIZATION_JAC_HONGANJI",
+      "oath": "JAC_OATH_HONGANJI_OSAKA_DEFENSE",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_honganji_osaka_defense.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "OUCHI",
+      "civilization": "CIVILIZATION_JAC_OUCHI",
+      "oath": "JAC_OATH_OUCHI_CERTIFIED_ROUTES",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ouchi_certified_routes.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "OUCHI",
+      "civilization": "CIVILIZATION_JAC_OUCHI",
+      "oath": "JAC_OATH_OUCHI_WESTERN_CAPITAL",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ouchi_western_capital.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "OUCHI",
+      "civilization": "CIVILIZATION_JAC_OUCHI",
+      "oath": "JAC_OATH_OUCHI_PRINTING",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ouchi_printing.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "science",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "AMAGO",
+      "civilization": "CIVILIZATION_JAC_AMAGO",
+      "oath": "JAC_OATH_AMAGO_TODA",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_amago_toda.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "AMAGO",
+      "civilization": "CIVILIZATION_JAC_AMAGO",
+      "oath": "JAC_OATH_AMAGO_DAISEN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_amago_daisen.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "faith",
+          "expected_percent": 10
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "AMAGO",
+      "civilization": "CIVILIZATION_JAC_AMAGO",
+      "oath": "JAC_OATH_AMAGO_RESTORATION",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_amago_restoration.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "MORI",
+      "civilization": "CIVILIZATION_JAC_MORI",
+      "oath": "JAC_OATH_MORI_THREE_SONS",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_mori_three_sons.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "MORI",
+      "civilization": "CIVILIZATION_JAC_MORI",
+      "oath": "JAC_OATH_MORI_SETO_FLEETS",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_mori_seto_fleets.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "naval",
+          "expected_percent": 20
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_GALLEY",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "MORI",
+      "civilization": "CIVILIZATION_JAC_MORI",
+      "oath": "JAC_OATH_MORI_OTA_TOWN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_mori_ota_town.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "OTOMO",
+      "civilization": "CIVILIZATION_JAC_OTOMO",
+      "oath": "JAC_OATH_OTOMO_SOUTHERN_PORT",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_otomo_southern_port.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "OTOMO",
+      "civilization": "CIVILIZATION_JAC_OTOMO",
+      "oath": "JAC_OATH_OTOMO_FUNAI_HEALING",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_otomo_funai_healing.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "food",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "OTOMO",
+      "civilization": "CIVILIZATION_JAC_OTOMO",
+      "oath": "JAC_OATH_OTOMO_FUNAI_LEARNING",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_otomo_funai_learning.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "science",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "SHIMAZU",
+      "civilization": "CIVILIZATION_JAC_SHIMAZU",
+      "oath": "JAC_OATH_SHIMAZU_KUROKAWA_GUNS",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_shimazu_kurokawa_guns.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "military",
+          "expected_percent": 15
+        },
+        {
+          "kind": "science",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 15,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "SHIMAZU",
+      "civilization": "CIVILIZATION_JAC_SHIMAZU",
+      "oath": "JAC_OATH_SHIMAZU_JISSHIN",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_shimazu_jisshin.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "SHIMAZU",
+      "civilization": "CIVILIZATION_JAC_SHIMAZU",
+      "oath": "JAC_OATH_SHIMAZU_UCHIJO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_shimazu_uchijo.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "production",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "CHOSOKABE",
+      "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+      "oath": "JAC_OATH_CHOSOKABE_TOSA_SURVEY",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_chosokabe_tosa_survey.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "food",
+          "expected_percent": 10
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "CHOSOKABE",
+      "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+      "oath": "JAC_OATH_CHOSOKABE_HUNDRED_ARTICLES",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_chosokabe_hundred_articles.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "CHOSOKABE",
+      "civilization": "CIVILIZATION_JAC_CHOSOKABE",
+      "oath": "JAC_OATH_CHOSOKABE_URADO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_chosokabe_urado.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "naval",
+          "expected_percent": 20
+        },
+        {
+          "kind": "gold",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_GALLEY",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "RYUKYU",
+      "civilization": "CIVILIZATION_JAC_RYUKYU",
+      "oath": "JAC_OATH_RYUKYU_BRIDGE",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ryukyu_bridge.json",
+      "turns": 18,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "naval",
+          "expected_percent": 20
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "UNIT_GALLEY",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_SPEARMAN",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    },
+    {
+      "house": "RYUKYU",
+      "civilization": "CIVILIZATION_JAC_RYUKYU",
+      "oath": "JAC_OATH_RYUKYU_KUME",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ryukyu_kume.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "science",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "RYUKYU",
+      "civilization": "CIVILIZATION_JAC_RYUKYU",
+      "oath": "JAC_OATH_RYUKYU_OMORO",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ryukyu_omoro.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "culture",
+          "expected_percent": 10
+        },
+        {
+          "kind": "faith",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "AINU",
+      "civilization": "CIVILIZATION_JAC_AINU",
+      "oath": "JAC_OATH_AINU_RIVER_MOUTH",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ainu_river_mouth.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "food",
+          "expected_percent": 10
+        },
+        {
+          "kind": "growth",
+          "expected_percent": 10
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "AINU",
+      "civilization": "CIVILIZATION_JAC_AINU",
+      "oath": "JAC_OATH_AINU_NORTHERN_TRADE",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ainu_northern_trade.json",
+      "turns": 0,
+      "effects": [
+        {
+          "kind": "gold",
+          "expected_percent": 10
+        },
+        {
+          "kind": "culture",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": []
+    },
+    {
+      "house": "AINU",
+      "civilization": "CIVILIZATION_JAC_AINU",
+      "oath": "JAC_OATH_AINU_CHASHI",
+      "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ainu_chashi.json",
+      "turns": 36,
+      "effects": [
+        {
+          "kind": "walls",
+          "expected_percent": 20
+        },
+        {
+          "kind": "production",
+          "expected_percent": 5
+        }
+      ],
+      "production_targets": [
+        {
+          "target": "BUILDING_WALLS",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_CASTLE",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "BUILDING_STAR_FORT",
+          "expected_percent": 20,
+          "role": "subject"
+        },
+        {
+          "target": "UNIT_BUILDER",
+          "expected_percent": 0,
+          "role": "non_target_control"
+        }
+      ]
+    }
+  ]
+}
