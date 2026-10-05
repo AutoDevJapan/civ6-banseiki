@@ -52,6 +52,31 @@ fn property_observer_is_disabled_after_its_scene_unless_explicitly_enabled() {
 }
 
 #[test]
+fn exclusive_selection_disables_unrequested_persona_observer_once() {
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    let observer = lua.create_table().unwrap();
+    observer.set("Id", PROPERTY_OBSERVER_MOD_ID).unwrap();
+    observer.set("Enabled", true).unwrap();
+    observer.set("Official", false).unwrap();
+    observer
+        .set("Dependencies", lua.create_table().unwrap())
+        .unwrap();
+    definitions.set(1, observer).unwrap();
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code_with_scope(&[], &[], true))
+        .exec()
+        .unwrap();
+    let mods: Table = lua.globals().get("MODS").unwrap();
+    let observer: Table = mods.get(PROPERTY_OBSERVER_MOD_ID).unwrap();
+    assert!(!observer.get::<bool>("Enabled").unwrap());
+    let disabled: Table = lua.globals().get("DISABLED").unwrap();
+    assert_eq!(disabled.raw_len(), 1);
+}
+
+#[test]
 fn static_gate_is_disabled_by_default_but_an_explicit_diagnostic_can_enable_it() {
     use civ6_autotest_rs::scenario::STATIC_PERSONA_GATE_ID;
     for (installed, opt_in, initially_enabled, expected) in [
