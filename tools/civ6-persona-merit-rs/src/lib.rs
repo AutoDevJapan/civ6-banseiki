@@ -185,17 +185,21 @@ mod tests {
                 Player=function() return true end,Parameter=function() return 2 end,
                 Merit=function() return 0 end,Set=function() error('unexpected award') end}
             local city={GetID=function() return 1 end,GetOwner=function() return 0 end}
-            for _,value in ipairs({false,1,'invalid'}) do
+            for _,value in ipairs({false,0.5,1,'invalid'}) do
                 pending=value; buckets=nil; q.Drain(a)
                 assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
                 pending=nil; buckets=value; q.Drain(a)
                 assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
                 buckets=nil; sequence=value
-                if value=='invalid' or value==false then assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false) end
+                if value~=1 then assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false) end
             end
+            pending=nil; buckets={L_BUILDING_1=0.5}; sequence=0
+            assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
+            buckets=nil
             sequence=9007199254740991
             assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
             assert(q.Reserve(true,'bad',2,3)==nil)
+            assert(q.Reserve(true,0.5,2,3)==nil)
             assert(q.Reserve(true,0,'bad',3)==nil)
             assert(q.Reserve(true,0,2,'bad')==nil)
         "#).exec().unwrap();
