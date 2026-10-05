@@ -4,8 +4,11 @@ JAC_PersonaMeritQueue = {}
 local Q = JAC_PersonaMeritQueue
 local PENDING = 'JAC_PERSONA_PENDING_DEEDS'
 local BUCKETS = 'JAC_PERSONA_MERIT_BUCKETS_V2'
+local function integer(value)
+    return type(value) == 'number' and value >= 0 and value < 9007199254740992 and value % 1 == 0
+end
 function Q.Reserve(eligible, count, cap, reward)
-    if not eligible or cap <= 0 or reward <= 0 then return nil end
+    if eligible ~= true or not integer(count) or not integer(cap) or not integer(reward) or cap <= 0 or reward <= 0 then return nil end
     if count < cap then return reward, count + 1 end
     return 0, cap
 end
@@ -14,18 +17,22 @@ function Q.Capture(row, deed, identity, city, a)
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
     local pending = Game:GetProperty(PENDING) or {}
+    if type(pending) ~= 'table' then return false end
     if pending[key] or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
     local cap = deed == 'GOVERN_TURN' and 1 or a.Parameter(deed .. '_DEEDS_PER_TURN')
     local reward = GameInfo.JAC_PersonaMeritRules[GameInfo.JAC_PersonaTreePeople[leader].MeritProfile][deed]
     local buckets = Game:GetProperty(BUCKETS) or {}
+    if type(buckets) ~= 'table' then return false end
     local bucket = leader .. '_' .. deed .. '_' .. turn
     local count = buckets[bucket]
     if count == nil then count = a.Get(leader, deed .. '_COUNT_TURN') == turn and (a.Get(leader, deed .. '_COUNT') or 0) or 0 end
     local amount, reserved = Q.Reserve(true, count, cap, reward)
     if amount == nil then return false end
-    local sequence = (Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE') or 0) + 1
+    local priorSequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE') or 0
+    if not integer(priorSequence) or priorSequence >= 9007199254740991 then return false end
+    local sequence = priorSequence + 1
     pending[key] = {version=2, leader=leader, owner=owner, deed=deed,
         identity=identity, turn=turn, sequence=sequence, cityID=city:GetID(),
         eligibilityUnknown=false, eligible=true, amount=amount, reservedCount=reserved,
@@ -36,11 +43,10 @@ function Q.Capture(row, deed, identity, city, a)
     Game:SetProperty(PENDING, pending)
     return amount > 0
 end
-local function integer(value)
-    return type(value) == 'number' and value >= 0 and value < 9007199254740992 and value % 1 == 0
-end
 function Q.Drain(a)
     local pending = Game:GetProperty(PENDING) or {}
+    local buckets = Game:GetProperty(BUCKETS) or {}
+    if type(pending) ~= 'table' or type(buckets) ~= 'table' then return end
     local changed = false
     local completedBuckets = {}
     local ordered = {}
@@ -72,7 +78,7 @@ function Q.Drain(a)
             -- neither strand a proven event nor change its committed amount.
             local cap, reward = e.cap, e.reward
             local bucket = e.leader .. '_' .. e.deed .. '_' .. e.turn
-            local reserved = (Game:GetProperty(BUCKETS) or {})[bucket]
+            local reserved = buckets[bucket]
             if integer(cap) and cap > 0 and integer(reward) and reward > 0 and
                e.reservedCount > 0 and e.reservedCount <= cap and integer(reserved) and reserved >= e.reservedCount and reserved <= cap and
                (e.amount == reward or (e.amount == 0 and e.reservedCount == cap)) then
@@ -103,7 +109,6 @@ function Q.Drain(a)
                 completedBuckets[e.leader .. '_' .. e.deed .. '_' .. e.turn] = nil
             end
         end
-        local buckets = Game:GetProperty(BUCKETS) or {}
         for bucket in pairs(completedBuckets) do buckets[bucket] = nil end
         Game:SetProperty(BUCKETS, next(buckets) and buckets or nil)
         Game:SetProperty(PENDING, next(pending) and pending or nil)
