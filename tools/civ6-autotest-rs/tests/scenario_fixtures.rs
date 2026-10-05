@@ -816,12 +816,19 @@ fn mission_window_preserves_results_and_refuses_to_overrun_native_duration() {
     assert_eq!(actions.len(), 24);
     let guard = code(&actions[2]);
     let lua = Lua::new();
-    lua.load("stage='MISSION'; remaining=4; present=true; ExposedMembers={JAC_PersonaBoundary={EnemyProgress=function() return stage end,ReadEnemy=function() return {spy={present=present,remaining=remaining}} end}}")
+    lua.load("stage='MISSION'; remaining=4; present=true; operation=59; GameInfo={UnitOperations={UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR={Index=59,Hash=9059}}}; ExposedMembers={JAC_PersonaBoundary={EnemyProgress=function() return stage end,ReadEnemy=function() return {spy={present=present,remaining=remaining,operation=operation}} end}}")
         .exec().unwrap();
     assert_eq!(
         lua.load(guard).eval::<String>().unwrap(),
         "four native turns verified"
     );
+    for operation in ["operation=60", "operation=nil", "operation='59'"] {
+        lua.load(operation).exec().unwrap();
+        assert!(lua.load(guard).eval::<String>().is_err(), "{operation}");
+    }
+    lua.load("operation=9059").exec().unwrap();
+    assert!(lua.load(guard).eval::<String>().is_ok());
+    lua.load("operation=59").exec().unwrap();
     for state in [
         "remaining=3",
         "remaining=nil",
@@ -868,6 +875,26 @@ fn mission_window_preserves_results_and_refuses_to_overrun_native_duration() {
             "a mission window must not replay a mission"
         );
     }
+}
+
+#[test]
+fn single_mission_tick_rejects_other_operations_before_advancing() {
+    let tick = scenario("leader-persona-spy-neutralization-mission-tick.json");
+    let actions = steps(&tick);
+    assert_eq!(actions[2]["action"], "ui_lua");
+    assert_eq!(actions[3]["action"], "end_turn");
+    let guard = code(&actions[2]);
+    let lua = Lua::new();
+    lua.load("remaining=1; operation=59; GameInfo={UnitOperations={UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR={Index=59,Hash=9059}}}; ExposedMembers={JAC_PersonaBoundary={EnemyProgress=function() return 'MISSION' end,ReadEnemy=function() return {spy={present=true,remaining=remaining,operation=operation}} end}}")
+        .exec().unwrap();
+    assert_eq!(
+        lua.load(guard).eval::<String>().unwrap(),
+        "one native turn verified"
+    );
+    lua.load("operation=60").exec().unwrap();
+    assert!(lua.load(guard).eval::<String>().is_err());
+    lua.load("operation=59; remaining=0").exec().unwrap();
+    assert!(lua.load(guard).eval::<String>().is_err());
 }
 
 #[test]

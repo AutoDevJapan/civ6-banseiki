@@ -22,7 +22,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local b=ExposedMembers.JAC_PersonaBoundary; assert(b.EnemyProgress()=='MISSION','mission window needs an active native mission'); local s=b.ReadEnemy(); assert(s.spy.present and type(s.spy.remaining)=='number' and s.spy.remaining>=4,'mission window needs at least four native turns remaining'); return 'four native turns verified'"
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; assert(b.EnemyProgress()=='MISSION','mission window needs an active native mission'); local s=b.ReadEnemy(); local m=assert(GameInfo.UnitOperations['UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR'],'native neutralize operation missing'); assert(s.spy.operation==m.Index or s.spy.operation==m.Hash,'mission window requires native neutralization'); assert(s.spy.present and type(s.spy.remaining)=='number' and s.spy.remaining>=4,'mission window needs at least four native turns remaining'); return 'four native turns verified'"
     },
     {
       "action": "end_turn",
