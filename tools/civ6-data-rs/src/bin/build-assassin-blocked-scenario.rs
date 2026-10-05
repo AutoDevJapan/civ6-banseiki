@@ -44,6 +44,11 @@ end
 local function Pending()
   Blockers()
   local s=R.State(t.Actor)
+  print('[JAC_ASN_BLOCKED] inspect turn='..R.Turn()..' production='..tostring(s.Production~=nil)..
+    ' completion='..tostring(s.LastCompletion)..' produced='..tostring(s.LastProducedUnit))
+  for _,u in Players[t.Actor]:GetUnits():Members() do
+    if not t.AllBefore[tostring(u:GetID())] then Trace('unexpected-spawn',Row(u)) end
+  end
   assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')
   assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),
     'blocked training disappeared or restarted')
