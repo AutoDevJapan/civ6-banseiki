@@ -54,7 +54,8 @@ return u and u:GetID()==e.UnitID and u:GetReligionType()==e.Religion and u:GetSp
 const ARM: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'))
 local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID));assert(u:GetID()==e.UnitID and u:GetOwner()==e.From,'fixture identity mismatch')
 assert(u:GetSpreadCharges()==3 and u:GetReligionType()==e.Religion,'fixture native state mismatch')
-JAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),Turns={},Operations={},Events={}}
+local spreadKind=assert(GameInfo.UnitOperations.UNITOPERATION_SPREAD_RELIGION.Hash,'native spread operation hash missing')
+JAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),SpreadKind=spreadKind,Turns={},Operations={},Events={}}
 local function charges(owner,id,newCharges,oldCharges)
  if owner==e.From and id==e.UnitID then
   local unit=Players[owner]:GetUnits():FindID(id)
@@ -64,14 +65,14 @@ local function charges(owner,id,newCharges,oldCharges)
 end
 local function operation(owner,id,kind)
  if owner~=e.From or id~=e.UnitID then return end
- print('[JAC_SPENT_SPREAD_192] operation kind='..tostring(kind)..' expected='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' turn='..Game.GetCurrentGameTurn())
- if kind==UnitOperationTypes.SPREAD_RELIGION then
+ print('[JAC_SPENT_SPREAD_192] operation kind='..tostring(kind)..' expected='..tostring(spreadKind)..' turn='..Game.GetCurrentGameTurn())
+ if kind==spreadKind then
   JAC192_SPREAD.Operations[#JAC192_SPREAD.Operations+1]={Turn=Game.GetCurrentGameTurn(),Kind=kind,Active=Players[owner]:IsTurnActive()}
   print('[JAC_SPENT_SPREAD_192] native spread owner='..owner..' unit='..id..' turn='..Game.GetCurrentGameTurn())
  end
 end
 local function command(owner,id,kind)
- if owner==e.From and id==e.UnitID then print('[JAC_SPENT_SPREAD_192] command kind='..tostring(kind)..' expected='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' turn='..Game.GetCurrentGameTurn()) end
+ if owner==e.From and id==e.UnitID then print('[JAC_SPENT_SPREAD_192] command kind='..tostring(kind)..' expected='..tostring(spreadKind)..' turn='..Game.GetCurrentGameTurn()) end
 end
 local function activated(owner)
  if owner~=e.From then return end
@@ -84,8 +85,8 @@ local function activated(owner)
   assert(record.Before==3 and record.EventCount==0,'donor spent charges before AI turn')
   JAC192_SPREAD.FirstTurn=turn
  end
- local called,can,reasons=pcall(UnitManager.CanStartOperation,unit,UnitOperationTypes.SPREAD_RELIGION,nil,false,true)
- print('[JAC_SPENT_SPREAD_192] AI turn='..turn..' charges='..record.Before..' xy='..unit:GetX()..','..unit:GetY()..' opcode='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' can_call='..tostring(called)..' can='..tostring(can)..' reasons='..tostring(reasons))
+ local called,can,reasons=pcall(UnitManager.CanStartOperation,unit,spreadKind,nil,false,true)
+ print('[JAC_SPENT_SPREAD_192] AI turn='..turn..' charges='..record.Before..' xy='..unit:GetX()..','..unit:GetY()..' opcode='..tostring(spreadKind)..' can_call='..tostring(called)..' can='..tostring(can)..' reasons='..tostring(reasons))
 end
 Events.PlayerTurnActivated.Add(activated)
 Events.UnitChargesChanged.Add(charges)
@@ -105,7 +106,7 @@ assert(n==2,'native AI spread did not consume native charge exactly once')
 assert(#o.Operations==1,'expected one official native spread operation')
 local op=o.Operations[1]
 local turn=o.Turns[op.Turn]
-assert(op.Kind==UnitOperationTypes.SPREAD_RELIGION and op.Active==true and turn and turn.Before==3 and turn.EventCount==0,'native operation not on donor AI turn')
+assert(o.SpreadKind==GameInfo.UnitOperations.UNITOPERATION_SPREAD_RELIGION.Hash and op.Kind==o.SpreadKind and op.Active==true and turn and turn.Before==3 and turn.EventCount==0,'native operation not on donor AI turn')
 assert(#o.Events==1,'expected one native charge change event')
 local changed=o.Events[1]
 assert(changed.Old==3 and changed.New==2 and changed.Charges==2 and changed.Turn==op.Turn,'native charge event not associated with spread operation')
@@ -254,9 +255,8 @@ mod tests {
               GetReligionType=function() return 13 end}
             Game={GetProperty=function() return {From=3,UnitID=42} end}
             Players={[3]={GetUnits=function() return {FindID=function() return u end} end}}
-            GameInfo={Units={UNIT_MISSIONARY={Index=7}}}
-            UnitOperationTypes={SPREAD_RELIGION=99}
-            JAC192_SPREAD={Before=3,FirstTurn=1,Turns={[1]={Before=3,EventCount=0}},Operations={},Events={}}
+            GameInfo={Units={UNIT_MISSIONARY={Index=7}},UnitOperations={UNITOPERATION_SPREAD_RELIGION={Hash=99}}}
+            JAC192_SPREAD={Before=3,SpreadKind=99,FirstTurn=1,Turns={[1]={Before=3,EventCount=0}},Operations={},Events={}}
             ExposedMembers={JAC_Absorption={Canonical=function() return 'verified' end}}
         "#,
         )
@@ -301,7 +301,7 @@ mod tests {
                   GetX=function() return 1 end,GetY=function() return 1 end}
                 Game={GetProperty=function() return {From=3,UnitID=42,Religion=13} end,GetCurrentGameTurn=function() return TURN end}
                 Players={[3]={IsTurnActive=function() return true end,GetUnits=function() return {FindID=function(_,id) if id==42 then return u end end} end}}
-                GameInfo={Units={UNIT_MISSIONARY={Index=7}}};UnitOperationTypes={SPREAD_RELIGION=99}
+                GameInfo={Units={UNIT_MISSIONARY={Index=7}},UnitOperations={UNITOPERATION_SPREAD_RELIGION={Hash=99}}}
                 UnitManager={CanStartOperation=function() return true end}
                 ExposedMembers={JAC_Absorption={Canonical=function() return 'verified' end}}
             "#).exec().unwrap();
