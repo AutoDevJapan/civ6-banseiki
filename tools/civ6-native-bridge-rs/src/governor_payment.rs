@@ -142,8 +142,12 @@ fn flags(
     count: usize,
 ) -> Result<[u8; PROMOTION_LIMIT], ReadFailure> {
     let mut bytes = [0; PROMOTION_LIMIT];
+    let bulk = count / 256 * 256;
+    for offset in (0..bulk).step_by(256) {
+        bytes[offset..offset + 256].copy_from_slice(&field::<256>(memory, address, offset as u64)?);
+    }
     let complete = count / 8 * 8;
-    for offset in (0..complete).step_by(8) {
+    for offset in (bulk..complete).step_by(8) {
         bytes[offset..offset + 8].copy_from_slice(&field::<8>(memory, address, offset as u64)?);
     }
     for offset in complete..count {
@@ -281,6 +285,10 @@ mod tests {
         }
         assert_eq!(s.has(4096), None);
         assert_eq!(m.bytes, before);
+        assert!(
+            m.reads.get() <= 64,
+            "4096 flags require bounded bulk reads, not one call per byte"
+        );
     }
     #[test]
     fn rejects_wrong_owner_nonmember_and_invalid_lengths_without_getters() {
@@ -336,6 +344,35 @@ mod tests {
             Err(ReadFailure::InvalidLayout)
         );
         assert!(m.reads.get() < 270);
+    }
+
+    #[test]
+    fn membership_reads_head_middle_and_tail_through_the_pinned_next_link() {
+        for position in 0..3 {
+            let mut m = fixture();
+            for node in 0..3 {
+                let address = 0x3000 + node * 0x20;
+                let person = if node == position {
+                    0x3800u64
+                } else {
+                    0x3900u64
+                };
+                let next = if node == 2 {
+                    0u64
+                } else {
+                    (address + 0x20) as u64
+                };
+                put(&mut m, address, &person.to_le_bytes());
+                put(&mut m, address + 0x10, &next.to_le_bytes());
+            }
+            let snapshot = read_current(&m, 0x1000, 0x3800).unwrap();
+            assert_eq!((snapshot.owner, snapshot.governor_index), (7, 22));
+            put(&mut m, 0x20d8, &13u32.to_le_bytes());
+            assert_eq!(
+                read_current(&m, 0x1000, 0x3800),
+                Err(ReadFailure::IdentityMismatch)
+            );
+        }
     }
 
     #[test]
