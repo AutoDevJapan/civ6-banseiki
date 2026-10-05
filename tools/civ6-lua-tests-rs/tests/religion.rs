@@ -265,6 +265,47 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
 }
 
 #[test]
+fn absorption_receipt_does_not_freeze_unrelated_destination_rewards() {
+    let mut h = Harness::new();
+    h.f();
+    call!(h, "PreserveAsset", R1, "source", "SCRIPTURE", "CAVE", 0);
+    call!(h, "Found", R2, 2, "origin", 1, 0, "PLAYER_1");
+    call!(h, "SetCommunity", R2, "origin", 0, 0, "PLAYER_1");
+    h.discovery("MONK", "MONK_1", R2, "book2", "d2", 1);
+    h.resolve(R2, "d2", "HERO", json!({"player":1}));
+    assert_eq!(hero_verification(&h), "PENDING");
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.artifacts['1']={religion='JAC_RP_PLACEHOLDER_02',asset='vault_book'}");
+    let hero_before = h.export()["heroes"]["1"].clone();
+    let vault_before = h.export()["artifacts"]["1"].clone();
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='unrelated-rewards',From=0,To=1,Units={},UnitMap={}}");
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.export()["heroes"]["1"], hero_before);
+    assert_eq!(h.export()["artifacts"]["1"], vault_before);
+    assert_eq!(h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Hero==nil and PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Artifact==nil"), true);
+    h.exec("HERO_UI_TICK()");
+    assert_eq!(hero_verification(&h), "APPLIED");
+    let saved = h.export();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    h.reload();
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='unrelated-rewards',From=0,To=1,Units={},UnitMap={}}");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), 0);
+}
+
+#[test]
 fn absorption_adapter_saturated_counter_allows_normal_updates_and_reload() {
     let mut h = seeded_absorption_harness();
     h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.revision=2147483647");

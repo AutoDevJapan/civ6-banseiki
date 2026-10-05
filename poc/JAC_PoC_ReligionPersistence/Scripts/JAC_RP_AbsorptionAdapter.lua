@@ -129,7 +129,7 @@ local function verifyReceipt(state, tx, snapshot, receipt)
   local fromKey, toKey = tostring(tx.From), tostring(tx.To)
   assert(state.heroes[fromKey] == nil and state.artifacts[fromKey] == nil,
     "RP source player slot survived absorption")
-  if receipt.Hero then
+  if receipt.Hero and snapshot.HeroUnit then
     assert(equal(state.heroes[toKey], receipt.Hero), "RP hero transfer mismatch")
   end
   if receipt.Artifact then
@@ -186,6 +186,7 @@ function Adapter.Apply(tx, snapshot)
   local touched, sourceHero = inspect(state, tx)
   assert(sourceHero == snapshot.HeroUnit, "RP source hero changed after preparation")
   local fromKey, toKey = tostring(tx.From), tostring(tx.To)
+  local sourceArtifact = state.artifacts[fromKey] ~= nil
   for id in pairs(touched) do
     local religion = state.religions[id]
     if religion.founder == tx.From then religion.founderDefeated = true end
@@ -223,7 +224,8 @@ function Adapter.Apply(tx, snapshot)
   state.absorptionExactReceipt = tx.ID
   receipt = { Version = 2, ID = tx.ID, From = tx.From, To = tx.To,
     Turn = Game.GetCurrentGameTurn(), Revision = state.revision, Religions = {},
-    Hero = copy(state.heroes[toKey]), Artifact = copy(state.artifacts[toKey]) }
+    Hero = sourceHero and copy(state.heroes[toKey]) or nil,
+    Artifact = sourceArtifact and copy(state.artifacts[toKey]) or nil }
   for id in pairs(touched) do receipt.Religions[id] = projection(state.religions[id]) end
   state.absorptionReceipts[tx.ID] = receipt
   Game:SetProperty(KEY, state) -- one write contains every patch and its retry receipt
