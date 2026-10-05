@@ -151,6 +151,7 @@ pub struct Report {
     pub calibration_rows: usize,
     pub property_rows: usize,
     pub property_subject_unknown_rows: usize,
+    pub property_zero_subject_corroborated_rows: usize,
     pub property_subject_metadata_scope: &'static str,
     pub unrelated_calibration_rows: usize,
     pub observed_calls: u64,
@@ -280,7 +281,8 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         source_contract_version:evidence.source_contract_version,
         catalog: evidence.catalog.clone(), pairs: Vec::new(), calibration_rows: 0, property_rows: 0,
         property_subject_unknown_rows:0,
-        property_subject_metadata_scope:"controller packed owner/index on cell keys; denial_checked is a denial result, not a validity flag; absent/all-zero false metadata is unknown and cannot prove positivity",
+        property_zero_subject_corroborated_rows:0,
+        property_subject_metadata_scope:"denial_checked is a denial result, not validity; absent/zero metadata stays unknown except present 0/0 on index0 with unique calibrated owner0 receiver, same-thread prior reset902000 and native positive corroboration; cross-ring chronology unmeasured; no permission authority",
         unrelated_calibration_rows: 0,
         observed_calls: 0, dropped: 0, filtered_calls: 0, getter_calls_seen: 0,
         calibration_sample_limit: CALIBRATION_LIMIT, property_sample_limit: TRACE_CAPACITY,
@@ -325,6 +327,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
     }
     let mut owners = BTreeMap::new(); // owner -> (player address, Governors receiver, property receiver)
     let mut receivers = BTreeMap::new();
+    let mut governor_receivers = BTreeMap::new();
     let mut in_properties = false;
     let mut properties = Vec::new();
     for row in &rows[3..rows.len() - 1] {
@@ -388,6 +391,12 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                 if let Some(old) = receivers.insert(receiver, owner) {
                     require(old == owner, "native receiver aliases another owner")?;
                 }
+                if let Some(old) = governor_receivers.insert(gov, owner) {
+                    require(
+                        old == owner,
+                        "native Governors receiver aliases another owner",
+                    )?;
+                }
                 if let Some(e) = evidence
                     .catalog
                     .iter()
@@ -433,8 +442,10 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                 // Controller windows.rs stores owner/index for token != 0 on
                 // manifest/allow keys even when denial_checked is false. With
                 // no token (or on reset/close), the untouched packed high bits
-                // decode as all-zero false. That sentinel never proves permit.
+                // decode as all-zero false, also the legitimate owner0/index0
+                // encoding. Disambiguation requires independent receipts below.
                 let mut subject = None;
+                let mut zero_subject = false;
                 if has_denial {
                     fields.extend(["denial_owner", "denial_index", "denial_checked"]);
                 }
@@ -473,6 +484,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                     let sentinel = row["denial_checked"] == false
                         && metadata_owner == 0
                         && metadata_index == 0;
+                    zero_subject = sentinel && is_cell && key % 1000 == 0;
                     if !sentinel {
                         require(is_cell, "denial metadata on non-cell key")?;
                         require(
@@ -502,6 +514,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                     payload == 1,
                     row["denial_checked"] == true,
                     subject,
+                    zero_subject,
                 ));
             }
             _ => {
@@ -566,8 +579,9 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
     // its real owner; per-cell close(false), manifest(true), allow(true) then
     // supplies a bool receipt. A UI matrix cannot fill a missing raw row.
     let mut bound = BTreeMap::new(); // receiver -> (owner, Core thread)
+    let mut bound_owner_receivers = BTreeMap::new();
     let mut cells = BTreeMap::new(); // (receiver,index) -> (close read, false ack, manifest)
-    for (receiver, thread, key, value, denied, subject) in properties {
+    for (receiver, thread, key, value, denied, mut subject, zero_subject) in properties {
         if (902000..=902063).contains(&key) {
             let owner = key - 902000;
             require(owner < COUNT as u64 && value, "invalid owner reset")?;
@@ -576,6 +590,9 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
             }
             if let Some(old) = bound.insert(receiver, (owner, thread)) {
                 require(old == (owner, thread), "Core owner/thread binding changed")?;
+            }
+            if let Some(old) = bound_owner_receivers.insert(owner, receiver) {
+                require(old == receiver, "Core reset owner aliases another receiver")?;
             }
             cells.retain(|(r, _), _| *r != receiver);
             continue;
@@ -595,6 +612,30 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         )?;
         let base = key / 1000 * 1000;
         let index = key - base;
+        // The controller has no separate metadata-valid bit. A present 0/0
+        // false row can witness owner0/index0 only with these independent exact
+        // identities. This does NOT assert its token was valid or align ring
+        // timestamps. Missing metadata and other owner/index zeros stay unknown.
+        if zero_subject
+            && owner == 0
+            && index == 0
+            && receivers.get(&receiver) == Some(&0)
+            && bound_owner_receivers.get(&0) == Some(&receiver)
+            && evidence
+                .catalog
+                .iter()
+                .find(|e| e.index == 0)
+                .is_some_and(|e| {
+                    e.owner == 0 && {
+                        let p = &report.pairs[e.source as usize * COUNT];
+                        p.original_zero_effective_one + p.original_one_effective_one > 0
+                    }
+                })
+        {
+            subject = Some(0);
+            report.property_subject_unknown_rows -= 1;
+            report.property_zero_subject_corroborated_rows += 1;
+        }
         let cell = cells
             .entry((receiver, index))
             .or_insert((false, false, false));

@@ -773,3 +773,136 @@ fn nil_adjusted_shipping_restart_keeps_version_binding_before_and_after_native_s
         assert!(catalog_check::evidence_from_steps(&lines(&mixed)).is_err());
     }
 }
+
+// Hybrid unit model: the five raw Ainu property rows and first positive native
+// row come from a frozen subset. Resequencing below is ONLY for this unit model.
+// The subset itself retains original sequences and cannot be a complete capture.
+fn zero_subject_model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
+    let (mut trace, mut steps) = nil_adjusted_model(directory);
+    let subset: Value = serde_json::from_str(include_str!(
+        "fixtures/catalog-check/ainu-zero-subject-subset.json"
+    ))
+    .unwrap();
+    for row in &mut steps {
+        if row["status"] != "OK" {
+            continue;
+        }
+        let detail = row["detail"].as_str().unwrap().to_owned();
+        let adjusted = if let Some((prefix, rest)) = detail.split_once(" catalog=") {
+            let (records, titles) = rest.split_once(" titles=").unwrap();
+            let mut records: Vec<_> = records.split(';').map(str::to_owned).collect();
+            let mut fields: Vec<_> = records[21].split(':').map(str::to_owned).collect();
+            fields[3] = "0".into();
+            records[21] = fields.join(":");
+            format!("{prefix} catalog={} titles={titles}", records.join(";"))
+        } else {
+            detail.replace("21:0:164:", "21:0:0:")
+        };
+        row["detail"] = json!(adjusted);
+    }
+    trace[24] = subset["calibration"][0].clone();
+    trace[24]["sequence"] = json!(22);
+    for (offset, raw) in subset["properties"].as_array().unwrap().iter().enumerate() {
+        trace[130 + offset] = raw.clone();
+        trace[130 + offset]["sequence"] = json!(106 + offset);
+    }
+    (trace, steps)
+}
+
+#[test]
+fn zero_subject_corroboration_uses_exact_reset_calibration_and_catalog_identity() {
+    let (trace, steps) = zero_subject_model(Path::new("unit-model"));
+    let r = check(&trace, &steps).unwrap();
+    assert!(r.capture_valid && r.qualification_positive22);
+    assert_eq!(r.property_zero_subject_corroborated_rows, 1);
+    assert_eq!(r.property_subject_unknown_rows, 0);
+    let p = r
+        .pairs
+        .iter()
+        .find(|p| p.source == 21 && p.observed_owner == 0)
+        .unwrap();
+    assert_eq!(p.governor_index, 0);
+    assert_eq!(p.original_zero_effective_one, 1);
+    assert_eq!(p.core_allow_true_rows, 1);
+    assert!(
+        !r.full_history_authority
+            && !r.cross_ring_chronology_measured
+            && !r.payment_authority
+            && !r.product_acceptance
+    );
+}
+
+#[test]
+fn zero_subject_with_missing_reset_foreign_key_missing_metadata_or_denial_is_rejected() {
+    let (trace, steps) = zero_subject_model(Path::new("unit-model"));
+    for (row, field, value) in [
+        (130, "key_id", json!(903000)),
+        (130, "key_id", json!(902001)),
+        (130, "payload8", json!("0x0000000000000000")),
+        (134, "key_id", json!(901001)),
+        (134, "denial_owner", json!(1)),
+        (134, "denial_index", json!(1)),
+        (134, "property", json!("0x0000000000011528")),
+        (134, "thread_id", json!(99)),
+        (134, "denial_checked", json!(true)),
+        (24, "effective_al", json!(0)),
+    ] {
+        let mut bad = trace.clone();
+        bad[row][field] = value;
+        rejected(&bad, &steps);
+    }
+    let mut bad = trace.clone();
+    for field in ["denial_owner", "denial_index", "denial_checked"] {
+        bad[134].as_object_mut().unwrap().remove(field);
+    }
+    let r = check(&bad, &steps).unwrap();
+    assert!(!r.qualification_positive22);
+    assert_eq!(r.missing_positive_sources, vec![21]);
+    // Same reset moved after the allow row has no preceding binding.
+    let mut bad = trace.clone();
+    let mut reset = bad.remove(130);
+    reset["sequence"] = json!(110);
+    bad.insert(134, reset);
+    for (i, row) in bad[130..135].iter_mut().enumerate() {
+        row["sequence"] = json!(106 + i);
+    }
+    rejected(&bad, &steps);
+}
+
+#[test]
+fn zero_subject_requires_unique_native_and_property_owner_receivers() {
+    let (trace, steps) = zero_subject_model(Path::new("unit-model"));
+    let mut bad = trace.clone();
+    bad[24]["governors_this"] = bad[3]["governors_this"].clone();
+    assert!(check(&bad, &steps).is_err());
+    let mut bad = trace.clone();
+    bad[24]["player_address"] = bad[3]["player_address"].clone();
+    bad[24]["property_receiver"] = bad[3]["property_receiver"].clone();
+    assert!(check(&bad, &steps).is_err());
+    // No native receiver identifies this replacement reset; duplicate owner0
+    // would otherwise allow a second stale alias to enter the property table.
+    let mut bad = trace.clone();
+    bad[30]["key_id"] = json!(902000);
+    bad[30]["property"] = json!("0x00000000feed0528");
+    assert!(check(&bad, &steps).is_err());
+}
+
+#[test]
+fn frozen_ainu_subset_preserves_original_sequences_and_is_not_a_full_capture() {
+    use sha2::{Digest, Sha256};
+    let bytes = include_bytes!("fixtures/catalog-check/ainu-zero-subject-subset.json");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(bytes)),
+        "62c61902dcefa42a4a33e76e019dbc5fffae7253e1e5d14a60610132d87125bc"
+    );
+    let v: Value = serde_json::from_slice(bytes).unwrap();
+    assert_eq!(v["calibration"][0]["sequence"], 87);
+    assert_eq!(v["properties"][0]["sequence"], 1);
+    assert_eq!(v["properties"][4]["sequence"], 2992);
+    assert_eq!(v["calibration"].as_array().unwrap().len(), 4);
+    assert_eq!(v["properties"].as_array().unwrap().len(), 5);
+    assert!(v["scope"]
+        .as_str()
+        .unwrap()
+        .contains("not a complete capture"));
+}
