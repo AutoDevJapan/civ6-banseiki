@@ -1699,6 +1699,29 @@ fn ui_lua_comparison_requires_a_recorded_value() {
 }
 
 #[test]
+fn carrier_exchange_rejects_unimplemented_comparisons_but_checkpoint_retains_them() {
+    let base = json!({
+        "name": "carrier comparison scope",
+        "steps": [{"action": "carrier_exchange", "token": "saved_boundary", "candidate": "candidate"}]
+    });
+    validate_scenario(&base).unwrap();
+    for key in ["capture_as", "equals_capture"] {
+        for value in [json!("BEFORE"), Value::Null] {
+            let mut data = base.clone();
+            data["steps"][0][key] = value;
+            let error = validate_scenario(&data).unwrap_err();
+            assert!(error.message.contains(&format!("does not implement {key}")));
+        }
+    }
+    let mut checkpoint = base;
+    checkpoint["steps"][0]["action"] = json!("carrier_checkpoint");
+    checkpoint["steps"][0]["path"] = json!("carrier/before.json");
+    checkpoint["steps"][0]["capture_as"] = json!("BEFORE");
+    checkpoint["steps"][0]["equals_capture"] = json!("BEFORE");
+    validate_scenario(&checkpoint).unwrap();
+}
+
+#[test]
 fn ages_every_chunk_is_followed_by_a_full_previous_era_record() {
     let data = scenario("ages-probe.json");
     let s = steps(&data);

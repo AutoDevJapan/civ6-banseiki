@@ -463,8 +463,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     )?;
                 }
                 for key in ["capture_as", "equals_capture"] {
-                    if step.get(key).is_some_and(|v| !type_id(v)) {
-                        return Err(fail(format!("invalid {key}")));
+                    if let Some(value) = step.get(key) {
+                        if action == "carrier_exchange" {
+                            return Err(fail(format!("carrier_exchange does not implement {key}")));
+                        }
+                        if !type_id(value) {
+                            return Err(fail(format!("invalid {key}")));
+                        }
                     }
                 }
             }
