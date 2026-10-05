@@ -763,6 +763,14 @@ local function HandleEnemySpyRetry(controller,params,final)
             assert(coreCapacity==params.Capacity,
                 "native Core spy capacity changed after UI observation");
         end
+        print("JAC_BOUNDARY CORE_CAPACITY_RETRY_IDENTITY "..R.Serialize({
+            mapCount=mapCount,captor=params.CaptiveCaptor,expectedCaptor=c.owner,
+            map=params.MapCount,captured=params.CapturedCount,offMap=params.OffMapCount,
+            moving=params.ActiveOffMapCount,placeholder=params.PlaceholderIndex,
+            captiveName=params.CaptiveName,captiveNameIndex=params.CaptiveNameIndex,
+            captiveLevel=params.CaptiveLevel,travelName=travel.name,travelLevel=travel.level,
+            defaultName=GameInfo.Units["UNIT_SPY"].Name,
+            mapX=params.MapX,mapY=params.MapY,mapLevel=params.MapLevel,mapName=params.MapName}));
         assert(params.CaptiveCaptor==c.owner and mapCount==1 and
             params.MapCount==1 and params.CapturedCount==1 and
             params.OffMapCount==1 and params.ActiveOffMapCount==0 and
