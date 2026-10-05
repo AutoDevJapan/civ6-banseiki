@@ -1459,35 +1459,61 @@ impl Runner {
     }
     /// Hosting/loading hotseat opens StagingRoom; its official Ready button launches it.
     pub fn launch_hotseat_staging(&mut self, before: usize, deadline: f64) -> Result<bool> {
+        let mut last = "StagingRoom not available yet".to_string();
         while self.clock.now() < deadline {
             if self.loadscreen_count()? > before {
                 return Ok(false);
             }
-            if self
-                .states(self.budget(deadline, 5.0)?)?
-                .iter()
-                .any(|s| state_name_eq(s, "StagingRoom"))
-            {
+            let states = match self.states(self.budget(deadline, 5.0)?) {
+                Ok(states) => states,
+                Err(e) if e.kind == ErrorKind::Tuner => {
+                    last = e.to_string();
+                    self.disconnect();
+                    self.sleep_until(deadline, 0.2);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+            if states.iter().any(|s| state_name_eq(s, "StagingRoom")) {
                 let ready = self.lua("StagingRoom", "return not ContextPtr:IsHidden() and Controls.ReadyButton ~= nil and not Controls.ReadyButton:IsDisabled()", self.budget(deadline, 5.0)?);
                 match ready {
                     Ok(v) if v == "true" => {
                         let launched = self.lua("StagingRoom", "if not GameConfiguration.IsHotseat() or not Network.IsGameHost() then error('hotseat host required') end\nif ContextPtr:IsHidden() or Controls.ReadyButton:IsDisabled() then error('hotseat staging not ready') end\nControls.ReadyButton:DoLeftClick()\nreturn true", self.budget(deadline, 5.0)?);
-                        return match launched {
-                            Ok(_) => Ok(false),
-                            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => Ok(true),
-                            Err(e) => Err(e),
-                        };
+                        match launched {
+                            Ok(_) => {
+                                self.log(
+                                    "hotseat_staging",
+                                    "OK",
+                                    "official Ready button acknowledged",
+                                )?;
+                                return Ok(false);
+                            }
+                            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                                self.log("hotseat_staging", "UNKNOWN", &e.to_string())?;
+                                return Ok(true);
+                            }
+                            // Tuner errors precede the mutating Lua send. Once sent,
+                            // an uncertain result is LuaResponseUnknown, handled above.
+                            Err(e) if e.kind == ErrorKind::Tuner => {
+                                last = e.to_string();
+                                self.disconnect();
+                            }
+                            Err(e) => return Err(e),
+                        }
                     }
-                    Ok(_) => {}
-                    Err(e) if retryable(&e) => self.disconnect(),
+                    Ok(_) => last = "StagingRoom Ready button is hidden or disabled".into(),
+                    Err(e) if retryable(&e) => {
+                        last = e.to_string();
+                        self.disconnect();
+                    }
                     Err(e) => return Err(e),
                 }
             }
             self.sleep_until(deadline, 0.2);
         }
-        Err(Error::scenario(
-            "Timed out waiting for the hotseat StagingRoom Ready button",
-        ))
+        Err(Error::scenario(format!(
+            "Timed out waiting for the hotseat StagingRoom Ready button; last: {last}"
+        )))
     }
     pub fn choose_dedication(&mut self, human: i64, deadline: f64) -> Result<Option<String>> {
         let code = format!("local h = {human}\n{DEDICATION_CODE}");

@@ -350,3 +350,54 @@ fn disabled_staging_button_is_not_clicked_and_loading_skips_the_lobby() {
     assert!(!h.runner.launch_hotseat_staging(0, 5.0).unwrap());
     assert_eq!(h.calls().len(), calls);
 }
+
+#[test]
+fn staging_reconnects_before_queries_and_before_the_unsent_launch() {
+    let mut states = 0;
+    let fake = FakeBackend::new().states(move || {
+        states += 1;
+        if [1, 2, 4, 5, 8, 9].contains(&states) {
+            Err(Error::tuner(
+                "connection refused during frontend transition",
+            ))
+        } else {
+            Ok(vec!["StagingRoom".into()])
+        }
+    });
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    staging_baseline(&mut h);
+    assert!(!h.runner.launch_hotseat_staging(0, 5.0).unwrap());
+    assert_eq!(h.count_code("DoLeftClick()"), 1);
+    assert!(h.clock.at() > 0.0 && h.clock.at() < 5.0);
+}
+
+#[test]
+fn staging_permanent_disconnect_expires_without_launching() {
+    let fake = FakeBackend::new().states(|| Err(Error::tuner("connection refused")));
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    staging_baseline(&mut h);
+    let error = h.runner.launch_hotseat_staging(0, 1.0).unwrap_err();
+    assert!(error.to_string().contains("Timed out"));
+    assert!(error.to_string().contains("connection refused"));
+    assert_eq!(h.count_code("DoLeftClick()"), 0);
+    assert_eq!(h.clock.at(), 1.0);
+}
+
+#[test]
+fn staging_does_not_retry_interruption_or_multiple_process_errors() {
+    for error in [
+        Error::interrupted("stop"),
+        Error::scenario("multiple Civ6 processes"),
+    ] {
+        let expected = error.clone();
+        let fake = FakeBackend::new().states(move || Err(error.clone()));
+        let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+        staging_baseline(&mut h);
+        assert_eq!(
+            h.runner.launch_hotseat_staging(0, 5.0).unwrap_err(),
+            expected
+        );
+        assert_eq!(h.clock.at(), 0.0);
+        assert_eq!(h.count_code("DoLeftClick()"), 0);
+    }
+}
