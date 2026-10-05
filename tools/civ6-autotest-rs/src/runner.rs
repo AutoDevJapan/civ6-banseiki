@@ -1455,7 +1455,7 @@ impl Runner {
                         &strings(&step["disable_ids"]),
                         step["exclusive_user_mods"] == true,
                     ),
-                    self.budget(deadline, 5.0)?,
+                    self.remaining(deadline)?,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
@@ -1495,6 +1495,27 @@ impl Runner {
                     } else {
                         ""
                     }
+                ))
+            }
+            "choose_dedication" => {
+                let human = step["human"]
+                    .as_i64()
+                    .ok_or_else(|| Error::scenario("Missing dedication human"))?;
+                let local = parse_integer(&self.lua(
+                    "InGame",
+                    "return Game.GetLocalPlayer()",
+                    self.budget(deadline, 5.0)?,
+                )?)?;
+                if local != human {
+                    return Err(Error::scenario(format!(
+                        "Dedication human {human} is not the local player {local}"
+                    )));
+                }
+                let selected = self.choose_dedication(human, deadline)?.ok_or_else(|| {
+                    Error::scenario("No pending dedication; nothing was submitted")
+                })?;
+                Ok(format!(
+                    "human={human} chose commemoration indices={selected}"
                 ))
             }
             "start_game" => {
@@ -1642,7 +1663,7 @@ impl Runner {
                     match self.lua(
                         text(step, "state_name"),
                         text(step, "code"),
-                        self.budget(deadline, 5.0)?,
+                        self.remaining(deadline)?,
                     ) {
                         Ok(v) => break v,
                         Err(e)

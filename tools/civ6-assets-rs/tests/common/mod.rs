@@ -22,9 +22,7 @@ pub fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 pub fn temp() -> tempfile::TempDir {
-    let work = fixtures().join("work");
-    fs::create_dir_all(&work).unwrap();
-    tempfile::tempdir_in(work).unwrap()
+    tempfile::tempdir().unwrap()
 }
 pub static MAPS: LazyLock<Maps> = LazyLock::new(|| {
     let t = temp();
