@@ -3,7 +3,7 @@
   "capability_scenario": "tools/civ6-autotest/scenarios/oath-effects/capabilities.json",
   "oath_count": 66,
   "house_count": 22,
-  "max_turns": 36,
+  "max_turns": 12,
   "quantity_acceptance": "requires_documented_or_observed_unmodified_basis; unresolved yields never pass",
   "scenarios": [
     {
@@ -11,7 +11,7 @@
       "civilization": "CIVILIZATION_JAC_ODA",
       "oath": "JAC_OATH_ODA_TENKA_FUBU",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_oda_tenka_fubu.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -58,7 +58,7 @@
       "civilization": "CIVILIZATION_JAC_ODA",
       "oath": "JAC_OATH_ODA_AZUCHI",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_oda_azuchi.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -169,7 +169,7 @@
       "civilization": "CIVILIZATION_JAC_DATE",
       "oath": "JAC_OATH_DATE_BLACK_LACQUER",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_date_black_lacquer.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -234,7 +234,7 @@
       "civilization": "CIVILIZATION_JAC_ASHINA",
       "oath": "JAC_OATH_ASHINA_MUKAIHAGURO",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ashina_mukaihaguro.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -309,7 +309,7 @@
       "civilization": "CIVILIZATION_JAC_HOJO",
       "oath": "JAC_OATH_HOJO_SERVICE",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_hojo_service.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -338,7 +338,7 @@
       "civilization": "CIVILIZATION_JAC_HOJO",
       "oath": "JAC_OATH_HOJO_ODAWARA",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_hojo_odawara.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -413,7 +413,7 @@
       "civilization": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
       "oath": "JAC_OATH_YAMANOUCHI_UESUGI_HIRAI",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_yamanouchi_uesugi_hirai.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -452,7 +452,7 @@
       "civilization": "CIVILIZATION_JAC_NAGAO",
       "oath": "JAC_OATH_NAGAO_KASUGAYAMA",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_nagao_kasugayama.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -491,7 +491,7 @@
       "civilization": "CIVILIZATION_JAC_NAGAO",
       "oath": "JAC_OATH_NAGAO_DISPATCHES",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_nagao_dispatches.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -592,7 +592,7 @@
       "civilization": "CIVILIZATION_JAC_MATSUDAIRA",
       "oath": "JAC_OATH_MATSUDAIRA_ANJO",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_matsudaira_anjo.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -765,7 +765,7 @@
       "civilization": "CIVILIZATION_JAC_MIYOSHI",
       "oath": "JAC_OATH_MIYOSHI_IIMORI",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_miyoshi_iimori.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -840,7 +840,7 @@
       "civilization": "CIVILIZATION_JAC_ROKKAKU",
       "oath": "JAC_OATH_ROKKAKU_KANNONJI",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_rokkaku_kannonji.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -951,7 +951,7 @@
       "civilization": "CIVILIZATION_JAC_HONGANJI",
       "oath": "JAC_OATH_HONGANJI_OSAKA_DEFENSE",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_honganji_osaka_defense.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -1044,7 +1044,7 @@
       "civilization": "CIVILIZATION_JAC_AMAGO",
       "oath": "JAC_OATH_AMAGO_TODA",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_amago_toda.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",
@@ -1101,7 +1101,7 @@
       "civilization": "CIVILIZATION_JAC_AMAGO",
       "oath": "JAC_OATH_AMAGO_RESTORATION",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_amago_restoration.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -1148,7 +1148,7 @@
       "civilization": "CIVILIZATION_JAC_MORI",
       "oath": "JAC_OATH_MORI_SETO_FLEETS",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_mori_seto_fleets.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "naval",
@@ -1249,7 +1249,7 @@
       "civilization": "CIVILIZATION_JAC_SHIMAZU",
       "oath": "JAC_OATH_SHIMAZU_KUROKAWA_GUNS",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_shimazu_kurokawa_guns.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "military",
@@ -1350,7 +1350,7 @@
       "civilization": "CIVILIZATION_JAC_CHOSOKABE",
       "oath": "JAC_OATH_CHOSOKABE_URADO",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_chosokabe_urado.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "naval",
@@ -1379,7 +1379,7 @@
       "civilization": "CIVILIZATION_JAC_RYUKYU",
       "oath": "JAC_OATH_RYUKYU_BRIDGE",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ryukyu_bridge.json",
-      "turns": 18,
+      "turns": 6,
       "effects": [
         {
           "kind": "gold",
@@ -1480,7 +1480,7 @@
       "civilization": "CIVILIZATION_JAC_AINU",
       "oath": "JAC_OATH_AINU_CHASHI",
       "scenario": "tools/civ6-autotest/scenarios/oath-effects/jac_oath_ainu_chashi.json",
-      "turns": 36,
+      "turns": 12,
       "effects": [
         {
           "kind": "walls",

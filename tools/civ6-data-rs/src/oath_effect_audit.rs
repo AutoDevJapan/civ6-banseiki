@@ -8,7 +8,7 @@ use crate::{oaths, Outputs, Repository};
 const BASE: &str = "tools/civ6-autotest/scenarios/sengoku-oaths-oda.json";
 const DIR: &str = "tools/civ6-autotest/scenarios/oath-effects";
 const INVENTORY: &str = "documents/poc/data/oath-effect-scenarios.json";
-const PRODUCTION_SAMPLES: usize = 3;
+const PRODUCTION_SAMPLES: usize = 1;
 
 fn bounded_turns(steps: &[Value]) -> usize {
     steps
@@ -474,7 +474,7 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
         "InGame",
         substitute(MEASURE, case, &[("__PHASE__", "\"baseline\"")]),
     ));
-    steps.push(ui("JAC_DedicationPopup", substitute(POPUP, case, &[])));
+    steps.push(ui("DedicationPopup", substitute(POPUP, case, &[])));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":format!("local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; return h and h.oathChosen==1 and h.oaths[{}]==true",lua_string(&case.oath))}}));
     steps.push(ui(
         "InGame",
@@ -619,10 +619,10 @@ for _,city in Players[0]:GetCities():Members() do
   local progress=number(t.Building and q:GetBuildingProgress(def.Index) or q:GetUnitProgress(def.Index),'candidate progress')
   local cost=number(t.Building and q:GetBuildingCost(def.Index) or q:GetUnitCost(def.Index),'candidate cost')
   local production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'candidate city production')
-  if progress>=0 and production>=2 and cost-progress>production*10 and production<cheapest then chosen=city; cheapest=production end
+  if progress>=0 and production>=5 and cost-progress>production*4 and production<cheapest then chosen=city; cheapest=production end
  end
 end
-assert(chosen,'no eligible actual owned city has nine-turn production headroom for '..t.Target)
+assert(chosen,'no eligible actual owned city has three-turn headroom and sufficient production precision for '..t.Target)
 t.City=chosen:GetID(); t.Plot=Map.GetPlot(chosen:GetX(),chosen:GetY()):GetIndex(); t.Owner=0
 JAC_OATH_AUDIT.current=t
 CityManager.RequestOperation(chosen,CityOperationTypes.BUILD,params)
@@ -865,7 +865,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
             format!("{}\n", serde_json::to_string_pretty(&scenario)?),
         );
     }
-    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":36,
+    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":12,
         "quantity_acceptance":"requires_documented_or_observed_unmodified_basis; unresolved yields never pass","scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
@@ -955,18 +955,18 @@ mod tests {
             assert!(!all_codes.contains("__TARGET__"));
             let turns = bounded_turns(steps);
             let expected = if case.effects.iter().any(|e| e.kind == "walls") {
-                36
+                12
             } else if case
                 .effects
                 .iter()
                 .any(|e| e.kind == "military" || e.kind == "naval")
             {
-                18
+                6
             } else {
                 0
             };
             assert_eq!(turns, expected, "{}", case.oath);
-            assert!(turns <= 36);
+            assert!(turns <= 12);
             assert!(steps.iter().all(|s| s["action"] != "autoplay"));
             assert!(steps.last().context("last step")?["code"]
                 .as_str()

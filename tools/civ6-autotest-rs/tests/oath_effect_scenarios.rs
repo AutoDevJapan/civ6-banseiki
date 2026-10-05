@@ -13,6 +13,19 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
     assert_eq!(inventory["live_verified"], false);
     assert_eq!(inventory["oath_count"], 66);
     assert_eq!(inventory["house_count"], 22);
+    assert_eq!(inventory["max_turns"], 12);
+    let modinfo =
+        std::fs::read_to_string(root.join("poc/JAC_PoC_SengokuTrees/JAC_PoC_SengokuTrees.modinfo"))
+            .expect("MOD UI contexts");
+    let contexts: BTreeSet<_> = modinfo
+        .split("<LuaContext>")
+        .skip(1)
+        .map(|part| {
+            part.split_once("</LuaContext>")
+                .expect("closed LuaContext")
+                .0
+        })
+        .collect();
     let mut expected = BTreeSet::new();
     let mut houses = BTreeSet::new();
     for house in catalogue["houses"].as_array().expect("houses") {
@@ -42,7 +55,18 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
                 .filter(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,"))
                 .count();
             assert_eq!(data["finite_turns"], turns);
-            assert!(turns <= 36, "{path}: unbounded turns {turns}");
+            assert!(turns <= 12, "{path}: unbounded turns {turns}");
+            for step in steps.iter().filter(|s| {
+                s["code"]
+                    .as_str()
+                    .is_some_and(|code| code.contains("JAC_ShowOaths(true)"))
+            }) {
+                let state = step["state_name"].as_str().expect("oath UI state");
+                assert!(
+                    contexts.contains(state),
+                    "{path}: oath UI state {state} is not registered by the MOD"
+                );
+            }
             assert!(steps.last().expect("acceptance step")["code"]
                 .as_str()
                 .expect("gate")

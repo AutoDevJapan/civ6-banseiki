@@ -20,7 +20,7 @@ Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を�
 |---|---|---|
 | 生産・金・科学・文化・信仰・食料 | `city:GetYield`。`Base/Assets/UI/CitySupport.lua:316–332` | 実効値を記録する。補正前の総産出を返す公式の使用実績があるgetterは見つかっていないため、期待差分は `null`、数量確認は `false` |
 | 成長の割合と総倍率 | `GetOtherGrowthModifier`、`GetOverallGrowthModifier`、`GetHousingGrowthModifier`、`GetHappinessGrowthModifier`。同ファイル490・557・570–574 | その他の成長補正が要求割合だけ増え、住宅を含む公式UIの式と総倍率の差分が一致すること |
-| 軍事・水軍の生産 | `GetCurrentProductionTypeHash`、`GetUnitProgress`、`GetUnitCost`。同ファイル233–257 | 各段階で3回の1手番進捗を測り、進捗の合計を手番前の実都市生産量の合計で割る。解除時の比率が両側で1と観測できた場合に、適用時の比率を `1 + 要求割合/100` と厳密に比較する |
+| 軍事・水軍の生産 | `GetCurrentProductionTypeHash`、`GetUnitProgress`、`GetUnitCost`。同ファイル233–257 | 各段階で1回の1手番進捗を測り、進捗の合計を手番前の実都市生産量の合計で割る。解除時の比率が両側で1と観測できた場合に、適用時の比率を `1 + 要求割合/100` と厳密に比較する |
 | 防壁3種類の生産 | `GetBuildingProgress`、`GetBuildingCost`。同ファイル206–215 | 古代・中世・ルネサンス防壁を個別に指定し、軍事・水軍と同じ実進捗の条件で比較する |
 
 成長の総倍率は住宅や幸福度の影響を受ける。一律に要求割合を100で割った差とはしない。公式 `Base/Assets/UI/Panels/CityPanelOverview.lua:667` の式に従い、非占領・食料余剰が正・忠誠度倍率が1の都市で、次の差分を確認する。
@@ -35,11 +35,11 @@ Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を�
 
 必要な前提技術・社会制度は、読み込まれた建造定義のものだけを用意する。全技術の解禁によるユニットの陳腐化や、防壁を建てられなくなる条件を避ける。下位防壁の用意は公式Tunerの `CreateIncompleteBuilding(..., 100)` を使う（`Base/Assets/UI/Tuner/TunerCityPanel.lua:103`）。自然な技術進行や下位防壁の建設の証明にはしない。
 
-生産は公式の `CityManager.RequestOperation(...BUILD...)` で先頭の項目を置き換える（`Base/Assets/UI/Panels/ProductionPanel.lua:291–370, 2885–2898`）。実所有都市から、公式の開始判定が通り、9手番を測る余裕がある都市を選ぶ。
+生産は公式の `CityManager.RequestOperation(...BUILD...)` で先頭の項目を置き換える（`Base/Assets/UI/Panels/ProductionPanel.lua:291–370, 2885–2898`）。実所有都市から、公式の開始判定が通り、3手番を測る余裕と都市生産量5以上がある都市を選ぶ。
 
-解除・適用・解除の各3手番を、公式Shift+Enterと同じ `UI.RequestAction(ACTION_ENDTURN, { REASON = "UserForced" })` で進める（`Base/Assets/UI/ActionPanel.lua:1099`）。AIへ操作を渡さず、要求は各観測につき1回だけ。次の人間手番がちょうど1手番後であることを待ち、実数の進捗を測る。途中の完成、項目や費用の変更、手番の飛び、復元失敗は不合格になる。手番後の都市生産量も記録し、手番内に変化した場合は数量未確認にする。丸めを含む割合の誤差幅が0.5パーセントポイント未満にならなければ、隣の整数割合と区別できないため数量確認をfalseにする。実機の進捗丸め幅は初回診断と実測で確認する。
+解除・適用・解除の各1手番を、公式Shift+Enterと同じ `UI.RequestAction(ACTION_ENDTURN, { REASON = "UserForced" })` で進める（`Base/Assets/UI/ActionPanel.lua:1099`）。AIへ操作を渡さず、要求は各観測につき1回だけ。次の人間手番がちょうど1手番後であることを待ち、実数の進捗を測る。途中の完成、項目や費用の変更、手番の飛び、復元失敗は不合格になる。手番後の都市生産量も記録し、手番内に変化した場合は数量未確認にする。丸めを含む割合の誤差幅が0.5パーセントポイント未満にならなければ、隣の整数割合と区別できないため数量確認をfalseにする。実機の進捗丸め幅は初回診断と実測で確認する。
 
-軍事・防壁の非対象には労働者、水軍の非対象には陸上の槍兵を実際に生産する。同時に都市生産量が増える誓約でも、非対象の進捗をその都市生産量で割った比率が増えないことを要求する。通常進行は産出・成長のみで0手番、軍事・水軍で18手番、防壁で36手番。何百手番も進める処理はない。
+軍事・防壁の非対象には労働者、水軍の非対象には陸上の槍兵を実際に生産する。同時に都市生産量が増える誓約でも、非対象の進捗をその都市生産量で割った比率が増えないことを要求する。通常進行は産出・成長のみで0手番、軍事・水軍で6手番、防壁で12手番。何百手番も進める処理はない。
 
 ## 初回の能力診断と検査
 
@@ -49,6 +49,7 @@ CargoはこのPCのゲートを通す。実機を起動しない検査は次の�
 
 ```powershell
 $gate = 'D:/CC/Tools/codex-jobs/cargo_gate.exe'
+$env:CARGO_TARGET_DIR = Join-Path (Get-Location) 'tools/target'
 & $gate run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-effect-audit
 & $gate run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-effect-audit -- --check
 & $gate test --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --lib oath_effect_audit -- --nocapture
@@ -58,10 +59,11 @@ $gate = 'D:/CC/Tools/codex-jobs/cargo_gate.exe'
 
 生成した全Lua手順・待機条件と、全PoCの製品LuaをLua 5.1でコンパイルする。既存の助言画面1本にあるHavokの構造体は、13項目の型を検査し、コメントと文字列を区別するRustの字句検査で、既存の史実イベント検査と同じ構造体の変換を行う。それ以外の製品Luaは本文をそのままコンパイルする。製品のLuaは変更しない。実数の増加・住宅の抑制・割合の取り違え・非対象への漏れ・復元・誤った所有都市・手番の飛び・不明APIを、生成されたコードを実行する負例で検査する。66件と能力診断のJSONは、実際のドライバの形式検査も通す。
 
-実機の起動・停止は統合担当がlive_chain経由で管理する。最初の有限診断は、親worktreeへ取り込んで再ビルドした実行ファイルから、次のシナリオを渡す。出力先は実行ごとに変える。
+実機の起動・停止は統合担当がlive_chain経由で管理する。検査済みの変更をpushし、自分のジョブIDをCODEX_JOB_IDへ設定してから、最初の有限診断を次のコマンドで実行する。共有枠の取得、実行器の再ビルド、実行ごとに異なる出力先、ゲームの終了はlive_chainが管理する。
 
 ```powershell
-& $gate run --locked --manifest-path tools/Cargo.toml -p civ6-autotest-rs --bin civ6-autotest -- tools/civ6-autotest/scenarios/oath-effects/capabilities.json --output tools/civ6-autotest/artifacts/oath-capability-first
+$branch = git branch --show-current
+& D:/CC/Tools/civ6-live/live_chain.exe "${branch}:oath-effects/capabilities.json" --test-mode --stop-on-failure
 ```
 
 `steps.jsonl` の2つの能力JSONを先に確認する。数量基準が未確定のまま66本を受入試験として扱わない。各シナリオは実測JSONを残した後、最後の `accepted == true` の確認で、未対応の数量基準を不合格にする。

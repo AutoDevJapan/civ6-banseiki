@@ -35,7 +35,7 @@ function audit_rows(off,on,last,first_yield,on_yield,last_yield)
  local turn=0; local progress=0
  local function phase(delta,yield)
   local samples={}
-  for i=1,3 do
+  for i=1,1 do
    turn=turn+1; local before=progress; progress=progress+delta
    samples[i]={city=3,plot=22,turn=turn,before=before,after=progress,delta=delta,city_yield=yield,city_yield_after=yield,cost=1000}
   end
@@ -150,7 +150,7 @@ native_request_count=function() return calls end
 }
 
 #[test]
-fn adjacent_integer_percentages_are_distinguished_at_production_two() -> Result<()> {
+fn single_turn_samples_distinguish_adjacent_percentages_and_reject_low_resolution() -> Result<()> {
     let military = generated_code(&oda()?, "local target=\"UNIT_SPEARMAN\"; local amount=15")?;
     let mut wall_case = growth_case();
     wall_case.effects = vec![
@@ -169,22 +169,30 @@ fn adjacent_integer_percentages_are_distinguished_at_production_two() -> Result<
     )?;
     let lua = Lua::new();
     for (target, code, correct, adjacent) in [
-        ("UNIT_SPEARMAN", military, 2.3, 2.28),
-        ("BUILDING_WALLS", wall, 2.4, 2.38),
+        ("UNIT_SPEARMAN", military, 5.75, 5.7),
+        ("BUILDING_WALLS", wall, 6.0, 5.95),
     ] {
         lua.load(PRODUCTION_OBSERVATIONS).exec()?;
-        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(2,{correct},2,2,2,2)")).exec()?;
+        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(5,{correct},5,5,5,5)")).exec()?;
         let result = decode(&lua, &code)?;
         assert_eq!(result["quantity_verified"], true);
         assert_eq!(result["integer_percentage_resolved"], true);
         lua.load(format!(
-            "JAC_OATH_AUDIT.production['{target}']=audit_rows(2,{adjacent},2,2,2,2)"
+            "JAC_OATH_AUDIT.production['{target}']=audit_rows(5,{adjacent},5,5,5,5)"
         ))
         .exec()?;
         assert!(
             decode(&lua, &code).is_err(),
             "accepted adjacent amount for {target}"
         );
+        lua.load(format!(
+            "JAC_OATH_AUDIT.production['{target}']=audit_rows(2,{},2,2,2,2)",
+            correct * 2.0 / 5.0
+        ))
+        .exec()?;
+        let unresolved = decode(&lua, &code)?;
+        assert_eq!(unresolved["quantity_verified"], false);
+        assert_eq!(unresolved["integer_percentage_resolved"], false);
     }
     Ok(())
 }
