@@ -13,16 +13,20 @@ assert(p:GetReligion():GetReligionTypeCreated()<0,'fixture religion already foun
 p:GetReligion():SetHolyCity(cap);Game.GetReligion():FoundReligion(from,r.Index)
 for _,kind in ipairs({'BELIEF_DIVINE_INSPIRATION','BELIEF_CATHEDRAL'}) do Game.GetReligion():AddBelief(from,GameInfo.Beliefs[kind].Index) end
 cap:GetReligion():SetAllCityToReligion(r.Index)
-local target=assert(Players[Game.GetLocalPlayer()]:GetCities():GetCapitalCity())
+local target
+for _,city in p:GetCities():Members() do
+ if city:GetID()~=cap:GetID() and (not target or city:GetID()<target:GetID()) then target=city end
+end
+assert(target,'donor needs a second city for official spread')
 assert(target:GetReligion():GetMajorityReligion()~=r.Index,'target already converted')
 local before={};for _,u in p:GetUnits():Members() do before[u:GetID()]=true end
-UnitManager.InitUnitValidAdjacentHex(from,'UNIT_MISSIONARY',target:GetX(),target:GetY(),8)
+UnitManager.InitUnitValidAdjacentHex(from,'UNIT_MISSIONARY',target:GetX(),target:GetY(),1)
 local priest
 for _,u in p:GetUnits():Members() do if not before[u:GetID()] then assert(not priest,'ambiguous new unit');priest=u end end
 assert(priest and GameInfo.Units[priest:GetType()].UnitType=='UNIT_MISSIONARY','missionary creation failed')
 priest:GetReligion():SetReligionType(r.ReligionType)
-UnitManager.PlaceUnit(priest,target:GetX(),target:GetY())
-assert(priest:GetX()==target:GetX() and priest:GetY()==target:GetY(),'missionary target placement failed')
+print('[JAC_SPENT_SPREAD_192] created xy='..priest:GetX()..','..priest:GetY()..' target='..target:GetX()..','..target:GetY())
+assert(priest:GetX()>=0 and priest:GetY()>=0 and Map.GetPlotDistance(priest:GetX(),priest:GetY(),target:GetX(),target:GetY())<=1,'missionary not on a valid target-adjacent plot')
 local e={From=from,To=to,UnitID=priest:GetID(),Religion=r.Index,TargetOwner=target:GetOwner(),TargetID=target:GetID(),X=target:GetX(),Y=target:GetY(),StartTurn=Game.GetCurrentGameTurn()}
 Game:SetProperty('JAC_ABSORPTION_SPENT_SPREAD_192',e)
 print('[JAC_SPENT_SPREAD_192] fixture owner='..from..' unit='..e.UnitID..' gameplay_request='..type(UnitManager.RequestOperation)..' gameplay_can='..type(UnitManager.CanStartOperation))
