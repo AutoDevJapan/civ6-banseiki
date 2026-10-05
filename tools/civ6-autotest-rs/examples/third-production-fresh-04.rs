@@ -32,7 +32,7 @@ fn scenario() -> Value {
             save(),
             wait("local b=ExposedMembers.JAC_PersonaBoundary; if b.thirdLast=='ERROR_PROGRESS_SPY' then error(b.thirdLast) end; local p=Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'); return p and p.generation==3 and b.thirdLast=='ACCEPTED_PROGRESS_SPY'"),
             save(),
-            ui("local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyStatus(); local u=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04')); assert(u.status=='SENT_RESULT_UNCONFIRMED' and not u.actualSpyIDKnown and u.attempt==1 and s.progressed and not s.bound); return b.RecordEnemy('FRESH_ATTEMPT2_ENGINE_PRODUCTION_OBSERVED')"),
+            ui("local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyStatus(); local u=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04')); assert(u.status=='SENT_RESULT_UNCONFIRMED' and not u.actualSpyIDKnown and u.attempt==1 and s.progressed and not s.bound); return b.RecordEnemy('FRESH_ATTEMPT2_PROGRESS_CONFIRMED_UNIT_NOT_ADOPTED')"),
             {"action":"exit_to_menu"}
         ]
     })

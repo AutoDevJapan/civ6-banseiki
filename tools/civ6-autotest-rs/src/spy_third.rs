@@ -107,6 +107,18 @@ local function conserved(before,after,progress)
 end
 local function archive() return assert(Game:GetProperty(ARCHIVE),'third generation archive missing') end
 local function state() return assert(Game:GetProperty(STATE),'third generation state missing') end
+local function productionLineage(s,a,production)
+ local intent=assert(s.intents.BUILD_SPY,'production BUILD intent missing');
+ if s.productionAttempt==2 then
+  assert(Game:GetProperty(UNKNOWN_PRODUCTION) and intent.attempt==2 and production.attempt==2 and
+   integer(intent.token,1) and production.reservationToken==intent.token,
+   'fresh production attempt or reservation differs');
+  return 2,intent.token
+ end
+ assert(s.productionAttempt==nil and production.attempt==nil and production.reservationToken==nil and
+  intent.attempt==nil and intent.token==a.token,'original production reservation differs');
+ return 1,a.token
+end
 local function freshProductionCheck(o)
  local s=state(); local a=archive(); local production=assert(Game:GetProperty(PRODUCTION));
  local ack=assert(Game:GetProperty(ACK)); local intent=assert(s.intents.BUILD_SPY);
@@ -477,6 +489,7 @@ function T.InstallCore(hooks)
     o.placeholdersText==a.placeholdersText,'third spy immutable archive differs');
    if p.Action=='ATTEST' or p.Action=='ADOPT' then
     local production=assert(Game:GetProperty(PRODUCTION));
+    local attempt,reservation=productionLineage(s,a,production);
     assert(production.generation==T.generation and production.progressed and production.beforeCount==0 and
      o.mapCount==1 and o.activeCount==0 and o.map and o.map.owner==owner and o.map.unitType==o.spyType and
      T.AllowedID(o.map.id) and not retry.spyID and not s.bound,'third spy production increment is not one distinct unit');
@@ -492,7 +505,7 @@ function T.InstallCore(hooks)
       'third spy adoption changed after Core attestation');
      retry.spyID=o.map.id; retry.binding={source='NATIVE_BUILD',generation=T.generation,owner=owner,
       unitType=o.map.unitType,spyID=o.map.id,cityID=production.cityID,token=p.Token,sources=source,
-      productionAttempt=production.attempt or 1,productionReservation=production.reservationToken or a.token};
+      productionAttempt=attempt,productionReservation=reservation};
      s.bound=true; s.spyID=o.map.id; s.binding=copy(retry.binding);
      Game:SetProperty(RETRY,retry); Game:SetProperty('JAC_BOUNDARY_SPY',{owner=owner,id=o.map.id,generation=T.generation});
     end
@@ -519,6 +532,7 @@ function T.Progress(owner,p)
  local previous=Game:GetProperty(ACK); assert(not previous or p.Token>previous.token,'third spy progress token replayed');
  checkReady(o); local source=coreCheck(owner,o);
  local s=state(); local a=archive(); local production=assert(Game:GetProperty(PRODUCTION));
+ productionLineage(s,a,production);
  assert(T.IsThird(Game:GetProperty(RETRY)) and same(o.histories,a.histories) and
   o.captivesText==a.captivesText and o.placeholdersText==a.placeholdersText and o.mapCount==0 and o.activeCount==0 and
   o.buildReady and o.queueSpy and o.queueOwner==owner and o.queueCityID==production.cityID and

@@ -1439,3 +1439,31 @@ fn fresh_production_cannot_replace_the_preserved_native_failure() {
     );
     t.run("assert(#BUILD_REQUESTS==0 and PROGRESS_CALLS==0 and #UNIT_REQUESTS==0)");
 }
+
+#[test]
+fn adoption_requires_attempt_and_reservation_to_match_the_build_intent() {
+    for fault in [
+        "production.attempt=nil",
+        "production.reservationToken=nil",
+        "production.reservationToken=s.intents.BUILD_SPY.token+1",
+        "s.intents.BUILD_SPY.attempt=nil",
+        "s.intents.BUILD_SPY.token=nil",
+        "Game:SetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04',nil)",
+    ] {
+        let t = Third::new();
+        t.produce();
+        t.run(&format!(
+            "local s=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE'); \
+             local production=Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION'); \
+             s.productionAttempt=2; s.intents.BUILD_SPY.attempt=2; production.attempt=2; \
+             production.reservationToken=s.intents.BUILD_SPY.token; \
+             Game:SetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04',{{status='SENT_RESULT_UNCONFIRMED'}}); \
+             {fault}; ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME()"
+        ));
+        t.reject(
+            "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
+            "fresh production attempt or reservation differs",
+        );
+        t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').attestation and PROGRESS_CALLS==1)");
+    }
+}
