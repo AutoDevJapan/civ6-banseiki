@@ -81,7 +81,18 @@ local function Resolved()
     else
       assert(Players[job.Actor]:IsAlive(),'actor eliminated')
       local u=Players[job.Actor]:GetUnits():FindID(job.Unit)
-      if not want.Success then assert(u==nil,'failed assassin not removed')
+      if not want.Success then
+        local sameIdentity
+        for _,candidate in Players[job.Actor]:GetUnits():Members() do
+          if candidate:GetProperty(R.TOKEN)==want.ActorIdentity then sameIdentity=candidate end
+        end
+        if u and u:GetProperty(R.TOKEN)~=want.ActorIdentity then
+          print('[JAC_ASN_ELIM] unit_id_identity_mismatch actor='..job.Actor..' unit='..job.Unit..
+            ' expected_identity='..tostring(want.ActorIdentity)..
+            ' observed_identity='..tostring(u:GetProperty(R.TOKEN))..
+            ' original_identity_present='..tostring(sameIdentity~=nil))
+        end
+        assert(not sameIdentity,'failed assassin identity remains')
       else
         assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')
         assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')
@@ -336,16 +347,106 @@ mod tests {
         for actor in [true, false] {
             let lua = harness(&repo)?;
             let scenario = build_scenario(&repo, actor)?;
+            let mut ended_turns = 0;
             for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
                 match step["action"].as_str().unwrap() {
                     "ui_lua" => lua
                         .load(step["code"].as_str().unwrap())
                         .exec()
                         .with_context(|| format!("actor={actor} step={index}"))?,
-                    "end_turn" => lua.load("ADVANCE(1)").exec()?,
+                    "end_turn" => {
+                        lua.load("ADVANCE(1)").exec()?;
+                        ended_turns += 1;
+                        if !actor && ended_turns == 2 {
+                            lua.load(
+                                r#"
+                              local t=Game:GetProperty('JAC_ASN_ELIM_TEST')
+                              for _,job in ipairs(t.Jobs) do
+                                if not job.Pending.Mission.Success then
+                                  local units=DATA[job.Actor].Units
+                                  assert(units[job.Unit]==nil,'failed assassin survived before UnitID reuse')
+                                  units[job.Unit]={
+                                    ID=job.Unit,Owner=job.Actor,
+                                    Type=GameInfo.Units[JAC_ASN.UnitForPlayer(job.Actor)].Index,
+                                    X=job.Actor,Y=1,
+                                    Properties={[JAC_ASN.TOKEN]='replacement:'..job.Actor}
+                                  }
+                                end
+                              end
+                            "#,
+                            )
+                            .exec()?;
+                        }
+                    }
                     "load" => reload(&lua, &repo)?,
                     _ => {}
                 }
+            }
+            if !actor {
+                lua.load(
+                    r#"
+                  local t=Game:GetProperty('JAC_ASN_ELIM_TEST')
+                  local job
+                  for _,candidate in ipairs(t.Jobs) do
+                    if not candidate.Pending.Mission.Success then job=candidate; break end
+                  end
+                  assert(job,'target scenario lacks a failed mission')
+                  local units=DATA[job.Actor].Units
+                  local data=assert(units[job.Unit])
+                  local replacement='replacement:'..job.Actor
+                  assert(data.Properties[JAC_ASN.TOKEN]==replacement,'UnitID reuse fixture missing')
+                  data.Properties[JAC_ASN.TOKEN]=job.Pending.Mission.ActorIdentity
+                "#,
+                )
+                .exec()?;
+                let same_id_error = lua
+                    .load(format!("{PREFIX}\nResolved()"))
+                    .exec()
+                    .unwrap_err();
+                assert!(
+                    same_id_error
+                        .to_string()
+                        .contains("failed assassin identity remains"),
+                    "{same_id_error}"
+                );
+                lua.load(
+                    r#"
+                  local t=Game:GetProperty('JAC_ASN_ELIM_TEST')
+                  local job
+                  for _,candidate in ipairs(t.Jobs) do
+                    if not candidate.Pending.Mission.Success then job=candidate; break end
+                  end
+                  local units=DATA[job.Actor].Units
+                  local data=assert(units[job.Unit])
+                  local old_id=job.Unit; local new_id=NEXT_UNIT; NEXT_UNIT=NEXT_UNIT+1
+                  units[old_id]=nil; data.ID=new_id; units[new_id]=data
+                "#,
+                )
+                .exec()?;
+                let different_id_error = lua
+                    .load(format!("{PREFIX}\nResolved()"))
+                    .exec()
+                    .unwrap_err();
+                assert!(
+                    different_id_error
+                        .to_string()
+                        .contains("failed assassin identity remains"),
+                    "{different_id_error}"
+                );
+                lua.load(
+                    r#"
+                  local t=Game:GetProperty('JAC_ASN_ELIM_TEST')
+                  local job
+                  for _,candidate in ipairs(t.Jobs) do
+                    if not candidate.Pending.Mission.Success then job=candidate; break end
+                  end
+                  local units=DATA[job.Actor].Units
+                  local data=assert(units[NEXT_UNIT-1])
+                  units[NEXT_UNIT-1]=nil; data.ID=job.Unit; units[job.Unit]=data
+                  data.Properties[JAC_ASN.TOKEN]='replacement:'..job.Actor
+                "#,
+                )
+                .exec()?;
             }
             // Reusing the exact generated checker rejects corruption introduced by a load.
             lua.load(
