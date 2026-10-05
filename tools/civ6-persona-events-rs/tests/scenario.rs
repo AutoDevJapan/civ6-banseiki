@@ -19,6 +19,11 @@ fn finite_diagnostic_has_one_payment_sender_and_only_its_new_save() {
     let scenario = scenario::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&scenario).unwrap();
     let steps = scenario["steps"].as_array().unwrap();
+    assert_eq!(
+        steps.len(),
+        38,
+        "retain the finite 38-step diagnostic; the driver adds its initial restart"
+    );
     let lua = Lua::new();
     let mut appoint = 0;
     let mut promote = 0;

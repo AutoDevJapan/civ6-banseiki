@@ -1,11 +1,13 @@
 use civ6_persona_events_rs::{adapter, BEGIN, END, GAMEPLAY};
 use mlua::Lua;
 use std::{fs, path::PathBuf};
+include!("support/normal_cases.rs");
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 const FIXTURE: &str = r#"
+print=function() end
 properties={}; playerProps={}; unitLists={}; used={}; uiReads=0; operations=0
 UI={RequestPlayerOperation=function() operations=operations+1; error('Gameplay callback sent an operation') end}
 leader='LEADER_JAC_DATE_TANEMUNE'; prefix='JAC_PERSONA_'..leader..'_'
@@ -119,7 +121,10 @@ fn generated_block_is_current_and_in_the_gameplay_lexical_context() {
     let source = fs::read_to_string(root().join(GAMEPLAY))
         .unwrap()
         .replace("\r\n", "\n");
-    assert_eq!(civ6_persona_events_rs::embed(&source).unwrap(), source);
+    assert!(
+        civ6_persona_events_rs::embed(&source).unwrap() == source,
+        "Gameplay generated blocks are stale; run the Rust embed CLI"
+    );
     assert_eq!(source.matches(BEGIN).count(), 1);
     assert_eq!(source.matches(END).count(), 1);
     assert!(source.contains(adapter()));
@@ -128,9 +133,9 @@ fn generated_block_is_current_and_in_the_gameplay_lexical_context() {
 }
 
 #[test]
-fn disabled_keeps_the_original_native_route_and_does_not_capture() {
+fn legacy_ui_without_normal_receipts_stays_unknown_closed() {
     let lua = context();
-    run(&lua,"emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1); assert(properties.JAC_PERSONA_EVENTS_PROBE_V1==nil); emit(GameEvents,'JAC_LeaderPersonaJoin',0,{Source=1}); assert(uiReads==1 and playerProps[0].JAC_PERSONA_RESULT=='JOINED')");
+    run(&lua,"emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1); assert(properties.JAC_PERSONA_EVENTS_PROBE_V1==nil); emit(GameEvents,'JAC_LeaderPersonaJoin',0,{Source=1}); assert(uiReads==0 and playerProps[0].JAC_PERSONA_RESULT=='NATIVE_UNAVAILABLE')");
 }
 
 #[test]
