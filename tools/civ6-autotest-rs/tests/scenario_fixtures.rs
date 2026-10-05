@@ -1537,6 +1537,33 @@ fn native_trace_separates_ui_ai_and_refused_official_request_without_changing_qu
 }
 
 #[test]
+fn carrier_exchange_rejects_ignored_snapshot_options_without_limiting_checkpoints() {
+    let data = json!({
+        "name": "carrier exchange snapshot options",
+        "steps": [{"action":"carrier_exchange", "token":"txn:carrier:900", "candidate":"test"}]
+    });
+    validate_scenario(&data).unwrap();
+    for key in ["capture_as", "equals_capture"] {
+        for value in [json!("STATE"), json!(null)] {
+            let mut exchange = data.clone();
+            exchange["steps"][0][key] = value;
+            let error = validate_scenario(&exchange).unwrap_err();
+            assert!(error
+                .message
+                .contains(&format!("carrier_exchange does not support {key}")));
+        }
+    }
+    let checkpoint = json!({
+        "name": "carrier checkpoints retain supported comparison",
+        "steps": [
+            {"action":"carrier_checkpoint", "token":"txn:carrier:900", "candidate":"test", "path":"before.json", "capture_as":"STATE"},
+            {"action":"carrier_checkpoint", "token":"txn:carrier:900", "candidate":"test", "path":"after.json", "equals_capture":"STATE"}
+        ]
+    });
+    validate_scenario(&checkpoint).unwrap();
+}
+
+#[test]
 fn ui_lua_comparison_requires_a_recorded_value() {
     let mut data = json!({
         "name": "snapshot comparison",
