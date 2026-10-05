@@ -141,7 +141,8 @@
       "action": "save",
       "name": "JAC-ToDo158-AI-Skills",
       "checkpoint": true,
-      "timeout": 120
+      "timeout": 120,
+      "exact_name": true
     },
     {
       "action": "exit_to_menu"
@@ -150,7 +151,8 @@
       "action": "load",
       "name": "JAC-ToDo158-AI-Skills",
       "checkpoint": true,
-      "timeout": 300
+      "timeout": 300,
+      "exact_name": true
     },
     {
       "action": "wait_for",

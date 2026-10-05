@@ -112,11 +112,11 @@ fn scenario() -> Value {
     capture["capture_as"] = json!("AI_PERSONA_BEFORE_SAVE");
     steps.push(capture);
     steps.push(
-        json!({"action":"save","name":"JAC-ToDo158-AI-Skills","checkpoint":true,"timeout":120}),
+        json!({"action":"save","name":"JAC-ToDo158-AI-Skills","exact_name":true,"checkpoint":true,"timeout":120}),
     );
     steps.push(json!({"action":"exit_to_menu"}));
     steps.push(
-        json!({"action":"load","name":"JAC-ToDo158-AI-Skills","checkpoint":true,"timeout":300}),
+        json!({"action":"load","name":"JAC-ToDo158-AI-Skills","exact_name":true,"checkpoint":true,"timeout":300}),
     );
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"JAC_LeaderPersona_Tree","code":"local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersonaNativeRead)=='function' and type(JAC_PersonaTreeRules)=='table'"}}));
     let mut restored = lua(format!("{READ}\nreturn JAC158_Encode(JAC158_Read())"));
@@ -290,6 +290,8 @@ JAC_PersonaTreeRules={Status=function(owner,person,node) return statuses[node] e
         assert_eq!(steps[reload]["name"], steps[save]["name"]);
         assert_eq!(steps[save]["checkpoint"], true);
         assert_eq!(steps[reload]["checkpoint"], true);
+        assert_eq!(steps[save]["exact_name"], true);
+        assert_eq!(steps[reload]["exact_name"], true);
         for s in steps.iter().filter(|s| s["action"] == "ui_lua") {
             let code = s["code"].as_str().unwrap();
             Lua::new().load(code).into_function().unwrap();
