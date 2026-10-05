@@ -59,6 +59,8 @@
       <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
     </AddUserInterfaces>
     <ImportFiles id="JAC_RP_UIFiles" criteria="JAC_RP_BanseikiOnly">
+      <File>Scripts/JAC_ReligionPersistence.lua</File>
+      <File>Scripts/JAC_RP_AbsorptionAdapter.lua</File>
       <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
       <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
     </ImportFiles>
@@ -68,6 +70,7 @@
     <File>Data/JAC_ReligionPersistence_Test.sql</File>
     <File>Text/JAC_ReligionPersistence_Text.xml</File>
     <File>Scripts/JAC_ReligionPersistence.lua</File>
+    <File>Scripts/JAC_RP_AbsorptionAdapter.lua</File>
     <File>UI/JAC_ReligionPersistence_HeroUI.lua</File>
     <File>UI/JAC_ReligionPersistence_HeroUI.xml</File>
   </Files>

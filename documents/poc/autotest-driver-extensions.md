@@ -16,6 +16,22 @@ Rust実行器の `carrier_checkpoint` は、指定した借用トークンを保
 
 ## 対象と使い方
 
+### 保存意図を全クライアントへ運ぶ受信口
+
+`carrier_exchange` はRustで保存済み借用のパケットを作り、公式の `PlayerOperations.EXECUTE_SCRIPT` へ一度渡す。受信口はRustの同じフィールド定義から生成した最小のGameplay接続で、画面コンテキストの値を読まない。`Scripts/JAC_CarrierBoundary.lua` は `civ6-carrier-transport generate <出力パス>` で再生成し、MODのGameplayスクリプトとしてロードする。
+
+パケットは借用トークン・処理段階・観測トークン・手番・都市ID・所有者・座標・建物・枠を保存意図と照合する。送信者は現在手番中の人間のうち最小のプレイヤーIDとし、Gameplayでも独立に資格を照合する。UIは選ばれた人だけが送る。長さを付けた文字列でパケットのIDを定義し、同じIDの再受信では受領数を増やさない。返答不明では操作を再送しない。UIの再作成後は保存された受領を採用する前に全フィールドを照合する。
+
+`carrier_exchange` は選定された送信者の実行器だけで実行する。ほかの参加者の実行器で呼ぶと、送信者の資格検査で失敗し、操作を送らない。ほかの参加者は `carrier_checkpoint` で保存済み受領を採取し、参加者間の記録を照合する。選定と受領の実ネットワーク検証はToDo996で行う。
+
+```json
+{"action":"carrier_exchange","token":"取引ID:carrier:作品index","candidate":"配置したコミットID","timeout":30}
+```
+
+受領は `JAC_CARRIER_BOUNDARY_V1` に保存し、`carrier_checkpoint` にも含める。この受信口は都市や作品を変更せず、旧来の都市借用MP拒否も維持する。公式操作の実ネットワーク配送、実セーブでの受領復元、AI所有作品のMOVE、受領から製品処理を進める接続は未確認である。二つのLua VMへの同じパケットの配送をネットワーク配送の成功に数えない。公式の根拠は導入済み `DLC/BlackDeathScenario/UI/BlackDeathScenario_PopupHandler.lua:8-28` にある、全クライアントのGameEventを呼ぶPlayerOperationの使い方。
+
+実機の回帰検査は `absorption-carrier-boundary-load.json` で行う。既存の都市借用結果の保存を読み込み、独立した受信スクリプトがロードされること、単独プレイの操作を拒否して保存意図を変更しないこと、保存・再読込後も同じ条件を満たすことを確認する。この検査はマルチプレイの配送や受領復元の証明には含めない。
+
 借用の記録採取では、対象の取引に対応するフロー証拠も必要とする。フローを使わない直接適用の診断だけは `direct_apply: true`（CLIでは `query --direct-apply`）を明示する。製品の取引がフロー経由を記録している場合は、この指定でもフローの欠落を受け入れない。返却完了の記録では、移動対象の枠だけを空として正規化し、借用前の保存スナップショットと都市状態を照合する。地区と別作品も一致を要求する。
 
 SSOT [3.2](../spec/ssot/03-map-and-scale.md) の約200ターン・22勢力の研究進行の計測、および [2.2](../spec/ssot/02-progression.md) の日本マップ指導者プールの確認を支援する。既存のシナリオ形式を維持し、追加機能は `configure.build_setup`、`autoplay.research_metrics`、`autoplay.allow_human_elimination` で有効化する。既存のセーブ名にも既定で出力ディレクトリ由来の接尾辞が付き、同じ実行中の `load` は同じ名前を解決する。固定名を使う場合は `save` と `load` の両方で `exact_name: true` とする。既存ファイルへの上書き禁止は維持する。
