@@ -99,7 +99,7 @@ fn hotseat_handoff_does_not_wait_for_a_whole_round_or_end_twice() {
             }
             if code.contains("local p = Players[id]") && code.contains("id ~= 0") {
                 assert!(ended);
-                assert!(code.contains("Game.GetCurrentGameTurn() >= 7"));
+                assert!(code.contains("turn >= 7"));
                 assert!(code.contains("p:IsTurnActive()"));
             }
             if code.contains("tostring(Game.GetCurrentGameTurn()) .. '|' ..") {
@@ -180,4 +180,41 @@ fn configure_routes_the_explicit_session_mode() {
             .count(),
         2
     );
+}
+
+#[test]
+fn start_turn_requires_an_active_human_and_an_unpaused_game() {
+    use civ6_autotest_rs::runner::HOTSEAT_START_TURN_CODE;
+    let lua = Lua::new();
+    lua.load(
+        r#"
+      hidden=true; active=true; human=true; paused=true; password=''; presses=0
+      Game={GetLocalPlayer=function() return 1 end}
+      Players={[1]={IsHuman=function() return human end, IsTurnActive=function() return active end}}
+      PlayerConfigurations={[1]={GetHotseatPassword=function() return password end}}
+      GameConfiguration={IsPaused=function() return paused end}
+      ContextPtr={IsHidden=function() return hidden end}
+      function OnKeyUp_Return() presses=presses+1; hidden=true; paused=false end
+    "#,
+    )
+    .exec()
+    .unwrap();
+    assert!(
+        !lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap(),
+        "hidden paused screen must not pass"
+    );
+    for state in ["paused=false; active=false", "active=true; human=false"] {
+        lua.load(state).exec().unwrap();
+        assert!(!lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    }
+    lua.load("human=true; active=true; paused=true; hidden=false; password='secret'")
+        .exec()
+        .unwrap();
+    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().is_err());
+    assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 0);
+    lua.load("password=''").exec().unwrap();
+    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
+    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
 }

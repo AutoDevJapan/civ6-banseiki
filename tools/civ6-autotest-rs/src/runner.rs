@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
 };
 
+pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  OnKeyUp_Return()\nend\nreturn ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
+
 pub trait Backend: Send {
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
@@ -1384,7 +1386,7 @@ impl Runner {
             self.budget(deadline, 5.0)?,
         )?;
         let condition = if let Some(human) = human {
-            format!("local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nreturn Game.GetCurrentGameTurn() >= {start} and id >= 0 and (id ~= {human} or Game.GetCurrentGameTurn() > {start}) and p ~= nil and p:IsHuman() and p:IsTurnActive()")
+            format!("local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nlocal turn = Game.GetCurrentGameTurn()\nif turn > {} then error('hotseat skipped more than one round') end\nreturn turn >= {start} and id >= 0 and (id ~= {human} or turn > {start}) and p ~= nil and p:IsHuman() and p:IsTurnActive()", start + 1)
         } else {
             format!(
                 "return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",
@@ -1416,7 +1418,11 @@ impl Runner {
             scenario::SessionType::Hotseat.guard_code(),
             self.budget(deadline, 5.0)?,
         )?;
-        self.wait(&json!({"type":"lua","state_name":"PlayerChange","code":"if ContextPtr:IsHidden() then return true end\nlocal id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsTurnActive() then return false end\nif PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\nOnKeyUp_Return()\nreturn ContextPtr:IsHidden()"}), self.remaining(deadline)?, false)
+        self.wait(
+            &json!({"type":"lua","state_name":"PlayerChange","code":HOTSEAT_START_TURN_CODE}),
+            self.remaining(deadline)?,
+            false,
+        )
     }
     pub fn choose_dedication(&mut self, human: i64, deadline: f64) -> Result<Option<String>> {
         let code = format!("local h = {human}\n{DEDICATION_CODE}");
