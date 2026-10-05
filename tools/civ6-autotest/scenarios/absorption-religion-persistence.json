@@ -820,6 +820,39 @@
       "state_name": "JAC_Absorption_Entry",
       "code": "\nlocal RP=assert(ExposedMembers.JAC_ReligionPersistence)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))\nlocal s=RP.Inspect('JAC_RP_PLACEHOLDER_01')\nassert(RP.NativeFollowers('JAC_RP_PLACEHOLDER_01')==1 and not s.lost and s.revivalCount==1,'native revival not restored')\nassert(s.revivals.joint_revival.effects=='APPLIED' and s.assets.joint_scripture.owner==e.To,'revival receipt/material owner not restored')\nassert(Players[e.To]:GetReligion():GetFaithBalance()==Game:GetProperty('JAC_JOINT_REVIVED_FAITH_V1'),'reload replayed the revival cost')\nlocal before=assert(Game:GetProperty('JAC_JOINT_BEFORE_V1'))\nassert(JAC_AbsorptionGameplay.Canonical(RP.Inspect('JAC_RP_PLACEHOLDER_02'))==JAC_AbsorptionGameplay.Canonical(before.Third),'third party changed during revival')\nreturn RP.Snapshot()\n",
       "equals_capture": "JOINT_REVIVED"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal RP=assert(ExposedMembers.JAC_ReligionPersistence)\nlocal state=RP.Export()\nstate.revision=2147483647\nGame:SetProperty(RP.PROPERTY_KEY,state)\nreturn RP.Snapshot()\n",
+      "capture_as": "JOINT_REVISION_MAX"
+    },
+    {
+      "action": "save",
+      "name": "JAC-JOINT-REVISION-MAX"
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-JOINT-REVISION-MAX",
+      "timeout": 240
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_ReligionPersistence~=nil and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal RP=assert(ExposedMembers.JAC_ReligionPersistence)\nassert(RP.Export().revision==2147483647,'maximum revision changed during save/load')\nlocal A=assert(JAC_AbsorptionGameplay)\nlocal adapter=assert(JAC_RP_AbsorptionAdapter)\nlocal tx=assert(A.GetState().Transactions['japan-live-absorption'])\nlocal snapshot=assert(tx.Adapters['religion-persistence'])\nlocal before=RP.Snapshot()\nadapter.Verify(tx,snapshot)\nadapter.Apply(tx,snapshot)\nassert(RP.Snapshot()==before,'maximum revision replay changed ledger')\nassert(RP.NativeFollowers('JAC_RP_PLACEHOLDER_01')==1,'maximum revision reload lost revived citizen')\nreturn before\n",
+      "equals_capture": "JOINT_REVISION_MAX"
     }
   ],
   "test_mode": {

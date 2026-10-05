@@ -124,6 +124,29 @@ assert(JAC_AbsorptionGameplay.Canonical(RP.Inspect('JAC_RP_PLACEHOLDER_02'))==JA
 return RP.Snapshot()
 "#;
 
+const REVISION_MAX: &str = r#"
+local RP=assert(ExposedMembers.JAC_ReligionPersistence)
+local state=RP.Export()
+state.revision=2147483647
+Game:SetProperty(RP.PROPERTY_KEY,state)
+return RP.Snapshot()
+"#;
+
+const AFTER_REVISION_MAX: &str = r#"
+local RP=assert(ExposedMembers.JAC_ReligionPersistence)
+assert(RP.Export().revision==2147483647,'maximum revision changed during save/load')
+local A=assert(JAC_AbsorptionGameplay)
+local adapter=assert(JAC_RP_AbsorptionAdapter)
+local tx=assert(A.GetState().Transactions['japan-live-absorption'])
+local snapshot=assert(tx.Adapters['religion-persistence'])
+local before=RP.Snapshot()
+adapter.Verify(tx,snapshot)
+adapter.Apply(tx,snapshot)
+assert(RP.Snapshot()==before,'maximum revision replay changed ledger')
+assert(RP.NativeFollowers('JAC_RP_PLACEHOLDER_01')==1,'maximum revision reload lost revived citizen')
+return before
+"#;
+
 fn core(code: &str) -> Value {
     json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":code})
 }
@@ -170,6 +193,16 @@ fn generate(mut source: Value) -> Value {
     let mut restored = core(AFTER_REVIVE);
     restored["equals_capture"] = json!("JOINT_REVIVED");
     result.push(restored);
+    let mut maximum = core(REVISION_MAX);
+    maximum["capture_as"] = json!("JOINT_REVISION_MAX");
+    result.push(maximum);
+    result.push(json!({"action":"save","name":"JAC-JOINT-REVISION-MAX"}));
+    result.push(json!({"action":"exit_to_menu"}));
+    result.push(json!({"action":"load","name":"JAC-JOINT-REVISION-MAX","timeout":240}));
+    result.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return ExposedMembers.JAC_ReligionPersistence~=nil and ExposedMembers.JAC_Absorption~=nil"}}));
+    let mut restored = core(AFTER_REVISION_MAX);
+    restored["equals_capture"] = json!("JOINT_REVISION_MAX");
+    result.push(restored);
     source["steps"] = json!(result);
     source["name"] = json!("Joint absorption and religion persistence: native citizens, Hero receipt, scripture ownership, reload and native revival");
     source["test_mode"] = json!({"continuous_performance_valid":false,"skipped_turns":0});
@@ -208,7 +241,7 @@ mod tests {
         assert!(result == deployed, "regenerate the deployed joint scenario");
         civ6_autotest_rs::scenario::validate_scenario(&result).unwrap();
         let steps = result["steps"].as_array().unwrap();
-        assert_eq!(steps.len(), 98);
+        assert_eq!(steps.len(), 104);
         for step in steps {
             if let Some(code) = step["code"]
                 .as_str()

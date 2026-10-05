@@ -178,7 +178,6 @@ end
 function Adapter.Apply(tx, snapshot)
   assert(snapshot.Version == 1 and snapshot.From == tx.From and snapshot.To == tx.To,
     "RP absorption snapshot mismatch")
-  if snapshot.Empty and Game:GetProperty(KEY) == nil then return end
   local state = requireState() -- fresh state: preserve RP changes made after Prepare
   state.absorptionReceipts = state.absorptionReceipts or {}
   local receipt = state.absorptionReceipts[tx.ID]
@@ -235,7 +234,6 @@ end
 function Adapter.Verify(tx, snapshot)
   assert(snapshot.Version == 1 and snapshot.From == tx.From and snapshot.To == tx.To,
     "RP absorption snapshot mismatch")
-  if snapshot.Empty and Game:GetProperty(KEY) == nil then return end
   local state = requireState()
   local receipt = assert((state.absorptionReceipts or {})[tx.ID],
     "RP absorption receipt missing")

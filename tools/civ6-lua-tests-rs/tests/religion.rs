@@ -281,7 +281,7 @@ fn absorption_adapter_failed_write_retries_and_empty_state_is_supported() {
     h.exec("FAIL_WRITE=false; ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
     assert_eq!(h.writes().python_f64().unwrap(), writes + 1.0);
 
-    let empty = Harness::new();
+    let mut empty = Harness::new();
     install_absorption_adapter(&empty);
     empty.exec("TX={ID='empty',From=0,To=1,Units={},UnitMap={}}");
     let snapshot = empty.eval("ADAPTER.Prepare(TX)");
@@ -291,7 +291,30 @@ fn absorption_adapter_failed_write_retries_and_empty_state_is_supported() {
         .set("SNAP", snapshot.to_lua(&empty.lua))
         .unwrap();
     empty.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(empty.writes(), 1);
+    assert_eq!(
+        empty.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts.empty.Revision"),
+        1
+    );
+    empty.f();
+    let after_found = empty.export();
+    let writes = empty.writes();
+    empty.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(empty.export(), after_found);
+    assert_eq!(empty.writes(), writes);
+    empty.reload();
+    install_absorption_adapter(&empty);
+    empty.exec("TX={ID='empty',From=0,To=1,Units={},UnitMap={}}");
+    empty
+        .lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&empty.lua))
+        .unwrap();
+    empty.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(empty.export(), after_found);
     assert_eq!(empty.writes(), 0);
+    empty.exec("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts.empty=nil");
+    assert!(empty.lua.load("ADAPTER.Verify(TX,SNAP)").exec().is_err());
 }
 
 #[test]
