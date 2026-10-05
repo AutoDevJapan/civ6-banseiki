@@ -29,10 +29,66 @@ pub struct PromotionSnapshot {
     pub owned: [u64; PROMOTION_WORDS],
 }
 
+/// Indices must be supplied by a validated GameInfo persona definition. They
+/// identify which copied Core bytes to compare; they are not payment evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PaymentDefinition {
+    pub governor_index: u32,
+    pub cost: u8,
+    pub base: u32,
+    pub titles: [Option<u32>; 2],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentFailure {
+    Definition,
+    DifferentPerson,
+    UnknownPromotion,
+    OutOfOrder,
+}
+
 impl PromotionSnapshot {
     pub fn has(&self, index: u32) -> Option<bool> {
         (index < self.count && index < PROMOTION_LIMIT as u32)
             .then(|| self.owned[index as usize / 64] & (1 << (index % 64)) != 0)
+    }
+
+    /// Interpret only this person's base and ordered official payment flags.
+    /// Aggregate Spent and another person's promotions are never consulted.
+    pub fn paid(&self, definition: PaymentDefinition) -> Result<u8, PaymentFailure> {
+        if !(1..=3).contains(&definition.cost)
+            || definition.governor_index >= GOVERNOR_LIMIT as u32
+            || definition.titles[0].is_some() != (definition.cost >= 2)
+            || definition.titles[1].is_some() != (definition.cost == 3)
+            || definition
+                .titles
+                .iter()
+                .flatten()
+                .any(|index| *index == definition.base)
+            || (definition.cost == 3 && definition.titles[0] == definition.titles[1])
+        {
+            return Err(PaymentFailure::Definition);
+        }
+        if self.governor_index != definition.governor_index {
+            return Err(PaymentFailure::DifferentPerson);
+        }
+        let base = self
+            .has(definition.base)
+            .ok_or(PaymentFailure::UnknownPromotion)?;
+        let mut paid = u8::from(base);
+        let mut missing = !base;
+        for index in definition.titles.into_iter().flatten() {
+            let owned = self.has(index).ok_or(PaymentFailure::UnknownPromotion)?;
+            if owned && missing {
+                return Err(PaymentFailure::OutOfOrder);
+            }
+            if owned {
+                paid += 1;
+            } else {
+                missing = true;
+            }
+        }
+        Ok(paid)
     }
 }
 
@@ -280,5 +336,107 @@ mod tests {
             Err(ReadFailure::InvalidLayout)
         );
         assert!(m.reads.get() < 270);
+    }
+
+    #[test]
+    fn payment_uses_only_matching_person_and_ordered_official_title_flags() {
+        let mut m = fixture();
+        m.bytes[0x4000 + 63] = 0;
+        m.bytes[0x4000 + 64] = 0;
+        let definition = PaymentDefinition {
+            governor_index: 22,
+            cost: 3,
+            base: 0,
+            titles: [Some(63), Some(64)],
+        };
+        let snapshot = read_current(&m, 0x1000, 0x3800).unwrap();
+        assert_eq!(snapshot.paid(definition), Ok(1));
+        m.bytes[0x4000 + 63] = 1;
+        assert_eq!(
+            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            Ok(2)
+        );
+        m.bytes[0x4000 + 64] = 1;
+        let snapshot = read_current(&m, 0x1000, 0x3800).unwrap();
+        assert_eq!(snapshot.paid(definition), Ok(3));
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                governor_index: 23,
+                ..definition
+            }),
+            Err(PaymentFailure::DifferentPerson)
+        );
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                cost: 2,
+                titles: [Some(63), None],
+                ..definition
+            }),
+            Ok(2)
+        );
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                cost: 1,
+                titles: [None, None],
+                ..definition
+            }),
+            Ok(1)
+        );
+        m.bytes[0x4000 + 63] = 0;
+        assert_eq!(
+            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            Err(PaymentFailure::OutOfOrder)
+        );
+        m.bytes[0x4000] = 0;
+        assert_eq!(
+            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            Err(PaymentFailure::OutOfOrder)
+        );
+    }
+
+    #[test]
+    fn missing_or_duplicate_payment_indices_cannot_become_full_payment() {
+        let snapshot = read_current(&fixture(), 0x1000, 0x3800).unwrap();
+        let definition = PaymentDefinition {
+            governor_index: 22,
+            cost: 3,
+            base: 0,
+            titles: [Some(63), Some(64)],
+        };
+        for titles in [
+            [None, None],
+            [Some(63), None],
+            [Some(0), Some(64)],
+            [Some(63), Some(63)],
+        ] {
+            assert_eq!(
+                snapshot.paid(PaymentDefinition {
+                    titles,
+                    ..definition
+                }),
+                Err(PaymentFailure::Definition)
+            );
+        }
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                cost: 0,
+                ..definition
+            }),
+            Err(PaymentFailure::Definition)
+        );
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                base: 4096,
+                ..definition
+            }),
+            Err(PaymentFailure::UnknownPromotion)
+        );
+        assert_eq!(
+            snapshot.paid(PaymentDefinition {
+                titles: [Some(63), Some(4096)],
+                ..definition
+            }),
+            Err(PaymentFailure::UnknownPromotion)
+        );
     }
 }
