@@ -421,7 +421,7 @@ core::arch::global_asm!(
     ".seh_stackalloc 0x68",
     ".seh_endprologue",
     "mov r11,rdx",
-    "mov edx,2",
+    "mov edx,r8d",
     "xor r8d,r8d",
     "call r11",
     ".globl accepted_stage_return",
@@ -431,13 +431,14 @@ core::arch::global_asm!(
     ".seh_endproc"
 );
 unsafe extern "system" {
-    fn accepted_stage_driver(receiver: u64, target: usize) -> u64;
+    fn accepted_stage_driver(receiver: u64, target: usize, phase: u32) -> u64;
     fn accepted_stage_return();
 }
 static FIXTURE_EPOCH: AtomicU32 = AtomicU32::new(1);
 static FIXTURE_CALLS: AtomicU32 = AtomicU32::new(0);
 static FIXTURE_ARMED: AtomicU32 = AtomicU32::new(0);
 static FIXTURE_ACTION: AtomicU32 = AtomicU32::new(0);
+static FIXTURE_ORIGINAL_PHASE: AtomicU32 = AtomicU32::new(u32::MAX);
 struct DynamicLease {
     stamp: LeaseStamp,
     player: u64,
@@ -460,14 +461,15 @@ unsafe impl RuntimeLease for DynamicLease {
             && unsafe { GetCurrentThreadId() } == self.thread
     }
 }
-unsafe extern "system" fn accepted_original(receiver: u64, _phase: u32) -> u64 {
+unsafe extern "system" fn accepted_original(receiver: u64, phase: u32) -> u64 {
+    FIXTURE_ORIGINAL_PHASE.store(phase, Ordering::SeqCst);
     FIXTURE_CALLS.fetch_add(1, Ordering::SeqCst);
     if CAPTURE.with(|c| c.borrow().is_some()) {
         FIXTURE_ARMED.fetch_add(1, Ordering::SeqCst);
     }
     match FIXTURE_ACTION.swap(0, Ordering::SeqCst) {
         1 => unsafe {
-            accepted_stage_driver(receiver, gateways()[0]);
+            accepted_stage_driver(receiver, gateways()[0], 2);
         },
         2 => {
             FIXTURE_EPOCH.fetch_add(1, Ordering::SeqCst);
@@ -535,7 +537,7 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     ACTIVE.store(true, Ordering::Release);
     AI_GATE_TARGETS[0].store(accepted_original as *const () as u64, Ordering::Release);
     assert_eq!(
-        unsafe { accepted_stage_driver(receiver, gateways()[0]) },
+        unsafe { accepted_stage_driver(receiver, gateways()[0], 2) },
         0x1234
     );
     assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 1);
@@ -545,46 +547,91 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     assert!(rows
         .iter()
         .all(|r| r.accepted && r.capture_entry && r.owner == Some(3)));
+    // Correct owner/thread/ARM and original generation, but wrong native phase.
+    // Enter through the same machine-code caller so only phase differs.
+    let calls_before = FIXTURE_CALLS.load(Ordering::SeqCst);
+    let armed_before = FIXTURE_ARMED.load(Ordering::SeqCst);
+    assert_eq!(
+        unsafe { accepted_stage_driver(receiver, gateways()[0], 1) },
+        0x1234
+    );
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), calls_before + 1);
+    assert_eq!(FIXTURE_ORIGINAL_PHASE.load(Ordering::SeqCst), 1);
+    assert_eq!(FIXTURE_ARMED.load(Ordering::SeqCst), armed_before);
+    let rows = observations().0;
+    assert_eq!(rows.len(), 4);
+    let rejected = &rows[2..4];
+    assert_eq!(
+        rejected.iter().filter(|r| r.accepted).count(),
+        0,
+        "wrong phase produces no accepted receipt"
+    );
+    assert!(rejected
+        .iter()
+        .all(|r| !r.capture_entry && r.owner.is_none()));
+    assert_eq!(
+        rejected[0].raw.rdx, 1,
+        "the actual original argument is phase 1"
+    );
+    assert_eq!(DEPTH.with(Cell::get), 0);
+    assert!(INVOCATION.with(Cell::get).is_none());
+    assert!(CAPTURE.with(|c| c.borrow().is_none()));
+    // Rejection does not strand thread-local context or prevent a valid call.
+    assert_eq!(
+        unsafe { accepted_stage_driver(receiver, gateways()[0], 2) },
+        0x1234
+    );
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), calls_before + 2);
+    assert_eq!(FIXTURE_ORIGINAL_PHASE.load(Ordering::SeqCst), 2);
+    assert_eq!(FIXTURE_ARMED.load(Ordering::SeqCst), armed_before + 1);
+    let rows = observations().0;
+    assert_eq!(rows.len(), 6);
+    assert!(rows[4..6]
+        .iter()
+        .all(|r| r.accepted && r.capture_entry && r.owner == Some(3)));
+    assert_eq!(DEPTH.with(Cell::get), 0);
+    assert!(INVOCATION.with(Cell::get).is_none());
+    assert!(CAPTURE.with(|c| c.borrow().is_none()));
     memory[0x3d8..0x3dc].copy_from_slice(&4u32.to_le_bytes());
     unsafe {
-        accepted_stage_driver(receiver, gateways()[0]);
+        accepted_stage_driver(receiver, gateways()[0], 2);
     }
     let rows = observations().0;
-    assert!(!rows[2].accepted && !rows[3].accepted);
+    assert!(!rows[6].accepted && !rows[7].accepted);
     memory[0x3d8..0x3dc].copy_from_slice(&3u32.to_le_bytes());
     FIXTURE_ACTION.store(1, Ordering::SeqCst);
     unsafe {
-        accepted_stage_driver(receiver, gateways()[0]);
+        accepted_stage_driver(receiver, gateways()[0], 2);
     }
     let rows = observations().0;
-    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 4);
-    assert!(!rows[5].accepted && !rows[6].accepted);
-    assert!(rows[4].accepted && rows[7].accepted);
-    std::thread::spawn(move || unsafe { accepted_stage_driver(receiver, gateways()[0]) })
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 6);
+    assert!(!rows[9].accepted && !rows[10].accepted);
+    assert!(rows[8].accepted && rows[11].accepted);
+    std::thread::spawn(move || unsafe { accepted_stage_driver(receiver, gateways()[0], 2) })
         .join()
         .unwrap();
     let rows = observations().0;
-    assert!(!rows[8].accepted && !rows[9].accepted);
+    assert!(!rows[12].accepted && !rows[13].accepted);
     FIXTURE_ACTION.store(2, Ordering::SeqCst);
     unsafe {
-        accepted_stage_driver(receiver, gateways()[0]);
+        accepted_stage_driver(receiver, gateways()[0], 2);
     }
     let rows = observations().0;
-    assert!(rows[10].accepted);
-    assert!(!rows[11].accepted);
+    assert!(rows[14].accepted);
+    assert!(!rows[15].accepted);
     unsafe {
-        accepted_stage_driver(receiver, gateways()[0]);
+        accepted_stage_driver(receiver, gateways()[0], 2);
     }
     let rows = observations().0;
-    assert!(!rows[12].accepted && !rows[13].accepted);
-    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 7);
-    assert_eq!(rows.len(), 14);
+    assert!(!rows[16].accepted && !rows[17].accepted);
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 9);
+    assert_eq!(rows.len(), 18);
     let entries: Vec<_> = rows
         .iter()
         .filter(|r| !r.after)
         .map(|r| r.sequence)
         .collect();
-    assert_eq!(entries, vec![1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(entries, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
 }
 #[test]
 fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {
