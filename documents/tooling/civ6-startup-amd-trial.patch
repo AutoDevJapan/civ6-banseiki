@@ -1,0 +1,214 @@
+diff --git a/src/chain.rs b/src/chain.rs
+index 71024c31..01c48dea 100644
+--- a/src/chain.rs
++++ b/src/chain.rs
+@@ -7,7 +7,7 @@ use serde_json::json;
+ use std::{
+     fs::{self, File, OpenOptions},
+     io::{ErrorKind, Read, Seek, SeekFrom, Write},
+-    path::Path,
++    path::{Path, PathBuf},
+     sync::atomic::{AtomicU64, Ordering},
+     time::{SystemTime, UNIX_EPOCH},
+ };
+@@ -724,6 +724,71 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+     main_owned(r, p, a, None)
+ }
+ 
++fn prepare_amd_trial(p: &Paths) -> Result<(PathBuf, Vec<u8>, Vec<u8>), String> {
++    let options = p
++        .profile
++        .join("AppData/Local/Firaxis Games/Sid Meier's Civilization VI/AppOptions.txt");
++    let original = fs::read(&options).map_err(|e| format!("read AppOptions: {e}"))?;
++    let modified = replace_nvidia_with_amd(&original)?;
++    let backup = PathBuf::from(format!(
++        "D:/CC/Work/civ6-todo974-igpu/AppOptions.before-{}",
++        std::process::id()
++    ));
++    let mut file = OpenOptions::new()
++        .create_new(true)
++        .write(true)
++        .open(&backup)
++        .map_err(|e| format!("create AppOptions backup: {e}"))?;
++    file.write_all(&original)
++        .map_err(|e| format!("write AppOptions backup: {e}"))?;
++    file.sync_all()
++        .map_err(|e| format!("flush AppOptions backup: {e}"))?;
++    Ok((options, original, modified))
++}
++
++fn replace_nvidia_with_amd(original: &[u8]) -> Result<Vec<u8>, String> {
++    let old = b"DeviceID 11141";
++    let mut positions = original
++        .windows(old.len())
++        .enumerate()
++        .filter_map(|(i, bytes)| {
++            let before = i == 0 || original[i - 1] == b'\n';
++            let end = i + old.len();
++            let after = end == original.len() || matches!(original[end], b'\r' | b'\n');
++            (bytes == old && before && after).then_some(i)
++        });
++    let at = positions
++        .next()
++        .ok_or("AppOptions lacks the exact NVIDIA DeviceID line")?;
++    if positions.next().is_some() {
++        return Err("AppOptions has duplicate NVIDIA DeviceID lines".into());
++    }
++    let mut modified = original.to_vec();
++    modified.splice(at..at + old.len(), b"DeviceID 5056".iter().copied());
++    Ok(modified)
++}
++
++#[cfg(test)]
++mod adapter_trial_tests {
++    use super::replace_nvidia_with_amd;
++
++    #[test]
++    fn changes_only_the_exact_line_and_keeps_line_endings() {
++        let before = b";DeviceID 11141\r\nDeviceID 11141\r\nOther 9\r\n";
++        let after = replace_nvidia_with_amd(before).unwrap();
++        assert_eq!(
++            after.as_slice(),
++            b";DeviceID 11141\r\nDeviceID 5056\r\nOther 9\r\n"
++        );
++    }
++
++    #[test]
++    fn rejects_missing_or_duplicate_device_lines() {
++        assert!(replace_nvidia_with_amd(b"DeviceID 5056\n").is_err());
++        assert!(replace_nvidia_with_amd(b"DeviceID 11141\nDeviceID 11141\n").is_err());
++    }
++}
++
+ fn main_owned(
+     r: &mut impl Runner,
+     p: &Paths,
+@@ -739,6 +804,48 @@ fn main_owned(
+         if let Some(token) = token {
+             yield_if_expired(r, p, token)?;
+         }
++        if let Some(scenario) = item.strip_prefix("trial:") {
++            let scenario = Path::new(scenario);
++            if !scenario.is_file() || !scenario.starts_with("D:/CC/Work/civ6-todo974-igpu") {
++                return Err("trial scenario must be an existing file in the task directory".into());
++            }
++            // Check out the same PR86 branch and build the driver as a normal live_chain run.
++            let _ = ship::live(
++                r,
++                p,
++                "leaderperson",
++                "leader-persona-spy-recovery.json",
++                false,
++            )?;
++            let output = PathBuf::from(format!(
++                "D:/CC/Work/civ6-todo974-igpu/artifacts-{}",
++                std::process::id()
++            ));
++            let mut argv = driver::scenario(p, &p.live())?;
++            argv.extend(args(&[
++                &path(scenario),
++                "--no-auto-restart",
++                "--output",
++                &path(&output),
++            ]));
++            let run = r.run(
++                Call::new(argv)
++                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
++                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
++                    .merged()
++                    // A renderer stall reaches the driver's global display reset only after
++                    // its 420-second startup deadline. Stop this diagnostic first.
++                    .timeout(300.0)
++                    .managed(),
++            )?;
++            write_text(format!("{}.log", output.display()), &run.stdout)?;
++            r.print(&format!(
++                "TRIAL_RESULT {} {}",
++                windows_exit_code(run.code),
++                output.display()
++            ))?;
++            return Ok(run.code);
++        }
+         let (name, scenario) = item.split_once(':').ok_or("expected name:scenario.json")?;
+         let command = Call::new(args(&[
+             &path(p.here.join("ship.exe")),
+@@ -889,6 +996,21 @@ pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<b
+     Ok(true)
+ }
+ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> {
++    let amd_trial = a
++        .iter()
++        .filter(|s| s.as_str() == "--adapter-trial-amd")
++        .count();
++    if amd_trial > 1 {
++        return Err("adapter trial flag is duplicated".into());
++    }
++    let task_args: Vec<String> = a
++        .iter()
++        .filter(|s| s.as_str() != "--adapter-trial-amd")
++        .cloned()
++        .collect();
++    if amd_trial == 1 && task_args.iter().filter(|s| !s.starts_with("--")).count() != 1 {
++        return Err("AMD adapter trial requires exactly one scenario and one lease".into());
++    }
+     let mut owner = std::env::var("CODEX_JOB_ID")
+         .ok()
+         .filter(|s| !s.is_empty())
+@@ -905,14 +1027,23 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+         &owner,
+         6.0 * 3600.0,
+         is_long(
+-            &a.iter()
++            &task_args
++                .iter()
+                 .filter(|s| !s.starts_with("--"))
+                 .cloned()
+                 .collect::<Vec<_>>(),
+         ),
+     )?;
++    let mut original_options = None;
+     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+-        main_owned(r, p, a, Some(&token))
++        if amd_trial == 1 {
++            close_civ6(r)?;
++            let (options, original, modified) = prepare_amd_trial(p)?;
++            original_options = Some((options.clone(), original));
++            fs::write(&options, modified).map_err(|e| format!("select AMD device: {e}"))?;
++            r.print("AMD adapter trial: AppOptions DeviceID 5056 under Civ6 lock")?;
++        }
++        main_owned(r, p, &task_args, Some(&token))
+     }))
+     .unwrap_or_else(|_| Err("live chain panicked".into()));
+     process::clear_interrupt_for_cleanup();
+@@ -946,8 +1077,30 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+         };
+         let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6(r)))
+             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
+-        let released = delete_owned_handle(file, &path, r, &token);
++        let restored: Result<(), String> = if let Some((options, original)) =
++            original_options.as_ref()
++        {
++            if closed.is_err() {
++                Err("Civ6 is still running; AMD adapter trial backup must be restored before releasing the lease".into())
++            } else {
++                fs::write(options, original).map_err(|e| format!("restore AppOptions: {e}"))?;
++                if fs::read(options).map_err(|e| e.to_string())? != *original {
++                    Err("AppOptions was not restored byte for byte".into())
++                } else {
++                    r.print("AMD adapter trial: original AppOptions restored byte for byte")?;
++                    Ok(())
++                }
++            }
++        } else {
++            Ok(())
++        };
++        let released = if restored.is_ok() {
++            delete_owned_handle(file, &path, r, &token)
++        } else {
++            Err("Civ6 lease retained because AppOptions restoration failed".into())
++        };
+         closed?;
++        restored?;
+         released
+     })();
+     process::finish_cleanup();
