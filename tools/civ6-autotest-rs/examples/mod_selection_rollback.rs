@@ -179,8 +179,13 @@ local function restore(expected)
       -- Keep cleanup effective even if the engine rejects false. Only use
       -- dependency expansion after the engine confirms every prerequisite is
       -- already enabled, so an originally disabled prerequisite stays off.
-      if not enabled(id) and nativeModding.CanEnableMod(handles[id], false) == 'OK' then
-        ok, err = pcall(nativeEnable, handles[id], true)
+      if not enabled(id) then
+        local checked, reason = pcall(nativeModding.CanEnableMod, handles[id], false)
+        if checked and reason == 'OK' then
+          ok, err = pcall(nativeEnable, handles[id], true)
+        elseif not checked then
+          table.insert(failures, id .. ': cleanup preflight: ' .. tostring(reason))
+        end
       end
       if not ok then table.insert(failures, tostring(err)) end
     end
@@ -530,6 +535,45 @@ mod tests {
             let info: Table = mods.get(id).unwrap();
             assert!(info.get::<bool>("Enabled").unwrap());
         }
+    }
+
+    #[test]
+    fn cleanup_preflight_errors_do_not_skip_remaining_restorations() {
+        let lua = fixture(31);
+        lua.globals().set("GROWTH_ID", GROWTH).unwrap();
+        lua.globals().set("MIDDLE_ID", MIDDLE).unwrap();
+        lua.load(
+            r#"
+          local can, enable = Modding.CanEnableMod, Modding.EnableMod
+          local trap = false
+          Modding.CanEnableMod = function(handle, dependencies)
+            if dependencies == false then
+              if trap and handle == GROWTH_ID then error('cleanup preflight refused') end
+              for _, id in ipairs(MODS[handle].Dependencies) do
+                if not MODS[id].Enabled then return 'MissingDependencies' end
+              end
+            end
+            return can(handle, dependencies)
+          end
+          Modding.EnableMod = function(handle, dependencies)
+            if dependencies == false then return end
+            enable(handle, dependencies)
+            if handle == MIDDLE_ID then
+              MODS[GROWTH_ID].Enabled = false
+              trap = true
+            end
+          end
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+        assert!(failure.contains("cleanup failed"));
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        let leaf: Table = mods.get(LEAF).unwrap();
+        assert!(leaf.get::<bool>("Enabled").unwrap());
+        let growth: Table = mods.get(GROWTH).unwrap();
+        assert!(!growth.get::<bool>("Enabled").unwrap());
     }
 
     #[test]
