@@ -5,7 +5,7 @@ UPDATES = 0
 for _, definition in ipairs(definitions) do
     local id = string.lower(definition.Id)
     local info = {Id = definition.Id, Handle = id, Enabled = definition.Enabled,
-                  Dependencies = definition.Dependencies}
+                  Dependencies = definition.Dependencies, Official = definition.Official}
     MODS[id] = info
     INSTALLED[#INSTALLED + 1] = info
 end

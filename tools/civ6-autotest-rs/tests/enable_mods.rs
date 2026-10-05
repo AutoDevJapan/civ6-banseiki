@@ -1,6 +1,8 @@
 mod support_fixture;
 
-use civ6_autotest_rs::scenario::{enable_mods_code, validate_scenario};
+use civ6_autotest_rs::scenario::{
+    enable_mods_code, enable_mods_code_with_scope, validate_scenario,
+};
 use mlua::{Lua, Table};
 use serde_json::json;
 use support_fixture::{expect_error, lua_error};
@@ -12,6 +14,7 @@ const SIBLING: u8 = 4;
 const KEEP: u8 = 5;
 const OFF: u8 = 6;
 const MISSING: u8 = 7;
+const OFFICIAL: u8 = 8;
 
 fn id(n: u8) -> String {
     format!("abcdef{n:02x}-1234-1234-1234-123456789abc")
@@ -39,6 +42,7 @@ impl Graph {
             definition
                 .set("Enabled", !disabled.contains(number))
                 .unwrap();
+            definition.set("Official", false).unwrap();
             let deps = lua
                 .create_sequence_from(dependencies.iter().map(|n| spell(*n)))
                 .unwrap();
@@ -67,6 +71,25 @@ impl Graph {
             .map(|&n| id(n).to_uppercase())
             .collect::<Vec<_>>();
         self.lua.load(enable_mods_code(&enabled, &disabled)).eval()
+    }
+
+    fn run_exclusive(&self, enabled: &[u8], disabled: &[u8]) -> mlua::Result<String> {
+        let enabled = enabled.iter().map(|&n| id(n)).collect::<Vec<_>>();
+        let disabled = disabled.iter().map(|&n| id(n)).collect::<Vec<_>>();
+        self.lua
+            .load(enable_mods_code_with_scope(&enabled, &disabled, true))
+            .eval()
+    }
+
+    fn set_official(&self, number: u8) {
+        self.lua
+            .globals()
+            .get::<Table>("MODS")
+            .unwrap()
+            .get::<Table>(id(number))
+            .unwrap()
+            .set("Official", true)
+            .unwrap();
     }
 
     fn disabled(&self) -> Vec<String> {
@@ -205,6 +228,44 @@ fn no_disable_targets_leaves_unrelated_mods_enabled() {
     assert!(g.disabled().is_empty());
     assert!(g.enabled(BASE));
     assert!(g.enabled(KEEP));
+}
+
+#[test]
+fn exclusive_selection_disables_extra_user_mods_but_keeps_official_content() {
+    let g = Graph::new(
+        &[(BASE, &[]), (LEAF, &[BASE]), (KEEP, &[]), (OFFICIAL, &[])],
+        &[KEEP],
+        false,
+    );
+    g.set_official(OFFICIAL);
+    assert_eq!(
+        g.run_exclusive(&[KEEP], &[]).unwrap(),
+        [id(LEAF), id(BASE)].join(", ")
+    );
+    assert_eq!(g.disabled(), [id(LEAF), id(BASE)]);
+    assert!(g.enabled(KEEP) && g.enabled(OFFICIAL));
+    assert!(!g.enabled(BASE) && !g.enabled(LEAF));
+    assert_eq!(g.updates(), 1);
+}
+
+#[test]
+fn exclusive_selection_rejects_a_kept_mod_depending_on_an_extra_user_mod() {
+    let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[], false);
+    lua_error(
+        g.run_exclusive(&[KEEP], &[]),
+        "scenario enables a dependent mod",
+    );
+    assert!(g.disabled().is_empty());
+    assert!(g.enabled(BASE) && g.enabled(KEEP));
+    assert_eq!(g.updates(), 0);
+}
+
+#[test]
+fn exclusive_selection_restores_implicitly_enabled_extra_dependency() {
+    let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[BASE, KEEP], false);
+    lua_error(g.run_exclusive(&[KEEP], &[]), "unexpected enabled user mod");
+    assert!(!g.enabled(BASE) && !g.enabled(KEEP));
+    assert_eq!(g.updates(), 1);
 }
 
 #[test]
