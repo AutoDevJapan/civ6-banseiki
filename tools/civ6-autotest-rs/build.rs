@@ -1,4 +1,6 @@
 use std::{collections::BTreeSet, env, fs, path::Path};
+#[path = "src/spy_completed_failure.rs"]
+mod spy_completed_failure;
 #[path = "src/spy_third.rs"]
 mod spy_third;
 
@@ -33,6 +35,9 @@ fn collect_ids(dir: &Path, ids: &mut BTreeSet<String>) {
 fn main() {
     let manifest = env::var_os("CARGO_MANIFEST_DIR").expect("manifest directory");
     println!("cargo:rerun-if-changed=src/spy_third.rs");
+    println!("cargo:rerun-if-changed=src/spy_completed_failure.rs");
+    spy_completed_failure::write(&Path::new(&manifest).join("../.."))
+        .expect("generate shared native completed-failure policy from Rust");
     spy_third::write_connection(&Path::new(&manifest).join("../.."), false)
         .expect("generate test-only third spy connection from Rust");
     let mut ids = BTreeSet::new();

@@ -16,6 +16,7 @@ fn real_observer_and_rust_diagnosis_keep_both_failures_without_any_write() {
         include_str!("../../civ6-lua-tests-rs/fixtures/persona/boundary_engine.lua"),
     );
     for path in [
+        "Shared/JAC_PersonaCompletedFailure.lua",
         "Shared/JAC_PersonaBoundaryRules.lua",
         "UI/JAC_PersonaBoundary_View.lua",
         "Scripts/JAC_PersonaBoundary_Fixture.lua",

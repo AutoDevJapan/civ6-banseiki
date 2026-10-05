@@ -156,8 +156,8 @@ local function checkFailures(o)
  for i,event in ipairs(T.oldEvents) do
   local h=o.histories[i]; local def=GameInfo.UnitOperations[h.operation];
   assert(h.id==event[1] and h.turn==event[2] and def and def.Hash==op.Hash and
-   h.plot==Map.GetPlot(o.x,o.y):GetIndex() and h.initial==EspionageResultTypes.FAIL_UNDETECTED and
-   h.escape==EspionageResultTypes.NO_RESULT,'two preserved native failures differ');
+   h.plot==Map.GetPlot(o.x,o.y):GetIndex() and R.CompletedNativeFailure(h.initial,h.escape),
+   'two preserved native failures differ');
  end
 end
 local function checkReady(o)

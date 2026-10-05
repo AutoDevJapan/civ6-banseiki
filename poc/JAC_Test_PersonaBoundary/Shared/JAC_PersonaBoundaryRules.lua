@@ -1,6 +1,10 @@
 -- Test-only read/validation rules. No native or persona state is written here.
 JAC_PersonaBoundaryRules = {};
 local R = JAC_PersonaBoundaryRules;
+include("JAC_PersonaCompletedFailure");
+R.CompletedNativeFailure=function(initial,escape)
+    return assert(JAC_PersonaCompletedFailure,"Rust generated native failure policy missing")(initial,escape);
+end;
 function R.IsCurrentSpyGeneration(retry)
     return retry.current==2 or (R.Third and R.Third.IsThird(retry)) or false;
 end

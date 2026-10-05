@@ -48,6 +48,7 @@ impl Third {
             )
             .unwrap();
         for path in [
+            "Shared/JAC_PersonaCompletedFailure.lua",
             "Shared/JAC_PersonaBoundaryRules.lua",
             "UI/JAC_PersonaBoundary_View.lua",
             "Scripts/JAC_PersonaBoundary_Fixture.lua",
@@ -220,10 +221,19 @@ fn generation_three_cannot_start_before_native_capacity_three() {
 #[test]
 fn live_failure_values_one_and_minus_one_are_kept_as_raw_history() {
     let t = Third::new();
-    t.run("EspionageResultTypes.SUCCESS_UNDETECTED=0; EspionageResultTypes.FAIL_UNDETECTED=1; EspionageResultTypes.NO_RESULT=-1; for _,id in ipairs({0,1}) do HISTORY[0][id].InitialResult=1; HISTORY[0][id].EscapeResult=-1 end; local old=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; old.initial=1; old.escape=-1");
+    t.run("EspionageResultTypes.SUCCESS_UNDETECTED=5; EspionageResultTypes.SUCCESS_MUST_ESCAPE=4; EspionageResultTypes.FAIL_UNDETECTED=3; EspionageResultTypes.FAIL_MUST_ESCAPE=2; EspionageResultTypes.CAPTURED=1; EspionageResultTypes.KILLED=0; EspionageResultTypes.NO_RESULT=-1; for _,id in ipairs({0,1}) do HISTORY[0][id].InitialResult=1; HISTORY[0][id].EscapeResult=-1 end; local old=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; old.initial=1; old.escape=-1");
     t.produce();
     t.bind();
     t.run("local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'); assert(a.histories[1].initial==1 and a.histories[1].escape==-1 and a.histories[2].initial==1 and a.histories[2].escape==-1); assert(a.histories[1].turn==23 and a.histories[2].turn==45)");
+}
+
+#[test]
+fn actual_captured_outcome_allows_third_generation_without_rewriting_either_failure() {
+    let t = Third::new();
+    t.run("EspionageResultTypes.SUCCESS_UNDETECTED=5; EspionageResultTypes.SUCCESS_MUST_ESCAPE=4; EspionageResultTypes.FAIL_UNDETECTED=3; EspionageResultTypes.FAIL_MUST_ESCAPE=2; EspionageResultTypes.CAPTURED=1; EspionageResultTypes.KILLED=0; EspionageResultTypes.NO_RESULT=-1; for _,id in ipairs({0,1}) do HISTORY[0][id].InitialResult=1; HISTORY[0][id].EscapeResult=-1 end; local a=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; a.initial=1; a.escape=-1");
+    t.produce();
+    t.bind();
+    t.run("assert(HISTORY[0][0].InitialResult==1 and HISTORY[0][1].InitialResult==1 and HISTORY[0][1].EscapeResult==-1 and #CAPTURED[1]==2)");
 }
 
 #[test]

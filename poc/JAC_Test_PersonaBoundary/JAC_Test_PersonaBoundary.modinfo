@@ -25,6 +25,7 @@
     <ImportFiles id="BoundaryImports">
       <File>Shared/JAC_PersonaBoundaryRules.lua</File>
       <File>Shared/JAC_PersonaThirdSpy.lua</File>
+      <File>Shared/JAC_PersonaCompletedFailure.lua</File>
       <File>UI/JAC_PersonaBoundary_View.lua</File>
       <File>UI/JAC_PersonaBoundary_View.xml</File>
     </ImportFiles>
@@ -42,6 +43,7 @@
     <File>Data/JAC_PersonaBoundary_ThirdSpy.sql</File>
     <File>Shared/JAC_PersonaBoundaryRules.lua</File>
     <File>Shared/JAC_PersonaThirdSpy.lua</File>
+    <File>Shared/JAC_PersonaCompletedFailure.lua</File>
     <File>Scripts/JAC_PersonaBoundary_Fixture.lua</File>
     <File>UI/JAC_PersonaBoundary_View.lua</File>
     <File>UI/JAC_PersonaBoundary_View.xml</File>

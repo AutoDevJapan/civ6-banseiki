@@ -20,6 +20,10 @@ impl Enemy {
         );
         exec(
             &lua,
+            &read_repo("poc/JAC_Test_PersonaBoundary/Shared/JAC_PersonaCompletedFailure.lua"),
+        );
+        exec(
+            &lua,
             &read_repo("poc/JAC_Test_PersonaBoundary/Shared/JAC_PersonaBoundaryRules.lua"),
         );
         exec(&lua, &read_repo(VIEW));
@@ -809,6 +813,28 @@ fn official_third_spy_civic_request_requires_native_research_progress() {
         "native third spy Civic is not eligible",
     );
     h.run("assert(#REQUESTS==BASE_REQUESTS+1 and HISTORY[0][0].CompletionTurn==23 and HISTORY[0][1].CompletionTurn==45 and #CAPTURED[1]==2)");
+}
+
+#[test]
+fn actual_captured_outcome_allows_civic_preflight_and_unknown_or_success_does_not() {
+    let h = Enemy::new();
+    h.third_civic_state();
+    h.run("EspionageResultTypes.SUCCESS_UNDETECTED=5; EspionageResultTypes.SUCCESS_MUST_ESCAPE=4; EspionageResultTypes.FAIL_UNDETECTED=3; EspionageResultTypes.FAIL_MUST_ESCAPE=2; EspionageResultTypes.CAPTURED=1; EspionageResultTypes.KILLED=0; EspionageResultTypes.NO_RESULT=-1; for _,id in ipairs({0,1}) do HISTORY[0][id].InitialResult=1; HISTORY[0][id].EscapeResult=-1 end; local a=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; a.initial=1; a.escape=-1; assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='NOT_REQUESTED')");
+    h.run("HISTORY[0][1].InitialResult=99");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus()",
+        "two failed native attempts",
+    );
+    h.run("HISTORY[0][1].InitialResult=5");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus()",
+        "two failed native attempts",
+    );
+    h.run("HISTORY[0][1].InitialResult=1; HISTORY[0][1].EscapeResult=2");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus()",
+        "two failed native attempts",
+    );
 }
 
 #[test]
