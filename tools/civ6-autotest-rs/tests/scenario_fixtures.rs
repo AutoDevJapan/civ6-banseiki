@@ -187,6 +187,37 @@ fn multi_failure_inspection_preserves_the_latest_checkpoint_without_mutation() {
 }
 
 #[test]
+fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() {
+    let data = scenario("leader-persona-spy-third-capacity-probe.json");
+    validate_scenario(&data).unwrap();
+    let actions = steps(&data);
+    assert_eq!(actions.len(), 5);
+    assert_eq!(
+        actions[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert_eq!(actions[0]["exact_name"], true);
+    assert!(actions[0].get("checkpoint").is_none());
+    assert!(actions.iter().all(|step| ![
+        "save",
+        "end_turn",
+        "configure",
+        "start_game",
+        "enable_mods",
+        "autoplay"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    assert!(action(&actions[3], "inspect_native_spy_failures"));
+    assert!(code(&actions[2]).contains("CIVIC_GRANT_SPY"));
+    let lua = Lua::new();
+    for step in actions {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
     let mut checkpoint_count = 0;
