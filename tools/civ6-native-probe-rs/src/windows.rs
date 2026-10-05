@@ -936,9 +936,12 @@ impl AttachOrigin {
         first_chance: bool,
         observed: ThreadOriginObservation,
     ) -> BreakpointOrigin {
-        let rip_matches = observed
-            .rip
-            .is_some_and(|rip| self.breakpoint_address.checked_add(1) == Some(rip));
+        // DbgBreakPoint is a verified one-byte INT3. The Windows child-process
+        // attach observes the stopped RIP immediately after that instruction.
+        let rip_matches = self
+            .breakpoint_address
+            .checked_add(1)
+            .is_some_and(|next| observed.rip == Some(next));
         if !self.accepted
             && !self.uncertain
             && first_chance
@@ -4016,10 +4019,10 @@ mod tests {
             exited.classify(22, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
-        let mut adjusted_rip = AttachOrigin::new(0x1000, 0x2000);
-        adjusted_rip.note_thread_start(22, Some(0x2000));
+        let mut instruction_start_rip = AttachOrigin::new(0x1000, 0x2000);
+        instruction_start_rip.note_thread_start(22, Some(0x2000));
         assert_eq!(
-            adjusted_rip.classify(
+            instruction_start_rip.classify(
                 22,
                 0x1000,
                 true,
@@ -4030,7 +4033,22 @@ mod tests {
             ),
             BreakpointOrigin::Application
         );
-        assert!(!adjusted_rip.accepted);
+        assert!(!instruction_start_rip.accepted);
+        let mut overflowed_rip = AttachOrigin::new(u64::MAX, 0x2000);
+        overflowed_rip.note_thread_start(22, Some(0x2000));
+        assert_eq!(
+            overflowed_rip.classify(
+                22,
+                u64::MAX,
+                true,
+                ThreadOriginObservation {
+                    rip: None,
+                    ..verified
+                }
+            ),
+            BreakpointOrigin::Application
+        );
+        assert!(!overflowed_rip.accepted);
     }
     #[test]
     fn unavailable_or_malformed_win32_start_query_never_supplies_provenance() {
