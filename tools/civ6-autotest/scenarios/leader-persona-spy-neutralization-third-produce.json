@@ -13,7 +13,7 @@
     {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY'); return 'one synchronized native AddProgress queued'"},
     {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_PROGRESS_SPY' then error(b.lastAction) end; local p=Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'); return p and p.generation==3"}},
     {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
-    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION')); assert(p.generation==3 and p.progressed and p.beforeCount==0); assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE')); return 'THIRD_PRODUCTION_QUEUED'"},
+    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION')); assert(p.generation==3 and p.progressed and p.beforeCount==0); assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE')); return ExposedMembers.JAC_PersonaBoundary.RecordEnemy('THIRD_PRODUCTION_QUEUED')"},
     {"action":"exit_to_menu"}
   ]
 }
