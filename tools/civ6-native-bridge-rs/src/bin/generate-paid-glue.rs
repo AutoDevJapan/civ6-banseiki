@@ -25,6 +25,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             1,
         )
     };
+    let appointment_begin = "-- BEGIN RUST GENERATED APPOINTMENT GLUE\n";
+    let appointment_end = "-- END RUST GENERATED APPOINTMENT GLUE\n";
+    let start = output
+        .find(appointment_begin)
+        .or_else(|| output.find("local function SyncAppointmentAdmission(forceClosed, onlyOwner)"))
+        .ok_or("appointment publication missing")?;
+    let finish = if output[start..].starts_with(appointment_begin) {
+        start
+            + output[start..]
+                .find(appointment_end)
+                .ok_or("appointment block end missing")?
+            + appointment_end.len()
+    } else {
+        start
+            + output[start..]
+                .find(begin)
+                .ok_or("paid block boundary missing")?
+    };
+    let output = format!(
+        "{}{}{}",
+        &output[..start],
+        civ6_native_bridge_rs::appointment_glue::source(),
+        &output[finish..]
+    );
     std::fs::write(path, output)?;
     Ok(())
 }
