@@ -2570,7 +2570,7 @@ mod tests {
         sync::{
             atomic::{AtomicBool, Ordering},
             mpsc::Sender,
-            Arc,
+            Arc, Mutex, MutexGuard,
         },
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
@@ -2580,6 +2580,10 @@ mod tests {
     };
 
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
+    // These integration fixtures model the single owned game/debugger lane.
+    // Keep the whole child lifetime exclusive, while the tests inside a child
+    // still exercise multiple threads and real hardware exceptions.
+    static DEBUG_FIXTURE_LANE: Mutex<()> = Mutex::new(());
 
     #[test]
     fn pinned_instruction_starts_and_context_layout_are_checked_before_attach() {
@@ -2798,9 +2802,13 @@ mod tests {
         output: BufReader<ChildStdout>,
         entry: u64,
         original_regs: String,
+        _lane: MutexGuard<'static, ()>,
     }
     impl Fixture {
         fn start() -> Self {
+            let lane = DEBUG_FIXTURE_LANE
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
@@ -2834,6 +2842,7 @@ mod tests {
                 output,
                 entry: address.parse().unwrap(),
                 original_regs: regs.into(),
+                _lane: lane,
             }
         }
         fn command(&mut self, cmd: &str, prefix: &str) -> String {
