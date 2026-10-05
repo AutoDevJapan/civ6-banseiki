@@ -774,6 +774,7 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Gameplay.lua",
             "Scripts/JAC_Absorption_Flow.lua",
             "Scripts/JAC_Absorption_Entry.lua",
+            "Scripts/JAC_Absorption_Admission.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",

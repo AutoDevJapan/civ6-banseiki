@@ -1,0 +1,30 @@
+use civ6_data_rs::{absorption_admission, apply_outputs, parse_check_args, Repository};
+
+fn main() -> anyhow::Result<()> {
+    let mut args: Vec<_> = std::env::args().skip(1).collect();
+    let scenario_path = if let Some(index) = args.iter().position(|a| a == "--scenario-output") {
+        anyhow::ensure!(index + 1 < args.len(), "--scenario-output requires a path");
+        let path = args.remove(index + 1);
+        args.remove(index);
+        Some(std::path::PathBuf::from(path))
+    } else {
+        None
+    };
+    let Some(check) = parse_check_args(
+        "absorption-admission-generate",
+        &args,
+        "Generate the Gameplay connection from normal admission to three-stage absorption.",
+    )?
+    else {
+        return Ok(());
+    };
+    let repo = Repository::checked_in();
+    apply_outputs(&repo, absorption_admission::generate(&repo)?, check)?;
+    if let Some(path) = scenario_path {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, absorption_admission::live_scenario(&repo)?)?;
+    }
+    Ok(())
+}

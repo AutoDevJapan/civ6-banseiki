@@ -1,8 +1,9 @@
--- One AddGameplayScripts entry: include executes both modules in this context.
+-- One AddGameplayScripts entry: include executes all modules in this context.
 -- No gameplay dependency is obtained through a cross-context function table.
 if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
 include("JAC_Absorption_Flow")
+include("JAC_Absorption_Admission")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 local R = A.Rules
 local methods = {

@@ -135,6 +135,127 @@ fn flow_world() -> mlua::Result<Lua> {
     Ok(lua)
 }
 
+fn admission_world() -> mlua::Result<Lua> {
+    let lua = flow_world()?;
+    lua.load(r#"
+      local function event()
+        local handlers={}; return {Add=function(fn) handlers[#handlers+1]=fn end,
+          Call=function(...) for _,fn in ipairs(handlers) do fn(...) end end}
+      end
+      GameEvents.JAC_Absorption_AdmissionRequested=event()
+      GameEvents.JAC_Absorption_LeaderOffer=event()
+      NORMAL_GOLD, NORMAL_RELEASE = 99, false
+      Players[2].GetTreasury=function() return {GetGoldBalance=function() return NORMAL_GOLD end} end
+      -- No debug start flag and no forced rolls are needed for normal admission.
+      Game:SetProperty('JAC_ABSORPTION_FLOW_TEST_MODE',nil)
+      local config=GameConfiguration.GetValue
+      GameConfiguration.GetValue=function(key) if key=='JAC_AUTOTEST' then return 0 end;return config(key) end
+      NORMAL_OFFER={ID='normal-leader-terms',From=1,To=2,AreaKm2=10000,
+        Requirements={{ID='reserve',Kind='GOLD_MINIMUM',Minimum=100}},
+        RelationRequirements={{ID='release',Kind='RELEASE'}}, RelationsReviewed=true}
+      for i=1,100 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+    "#).exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+    )?;
+    lua.load(
+        r#"
+      N=JAC_AbsorptionAdmissionGameplay
+      N.RegisterRequirement('RELEASE',function() return NORMAL_RELEASE end)
+    "#,
+    )
+    .exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_reload_reroll()
+-> mlua::Result<()> {
+    let lua = admission_world()?;
+    lua.load(
+        r#"
+      GameEvents.JAC_Absorption_LeaderOffer.Call(NORMAL_OFFER)
+      GameEvents.OnGameTurnStarted.Emit()
+      assert(#RANDOM_CALLS==0 and TRANSFERS==0 and SPAWNS==0)
+      NORMAL_GOLD=100; GameEvents.OnGameTurnStarted.Emit()
+      assert(#RANDOM_CALLS==0)
+      NORMAL_RELEASE=true; GameEvents.OnGameTurnStarted.Emit()
+      local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='STARTED',receipt.LastError)
+      NORMAL_FLOW_ID=receipt.FlowID
+      local flow=assert(TEST_FLOW.Get(NORMAL_FLOW_ID))
+      assert(flow.Phase=='CHOICE' and flow.Phase1Complete and flow.Mode=='MERGER')
+      assert(TRANSFERS==0 and SPAWNS==0 and KILLS==0 and #RANDOM_CALLS>0)
+      NORMAL_ROLLS=#RANDOM_CALLS
+      NORMAL_SNAPSHOT=TEST_ABSORPTION.Canonical(flow)
+      Game.props=TEST_ABSORPTION.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, FLOW)?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+    )?;
+    lua.load(
+        r#"
+      N=JAC_AbsorptionAdmissionGameplay
+      N.Tick(); N.Request('leader-offer',NORMAL_OFFER.ID,1,2)
+      assert(#RANDOM_CALLS==NORMAL_ROLLS)
+      assert(TEST_ABSORPTION.Canonical(TEST_FLOW.Get(NORMAL_FLOW_ID))==NORMAL_SNAPSHOT)
+      assert(ExposedMembers.JAC_AbsorptionAdmission==nil)
+      GameEvents.JAC_AbsorptionFlow_Operation.Emit(2,{Command='BEGIN',OfferID=NORMAL_OFFER.ID})
+      assert(not Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1').Accepted)
+      assert(#RANDOM_CALLS==NORMAL_ROLLS)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating_a_roll()
+-> mlua::Result<()> {
+    let lua = admission_world()?;
+    lua.load(
+        r#"
+      NORMAL_GOLD=100; NORMAL_RELEASE=true
+      local original=Game.GetRandNum
+      local calls=0
+      Game.GetRandNum=function(maximum,label)
+        calls=calls+1; if calls==2 then error('stop before second native roll') end
+        return original(maximum,label)
+      end
+      N.DefineOffer(NORMAL_OFFER); N.Tick()
+      local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='STARTING' and receipt.LastError)
+      NORMAL_FLOW_ID=receipt.FlowID
+      local flow=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_V1').Flows[NORMAL_FLOW_ID])
+      assert(not flow.Phase1Complete and #RANDOM_CALLS==1,
+        'phase1='..tostring(flow.Phase1Complete)..' rolls='..#RANDOM_CALLS..' calls='..calls)
+      assert(TEST_FLOW.Get(NORMAL_FLOW_ID)==nil,'UI exposed incomplete phase one')
+      FIRST_LABEL=RANDOM_CALLS[1].Label
+      Game.GetRandNum=original; NORMAL_GOLD=0;NORMAL_RELEASE=false
+      Game.props=TEST_ABSORPTION.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load_module(&lua, FLOW)?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+    )?;
+    lua.load(r#"
+      N=JAC_AbsorptionAdmissionGameplay; N.Tick()
+      local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='STARTED',receipt.LastError)
+      assert(TEST_FLOW.Get(NORMAL_FLOW_ID).Phase1Complete)
+      local seen=0;for _,roll in ipairs(RANDOM_CALLS) do if roll.Label==FIRST_LABEL then seen=seen+1 end end
+      assert(seen==1,'saved first-stage roll was repeated')
+      local count=#RANDOM_CALLS; N.Tick();assert(#RANDOM_CALLS==count)
+    "#).exec()
+}
+
 #[test]
 fn fixture_runs_the_actual_lua_transfer_with_no_spawn_return_value() -> mlua::Result<()> {
     let lua = world()?;
@@ -1723,6 +1844,8 @@ fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event()
             Count=function() return #handlers end}
         end
         GameEvents.JAC_Absorption_TestCall=COUNTED_EVENT()
+        GameEvents.JAC_Absorption_AdmissionRequested=COUNTED_EVENT()
+        GameEvents.JAC_Absorption_LeaderOffer=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
         GameEvents.OnGameTurnStarted=COUNTED_EVENT()
     "#,
@@ -1762,7 +1885,9 @@ fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event()
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
-        assert(GameEvents.OnGameTurnStarted.Count()==2)
+        assert(GameEvents.OnGameTurnStarted.Count()==3)
+        assert(GameEvents.JAC_Absorption_AdmissionRequested.Count()==1)
+        assert(GameEvents.JAC_Absorption_LeaderOffer.Count()==1)
         local event=GameEvents.JAC_Absorption_TestCall
         GameConfiguration.IsAnyMultiplayer=function() return true end
         event.Call('mp','ENGINE','Apply',{PLAN})
