@@ -89,7 +89,7 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 
 無応答の合成子、controller側のpanic、保留中の実ハードウェア例外におけるpanic、続行APIの一時拒否、永続的な復元拒否を検査する。意図的に停止した検査を終了して失敗を保持すること、同時に動く別の合成子を閉じないことも実証する。ゲーム・Civ6・Steamの起動、共有DLLの配置・編集、実ゲームへのattachは行っていない。実ゲームのAI検証と、統合後の別モデルレビューは親担当が進める。
 
-最終版は専用target `D:/CC/Work/todo158-native-cleanup/target` を使い、Rust製の `cargo_gate.exe` 経由で検査した。Windowsの主ワークスペース全件は115試験群・1790件が成功し、失敗・除外・フィルター適用は0件だった。観測器の51件は全件実行中に7.46秒で完了し、単独実行でも3.15秒で成功した。ワークスペース全体の形式検査も成功した。検査コマンドは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` と `cargo fmt --manifest-path tools/Cargo.toml --all -- --check` である。全件検査後に所有プロセスの残存がないことを確認した。
+子担当の候補 `5daaef17` は専用target `D:/CC/Work/todo158-native-cleanup/target` を使い、Rust製の `cargo_gate.exe` 経由で検査した。Windowsの主ワークスペース全件は115試験群・1790件が成功し、失敗・除外・フィルター適用は0件だった。観測器の51件は全件実行中に7.46秒で完了し、単独実行でも3.15秒で成功した。ワークスペース全体の形式検査も成功した。検査コマンドは `cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets` と `cargo fmt --manifest-path tools/Cargo.toml --all -- --check` である。全件検査後に所有プロセスの残存がないことを確認した。
 
 追加の厳格Clippy検査は、既存の指摘が残っている。依存する加入資格クレートには `?` 記法の指摘があり、観測器には引数数・分岐・初期化の文体に関する指摘がある。主ワークスペースCIで指定された全件テストと形式検査の成功とは区別し、厳格Clippyの成功とは報告しない。
 
