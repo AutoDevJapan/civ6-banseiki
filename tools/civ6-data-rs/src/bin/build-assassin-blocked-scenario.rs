@@ -20,6 +20,14 @@ end
 local function Trace(label,row)
   print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..
     ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)
+  local plot=Map.GetPlot and Map.GetPlot(row.X,row.Y)
+  if plot and Units and Units.GetUnitsInPlot then
+    local present=false; local count=0
+    for _,u in ipairs(Units.GetUnitsInPlot(plot)) do
+      count=count+1; if u:GetOwner()==row.Owner and u:GetID()==row.ID then present=true end
+    end
+    print('[JAC_ASN_BLOCKED] plot-membership label='..label..' present='..tostring(present)..' count='..count)
+  end
 end
 local function Assassins(owner)
   local ids={}; for _,u in Players[owner]:GetUnits():Members() do
@@ -38,7 +46,16 @@ local function Blockers()
       assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,
         'blocking unit moved or disappeared')
       assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')
-    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end
+    else
+      assert(plot:IsImpassable() and plot:GetTerrainType()==p.Barrier,'terrain barrier changed')
+    end
+  end
+end
+local function RestoreTerrain()
+  for _,p in ipairs(t.Plots) do
+    local plot=Map.GetPlot(p.X,p.Y)
+    TerrainBuilder.SetTerrainType(plot,p.Terrain); TerrainBuilder.SetFeatureType(plot,p.Feature)
+    assert(plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.Feature,'fixture terrain did not restore')
   end
 end
 local function Pending()
@@ -80,6 +97,16 @@ fn round_trip(steps: &mut Vec<Value>, name: &str) {
 fn build(repo: &Repository) -> Result<Value> {
     let base = repo.json("tools/civ6-autotest/scenarios/assassin-leader-save-load.json")?;
     let mut steps = base["steps"].as_array().unwrap()[..3].to_vec();
+    let disabled = steps[0]["disable_ids"].as_array_mut().unwrap();
+    for id in [
+        "5c1e7a3d-9b2f-4e61-8d47-2a6f0c9e1b85",
+        "61320778-2e75-4c11-9009-94101b519aba",
+        "9b0b9a39-bd72-4ff1-9062-05eeac09b693",
+        "d8532710-f853-4c53-8853-271000000001",
+        "f6398d3b-707c-4d0a-8b19-e68333efa200",
+    ] {
+        disabled.push(json!(id));
+    }
     steps.push(assassin::active());
     check(
         &mut steps,
@@ -87,29 +114,22 @@ fn build(repo: &Repository) -> Result<Value> {
 Game:SetProperty(R.TEST,1)
 local owner=Game.GetLocalPlayer(); assert(Players[owner]:IsHuman(),'human required')
 local city=Players[owner]:GetCities():GetCapitalCity(); assert(city,'capital missing')
+assert(next(Assassins(owner))==nil,'fresh game already contains assassins')
 local plots={Map.GetPlot(city:GetX(),city:GetY())}
 for _,p in ipairs(Map.GetAdjacentPlots(city:GetX(),city:GetY())) do plots[#plots+1]=p end
 assert(#plots==7,'complete radius-one footprint required')
 local rows={}; local occupied={}
 local function Occupy(p)
-  local row={X=p:GetX(),Y=p:GetY()}
-  if not p:IsWater() and not p:IsImpassable() then
-    local blocker
-    for _,u in Players[owner]:GetUnits():Members() do
-      if u:GetX()==row.X and u:GetY()==row.Y and GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT' then
-        assert(not blocker,'stacked combat blockers'); blocker=u
-      end
-    end
-    if not blocker then
-      local had={}; for _,u in Players[owner]:GetUnits():Members() do had[u:GetID()]=true end
-      UnitManager.InitUnit(owner,'UNIT_WARRIOR',row.X,row.Y)
-      for _,u in Players[owner]:GetUnits():Members() do if not had[u:GetID()] then
-        assert(not blocker and u:GetType()==GameInfo.Units.UNIT_WARRIOR.Index,'ambiguous blocker creation'); blocker=u
-      end end
-    end
-    assert(blocker and blocker:GetX()==row.X and blocker:GetY()==row.Y,'blocker not on requested plot')
-    row.ID=blocker:GetID(); Trace('blocker',Row(blocker))
+  local row={X=p:GetX(),Y=p:GetY(),Terrain=p:GetTerrainType(),Feature=p:GetFeatureType(),
+    Barrier=GameInfo.Terrains.TERRAIN_GRASS_MOUNTAIN.Index}
+  local remove={}
+  for _,u in Players[owner]:GetUnits():Members() do
+    if u:GetX()==row.X and u:GetY()==row.Y then remove[#remove+1]=u:GetID() end
   end
+  for _,id in ipairs(remove) do UnitManager.Kill(Players[owner]:GetUnits():FindID(id)) end
+  TerrainBuilder.SetFeatureType(p,-1); TerrainBuilder.SetTerrainType(p,row.Barrier)
+  assert(p:IsImpassable(),'terrain setter did not create an impassable plot')
+  print('[JAC_ASN_BLOCKED] terrain-blocker xy='..row.X..','..row.Y..' original='..row.Terrain..' barrier='..row.Barrier)
   rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
 for _,p in ipairs(plots) do Occupy(p) end
@@ -135,10 +155,9 @@ for attempt=1,128 do
     blocked=true; print('[JAC_ASN_BLOCKED] native-blocked-unplaced attempts='..attempt..' plots='..#rows); break
   end
   local existing=occupied[row.X..','..row.Y]
-  assert(not existing or not existing.ID,'native placement stacked onto an occupied combat plot')
+  assert(not existing,'native placement selected an impassable terrain barrier')
   local plot=Map.GetPlot(row.X,row.Y)
   assert(plot and not plot:IsWater() and not plot:IsImpassable(),'native probe selected an invalid land plot')
-  assert(not existing,'native probe selected an impassable footprint plot')
   Occupy(plot)
 end
 assert(blocked,'native placement did not become blocked within 128 probes')
@@ -146,7 +165,7 @@ t={Actor=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots=rows,
   Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner),AllBefore=UnitIDs(owner)}
 assert(next(t.Before)==nil,'fresh game already contains assassins')
 Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()
-return 'real combat units block the native API after discovering its actual placement candidates'
+return 'real impassable terrain blocks the native API after discovering its actual placement candidates'
 "#,
         "GameCore_Tuner",
     );
@@ -173,12 +192,9 @@ return 'only the test deadline is shortened; native spawn and tick are unchanged
         &mut steps,
         r#"
 Pending()
-for _,p in ipairs(t.Plots) do if p.ID then
-  local u=Players[t.Actor]:GetUnits():FindID(p.ID); assert(u and u:GetID()==p.ID,'blocker identity changed')
-  UnitManager.Kill(u)
-end end
+RestoreTerrain()
 t.Released=R.Turn(); t.AllReleased=UnitIDs(t.Actor); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)
-return 'second blocked real tick verified; fixture blockers removed without touching training'
+return 'second blocked real tick verified; original terrain restored without touching training'
 "#,
         "GameCore_Tuner",
     );
@@ -293,16 +309,23 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn native_footprint_discovery_handles_fallback_and_rejects_unsafe_probes() -> Result<()> {
+    fn native_terrain_discovery_handles_fallback_and_rejects_unsafe_probes() -> Result<()> {
         let repo = Repository::checked_in();
         let data = build(&repo)?;
         let setup = data["steps"][4]["code"].as_str().unwrap();
         let fixture = r#"
 Game.GetLocalPlayer=function() return 0 end
+local terrain={}; local features={}
+GameInfo.Terrains={TERRAIN_GRASS_MOUNTAIN={Index=9}}
 local function Plot(x,y)
+  local key=x..','..y
   return {GetX=function() return x end,GetY=function() return y end,
-    IsWater=function() return false end,IsImpassable=function() return false end}
+    GetTerrainType=function() return terrain[key] or 1 end,
+    GetFeatureType=function() return features[key] or -1 end,
+    IsWater=function() return false end,IsImpassable=function() return terrain[key]==9 end}
 end
+TerrainBuilder={SetTerrainType=function(p,t) terrain[p:GetX()..','..p:GetY()]=t end,
+  SetFeatureType=function(p,f) features[p:GetX()..','..p:GetY()]=f end}
 Map.GetPlot=Plot
 Map.GetAdjacentPlots=function() local rows={}; for x=1,6 do rows[#rows+1]=Plot(x,0) end; return rows end
 for _,row in pairs(GameInfo.Units) do
@@ -330,8 +353,16 @@ end
 function CheckFootprint()
   local t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')
   assert(NATIVE_CALLS==2 and #t.Plots==8)
-  assert(Players[0]:GetUnits():GetCount()==9 and Players[0]:GetUnits():FindID(unrelated))
+  assert(Players[0]:GetUnits():GetCount()==1 and Players[0]:GetUnits():FindID(unrelated))
+  for _,p in ipairs(t.Plots) do assert(Map.GetPlot(p.X,p.Y):IsImpassable()) end
   for _,u in Players[0]:GetUnits():Members() do assert(u:GetType()~=0 and u:GetType()~=5) end
+end
+function CheckRestored()
+  local t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')
+  for _,p in ipairs(t.Plots) do local plot=Map.GetPlot(p.X,p.Y)
+    assert(plot:GetTerrainType()==1 and plot:GetFeatureType()==-1)
+  end
+  assert(Players[0]:GetUnits():GetCount()==1 and Players[0]:GetUnits():FindID(unrelated))
 end
 "#;
         for mode in [
@@ -351,6 +382,8 @@ end
             assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
             if safe {
                 lua.load("CheckFootprint()").exec()?;
+                lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
+                lua.load("CheckRestored()").exec()?;
             }
         }
         Ok(())
