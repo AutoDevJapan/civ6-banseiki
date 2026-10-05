@@ -23,6 +23,7 @@ struct Game {
     closed: Vec<String>,
     cleanup_fail_once: bool,
     cleanup_calls: usize,
+    alive_ack_lost_once: bool,
     next_screen: Option<String>,
 }
 impl Game {
@@ -93,7 +94,14 @@ impl Game {
             return Ok("none".into());
         }
         if code.contains("IsAlive()") {
-            return Ok("true".into());
+            if self.alive_ack_lost_once {
+                self.alive_ack_lost_once = false;
+                self.advance();
+                return Err(Error::unknown(
+                    "alive read ran but FireTuner acknowledgement was lost",
+                ));
+            }
+            return Ok(format!("{}|true", self.turn));
         }
         Ok("true".into())
     }
@@ -159,6 +167,18 @@ fn test_statement_after_final_turn_retries_only_idempotent_handler_cleanup() {
     assert!(h
         .log()
         .contains("closed AI diplomacy statement after an InGame timeout"));
+}
+
+#[test]
+fn autoplay_retries_only_the_alive_read_after_lost_acknowledgement() {
+    let mut game = Game::new(&[]);
+    game.alive_ack_lost_once = true;
+    let (h, game, result) = autoplay(game, 2);
+    assert!(result.unwrap().contains("autoplay completed 2 turns (1->3"));
+    assert_eq!(game.lock().unwrap().turn, 3);
+    assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+    assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
+    assert!(h.events().iter().any(|event| event == "disconnect"));
 }
 
 #[test]
