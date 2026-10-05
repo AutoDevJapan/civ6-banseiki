@@ -3153,9 +3153,10 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
-        child.child.kill().unwrap(); // The controller closes only its synthetic child.
-        child.child.wait().unwrap();
+        // Let the debugger consume the process exit event before waiting.
+        child.child.kill().unwrap();
         let (result, terminal, exit_code) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result.unwrap_err().contains("target process exited"));
         assert_eq!(terminal, TerminalKind::TargetExited);
         assert!(exit_code.is_some());
@@ -3480,8 +3481,8 @@ mod tests {
         );
         child.child.kill().unwrap();
         close_ack.store(true, Ordering::SeqCst); // Controller acknowledged closing this owned Rust child.
-        child.child.wait().unwrap();
         let (result, critical, normal_cleanup_gate) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result.unwrap_err().contains("ambiguous debug exception"));
         assert!(critical);
         assert!(
@@ -4160,9 +4161,13 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        child.child.kill().unwrap(); // The controller closes only its own Rust fixture.
-        child.child.wait().unwrap();
+        // The controller closes only its own Rust fixture.
+        child.child.kill().unwrap();
+        // On Windows a debugged process may not become signaled until the
+        // debugger has consumed its EXIT_PROCESS event. Join the event pump
+        // before waiting for the child process handle.
         let (result, attached, critical) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result
             .unwrap_err()
             .contains("controller closed the owned game"));
