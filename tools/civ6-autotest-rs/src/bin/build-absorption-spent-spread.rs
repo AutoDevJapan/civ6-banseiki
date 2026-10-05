@@ -193,7 +193,16 @@ mod tests {
     #[test]
     fn all_embedded_commands_compile_as_lua51() {
         let lua = mlua::Lua::new();
-        for code in [SETUP, FIXTURE_READY, ARM, VERIFY, APPLY, RESUME, BLOCKED, READY] {
+        for code in [
+            SETUP,
+            FIXTURE_READY,
+            ARM,
+            VERIFY,
+            APPLY,
+            RESUME,
+            BLOCKED,
+            READY,
+        ] {
             lua.load(code).into_function().unwrap();
         }
     }
