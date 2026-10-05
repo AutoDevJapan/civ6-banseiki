@@ -201,6 +201,34 @@ fn end_turn_waits_for_human_control_after_gameplay_advances_without_resending() 
 }
 
 #[test]
+fn end_turn_rejects_overshoot_during_human_control_wait() {
+    let turn = Arc::new(Mutex::new(66));
+    let game = turn.clone();
+    let fake = FakeBackend::new().lua(move |state, code| {
+        if code.trim() == "return Game.GetCurrentGameTurn()" {
+            return Ok(game.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+            *game.lock().unwrap() = 67;
+        }
+        if state == "InGame" && code.contains("Players[p]:IsTurnActive()") {
+            *game.lock().unwrap() = 68;
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h
+        .runner
+        .run_step(&json!({"action":"end_turn"}))
+        .unwrap_err();
+    assert!(error.to_string().contains("66->68"));
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        1
+    );
+}
+
+#[test]
 fn test_end_turn_rejects_invalid_counts() {
     for value in [json!(0), json!(-1), json!(true), json!(1.5), json!("2")] {
         for key in ["turns", "test_turns"] {

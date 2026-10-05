@@ -1400,6 +1400,16 @@ impl Runner {
         self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":format!("local turn=Game.GetCurrentGameTurn(); if turn>{} then error('end_turn advanced past its single-turn target') end; return turn == {}",start+1,start+1)}),self.remaining(deadline)?,true)?;
         self.wait(&json!({"type":"lua","state_name":"InGame","code":"local p=Game.GetLocalPlayer(); if p>=0 and Players[p]:IsTurnActive() then return true end; return 'human inactive local='..tostring(p)..' uiTurn='..tostring(Game.GetCurrentGameTurn())..' p0Active='..tostring(Players[0]:IsTurnActive())..' p0Human='..tostring(Players[0]:IsHuman())"}),self.remaining(deadline)?,true)?;
         self.dismiss_advisor(deadline)?;
+        let finish = parse_integer(&self.lua(
+            "GameCore_Tuner",
+            "return Game.GetCurrentGameTurn()",
+            self.budget(deadline, 5.0)?,
+        )?)?;
+        if finish != start + 1 {
+            return Err(Error::scenario(format!(
+                "end_turn advanced beyond its single-turn target while waiting for human control: {start}->{finish}"
+            )));
+        }
         self.remaining(deadline)?;
         Ok(format!("human turn {start}->{}", start + 1))
     }

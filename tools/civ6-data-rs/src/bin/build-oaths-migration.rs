@@ -196,12 +196,42 @@ end
 if type(Game.GetLocalPlayer)=='function' then local ok,p=pcall(Game.GetLocalPlayer); out[#out+1]='local='..tostring(ok and p or 'unavailable') end
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
  local label='p'..p:GetID()
- for _,name in ipairs({'IsAlive','IsHuman','IsTurnActive','IsAITurnActive','GetTeam'}) do probe(p,label,name) end
+ for _,name in ipairs({'IsAlive','IsHuman','IsTurnActive','IsTurnActiveComplete','IsAITurnActive','GetTeam'}) do probe(p,label,name) end
 end
+for _,name in ipairs({'CanEndTurn','CanUnreadyTurn','IsProcessingMessages'}) do
+ if UI and type(UI[name])=='function' then local ok,v=pcall(UI[name]); out[#out+1]='UI.'..name..'='..(ok and tostring(v) or 'error') end
+end
+if NotificationManager and type(NotificationManager.GetAllEndTurnBlocking)=='function' then
+ local ok,v=pcall(NotificationManager.GetAllEndTurnBlocking,Game.GetLocalPlayer())
+ if ok and type(v)=='table' then for _,b in ipairs(v) do out[#out+1]='block='..tostring(b) end end
+end
+if AutoplayManager and type(AutoplayManager.IsActive)=='function' then local ok,v=pcall(AutoplayManager.IsActive); out[#out+1]='autoplay='..(ok and tostring(v) or 'error') end
 local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0
 if h then for _,k in ipairs({'age','oathReign','oathChosen','oathDue'}) do out[#out+1]='human.'..k..'='..tostring(h[k]) end end
 return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
 "#;
+
+fn turn_event_observer() -> String {
+    format!(
+        r#"
+local function snapshot()
+{TURN_DIAGNOSTIC}
+end
+local last=''
+for _,name in ipairs({{'TurnBegin','TurnEnd','PlayerTurnActivated','PlayerTurnDeactivated','LocalPlayerTurnBegin','LocalPlayerTurnEnd','GameCoreEventPublishComplete'}}) do
+ if Events[name] and Events[name].Add then
+  local event=name
+  Events[name].Add(function(...)
+   local args={{}}; for i,v in ipairs({{...}}) do args[i]=tostring(v) end
+   local state=event..':'..table.concat(args,',')..' '..snapshot()
+   if state~=last then print('LEGACY_CONTROL_EVENT '..state); last=state end
+  end)
+ end
+end
+return 'diagnostic event observers registered; no acceptance'
+"#
+    )
+}
 
 fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     let base = repo.json("tools/civ6-autotest/scenarios/sengoku-oaths-oda.json")?;
@@ -211,7 +241,10 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     let probe = json!({"name":"誓約導入前の実保存：現在の台帳とAPIを読み取る","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),catalogue_lua(CAPABILITIES)]});
     let migration = json!({"name":"誓約導入前の実保存：自然な次手番で人間とAIを移行し、旧履歴と保存復元を照合する","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",SNAPSHOT),active.clone(),json!({"action":"end_turn","timeout":900}),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathReign==1 and Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68"}}),lua("GameCore_Tuner",MIGRATED),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==l.reign"}}),oath_snapshot(false),json!({"action":"save","name":"JAC-Todo134-Migrated","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Migrated","timeout":600}),oath_snapshot(true)]});
     let pre = json!({"name":"誓約導入前の天文保存：改元前には候補と効果を持たない","judge_profile":"generic","steps":[enabled.clone(),load(PRE_NAME),lua("GameCore_Tuner",TENBUN_BEFORE),active.clone(),json!({"action":"end_turn","timeout":900}),catalogue_lua(TENBUN_AFTER)]});
-    let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn>68 then error('diagnostic advanced too far') end; return turn==68"}}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
+    // A bounded observation always reaches the post-request snapshots, even
+    // when the engine rejects the request or human control never returns.
+    // This scene diagnoses a stall; its completion is never acceptance.
+    let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",&turn_event_observer()),lua("InGame",&turn_event_observer()),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"pause","seconds":120,"timeout":135}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
     Ok(vec![
         ("legacy-capabilities.json", probe),
         ("legacy-migration.json", migration),
@@ -245,6 +278,75 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stalled_diagnostic_still_captures_both_contexts_and_event_history() -> Result<()> {
+        let scene = scenarios(&Repository::checked_in())?
+            .into_iter()
+            .find(|(name, _)| *name == "legacy-control-diagnostic.json")
+            .unwrap()
+            .1;
+        let vm = legacy_vm()?;
+        vm.load(r#"
+active=true; requests=0; callbacks={}; logs={}
+Players[0].GetID=function()return 0 end
+Players[0].IsTurnActive=function()return active end
+PlayerManager={GetAliveMajors=function()return {Players[0]} end}
+Game.GetLocalPlayer=function()return 0 end
+UI={RequestAction=function()requests=requests+1;active=false end,CanEndTurn=function()return active end}
+ActionTypes={ACTION_ENDTURN=1}
+Events=setmetatable({},{__index=function(t,name)local event={Add=function(fn)callbacks[name]=fn end};rawset(t,name,event);return event end})
+print=function(s)logs[#logs+1]=s end
+"#).exec()?;
+        let mut snapshots = Vec::new();
+        let mut paused = 0;
+        for step in scene["steps"].as_array().unwrap() {
+            match step["action"].as_str().unwrap() {
+                "ui_lua" => {
+                    let value: String = vm.load(step["code"].as_str().unwrap()).eval()?;
+                    if value.starts_with("LEGACY_CONTROL_DIAGNOSTIC") {
+                        snapshots.push((step["state_name"].as_str().unwrap(), value));
+                    }
+                }
+                "wait_for" => {
+                    // Only the pre-request readiness check may fail the scene.
+                    assert!(vm
+                        .load(step["condition"]["code"].as_str().unwrap())
+                        .eval::<bool>()?);
+                    assert_eq!(vm.globals().get::<i32>("requests")?, 0);
+                }
+                "pause" => {
+                    let seconds = step["seconds"].as_i64().unwrap();
+                    assert!(step["timeout"].as_i64().unwrap_or(120) > seconds);
+                    paused += seconds;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(paused, 130);
+        assert_eq!(vm.globals().get::<i32>("requests")?, 1);
+        assert_eq!(snapshots.len(), 6);
+        for pair in snapshots[2..].chunks(2) {
+            assert_eq!([pair[0].0, pair[1].0], ["GameCore_Tuner", "InGame"]);
+            for (_, value) in pair {
+                assert!(value.contains("raw=67"));
+                assert!(value.contains("p0.IsTurnActive=false"));
+            }
+        }
+        vm.load(
+            r#"
+callbacks.PlayerTurnActivated(0,false)
+callbacks.GameCoreEventPublishComplete()
+callbacks.GameCoreEventPublishComplete()
+assert(#logs==2)
+assert(string.find(logs[1],'PlayerTurnActivated:0,false',1,true))
+assert(string.find(logs[2],'p0.IsTurnActive=false',1,true))
+assert(ledger.houses.p0.oaths==nil)
+"#,
+        )
+        .exec()?;
+        Ok(())
+    }
+
     #[test]
     fn live_catalogue_rejects_missing_and_extra_rows() -> Result<()> {
         let vm = mlua::Lua::new();
