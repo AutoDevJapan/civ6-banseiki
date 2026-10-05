@@ -1350,3 +1350,92 @@ fn core_optional_unit_getter_failure_after_immediate_progress_keeps_one_mutation
         "cannot replay",
     );
 }
+
+#[test]
+fn fresh_production_preserves_unknown_attempt_and_saves_before_barrier() {
+    let t = Third::new();
+    t.run("TURN=46");
+    t.begin();
+    t.run("OLD_ARCHIVE=JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE')); fire(Events.LoadScreenClose); TURN=47");
+    t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('FRESH_PRODUCTION_04')");
+    t.complete_step("FRESH_PRODUCTION_04");
+    t.run(
+        r#"
+        local b=ExposedMembers.JAC_PersonaBoundary;
+        local u=Game:GetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04');
+        assert(u.status=='SENT_RESULT_UNCONFIRMED' and u.source=='HOST_ARTIFACT');
+        assert(u.buildSent and u.progressSent and not u.actualSpyIDKnown and not u.postMutationSave);
+        assert(u.state.intents.BUILD_SPY.turn==46 and u.ack.action=='BEGIN');
+        assert(JAC_PersonaBoundaryRules.Serialize(u.archive)==OLD_ARCHIVE);
+        assert(JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'))==OLD_ARCHIVE);
+        assert(#BUILD_REQUESTS==0 and PROGRESS_CALLS==0);
+        fire(Events.SaveComplete); b.ThirdSpySend('BUILD_SPY'); FRAME(); FRAME();
+        b.Queue('PROGRESS_SPY'); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        fire(Events.GameCoreEventPublishComplete); FRAME();
+        assert(b.thirdLast=='COMMAND_PROGRESS_AWAITING_SAVE');
+        local requests=#REQUESTS; FRAME(); FRAME(); assert(#REQUESTS==requests);
+        assert(PROGRESS_CALLS==1 and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'));
+        fire(Events.SaveComplete); FRAME();
+        assert(REQUESTS[#REQUESTS].params.Phase=='BARRIER');
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        fire(Events.GameCoreEventPublishComplete); FRAME();
+        assert(b.thirdLast=='ACCEPTED_PROGRESS_SPY' and #BUILD_REQUESTS==1 and PROGRESS_CALLS==1);
+        assert(JAC_PersonaBoundaryRules.Serialize(HISTORY)==BEFORE_HISTORY);
+        assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE').properties.JAC_BOUNDARY_SPY.id==851976);
+        fire(Events.LoadScreenClose);
+        "#,
+    );
+    t.run("PRODUCED_SPY_ID=983048; ADVANCE_TURN(); assert(#UNITS[0]==1)");
+    t.bind();
+    t.run("local binding=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding; local production=Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION'); assert(binding.source=='NATIVE_BUILD' and binding.spyID==983048 and binding.productionAttempt==2 and binding.productionReservation==production.reservationToken and binding.sources.unit.identity=='CORE')");
+    t.run("fire(Events.LoadScreenClose)");
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('FRESH_PRODUCTION_04')",
+        "fresh production requires",
+    );
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('BUILD_SPY')",
+        "reloaded, unsaved or already sent",
+    );
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY')",
+        "cannot replay",
+    );
+}
+
+#[test]
+fn fresh_production_refuses_other_turns_and_any_existing_native_production() {
+    for fault in [
+        "TURN=46",
+        "TURN=48",
+        "Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION').progressed=true",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').bound=true",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').action='PROGRESS_SPY'",
+        "Game:SetProperty('JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04',{})",
+    ] {
+        let t = Third::new();
+        t.run("TURN=46");
+        t.begin();
+        t.run("fire(Events.LoadScreenClose); TURN=47");
+        t.run(fault);
+        t.reject(
+            "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('FRESH_PRODUCTION_04')",
+            "fresh production requires",
+        );
+        t.run("assert(#BUILD_REQUESTS==0 and PROGRESS_CALLS==0 and #UNIT_REQUESTS==0)");
+    }
+}
+
+#[test]
+fn fresh_production_cannot_replace_the_preserved_native_failure() {
+    let t = Third::new();
+    t.run("TURN=46");
+    t.begin();
+    t.run("fire(Events.LoadScreenClose); TURN=47; Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE').histories[2].turn=44");
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('FRESH_PRODUCTION_04')",
+        "preserved native failure changed",
+    );
+    t.run("assert(#BUILD_REQUESTS==0 and PROGRESS_CALLS==0 and #UNIT_REQUESTS==0)");
+}

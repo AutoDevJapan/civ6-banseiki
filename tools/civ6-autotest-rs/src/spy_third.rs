@@ -47,6 +47,7 @@ local PRODUCTION='JAC_BOUNDARY_SPY_PRODUCTION';
 local CIVIC='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS';
 local WITNESS='JAC_PersonaThirdSpyObservation';
 local MISSION_ACK='JAC_BOUNDARY_THIRD_MISSION_ACK';
+local UNKNOWN_PRODUCTION='JAC_BOUNDARY_THIRD_PRODUCTION_UNCONFIRMED_04';
 local KEYS={RETRY,'JAC_BOUNDARY_ENEMY_CONFIG','JAC_BOUNDARY_ENEMY_MISSION',
  'JAC_BOUNDARY_SPY','JAC_BOUNDARY_SPY_TRAVEL','JAC_BOUNDARY_SPY_BARRIER',PRODUCTION,
  'JAC_BOUNDARY_SPY_PREPARED','JAC_BOUNDARY_SPY_PROGRESS','JAC_BOUNDARY_ENEMY_RECOVERY',
@@ -106,6 +107,22 @@ local function conserved(before,after,progress)
 end
 local function archive() return assert(Game:GetProperty(ARCHIVE),'third generation archive missing') end
 local function state() return assert(Game:GetProperty(STATE),'third generation state missing') end
+local function freshProductionCheck(o)
+ local s=state(); local a=archive(); local production=assert(Game:GetProperty(PRODUCTION));
+ local ack=assert(Game:GetProperty(ACK)); local intent=assert(s.intents.BUILD_SPY);
+ assert(not Game:GetProperty(UNKNOWN_PRODUCTION) and not s.productionAttempt and
+  not s.bound and not s.attestation and not s.intents.SPY_TRAVEL and not s.intents.SPY_MISSION and
+  not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL') and
+  not Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION') and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS') and
+  a.turn==46 and intent.turn==46 and o.turn==47 and
+  ack.action=='BEGIN' and ack.phase=='BARRIER' and ack.turn==46 and ack.token==intent.token and
+  production.generation==T.generation and production.owner==0 and production.cityID==o.capitalID and
+  production.progressed==false and not production.beforeCount and
+  o.mapCount==0 and o.activeCount==0 and not o.queueSpy and
+  same(o.histories,a.histories) and o.captivesText==a.captivesText and o.placeholdersText==a.placeholdersText,
+  'fresh production requires the untouched saved reservation and one forward turn');
+ return s,a,production,ack
+end
 function T.IsThird(retry)
  local a=Game:GetProperty(ARCHIVE); local s=Game:GetProperty(STATE);
  return retry and retry.current==T.generation and retry.thirdArchive==ARCHIVE and
@@ -390,7 +407,23 @@ function T.InstallCore(hooks)
   end
   if p.Action=='PROGRESS_SPY' then T.Progress(owner,p); return end
   checkReady(o); local source=coreCheck(owner,o);
-  if p.Action=='BEGIN' then
+  if p.Action=='FRESH_PRODUCTION_04' then
+   assert(T.IsThird(Game:GetProperty(RETRY)),'fresh production lineage missing');
+   local s,a,production,previousAck=freshProductionCheck(o);
+   -- Host evidence labels the lost run; it does not reconstruct engine state.
+   -- This path is finite: the immutable marker prevents another fresh attempt.
+   Game:SetProperty(UNKNOWN_PRODUCTION,{status='SENT_RESULT_UNCONFIRMED',source='HOST_ARTIFACT',
+    artifact='todo548-third-integration-04',generation=T.generation,attempt=1,
+    save='JAC-Enemy-Neutralization-118003cc3d3442aba3a2fe9f93dbaf38-0000000000000001',
+    buildSent=true,progressSent=true,postMutationSave=false,actualSpyIDKnown=false,
+    state=copy(s),production=copy(production),ack=copy(previousAck),archive=copy(a),
+    restartObservation=copy(o),restartSources=copy(source)});
+   s.productionAttempt=2;
+   s.intents.BUILD_SPY={token=p.Token,turn=p.Turn,attempt=2};
+   Game:SetProperty(STATE,s);
+   production.attempt=2; production.reservationToken=p.Token;
+   Game:SetProperty(PRODUCTION,production);
+  elseif p.Action=='BEGIN' then
    assert(not Game:GetProperty(ARCHIVE) and not Game:GetProperty(STATE) and o.mapCount==0 and o.activeCount==0,
     'third spy generation already started or operative already exists');
    local previous=assert(Game:GetProperty(RETRY)); local event=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'));
@@ -458,7 +491,8 @@ function T.InstallCore(hooks)
       p.Turn==first.turn and p.Frame>first.frame and p.PublishEpoch>first.publishEpoch,
       'third spy adoption changed after Core attestation');
      retry.spyID=o.map.id; retry.binding={source='NATIVE_BUILD',generation=T.generation,owner=owner,
-      unitType=o.map.unitType,spyID=o.map.id,cityID=production.cityID,token=p.Token,sources=source};
+      unitType=o.map.unitType,spyID=o.map.id,cityID=production.cityID,token=p.Token,sources=source,
+      productionAttempt=production.attempt or 1,productionReservation=production.reservationToken or a.token};
      s.bound=true; s.spyID=o.map.id; s.binding=copy(retry.binding);
      Game:SetProperty(RETRY,retry); Game:SetProperty('JAC_BOUNDARY_SPY',{owner=owner,id=o.map.id,generation=T.generation});
     end
@@ -604,10 +638,11 @@ function T.InstallUI(hooks)
   return o
  end
  B.ThirdSpyReserve=function(action)
-  assert(action=='BEGIN' or action=='SPY_TRAVEL' or action=='SPY_MISSION','unknown third spy reservation');
+  assert(action=='BEGIN' or action=='FRESH_PRODUCTION_04' or action=='SPY_TRAVEL' or action=='SPY_MISSION','unknown third spy reservation');
   assert(not pending and not ui.busy() and not used[action],'third spy request is already pending or used');
   local o=B.ThirdSpyStatus(); assert(Players[0]:IsTurnActive(),'third spy request needs the active human turn');
-  if action=='BEGIN' then assert(not Game:GetProperty(STATE) and o.mapCount==0 and o.activeCount==0,'third spy already prepared')
+  if action=='FRESH_PRODUCTION_04' then freshProductionCheck(o)
+  elseif action=='BEGIN' then assert(not Game:GetProperty(STATE) and o.mapCount==0 and o.activeCount==0,'third spy already prepared')
   else assert(o.bound and not state().intents[action],'third spy operation already reserved') end
   used[action]=true; pending={action=action,stage='QUEUED'}; B.thirdLast='QUEUED_'..action;
  end
@@ -623,6 +658,11 @@ function T.InstallUI(hooks)
   B.Queue(action,action~='BUILD_SPY' and B.EnemyTarget() or nil); return B.lastAction
  end
  Events.SaveComplete.Add(function()
+  if pending and pending.action=='PROGRESS_SPY' then
+   local ack=Game:GetProperty(ACK); local production=Game:GetProperty(PRODUCTION);
+   if ack and ack.token==pending.token and ack.action=='PROGRESS_SPY' and ack.phase=='COMMAND' and
+    production and production.attempt==2 and production.progressed then pending.commandSaved=true end
+  end
   for action,arm in pairs(arms) do local s=Game:GetProperty(STATE); local i=s and s.intents[action];
    if i and arm.token==i.token and arm.turn==i.turn and arm.turn==Game.GetCurrentGameTurn() and not arm.sent then
     local o=T.Read(); checkReady(o); T.CheckRoster(ui.roster(0));
@@ -683,6 +723,9 @@ function T.InstallUI(hooks)
     local ack=Game:GetProperty(ACK);
     if request.commandPublished and ack and ack.owner==0 and ack.token==request.token and
      ack.action==request.action and ack.phase=='COMMAND' and ack.turn==request.turn then
+     if request.action=='PROGRESS_SPY' and state().productionAttempt==2 and not request.commandSaved then
+      B.thirdLast='COMMAND_PROGRESS_AWAITING_SAVE'; return
+     end
      local o=T.Read(); checkReady(o);
      assert(conserved(request.observed,o,request.action=='PROGRESS_SPY'),'third spy changed after Core response');
      request.stage='BARRIER_SENT';
@@ -698,7 +741,7 @@ function T.InstallUI(hooks)
      assert(R.EncodeText(R.Serialize(o))==request.observation,'third spy changed after attestation');
      pending={action='ADOPT',stage='QUEUED'}; return
     end
-    local action=request.action=='BEGIN' and 'BUILD_SPY' or request.action;
+    local action=(request.action=='BEGIN' or request.action=='FRESH_PRODUCTION_04') and 'BUILD_SPY' or request.action;
     if action~='ADOPT' and action~='PROGRESS_SPY' then local intent=state().intents[action];
      arms[action]={token=intent.token,turn=intent.turn,saved=false,sent=false,observed=copy(o)}; end
     B.thirdLast='ACCEPTED_'..request.action; pending=nil;
