@@ -31,6 +31,8 @@
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |
 | [`poc/sengoku-ages.md`](poc/sengoku-ages.md) | 戦国パックの時代（黄金期・暗黒期）第1段階：公式の時代スコアの停止、武功の台帳、改元の判定と通知、オーナー判断 L（時代の名前を元号に、友好宣言の点、令和・遅代までの改元、誓約は各家に固有3つ）、実機確認項目。後続1：暗黒期の政策の選択画面（EXECUTE_SCRIPT）と家ごとの既定の政策（Q70〜Q72）。後続3：改元の画面と時代スコアの画面（公式の時代の画面の絵と組み立て、元号はこの2画面だけ） |
 | [`poc/sengoku-oaths.md`](poc/sengoku-oaths.md) | 家ごとの誓約66件：公式Commemorationsの調査、史実資料、3言語の名前、年齢別の効果、台帳・選択画面・AI・保存と実機シナリオ |
+| [`poc/oath-effect-audit.md`](poc/oath-effect-audit.md) | 66誓約の強い効果を短い実機シナリオで個別に測る方法、公式UIの数値API、確認済みと未確認の境界 |
+| [`poc/data/oath-effect-scenarios.json`](poc/data/oath-effect-scenarios.json) | 誓約66件のシナリオ、対象と非対象の建造、手番上限、実機未確認の記録。Rust生成器の出力 |
 | [`poc/data/sengoku-oaths.json`](poc/data/sengoku-oaths.json) | 上記誓約の暫定カタログ。SQLと3言語の翻訳の生成元 |
 | [`poc/tuning-200.md`](poc/tuning-200.md) | 約200ターンで暫定値を測る手順・結果・再開記録 |
 | [poc/data/tuning-200-03.json](poc/data/tuning-200-03.json) | 完全性を確認した200ターンの年齢判定・観測・裁定・滅亡の実測 |
