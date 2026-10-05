@@ -41,15 +41,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or("save name missing")?;
-    let apply = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true); local api=assert(ExposedMembers.JAC_LeaderPersona); api.Reconcile(); assert(Game:GetProperty('JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA')==1); return 'synchronized paid projection invoked, no payment or ledger edits'"});
+    let request = |serial| json!({"action":"ui_lua","state_name":"InGame","code":format!("UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{{OnStart='JAC_LeaderPersonaProject',ProjectionSerial={serial}}}); return 'projection requested'")});
+    let receipt = |serial| json!({"action":"wait_for","timeout":30,"condition":{"type":"lua","state_name":"InGame","code":format!("return Players[0]:GetProperty('JAC_PERSONA_PROJECT_RECEIPT')=={serial}")}});
     let allowed = paid == 3;
     let data = json!({"name":format!("Resident runtime retains native cost3 {}/3 decision after observation stop",paid),
     "judge_profile":"generic","strict_lua_errors":true,"steps":[
         {"action":"load","name":name,"exact_name":true,"timeout":300},
         {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0] and Players[0]:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersona)=='table'"}},
-        ui_check(paid,true),apply.clone(),
+        ui_check(paid,true),
+        {"action":"ui_lua","state_name":"GameCore_Tuner","code":"Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true); return 'diagnostic projection flag only'"},
+        request(1),receipt(1),
         {"action":"start_native_paid_runtime","name":format!("runtime-cost3-{paid}"),"max_seconds":90},
-        apply,ui_check(paid,allowed),
+        request(2),receipt(2),ui_check(paid,allowed),
         {"action":"stop_native_paid_runtime_observation"},
         ui_check(paid,allowed)
     ]});
@@ -58,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &args[2],
         format!("{}\n", serde_json::to_string_pretty(&data)?),
     )?;
-    println!("save SHA-256 {actual}; 9 steps; formal payment requests=0");
+    println!("save SHA-256 {actual}; 12 steps; formal payment requests=0");
     Ok(())
 }
 

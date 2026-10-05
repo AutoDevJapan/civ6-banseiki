@@ -903,9 +903,15 @@ mod platform {
         pub fn process_identity(&self) -> (u32, u64) {
             (self.pid, self.created)
         }
+        pub fn retains_process_after_stop(&self) -> bool {
+            self.resident_runtime && self.finished
+        }
+        pub fn process_has_exited(&self) -> bool {
+            unsafe { WaitForSingleObject(self.target.0, 0) == WAIT_OBJECT_0 }
+        }
         pub fn verify_current_process(&self, pid: u32, started: f64) -> Result<(u32, u64)> {
             let (created, target) = pinned_created(pid, started)?;
-            if self.finished
+            if (self.finished && !self.resident_runtime)
                 || (pid, created) != (self.pid, self.created)
                 || unsafe { WaitForSingleObject(target.0, 0) } != WAIT_TIMEOUT
             {
@@ -2088,6 +2094,12 @@ impl Session {
     }
     pub fn process_identity(&self) -> (u32, u64) {
         (0, 0)
+    }
+    pub fn retains_process_after_stop(&self) -> bool {
+        false
+    }
+    pub fn process_has_exited(&self) -> bool {
+        false
     }
     pub fn verify_current_process(&self, _: u32, _: f64) -> Result<(u32, u64)> {
         Err(Error::input("native bridge requires Windows x64"))
