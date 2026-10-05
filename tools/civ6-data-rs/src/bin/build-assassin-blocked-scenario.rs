@@ -144,6 +144,7 @@ assert(#plots==6,'complete adjacent ring required')
 local rows={}; local occupied={}
 local function SafePlot(p)
   assert(not p:IsCity(),'fixture would modify another city')
+  assert(not p:IsWater(),'fixture would modify a water plot')
   assert(p:GetOwner()<0 or p:GetOwner()==owner,'fixture would modify foreign territory')
   -- Civ6 has 64 player slots, including the free cities and barbarians.
   for id=0,63 do local player=Players[id]
@@ -373,7 +374,7 @@ local function Plot(x,y)
     GetTerrainType=function() return terrain[key] or 1 end,
     GetFeatureType=function() return features[key] or -1 end,
     IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
-    IsWater=function() return false end,IsImpassable=function() return terrain[key]==9 end}
+    IsWater=function() return PROBE_MODE=='water' and x==2 end,IsImpassable=function() return terrain[key]==9 end}
 end
 TerrainBuilder={SetTerrainType=function(p,t)
   terrain[p:GetX()..','..p:GetY()]=t
@@ -471,6 +472,7 @@ end
             "occupied",
             "foreign_occupied",
             "foreign_territory",
+            "water",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -509,6 +511,14 @@ end
                     .unwrap_err()
                     .to_string()
                     .contains("fixture would modify foreign territory"));
+                lua.load("CheckPreflightUnchanged()").exec()?;
+            }
+            if mode == "water" {
+                assert!(result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixture would modify a water plot"));
                 lua.load("CheckPreflightUnchanged()").exec()?;
             }
             if safe {
