@@ -38,6 +38,32 @@ local function UnitIDs(owner)
   local ids={}; for _,u in Players[owner]:GetUnits():Members() do ids[tostring(u:GetID())]=true end
   return ids
 end
+local function Placed(row)
+  local plot=Map.GetPlot(row.X,row.Y)
+  assert(plot and Units and Units.GetUnitsInPlot,'native plot membership unavailable')
+  local count=0
+  for _,u in ipairs(Units.GetUnitsInPlot(plot)) do
+    if u:GetOwner()==row.Owner and u:GetID()==row.ID then
+      count=count+1; assert(Same(Row(u),row),'plot member differs from saved unit')
+    end
+  end
+  assert(count==1,'native unit is not present exactly once in its plot')
+end
+local function AssetFree(plot)
+  assert(plot:GetResourceType()==-1 and plot:GetImprovementType()==-1 and
+    plot:GetDistrictType()==-1 and plot:GetRouteType()==-1,'fixture would modify a plot with assets')
+end
+local function NationwideLock()
+  local before=R.State(t.Actor); local count=0
+  assert(before.ProductionUnlock==before.LastCompletion+10,'standard-speed lock must last ten turns')
+  for _,city in Players[t.Actor]:GetCities():Members() do
+    count=count+1
+    local ok,why=R.StartProduction(t.Actor,city:GetID())
+    assert(not ok and why=='PRODUCTION_LOCK','another city bypassed the nationwide lock')
+    assert(Same(R.State(t.Actor),before),'rejected training changed completion state')
+  end
+  assert(count>=2,'nationwide lock requires another city')
+end
 local function IntactCity()
   local city=Players[t.Actor]:GetCities():FindID(t.City)
   assert(city and city:GetX()==t.X and city:GetY()==t.Y,'training city lost or replaced')
@@ -49,6 +75,7 @@ local function Blockers()
   IntactCity()
   for _,p in ipairs(t.Plots) do
     local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')
+    AssetFree(plot)
     assert(plot:IsImpassable() and plot:GetTerrainType()==p.Barrier,'fixture terrain barrier changed')
   end
 end
@@ -57,6 +84,7 @@ local function RestoredTerrain()
   for _,p in ipairs(t.Plots) do
     local plot=Map.GetPlot(p.X,p.Y)
     assert(plot and plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.Feature,'restored terrain or feature differs')
+    AssetFree(plot)
   end
 end
 local function RestoreTerrain()
@@ -146,6 +174,7 @@ local function SafePlot(p)
   assert(not p:IsCity(),'fixture would modify another city')
   assert(not p:IsWater(),'fixture would modify a water plot')
   assert(p:GetOwner()<0 or p:GetOwner()==owner,'fixture would modify foreign territory')
+  AssetFree(p)
   -- Civ6 has 64 player slots, including the free cities and barbarians.
   for id=0,63 do local player=Players[id]
     local units=player and player:GetUnits()
@@ -268,7 +297,7 @@ print('[JAC_ASN_BLOCKED] recovery-distance='..Map.GetPlotDistance(t.X,t.Y,row.X,
 assert(s.Production==nil and s.LastCompletion==R.Turn() and R.Turn()==t.Released+1,'wrong actual completion turn')
 assert(s.ProductionUnlock==s.LastCompletion+R.Scale(R.PRODUCTION_LOCK),'lock did not start at actual completion')
 t.Complete=s; t.Unit=row; Trace('gameplay-before-save',row); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)
-local ok,why=R.StartProduction(t.Actor,t.City); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')
+Placed(row); NationwideLock()
 return 'one native placed assassin; full lock starts only at actual recovery'
 "#,
         "GameCore_Tuner",
@@ -279,6 +308,7 @@ return 'one native placed assassin; full lock starts only at actual recovery'
 local u=Players[t.Actor]:GetUnits():FindID(t.Unit.ID); local row=Row(u)
 RestoredTerrain()
 assert(Same(row,t.Unit),'independent UI coordinates differ from gameplay')
+Placed(row)
 Trace('ui-before-save',row); return 'native UI independently matches production id, type, position and damage'
 "#,
         "InGame",
@@ -290,6 +320,7 @@ Trace('ui-before-save',row); return 'native UI independently matches production 
 assert(Same(R.State(t.Actor),t.Complete),'completion state changed after load')
 RestoredTerrain()
 local row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'gameplay unit changed after load')
+Placed(row); NationwideLock()
 Trace('gameplay-after-load',row); return 'completed state and same native unit restored unchanged'
 "#,
         "GameCore_Tuner",
@@ -298,6 +329,7 @@ Trace('gameplay-after-load',row); return 'completed state and same native unit r
         &mut steps,
         r#"
 local row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'independent UI unit changed after load')
+Placed(row)
 RestoredTerrain()
 Trace('ui-after-load',row); return 'independent UI restores the same id, owner, type, coordinates and damage'
 "#,
@@ -311,6 +343,7 @@ assert(Same(R.State(t.Actor),t.Complete),'next turn duplicated completion or ext
 RestoredTerrain()
 local ids=Assassins(t.Actor); local count=0; for id in pairs(ids) do count=count+1; assert(tonumber(id)==t.Unit.ID,'duplicate assassin') end
 assert(count==1,'recovered assassin lost'); Trace('next-turn',ids[tostring(t.Unit.ID)])
+Placed(ids[tostring(t.Unit.ID)]); NationwideLock()
 Game:SetProperty(R.TEST,nil)
 local ok,why=R.TestAdvanceDeadlines(t.Actor); assert(not ok and why=='TEST_MODE_OFF','test hook remains active')
 return 'next real turn preserves one completion and original lock; test hook disabled'
@@ -379,6 +412,10 @@ local function Plot(x,y)
     GetOwner=function() return PROBE_MODE=='foreign_territory' and x==2 and 1 or 0 end,
     GetTerrainType=function() return terrain[key] or 1 end,
     GetFeatureType=function() return features[key] or -1 end,
+    GetResourceType=function() return PROBE_MODE=='resource' and x==2 and 1 or -1 end,
+    GetImprovementType=function() return PROBE_MODE=='improvement' and x==2 and 1 or -1 end,
+    GetDistrictType=function() return PROBE_MODE=='district' and x==2 and 1 or -1 end,
+    GetRouteType=function() return PROBE_MODE=='route' and x==2 and 1 or -1 end,
     IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
     IsWater=function() return (PROBE_MODE=='water' or PROBE_MODE=='water_candidate') and x==2 end,
     IsImpassable=function() return terrain[key]==9 end}
@@ -485,6 +522,10 @@ end
             "foreign_territory",
             "water",
             "water_candidate",
+            "resource",
+            "improvement",
+            "district",
+            "route",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -523,6 +564,14 @@ end
                     .unwrap_err()
                     .to_string()
                     .contains("fixture would modify foreign territory"));
+                lua.load("CheckPreflightUnchanged()").exec()?;
+            }
+            if matches!(mode, "resource" | "improvement" | "district" | "route") {
+                assert!(result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixture would modify a plot with assets"));
                 lua.load("CheckPreflightUnchanged()").exec()?;
             }
             if mode == "water_candidate" {
@@ -580,28 +629,57 @@ end
             .filter_map(|step| step["code"].as_str())
             .find(|code| code.contains("recovery did not create exactly one placed assassin"))
             .unwrap();
-        for x in [5, 999999] {
+        for (x, mode) in [
+            (5, "valid"),
+            (999999, "valid"),
+            (5, "missing_member"),
+            (5, "wrong_member"),
+            (5, "duplicate_member"),
+            (5, "missing_api"),
+            (5, "one_city"),
+            (5, "other_city_bypass"),
+            (5, "mutated_rejection"),
+            (5, "wrong_lock"),
+        ] {
             let lua = Lua::new();
             lua.load(format!(r#"
 local unit={{GetID=function() return 90 end,GetOwner=function() return 0 end,GetType=function() return 0 end,
   GetX=function() return {x} end,GetY=function() return 0 end,GetDamage=function() return 0 end}}
 local s={{LastProducedUnit=90,LastCompletion=2,ProductionUnlock=12}}
+local mode='{mode}'
+if mode=='wrong_lock' then s.ProductionUnlock=11 end
 local t={{Actor=0,City=10,X=0,Y=0,CenterTerrain=1,CenterFeature=3,Plots={{}},Before={{}},AllReleased={{}},Released=1}}
 Game={{GetProperty=function() return t end,SetProperty=function() end,GetCurrentGameTurn=function() return 2 end}}
-Players={{[0]={{GetCities=function() return {{FindID=function() return {{GetX=function() return 0 end,GetY=function() return 0 end}} end}} end,
+Players={{[0]={{GetCities=function() return {{FindID=function() return {{GetX=function() return 0 end,GetY=function() return 0 end}} end,
+  Members=function() local id=9; local last=mode=='one_city' and 10 or 11
+    return function() id=id+1; if id<=last then return id,{{GetID=function() return id end}} end end end}} end,
   GetUnits=function() return {{Members=function() local once=false; return function()
     if not once then once=true; return 90,unit end end end}} end}}}}
 Map={{GetPlot=function(px) if px==999999 then return nil end
   return {{GetTerrainType=function() return 1 end,GetFeatureType=function() return 3 end}} end,
   GetPlotDistance=function() return {x} end}}
+Units={{GetUnitsInPlot=function()
+  if mode=='missing_member' then return {{}} end
+  if mode=='wrong_member' then return {{{{GetID=function() return 90 end,GetOwner=function() return 1 end}}}} end
+  if mode=='duplicate_member' then return {{unit,unit}} end
+  return {{unit}}
+end}}
+if mode=='missing_api' then Units=nil end
 GameInfo={{Units={{ASSASSIN={{Index=0}}}}}}
-ExposedMembers={{JAC_Assassin={{State=function() return s end,IsAssassin=function() return true end,
+ExposedMembers={{JAC_Assassin={{State=function() local copy={{}}; for k,v in pairs(s) do copy[k]=v end; return copy end,IsAssassin=function() return true end,
   UnitForPlayer=function() return 'ASSASSIN' end,Turn=function() return 2 end,PRODUCTION_LOCK=10,
   Scale=function(v) return v end,StartProduction=function(actor,city)
-    assert(actor==0 and city==10); return false,'PRODUCTION_LOCK' end}}}}
+    assert(actor==0 and (city==10 or city==11))
+    if city==11 and mode=='other_city_bypass' then return true end
+    if city==11 and mode=='mutated_rejection' then s.ProductionUnlock=13 end
+    return false,'PRODUCTION_LOCK' end}}}}
 "#)).exec()?;
             let result = lua.load(recovery).exec();
-            assert_eq!(result.is_ok(), x == 5, "{x}: {result:?}");
+            assert_eq!(
+                result.is_ok(),
+                x == 5 && mode == "valid",
+                "{x}/{mode}: {result:?}"
+            );
         }
         Ok(())
     }
