@@ -619,6 +619,18 @@ fn neutralized_governor_establishment_flag_is_observed_without_inventing_its_val
 }
 
 #[test]
+fn native_neutralization_stops_merit_even_if_engine_reports_established() {
+    let h = Enemy::new();
+    h.success();
+    h.capture();
+    h.run("ENEMY_GOV.established=true; assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='NEUTRALIZED'); Game:SetProperty('JAC_PERSONA_'..ENEMY_CASES.leader..'_MERIT',7)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyProgress()",
+        "earned merit while neutralized",
+    );
+}
+
+#[test]
 fn recycled_spy_lookup_cannot_dispatch_a_mission_for_the_saved_identity() {
     let h = Enemy::new();
     h.prepare();
@@ -712,6 +724,28 @@ fn recovery_survives_view_reload_stays_unassigned_and_requires_five_native_turns
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.CheckEnemy('ESTABLISHING',6)",
         "merit changed",
+    );
+}
+
+#[test]
+fn native_reassignment_before_human_request_uses_a_recorded_unassigned_baseline() {
+    let h = Enemy::new();
+    h.success();
+    h.capture();
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY').unassignedAtCapture==1); ENEMY_CASES.neutralize(0); ENEMY_CASES.reassign(0); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='ESTABLISHING')");
+    h.run("ENEMY_CASES.reassign(5); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='SETTLED')");
+}
+
+#[test]
+fn unchanged_native_assignment_is_not_misreported_as_reassignment() {
+    let h = Enemy::new();
+    h.success();
+    h.run("ENEMY_GOV.assigned=FOREIGN");
+    h.capture();
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY').unassignedAtCapture==0); ENEMY_CASES.neutralize(0); ENEMY_CASES.reassign(0)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyProgress()",
+        "native assignment has no prior unassigned observation",
     );
 }
 

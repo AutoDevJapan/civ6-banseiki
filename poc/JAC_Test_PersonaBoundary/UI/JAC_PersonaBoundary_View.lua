@@ -2105,7 +2105,7 @@ function B.EnemyProgress()
         for node in pairs(baseline.nodesOwned) do
             assert(s.nodesOwned[node]==1,"purchased native persona skill was lost");
         end
-        if not s.native.established then
+        if s.native.neutralized>0 or not s.native.established then
             local purchased=0;
             for node in GameInfo.JAC_PersonaTreeNodes() do
                 if node.LeaderType==c.leader and s.nodesOwned[node.NodeType]==1 and
@@ -2126,13 +2126,16 @@ function B.EnemyProgress()
         R.Check(s,"NEUTRALIZED");
         stage="NEUTRALIZED";
     elseif baseline then
-        local assignment=Game:GetProperty("JAC_BOUNDARY_ENEMY_BARRIER");
-        if not assignment or assignment.action~="REASSIGN" or s.native.cityOwner==-1 then
+        if s.native.cityOwner==-1 then
             R.Check(s,"RECOVERED"); stage="RECOVERED";
-        elseif s.native.established then
-            R.Check(s,"SETTLED"); stage="SETTLED";
         else
-            R.Check(s,"ESTABLISHING"); stage="ESTABLISHING";
+            assert(baseline.unassignedAtCapture==1,
+                "native assignment has no prior unassigned observation");
+            if s.native.established then
+                R.Check(s,"SETTLED"); stage="SETTLED";
+            else
+                R.Check(s,"ESTABLISHING"); stage="ESTABLISHING";
+            end
         end
     elseif receipt then
         stage="FAILED"; -- also covers a successful mission with no native neutralization
@@ -3125,7 +3128,8 @@ local function Submit(command)
         B.CheckEnemy("NEUTRALIZED");
         local native=B.EnemyState();
         assert(native.neutralized>0,"UI native neutralization missing at capture");
-        return EnemySyncRequest(action,{Neutralized=native.neutralized,CityID=c.cityID});
+        return EnemySyncRequest(action,{Neutralized=native.neutralized,CityID=c.cityID,
+            Unassigned=native.cityOwner==-1 and 1 or 0});
     elseif action == "SAVE_TRAVEL" then
         local receipt=assert(travelReference,"accepted travel receipt missing");
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
@@ -3683,7 +3687,8 @@ ContextPtr:SetUpdate(function()
                     R.Property(c.leader,"STATE")=="GOVERNOR";
             elseif request.action=="CAPTURE_ENEMY" then
                 local baseline=Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY");
-                accepted=baseline and c and baseline.remaining==request.payload.Neutralized;
+                accepted=baseline and c and baseline.remaining==request.payload.Neutralized and
+                    baseline.unassignedAtCapture==request.payload.Unassigned;
             elseif request.action=="BEGIN_SPY_RETRY" or
                 request.action=="FINALIZE_SPY_RETRY" then
                 local retry=Game:GetProperty(RETRY);

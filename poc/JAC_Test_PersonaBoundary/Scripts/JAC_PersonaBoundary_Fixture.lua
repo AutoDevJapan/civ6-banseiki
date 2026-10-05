@@ -1848,6 +1848,15 @@ GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)
     assert(type(remaining)=="number" and remaining>0,"native neutralization required for recovery");
     assert(remaining==params.Neutralized and params.CityID==c.cityID,
         "UI/Gameplay neutralization observation changed before capture");
+    assert(params.Unassigned==0 or params.Unassigned==1,
+        "native assignment observation missing at recovery capture");
+    if params.Unassigned==1 then
+        assert(native.cityOwner==nil and native.cityID==nil,
+            "native Governor was assigned after the UI unassigned observation");
+    else
+        assert(native.cityOwner==c.owner and native.cityID==c.cityID,
+            "native Governor assignment changed before recovery capture");
+    end
     local nodes={};
     for node in GameInfo.JAC_PersonaTreeNodes() do
         if node.LeaderType==c.leader and R.Property(c.leader,"NODE_"..node.NodeType)==1 then
@@ -1856,7 +1865,8 @@ GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)
     end
     Game:SetProperty("JAC_BOUNDARY_ENEMY_RECOVERY",{merit=R.Property(c.leader,"MERIT") or 0,
         nodesOwned=nodes,spent=Players[c.owner]:GetGovernors():GetGovernorPointsSpent(),
-        remaining=remaining,turn=Game.GetCurrentGameTurn()});
+        remaining=remaining,unassignedAtCapture=params.Unassigned,
+        turn=Game.GetCurrentGameTurn()});
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;
