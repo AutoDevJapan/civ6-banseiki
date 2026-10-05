@@ -770,6 +770,25 @@ mod native_transport {
     }
 
     #[test]
+    fn single_player_rejects_an_otherwise_valid_boundary_without_mutation() {
+        let lua = ready();
+        let p = message(&lua);
+        let before = checkpoint(&lua).ledger;
+        lua.load("GameConfiguration.IsAnyMultiplayer=function() return false end")
+            .exec()
+            .unwrap();
+        assert!(!receive(&lua, 2, &p));
+        assert!(lua
+            .load(format!(
+                "return Game:GetProperty({:?})==nil",
+                transport::STATE_KEY
+            ))
+            .eval::<bool>()
+            .unwrap());
+        assert_eq!(checkpoint(&lua).ledger, before);
+    }
+
+    #[test]
     fn saved_receipt_survives_vm_recreation_and_corrupt_payload_is_not_adopted() {
         let first = ready();
         let p = message(&first);
