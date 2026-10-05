@@ -290,11 +290,13 @@ fn religion_adapter_corrupt_metadata_rejects_before_native_absorption_mutation()
 #[test]
 fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment()
 -> mlua::Result<()> {
-    let lua = joint_adapter_world()?;
-    lua.load(
-        r#"
+    for revision in [2147483646i64, 2147483647] {
+        let lua = joint_adapter_world()?;
+        lua.globals().set("REVISION", revision)?;
+        lua.load(
+            r#"
       local A=TEST_ABSORPTION
-      Game:GetProperty('JAC_RP_STATE_V1').revision=2147483646
+      Game:GetProperty('JAC_RP_STATE_V1').revision=REVISION
       local tx=A.Apply(PLAN)
       assert(tx.Status=='COMPLETE' and Game:GetProperty('JAC_RP_STATE_V1').revision==2147483647)
       assert(A.Verify(PLAN.ID,true))
@@ -304,8 +306,10 @@ fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_incre
       assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==saved)
       assert(SPAWNS==spawns and KILLS==kills and TRANSFERS==transfers)
     "#,
-    )
-    .exec()
+        )
+        .exec()?;
+    }
+    Ok(())
 }
 
 #[test]

@@ -225,7 +225,7 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
         ("s.revision='broken'", "revision type"),
         ("s.revision=-1", "negative revision"),
         ("s.revision=1.5", "fractional revision"),
-        ("s.revision=2147483647", "revision overflow"),
+        ("s.revision=2147483648", "revision overflow"),
         ("s.absorptionReceipts=false", "receipt type"),
         (
             "s.absorptionReceipts={['rp-absorb-1']={}}",
@@ -262,6 +262,46 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
         .load("return ADAPTER.Prepare(TX)")
         .eval::<MultiValue>()
         .is_err());
+}
+
+#[test]
+fn absorption_adapter_saturated_counter_allows_normal_updates_and_reload() {
+    let mut h = seeded_absorption_harness();
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.revision=2147483647");
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.export()["revision"], 2147483647);
+    assert_eq!(h.export()["absorptionExactReceipt"], "rp-absorb-1");
+    h.exec("local a=PROPERTY_STORE.JAC_RP_STATE_V1.religions[RP_R1].assets.scripture; a.owner=9; assert(not pcall(ADAPTER.Verify,TX,SNAP)); a.owner=1");
+    call!(h, "SetCommunity", R1, "late_max", 0, 0, "PLAYER_1");
+    assert_eq!(h.export()["revision"], 2147483647);
+    assert_eq!(
+        h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionExactReceipt==nil"),
+        true
+    );
+    let saved = h.export();
+    let writes = h.writes();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), writes);
+    h.reload();
+    install_absorption_adapter(&h);
+    absorption_tx(&h, true);
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), 0);
+    // V1 receipts remain readable after an ordinary update at the saturated counter.
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Version=1");
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.writes(), 0);
 }
 
 #[test]

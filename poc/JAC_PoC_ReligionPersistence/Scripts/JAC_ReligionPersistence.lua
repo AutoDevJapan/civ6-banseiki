@@ -138,7 +138,10 @@ local function get(state, id)
 end
 
 local function commit(state)
-  state.revision = state.revision + 1
+  -- The saved counter is bounded; freshness is tracked independently so
+  -- ordinary RP actions remain available after the counter saturates.
+  state.revision = math.min(state.revision + 1, 2147483647)
+  state.absorptionExactReceipt = nil
   for _, id in ipairs(keys(state.religions)) do derive(state.religions[id]) end
   Game:SetProperty(KEY, state)
   print("[JAC_RP] committed revision=" .. state.revision)

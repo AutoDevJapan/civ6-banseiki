@@ -129,6 +129,11 @@ local RP=assert(ExposedMembers.JAC_ReligionPersistence)
 local state=RP.Export()
 state.revision=2147483647
 Game:SetProperty(RP.PROPERTY_KEY,state)
+local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))
+RP.SetCommunity('JAC_RP_PLACEHOLDER_01','joint_max_update',0,0,'PLAYER_'..e.To)
+assert(RP.Export().revision==2147483647,'ordinary RP update overflowed maximum revision')
+local tx=assert(JAC_AbsorptionGameplay.GetState().Transactions['japan-live-absorption'])
+JAC_RP_AbsorptionAdapter.Verify(tx,assert(tx.Adapters['religion-persistence']))
 return RP.Snapshot()
 "#;
 

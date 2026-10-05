@@ -824,7 +824,7 @@
     {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "\nlocal RP=assert(ExposedMembers.JAC_ReligionPersistence)\nlocal state=RP.Export()\nstate.revision=2147483647\nGame:SetProperty(RP.PROPERTY_KEY,state)\nreturn RP.Snapshot()\n",
+      "code": "\nlocal RP=assert(ExposedMembers.JAC_ReligionPersistence)\nlocal state=RP.Export()\nstate.revision=2147483647\nGame:SetProperty(RP.PROPERTY_KEY,state)\nlocal e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))\nRP.SetCommunity('JAC_RP_PLACEHOLDER_01','joint_max_update',0,0,'PLAYER_'..e.To)\nassert(RP.Export().revision==2147483647,'ordinary RP update overflowed maximum revision')\nlocal tx=assert(JAC_AbsorptionGameplay.GetState().Transactions['japan-live-absorption'])\nJAC_RP_AbsorptionAdapter.Verify(tx,assert(tx.Adapters['religion-persistence']))\nreturn RP.Snapshot()\n",
       "capture_as": "JOINT_REVISION_MAX"
     },
     {

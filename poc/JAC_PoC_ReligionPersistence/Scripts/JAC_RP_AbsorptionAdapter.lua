@@ -124,7 +124,7 @@ end
 
 local function verifyReceipt(state, tx, snapshot, receipt)
   assert(receipt.ID == tx.ID and receipt.From == tx.From and receipt.To == tx.To
-    and receipt.Version == 1 and type(receipt.Revision) == "number"
+    and (receipt.Version == 1 or receipt.Version == 2) and type(receipt.Revision) == "number"
     and state.revision >= receipt.Revision, "RP absorption receipt mismatch")
   local fromKey, toKey = tostring(tx.From), tostring(tx.To)
   assert(state.heroes[fromKey] == nil and state.artifacts[fromKey] == nil,
@@ -145,7 +145,10 @@ local function verifyReceipt(state, tx, snapshot, receipt)
     end
     -- Later RP actions can add communities, discoveries and revival receipts
     -- even in this turn. Exact comparison applies only before their commits.
-    if state.revision == receipt.Revision then
+    local exact = receipt.Version == 2 and state.absorptionExactReceipt == tx.ID
+      or receipt.Version == 1 and state.revision == receipt.Revision
+        and state.revision < 2147483647
+    if exact then
       assert(equal(projection(current), expected), "RP religion transfer mismatch")
     end
   end
@@ -162,7 +165,6 @@ function Adapter.Prepare(tx)
   assert(type(tx.ID) == "string" and type(tx.From) == "number"
     and type(tx.To) == "number" and tx.From ~= tx.To, "invalid RP absorption transaction")
   local state = requireState()
-  assert(state.revision < 2147483647, "RP revision has no increment capacity")
   assert(not state.absorptionReceipts or state.absorptionReceipts[tx.ID] == nil,
     "RP absorption receipt ID already used")
   inspect(state, tx) -- read-only; no reservation or property write
@@ -181,7 +183,6 @@ function Adapter.Apply(tx, snapshot)
     verifyReceipt(state, tx, snapshot, receipt)
     return -- a successful property write already included the receipt
   end
-  assert(state.revision < 2147483647, "RP revision has no increment capacity")
   local touched, sourceHero = inspect(state, tx)
   assert(sourceHero == snapshot.HeroUnit, "RP source hero changed after preparation")
   local fromKey, toKey = tostring(tx.From), tostring(tx.To)
@@ -218,8 +219,9 @@ function Adapter.Apply(tx, snapshot)
   if state.artifacts[fromKey] then
     state.artifacts[toKey], state.artifacts[fromKey] = state.artifacts[fromKey], nil
   end
-  state.revision = state.revision + 1
-  receipt = { Version = 1, ID = tx.ID, From = tx.From, To = tx.To,
+  state.revision = math.min(state.revision + 1, 2147483647)
+  state.absorptionExactReceipt = tx.ID
+  receipt = { Version = 2, ID = tx.ID, From = tx.From, To = tx.To,
     Turn = Game.GetCurrentGameTurn(), Revision = state.revision, Religions = {},
     Hero = copy(state.heroes[toKey]), Artifact = copy(state.artifacts[toKey]) }
   for id in pairs(touched) do receipt.Religions[id] = projection(state.religions[id]) end
