@@ -1554,7 +1554,7 @@ impl Runner {
                     )?;
                 }
                 Ok(format!(
-                    "native boundary receipt confirmed for {token}; no physical MOVE claimed"
+                    "boundary receipt confirmed on this client for {token}; no physical MOVE claimed"
                 ))
             }
             "carrier_checkpoint" => {

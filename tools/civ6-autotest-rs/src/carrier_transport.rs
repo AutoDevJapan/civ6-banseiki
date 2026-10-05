@@ -19,6 +19,7 @@ const CARRIER_FIELDS: &[(&str, &str)] = &[
     ("Y", "Y"),
     ("Building", "Building"),
     ("Slot", "Slot"),
+    ("OriginalCity", "OriginalCity"),
 ];
 const PHASE_TOKENS: &[(&str, &str)] = &[
     ("BORROW", "BorrowToken"),
@@ -228,6 +229,25 @@ local function Receive(actor,p)
     and p.ObservationToken~='','saved observation token changed')
   local city=assert(CityManager.GetCityAt(c.X,c.Y),'carrier city disappeared')
   assert(p.CityOwner==city:GetOwner() and p.CityID==city:GetID(),'carrier city identity changed')
+  local owner,id=city:GetOwner(),city:GetID()
+  assert(owner==c.Owner or owner==c.Borrower,'carrier belongs to unrelated owner')
+  if c.Phase=='BORROW' then
+    if owner==c.Owner then
+      assert(id==c.OriginalCity,'original carrier identity changed')
+    else
+      assert(c.BorrowIssued==true,'borrowed carrier has no issued saved intent')
+      assert(c.BorrowedCity==nil or c.BorrowedCity==id,'saved borrowed identity changed')
+    end
+  elseif c.Phase=='MOVE' then
+    assert(owner==c.Borrower and id==c.BorrowedCity,'MOVE borrowed identity changed')
+  elseif c.Phase=='RETURN' or c.Phase=='RESTORE' then
+    if owner==c.Borrower then assert(id==c.BorrowedCity,'return borrowed identity changed') end
+  elseif c.Phase=='PROVED' then
+    assert(owner==c.Owner,'proved carrier was not returned')
+    local final=assert(c.FinalSlot,'final carrier identity missing')
+    assert(final.Owner==owner and final.City==id and final.X==c.X and final.Y==c.Y
+      and final.Building==c.Building and final.Slot==c.Slot,'saved final carrier identity changed')
+  end
   local parts,packet={},{}
   for _,name in ipairs(fields) do
     local v=p[name]
