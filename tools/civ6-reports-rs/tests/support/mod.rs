@@ -16,12 +16,7 @@ pub fn root() -> PathBuf {
 }
 
 pub fn tempdir() -> TempDir {
-    // A moved checkout fixture must work even if the owning agent checkout
-    // is nested beyond Windows executable/SQLite path limits.
-    tempfile::Builder::new()
-        .prefix("civ6-reports-")
-        .tempdir()
-        .unwrap()
+    tempfile::tempdir().unwrap()
 }
 
 pub fn repo_text(path: &str) -> String {

@@ -606,6 +606,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-neutralization-mission-window.json".to_string(),
             "leader-persona-property-abi-15km.json".to_string(),
             "leader-persona-spy-result-diagnostic.json".to_string(),
+            "leader-persona-spy-neutralization-multi-failure-diagnose.json".to_string(),
             "leader-persona-spy-neutralization-retry-diagnose.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange-probe.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange.json".to_string(),

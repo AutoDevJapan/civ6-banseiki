@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 31] = [
+pub const ACTIONS: [&str; 33] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -12,12 +12,14 @@ pub const ACTIONS: [&str; 31] = [
     "autoplay",
     "end_turn",
     "ui_lua",
+    "carrier_checkpoint",
     "screenshot",
     "save",
     "exit_to_menu",
     "load",
     "wait_for",
     "observe_captive_session",
+    "inspect_native_spy_failures",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -201,9 +203,22 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         (1..=u64::from(civ6_native_bridge_rs::MAX_ACTIVE_SECONDS)).contains(&n)
                     })
                     || step.as_object().unwrap().keys().any(|k| {
-                        !["action", "name", "max_seconds", "timeout", "scope"].contains(&k.as_str())
+                        ![
+                            "action",
+                            "name",
+                            "max_seconds",
+                            "timeout",
+                            "scope",
+                            "owner",
+                            "leader",
+                        ]
+                        .contains(&k.as_str())
                     })
                     || (action != "start_native_property_trace" && step.get("scope").is_some())
+                    || ((step.get("owner").is_some() || step.get("leader").is_some())
+                        && (action != "start_native_assign_calibration"
+                            || !step["owner"].as_u64().is_some_and(|n| n < 64)
+                            || !type_id(&step["leader"])))
                     || (action == "start_native_property_trace"
                         && step.get("scope").is_some_and(|v| {
                             v != "numeric_test_keys_853271_853272" && v != "ashina_admission_853304"
@@ -415,6 +430,37 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         .is_some_and(|v| !v.as_i64().is_some_and(|n| n > 0))
                     {
                         return Err(fail(format!("{key} must be positive")));
+                    }
+                }
+            }
+            "inspect_native_spy_failures" => {
+                if step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout"].contains(&key.as_str()))
+                }) {
+                    return Err(fail(
+                        "native spy failure inspection only accepts timeout".into(),
+                    ));
+                }
+            }
+            "carrier_checkpoint" => {
+                bool_flags(&["direct_apply"])?;
+                let token = step["token"]
+                    .as_str()
+                    .ok_or_else(|| fail("carrier checkpoint needs token".into()))?;
+                let candidate = step["candidate"]
+                    .as_str()
+                    .ok_or_else(|| fail("carrier checkpoint needs candidate".into()))?;
+                crate::carrier_sync::query(token, candidate).map_err(|e| fail(e.to_string()))?;
+                safe_relative_path(
+                    step["path"]
+                        .as_str()
+                        .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
+                )?;
+                for key in ["capture_as", "equals_capture"] {
+                    if step.get(key).is_some_and(|v| !type_id(v)) {
+                        return Err(fail(format!("invalid {key}")));
                     }
                 }
             }

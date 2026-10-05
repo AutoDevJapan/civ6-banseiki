@@ -8,6 +8,22 @@ end
 local function expect(expected, actual, label)
     assert(expected == actual, label .. ': expected ' .. tostring(expected) .. ', got ' .. tostring(actual))
 end
+function PRODUCTION_ADMISSION_CASES.gameplay_without_can_ever_binding_still_publishes_authoritative_owner()
+    local original = Players[1].GetGovernors
+    Players[1].GetGovernors = function()
+        local governors = original()
+        governors.CanEverAppointGovernor = nil
+        return governors
+    end
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    assert(Players[1]:GetProperty(902001)==true, 'owner-specific reset must be read')
+    assert(gate(1,4)==true, 'owner 1 must publish after official reservation')
+    assert(gate(0,4)==false, 'other owner remains closed')
+    Players[1].GetGovernors = original
+end
 function PRODUCTION_ADMISSION_CASES.ai_owner_and_sparse_gameinfo_indices()
     Players[1].human = false
     ExposedMembers.JAC_LeaderPersona.Reconcile()
@@ -206,7 +222,7 @@ function PRODUCTION_ADMISSION_CASES.stale_true_during_closure_aborts_owner_publi
         return set(self, key, value)
     end
     p.GetProperty = function(self, key)
-        if key == 902000 then resetReads = resetReads + 1 end
+        if key == 902000 + self:GetID() then resetReads = resetReads + 1 end
         return get(self, key)
     end
     p.points = 0
@@ -273,7 +289,7 @@ function PRODUCTION_ADMISSION_CASES.failed_reset_and_false_ack_never_publish_man
     local get, set = p.GetProperty, p.SetProperty
     p.GetProperty = function(self, key)
         if key == 901004 then return true end -- old true after attempted false
-        if key == 902000 then return 'wrong-type' end
+        if key == 902000 + self:GetID() then return 'wrong-type' end
         return get(self, key)
     end
     p.SetProperty = function(self, key, value)
@@ -353,7 +369,7 @@ function PRODUCTION_ADMISSION_CASES.twenty_two_owners_initialize_once_and_keep_3
     assert(loadstring(GAMEPLAY_SOURCE))()
     expect(22*(1+22*3),writes,'one reset and three phases per owner/index on reload')
     expect(writes,reads,'every initialization write has one natural ACK')
-    expect(22,anchors,'one natural Core binding anchor per owner')
+    expect(0,anchors,'owner reset removes the Gameplay CanEver dependency')
     for id=0,21 do
         for row in GameInfo.JAC_LeaderPersonas() do
             expect(false,gate(id,GameInfo.Governors[row.GovernorType].Index),'unjoined matrix closed')
@@ -378,7 +394,7 @@ function PRODUCTION_ADMISSION_CASES.reload_reset_failure_still_closes_every_owne
         local p,owner=Players[id],id
         local get=p.GetProperty
         p.GetProperty=function(self,key)
-            if key==902000 then
+            if key==902000+owner then
                 resetReads[owner]=(resetReads[owner] or 0)+1
                 if owner==0 then return 'invalid-reset' end
             end
@@ -391,8 +407,24 @@ function PRODUCTION_ADMISSION_CASES.reload_reset_failure_still_closes_every_owne
     end
 end
 
+function PRODUCTION_ADMISSION_CASES.sparse_alive_ids_on_reload_close_omitted_owner()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points=1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    expect(true,gate(1,4),'current permission before reload')
+    local reads, original=0, Players[1].GetProperty
+    Players[1].GetProperty=function(self,key)
+        if key==902001 then reads=reads+1 end
+        return original(self,key)
+    end
+    PlayerManager.GetAliveMajorIDs=function() return {[1]=0,[3]=1} end
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    assert(reads>0,'sparse owner list must read every old owner reset')
+end
+
 function PRODUCTION_ADMISSION_CASES.legacy_schema_does_not_overwrite_a_foreign_close_key()
     for owner=0,2 do
+        if owner > 0 then Players[owner]:SetProperty(902000+owner,nil) end
         for row in GameInfo.JAC_LeaderPersonas() do
             Players[owner]:SetProperty(903000+GameInfo.Governors[row.GovernorType].Index,nil)
         end
@@ -406,15 +438,25 @@ end
 
 function PRODUCTION_ADMISSION_CASES.legacy_schema_claims_empty_close_range_before_republishing()
     for owner=0,2 do
+        if owner > 0 then Players[owner]:SetProperty(902000+owner,nil) end
         for row in GameInfo.JAC_LeaderPersonas() do
             Players[owner]:SetProperty(903000+GameInfo.Governors[row.GovernorType].Index,nil)
         end
     end
     Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',1)
     assert(loadstring(GAMEPLAY_SOURCE))()
-    expect(2,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'empty legacy range safely migrates')
+    expect(3,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'empty legacy range safely migrates')
     for owner=0,2 do
         expect(false,gate(owner,4),'migration closes any earlier permission')
         expect(true,manifest(owner,4),'current manifest after migration')
     end
+end
+
+function PRODUCTION_ADMISSION_CASES.schema_two_rejects_foreign_owner_reset_key()
+    for owner=1,2 do Players[owner]:SetProperty(902000+owner,nil) end
+    Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',2)
+    Players[1]:SetProperty(902001,'foreign-reset')
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect(2,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'collision keeps old schema')
+    expect('foreign-reset',Players[1]:GetProperty(902001),'foreign reset remains untouched')
 end

@@ -936,9 +936,12 @@ impl AttachOrigin {
         first_chance: bool,
         observed: ThreadOriginObservation,
     ) -> BreakpointOrigin {
-        let rip_matches = observed
-            .rip
-            .is_some_and(|rip| self.breakpoint_address.checked_add(1) == Some(rip));
+        // DbgBreakPoint is a verified one-byte INT3. The Windows child-process
+        // attach observes the stopped RIP immediately after that instruction.
+        let rip_matches = self
+            .breakpoint_address
+            .checked_add(1)
+            .is_some_and(|next| observed.rip == Some(next));
         if !self.accepted
             && !self.uncertain
             && first_chance
@@ -2563,11 +2566,11 @@ mod tests {
     use std::{
         io::{BufReader, BufWriter},
         os::windows::process::CommandExt,
-        process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+        process::{Child, ChildStdin, Command, Stdio},
         sync::{
             atomic::{AtomicBool, Ordering},
             mpsc::Sender,
-            Arc,
+            Arc, Mutex, MutexGuard,
         },
     };
     use windows_sys::Win32::System::Diagnostics::Debug::{
@@ -2577,6 +2580,10 @@ mod tests {
     };
 
     static UNKNOWN_STEP_HANDLED: AtomicBool = AtomicBool::new(false);
+    // These integration fixtures model the single owned game/debugger lane.
+    // Keep the whole child lifetime exclusive, while the tests inside a child
+    // still exercise multiple threads and real hardware exceptions.
+    static DEBUG_FIXTURE_LANE: Mutex<()> = Mutex::new(());
 
     #[test]
     fn pinned_instruction_starts_and_context_layout_are_checked_before_attach() {
@@ -2783,6 +2790,7 @@ mod tests {
                     println!("PROBE_OWNER:{:x}", governors.as_ptr() as u64);
                 }
                 "X" => break,
+                "H" => thread::sleep(Duration::from_secs(60)),
                 _ => panic!("invalid fixture command"),
             }
             std::io::stdout().flush().unwrap();
@@ -2792,12 +2800,34 @@ mod tests {
     struct Fixture {
         child: Child,
         input: BufWriter<ChildStdin>,
-        output: BufReader<ChildStdout>,
+        output: Receiver<Result<String, String>>,
+        reader: Option<thread::JoinHandle<()>>,
+        observers: Vec<thread::JoinHandle<()>>,
+        stops: Vec<Sender<()>>,
+        close_ack: Arc<AtomicBool>,
         entry: u64,
         original_regs: String,
+        _lane: MutexGuard<'static, ()>,
+    }
+    struct FixtureObserver<T> {
+        result: Receiver<thread::Result<T>>,
+    }
+    impl<T> FixtureObserver<T> {
+        fn join(self) -> thread::Result<T> {
+            self.result
+                .recv_timeout(Duration::from_secs(30))
+                .unwrap_or_else(|error| {
+                    Err(Box::new(format!(
+                        "fixture observer did not finish: {error}"
+                    )))
+                })
+        }
     }
     impl Fixture {
         fn start() -> Self {
+            let lane = DEBUG_FIXTURE_LANE
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
@@ -2812,54 +2842,205 @@ mod tests {
                 .spawn()
                 .unwrap();
             let input = BufWriter::new(child.stdin.take().unwrap());
-            let mut output = BufReader::new(child.stdout.take().unwrap());
-            let ready = loop {
-                let mut line = String::new();
-                assert_ne!(
-                    output.read_line(&mut line).unwrap(),
-                    0,
-                    "fixture child exited before ready"
-                );
-                if let Some(rest) = line.trim().strip_prefix("PROBE_FIXTURE_READY:") {
-                    break rest.to_string();
+            let output = BufReader::new(child.stdout.take().unwrap());
+            let (line_tx, line_rx) = mpsc::channel();
+            let reader = thread::spawn(move || {
+                for line in output.lines() {
+                    if line_tx
+                        .send(line.map_err(|error| error.to_string()))
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
-            };
-            let (address, regs) = ready.split_once(':').unwrap();
-            Self {
+            });
+            let mut fixture = Self {
                 child,
                 input,
-                output,
-                entry: address.parse().unwrap(),
-                original_regs: regs.into(),
-            }
+                output: line_rx,
+                reader: Some(reader),
+                observers: Vec::new(),
+                stops: Vec::new(),
+                close_ack: Arc::new(AtomicBool::new(false)),
+                entry: 0,
+                original_regs: String::new(),
+                _lane: lane,
+            };
+            let ready = fixture.response("PROBE_FIXTURE_READY:");
+            let (address, regs) = ready.split_once(':').unwrap();
+            fixture.entry = address.parse().unwrap();
+            fixture.original_regs = regs.into();
+            fixture
         }
-        fn command(&mut self, cmd: &str, prefix: &str) -> String {
-            writeln!(self.input, "{cmd}").unwrap();
-            self.input.flush().unwrap();
+        fn response(&self, prefix: &str) -> String {
+            self.response_with_budget(prefix, Duration::from_secs(10))
+        }
+        fn response_with_budget(&self, prefix: &str, budget: Duration) -> String {
+            let deadline = Instant::now() + budget;
             loop {
-                let mut line = String::new();
-                if self.output.read_line(&mut line).unwrap() == 0 {
-                    let status = self.child.try_wait().unwrap();
-                    let mut stderr = String::new();
-                    if status.is_some() {
-                        if let Some(pipe) = self.child.stderr.as_mut() {
-                            let _ = pipe.read_to_string(&mut stderr);
-                        }
-                    }
-                    panic!("fixture child exited during {cmd}: {status:?}; stderr={stderr}");
-                }
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                let line = self
+                    .output
+                    .recv_timeout(remaining)
+                    .unwrap_or_else(|error| {
+                        panic!("fixture response {prefix} timed out or closed: {error}")
+                    })
+                    .unwrap_or_else(|error| panic!("fixture output error: {error}"));
                 if let Some(rest) = line.trim().strip_prefix(prefix) {
                     return rest.to_string();
                 }
             }
         }
+        fn observe<T: Send + 'static>(
+            &mut self,
+            stop: &Sender<()>,
+            work: impl FnOnce(Arc<AtomicBool>) -> T + Send + 'static,
+        ) -> FixtureObserver<T> {
+            self.stops.push(stop.clone());
+            let ack = Arc::clone(&self.close_ack);
+            let (result_tx, result_rx) = mpsc::channel();
+            self.observers.push(thread::spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(ack)));
+                let _ = result_tx.send(result);
+            }));
+            FixtureObserver { result: result_rx }
+        }
+        fn command(&mut self, cmd: &str, prefix: &str) -> String {
+            writeln!(self.input, "{cmd}").unwrap();
+            self.input.flush().unwrap();
+            self.response(prefix)
+        }
     }
     impl Drop for Fixture {
         fn drop(&mut self) {
-            let _ = writeln!(self.input, "X");
-            let _ = self.input.flush();
-            let _ = self.child.wait();
+            for stop in &self.stops {
+                let _ = stop.send(());
+            }
+            // Kill the exact owned child before acknowledging closure; a
+            // suspended debuggee cannot consume an X command during unwinding.
+            if self.child.kill().is_ok()
+                || self.child.try_wait().is_ok_and(|status| status.is_some())
+            {
+                self.close_ack.store(true, Ordering::SeqCst);
+            }
+            let deadline = Instant::now() + Duration::from_secs(30);
+            for observer in self.observers.drain(..) {
+                while !observer.is_finished() && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                if !observer.is_finished() {
+                    // A test process that cannot collect its owned debugger
+                    // must fail finitely rather than retain the whole lane.
+                    std::process::abort();
+                }
+                let _ = observer.join();
+            }
+            while self.child.try_wait().is_ok_and(|status| status.is_none())
+                && Instant::now() < deadline
+            {
+                thread::sleep(Duration::from_millis(10));
+            }
+            if self.child.try_wait().is_ok_and(|status| status.is_none()) {
+                std::process::abort();
+            }
+            if let Some(reader) = self.reader.take() {
+                while !reader.is_finished() && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                if !reader.is_finished() {
+                    std::process::abort();
+                }
+                let _ = reader.join();
+            }
         }
+    }
+
+    #[test]
+    fn fixture_unresponsive_pipe_has_a_deadline_and_releases_its_owned_child() {
+        let child = Fixture::start();
+        assert_ne!(child.child.id(), 0);
+        let game = process(child.child.id(), false).unwrap();
+        assert!(alive(&game).unwrap());
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let mut child = child;
+            writeln!(child.input, "H").unwrap();
+            child.input.flush().unwrap();
+            let _ = child.response_with_budget("NEVER:", Duration::from_millis(100));
+        }));
+        let failure = failed.expect_err("the unresponsive child must reach the read deadline");
+        assert_eq!(
+            failure.downcast_ref::<String>().map(String::as_str),
+            Some(
+                format!(
+                    "fixture response NEVER: timed out or closed: {}",
+                    mpsc::RecvTimeoutError::Timeout
+                )
+                .as_str()
+            )
+        );
+        let lane = DEBUG_FIXTURE_LANE
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        assert!(!alive(&game).unwrap());
+        drop(lane);
+    }
+
+    #[test]
+    fn panic_before_critical_close_ack_collects_observer_child_and_fixture_lane() {
+        let child = Fixture::start();
+        let child_pid = child.child.id();
+        assert_ne!(child_pid, 0);
+        let game = process(child_pid, false).unwrap();
+        assert!(alive(&game).unwrap());
+        let path =
+            std::env::temp_dir().join(format!("pr86-fixture-panic-{}.jsonl", std::process::id()));
+        let _ = fs::remove_file(&path);
+        let output = Jsonl::new(&path).unwrap();
+        let read_path = path.clone();
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let mut child = child;
+            let base = child.entry - CAN_EVER_RVA;
+            let signal = Arc::new(AtomicBool::new(false));
+            let observed = Arc::clone(&signal);
+            let (stop_tx, stop_rx) = mpsc::channel();
+            let _observer = child.observe(&stop_tx, move |close_ack| {
+                let game = process(child_pid, true).unwrap();
+                let mut debugger =
+                    Debugger::attach(child_pid, game, base, 0x800000, output, ProbeMode::Governor)
+                        .unwrap();
+                debugger.close_ack = close_ack;
+                debugger.critical_signal = Some(observed);
+                debugger.force_context_failure = true;
+                debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+            });
+            let start = Instant::now();
+            while !fs::read_to_string(&read_path)
+                .is_ok_and(|text| text.contains("\"type\":\"ready\""))
+            {
+                assert!(start.elapsed() < Duration::from_secs(5));
+                thread::sleep(Duration::from_millis(10));
+            }
+            writeln!(child.input, "T").unwrap();
+            child.input.flush().unwrap();
+            while !signal.load(Ordering::SeqCst) {
+                assert!(start.elapsed() < Duration::from_secs(5));
+                thread::sleep(Duration::from_millis(10));
+            }
+            panic!("injected panic before controller close_ack");
+        }));
+        let failure = failed.expect_err("the fixture must reach the injected close-ack panic");
+        assert_eq!(
+            failure.downcast_ref::<&str>().copied(),
+            Some("injected panic before controller close_ack")
+        );
+        let lane = DEBUG_FIXTURE_LANE
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        assert!(!alive(&game).unwrap());
+        let rows = fs::read_to_string(&path).unwrap();
+        assert!(rows.contains("ambiguous debug exception") || rows.contains("critical_cleanup"));
+        drop(lane);
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -2897,10 +3078,11 @@ mod tests {
         let base = child.entry - PLAYER_GETTER_RVA;
         let pid = child.child.id();
         let (stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Property).unwrap();
+            debugger.close_ack = close_ack;
             debugger.zero_context_dr6_for_test = true;
             debugger.run(stop_rx, Duration::from_secs(3), || Ok(()))
         });
@@ -2968,10 +3150,11 @@ mod tests {
         let (stop_tx, stop_rx) = mpsc::channel();
         let fail = Arc::new(AtomicBool::new(false));
         let fail_observer = Arc::clone(&fail);
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, false).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
+            debugger.close_ack = close_ack;
             // Inject only into the dispatcher, before any real OS event. This
             // is not a child-generated breakpoint and is never continued.
             let mut app_event = DEBUG_EVENT::default();
@@ -3136,11 +3319,12 @@ mod tests {
         let _ = fs::remove_file(&path);
         let output = Jsonl::new(&path).unwrap();
         let base = child.entry - PLAYER_GETTER_RVA;
-        let (_stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, false).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x800000, output, ProbeMode::Lifecycle).unwrap();
+            debugger.close_ack = close_ack;
             let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
             (result, debugger.terminal, debugger.lifecycle.exit_code)
         });
@@ -3150,9 +3334,10 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
-        child.child.kill().unwrap(); // The controller closes only its synthetic child.
-        child.child.wait().unwrap();
+        // Let the debugger consume the process exit event before waiting.
+        child.child.kill().unwrap();
         let (result, terminal, exit_code) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result.unwrap_err().contains("target process exited"));
         assert_eq!(terminal, TerminalKind::TargetExited);
         assert!(exit_code.is_some());
@@ -3234,10 +3419,11 @@ mod tests {
         let pid = child.child.id();
         let fail = Arc::new(AtomicBool::new(false));
         let fail_in_observer = Arc::clone(&fail);
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.close_ack = close_ack;
             debugger.restore_faults = restore_faults;
             debugger.zero_context_dr6_for_test = mask_dr6;
             let result = debugger.run(stop_rx, timeout, || {
@@ -3355,10 +3541,11 @@ mod tests {
         let output = Jsonl::new(&path).unwrap();
         let base = child.entry - CAN_EVER_RVA;
         let (stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.close_ack = close_ack;
             debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
         });
         let started = Instant::now();
@@ -3438,9 +3625,10 @@ mod tests {
         let observed_signal = Arc::clone(&signal);
         let (ack_tx, ack_rx) = mpsc::channel();
         let (stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger = Debugger::attach(pid, game, base, 0x800000, output, mode).unwrap();
+            debugger.close_ack = close_ack;
             debugger.critical_signal = Some(observed_signal);
             debugger.force_context_failure = context_failure;
             debugger.force_reported_rip_mismatch = !context_failure;
@@ -3477,8 +3665,8 @@ mod tests {
         );
         child.child.kill().unwrap();
         close_ack.store(true, Ordering::SeqCst); // Controller acknowledged closing this owned Rust child.
-        child.child.wait().unwrap();
         let (result, critical, normal_cleanup_gate) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result.unwrap_err().contains("ambiguous debug exception"));
         assert!(critical);
         assert!(
@@ -3526,11 +3714,12 @@ mod tests {
         let _ = fs::remove_file(&path);
         let output = Jsonl::new(&path).unwrap();
         let base = child.entry - CAN_EVER_RVA;
-        let (_stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.close_ack = close_ack;
             debugger.force_initial_breakpoint_late = true;
             let result = debugger.run(stop_rx, Duration::from_secs(10), || Ok(()));
             (result, debugger.attached)
@@ -3563,10 +3752,11 @@ mod tests {
         let output = Jsonl::new(&path).unwrap();
         let base = child.entry - CAN_EVER_RVA;
         let (stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.close_ack = close_ack;
             debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
         });
         let started = Instant::now();
@@ -4016,10 +4206,10 @@ mod tests {
             exited.classify(22, 0x1000, true, verified),
             BreakpointOrigin::Application
         );
-        let mut adjusted_rip = AttachOrigin::new(0x1000, 0x2000);
-        adjusted_rip.note_thread_start(22, Some(0x2000));
+        let mut instruction_start_rip = AttachOrigin::new(0x1000, 0x2000);
+        instruction_start_rip.note_thread_start(22, Some(0x2000));
         assert_eq!(
-            adjusted_rip.classify(
+            instruction_start_rip.classify(
                 22,
                 0x1000,
                 true,
@@ -4030,7 +4220,22 @@ mod tests {
             ),
             BreakpointOrigin::Application
         );
-        assert!(!adjusted_rip.accepted);
+        assert!(!instruction_start_rip.accepted);
+        let mut overflowed_rip = AttachOrigin::new(u64::MAX, 0x2000);
+        overflowed_rip.note_thread_start(22, Some(0x2000));
+        assert_eq!(
+            overflowed_rip.classify(
+                22,
+                u64::MAX,
+                true,
+                ThreadOriginObservation {
+                    rip: None,
+                    ..verified
+                }
+            ),
+            BreakpointOrigin::Application
+        );
+        assert!(!overflowed_rip.accepted);
     }
     #[test]
     fn unavailable_or_malformed_win32_start_query_never_supplies_provenance() {
@@ -4114,10 +4319,11 @@ mod tests {
         let signal = Arc::new(AtomicBool::new(false));
         let observer_signal = Arc::clone(&signal);
         let (stop_tx, stop_rx) = mpsc::channel();
-        let observer = thread::spawn(move || {
+        let observer = child.observe(&stop_tx, move |close_ack| {
             let game = process(pid, true).unwrap();
             let mut debugger =
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
+            debugger.close_ack = close_ack;
             debugger.restore_faults = usize::MAX;
             debugger.critical_signal = Some(observer_signal);
             let mut gate = CleanupGate::new();
@@ -4142,9 +4348,13 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        child.child.kill().unwrap(); // The controller closes only its own Rust fixture.
-        child.child.wait().unwrap();
+        // The controller closes only its own Rust fixture.
+        child.child.kill().unwrap();
+        // On Windows a debugged process may not become signaled until the
+        // debugger has consumed its EXIT_PROCESS event. Join the event pump
+        // before waiting for the child process handle.
         let (result, attached, critical) = observer.join().unwrap();
+        child.child.wait().unwrap();
         assert!(result
             .unwrap_err()
             .contains("controller closed the owned game"));

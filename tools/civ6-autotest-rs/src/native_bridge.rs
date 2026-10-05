@@ -3,6 +3,46 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AssignmentSubject {
+    pub owner: u32,
+    pub governor: u32,
+}
+impl AssignmentSubject {
+    pub fn parse(raw: &str) -> Result<Self> {
+        let (owner, governor) = raw
+            .split_once('|')
+            .ok_or_else(|| Error::input("assignment subject owner/Index unavailable"))?;
+        let subject = Self {
+            owner: owner
+                .parse()
+                .map_err(|_| Error::input("invalid assignment subject owner"))?,
+            governor: governor
+                .parse()
+                .map_err(|_| Error::input("invalid assignment subject Index"))?,
+        };
+        if subject.owner >= 64 || subject.governor >= 256 {
+            return Err(Error::input("assignment subject exceeds native bounds"));
+        }
+        Ok(subject)
+    }
+}
+
+pub fn assignment_subject_code(owner: u32, leader: &str) -> String {
+    format!(
+        r#"
+local owner={owner}; local leader={leader}
+local row=assert(GameInfo.JAC_LeaderPersonas[leader],'assignment subject definition missing')
+local def=assert(GameInfo.Governors[row.GovernorType])
+assert(Game:GetProperty('JAC_PERSONA_'..leader..'_OWNER')==owner,'assignment subject owner differs')
+local gs=assert(Players[owner]):GetGovernors(); local gov=assert(gs:GetGovernor(def.Hash))
+assert(type(def.Index)=='number' and def.Index%1==0 and def.Index>=0 and def.Index<256 and gov:GetType()==def.Index,'assignment subject identity differs')
+return tostring(owner)..'|'..tostring(def.Index)
+"#,
+        leader = crate::scenario::lua_string(leader)
+    )
+}
+
 #[cfg(windows)]
 mod platform {
     use super::*;
@@ -16,7 +56,7 @@ mod platform {
     use std::sync::mpsc::{self, Receiver};
     use std::time::Duration;
     use windows_sys::Win32::Foundation::{
-        CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
@@ -37,7 +77,76 @@ mod platform {
             .flatten()
     }
 
+    fn valid_promotion_snapshot(row: &Value) -> bool {
+        let Some(status) = row["promotion_snapshot_status"]
+            .as_u64()
+            .filter(|n| *n <= 7)
+        else {
+            return false;
+        };
+        let Some(count) = row["promotion_count"]
+            .as_u64()
+            .filter(|n| *n <= civ6_native_bridge_rs::governor_payment::PROMOTION_LIMIT as u64)
+        else {
+            return false;
+        };
+        let Some(indices) = row["owned_promotion_indices"].as_array() else {
+            return false;
+        };
+        if row["payment_authority"] != false {
+            return false;
+        }
+        if status != 0 {
+            return count == 0
+                && indices.is_empty()
+                && row["promotion_owner"] == u32::MAX
+                && row["promotion_index"] == u32::MAX;
+        }
+        if count == 0
+            || row["promotion_owner"] != row["player_id"]
+            || row["promotion_index"] != row["governor_index"]
+            || !row["promotion_owner"].as_u64().is_some_and(|n| n < 64)
+            || !row["promotion_index"].as_u64().is_some_and(|n| n < 256)
+            || !row["read_flags"].as_u64().is_some_and(|n| n & 3 == 3)
+        {
+            return false;
+        }
+        let mut previous = None;
+        for index in indices {
+            let Some(index) = index
+                .as_u64()
+                .filter(|n| *n < count && previous.is_none_or(|old| old < *n))
+            else {
+                return false;
+            };
+            previous = Some(index);
+        }
+        true
+    }
+
+    #[cfg(test)]
     fn terminal_artifact(path: &Path, pid: u32, created: u64, mode: BridgeMode) -> Result<usize> {
+        terminal_artifact_for_subject(path, pid, created, mode, None)
+    }
+
+    fn terminal_artifact_for_subject(
+        path: &Path,
+        pid: u32,
+        created: u64,
+        mode: BridgeMode,
+        subject: Option<AssignmentSubject>,
+    ) -> Result<usize> {
+        if subject.is_some_and(|s| s.owner >= 64 || s.governor >= 256)
+            || (subject.is_some() && mode != BridgeMode::AssignCalibration)
+        {
+            return Err(Error::input(
+                "invalid bounded assignment observation subject",
+            ));
+        }
+        let subject = subject.unwrap_or(AssignmentSubject {
+            owner: 0,
+            governor: 4,
+        });
         let dual = matches!(
             mode,
             BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
@@ -57,6 +166,7 @@ mod platform {
         let mut scoped_keys = std::collections::BTreeSet::new();
         let mut partial_dropped = None;
         let mut production_bindings = std::collections::BTreeSet::new();
+        let mut production_resets = std::collections::BTreeSet::new();
         let mut calibrated_owners = std::collections::BTreeSet::new();
         let mut admission_values = std::collections::BTreeSet::new();
         let mut admission_threads = std::collections::BTreeSet::new();
@@ -110,8 +220,11 @@ mod platform {
                                         [901000, 901255],
                                         [903000, 903255]
                                     ])
-                                && row["reset_key_id"]
-                                    == civ6_native_bridge_rs::PRODUCTION_RESET_KEY))
+                                && row["reset_key_range"]
+                                    == serde_json::json!([
+                                        civ6_native_bridge_rs::PRODUCTION_RESET_KEY,
+                                        civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY
+                                    ])))
                         && (mode != BridgeMode::PropertyScoped
                             || row["scope_key_ids"]
                                 == serde_json::json!([
@@ -236,10 +349,13 @@ mod platform {
                         .into_iter()
                         .all(|key| row[key].as_u64().is_some_and(|n| n <= u32::MAX as u64)) =>
                 {
+                    if !valid_promotion_snapshot(&row) {
+                        return Err(Error::input("invalid read-only native promotion snapshot"));
+                    }
                     if row["read_flags"] == 7
-                        && row["player_id"] == 0
-                        && row["governor_index"] == 4
-                        && row["city_d8"] == 0
+                        && row["player_id"] == subject.owner
+                        && row["governor_index"] == subject.governor
+                        && row["city_d8"] == subject.owner
                         && row["original_al"].as_u64().is_some_and(|n| n <= 1)
                         && [
                             "governors_this",
@@ -300,7 +416,9 @@ mod platform {
                                 ) || n
                                     == u64::from(civ6_native_bridge_rs::ASHINA_ADMISSION_KEY_ID))
                                 && (mode != BridgeMode::ProductionAdmission
-                                    || n == u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                                    || (u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                                        ..=u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY))
+                                        .contains(&n)
                                     || (900000..900256).contains(&n)
                                     || (901000..901256).contains(&n)
                                     || (903000..903256).contains(&n))
@@ -374,6 +492,21 @@ mod platform {
                     }
                     if mode == BridgeMode::ProductionAdmission {
                         let key = row["key_id"].as_u64().unwrap();
+                        if (u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY)
+                            ..=u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_LAST_KEY))
+                            .contains(&key)
+                            && row["read_state"] == 1
+                            && row["tag"] == 1
+                            && row["flags14"] == 0
+                            && row["payload8"] == "0x0000000000000001"
+                        {
+                            if let Some(receiver) = hex_address(&row["property"]) {
+                                production_resets.insert((
+                                    key - u64::from(civ6_native_bridge_rs::PRODUCTION_RESET_KEY),
+                                    receiver,
+                                ));
+                            }
+                        }
                         let cell_index = if (900000..900256).contains(&key) {
                             Some(key - 900000)
                         } else if (901000..901256).contains(&key) {
@@ -557,10 +690,12 @@ mod platform {
             ));
         }
         if mode == BridgeMode::ProductionAdmission
-            && (joined_calibrations == 0 || joined_properties == 0)
+            && (joined_calibrations == 0
+                || joined_properties == 0
+                || production_bindings.is_disjoint(&production_resets))
         {
             return Err(Error::input(
-                "production admission observed no Core getter or owner",
+                "production admission lacks a sampled owner reset paired with Core getter",
             ));
         }
         Ok(entries)
@@ -717,9 +852,25 @@ mod platform {
         close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         finished: bool,
         mode: BridgeMode,
+        assignment_subject: Option<AssignmentSubject>,
     }
 
     impl Session {
+        pub fn process_identity(&self) -> (u32, u64) {
+            (self.pid, self.created)
+        }
+        pub fn verify_current_process(&self, pid: u32, started: f64) -> Result<(u32, u64)> {
+            let (created, target) = pinned_created(pid, started)?;
+            if self.finished
+                || (pid, created) != (self.pid, self.created)
+                || unsafe { WaitForSingleObject(target.0, 0) } != WAIT_TIMEOUT
+            {
+                return Err(Error::input(
+                    "UI process differs from the active native observation",
+                ));
+            }
+            Ok((pid, created))
+        }
         pub fn start(
             pid: u32,
             started: f64,
@@ -834,6 +985,7 @@ mod platform {
                 close_game,
                 finished: false,
                 mode,
+                assignment_subject: None,
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -886,8 +1038,54 @@ mod platform {
                     stderr.trim()
                 )));
             }
-            terminal_artifact(&self.artifact, self.pid, self.created, self.mode)?;
+            terminal_artifact_for_subject(
+                &self.artifact,
+                self.pid,
+                self.created,
+                self.mode,
+                self.assignment_subject,
+            )?;
             Ok(self.artifact.clone())
+        }
+
+        pub fn select_assignment_subject(
+            &mut self,
+            observed_pid: u32,
+            observed_started: f64,
+            subject: AssignmentSubject,
+        ) -> Result<()> {
+            if self.mode != BridgeMode::AssignCalibration
+                || self.assignment_subject.is_some()
+                || subject.owner >= 64
+                || subject.governor >= 256
+                || self.finished
+            {
+                return Err(Error::input(
+                    "assignment subject cannot be selected for this session",
+                ));
+            }
+            let (created, _) = pinned_created(observed_pid, observed_started)?;
+            if observed_pid != self.pid
+                || created != self.created
+                || unsafe { WaitForSingleObject(self.target.0, 0) } == WAIT_OBJECT_0
+            {
+                return Err(Error::input(
+                    "assignment subject belongs to another game process",
+                ));
+            }
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(self.artifact.with_extension("subject.json"))?;
+            serde_json::to_writer(
+                file,
+                &serde_json::json!({
+                    "owner":subject.owner,"governor":subject.governor,
+                    "pid":self.pid,"created_filetime":self.created,"payment_authority":false
+                }),
+            )?;
+            self.assignment_subject = Some(subject);
+            Ok(())
         }
 
         pub fn stop(&mut self) -> Result<PathBuf> {
@@ -1315,7 +1513,9 @@ mod platform {
                 "city_pointer":"0x0000000000004000","raw_r9":"0x0000000000000000",
                 "player_address":"0x0000000000002000","player_id":0,"governor_index":4,
                 "city_a8":19,"city_c0":17,"city_c4":29,"city_d8":0,"return_site_rva":0xba3e2,
-                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1});
+                "original_rax":"0xaabbccdd00000001","original_al":1,"effective_al":1,
+                "promotion_snapshot_status":0,"promotion_owner":0,"promotion_index":4,
+                "promotion_count":4096,"owned_promotion_indices":[0,63,64,4095],"payment_authority":false});
             let mut update = call.clone();
             update["sequence"] = json!(2);
             update["return_site_rva"] = json!(0x2dd375);
@@ -1347,6 +1547,79 @@ mod platform {
                 terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
                 2
             );
+            // A normal person and another owner require their own matching
+            // UI/update pair; they cannot certify the old owner0/Index4 probe.
+            for subject in [
+                AssignmentSubject {
+                    owner: 0,
+                    governor: 9,
+                },
+                AssignmentSubject {
+                    owner: 3,
+                    governor: 12,
+                },
+            ] {
+                let mut normal = rows.clone();
+                for row in &mut normal[3..5] {
+                    row["player_id"] = json!(subject.owner);
+                    row["city_d8"] = json!(subject.owner);
+                    row["governor_index"] = json!(subject.governor);
+                    row["promotion_owner"] = json!(subject.owner);
+                    row["promotion_index"] = json!(subject.governor);
+                }
+                write(&normal);
+                assert!(terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err());
+                assert_eq!(
+                    terminal_artifact_for_subject(
+                        &path,
+                        7,
+                        123,
+                        BridgeMode::AssignCalibration,
+                        Some(subject)
+                    )
+                    .unwrap(),
+                    2
+                );
+                for field in ["player_id", "city_d8", "governor_index"] {
+                    let mut mixed = normal.clone();
+                    mixed[4][field] = json!(99);
+                    write(&mixed);
+                    assert!(
+                        terminal_artifact_for_subject(
+                            &path,
+                            7,
+                            123,
+                            BridgeMode::AssignCalibration,
+                            Some(subject)
+                        )
+                        .is_err(),
+                        "{field}"
+                    );
+                }
+            }
+            write(&rows);
+            assert!(terminal_artifact_for_subject(
+                &path,
+                7,
+                123,
+                BridgeMode::AssignCalibration,
+                Some(AssignmentSubject {
+                    owner: 64,
+                    governor: 4
+                })
+            )
+            .is_err());
+            assert!(terminal_artifact_for_subject(
+                &path,
+                7,
+                123,
+                BridgeMode::AssignCalibration,
+                Some(AssignmentSubject {
+                    owner: 0,
+                    governor: 256
+                })
+            )
+            .is_err());
             for (index, field, value) in [
                 (3, "original_rax", json!("0xaabbccdd00000000")),
                 (3, "effective_al", json!(0)),
@@ -1361,6 +1634,16 @@ mod platform {
                 (5, "counter_scope", json!("complete_call_history")),
                 (2, "entry_restored", json!(false)),
                 (0, "entry_rva", json!(0x2dddd0)),
+                (3, "promotion_snapshot_status", json!(8)),
+                (3, "promotion_owner", json!(1)),
+                (3, "promotion_index", json!(5)),
+                (3, "promotion_count", json!(0)),
+                (3, "promotion_count", json!(4097)),
+                (3, "owned_promotion_indices", json!([0, 63, 63])),
+                (3, "owned_promotion_indices", json!([64, 63])),
+                (3, "owned_promotion_indices", json!([4096])),
+                (3, "owned_promotion_indices", json!(["1"])),
+                (3, "payment_authority", json!(true)),
             ] {
                 let mut bad = rows.clone();
                 bad[index][field] = value;
@@ -1379,6 +1662,35 @@ mod platform {
                     "missing {field}"
                 );
             }
+            for field in [
+                "promotion_snapshot_status",
+                "promotion_owner",
+                "promotion_index",
+                "promotion_count",
+                "owned_promotion_indices",
+                "payment_authority",
+            ] {
+                let mut bad = rows.clone();
+                bad[3].as_object_mut().unwrap().remove(field);
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err(),
+                    "missing {field}"
+                );
+            }
+            let mut unreadable = rows.clone();
+            for row in &mut unreadable[3..5] {
+                row["promotion_snapshot_status"] = json!(1);
+                row["promotion_owner"] = json!(u32::MAX);
+                row["promotion_index"] = json!(u32::MAX);
+                row["promotion_count"] = json!(0);
+                row["owned_promotion_indices"] = json!([]);
+            }
+            write(&unreadable);
+            assert_eq!(
+                terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
+                2
+            );
         }
 
         #[test]
@@ -1511,7 +1823,7 @@ mod platform {
                     "mode":"production-admission","entry_rva":civ6_native_bridge_rs::PINNED_CAN_EVER_RVA,
                     "property_rva":civ6_native_bridge_rs::PINNED_PROPERTY_GET_RVA,
                     "scope_key_ranges":[[900000,900255],[901000,901255],[903000,903255]],
-                    "reset_key_id":902000,"prefix_bytes":"[cc, cc, cc, cc, cc]",
+                    "reset_key_range":[902000,902063],"prefix_bytes":"[cc, cc, cc, cc, cc]",
                     "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256}),
                 json!({"kind":"install","status":0}),
                 json!({"kind":"uninstall","status":0,"entry_restored":true,
@@ -1549,10 +1861,39 @@ mod platform {
             verified[4]["denial_owner"] = json!(2);
             verified[4]["denial_index"] = json!(77);
             write(&verified);
+            assert!(
+                terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                "a production artifact without a paired owner reset is incomplete"
+            );
+            verified.insert(
+                4,
+                json!({"kind":"property_get","sequence":1,
+                "property":"0x0000000000002528","key_id":902002,
+                "returned":"0x0000000000006000","thread_id":12,
+                "read_state":1,"tag":1,"payload8":"0x0000000000000001","flags14":0}),
+            );
+            verified[5]["sequence"] = json!(2);
+            verified[6]["rows"] = json!(3);
+            verified[6]["observed_calls"] = json!(3);
+            verified[6]["getter_calls_seen"] = json!(3);
+            write(&verified);
             assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
-                2
+                3
             );
+            for (field, value) in [
+                ("key_id", json!(902001)),
+                ("property", json!("0x0000000000003000")),
+                ("payload8", json!("0x0000000000000000")),
+            ] {
+                let mut bad = verified.clone();
+                bad[4][field] = value;
+                write(&bad);
+                assert!(
+                    terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
+                    "reset {field} must identify the calibrated Core owner"
+                );
+            }
             for (field, value) in [
                 ("denial_checked", json!(false)),
                 ("denial_index", json!(78)),
@@ -1560,7 +1901,7 @@ mod platform {
                 ("denial_owner", json!(1)),
             ] {
                 let mut bad = verified.clone();
-                bad[4][field] = value;
+                bad[5][field] = value;
                 write(&bad);
                 assert!(
                     terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err(),
@@ -1568,17 +1909,17 @@ mod platform {
                 );
             }
             let mut sampled = verified.clone();
-            sampled[5]["dropped"] = json!(80);
-            sampled[5]["observed_calls"] = json!(82);
-            sampled[5]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
-            sampled[5]["calibration_sample_limit"] = json!(1024);
-            sampled[5]["property_sample_limit"] = json!(4096);
+            sampled[6]["dropped"] = json!(80);
+            sampled[6]["observed_calls"] = json!(83);
+            sampled[6]["counter_scope"] = json!("bounded_prefix_samples_not_complete_call_history");
+            sampled[6]["calibration_sample_limit"] = json!(1024);
+            sampled[6]["property_sample_limit"] = json!(4096);
             write(&sampled);
             assert_eq!(
                 terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).unwrap(),
-                2
+                3
             );
-            sampled[5]["counter_scope"] = json!("complete_history");
+            sampled[6]["counter_scope"] = json!("complete_history");
             write(&sampled);
             assert!(terminal_artifact(&path, 7, 123, BridgeMode::ProductionAdmission).is_err());
             let mut foreign = rows.to_vec();
@@ -1605,6 +1946,22 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn select_assignment_subject(
+        &mut self,
+        _: u32,
+        _: f64,
+        _: AssignmentSubject,
+    ) -> Result<()> {
+        Err(Error::input(
+            "native assignment observation requires Windows",
+        ))
+    }
+    pub fn process_identity(&self) -> (u32, u64) {
+        (0, 0)
+    }
+    pub fn verify_current_process(&self, _: u32, _: f64) -> Result<(u32, u64)> {
+        Err(Error::input("native bridge requires Windows x64"))
+    }
     pub fn start(
         _pid: u32,
         _started: f64,
