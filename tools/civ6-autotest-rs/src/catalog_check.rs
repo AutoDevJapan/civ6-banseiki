@@ -131,6 +131,8 @@ pub struct PairCount {
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub capture_valid: bool,
+    pub scenario_complete: bool,
+    pub successful_stop_step_verified: bool,
     pub qualification_positive22: bool,
     pub product_acceptance: bool,
     pub payment_authority: bool,
@@ -174,15 +176,17 @@ pub fn check_files(trace: &Path, steps: &Path) -> Result<Report> {
             && steps.file_name().and_then(|s| s.to_str()) == Some("steps.jsonl"),
         "trace and steps must be in the same artifact directory",
     )?;
-    let evidence = evidence_from_steps(&std::fs::read_to_string(steps)?)?;
+    let evidence = steps::parse_steps(&std::fs::read_to_string(steps)?, true)?;
     require(
         trace.file_name().and_then(|s| s.to_str()) == Some(evidence.artifact.as_str()),
         "trace filename differs from start receipt",
     )?;
-    require(
-        evidence.artifact_path.canonicalize()? == trace,
-        "trace belongs to a different restoration artifact",
-    )?;
+    if let Some(path) = &evidence.artifact_path {
+        require(
+            path.canonicalize()? == trace,
+            "trace belongs to a different restoration artifact",
+        )?;
+    }
     verify(&std::fs::read_to_string(trace)?, &evidence)
 }
 
@@ -262,7 +266,8 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
     )?;
 
     let mut report = Report {
-        capture_valid: true, qualification_positive22: false, product_acceptance: false, payment_authority: false,
+        capture_valid: true, scenario_complete:evidence.scenario_complete, successful_stop_step_verified:evidence.artifact_path.is_some(),
+        qualification_positive22: false, product_acceptance: false, payment_authority: false,
         scope: "finite normal catalog qualification; raw retained prefixes, not product or payment acceptance",
         baseline_unmeasured: vec!["initial UI closed484", "per-join UI negatives", "complete native call history", "AI-initiated payment", "startup/load", "unpaid placement", "multiplayer", "113-step suite", "neutralization and recovery"],
         process: evidence.process.clone(), gamecore_sha256: PINNED_GAMECORE_SHA256,
@@ -270,10 +275,28 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         catalog: evidence.catalog.clone(), pairs: Vec::new(), calibration_rows: 0, property_rows: 0, unrelated_calibration_rows: 0,
         observed_calls: 0, dropped: 0, filtered_calls: 0, getter_calls_seen: 0,
         calibration_sample_limit: CALIBRATION_LIMIT, property_sample_limit: TRACE_CAPACITY,
-        full_history_authority: false, cross_ring_chronology_measured: false, gameplay_closed484: true,
+        full_history_authority: false, cross_ring_chronology_measured: false, gameplay_closed484: evidence.gameplay_closed484,
         ui_native_qualification: evidence.ui.clone(), gameplay_projection: evidence.gameplay.clone(),
         missing_positive_sources: Vec::new(), qualification_errors: Vec::new(),
     };
+    if let Some(failure) = &evidence.failure {
+        report.qualification_errors.push(failure.clone());
+    }
+    if !evidence.gameplay_closed484 {
+        report
+            .baseline_unmeasured
+            .push("Gameplay closed484 matrix receipt");
+    }
+    if !evidence.ui.measured {
+        report
+            .baseline_unmeasured
+            .push("final UI positive22/negative462");
+    }
+    if !evidence.gameplay.measured {
+        report
+            .baseline_unmeasured
+            .push("final Gameplay positive22/negative462");
+    }
     for e in &evidence.catalog {
         for owner in 0..COUNT as u32 {
             report.pairs.push(PairCount {
@@ -451,7 +474,13 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                         || (903000..=903255).contains(&key),
                     "foreign property key",
                 )?;
-                properties.push((receiver, thread, key, payload == 1));
+                properties.push((
+                    receiver,
+                    thread,
+                    key,
+                    payload == 1,
+                    row["denial_checked"] == true,
+                ));
             }
             _ => {
                 return Err(Error::input(
@@ -516,7 +545,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
     // supplies a bool receipt. A UI matrix cannot fill a missing raw row.
     let mut bound = BTreeMap::new(); // receiver -> (owner, Core thread)
     let mut cells = BTreeMap::new(); // (receiver,index) -> (close read, false ack, manifest)
-    for (receiver, thread, key, value) in properties {
+    for (receiver, thread, key, value, denied) in properties {
         if (902000..=902063).contains(&key) {
             let owner = key - 902000;
             require(owner < COUNT as u64 && value, "invalid owner reset")?;
@@ -564,7 +593,12 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                             e.source
                         ));
                     }
-                    if cell.0 && cell.1 && cell.2 && receivers.get(&receiver) == Some(&owner) {
+                    if cell.0
+                        && cell.1
+                        && cell.2
+                        && !denied
+                        && receivers.get(&receiver) == Some(&owner)
+                    {
                         let p = &mut report.pairs[e.source as usize * COUNT + owner as usize];
                         p.core_allow_true_rows += 1;
                         p.core_getter_threads.insert(thread);
@@ -582,8 +616,11 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
             report.missing_positive_sources.push(e.source);
         }
     }
-    report.qualification_positive22 =
-        report.missing_positive_sources.is_empty() && report.qualification_errors.is_empty();
+    report.qualification_positive22 = evidence.scenario_complete
+        && evidence.ui.measured
+        && evidence.gameplay.measured
+        && report.missing_positive_sources.is_empty()
+        && report.qualification_errors.is_empty();
     Ok(report)
 }
 

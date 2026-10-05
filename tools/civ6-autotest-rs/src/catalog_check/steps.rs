@@ -22,6 +22,7 @@ pub struct CatalogEntry {
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Matrix {
+    pub measured: bool,
     pub marker: &'static str,
     pub positive: usize,
     pub negative: usize,
@@ -32,12 +33,15 @@ pub struct Matrix {
 pub struct Evidence {
     pub(super) process: ProcessIdentity,
     pub(super) artifact: String,
-    pub(super) artifact_path: PathBuf,
+    pub(super) artifact_path: Option<PathBuf>,
     pub(super) catalog: Vec<CatalogEntry>,
     pub(super) ui: Matrix,
     pub(super) gameplay: Matrix,
     pub(super) steps_sha256: String,
     pub(super) scenario_contract_sha256: String,
+    pub(super) scenario_complete: bool,
+    pub(super) gameplay_closed484: bool,
+    pub(super) failure: Option<String>,
 }
 fn decimal<T: std::str::FromStr>(text: &str) -> Result<T> {
     require(
@@ -209,6 +213,7 @@ fn raw_matrix(value: &str, entries: &[CatalogEntry], core: bool, step: usize) ->
         bits.push(bit.to_owned());
     }
     Ok(Matrix {
+        measured: true,
         marker,
         positive: 22,
         negative: 462,
@@ -220,6 +225,10 @@ fn raw_matrix(value: &str, entries: &[CatalogEntry], core: bool, step: usize) ->
 /// Every indexed START must contain the exact generated action/code; its OK
 /// must immediately follow. Nothing in a START code string is a measurement.
 pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
+    parse_steps(text, false)
+}
+
+pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evidence> {
     let normal = json(catalog_scenario::NORMAL)?;
     let contract = catalog_scenario::build(&normal)?;
     let mut expected = contract["steps"].as_array().unwrap().clone();
@@ -235,8 +244,10 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
     let mut ui = None;
     let mut gameplay = None;
     let mut last_time = None;
+    let mut failure = None;
     for line in text.lines() {
         require(!judged, "records follow final judge")?;
+        require(failure.is_none(), "records follow failed scenario step")?;
         let row = json(line)?;
         super::shape(&row, &["at", "action", "status", "detail"])?;
         let at = chrono::DateTime::parse_from_rfc3339(row["at"].as_str().unwrap_or(""))
@@ -257,6 +268,7 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
             .ok_or_else(|| Error::input("step detail missing"))?;
         require(
             matches!(status, "START" | "OK")
+                || (allow_failed_capture && status == "FAIL")
                 || (action == "auto_restart" && status == "SKIP" && next == 0 && !pending),
             "failed or unknown step status",
         )?;
@@ -356,6 +368,14 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
         }
         require(pending, "successful receipt has no matching START")?;
         pending = false;
+        if status == "FAIL" {
+            require(
+                allow_failed_capture && process.is_some(),
+                "scenario failed before native capture",
+            )?;
+            failure = Some(format!("{action}: {detail}"));
+            continue;
+        }
         match step["action"].as_str().unwrap() {
             "start_native_production_admission" => {
                 require(process.is_none(), "duplicate native observation")?;
@@ -492,18 +512,34 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
         next += 1;
     }
     require(
-        judged && next == expected.len() && !pending,
+        (judged && next == expected.len() && !pending)
+            || (allow_failed_capture && failure.is_some()),
         "complete generated run and final judge required",
+    )?;
+    let unmeasured = |marker| Matrix {
+        measured: false,
+        marker,
+        positive: 0,
+        negative: 0,
+        raw: vec![],
+        step: 0,
+    };
+    let complete = judged && failure.is_none();
+    require(
+        !complete || (ui.is_some() && gameplay.is_some() && artifact_path.is_some()),
+        "completed scenario missing final raw matrices or stop path",
     )?;
     Ok(Evidence {
         process: process.ok_or_else(|| Error::input("native process missing"))?,
         artifact: "normal-catalog22.jsonl".into(),
-        artifact_path: artifact_path.ok_or_else(|| Error::input("restoration path missing"))?,
+        artifact_path,
         catalog: entries.ok_or_else(|| Error::input("stable runtime catalog missing"))?,
-        ui: ui.ok_or_else(|| Error::input("explicit UI raw positive22 receipt missing"))?,
-        gameplay: gameplay
-            .ok_or_else(|| Error::input("explicit Gameplay raw positive22 receipt missing"))?,
+        ui: ui.unwrap_or_else(|| unmeasured("UI_NATIVE_QUALIFICATION")),
+        gameplay: gameplay.unwrap_or_else(|| unmeasured("GAMEPLAY_PROJECTION")),
         steps_sha256: digest(text),
         scenario_contract_sha256: digest(&contract.to_string()),
+        scenario_complete: complete,
+        gameplay_closed484: captures.contains_key("CATALOG880_CLOSED"),
+        failure,
     })
 }

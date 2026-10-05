@@ -356,3 +356,163 @@ fn shipped_leading_restart_uses_actions_and_successful_reads_not_43_offsets() {
     bad[1]["detail"] = json!("{\"action\":\"restart_game\",\"code\":\"malicious\"}");
     rejected(&trace, &bad);
 }
+
+#[test]
+fn partial_run_and_wrong_receipt_kind_cannot_supply_positive_evidence() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    rejected(&trace, &steps[..25]);
+    let mut partial = steps[..25].to_vec();
+    partial.last_mut().unwrap()["status"] = json!("FAIL");
+    partial.last_mut().unwrap()["detail"] = json!("bad argument #1 to tostring (value expected)");
+    rejected(&trace, &partial);
+    let mut swapped = steps.clone();
+    let final_ledger = steps
+        .iter()
+        .find(|r| {
+            r["status"] == "OK"
+                && r["detail"].as_str().unwrap().starts_with(
+                    "ran Lua in GameCore_Tuner; return=CATALOG880 MATRIX identities=22 0:1:",
+                )
+                && r["detail"].as_str().unwrap().contains(":EVOLVING:")
+        })
+        .unwrap()["detail"]
+        .clone();
+    for row in &mut swapped {
+        if row["status"] == "OK"
+            && row["detail"]
+                .as_str()
+                .unwrap()
+                .starts_with("ran Lua in GameCore_Tuner; return=positive=")
+        {
+            row["detail"] = final_ledger.clone();
+        }
+    }
+    rejected(&trace, &swapped);
+}
+
+#[test]
+fn nil_and_numeric_nan_property_values_cannot_be_qualification() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    for (field, value) in [
+        ("tag", json!(0)),
+        ("tag", json!(2)),
+        ("payload8", json!("0x7ff8000000000000")),
+        ("read_state", json!(0)),
+        ("payload8", Value::Null),
+    ] {
+        let mut bad = trace.clone();
+        bad[29][field] = value;
+        rejected(&bad, &steps);
+    }
+}
+
+#[test]
+fn missing_close_ack_reset_or_manifest_never_grants_raw_positive() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    for row in 25..29 {
+        let mut bad = trace.clone();
+        bad[row]["key_id"] = json!(903250);
+        rejected(&bad, &steps);
+    }
+}
+
+#[test]
+fn explicit_native_denial_cannot_count_as_a_core_positive() {
+    let (mut trace, steps) = model(Path::new("unit-model"));
+    trace[29]["denial_checked"] = json!(true);
+    trace[29]["denial_owner"] = json!(1);
+    trace[29]["denial_index"] = json!(17);
+    let r = check(&trace, &steps).unwrap();
+    assert!(r.capture_valid);
+    assert_eq!(r.missing_positive_sources, vec![0]);
+    assert!(!r.qualification_positive22);
+}
+
+#[test]
+fn failed_scenario_keeps_structural_capture_separate_from_unmeasured_qualification() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut trace, mut steps) = model(dir.path());
+    // Unit model of a failure before the first UI native getter, not live data.
+    steps.truncate(23);
+    steps[22]["status"] = json!("FAIL");
+    steps[22]["detail"] = json!("Lua error: bad argument #1 to tostring (value expected)");
+    trace.drain(3..25);
+    let stop = trace.last_mut().unwrap();
+    stop["rows"] = json!(110);
+    stop["observed_calls"] = json!(110);
+    stop["getter_calls_seen"] = json!(120);
+    let t = dir.path().join("normal-catalog22.jsonl");
+    let s = dir.path().join("steps.jsonl");
+    std::fs::write(&t, lines(&trace)).unwrap();
+    std::fs::write(&s, lines(&steps)).unwrap();
+    let r = catalog_check::check_files(&t, &s).unwrap();
+    assert!(r.capture_valid);
+    assert!(
+        !r.scenario_complete && !r.successful_stop_step_verified && !r.qualification_positive22
+    );
+    assert!(!r.ui_native_qualification.measured && !r.gameplay_projection.measured);
+    assert!(!r.gameplay_closed484);
+    assert_eq!((r.calibration_rows, r.property_rows), (0, 110));
+    assert_eq!(r.missing_positive_sources.len(), 22);
+    assert_eq!(r.qualification_errors.len(), 1);
+}
+
+#[test]
+fn signed_runtime_hashes_and_capital_ids_shared_by_different_owners_are_legal() {
+    let (trace, mut steps) = model(Path::new("unit-model"));
+    for row in &mut steps {
+        if row["status"] != "OK" {
+            continue;
+        }
+        let detail = row["detail"].as_str().unwrap();
+        if !detail.contains("CATALOG880 STABLE turn=") {
+            continue;
+        }
+        let (prefix, rest) = detail.split_once(" catalog=").unwrap();
+        let (entries, suffix) = rest.split_once(" titles=").unwrap();
+        let records = entries
+            .split(';')
+            .enumerate()
+            .map(|(i, e)| {
+                let mut fields: Vec<_> = e.split(':').map(str::to_owned).collect();
+                fields[4] = (-1748467484i64 - i as i64).to_string();
+                fields[6] = "42".into();
+                fields.join(":")
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+        row["detail"] = json!(format!("{prefix} catalog={records} titles={suffix}"));
+    }
+    let r = check(&trace, &steps).unwrap();
+    assert!(r.qualification_positive22);
+    assert_eq!(r.catalog[0].hash, -1748467484);
+    assert_eq!(r.catalog[21].capital, 42);
+}
+
+#[test]
+fn duplicate_runtime_index_and_source_catalog_receipts_are_rejected() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    for field in [0, 3] {
+        let mut bad = steps.clone();
+        for row in &mut bad {
+            if row["status"] != "OK" {
+                continue;
+            }
+            let detail = row["detail"].as_str().unwrap();
+            if !detail.contains("CATALOG880 STABLE turn=") {
+                continue;
+            }
+            let (prefix, rest) = detail.split_once(" catalog=").unwrap();
+            let (entries, suffix) = rest.split_once(" titles=").unwrap();
+            let mut records: Vec<_> = entries.split(';').map(str::to_owned).collect();
+            let mut fields: Vec<_> = records[1].split(':').map(str::to_owned).collect();
+            fields[field] = if field == 0 { "0" } else { "17" }.into();
+            records[1] = fields.join(":");
+            row["detail"] = json!(format!(
+                "{prefix} catalog={} titles={suffix}",
+                records.join(";")
+            ));
+        }
+        rejected(&trace, &bad);
+    }
+}
