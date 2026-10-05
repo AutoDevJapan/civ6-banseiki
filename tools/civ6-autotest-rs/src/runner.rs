@@ -1460,6 +1460,7 @@ impl Runner {
     /// Hosting/loading hotseat opens StagingRoom; its official Ready button launches it.
     pub fn launch_hotseat_staging(&mut self, before: usize, deadline: f64) -> Result<bool> {
         let mut last = "StagingRoom not available yet".to_string();
+        let mut reported = String::new();
         while self.clock.now() < deadline {
             if self.loadscreen_count()? > before {
                 return Ok(false);
@@ -1468,12 +1469,21 @@ impl Runner {
                 Ok(states) => states,
                 Err(e) if e.kind == ErrorKind::Tuner => {
                     last = e.to_string();
+                    if reported != last {
+                        self.log("hotseat_staging_states", "WAIT", &last)?;
+                        reported = last.clone();
+                    }
                     self.disconnect();
                     self.sleep_until(deadline, 0.2);
                     continue;
                 }
                 Err(e) => return Err(e),
             };
+            let observed = format!("Lua states after hosting/loading: {}", states.join(", "));
+            if reported != observed {
+                self.log("hotseat_staging_states", "OBSERVED", &observed)?;
+                reported = observed;
+            }
             if states.iter().any(|s| state_name_eq(s, "StagingRoom")) {
                 let ready = self.lua("StagingRoom", "return not ContextPtr:IsHidden() and Controls.ReadyButton ~= nil and not Controls.ReadyButton:IsDisabled()", self.budget(deadline, 5.0)?);
                 match ready {
@@ -1626,6 +1636,11 @@ impl Runner {
                     Err(e) => return Err(e),
                 };
                 if session == scenario::SessionType::Hotseat {
+                    self.log(
+                        "hotseat_host",
+                        if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
+                        "HostGame sent once; preparing to query the staging Lua states",
+                    )?;
                     unknown |= self.launch_hotseat_staging(before, deadline)?;
                 }
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
