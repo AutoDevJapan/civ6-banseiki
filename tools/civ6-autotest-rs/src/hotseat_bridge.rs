@@ -300,13 +300,13 @@ fn parse_frames_inner(log: &str, nonce: &str, allow_incomplete_tail: bool) -> Re
     let mut last_serial = None;
     let mut current: Option<Chunk> = None;
     let mut hex = String::new();
-    let lines: Vec<_> = log.lines().collect();
+    let lines: Vec<_> = log.split_inclusive('\n').collect();
     for (index, line) in lines.iter().enumerate() {
+        if allow_incomplete_tail && index + 1 == lines.len() && !line.ends_with('\n') {
+            break;
+        }
         let chunk = match parse_chunk(line) {
             Ok(chunk) => chunk,
-            Err(_) if allow_incomplete_tail && index + 1 == lines.len() && !log.ends_with('\n') => {
-                break;
-            }
             Err(error) => return Err(error),
         };
         let Some(chunk) = chunk else {

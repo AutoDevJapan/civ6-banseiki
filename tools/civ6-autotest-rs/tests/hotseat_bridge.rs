@@ -244,13 +244,33 @@ fn polling_waits_for_the_tail_of_a_chunked_frame() {
     let first = log.lines().next().unwrap();
     assert!(hs::parse_frames(first, NONCE).is_err());
     assert!(hs::parse_available_frames(first, NONCE).unwrap().is_empty());
-    assert_eq!(hs::parse_available_frames(&log, NONCE).unwrap(), complete);
+    assert_eq!(
+        hs::parse_available_frames(&format!("{log}\n"), NONCE).unwrap(),
+        complete
+    );
     let interrupted = format!("{log}\nJAC_HS|1|{NONCE}|unfinished");
     assert_eq!(
         hs::parse_available_frames(&interrupted, NONCE).unwrap(),
         complete
     );
     assert!(hs::parse_available_frames(&format!("{interrupted}\n"), NONCE).is_err());
+    let finished = format!("{log}\n");
+    let last_line = finished.lines().last().unwrap();
+    let partial = last_line
+        .rfind('|')
+        .and_then(|at| last_line.get(..at + 3))
+        .unwrap();
+    let without_last = finished.strip_suffix(&format!("{last_line}\n")).unwrap();
+    assert_eq!(
+        hs::parse_available_frames(&format!("{without_last}{partial}"), NONCE)
+            .unwrap()
+            .len(),
+        complete.len() - 1
+    );
+    assert_eq!(
+        hs::parse_available_frames(&finished, NONCE).unwrap(),
+        complete
+    );
 }
 
 #[test]

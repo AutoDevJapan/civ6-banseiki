@@ -218,7 +218,7 @@ fn current_frames(logs: &Path, nonce: &str) -> Result<(Vec<hs::Frame>, usize)> {
     let raw = String::from_utf8_lossy(&bytes);
     let needle = format!("JAC_HS|1|{nonce}|");
     let matching = raw
-        .lines()
+        .split_inclusive('\n')
         .filter(|line| line.contains(&needle))
         .collect::<Vec<_>>();
     let boots = matching
@@ -230,7 +230,7 @@ fn current_frames(logs: &Path, nonce: &str) -> Result<(Vec<hs::Frame>, usize)> {
         .rposition(|line| line.contains("|BOOT|1/"))
         .ok_or_else(|| Error::scenario("nonce-matched BOOT is missing"))?;
     Ok((
-        hs::parse_available_frames(&matching[start..].join("\n"), nonce)?,
+        hs::parse_available_frames(&matching[start..].concat(), nonce)?,
         boots,
     ))
 }
