@@ -395,6 +395,34 @@ fn ineligible_influence_recipient_waits_even_with_a_nonzero_existing_envoy_count
 }
 
 #[test]
+fn permanent_preflight_failure_can_be_cancelled_but_an_inflight_retry_cannot() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      GOLD=100;RELEASE=true
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function(plan) error('unsupported inventory permanently') end
+      N.DefineOffer(OFFER);N.Tick()
+      assert(N.Get('leader-offer',OFFER.ID).Status=='STARTING')
+      assert(not Game:GetProperty('JAC_ABSORPTION_FLOW_V1'))
+      JAC_AbsorptionFlowGameplay.Begin=function(plan)
+        assert(not pcall(N.CancelOffer,OFFER.ID),'inflight intent was cancelled')
+        error('unsupported inventory permanently')
+      end
+      N.Tick()
+      N.CancelOffer(OFFER.ID)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')
+      JAC_AbsorptionFlowGameplay.Begin=begin
+      N.Tick();assert(BEGIN_COUNT==0)
+      local replacement=JAC_AbsorptionGameplay.Rules.Copy(OFFER)
+      replacement.ID='corrected-terms'
+      N.ReplaceOffer(OFFER.ID,replacement);N.Tick();assert(BEGIN_COUNT==1)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn failure_before_flow_journal_still_resumes_the_saved_start_intent() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(

@@ -219,7 +219,7 @@ pub fn lua() -> String {
 -- Gameplay-only callbacks re-read the normal admission decision, never UI flags.
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 local R = A.Rules
-local N, providers, readers = {}, {}, {}
+local N, providers, readers, starting = {}, {}, {}, {}
 local KEY = 'JAC_ABSORPTION_ADMISSION_V1'
 local function State()
   local s = R.Copy(Game:GetProperty(KEY) or {Version=2, Requests={}, Offers={}})
@@ -258,8 +258,11 @@ local function NewRequest(source, id, from, to)
 end
 local function CancelInState(request)
   if request.Status == 'CANCELLED' then return end
-  assert((request.Status == 'WAITING' or request.Status == 'UNAVAILABLE')
-    and not request.Plan and not FlowRequest(request.FlowID),
+  local journal = FlowRequest(request.FlowID)
+  local waiting = request.Status == 'WAITING' or request.Status == 'UNAVAILABLE'
+  local failedPreflight = (waiting or request.Status == 'STARTING') and request.LastError ~= nil
+  assert(not starting[request.FlowID] and not journal
+    and (waiting and not request.Plan or failedPreflight),
     'cannot cancel an admission after its plan is frozen')
   request.Status, request.CancelledTurn = 'CANCELLED', Game.GetCurrentGameTurn()
   request.LastError = nil
@@ -337,7 +340,10 @@ function N.Check(source, id)
     request.Plan, request.Decision = plan, decision
     request.Status = 'STARTING'; Save(s)
   end
-  local result = F.Begin(R.Copy(request.Plan))
+  starting[request.FlowID] = true
+  local ok, result = pcall(F.Begin, R.Copy(request.Plan))
+  starting[request.FlowID] = nil
+  if not ok then error(result) end
   assert(result and result.ID == request.FlowID and result.Phase1Complete,
     'three-stage admission did not finish phase one')
   -- F.Begin can synchronously resolve AI flows; reload to preserve other requests.
