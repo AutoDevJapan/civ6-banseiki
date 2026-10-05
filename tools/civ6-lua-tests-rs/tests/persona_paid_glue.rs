@@ -69,7 +69,9 @@ fn foreign_reserved_key_is_not_overwritten() {
 #[test]
 fn duplicate_gameinfo_promotion_never_commits_catalog() {
     run(r#"Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true)
-        PROMOS[2].Index=PROMOS[1].Index
+        local first=GameInfo.GovernorPromotions[ROWS[1].BasePromotionType]
+        local second=GameInfo.GovernorPromotions[ROWS[2].BasePromotionType]
+        second.Index=first.Index
         GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')
         assert(loadstring(GAMEPLAY_SOURCE))()
         assert(Players[1]:GetProperty(904999)==nil)

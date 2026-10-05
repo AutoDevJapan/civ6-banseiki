@@ -436,7 +436,9 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
     local packed, used = {}, {};
     for slot,entry in ipairs(rows) do
         local row, cost = entry.row, entry.row.EvolutionCost;
-        if not integer(cost, 4) or cost == 0 then return; end
+        local governor = GameInfo.Governors[row.GovernorType];
+        if not integer(cost, 4) or cost == 0 or not governor or governor.GovernorType ~= row.GovernorType or
+           row.BasePromotionType ~= "GOVERNOR_PROMOTION_JAC_PERSONA_" .. string.sub(row.LeaderType,12) .. "_BASE" then return; end
         local values = {};
         for step=0,cost-1 do
             local name = row.BasePromotionType;
