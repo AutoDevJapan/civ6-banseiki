@@ -127,7 +127,8 @@ impl Third {
             local function coreUnitSurface(u)
              rememberUnit(u);
              if CORE_UNIT_MODE=='missing' then
-              u.GetName=nil; u.GetExperience=nil; u.GetSpyOperation=nil; u.GetSpyOperationEndTurn=nil;
+              u.GetName=nil; u.GetSpyOperation=nil; u.GetSpyOperationEndTurn=nil;
+              u.GetExperience=function() return {GetExperiencePoints=function() return 0 end} end;
              end
              if CORE_UNIT_FAULT then CORE_UNIT_FAULT(u) end
             end
@@ -1247,10 +1248,6 @@ fn optional_core_unit_getter_throw_invalid_and_partial_are_not_successful_fallba
             "experience object unavailable",
         ),
         (
-            "u.GetExperience=function() return {} end",
-            "partial third spy Core experience API",
-        ),
-        (
             "u.GetExperience=function() return {GetLevel=false} end",
             "unknown third spy Core unit getter",
         ),
@@ -1466,4 +1463,65 @@ fn adoption_requires_attempt_and_reservation_to_match_the_build_intent() {
         );
         t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').attestation and PROGRESS_CALLS==1)");
     }
+}
+
+#[test]
+fn saved_command_can_be_attested_after_ui_reload_without_replaying_native_production() {
+    let t = Third::new();
+    t.enable_immediate_production();
+    t.begin();
+    t.run(
+        r#"
+        fire(Events.SaveComplete); local b=ExposedMembers.JAC_PersonaBoundary;
+        b.ThirdSpySend('BUILD_SPY'); FRAME(); FRAME(); b.Queue('PROGRESS_SPY'); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').phase=='COMMAND');
+        assert(PROGRESS_CALLS==1 and #UNITS[0]==1 and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'));
+        -- Recreate only UI dispatch state, not a claim of physical save/load.
+        fire(Events.LoadScreenClose);
+        "#,
+    );
+    t.bind();
+    t.run(
+        r#"
+        local s=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE');
+        assert(s.attestation.productionCommand.action=='PROGRESS_SPY' and
+         s.attestation.productionCommand.phase=='COMMAND');
+        local binding=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding;
+        assert(binding.sources.unit.identity=='CORE' and binding.sources.unit.level=='UI' and
+         binding.sources.unit.levelUnavailable=='GetLevel');
+        assert(PROGRESS_CALLS==1 and #BUILD_REQUESTS==1 and #UNIT_REQUESTS==0 and UI_CORE_CALLS==0);
+        "#,
+    );
+}
+
+#[test]
+fn reservation_without_completed_progress_ack_cannot_supply_an_adoption() {
+    for fault in [
+        "Game:SetProperty('JAC_BOUNDARY_THIRD_SPY_ACK',nil)",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').action='BEGIN'",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').phase='RESERVED'",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').turn=123",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').observed.capacity=99",
+        "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK').observed=nil",
+    ] {
+        let t = Third::new();
+        t.produce();
+        t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME()");
+        t.run(fault);
+        t.reject(
+            "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
+            "adoption lacks the completed production command",
+        );
+        t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').attestation and PROGRESS_CALLS==1)");
+    }
+}
+
+#[test]
+fn absent_experience_object_getter_remains_distinct_from_absent_level_getter() {
+    let t = Third::new();
+    t.produce();
+    t.run("CORE_UNIT_FAULT=function(u) u.GetExperience=nil end");
+    t.bind();
+    t.run("local sources=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').binding.sources; assert(sources.unit.level=='UI' and sources.unit.levelUnavailable=='GetExperience')");
 }

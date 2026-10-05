@@ -312,11 +312,14 @@ local function coreUnit(owner,map,units)
   local experience=u:GetExperience();
   assert(type(experience)=='table' or type(experience)=='userdata',
    'third spy Core experience object unavailable');
-  assert(getter(experience,'GetLevel'),'partial third spy Core experience API');
-  local level=experience:GetLevel();
-  assert(integer(level,0) and level==map.level,'third spy Core operative level differs');
-  source.level='CORE'
- end
+  -- The live Gameplay experience object exists but has no GetLevel. Its
+  -- presence does not establish availability of this individual value.
+  if getter(experience,'GetLevel') then
+   local level=experience:GetLevel();
+   assert(integer(level,0) and level==map.level,'third spy Core operative level differs');
+   source.level='CORE'
+  else source.levelUnavailable='GetLevel' end
+ else source.levelUnavailable='GetExperience' end
  for _,field in ipairs({{'operation','GetSpyOperation'},{'endTurn','GetSpyOperationEndTurn'}}) do
   if getter(u,field[2]) then
    local value=u[field[2]](u);
@@ -497,7 +500,15 @@ function T.InstallCore(hooks)
     assert(city and city:GetOwner()==owner and city:GetID()==production.cityID,'third spy did not appear in its production city');
     if p.Action=='ATTEST' then
      assert(not s.attestation,'third spy adoption already attested');
-     s.attestation={token=p.Token,turn=p.Turn,frame=p.Frame,publishEpoch=p.PublishEpoch,observation=p.Observation,id=o.map.id,sources=source};
+     -- A persisted reservation flag alone cannot prove that AddProgress
+     -- returned. Load the saved COMMAND without replaying the native call.
+     assert(ack and ack.owner==owner and ack.action=='PROGRESS_SPY' and
+      (ack.phase=='COMMAND' or ack.phase=='BARRIER') and
+      ack.token>s.intents.BUILD_SPY.token and ack.turn==production.observation.turn and
+      type(ack.observed)=='table' and conserved(production.observation,ack.observed,true),
+      'third spy adoption lacks the completed production command');
+     s.attestation={token=p.Token,turn=p.Turn,frame=p.Frame,publishEpoch=p.PublishEpoch,
+      observation=p.Observation,id=o.map.id,sources=source,productionCommand=copy(ack)};
     else
      local first=assert(s.attestation,'third spy adoption attestation missing');
      assert(first.observation==p.Observation and first.id==o.map.id and p.Token>first.token and
