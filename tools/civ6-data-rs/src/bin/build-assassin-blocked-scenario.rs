@@ -54,6 +54,14 @@ local function Blockers()
     end
   end
 end
+local function RestoredTerrain()
+  local city=Players[t.Actor]:GetCities():FindID(t.City)
+  assert(city and city:GetX()==t.X and city:GetY()==t.Y,'restored training city lost or replaced')
+  for _,p in ipairs(t.Plots) do
+    local plot=Map.GetPlot(p.X,p.Y)
+    assert(plot and plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.Feature,'restored terrain or feature differs')
+  end
+end
 local function RestoreTerrain()
   for _,p in ipairs(t.Plots) do
     local plot=Map.GetPlot(p.X,p.Y)
@@ -61,6 +69,7 @@ local function RestoreTerrain()
     TerrainBuilder.SetFeatureType(plot,p.Feature)
     assert(plot:GetTerrainType()==p.Terrain and plot:GetFeatureType()==p.Feature,'fixture terrain did not restore')
   end
+  RestoredTerrain()
 end
 local function Pending()
   local s=R.State(t.Actor)
@@ -127,6 +136,7 @@ for _,p in ipairs(Map.GetAdjacentPlots(cityX,cityY)) do plots[#plots+1]=p end
 assert(#plots==7,'complete radius-one footprint required')
 local rows={}; local occupied={}
 local function Occupy(p)
+  assert(not p:IsCity() or (p:GetX()==cityX and p:GetY()==cityY),'fixture would modify another city')
   local row={X=p:GetX(),Y=p:GetY(),Terrain=p:GetTerrainType(),Feature=p:GetFeatureType(),
     Barrier=GameInfo.Terrains.TERRAIN_GRASS_MOUNTAIN.Index}
   local remove={}
@@ -216,6 +226,7 @@ return 'second blocked real tick verified; original terrain restored without tou
         &mut steps,
         r#"
 local s=R.State(t.Actor); local count=0; local row
+RestoredTerrain()
 for _,u in Players[t.Actor]:GetUnits():Members() do if R.IsAssassin(u) then
   count=count+1; row=Row(u); assert(not t.Before[tostring(row.ID)],'reused production id')
 end end
@@ -238,6 +249,7 @@ return 'one native placed assassin; full lock starts only at actual recovery'
         &mut steps,
         r#"
 local u=Players[t.Actor]:GetUnits():FindID(t.Unit.ID); local row=Row(u)
+RestoredTerrain()
 assert(Same(row,t.Unit),'independent UI coordinates differ from gameplay')
 Trace('ui-before-save',row); return 'native UI independently matches production id, type, position and damage'
 "#,
@@ -248,6 +260,7 @@ Trace('ui-before-save',row); return 'native UI independently matches production 
         &mut steps,
         r#"
 assert(Same(R.State(t.Actor),t.Complete),'completion state changed after load')
+RestoredTerrain()
 local row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'gameplay unit changed after load')
 Trace('gameplay-after-load',row); return 'completed state and same native unit restored unchanged'
 "#,
@@ -257,6 +270,7 @@ Trace('gameplay-after-load',row); return 'completed state and same native unit r
         &mut steps,
         r#"
 local row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'independent UI unit changed after load')
+RestoredTerrain()
 Trace('ui-after-load',row); return 'independent UI restores the same id, owner, type, coordinates and damage'
 "#,
         "InGame",
@@ -266,6 +280,7 @@ Trace('ui-after-load',row); return 'independent UI restores the same id, owner, 
         &mut steps,
         r#"
 assert(Same(R.State(t.Actor),t.Complete),'next turn duplicated completion or extended lock')
+RestoredTerrain()
 local ids=Assassins(t.Actor); local count=0; for id in pairs(ids) do count=count+1; assert(tonumber(id)==t.Unit.ID,'duplicate assassin') end
 assert(count==1,'recovered assassin lost'); Trace('next-turn',ids[tostring(t.Unit.ID)])
 Game:SetProperty(R.TEST,nil)
@@ -336,7 +351,7 @@ local function Plot(x,y)
   return {GetX=function() return x end,GetY=function() return y end,
     GetTerrainType=function() return terrain[key] or 1 end,
     GetFeatureType=function() return features[key] or -1 end,
-    IsCity=function() return x==0 and y==0 end,
+    IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
     IsWater=function() return false end,IsImpassable=function() return terrain[key]==9 or features[key]==11 end}
 end
 TerrainBuilder={SetTerrainType=function(p,t)
@@ -395,6 +410,7 @@ end
             "wrong_type",
             "corrupt_cleanup",
             "lost_city",
+            "other_city",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -407,6 +423,18 @@ end
                 lua.load("CheckFootprint()").exec()?;
                 lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
                 lua.load("CheckRestored()").exec()?;
+                for mutation in [
+                    "TerrainBuilder.SetTerrainType(Map.GetPlot(2,0),1)",
+                    "TerrainBuilder.SetFeatureType(Map.GetPlot(0,0),-1)",
+                    "DATA[0].Cities[10]=nil",
+                ] {
+                    lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
+                    lua.load(mutation).exec()?;
+                    assert!(lua
+                        .load(format!("{PREFIX} RestoredTerrain()"))
+                        .exec()
+                        .is_err());
+                }
             }
         }
         Ok(())
