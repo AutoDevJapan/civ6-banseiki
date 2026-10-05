@@ -1,6 +1,7 @@
 {
   "name": "15 km Japan: civic evolution Titles, individual Merit, irreversible category/route choices, city effects and save/load",
   "judge_profile": "generic",
+  "strict_lua_errors": true,
   "steps": [
     {
       "action": "enable_mods",
