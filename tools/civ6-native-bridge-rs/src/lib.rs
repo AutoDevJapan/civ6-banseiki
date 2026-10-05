@@ -17,6 +17,7 @@ pub mod governor_payment;
 pub mod paid_artifact;
 pub mod paid_catalog;
 pub mod paid_glue;
+pub mod persona_finalization;
 
 #[cfg(windows)]
 mod windows;
