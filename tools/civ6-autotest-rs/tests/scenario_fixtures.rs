@@ -191,13 +191,15 @@ fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() 
     let data = scenario("leader-persona-spy-third-capacity-probe.json");
     validate_scenario(&data).unwrap();
     let actions = steps(&data);
-    assert_eq!(actions.len(), 5);
+    assert_eq!(actions.len(), 4);
     assert_eq!(
         actions[0]["name"],
         "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
     );
     assert_eq!(actions[0]["exact_name"], true);
     assert!(actions[0].get("checkpoint").is_none());
+    assert!(action(&actions[1], "pause") && actions[1]["seconds"] == 2);
+    assert_eq!(actions[2]["lua_timeout"], 20);
     assert!(actions.iter().all(|step| ![
         "save",
         "end_turn",
@@ -207,7 +209,7 @@ fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() 
         "autoplay"
     ]
     .contains(&step["action"].as_str().unwrap())));
-    assert!(action(&actions[3], "inspect_native_spy_failures"));
+    assert!(action(&actions[3], "exit_to_menu"));
     assert!(code(&actions[2]).contains("CIVIC_GRANT_SPY"));
     let lua = Lua::new();
     for step in actions {
