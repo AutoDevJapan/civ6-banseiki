@@ -688,6 +688,7 @@
               IsHidden=function(self) return self.Hidden end,RegisterCallback=function(self,event,f) self.Callback=f end,
               CalculateSize=function() end,CalculateInternalSize=function() end}
           end
+          ContextPtr=Control(); ContextPtr:SetHide(true)
           Controls={}; for _,name in ipairs({'OpenButton','CloseButton','Panel','Rows','Status','Result','Scroll'}) do
             Controls[name]=Control()
           end
@@ -707,11 +708,12 @@
           EVENTS.JAC_AssassinOperation(0,UI_CALLS[2].Params); UI_HANDLERS.GameCoreEventPublishComplete()
           assert(UI_ROWS[1].Action.Text=='LOC_JAC_ASN_PRODUCE')
           Controls.CloseButton.Callback(); assert(Controls.Panel:IsHidden())
-          Players[0].IsTurnActive=function() return false end; UI_HANDLERS.LocalPlayerTurnBegin()
+          Players[0].IsTurnActive=function() return false end; Controls.OpenButton.Callback(); UI_HANDLERS.LocalPlayerTurnBegin()
           for _,row in ipairs(UI_ROWS) do assert(row.Action.Disabled) end
           local before=#UI_CALLS; UI_ROWS[1].Action.Callback(); assert(#UI_CALLS==before)
 -- CASE test_panel_lists_visible_non_major_units_without_leader_candidates
 -- SEGMENT
+          Controls.OpenButton.Callback()
           for _,row in ipairs(UI_ROWS) do if row.Action.Text=='LOC_JAC_ASN_ATTEMPT' then row.Action.Callback() end end
           local found=false
           for _,call in ipairs(UI_CALLS) do if call.Params.Target==3 then

@@ -5,6 +5,7 @@ use rusqlite::{types::ValueRef, Connection};
 use serde_json::{Map, Value as Json};
 use std::path::{Path, PathBuf};
 
+pub mod assassin_panel;
 pub mod official;
 pub mod strict;
 

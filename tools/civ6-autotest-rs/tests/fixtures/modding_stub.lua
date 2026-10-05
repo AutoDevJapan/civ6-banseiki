@@ -1,16 +1,27 @@
 -- Dependency-enforcing FrontEnd model copied from the legacy test fixture.
 local definitions = ...
-MODS, INSTALLED, DISABLED, ENABLED = {}, {}, {}, {}
+MODS, INSTALLED, DISABLED, ENABLED, CONFIGURED = {}, {}, {}, {}, {}
 UPDATES = 0
 for _, definition in ipairs(definitions) do
     local id = string.lower(definition.Id)
     local info = {Id = definition.Id, Handle = id, Enabled = definition.Enabled,
-                  Dependencies = definition.Dependencies}
+                  Dependencies = definition.Dependencies, Official = definition.Official}
     MODS[id] = info
     INSTALLED[#INSTALLED + 1] = info
 end
 UI = {IsInFrontEnd = function() return true end}
-GameConfiguration = {UpdateEnabledMods = function() UPDATES = UPDATES + 1 end}
+GameConfiguration = {
+    UpdateEnabledMods = function()
+        UPDATES = UPDATES + 1
+        CONFIGURED = {}
+        for _, info in ipairs(INSTALLED) do
+            if info.Enabled then
+                CONFIGURED[#CONFIGURED + 1] = {Id = info.Id, Official = info.Official}
+            end
+        end
+    end,
+    GetEnabledMods = function() return CONFIGURED end,
+}
 Modding = {
     GetInstalledMods = function() return INSTALLED end,
     GetModHandle = function(id) local key = string.lower(id); return MODS[key] and key end,

@@ -65,43 +65,64 @@ fn scenario() -> serde_json::Value {
     scenario
 }
 
-fn main() {
-    let mut data = scenario();
-    if let Some(log) = std::env::args().nth(1) {
-        let text = std::fs::read_to_string(log).expect("read original selection log");
-        let mut original = std::collections::BTreeMap::new();
-        for line in text.lines() {
-            if let Some(row) = line.strip_prefix("FrontEnd: TODO241 ORIGINAL ") {
-                let (id, flag) = row.split_once('=').expect("complete original row");
-                assert_eq!(
-                    id.trim_matches(['{', '}']).len(),
-                    36,
-                    "complete original MOD id"
-                );
-                let enabled = match flag {
-                    "true" => true,
-                    "false" => false,
-                    _ => panic!("complete original flag"),
-                };
-                assert!(
-                    original.insert(id.to_string(), enabled).is_none(),
-                    "duplicate original row"
-                );
+fn parse_original(text: &str) -> Result<std::collections::BTreeMap<String, bool>, String> {
+    let mut original = std::collections::BTreeMap::new();
+    let mut seen_guids = std::collections::BTreeSet::new();
+    let mut counted = false;
+    for line in text.lines() {
+        if let Some(row) = line.strip_prefix("FrontEnd: TODO241 ORIGINAL ") {
+            if counted {
+                return Err("original rows from multiple runs".into());
             }
+            let (id, flag) = row.split_once('=').ok_or("incomplete original row")?;
+            let guid = id
+                .strip_prefix('{')
+                .and_then(|s| s.strip_suffix('}'))
+                .unwrap_or(id);
+            if guid.len() != 36
+                || !guid.bytes().enumerate().all(|(i, b)| {
+                    if [8, 13, 18, 23].contains(&i) {
+                        b == b'-'
+                    } else {
+                        b.is_ascii_hexdigit()
+                    }
+                })
+            {
+                return Err("invalid original MOD id".into());
+            }
+            let enabled = match flag {
+                "true" => true,
+                "false" => false,
+                _ => return Err("invalid original flag".into()),
+            };
+            if !seen_guids.insert(guid.to_ascii_lowercase()) {
+                return Err("duplicate original row".into());
+            }
+            original.insert(id.to_ascii_lowercase(), enabled);
+        } else if let Some(pass) = line.strip_prefix("FrontEnd: TODO241 PASS ") {
+            let (label, count) = pass
+                .rsplit_once(" installed=")
+                .ok_or("missing diagnostic count")?;
+            if !counted && label != "native-false-preserves-disabled-intermediate" {
+                return Err("missing first diagnostic count".into());
+            }
+            let count: usize = count.parse().map_err(|_| "invalid diagnostic count")?;
+            if original.is_empty() || original.len() != count || count > 512 {
+                return Err("every original MOD row is required".into());
+            }
+            counted = true;
         }
-        assert!(!original.is_empty(), "original snapshot is required");
-        let expected_count = text
-            .lines()
-            .find_map(|line| {
-                line.split_once("installed=")
-                    .and_then(|(_, count)| count.trim().parse::<usize>().ok())
-            })
-            .expect("original installed count is required");
-        assert_eq!(
-            original.len(),
-            expected_count,
-            "every original MOD row is required"
-        );
+    }
+    if !counted {
+        return Err("original diagnostic count is required".into());
+    }
+    Ok(original)
+}
+
+fn recovery_scenario(text: &str) -> serde_json::Value {
+    let mut data = scenario();
+    {
+        let original = parse_original(text).expect("complete original snapshot");
         let mut recovery = format!(
             "if not UI.IsInFrontEnd() then error('main menu required') end\nlocal saved = {{{}}}\n",
             original
@@ -128,6 +149,16 @@ fn main() {
         );
     }
     validate_scenario(&data).expect("valid recovery diagnostic");
+    data
+}
+
+fn main() {
+    let data = match std::env::args().nth(1) {
+        Some(log) => {
+            recovery_scenario(&std::fs::read_to_string(log).expect("read original selection log"))
+        }
+        None => scenario(),
+    };
     println!("{}", serde_json::to_string_pretty(&data).unwrap());
 }
 
@@ -390,6 +421,125 @@ return 'TODO241 PASS 5/5 all-selection-restored installed=' .. #ids
 mod tests {
     use super::*;
     use mlua::{Lua, Table};
+
+    fn snapshot_log(rows: &[(&str, bool)]) -> String {
+        let mut text = rows
+            .iter()
+            .map(|(id, flag)| format!("FrontEnd: TODO241 ORIGINAL {id}={flag}\n"))
+            .collect::<String>();
+        text.push_str(&format!(
+            "FrontEnd: TODO241 PASS native-false-preserves-disabled-intermediate installed={}\n",
+            rows.len()
+        ));
+        text
+    }
+
+    #[test]
+    fn recovery_parser_preserves_braced_ids_and_uses_only_diagnostic_counts() {
+        let id = format!("{{{MAP}}}");
+        let text = format!(
+            "unrelated installed=99\n{}",
+            snapshot_log(&[(&id, true), (GROWTH, false)])
+        );
+        let original = parse_original(&text).unwrap();
+        assert_eq!(original.len(), 2);
+        assert_eq!(original[&id], true);
+        assert_eq!(original[GROWTH], false);
+    }
+
+    #[test]
+    fn recovery_parser_rejects_partial_duplicate_invalid_and_mixed_runs() {
+        let valid = snapshot_log(&[(MAP, true), (GROWTH, false)]);
+        for bad in [
+            valid.replace(&format!("FrontEnd: TODO241 ORIGINAL {GROWTH}=false\n"), ""),
+            valid.replace(" installed=2", " installed=1"),
+            valid.replace("=false", "=FALSE"),
+            valid.replace(MAP, "gggggggg-0000-0000-0000-000000000000"),
+            valid.replace(MAP, GROWTH),
+            snapshot_log(&[(MAP, true), (&format!("{{{MAP}}}"), false)]),
+            valid.replace("FrontEnd: TODO241 PASS ", "unrelated "),
+            format!("{valid}{}", snapshot_log(&[(TREES, true)])),
+            format!("{valid}FrontEnd: TODO241 PASS disable-failure-restores-all installed=3\n"),
+        ] {
+            assert!(
+                parse_original(&bad).is_err(),
+                "accepted incomplete or mixed snapshot: {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn recovery_executes_native_installed_handles_and_preserves_unrecorded_mods() {
+        for extra_enabled in [false, true] {
+            let lua = fixture(31);
+            lua.globals().set("EXTRA_ENABLED", extra_enabled).unwrap();
+            let official = "{02a8bdde-67ea-4d38-9540-26e685e3156e}";
+            lua.globals().set("OFFICIAL", official).unwrap();
+            lua.load(r#"
+                local info = {Id=OFFICIAL, Handle=OFFICIAL, Enabled=false, Dependencies={}, Official=true}
+                MODS[OFFICIAL] = info; INSTALLED[#INSTALLED+1] = info
+                local extra = {Id='deaddead-eeee-4ddd-aeee-000000000001', Handle='deaddead-eeee-4ddd-aeee-000000000001', Enabled=EXTRA_ENABLED, Dependencies={}}
+                MODS[extra.Id] = extra; INSTALLED[#INSTALLED+1] = extra
+                local lookup = Modding.GetModHandle
+                Modding.GetModHandle = function(id) if id == OFFICIAL then return nil end; return lookup(id) end
+                local native = Modding
+                Modding = setmetatable({}, {__index=native, __newindex=function() error('native API is read only') end})
+                ORIGINAL_LOOKUP = Modding.GetModHandle
+            "#).exec().unwrap();
+            let rows = [
+                (MAP, true),
+                (MIDDLE, false),
+                (LEAF, false),
+                (TREES, true),
+                (GROWTH, false),
+                (official, true),
+            ];
+            let data = recovery_scenario(&snapshot_log(&rows));
+            assert_eq!(data["steps"].as_array().unwrap().len(), 38);
+            let result = lua
+                .load(data["steps"][1]["code"].as_str().unwrap())
+                .eval::<String>()
+                .unwrap();
+            assert_eq!(result, "TODO241 RECOVERED original selection; installed=7");
+            let mods: Table = lua.globals().get("MODS").unwrap();
+            for (id, enabled) in rows {
+                assert_eq!(
+                    mods.get::<Table>(id)
+                        .unwrap()
+                        .get::<bool>("Enabled")
+                        .unwrap(),
+                    enabled
+                );
+            }
+            assert_eq!(
+                mods.get::<Table>("deaddead-eeee-4ddd-aeee-000000000001")
+                    .unwrap()
+                    .get::<bool>("Enabled")
+                    .unwrap(),
+                extra_enabled
+            );
+            assert!(lua
+                .load("return Modding.GetModHandle == ORIGINAL_LOOKUP")
+                .eval::<bool>()
+                .unwrap());
+        }
+    }
+
+    #[test]
+    fn recovery_missing_original_mod_fails_before_any_selection_changes() {
+        let lua = fixture(31);
+        let data = recovery_scenario(&snapshot_log(&[(
+            "02a8bdde-67ea-4d38-9540-26e685e3156e",
+            true,
+        )]));
+        let err = lua
+            .load(data["steps"][1]["code"].as_str().unwrap())
+            .eval::<String>()
+            .unwrap_err();
+        assert!(err.to_string().contains("original MOD no longer installed"));
+        assert_eq!(lua.globals().get::<Table>("ENABLED").unwrap().raw_len(), 0);
+        assert_eq!(lua.globals().get::<Table>("DISABLED").unwrap().raw_len(), 0);
+    }
 
     #[test]
     fn checked_in_scenario_uses_current_production_transaction() {

@@ -19,6 +19,419 @@ const TABLES: [&str; 6] = [
     "Rules",
 ];
 
+macro_rules! call { ($h:expr, $name:literal $(, $arg:expr)* $(,)?) => { $h.call($name, vec![$(json!($arg)),*]) }; }
+
+fn install_absorption_adapter(h: &Harness) {
+    let globals = h.lua.globals();
+    globals
+        .set(
+            "RP_SOURCE",
+            read_repo(format!("{MOD}/Scripts/JAC_ReligionPersistence.lua")),
+        )
+        .unwrap();
+    globals
+        .set(
+            "RP_ADAPTER_SOURCE",
+            read_repo(format!("{MOD}/Scripts/JAC_RP_AbsorptionAdapter.lua")),
+        )
+        .unwrap();
+    globals
+        .set(
+            "ABS_ENTRY_SOURCE",
+            read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua"),
+        )
+        .unwrap();
+    h.exec(
+        r#"
+        JAC_ReligionPersistenceGameplay=nil
+        JAC_AbsorptionGameplay={Rules={Copy=function(value) return value end},
+          RegisterAdapter=function(name, value)
+            assert(name=='religion-persistence' and ADAPTER==nil)
+            ADAPTER=value
+          end}
+        JAC_AbsorptionFlowGameplay={}
+        GameEvents.JAC_Absorption_TestCall={Add=function() end}
+        GameConfiguration.IsAnyMultiplayer=function() return false end
+        include=function(name)
+          if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow' then return end
+          local source=name=='JAC_ReligionPersistence' and RP_SOURCE
+            or name=='JAC_RP_AbsorptionAdapter' and RP_ADAPTER_SOURCE
+          assert(source, 'unexpected VFS include: '..name)
+          assert(loadstring(source))()
+        end
+        assert(loadstring(ABS_ENTRY_SOURCE))()
+        assert(ADAPTER and JAC_ReligionPersistenceGameplay)
+        "#,
+    );
+}
+
+fn absorption_tx(h: &Harness, transfer: bool) {
+    h.lua
+        .globals()
+        .set(
+            "TX",
+            json_to_lua(
+                &h.lua,
+                &json!({
+                    "ID":"rp-absorb-1", "From":0, "To":1,
+                    "Units":[{"ID":77,"Type":"UNIT_HERO_ANANSI","Hero":{"Class":10},"KeepUnit":transfer,
+                        "Destination":1,"Outcome":if transfer {"RECRUIT"} else {"SUICIDE"}}],
+                    "UnitMap":{"0:77":{"ID":88,"Token":"rp-absorb-1:unit:77"}}
+                }),
+            ),
+        )
+        .unwrap();
+}
+
+fn seeded_absorption_harness() -> Harness {
+    let h = Harness::new();
+    h.f();
+    call!(h, "BindEngineReligion", R1, 42);
+    call!(h, "SetCommunity", R1, "origin", 4, 2, "PLAYER_0");
+    for (id, kind, holder) in [
+        ("scripture", "SCRIPTURE", "CAVE"),
+        ("record", "RECORD", "PLAYER_0"),
+        ("hidden", "SCRIPTURE", "HIDDEN_PLAYER_0"),
+        ("vault", "RELIC", "VAULT_PLAYER_0"),
+        ("hero_source", "RELIC", "HERO_PLAYER_0"),
+        ("unresolved_source", "SCRIPTURE", "PLAYER_0"),
+    ] {
+        call!(h, "PreserveAsset", R1, id, kind, holder, 0);
+    }
+    h.found(R2, 2, 1, 2);
+    call!(h, "SetCommunity", R2, "origin", 2, 1, "PLAYER_2");
+    call!(h, "PreserveAsset", R2, "third", "RECORD", "PLAYER_2", 2);
+    h.lua.globals().set("RP_R1", R1).unwrap();
+    h.lua.globals().set("RP_R2", R2).unwrap();
+    h.exec(
+        r#"
+        local s=PROPERTY_STORE.JAC_RP_STATE_V1
+        local r=s.religions[RP_R1]
+        r.discoveries.history={asset='hero_source',player=0,outcome='HERO',effects='APPLIED'}
+        r.materialUses.hero_source={outcome='HERO',player=0,effects='APPLIED'}
+        r.discoveries.unresolved={asset='unresolved_source',player=0,
+          actor='PLAYER_0',site='CAVE',job='MONK'}
+        r.revivals.old={source='scripture',community='past',holder='PLAYER_0',
+          player=0,effects='APPLIED',turn=2}
+        r.revivalCount=1
+        r.outcomeUses['0:HERO']='history'
+        r.retiredAssets.retired=true
+        s.heroes['0']={religion=RP_R1,discovery='history',unit=77,
+          heroClass=10,heroUnit='UNIT_HERO_ANANSI',verification='APPLIED'}
+        s.artifacts['0']={religion=RP_R1,asset='vault'}
+        "#,
+    );
+    install_absorption_adapter(&h);
+    absorption_tx(&h, true);
+    h
+}
+
+#[test]
+fn absorption_entry_moves_rp_ledger_and_re_registers_after_load() {
+    let mut h = seeded_absorption_harness();
+    let third = h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.religions[RP_R2]");
+    let before = h.s();
+    let writes = h.writes();
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    assert_eq!(h.writes(), writes, "Prepare must only read");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    call!(h, "SetCommunity", R1, "late", 1, 1, "PLAYER_0");
+    call!(h, "SetCommunity", R2, "late-third", 1, 0, "PLAYER_2");
+    let third_at_apply = h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.religions[RP_R2]");
+    let writes = h.writes().python_f64().unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.writes().python_f64().unwrap(), writes + 1.0);
+    h.exec("ADAPTER.Verify(TX,SNAP)");
+    h.exec("ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(
+        h.writes().python_f64().unwrap(),
+        writes + 1.0,
+        "retry must not write twice"
+    );
+    let after = h.s();
+    assert_eq!(after["founder"], before["founder"]);
+    assert_eq!(after["founderDefeated"], true);
+    assert_eq!(after["engineReligion"], before["engineReligion"]);
+    assert_eq!(after["communities"]["origin"]["followers"], 4);
+    assert_eq!(after["communities"]["origin"]["publicFacilities"], 2);
+    assert_eq!(after["communities"]["origin"]["holder"], "PLAYER_1");
+    assert_eq!(after["communities"]["late"]["holder"], "PLAYER_1");
+    assert_eq!(after["assets"]["scripture"]["holder"], "CAVE");
+    assert_eq!(after["assets"]["scripture"]["owner"], 1);
+    for (asset, holder) in [
+        ("record", "PLAYER_1"),
+        ("hidden", "HIDDEN_PLAYER_1"),
+        ("vault", "VAULT_PLAYER_1"),
+        ("hero_source", "HERO_PLAYER_1"),
+    ] {
+        assert_eq!(after["assets"][asset]["holder"], holder);
+    }
+    assert_eq!(after["discoveries"]["history"]["player"], 0);
+    assert_eq!(after["discoveries"]["unresolved"]["player"], 1);
+    assert_eq!(after["discoveries"]["unresolved"]["actor"], "PLAYER_1");
+    assert_eq!(after["materialUses"]["hero_source"]["player"], 0);
+    assert_eq!(after["revivals"]["old"]["player"], 0);
+    assert_eq!(after["revivals"]["old"]["holder"], "PLAYER_1");
+    assert_eq!(after["outcomeUses"]["0:HERO"], "history");
+    assert_eq!(after["retiredAssets"]["retired"], true);
+    assert_eq!(
+        h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.heroes['1'].unit"),
+        88
+    );
+    assert_eq!(
+        h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.artifacts['1'].asset"),
+        "vault"
+    );
+    assert_eq!(
+        h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.religions[RP_R2]"),
+        third_at_apply
+    );
+    assert_ne!(
+        third, third_at_apply,
+        "the intervening RP update must be visible"
+    );
+    h.reload();
+    install_absorption_adapter(&h);
+    absorption_tx(&h, true);
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.writes(), 0);
+    h.exec("TURN=TURN+1; ENGINE['0'].cities['0'].pressure={['43']=7168}");
+    h.exec("ADAPTER.Verify(TX,SNAP)");
+}
+
+#[test]
+fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_writing() {
+    for (change, label) in [
+        (
+            "s.religions[RP_R1].discoveries.history.effects='PENDING'",
+            "discovery",
+        ),
+        (
+            "s.religions[RP_R1].materialUses.hero_source.effects='PENDING'",
+            "material",
+        ),
+        (
+            "s.religions[RP_R1].revivals.old.effects='PENDING'",
+            "revival",
+        ),
+        ("s.heroes['0'].verification='PENDING'", "hero"),
+        ("s.revision='broken'", "revision type"),
+        ("s.revision=-1", "negative revision"),
+        ("s.revision=1.5", "fractional revision"),
+        ("s.revision=2147483648", "revision overflow"),
+        ("s.absorptionReceipts=false", "receipt type"),
+        (
+            "s.absorptionReceipts={['rp-absorb-1']={}}",
+            "receipt ID collision",
+        ),
+        (
+            "s.heroes['0'].heroClass=11",
+            "reused hero ID with another class",
+        ),
+        (
+            "s.heroes['0'].heroUnit='UNIT_HERO_ARTHUR'",
+            "hero type mismatch",
+        ),
+        ("s.heroes['1']={unit=99}", "hero collision"),
+        ("s.artifacts['1']={asset='other'}", "Vault collision"),
+    ] {
+        let h = seeded_absorption_harness();
+        h.exec(&format!("local s=PROPERTY_STORE.JAC_RP_STATE_V1;{change}"));
+        let before = h.export();
+        let writes = h.writes();
+        let error = h
+            .lua
+            .load("return ADAPTER.Prepare(TX)")
+            .eval::<MultiValue>()
+            .unwrap_err();
+        assert!(!error.to_string().is_empty(), "{label}");
+        assert_eq!(h.export(), before, "{label}");
+        assert_eq!(h.writes(), writes, "{label}");
+    }
+    let h = seeded_absorption_harness();
+    absorption_tx(&h, false);
+    assert!(h
+        .lua
+        .load("return ADAPTER.Prepare(TX)")
+        .eval::<MultiValue>()
+        .is_err());
+}
+
+#[test]
+fn absorption_receipt_does_not_freeze_unrelated_destination_rewards() {
+    let mut h = Harness::new();
+    h.f();
+    call!(h, "PreserveAsset", R1, "source", "SCRIPTURE", "CAVE", 0);
+    call!(h, "Found", R2, 2, "origin", 1, 0, "PLAYER_1");
+    call!(h, "SetCommunity", R2, "origin", 0, 0, "PLAYER_1");
+    h.discovery("MONK", "MONK_1", R2, "book2", "d2", 1);
+    h.resolve(R2, "d2", "HERO", json!({"player":1}));
+    assert_eq!(hero_verification(&h), "PENDING");
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.artifacts['1']={religion='JAC_RP_PLACEHOLDER_02',asset='vault_book'}");
+    let hero_before = h.export()["heroes"]["1"].clone();
+    let vault_before = h.export()["artifacts"]["1"].clone();
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='unrelated-rewards',From=0,To=1,Units={},UnitMap={}}");
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.export()["heroes"]["1"], hero_before);
+    assert_eq!(h.export()["artifacts"]["1"], vault_before);
+    assert_eq!(h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Hero==nil and PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Artifact==nil"), true);
+    h.exec("HERO_UI_TICK()");
+    assert_eq!(hero_verification(&h), "APPLIED");
+    let saved = h.export();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    h.reload();
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='unrelated-rewards',From=0,To=1,Units={},UnitMap={}}");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), 0);
+}
+
+#[test]
+fn absorption_adapter_saturated_counter_allows_normal_updates_and_reload() {
+    let mut h = seeded_absorption_harness();
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.revision=2147483647");
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.export()["revision"], 2147483647);
+    assert_eq!(h.export()["absorptionExactReceipt"], "rp-absorb-1");
+    h.exec("local a=PROPERTY_STORE.JAC_RP_STATE_V1.religions[RP_R1].assets.scripture; a.owner=9; assert(not pcall(ADAPTER.Verify,TX,SNAP)); a.owner=1");
+    call!(h, "SetCommunity", R1, "late_max", 0, 0, "PLAYER_1");
+    assert_eq!(h.export()["revision"], 2147483647);
+    assert_eq!(
+        h.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionExactReceipt==nil"),
+        true
+    );
+    let saved = h.export();
+    let writes = h.writes();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), writes);
+    h.reload();
+    install_absorption_adapter(&h);
+    absorption_tx(&h, true);
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.export(), saved);
+    assert_eq!(h.writes(), 0);
+    // V1 receipts remain readable after an ordinary update at the saturated counter.
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts[TX.ID].Version=1");
+    h.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(h.writes(), 0);
+}
+
+#[test]
+fn absorption_adapter_failed_write_retries_and_empty_state_is_supported() {
+    let h = seeded_absorption_harness();
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    let before = h.export();
+    let writes = h.writes().python_f64().unwrap();
+    h.exec("FAIL_WRITE=true");
+    assert!(h.lua.load("ADAPTER.Apply(TX,SNAP)").exec().is_err());
+    assert_eq!(h.export(), before);
+    assert_eq!(h.writes().python_f64().unwrap(), writes);
+    h.exec("FAIL_WRITE=false; ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.writes().python_f64().unwrap(), writes + 1.0);
+
+    let mut empty = Harness::new();
+    install_absorption_adapter(&empty);
+    empty.exec("TX={ID='empty',From=0,To=1,Units={},UnitMap={}}");
+    let snapshot = empty.eval("ADAPTER.Prepare(TX)");
+    empty
+        .lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&empty.lua))
+        .unwrap();
+    empty.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(empty.writes(), 1);
+    assert_eq!(
+        empty.eval("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts.empty.Revision"),
+        1
+    );
+    empty.f();
+    let after_found = empty.export();
+    let writes = empty.writes();
+    empty.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(empty.export(), after_found);
+    assert_eq!(empty.writes(), writes);
+    empty.reload();
+    install_absorption_adapter(&empty);
+    empty.exec("TX={ID='empty',From=0,To=1,Units={},UnitMap={}}");
+    empty
+        .lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&empty.lua))
+        .unwrap();
+    empty.exec("ADAPTER.Verify(TX,SNAP); ADAPTER.Apply(TX,SNAP)");
+    assert_eq!(empty.export(), after_found);
+    assert_eq!(empty.writes(), 0);
+    empty.exec("PROPERTY_STORE.JAC_RP_STATE_V1.absorptionReceipts.empty=nil");
+    assert!(empty.lua.load("ADAPTER.Verify(TX,SNAP)").exec().is_err());
+}
+
+#[test]
+fn absorption_adapter_keeps_native_revival_available_to_new_owner() {
+    let mut h = Harness::new();
+    h.f();
+    call!(h, "PreserveAsset", R1, "source", "SCRIPTURE", "CAVE", 0);
+    call!(h, "BindEngineReligion", R1, 42);
+    h.exec("ENGINE['0'].cities['0'].pressure={['43']=7168}; ENGINE['1'].cities['0'].pressure={['43']=4096}");
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='revival-transfer',From=0,To=1,Units={},UnitMap={}}");
+    let snapshot = h.eval("ADAPTER.Prepare(TX)");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Apply(TX,SNAP); ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.s()["assets"]["source"]["owner"], 1);
+    assert_eq!(call!(h, "NativeFollowers", R1), 0);
+    let faith = h.engine("1")["faith"].python_f64().unwrap();
+    call!(h, "Revive", R1, "after-absorption", "source", "new", 1, 0);
+    assert_eq!(call!(h, "NativeFollowers", R1), 1);
+    assert_eq!(h.engine("1")["faith"].python_f64().unwrap(), faith - 20.0);
+    h.exec("ADAPTER.Verify(TX,SNAP)");
+    h.reload();
+    install_absorption_adapter(&h);
+    h.exec("TX={ID='revival-transfer',From=0,To=1,Units={},UnitMap={}}");
+    h.lua
+        .globals()
+        .set("SNAP", snapshot.to_lua(&h.lua))
+        .unwrap();
+    h.exec("ADAPTER.Verify(TX,SNAP)");
+    assert_eq!(h.s()["revivals"]["after-absorption"]["effects"], "APPLIED");
+    assert_eq!(call!(h, "NativeFollowers", R1), 1);
+}
+
 #[test]
 fn rejection_requires_a_raw_lua_error_and_independently_decodable_unchanged_state() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -360,7 +773,6 @@ impl Harness {
     }
 }
 
-macro_rules! call { ($h:expr, $name:literal $(, $arg:expr)* $(,)?) => { $h.call($name, vec![$(json!($arg)),*]) }; }
 macro_rules! reject { ($h:expr, $name:literal $(, $arg:expr)* $(,)?) => { $h.rejected($name, vec![$(json!($arg)),*]) }; }
 
 fn manifest_text() -> String {
@@ -490,6 +902,8 @@ fn test_manifest_packages_every_file_and_separates_gameplay() {
     assert_eq!(
         imports,
         BTreeSet::from([
+            "Scripts/JAC_ReligionPersistence.lua",
+            "Scripts/JAC_RP_AbsorptionAdapter.lua",
             "UI/JAC_ReligionPersistence_HeroUI.xml",
             "UI/JAC_ReligionPersistence_HeroUI.lua"
         ])
