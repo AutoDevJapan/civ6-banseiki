@@ -1438,8 +1438,12 @@ impl Runner {
                 let ids = strings(&step["ids"]);
                 let disabled = self.lua(
                     "FrontEnd",
-                    &scenario::enable_mods_code(&ids, &strings(&step["disable_ids"])),
-                    self.budget(deadline, 5.0)?,
+                    &scenario::enable_mods_code_with_scope(
+                        &ids,
+                        &strings(&step["disable_ids"]),
+                        step["exclusive_user_mods"] == true,
+                    ),
+                    self.remaining(deadline)?,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
@@ -1559,6 +1563,48 @@ impl Runner {
                 }
                 Ok(results.join("; "))
             }
+            "carrier_exchange" => {
+                let token = text(step, "token");
+                let candidate = text(step, "candidate");
+                let code = crate::carrier_sync::query_with_scope(
+                    token,
+                    candidate,
+                    step["direct_apply"] != true,
+                )?;
+                let raw = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
+                let boundary = crate::carrier_sync::Checkpoint::parse(&raw, token, candidate)?;
+                if boundary.flow_required != (step["direct_apply"] != true) {
+                    return Err(Error::scenario("Carrier evidence has the wrong flow scope"));
+                }
+                let actors = self.lua(
+                    "InGame",
+                    crate::carrier_transport::ACTORS_QUERY,
+                    self.budget(deadline, 5.0)?,
+                )?;
+                let packet = crate::carrier_transport::packet(
+                    &boundary,
+                    &crate::carrier_transport::parse_actors(&actors)?,
+                )?;
+                let receipt = crate::carrier_transport::receipt_query(&packet)?;
+                // A re-created UI adopts the saved native receipt; it cannot
+                // send the same accepted boundary a second time.
+                let existing = self.lua("InGame", &receipt, self.budget(deadline, 5.0)?)?;
+                if existing != "true" {
+                    self.lua(
+                        "InGame",
+                        &crate::carrier_transport::send_query(&packet)?,
+                        self.budget(deadline, 5.0)?,
+                    )?;
+                    self.wait(
+                        &json!({"type":"lua","state_name":"InGame","code":receipt}),
+                        self.remaining(deadline)?,
+                        false,
+                    )?;
+                }
+                Ok(format!(
+                    "boundary receipt confirmed on this client for {token}; no physical MOVE claimed"
+                ))
+            }
             "carrier_checkpoint" => {
                 let token = text(step, "token");
                 let candidate = text(step, "candidate");
@@ -1605,7 +1651,7 @@ impl Runner {
                     match self.lua(
                         text(step, "state_name"),
                         text(step, "code"),
-                        self.budget(deadline, 5.0)?,
+                        self.remaining(deadline)?,
                     ) {
                         Ok(v) => break v,
                         Err(e)

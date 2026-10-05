@@ -560,3 +560,311 @@ fn cli_compares_real_records_and_rejects_self_as_network_peer() {
     assert!(generated.status.success());
     Lua::new().load(&generated.stdout).into_function().unwrap();
 }
+
+mod native_transport {
+    use super::*;
+    use civ6_autotest_rs::carrier_transport as transport;
+    use mlua::Function;
+
+    fn lua_value(lua: &Lua, value: &serde_json::Value) -> mlua::Value {
+        match value {
+            serde_json::Value::Null => mlua::Value::Nil,
+            serde_json::Value::Bool(v) => mlua::Value::Boolean(*v),
+            serde_json::Value::Number(v) => mlua::Value::Integer(v.as_i64().unwrap()),
+            serde_json::Value::String(v) => mlua::Value::String(lua.create_string(v).unwrap()),
+            serde_json::Value::Object(map) => {
+                let table = lua.create_table().unwrap();
+                for (k, v) in map {
+                    table.set(k.as_str(), lua_value(lua, v)).unwrap();
+                }
+                mlua::Value::Table(table)
+            }
+            serde_json::Value::Array(_) => panic!("boundary packet has no arrays"),
+        }
+    }
+    fn ready() -> Lua {
+        let lua = world(2);
+        lua.load(r#"
+          TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.BorrowToken='txn:carrier:900:borrow' end)
+          for id=1,3 do Players[id].IsTurnActive=function() return true end end
+          GameEvents.JAC_CarrierBoundary_Operation={Add=function(fn) TEST_RECEIVE=fn end}
+        "#).exec().unwrap();
+        lua.load(transport::gameplay_binding()).exec().unwrap();
+        lua
+    }
+    fn receive(lua: &Lua, actor: i64, packet: &serde_json::Value) -> bool {
+        lua.globals()
+            .get::<Function>("TEST_RECEIVE")
+            .unwrap()
+            .call((actor, lua_value(lua, packet)))
+            .unwrap()
+    }
+    fn message(lua: &Lua) -> serde_json::Value {
+        transport::packet(&checkpoint(lua), &[2]).unwrap()
+    }
+
+    #[test]
+    fn shipped_binding_matches_rust_and_is_loaded_once_in_gameplay() {
+        let script = repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_CarrierBoundary.lua");
+        assert_eq!(
+            fs::read_to_string(script).unwrap(),
+            transport::gameplay_binding()
+        );
+        let text = fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo"),
+        )
+        .unwrap();
+        let doc = roxmltree::Document::parse(&text).unwrap();
+        let entries: Vec<_> = doc
+            .descendants()
+            .filter(|node| {
+                node.has_tag_name("AddGameplayScripts")
+                    && node.children().any(|file| {
+                        file.has_tag_name("File")
+                            && file.text() == Some("Scripts/JAC_CarrierBoundary.lua")
+                    })
+            })
+            .collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].attribute("criteria"),
+            Some("JAC_Absorption_Banseiki")
+        );
+        assert_eq!(
+            entries[0]
+                .descendants()
+                .find(|n| n.has_tag_name("LoadOrder"))
+                .unwrap()
+                .text(),
+            Some("205")
+        );
+        Lua::new()
+            .load(transport::gameplay_binding())
+            .into_function()
+            .unwrap();
+    }
+
+    #[test]
+    fn wire_identity_is_length_framed_and_sender_is_selected_in_rust() {
+        let lua = ready();
+        let p = message(&lua);
+        assert_eq!(p["RequestID"], transport::key(&p).unwrap());
+        let mut boundary = checkpoint(&lua);
+        boundary.local_player = 3;
+        assert!(transport::packet(&boundary, &[2, 3]).is_err());
+        for ids in [vec![], vec![2, 2], vec![-1, 2]] {
+            assert!(transport::packet(&checkpoint(&lua), &ids).is_err());
+        }
+        assert!(transport::parse_actors("2,no").is_err());
+        Lua::new()
+            .load(transport::send_query(&p).unwrap())
+            .into_function()
+            .unwrap();
+    }
+
+    #[test]
+    fn receiver_rechecks_saved_city_relationship_on_each_gameplay_client() {
+        for code in [
+            "c.OriginalCity=999",
+            "c.Owner=9;c.Borrower=8",
+            "c.Phase='MOVE';c.MoveToken=c.BorrowToken;c.Borrower=3;c.BorrowedCity=999",
+            "c.Phase='RETURN';c.ReturnToken=c.BorrowToken;c.Borrower=3;c.BorrowedCity=999",
+            "c.Phase='PROVED';c.ReturnToken=c.BorrowToken;c.FinalSlot={Owner=3,City=999,X=16,Y=0,Building=1,Slot=0}",
+        ] {
+            let lua=ready();let mut p=message(&lua);
+            lua.load(format!("TEST_STATE_EDIT(function(s) local c=s.Transactions.checkpoint.NativeWorks[1].Carrier;{code} end)")).exec().unwrap();
+            let carrier=lua.load("return ExposedMembers.JAC_Absorption.GetState().Transactions.checkpoint.NativeWorks[1].Carrier").eval::<mlua::Table>().unwrap();
+            for name in ["OriginalCity","Owner","Borrower","Phase"] {
+                let value=carrier.get::<mlua::Value>(name).unwrap();
+                p[name]=match value {mlua::Value::String(s)=>json!(s.to_str().unwrap().to_string()),
+                    mlua::Value::Integer(n)=>json!(n),mlua::Value::Number(n)=>json!(n as i64),_=>panic!("bad fixture")};
+            }
+            p["RequestID"]=json!(transport::key(&p).unwrap());
+            assert!(!receive(&lua,2,&p),"{code}");
+        }
+        let lua = ready();
+        let mut p = message(&lua);
+        lua.load("CityManager.TransferCity(CITIES[16],1)")
+            .exec()
+            .unwrap();
+        p["CityOwner"] = json!(1);
+        p["CityID"] = json!(lua.load("return CITIES[16]:GetID()").eval::<i64>().unwrap());
+        p["RequestID"] = json!(transport::key(&p).unwrap());
+        assert!(!receive(&lua, 2, &p), "unissued BORROW cannot be adopted");
+        lua.load("TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.BorrowIssued=true end)").exec().unwrap();
+        assert!(
+            receive(&lua, 2, &p),
+            "issued BORROW may precede saved BorrowedCity"
+        );
+    }
+
+    #[test]
+    fn two_gameplay_vms_receive_the_same_packet_without_local_ui_or_a_move() {
+        let left = ready();
+        let right = ready();
+        let p = message(&left);
+        for lua in [&left, &right] {
+            lua.load("Game.GetLocalPlayer=nil;UI=nil").exec().unwrap();
+            let transfers = lua.load("return TRANSFERS").eval::<i64>().unwrap();
+            assert!(receive(lua, 2, &p));
+            assert!(receive(lua, 2, &p));
+            assert!(lua
+                .load(transport::receipt_query(&p).unwrap())
+                .eval::<bool>()
+                .unwrap());
+            assert_eq!(
+                lua.load("return TRANSFERS").eval::<i64>().unwrap(),
+                transfers
+            );
+        }
+        let code = format!(
+            "return JAC_AbsorptionRules.Canonical(Game:GetProperty({:?}))",
+            transport::STATE_KEY
+        );
+        assert_eq!(
+            left.load(&code).eval::<String>().unwrap(),
+            right.load(&code).eval::<String>().unwrap()
+        );
+    }
+
+    #[test]
+    fn stale_sender_turn_phase_city_and_observation_never_write_a_receipt() {
+        for name in [
+            "Actor",
+            "Turn",
+            "Phase",
+            "CityID",
+            "CityOwner",
+            "ObservationToken",
+            "RequestID",
+        ] {
+            let lua = ready();
+            let mut p = message(&lua);
+            p[name] = match name {
+                "Phase" => json!("MOVE"),
+                "ObservationToken" | "RequestID" => json!("changed"),
+                _ => json!(999),
+            };
+            if name != "RequestID" {
+                p["RequestID"] = json!(transport::key(&p).unwrap());
+            }
+            assert!(!receive(&lua, 2, &p), "{name}");
+            assert!(lua
+                .load(format!(
+                    "return Game:GetProperty({:?})==nil",
+                    transport::STATE_KEY
+                ))
+                .eval::<bool>()
+                .unwrap());
+        }
+        let lua = ready();
+        let p = message(&lua);
+        assert!(!receive(&lua, 1, &p));
+        lua.load("Players[1].IsHuman=function() return true end")
+            .exec()
+            .unwrap();
+        assert!(
+            !receive(&lua, 2, &p),
+            "Core must independently choose lowest active human"
+        );
+    }
+
+    #[test]
+    fn single_player_rejects_an_otherwise_valid_boundary_without_mutation() {
+        let lua = ready();
+        let p = message(&lua);
+        let before = checkpoint(&lua).ledger;
+        lua.load("GameConfiguration.IsAnyMultiplayer=function() return false end")
+            .exec()
+            .unwrap();
+        assert!(!receive(&lua, 2, &p));
+        assert!(lua
+            .load(format!(
+                "return Game:GetProperty({:?})==nil",
+                transport::STATE_KEY
+            ))
+            .eval::<bool>()
+            .unwrap());
+        assert_eq!(checkpoint(&lua).ledger, before);
+    }
+
+    #[test]
+    fn saved_receipt_survives_vm_recreation_and_corrupt_payload_is_not_adopted() {
+        let first = ready();
+        let p = message(&first);
+        assert!(receive(&first, 2, &p));
+        let captured = checkpoint(&first).transport_receipts.unwrap();
+        drop(first);
+        let resumed = ready();
+        resumed
+            .globals()
+            .set("TEST_SAVED_BOX", lua_value(&resumed, &captured))
+            .unwrap();
+        resumed
+            .load(format!(
+                "Game:SetProperty({:?},TEST_SAVED_BOX)",
+                transport::STATE_KEY
+            ))
+            .exec()
+            .unwrap();
+        assert!(receive(&resumed, 2, &p));
+        assert!(resumed
+            .load(transport::receipt_query(&p).unwrap())
+            .eval::<bool>()
+            .unwrap());
+        let id = p["RequestID"].as_str().unwrap();
+        resumed.load(format!("local box=Game:GetProperty({:?});box.Receipts[{:?}].Packet.CityID=999;Game:SetProperty({:?},box)",transport::STATE_KEY,id,transport::STATE_KEY)).exec().unwrap();
+        assert!(!resumed
+            .load(transport::receipt_query(&p).unwrap())
+            .eval::<bool>()
+            .unwrap());
+        assert!(!receive(&resumed, 2, &p));
+    }
+
+    #[test]
+    fn runner_confirms_saved_receipt_and_unknown_send_is_never_repeated() {
+        let lua = ready();
+        let raw = serde_json::to_string(&checkpoint(&lua)).unwrap();
+        let p = message(&lua);
+        let fake = FakeBackend::new().lua(move |_, code| {
+            if code.contains("local wanted") {
+                Ok(raw.clone())
+            } else if code == transport::ACTORS_QUERY {
+                Ok("2".into())
+            } else if code.contains("UI.RequestPlayerOperation") {
+                Err(Error::unknown("lost send response"))
+            } else {
+                Ok("false".into())
+            }
+        });
+        let mut h = Harness::new(json!({}), fake);
+        let step = json!({"action":"carrier_exchange","token":TOKEN,"candidate":CANDIDATE,"direct_apply":true});
+        scenario::validate_scenario(&json!({"name":"boundary","steps":[step.clone()]})).unwrap();
+        assert!(h.runner.run_step(&step).is_err());
+        assert_eq!(
+            h.calls()
+                .iter()
+                .filter(|(_, c)| c.contains("UI.RequestPlayerOperation"))
+                .count(),
+            1
+        );
+        let raw = serde_json::to_string(&checkpoint(&ready())).unwrap();
+        let expected_query = transport::receipt_query(&p).unwrap();
+        let fake = FakeBackend::new().lua(move |_, code| {
+            if code.contains("local wanted") {
+                Ok(raw.clone())
+            } else if code == transport::ACTORS_QUERY {
+                Ok("2".into())
+            } else {
+                assert_eq!(code, expected_query);
+                Ok("true".into())
+            }
+        });
+        let mut h = Harness::new(json!({}), fake);
+        h.runner.run_step(&step).unwrap();
+        assert!(!h
+            .calls()
+            .iter()
+            .any(|(_, c)| c.contains("UI.RequestPlayerOperation")));
+    }
+}

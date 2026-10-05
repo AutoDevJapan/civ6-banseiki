@@ -51,3 +51,6 @@ path = "src/bin/jac-draw-crests.rs"
 [[bin]]
 name = "jac-generate-portraits"
 path = "src/bin/jac-generate-portraits.rs"
+[[bin]]
+name = "religion-absorption-generate"
+path = "src/bin/religion-absorption-generate.rs"

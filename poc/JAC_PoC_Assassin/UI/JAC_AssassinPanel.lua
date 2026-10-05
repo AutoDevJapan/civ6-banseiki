@@ -1,3 +1,4 @@
+ContextPtr:SetHide(false)
 -- Display and synchronized requests only. Gameplay and UI filenames must differ.
 include "InstanceManager"
 include "JAC_Assassin_Rules"
