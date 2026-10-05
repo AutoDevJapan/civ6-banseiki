@@ -634,12 +634,21 @@ GameEvents.JAC_BoundaryBeginEnemySpyRetry.Add(function(controller,params)
         "native retry captor missing");
     local captorDiplomacy=assert(rosterCaptor:GetDiplomacy(),
         "native captor diplomacy missing");
-    -- Captive/off-map getters are still unproved in live Gameplay. Keep the
-    -- historical routes usable if absent, but recheck the attacker's off-map
-    -- records and the original captor's count when available. CAPACITY_MAP
-    -- requires both getters below.
-    local offMapAPI=type(attackerDiplomacy.GetNumSpiesOffMap)=="function";
-    local captiveAPI=type(captorDiplomacy.GetNumSpiesCaptured)=="function";
+    -- Classify each roster interface before observing or archiving anything.
+    -- Historical routes support a wholly absent pair or a complete pair;
+    -- partial pairs never establish the identity of an operative.
+    local function PairedRosterAPI(diplomacy,countName,recordName,label)
+        local count=type(diplomacy[countName])=="function";
+        local record=type(diplomacy[recordName])=="function";
+        if not count and not record then return false; end
+        assert(count,"native Core retry "..label.." count API unavailable");
+        assert(record,"native "..params.Mode.." "..label.." record API unavailable");
+        return true;
+    end
+    local offMapAPI=PairedRosterAPI(attackerDiplomacy,
+        "GetNumSpiesOffMap","GetNthOffMapSpy","off-map");
+    local captiveAPI=PairedRosterAPI(captorDiplomacy,
+        "GetNumSpiesCaptured","GetNthCapturedSpy","captive");
     local offMapCount,captiveCount;
     if offMapAPI then
         offMapCount=attackerDiplomacy:GetNumSpiesOffMap();

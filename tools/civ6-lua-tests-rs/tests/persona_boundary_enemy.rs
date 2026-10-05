@@ -1538,7 +1538,7 @@ fn capacity_spawn_rejects_moving_spy_or_changed_captive_between_ui_and_core() {
     unavailable.run("ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); local original=Players[1].GetDiplomacy; Players[1].GetDiplomacy=function() local d=original(); d.GetNumSpiesCaptured=nil; return d end");
     unavailable.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',REQUESTS[#REQUESTS].params)",
-        "native Core captive or off-map roster API unavailable",
+        "native Core retry captive count API unavailable",
     );
     unavailable.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368)");
 }
@@ -2701,6 +2701,16 @@ fn partial_core_retry_record_apis_do_not_archive_unverified_people() {
     for (roster, mutation, expected) in [
         (
             "UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}",
+            "local original=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() local d=original(); d.GetNumSpiesOffMap=nil; return d end",
+            "native Core retry off-map count API unavailable",
+        ),
+        (
+            "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}",
+            "local original=Players[1].GetDiplomacy; Players[1].GetDiplomacy=function() local d=original(); d.GetNumSpiesCaptured=nil; return d end",
+            "native Core retry captive count API unavailable",
+        ),
+        (
+            "UNITS[0]={}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=TURN+2,XLocation=CONTROL.x,YLocation=CONTROL.y}}",
             "local original=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() local d=original(); d.GetNthOffMapSpy=nil; return d end",
             "native RETURN off-map record API unavailable",
         ),
@@ -2711,7 +2721,12 @@ fn partial_core_retry_record_apis_do_not_archive_unverified_people() {
         ),
         (
             "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}",
-            "OFF_MAP[1].Name='Another operative'; OFF_MAP[1].Level=2",
+            "OFF_MAP[1].Name='Another operative'",
+            "native PRODUCE captive placeholder identity changed",
+        ),
+        (
+            "UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}",
+            "OFF_MAP[1].Level=2",
             "native PRODUCE captive placeholder identity changed",
         ),
     ] {
