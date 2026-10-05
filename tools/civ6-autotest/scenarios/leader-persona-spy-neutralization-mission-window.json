@@ -1,0 +1,155 @@
+{
+  "name": "Four real native mission turns; preserve history and checkpoint every turn",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive()"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; assert(b.EnemyProgress()=='MISSION','mission window needs an active native mission'); local s=b.ReadEnemy(); assert(s.spy.present and type(s.spy.remaining)=='number' and s.spy.remaining>=4,'mission window needs at least four native turns remaining'); return 'four native turns verified'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=ExposedMembers.JAC_PersonaBoundary.EnemyProgress(); if stage=='FAILED' then error('native neutralization failed; checkpoint preserves the failed mission') end; return stage"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=ExposedMembers.JAC_PersonaBoundary.EnemyProgress(); if stage=='FAILED' then error('native neutralization failed; checkpoint preserves the failed mission') end; return stage"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=ExposedMembers.JAC_PersonaBoundary.EnemyProgress(); if stage=='FAILED' then error('native neutralization failed; checkpoint preserves the failed mission') end; return stage"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()"
+      }
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local stage=ExposedMembers.JAC_PersonaBoundary.EnemyProgress(); if stage=='FAILED' then error('native neutralization failed; checkpoint preserves the failed mission') end; return stage"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

@@ -808,6 +808,69 @@ fn travel_window_preserves_each_verified_turn_without_replaying_dispatch() {
 }
 
 #[test]
+fn mission_window_preserves_results_and_refuses_to_overrun_native_duration() {
+    let window = scenario("leader-persona-spy-neutralization-mission-window.json");
+    validate_scenario(&window).unwrap();
+    assert_eq!(window["strict_lua_errors"], true);
+    let actions = steps(&window);
+    assert_eq!(actions.len(), 24);
+    let guard = code(&actions[2]);
+    let lua = Lua::new();
+    lua.load("stage='MISSION'; remaining=4; present=true; ExposedMembers={JAC_PersonaBoundary={EnemyProgress=function() return stage end,ReadEnemy=function() return {spy={present=present,remaining=remaining}} end}}")
+        .exec().unwrap();
+    assert_eq!(
+        lua.load(guard).eval::<String>().unwrap(),
+        "four native turns verified"
+    );
+    for state in [
+        "remaining=3",
+        "remaining=nil",
+        "remaining='4'",
+        "remaining=4; present=false",
+        "present=true; stage='NEUTRALIZED'",
+        "stage='FAILED'",
+    ] {
+        lua.load(state).exec().unwrap();
+        assert!(lua.load(guard).eval::<String>().is_err(), "{state}");
+    }
+    for turn in actions[3..23].chunks_exact(5) {
+        assert_eq!(turn[0]["action"], "end_turn");
+        assert_eq!(turn[0]["turns"], 1);
+        // A finished native turn is saved even if its event cannot be observed.
+        assert_eq!(turn[1]["action"], "save");
+        assert_eq!(turn[1]["checkpoint"], true);
+        assert_eq!(turn[2]["action"], "wait_for");
+        assert_eq!(turn[3]["action"], "save");
+        assert_eq!(turn[3]["checkpoint"], true);
+        assert_eq!(turn[4]["action"], "ui_lua");
+        lua.load("ExposedMembers.JAC_PersonaBoundary.EnemyProgress=function() return 'FAILED' end")
+            .exec()
+            .unwrap();
+        assert!(lua.load(code(&turn[4])).eval::<String>().is_err());
+        lua.load(
+            "ExposedMembers.JAC_PersonaBoundary.EnemyProgress=function() return 'NEUTRALIZED' end",
+        )
+        .exec()
+        .unwrap();
+        assert_eq!(
+            lua.load(code(&turn[4])).eval::<String>().unwrap(),
+            "NEUTRALIZED"
+        );
+    }
+    assert_eq!(actions.last().unwrap()["action"], "exit_to_menu");
+    assert!(actions.iter().all(|step| !["autoplay", "start_game"]
+        .contains(&step["action"].as_str().unwrap())
+        && step["fast_forward"] != true));
+    for source in actions.iter().filter_map(embedded_lua) {
+        compile_lua(&lua, source);
+        assert!(
+            !source.contains("Queue("),
+            "a mission window must not replay a mission"
+        );
+    }
+}
+
+#[test]
 fn retry_prepare_saves_only_a_ready_or_waiting_capacity_spy() {
     let data = scenario("leader-persona-spy-neutralization-retry-prepare.json");
     let source = ui_codes(&data).last().copied().unwrap();
