@@ -91,6 +91,10 @@ fn finite_diagnostic_has_one_payment_sender_and_only_its_new_save() {
     assert!(!serde_json::to_string(after)
         .unwrap()
         .contains("RequestPlayerOperation"));
+    assert!(!serde_json::to_string(after).unwrap().contains("Reconcile"));
+    assert!(!serde_json::to_string(&scenario)
+        .unwrap()
+        .contains("Reconcile"));
     assert!(!serde_json::to_string(&scenario)
         .unwrap()
         .contains("SpySave45"));

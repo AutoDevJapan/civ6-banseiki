@@ -176,8 +176,9 @@ return 'one official TITLE_1 PROMOTE sent'
     ));
     restored["equals_capture"] = "TODO324_EVENTS_PAID".into();
     steps.push(restored);
-    // Read/reconcile twice, no APPOINT/PROMOTE/Join replay and no mode6 needed.
-    let mut stable = ui(format!("ExposedMembers.JAC_LeaderPersona.Reconcile(); ExposedMembers.JAC_LeaderPersona.Reconcile();\n{}",snapshot(2)));
+    // Repeat only read-only Status/snapshot queries after load. No projection,
+    // synchronized operation or payment is requested for saved-proof inspection.
+    let mut stable = ui(format!("{}\nlocal first=s\n{}\nassert(s.paid==first.paid and s.sequence==first.sequence, 'repeated Status read changed saved proof')\n{}",head(),head(),snapshot(2)));
     stable["equals_capture"] = "TODO324_EVENTS_PAID".into();
     steps.push(stable);
     steps.push(ui("return 'EVENTS324 finite opt-in Gameplay callback/payment/save diagnostic only; normal rollout, AI, native placement and old partial-save recovery remain unproved'"));
