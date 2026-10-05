@@ -75,6 +75,16 @@ fn build(repo: &Repository) -> Result<Value> {
     let prefix = code.split("Game:SetProperty(R.TEST,1)").next().unwrap();
     ensure!(prefix.contains("local function IntactCity()"));
     steps[4]["code"] = json!(format!("{prefix}\n{SETUP}"));
+    for step in steps.iter_mut() {
+        if let Some(code) = step["code"].as_str() {
+            if code.contains("local ok,why=R.StartProduction(t.Actor,t.City)") {
+                step["code"] = json!(code.replace(
+                    "local ok,why=R.StartProduction(t.Actor,t.City); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')",
+                    "local lockedCities=0\nfor _,candidate in Players[t.Actor]:GetCities():Members() do\n  lockedCities=lockedCities+1\n  local ok,why=R.StartProduction(t.Actor,candidate:GetID()); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')\nend\nassert(lockedCities>=2,'nationwide lock requires independent second city')\nassert(Same(R.State(t.Actor),t.Complete),'rejected city request changed completion state')",
+                ));
+            }
+        }
+    }
     let last = steps.last_mut().unwrap();
     let final_code = last["code"].as_str().unwrap();
     last["code"]=json!(final_code.replace("Game:SetProperty(R.TEST,nil)",
