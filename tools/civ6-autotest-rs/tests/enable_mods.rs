@@ -316,15 +316,23 @@ fn normal_300_prestart_checks_configured_user_mods_after_update() {
     );
 
     let configured = lua.globals().get::<Table>("CONFIGURED").unwrap();
+    let official = lua.create_table().unwrap();
+    official.set("Id", id(OFFICIAL)).unwrap();
+    official.set("Official", true).unwrap();
+    configured.set(ids.len() + 1, official).unwrap();
+    assert_eq!(
+        lua.load(check).eval::<String>().unwrap(),
+        "configured user mods=7"
+    );
     let extra = lua.create_table().unwrap();
     extra.set("Id", id(MISSING)).unwrap();
     extra.set("Official", false).unwrap();
-    configured.set(ids.len() + 1, extra).unwrap();
+    configured.set(ids.len() + 2, extra).unwrap();
     lua_error(
         lua.load(check).eval::<String>(),
         "unexpected configured user mod",
     );
-    configured.set(ids.len() + 1, mlua::Value::Nil).unwrap();
+    configured.set(ids.len() + 2, mlua::Value::Nil).unwrap();
     configured.set(ids.len(), mlua::Value::Nil).unwrap();
     lua_error(
         lua.load(check).eval::<String>(),
