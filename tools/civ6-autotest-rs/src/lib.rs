@@ -9,6 +9,7 @@ pub mod metrics;
 pub mod restart;
 pub mod runner;
 pub mod scenario;
+pub mod session;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;
