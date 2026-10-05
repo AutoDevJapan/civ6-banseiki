@@ -130,6 +130,16 @@ Game:SetProperty(R.TEST,1)
 local owner=Game.GetLocalPlayer(); assert(Players[owner]:IsHuman(),'human required')
 local city=Players[owner]:GetCities():GetCapitalCity(); assert(city,'capital missing')
 local cityID,cityX,cityY=city:GetID(),city:GetX(),city:GetY()
+local function CheckCity(label)
+  local found=Players[owner]:GetCities():FindID(cityID)
+  print('[JAC_ASN_BLOCKED] city-check label='..label..' expected='..cityID..' xy='..cityX..','..cityY..
+    ' found='..tostring(found~=nil)..' count='..Players[owner]:GetCities():GetCount())
+  for _,c in Players[owner]:GetCities():Members() do
+    print('[JAC_ASN_BLOCKED] city-member id='..c:GetID()..' xy='..c:GetX()..','..c:GetY()..' owner='..c:GetOwner())
+  end
+  assert(found and found:GetX()==cityX and found:GetY()==cityY,'fixture lost training city at '..label)
+end
+CheckCity('before-fixture')
 assert(next(Assassins(owner))==nil,'fresh game already contains assassins')
 local plots={Map.GetPlot(cityX,cityY)}
 for _,p in ipairs(Map.GetAdjacentPlots(cityX,cityY)) do plots[#plots+1]=p end
@@ -143,15 +153,20 @@ local function Occupy(p)
   for _,u in Players[owner]:GetUnits():Members() do
     if u:GetX()==row.X and u:GetY()==row.Y then remove[#remove+1]=u:GetID() end
   end
-  for _,id in ipairs(remove) do UnitManager.Kill(Players[owner]:GetUnits():FindID(id)) end
+  for _,id in ipairs(remove) do
+    UnitManager.Kill(Players[owner]:GetUnits():FindID(id))
+    CheckCity('after-kill-'..id)
+  end
   if p:IsCity() then
     row.BarrierFeature=GameInfo.Features.FEATURE_TSINGY.Index
     TerrainBuilder.SetFeatureType(p,row.BarrierFeature)
+    CheckCity('after-city-feature')
   else
     TerrainBuilder.SetFeatureType(p,-1); TerrainBuilder.SetTerrainType(p,row.Barrier)
+    CheckCity('after-terrain-'..row.X..','..row.Y)
   end
   assert(p:IsImpassable(),'terrain setter did not create an impassable plot')
-  assert(Players[owner]:GetCities():FindID(cityID),'fixture removed the training city')
+  CheckCity('after-barrier')
   print('[JAC_ASN_BLOCKED] terrain-blocker xy='..row.X..','..row.Y..' original='..row.Terrain..' barrier='..row.Barrier)
   rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
