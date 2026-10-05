@@ -1,5 +1,8 @@
 //! Bounded third-generation cases execute the Rust-generated connection in
 //! Lua 5.1. They do not attest that production or capacity 3 works in Civ6.
+#[path = "../src/spy_completed_failure.rs"]
+#[allow(dead_code)]
+mod spy_completed_failure;
 #[path = "../src/spy_third.rs"]
 mod spy_third;
 
@@ -35,6 +38,7 @@ impl Third {
         lua.load("GameEvents.JAC_BoundaryThirdSpyStep=event()")
             .exec()
             .unwrap();
+        lua.load(spy_completed_failure::LUA).exec().unwrap();
         lua.globals()
             .set(
                 "include",
@@ -48,7 +52,6 @@ impl Third {
             )
             .unwrap();
         for path in [
-            "Shared/JAC_PersonaCompletedFailure.lua",
             "Shared/JAC_PersonaBoundaryRules.lua",
             "UI/JAC_PersonaBoundary_View.lua",
             "Scripts/JAC_PersonaBoundary_Fixture.lua",
@@ -106,15 +109,42 @@ impl Third {
             BEFORE_RETRY=JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'));
             BEFORE_HISTORY=JAC_PersonaBoundaryRules.Serialize(HISTORY);
             BEFORE_TRAVEL=JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'));
-            -- Two independent VMs are represented by a UI-owned scalar read.
-            -- Remove UI Governor getters from Core using the existing engine double.
-            local raw=ExposedMembers.JAC_PersonaThirdSpyRead;
-            local uiGovernors=Players[1].GetGovernors;
-            ExposedMembers.JAC_PersonaThirdSpyRead=function()
-             local saved=Players[1].GetGovernors; local wasCore=CORE_READ;
-             Players[1].GetGovernors=uiGovernors; CORE_READ=false;
-             local ok,value=pcall(raw); Players[1].GetGovernors=saved; CORE_READ=wasCore;
-             if not ok then error(value) end; return value
+            -- A Core callback cannot regain UI getters by calling an Exposed
+            -- function. No proxy swaps the Governor or CORE_READ back to UI.
+            UI_CORE_CALLS=0; CORE_ROSTER_MODE='absent';
+            local function uiOnly(fn)
+             return function(...)
+              if CORE_READ then UI_CORE_CALLS=UI_CORE_CALLS+1; error('UI function called from Gameplay') end
+              return fn(...)
+             end
+            end
+            JAC_PersonaBoundaryRules.Third.Read=uiOnly(JAC_PersonaBoundaryRules.Third.Read);
+            JAC_PersonaBoundaryRules.Third.CheckHistory=uiOnly(JAC_PersonaBoundaryRules.Third.CheckHistory);
+            ExposedMembers.JAC_PersonaThirdSpyRead=uiOnly(function() return JAC_PersonaBoundaryRules.Third.Read() end);
+            ExposedMembers.JAC_PersonaThirdSpyMissionRead=uiOnly(function() error('obsolete UI history callback') end);
+            Game.GetPlayers=uiOnly(Game.GetPlayers);
+            for _,playerID in ipairs({0,1}) do
+             local p=Players[playerID]; local original=p.GetDiplomacy;
+             p.GetDiplomacy=function()
+              local d=original();
+              if CORE_READ and CORE_ROSTER_MODE~='available' then
+               d.GetNumSpiesOffMap=nil; d.GetNthOffMapSpy=nil;
+               d.GetNumSpiesCaptured=nil; d.GetNthCapturedSpy=nil; d.GetMission=nil;
+              end
+              return d
+             end;
+             p.GetID=uiOnly(p.GetID);
+            end
+            local native=ExposedMembers.JAC_LeaderPersonaNativeRead;
+            ExposedMembers.JAC_LeaderPersonaNativeRead=function(...)
+             if CORE_READ and THIRD_CORE_EVENT then UI_CORE_CALLS=UI_CORE_CALLS+1; error('UI Governor function called from Gameplay') end
+             return native(...)
+            end;
+            local coreEvent=ENEMY_CASES.fireCore;
+            ENEMY_CASES.fireCore=function(name,params,owner)
+             THIRD_CORE_EVENT=name=='JAC_BoundaryThirdSpyStep' or name=='JAC_BoundaryRecordEnemyMission' or name=='JAC_BoundaryProgressSpy';
+             local ok,err=pcall(coreEvent,name,params,owner); THIRD_CORE_EVENT=false;
+             if not ok then error(err) end
             end;
             assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyStatus().physicalCount==2);
             "#,
@@ -137,7 +167,8 @@ impl Third {
         self.run(&format!(
             "FRAME(); local r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryThirdSpyStep' \
              and r.params.Action=='{action}' and r.params.Phase==nil); \
-             ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params); FRAME(); \
+             ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params); \
+             fire(Events.GameCoreEventPublishComplete); FRAME(); \
              r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryThirdSpyStep' and r.params.Phase=='BARRIER'); \
              ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params); \
              fire(Events.GameCoreEventPublishComplete); FRAME()"
@@ -156,10 +187,15 @@ impl Third {
             "fire(Events.SaveComplete); local b=ExposedMembers.JAC_PersonaBoundary; \
              b.ThirdSpySend('BUILD_SPY'); FRAME(); FRAME(); assert(b.lastAction=='READY_BUILD_SPY'); \
              b.Queue('PROGRESS_SPY'); FRAME(); local r=REQUESTS[#REQUESTS]; \
-             assert(r.params.OnStart=='JAC_BoundaryProgressSpy'); \
-             ENEMY_CASES.fireCore('JAC_BoundaryProgressSpy',r.params); \
-             assert(PROGRESS_CALLS==1); PRODUCED_SPY_ID=983048; ADVANCE_TURN(); \
-             assert(TURN==46 and #UNITS[0]==1)"
+             assert(r.params.OnStart=='JAC_BoundaryThirdSpyStep' and r.params.Action=='PROGRESS_SPY'); \
+             ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params); \
+             assert(PROGRESS_CALLS==1 and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS')); \
+             fire(Events.GameCoreEventPublishComplete); FRAME(); \
+             r=REQUESTS[#REQUESTS]; assert(r.params.Phase=='BARRIER'); \
+             ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params); \
+             fire(Events.GameCoreEventPublishComplete); FRAME(); \
+             assert(Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS') and UI_CORE_CALLS==0); \
+             PRODUCED_SPY_ID=983048; ADVANCE_TURN(); assert(TURN==46 and #UNITS[0]==1)"
         );
     }
 
@@ -241,8 +277,13 @@ impl Third {
             fire(Events.SpyMissionCompleted,0,2); FRAME();
             local r=REQUESTS[#REQUESTS];
             assert(r.params.OnStart=='JAC_BoundaryRecordEnemyMission' and r.params.MissionID==2);
-            ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',r.params); FRAME();
+            ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',r.params);
+            fire(Events.GameCoreEventPublishComplete); FRAME();
+            r=REQUESTS[#REQUESTS]; assert(r.params.OnStart=='JAC_BoundaryThirdSpyStep' and r.params.Action=='RECORD_POST');
+            ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params);
+            fire(Events.GameCoreEventPublishComplete); FRAME(); FRAME();
             assert(b.enemyMissionStatus=='RECORDED' and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==2);
+            assert(UI_CORE_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost.source=='UI');
             "#
         ));
         self.preserved_failures();
@@ -408,8 +449,7 @@ fn core_map_change_between_ui_read_and_archive_preserves_old_generation() {
     let t = Third::new();
     t.run(
         "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); \
-         local raw=ExposedMembers.JAC_PersonaThirdSpyRead; local saved=raw(); \
-         ExposedMembers.JAC_PersonaThirdSpyRead=function() return saved end; makeSpy(0,983048)",
+         makeSpy(0,983048)",
     );
     t.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
@@ -444,7 +484,7 @@ fn native_adoption_rejects_old_ids_and_two_new_spies() {
 fn adoption_does_not_accept_a_find_id_alias_or_changed_native_unit_type() {
     let t = Third::new();
     t.produce();
-    t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME(); local raw=ExposedMembers.JAC_PersonaThirdSpyRead; local saved=raw(); ExposedMembers.JAC_PersonaThirdSpyRead=function() return saved end; local original=Players[0].GetUnits; local alias=makeSpy(0,983049); table.remove(UNITS[0],2); Players[0].GetUnits=function() local units=original(); units.FindID=function() return alias end; return units end");
+    t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME(); local original=Players[0].GetUnits; local alias=makeSpy(0,983049); table.remove(UNITS[0],2); Players[0].GetUnits=function() local units=original(); units.FindID=function() return alias end; return units end");
     t.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
         "exact unit lookup differs",
@@ -453,7 +493,7 @@ fn adoption_does_not_accept_a_find_id_alias_or_changed_native_unit_type() {
 
     let t = Third::new();
     t.produce();
-    t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME(); local raw=ExposedMembers.JAC_PersonaThirdSpyRead; local saved=raw(); ExposedMembers.JAC_PersonaThirdSpyRead=function() return saved end; GameInfo.Units[99]=GameInfo.Units.UNIT_PERSONA; UNITS[0][1].GetType=function() return 99 end");
+    t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyBind(); FRAME(); GameInfo.Units[99]=GameInfo.Units.UNIT_PERSONA; UNITS[0][1].GetType=function() return 99 end");
     t.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
         "Core map inventory differs",
@@ -502,8 +542,7 @@ fn partial_core_roster_api_is_rejected_before_archiving_anything() {
     let t = Third::new();
     t.run(
         "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); \
-         local raw=ExposedMembers.JAC_PersonaThirdSpyRead; local saved=raw(); \
-         ExposedMembers.JAC_PersonaThirdSpyRead=function() return saved end; \
+         CORE_ROSTER_MODE='available'; \
          local original=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() \
           local d=original(); d.GetNthOffMapSpy=nil; return d end",
     );
@@ -576,8 +615,7 @@ fn unavailable_core_roster_reads_remain_explicit_ui_evidence() {
     t.run(
         r#"
         ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME();
-        local raw=ExposedMembers.JAC_PersonaThirdSpyRead; local observed=raw();
-        ExposedMembers.JAC_PersonaThirdSpyRead=function() return observed end;
+        local observed=ExposedMembers.JAC_PersonaThirdSpyObservation.observed;
         for _,id in ipairs({0,1}) do local original=Players[id].GetDiplomacy;
          Players[id].GetDiplomacy=function() local d=original();
           d.GetSpyCapacity=nil; d.GetNumSpiesOffMap=nil; d.GetNthOffMapSpy=nil;
@@ -601,29 +639,23 @@ fn reserved_operative_change_is_rejected_before_a_native_operation_is_sent() {
     t.run("ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('SPY_TRAVEL')");
     t.complete_step("SPY_TRAVEL");
     t.run("fire(Events.SaveComplete); ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('SPY_TRAVEL'); UNITS[0][1].id=983049; Game:GetProperty('JAC_BOUNDARY_SPY').id=983049; Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').spyID=983049");
-    t.reject(
-        "FRAME()",
-        "reserved operative changed before native dispatch",
-    );
+    t.reject("FRAME()", "changed before native frame dispatch");
     t.run("assert(#UNIT_REQUESTS==0)");
 }
 
 #[test]
 fn a_new_event_id_with_old_native_completion_history_is_not_a_third_result() {
     let t = Third::new();
-    t.produce();
-    t.bind();
+    t.third_mission_started();
     t.run(
         r#"
-        Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').intents.SPY_MISSION={token=30,turn=46,spyID=983048};
-        Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').missionRequested=true;
-        Game:SetProperty('JAC_BOUNDARY_SPY_BARRIER',{owner=0,spyID=983048,action='SPY_MISSION',token=30});
         HISTORY[0][2]={Operation=59,PlotIndex=Map.GetPlot(FOREIGN.x,FOREIGN.y):GetIndex(),
          CompletionTurn=44,InitialResult=1,EscapeResult=0};
+        fire(Events.SpyMissionCompleted,0,2); FRAME();
         "#,
     );
     t.reject(
-        "ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',{Attacker=0,MissionID=2})",
+        "ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',REQUESTS[#REQUESTS].params)",
         "differs from new native history",
     );
     t.run("assert(not Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'))");
@@ -888,4 +920,214 @@ fn third_success_recovery_requires_both_new_success_and_native_neutralization_ob
         t.run("assert(not Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY') and #UNIT_REQUESTS==2)");
         t.preserved_failures();
     }
+}
+
+#[test]
+fn core_ui_function_reentry_is_a_fixture_error_not_an_independent_read() {
+    let t = Third::new();
+    t.run("GameEvents.JAC_TestThirdUIReentry=event(); GameEvents.JAC_TestThirdUIReentry.Add(function() ExposedMembers.JAC_PersonaThirdSpyRead() end)");
+    t.reject(
+        "ENEMY_CASES.fireCore('JAC_TestThirdUIReentry',{})",
+        "UI function called from Gameplay",
+    );
+    t.run("assert(UI_CORE_CALLS==1 and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'))");
+    t.unchanged();
+}
+
+#[test]
+fn scalar_witness_begin_progress_and_mission_work_with_ui_only_core_apis_absent() {
+    let t = Third::new();
+    t.third_success(false);
+    t.run(
+        r#"
+        assert(UI_CORE_CALLS==0 and CORE_ROSTER_MODE=='absent');
+        local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE');
+        local p=Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION');
+        assert(a.sources.governor=='UI' and a.sources.assignment=='UI' and a.sources.queue=='UI');
+        assert(a.sources.histories=='UI' and a.sources.captives=='UI' and a.sources.offMap=='UI');
+        assert(a.sources.map=='CORE' and a.sources.person=='CORE' and a.sources.city=='CORE' and a.sources.titles=='CORE');
+        assert(p.sources.governor=='UI' and p.sources.histories=='UI' and p.sources.map=='CORE');
+        assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK').histories=='UI');
+        assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost.source=='UI');
+        "#,
+    );
+}
+
+#[test]
+fn available_core_getters_are_compared_without_core_player_get_id_or_ui_callbacks() {
+    let t = Third::new();
+    t.run("CORE_ROSTER_MODE='available'");
+    t.third_success(false);
+    t.run(
+        r#"
+        local sources=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE').sources;
+        assert(sources.histories=='CORE' and sources.capacity=='CORE' and sources.captives=='CORE' and sources.offMap=='CORE');
+        assert(sources.governor=='UI' and sources.assignment=='UI' and sources.queue=='UI');
+        assert(UI_CORE_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK').histories=='CORE');
+        "#,
+    );
+}
+
+#[test]
+fn request_metadata_and_observation_must_match_the_published_scalar_witness() {
+    for mutation in [
+        "r.Frame=r.Frame+1",
+        "r.PublishEpoch=r.PublishEpoch+1",
+        "r.Token=r.Token+1",
+        "r.Turn=r.Turn-1",
+        "r.Observation=r.Observation..'changed'",
+        "ExposedMembers.JAC_PersonaThirdSpyObservation.observed.capacity=4",
+    ] {
+        let t = Third::new();
+        t.run(&format!("ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); local r=REQUESTS[#REQUESTS].params; {mutation}"));
+        let error =
+            t.0.load("ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)")
+                .exec()
+                .expect_err("mismatched scalar witness must reject");
+        assert!(
+            error.to_string().contains("observation")
+                || error.to_string().contains("witness")
+                || error.to_string().contains("synchronized request differs"),
+            "{error}"
+        );
+        t.unchanged();
+        t.run("assert(UI_CORE_CALLS==0 and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE') and #BUILD_REQUESTS==0 and PROGRESS_CALLS==0)");
+    }
+}
+
+#[test]
+fn scalar_witness_cannot_hide_a_function_or_trigger_a_metatable_callback() {
+    for mutation in [
+        "w.observed.hidden=function() error('function ran in Core') end",
+        "w.observed.hidden=setmetatable({}, {__index=function() error('metatable ran in Core') end})",
+    ] {
+        let t=Third::new();
+        t.run(&format!("ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); local w=ExposedMembers.JAC_PersonaThirdSpyObservation; {mutation}"));
+        let error=t.0.load("ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)").exec().expect_err("non-scalar/mismatched data must reject");
+        assert!(!error.to_string().contains("ran in Core"), "{error}");
+        t.unchanged();
+    }
+}
+
+#[test]
+fn post_publish_begin_change_never_arms_build_even_after_save_complete() {
+    let t = Third::new();
+    t.run(
+        r#"
+        local b=ExposedMembers.JAC_PersonaBoundary; b.ThirdSpyReserve('BEGIN'); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        fire(Events.GameCoreEventPublishComplete); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        fire(Events.GameCoreEventPublishComplete);
+        CAPTURED[1][1].NameIndex=17;
+        "#,
+    );
+    t.reject("FRAME()", "preserved captive groups");
+    t.run("fire(Events.SaveComplete); CAPTURED[1][1].NameIndex=-1");
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('BUILD_SPY')",
+        "reloaded, unsaved or already sent",
+    );
+    t.run("assert(#BUILD_REQUESTS==0 and PROGRESS_CALLS==0 and UI_CORE_CALLS==0)");
+}
+
+#[test]
+fn native_progress_waits_for_fresh_post_command_observation_before_its_receipt() {
+    let t = Third::new();
+    t.begin();
+    t.run(
+        r#"
+        fire(Events.SaveComplete); local b=ExposedMembers.JAC_PersonaBoundary;
+        b.ThirdSpySend('BUILD_SPY'); FRAME(); FRAME();
+        b.Queue('PROGRESS_SPY'); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params);
+        assert(PROGRESS_CALLS==1 and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'));
+        fire(Events.GameCoreEventPublishComplete); CAPTURED[1][1].NameIndex=17;
+        "#,
+    );
+    t.reject("FRAME()", "changed after Core response");
+    t.run("assert(PROGRESS_CALLS==1 and not Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS') and UI_CORE_CALLS==0); fire(Events.LoadScreenClose); CAPTURED[1][1].NameIndex=-1");
+    t.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY')",
+        "cannot replay",
+    );
+}
+
+#[test]
+fn mission_record_requires_post_publish_history_comparison_before_result_ready() {
+    let t = Third::new();
+    t.third_mission_started();
+    t.run(
+        r#"
+        TURN=54; UNITS[0][1].op=-1; UNITS[0][1].finish=TURN;
+        HISTORY[0][2]={Operation=59,PlotIndex=Map.GetPlot(FOREIGN.x,FOREIGN.y):GetIndex(),
+         CompletionTurn=54,InitialResult=EspionageResultTypes.SUCCESS_UNDETECTED,EscapeResult=EspionageResultTypes.NO_RESULT};
+        fire(Events.SpyMissionCompleted,0,2); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',REQUESTS[#REQUESTS].params);
+        assert(not ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady());
+        fire(Events.GameCoreEventPublishComplete); HISTORY[0][2].EscapeResult=17;
+        "#,
+    );
+    t.reject("FRAME()", "mission changed after Core response");
+    t.run("assert(UI_CORE_CALLS==0 and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost)");
+}
+
+#[test]
+fn core_getter_errors_and_negative_counts_do_not_become_ui_fallback_success() {
+    for fault in [
+        "d.GetNumSpiesCaptured=function() error('unavailable Core getter') end",
+        "d.GetNumSpiesCaptured=function() return -1 end",
+        "d.GetMission=function() return 0 end",
+        "d.GetMission=function() error('unavailable Core history') end",
+        "d.GetMission=false",
+        "d.GetNumSpiesCaptured=17; d.GetNthCapturedSpy=17",
+        "d.GetSpyCapacity=false",
+    ] {
+        let t = Third::new();
+        t.run(&format!("ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); CORE_ROSTER_MODE='available'; local original=Players[0].GetDiplomacy; Players[0].GetDiplomacy=function() local d=original(); if CORE_READ then {fault} end; return d end"));
+        t.0.load("ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)")
+            .exec()
+            .expect_err("unknown Core getter must reject");
+        t.unchanged();
+        t.run(
+            "assert(not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE') and UI_CORE_CALLS==0)",
+        );
+    }
+}
+
+#[test]
+fn turn_46_capacity_three_begin_preserves_turn_23_and_45_native_failures() {
+    let t = Third::new();
+    t.run("TURN=46; EspionageResultTypes.SUCCESS_UNDETECTED=5; EspionageResultTypes.SUCCESS_MUST_ESCAPE=4; EspionageResultTypes.FAIL_UNDETECTED=3; EspionageResultTypes.FAIL_MUST_ESCAPE=2; EspionageResultTypes.CAPTURED=1; EspionageResultTypes.KILLED=0; EspionageResultTypes.NO_RESULT=-1; for _,id in ipairs({0,1}) do HISTORY[0][id].InitialResult=1; HISTORY[0][id].EscapeResult=-1 end; local a=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; a.initial=1; a.escape=-1");
+    t.begin();
+    t.run(
+        r#"
+        local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE');
+        assert(a.turn==46 and a.histories[1].turn==23 and a.histories[2].turn==45);
+        assert(a.histories[1].initial==1 and a.histories[2].escape==-1);
+        assert(UI_CORE_CALLS==0 and #BUILD_REQUESTS==0 and PROGRESS_CALLS==0);
+        fire(Events.SaveComplete);
+        "#,
+    );
+}
+
+#[test]
+fn ui_reload_after_unknown_mission_record_keeps_history_but_does_not_replay() {
+    let t = Third::new();
+    t.third_mission_started();
+    t.run(
+        r#"
+        TURN=54; UNITS[0][1].op=-1; UNITS[0][1].finish=TURN;
+        HISTORY[0][2]={Operation=59,PlotIndex=Map.GetPlot(FOREIGN.x,FOREIGN.y):GetIndex(),
+         CompletionTurn=54,InitialResult=EspionageResultTypes.SUCCESS_UNDETECTED,EscapeResult=EspionageResultTypes.NO_RESULT};
+        fire(Events.SpyMissionCompleted,0,2); FRAME();
+        ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',REQUESTS[#REQUESTS].params);
+        UNKNOWN_RECORD_REQUESTS=#REQUESTS;
+        fire(Events.LoadScreenClose); FRAME();
+        assert(#REQUESTS==UNKNOWN_RECORD_REQUESTS and not ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady());
+        assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==2 and
+         not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost and UI_CORE_CALLS==0);
+        "#,
+    );
+    t.preserved_failures();
 }

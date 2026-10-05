@@ -1,6 +1,6 @@
 //! The opt-in third generation connection is authored and generated in Rust.
 //! It reuses Boundary's native BUILD, AddProgress, travel and mission routes.
-//! UI-only history/roster/queue reads cross the existing scalar read seam;
+//! UI-only history/roster/queue values cross as immutable scalar observations;
 //! Gameplay independently checks units, civic ownership and title accounting.
 //! Installed evidence: Base/Assets/UI/Panels/ProductionPanel.lua:293-301 and
 //! Debug/City.ltp:200-204. A third operative remains unproven on a real game.
@@ -45,6 +45,8 @@ const LUA: &str = r#"local ARCHIVE='JAC_BOUNDARY_THIRD_SPY_ARCHIVE'; local STATE
 local ACK='JAC_BOUNDARY_THIRD_SPY_ACK'; local RETRY='JAC_BOUNDARY_ENEMY_SPY_RETRY';
 local PRODUCTION='JAC_BOUNDARY_SPY_PRODUCTION';
 local CIVIC='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS';
+local WITNESS='JAC_PersonaThirdSpyObservation';
+local MISSION_ACK='JAC_BOUNDARY_THIRD_MISSION_ACK';
 local KEYS={RETRY,'JAC_BOUNDARY_ENEMY_CONFIG','JAC_BOUNDARY_ENEMY_MISSION',
  'JAC_BOUNDARY_SPY','JAC_BOUNDARY_SPY_TRAVEL','JAC_BOUNDARY_SPY_BARRIER',PRODUCTION,
  'JAC_BOUNDARY_SPY_PREPARED','JAC_BOUNDARY_SPY_PROGRESS','JAC_BOUNDARY_ENEMY_RECOVERY',
@@ -62,6 +64,46 @@ local function encodedCopy(v)
  local out={}; for k,x in pairs(v) do out[k]=encodedCopy(x) end; return out
 end
 local function same(a,b) return R.Serialize(a)==R.Serialize(b) end
+local function scalarCopy(v)
+ local kind=type(v);
+ if kind=='number' then assert(v==v and math.abs(v)<math.huge,'nonfinite third spy observation'); return v end
+ if kind=='boolean' or kind=='string' then return v end
+ assert(kind=='table','third spy observation is not scalar data');
+ local result={}; for key,value in pairs(v) do
+  assert(type(key)=='string' or type(key)=='number','third spy observation key differs');
+  result[key]=scalarCopy(value);
+ end; return result
+end
+local function signature(o) return R.EncodeText(R.Serialize(o)) end
+local function integer(v,min)
+ return type(v)=='number' and v>=min and v<math.huge and v==math.floor(v)
+end
+local function published(owner,p)
+ assert(type(p)=='table' and p.Attacker==owner and owner==0 and
+  type(p.Action)=='string' and integer(p.Token,1) and
+  integer(p.Frame,1) and integer(p.PublishEpoch,0) and
+  p.Turn==Game.GetCurrentGameTurn() and type(p.Observation)=='string',
+  'third spy request observation metadata differs');
+ local w=scalarCopy(assert(ExposedMembers[WITNESS],'third spy scalar UI witness missing'));
+ assert(w.owner==owner and w.action==p.Action and w.token==p.Token and
+  w.turn==p.Turn and w.frame==p.Frame and w.epoch==p.PublishEpoch and w.phase==p.Phase,
+  'third spy scalar UI witness metadata differs');
+ local o=scalarCopy(w.observed);
+ assert(signature(o)==p.Observation and o.owner==owner and o.turn==p.Turn,
+  'third spy UI observation changed');
+ return o
+end
+local function conserved(before,after,progress)
+ if not progress then return same(before,after) end
+ local a,b=copy(before),copy(after);
+ for _,key in ipairs({'map','mapCount','queueSpy','buildReady'}) do a[key]=nil; b[key]=nil end
+ -- AddProgress can finish the queue immediately or leave it pending. Birth
+ -- remains a separate two-phase adoption; these are the only allowed deltas.
+ a.physicalCount=nil; b.physicalCount=nil;
+ return same(a,b) and after.activeCount==0 and after.mapCount>=0 and after.mapCount<=1 and
+  after.physicalCount==2+after.mapCount and
+  (not after.map or (after.map.owner==0 and after.map.unitType==after.spyType))
+end
 local function archive() return assert(Game:GetProperty(ARCHIVE),'third generation archive missing') end
 local function state() return assert(Game:GetProperty(STATE),'third generation state missing') end
 function T.IsThird(retry)
@@ -86,6 +128,8 @@ local function nativeHistory(owner,id)
   initial=m.InitialResult,escape=m.EscapeResult}
 end
 function T.CheckHistory(c,retry)
+ -- Called by the UI observer only. Core mutations compare the published
+ -- histories and, if available, their independent native GetMission results.
  assert(T.IsThird(retry),'unrecognized third generation');
  local a=archive(); local previous=a.properties[RETRY];
  assert(previous and previous.current==2 and previous.archive and
@@ -120,7 +164,7 @@ function T.CheckRoster(roster)
   roster.physicalCount==2+#roster.map+#roster.activeOffMap and roster.physicalCount<=3,
   'preserved captive groups or third operative roster changed');
 end
-local ui,core,pending,arms,used;
+local ui,core,pending,arms,used,missionPending,nativeUI;
 function T.Read()
  local c=ui.config(); local s=ui.readEnemy(); local roster=ui.roster(c.attacker);
  local p=Players[c.attacker]; local unit=GameInfo.Units['UNIT_SPY'];
@@ -131,7 +175,8 @@ function T.Read()
  local map=roster.map[1]; local m=map and {id=map.id,owner=map.owner,unitType=map.unitType,
   x=map.x,y=map.y,nameText=R.EncodeText(map.name),level=map.level,operation=map.operation} or nil;
  local o={turn=s.turn,owner=c.attacker,defender=c.owner,cityID=c.cityID,x=c.x,y=c.y,
-  governorType=s.native.type,neutralized=s.native.neutralized,established=s.native.established,
+  governorType=s.native.type,appointed=true,base=s.native.base,
+  neutralized=s.native.neutralized,established=s.native.established,
   cityOwner=s.native.cityOwner,assignedID=s.native.cityID,spent=s.titles.spent,total=s.titles.total,
   personOwner=s.personOwner,personState=s.state,capitalID=capital:GetID(),spyType=unit.Index,
   civicOwned=p:GetCulture():HasCivic(civic.Index),capacity=p:GetDiplomacy():GetSpyCapacity(),
@@ -169,18 +214,36 @@ local function checkReady(o)
   'third spy capacity, Governor or captive roster is not ready');
 end
 local function pair(d,count,record)
- local a=type(d[count])=='function'; local b=type(d[record])=='function';
+ local countKind=type(d[count]); local recordKind=type(d[record]);
+ assert((countKind=='function' or countKind=='nil') and
+  (recordKind=='function' or recordKind=='nil'),'unknown native Core roster API');
+ local a=countKind=='function'; local b=recordKind=='function';
  assert(a==b,'partial native Core roster API'); return a
 end
+local function coreHistories(owner,histories)
+ local d=Players[owner]:GetDiplomacy();
+ local kind=type(d.GetMission);
+ assert(kind=='function' or kind=='nil','unknown native Core history API');
+ if kind=='nil' then return 'UI' end
+ for _,expected in ipairs(histories) do
+  assert(same(nativeHistory(owner,expected.id),expected),'third spy Core native history differs');
+ end
+ return 'CORE'
+end
 local function coreCheck(owner,o)
- local c=core.config(owner); local native=core.native(c); local gs=Players[c.owner]:GetGovernors();
+ local c=core.config(owner); local gs=Players[c.owner]:GetGovernors();
+ local def=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[c.leader].GovernorType];
+ local city=assert(CityManager.GetCity(c.owner,c.cityID),'third spy Core target city missing');
  assert(owner==0 and o.owner==owner and c.owner==o.defender and c.cityID==o.cityID and
   c.x==o.x and c.y==o.y and o.turn==Game.GetCurrentGameTurn() and
-  native.appointed and native.base and native.established and native.neutralized==0 and
-  native.cityOwner==c.owner and native.cityID==c.cityID and
+  o.appointed==true and o.base==true and o.governorType==def.Index and
+  o.established==true and o.neutralized==0 and
+  o.cityOwner==c.owner and o.assignedID==c.cityID and
+  city:GetOwner()==c.owner and city:GetID()==c.cityID and city:GetX()==c.x and city:GetY()==c.y and
+  R.Property(c.leader,'OWNER')==o.personOwner and R.Property(c.leader,'STATE')==o.personState and
   gs:GetGovernorPointsSpent()==o.spent and gs:GetGovernorPoints()==o.total,
   'third spy Core Governor or title accounting differs');
- assert(Players[owner]:GetCulture():HasCivic(GameInfo.Civics[CIVIC].Index),
+ assert(Players[owner]:GetCulture():HasCivic(GameInfo.Civics[CIVIC].Index)==true,
   'third spy native civic ownership differs');
  assert(R.MapSpyCount(owner)==o.mapCount and o.mapCount<=1,'third spy Core map inventory differs');
  if o.map then
@@ -190,9 +253,12 @@ local function coreCheck(owner,o)
    u:GetExperience():GetLevel()==o.map.level and u:GetSpyOperation()==o.map.operation and
    T.AllowedID(u:GetID()),'third spy Core operative identity differs');
  end
- local source={map='CORE',civic='CORE',histories='UI',capacity='UI',captives='UI',offMap='UI'};
+ local source={map='CORE',civic='CORE',person='CORE',city='CORE',titles='CORE',governor='UI',
+  assignment='UI',queue='UI',histories=coreHistories(owner,o.histories),capacity='UI',captives='UI',offMap='UI'};
  local d=Players[owner]:GetDiplomacy();
- if type(d.GetSpyCapacity)=='function' then assert(d:GetSpyCapacity()==o.capacity,'third spy Core capacity differs'); source.capacity='CORE' end
+ local capacityKind=type(d.GetSpyCapacity);
+ assert(capacityKind=='function' or capacityKind=='nil','unknown native Core capacity API');
+ if capacityKind=='function' then assert(d:GetSpyCapacity()==o.capacity,'third spy Core capacity differs'); source.capacity='CORE' end
  if pair(d,'GetNumSpiesOffMap','GetNthOffMapSpy') then
   local n=d:GetNumSpiesOffMap(); local records={};
   assert(n==o.offMapCount,'third spy Core off-map count differs');
@@ -204,11 +270,15 @@ local function coreCheck(owner,o)
  end
  local all,any=true,false; source.captivesByCaptor={};
  for id,expected in pairs(o.captivesByCaptor) do
-  local p=assert(Players[tonumber(id)],'third spy native captor missing'); local dip=p:GetDiplomacy();
+  local captorID=assert(tonumber(id),'third spy native captor ID differs');
+  local p=assert(Players[captorID],'third spy native captor missing'); local dip=p:GetDiplomacy();
   if pair(dip,'GetNumSpiesCaptured','GetNthCapturedSpy') then
    local captives={};
-   for i=0,dip:GetNumSpiesCaptured()-1 do local r=dip:GetNthCapturedSpy(p:GetID(),i);
-    if r.OwningPlayer==owner then captives[#captives+1]={captor=p:GetID(),name=r.Name,level=r.Level,nameIndex=r.NameIndex} end
+   local held=dip:GetNumSpiesCaptured();
+   assert(integer(held,0) and held<=256,'third spy Core captive count unavailable');
+   for i=0,held-1 do local r=dip:GetNthCapturedSpy(captorID,i);
+    assert(type(r)=='table' and integer(r.OwningPlayer,0),'third spy Core captive owner unavailable');
+    if r.OwningPlayer==owner then captives[#captives+1]={captor=captorID,name=r.Name,level=r.Level,nameIndex=r.NameIndex} end
    end
    assert(captiveSet({captured=captives})==expected,'third spy Core captives differ');
    source.captivesByCaptor[id]='CORE'; any=true;
@@ -218,7 +288,7 @@ local function coreCheck(owner,o)
  return source
 end
 function T.InstallCore(hooks)
- core=hooks;
+ core={config=hooks.config}; -- never import the UI Governor read hook
  GameEvents.JAC_BoundaryThirdSpyStep.Add(function(owner,p)
   assert(type(p)=='table' and type(p.Token)=='number' and p.Token>0 and
    type(p.Frame)=='number' and type(p.PublishEpoch)=='number' and p.Turn==Game.GetCurrentGameTurn(),
@@ -226,13 +296,35 @@ function T.InstallCore(hooks)
   local ack=Game:GetProperty(ACK);
   if p.Phase=='BARRIER' then
    assert(ack and ack.token==p.Token and ack.action==p.Action and ack.phase=='COMMAND' and
-    ack.owner==owner and ack.turn==p.Turn and p.Frame>ack.frame,'third spy barrier differs');
-   ack.phase='BARRIER'; ack.frame=p.Frame; Game:SetProperty(ACK,ack); return
+    ack.owner==owner and ack.turn==p.Turn and p.Frame>ack.frame and p.PublishEpoch>ack.epoch,
+    'third spy barrier differs');
+   local o=published(owner,p);
+   assert(conserved(ack.observed,o,p.Action=='PROGRESS_SPY'),'third spy changed after Core response');
+   checkReady(o); coreCheck(owner,o);
+   ack.phase='BARRIER'; ack.frame=p.Frame; ack.epoch=p.PublishEpoch; ack.observed=copy(o);
+   Game:SetProperty(ACK,ack);
+   if p.Action=='PROGRESS_SPY' then
+    local production=assert(Game:GetProperty(PRODUCTION));
+    Game:SetProperty('JAC_BOUNDARY_SPY_PROGRESS',{owner=owner,cityID=production.cityID,beforeCount=0,generation=T.generation});
+   end
+   return
   end
   assert(p.Phase==nil,'unknown third spy synchronization phase');
   assert(not ack or p.Token>ack.token,'third spy request token was replayed');
-  local read=assert(ExposedMembers.JAC_PersonaThirdSpyRead,'third spy UI read bridge missing');
-  local o=read(); assert(R.EncodeText(R.Serialize(o))==p.Observation,'third spy UI observation changed');
+  local o=published(owner,p);
+  if p.Action=='RECORD_POST' then
+   local recorded=assert(Game:GetProperty(MISSION_ACK),'third spy mission acknowledgement missing');
+   assert(p.Token>recorded.token and p.Frame>recorded.frame and p.PublishEpoch>recorded.epoch and
+    same(o,recorded.observed),'third spy mission changed after Core response');
+   local saved=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third spy mission not recorded');
+   assert(saved.attacker==owner and saved.id==o.mission.id and saved.turn==o.turn,'third spy recorded mission differs');
+   local s=state(); s.missionPost={token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+    source='UI',histories=coreHistories(owner,{o.preserved[1],o.preserved[2],o.mission})};
+   Game:SetProperty(STATE,s);
+   Game:SetProperty(ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+    action=p.Action,phase='COMMAND',observed=copy(o)}); return
+  end
+  if p.Action=='PROGRESS_SPY' then T.Progress(owner,p); return end
   checkReady(o); local source=coreCheck(owner,o);
   if p.Action=='BEGIN' then
    assert(not Game:GetProperty(ARCHIVE) and not Game:GetProperty(STATE) and o.mapCount==0 and o.activeCount==0,
@@ -315,15 +407,19 @@ function T.InstallCore(hooks)
     else local travel=assert(Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'),'third spy accepted travel missing');
      assert(travel.targetOwner==o.defender and travel.targetID==o.cityID and o.map.x==o.x and o.map.y==o.y,
       'third spy mission destination differs') end
-    s.intents[p.Action]={token=p.Token,turn=p.Turn,spyID=retry.spyID,targetOwner=o.defender,targetID=o.cityID};
+    s.intents[p.Action]={token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+     spyID=retry.spyID,targetOwner=o.defender,targetID=o.cityID};
    end
    Game:SetProperty(STATE,s);
   end
-  Game:SetProperty(ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,action=p.Action,phase='COMMAND'});
+  Game:SetProperty(ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+   action=p.Action,phase='COMMAND',observed=copy(o)});
  end);
 end
-function T.Progress(owner)
- local o=assert(ExposedMembers.JAC_PersonaThirdSpyRead)(); checkReady(o); coreCheck(owner,o);
+function T.Progress(owner,p)
+ local o=published(owner,p); assert(p.Action=='PROGRESS_SPY' and p.Phase==nil,'third spy progress action differs');
+ local previous=Game:GetProperty(ACK); assert(not previous or p.Token>previous.token,'third spy progress token replayed');
+ checkReady(o); local source=coreCheck(owner,o);
  local s=state(); local a=archive(); local production=assert(Game:GetProperty(PRODUCTION));
  assert(T.IsThird(Game:GetProperty(RETRY)) and same(o.histories,a.histories) and
   o.captivesText==a.captivesText and o.placeholdersText==a.placeholdersText and o.mapCount==0 and o.activeCount==0 and
@@ -333,9 +429,11 @@ function T.Progress(owner)
  local city=assert(CityManager.GetCity(owner,production.cityID)); local queue=city:GetBuildQueue();
  assert(type(queue.AddProgress)=='function','third spy native progress API unavailable');
  production.before={}; production.beforeCount=0; production.progressed=true;
+ production.observation=copy(o); production.sources=source;
  Game:SetProperty(PRODUCTION,production); -- reserve before the only native mutation
  queue:AddProgress(500);
- Game:SetProperty('JAC_BOUNDARY_SPY_PROGRESS',{owner=owner,cityID=production.cityID,beforeCount=0,generation=T.generation});
+ Game:SetProperty(ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+  action=p.Action,phase='COMMAND',observed=copy(o)});
 end
 function T.OperationBarrier(retry,action,id)
  if not T.IsThird(retry) then return end
@@ -348,7 +446,12 @@ function T.BeforeNativeDispatch(action,spy)
  assert(intent and intent.spyID==spy:GetID() and retry.spyID==spy:GetID() and spy:GetOwner()==0 and
   spy:GetType()==GameInfo.Units['UNIT_SPY'].Index and T.AllowedID(spy:GetID()),
   'third spy reserved operative changed before native dispatch');
- T.CheckHistory(ui.config(),retry); T.CheckRoster(ui.roster(0));
+ local w=scalarCopy(assert(ExposedMembers.JAC_PersonaThirdSpyDispatch,'third spy dispatch UI witness missing'));
+ assert(w.action==action and w.token==intent.token and w.turn==Game.GetCurrentGameTurn() and
+  integer(w.frame,1) and integer(w.epoch,0) and w.frame>intent.frame and w.epoch>intent.epoch and
+  w.observed.map.id==spy:GetID() and w.observed.map.owner==spy:GetOwner() and
+  w.observed.map.unitType==spy:GetType() and same(w.observed.histories,archive().histories),
+  'third spy native dispatch observation differs');
 end
 function T.RecordMission(owner,p)
  local retry=Game:GetProperty(RETRY); if not T.IsThird(retry) then return end
@@ -357,21 +460,79 @@ function T.RecordMission(owner,p)
   not T.ArchivedEvent(retry,p.MissionID) and intent and intent.spyID==retry.spyID and retry.missionRequested and
   marker and marker.action=='SPY_MISSION' and marker.owner==owner and marker.spyID==retry.spyID,
   'third spy completion has no matching reserved mission');
- local observed=assert(ExposedMembers.JAC_PersonaThirdSpyMissionRead,'third spy UI history read bridge missing')(owner,p.MissionID);
+ local observed=published(owner,p); assert(p.Action=='RECORD_MISSION','third spy mission action differs');
  local m=observed.mission; local op=GameInfo.UnitOperations[m.operation];
  assert(same(observed.preserved,archive().histories) and m.id==p.MissionID and
   op and op.Hash==GameInfo.UnitOperations['UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR'].Hash and
   m.plot==archive().histories[1].plot and m.turn==Game.GetCurrentGameTurn() and m.turn>=intent.turn and
   type(m.initial)=='number' and type(m.escape)=='number','third spy completion differs from new native history');
+ local previous=Game:GetProperty(MISSION_ACK);
+ assert(not previous and not Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third spy mission record was replayed');
+ local c=core.config(owner);
+ assert(c.cityID and observed.spyID==retry.spyID,'third spy mission operative differs');
+ Game:SetProperty(MISSION_ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+  source='UI',histories=coreHistories(owner,{observed.preserved[1],observed.preserved[2],m}),observed=copy(observed)});
 end
 function T.InstallUI(hooks)
- ui=hooks; arms={}; used={}; pending=nil;
- ExposedMembers.JAC_PersonaThirdSpyRead=T.Read;
- ExposedMembers.JAC_PersonaThirdSpyMissionRead=function(owner,id)
-  assert(owner==ui.config().attacker,'third spy history attacker differs');
-  return {mission=nativeHistory(owner,id),preserved={nativeHistory(owner,0),nativeHistory(owner,1)}};
- end;
+ ui=hooks; arms={}; used={}; pending=nil; missionPending=nil;
+ ExposedMembers[WITNESS]=nil; ExposedMembers.JAC_PersonaThirdSpyDispatch=nil;
+ -- No callable UI read bridge is exported to Gameplay.
+ ExposedMembers.JAC_PersonaThirdSpyRead=nil;
+ ExposedMembers.JAC_PersonaThirdSpyMissionRead=nil;
+ local function missionObservation(owner,id)
+  local c=ui.config(); assert(owner==c.attacker,'third spy history attacker differs');
+  local spy=assert(Game:GetProperty('JAC_BOUNDARY_SPY'),'third spy mission reference missing');
+  return {owner=owner,turn=Game.GetCurrentGameTurn(),spyID=spy.id,
+   mission=nativeHistory(owner,id),preserved={nativeHistory(owner,0),nativeHistory(owner,1)}};
+ end
+ local function nextToken()
+  local ack=Game:GetProperty(ACK); local barrier=Game:GetProperty('JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER');
+  local mission=Game:GetProperty(MISSION_ACK);
+  return math.max(ack and ack.token or 0,barrier and barrier.token or 0,mission and mission.token or 0)+1
+ end
+ local function publish(action,token,phase,o)
+  local p={Attacker=0,Action=action,Token=token,Turn=o.turn,Frame=ui.frame(),
+   PublishEpoch=ui.epoch(),Phase=phase,Observation=signature(o)};
+  ExposedMembers[WITNESS]={owner=0,action=action,token=token,turn=p.Turn,
+   frame=p.Frame,epoch=p.PublishEpoch,phase=phase,observed=scalarCopy(o)};
+  return p
+ end
  local B=hooks.boundary;
+ -- Only this diagnostic View's API namespace is decorated. All unrelated
+ -- operations pass unchanged to the original native UI library.
+ nativeUI=nativeUI or UI;
+ UI=setmetatable({}, {__index=nativeUI});
+ UI.RequestPlayerOperation=function(owner,operation,params)
+  if operation==PlayerOperations.EXECUTE_SCRIPT and T.IsThird(Game:GetProperty(RETRY)) and
+   type(params)=='table' and
+   (params.OnStart=='JAC_BoundaryProgressSpy' or params.OnStart=='JAC_BoundaryRecordEnemyMission') then
+   assert(owner==0 and not pending and not missionPending,'third spy frame dispatch is already pending');
+   local progress=params.OnStart=='JAC_BoundaryProgressSpy';
+   local action=progress and 'PROGRESS_SPY' or 'RECORD_MISSION';
+   local o=progress and T.Read() or missionObservation(owner,params.MissionID);
+   local payload=publish(action,nextToken(),nil,o);
+   for key,value in pairs(params) do payload[key]=value end
+   if progress then
+    payload.OnStart='JAC_BoundaryThirdSpyStep'; payload.Action=action;
+    pending={action=action,stage='SENT',token=payload.Token,turn=payload.Turn,
+     frame=payload.Frame,epoch=payload.PublishEpoch,observation=payload.Observation,observed=copy(o)};
+   else
+    payload.Action=action;
+    missionPending={stage='SENT',token=payload.Token,turn=payload.Turn,
+     frame=payload.Frame,epoch=payload.PublishEpoch,observed=copy(o),id=params.MissionID};
+   end
+   -- Reservation/one-send flags precede the call, including unknown responses.
+   return nativeUI.RequestPlayerOperation(owner,operation,payload)
+  end
+  return nativeUI.RequestPlayerOperation(owner,operation,params)
+ end;
+ local eventReady=B.EnemyMissionEventReady;
+ B.EnemyMissionEventReady=function()
+  if missionPending then return false end
+  if T.IsThird(Game:GetProperty(RETRY)) and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION') and
+   not state().missionPost then return false end
+  return eventReady()
+ end;
  B.ThirdSpyStatus=function()
   local o=T.Read(); checkReady(o);
   if T.IsThird(Game:GetProperty(RETRY)) then T.CheckRoster(ui.roster(0)) end
@@ -400,46 +561,108 @@ function T.InstallUI(hooks)
  end
  Events.SaveComplete.Add(function()
   for action,arm in pairs(arms) do local s=Game:GetProperty(STATE); local i=s and s.intents[action];
-   if i and arm.token==i.token and arm.turn==i.turn and arm.turn==Game.GetCurrentGameTurn() then arm.saved=true end
+   if i and arm.token==i.token and arm.turn==i.turn and arm.turn==Game.GetCurrentGameTurn() and not arm.sent then
+    local o=T.Read(); checkReady(o); T.CheckRoster(ui.roster(0));
+    assert(conserved(arm.observed,o,false),'third spy changed before saved arm confirmation');
+    arm.saved=true
+   end
   end
  end);
- Events.LoadScreenClose.Add(function() pending=nil; arms={}; used={} end);
+ Events.LoadScreenClose.Add(function()
+  pending=nil; missionPending=nil; arms={}; used={};
+  ExposedMembers[WITNESS]=nil; ExposedMembers.JAC_PersonaThirdSpyDispatch=nil;
+ end);
  T.UpdateUI=function()
-  if not pending then return false end
+  if missionPending then
+   local request=missionPending;
+   local ok,err=pcall(function()
+    if request.stage=='SENT' and request.published then
+     local recorded=Game:GetProperty(MISSION_ACK);
+     local saved=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION');
+     assert(recorded and recorded.token==request.token and recorded.owner==0 and
+      recorded.turn==request.turn and saved and saved.attacker==0 and saved.id==request.id,
+      'third spy recorded mission acknowledgement differs');
+     local o=missionObservation(0,request.id);
+     assert(same(o,request.observed),'third spy mission changed after Core response');
+     local p=publish('RECORD_POST',nextToken(),nil,o);
+     request.postToken=p.Token; request.stage='POST_SENT'; request.published=false;
+     p.OnStart='JAC_BoundaryThirdSpyStep';
+     UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,p);
+    elseif request.stage=='POST_SENT' and request.published then
+     assert(same(missionObservation(0,request.id),request.observed),
+      'third spy mission changed after post-publish confirmation');
+     missionPending=nil;
+    end
+   end);
+   if not ok then B.enemyMissionStatus='UNKNOWN'; error(err) end
+   return true
+  end
+  if not pending then
+   for action,arm in pairs(arms) do
+    if (action=='SPY_TRAVEL' or action=='SPY_MISSION') and arm.sent and not arm.dispatched then
+     local o=T.Read();
+     assert(conserved(arm.observed,o,false),'third spy changed before native frame dispatch');
+     ExposedMembers.JAC_PersonaThirdSpyDispatch={action=action,token=arm.token,turn=o.turn,
+      frame=ui.frame(),epoch=ui.epoch(),observed=scalarCopy(o)};
+     arm.dispatched=true;
+    end
+   end
+   return false
+  end
   local request=pending; local ok,err=pcall(function()
    if request.stage=='QUEUED' then
-    local ack=Game:GetProperty(ACK); local barrier=Game:GetProperty('JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER');
-    local o=T.Read(); request.token=math.max(ack and ack.token or 0,barrier and barrier.token or 0)+1;
+    local o=T.Read(); request.token=nextToken();
     request.turn=o.turn; request.frame=ui.frame(); request.epoch=ui.epoch();
-    request.observation=R.EncodeText(R.Serialize(o)); request.stage='SENT';
-    UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_BoundaryThirdSpyStep',Action=request.action,
-     Token=request.token,Turn=request.turn,Frame=request.frame,PublishEpoch=request.epoch,Observation=request.observation});
+    request.observation=signature(o); request.observed=copy(o); request.stage='SENT';
+    local p=publish(request.action,request.token,nil,o); p.OnStart='JAC_BoundaryThirdSpyStep';
+    UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,p);
    elseif request.stage=='SENT' then
     local ack=Game:GetProperty(ACK);
-    if ack and ack.owner==0 and ack.token==request.token and ack.action==request.action and ack.phase=='COMMAND' then
+    if request.commandPublished and ack and ack.owner==0 and ack.token==request.token and
+     ack.action==request.action and ack.phase=='COMMAND' and ack.turn==request.turn then
+     local o=T.Read(); checkReady(o);
+     assert(conserved(request.observed,o,request.action=='PROGRESS_SPY'),'third spy changed after Core response');
      request.stage='BARRIER_SENT';
-     UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_BoundaryThirdSpyStep',Action=request.action,
-      Phase='BARRIER',Token=request.token,Turn=request.turn,Frame=ui.frame(),PublishEpoch=ui.epoch()});
+     local p=publish(request.action,request.token,'BARRIER',o); p.OnStart='JAC_BoundaryThirdSpyStep';
+     request.barrierObserved=copy(o);
+     UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,p);
     end
    elseif request.published then
     local o=T.Read(); checkReady(o); T.CheckRoster(ui.roster(0));
+    assert(conserved(request.barrierObserved,o,request.action=='PROGRESS_SPY'),
+     'third spy changed after post-publish confirmation');
     if request.action=='ATTEST' then
      assert(R.EncodeText(R.Serialize(o))==request.observation,'third spy changed after attestation');
      pending={action='ADOPT',stage='QUEUED'}; return
     end
     local action=request.action=='BEGIN' and 'BUILD_SPY' or request.action;
-    if action~='ADOPT' then local intent=state().intents[action];
-     arms[action]={token=intent.token,turn=intent.turn,saved=false,sent=false}; end
+    if action~='ADOPT' and action~='PROGRESS_SPY' then local intent=state().intents[action];
+     arms[action]={token=intent.token,turn=intent.turn,saved=false,sent=false,observed=copy(o)}; end
     B.thirdLast='ACCEPTED_'..request.action; pending=nil;
+    if action=='PROGRESS_SPY' then B.lastAction='ACCEPTED_PROGRESS_SPY' end
    end
   end);
   if not ok then pending=nil; B.thirdLast='ERROR_'..request.action; error(err) end
   return true
  end;
  Events.GameCoreEventPublishComplete.Add(function()
+  if pending and pending.stage=='SENT' then local ack=Game:GetProperty(ACK);
+   if ack and ack.owner==0 and ack.token==pending.token and ack.action==pending.action and
+    ack.phase=='COMMAND' and ack.turn==pending.turn and ack.frame==pending.frame and ack.epoch==pending.epoch then
+    pending.commandPublished=true
+   end
+  end
+  if missionPending then
+   local ack=Game:GetProperty(missionPending.stage=='SENT' and MISSION_ACK or ACK);
+   if ack and ack.owner==0 and ack.turn==missionPending.turn and
+    ack.token==(missionPending.stage=='SENT' and missionPending.token or missionPending.postToken) then
+    missionPending.published=true
+   end
+  end
   if pending and pending.stage=='BARRIER_SENT' then local ack=Game:GetProperty(ACK);
    if ack and ack.owner==0 and ack.token==pending.token and ack.action==pending.action and
-    ack.phase=='BARRIER' and ack.turn==pending.turn and ack.frame>pending.frame then pending.published=true end
+    ack.phase=='BARRIER' and ack.turn==pending.turn and ack.frame>pending.frame and
+    ack.epoch>pending.epoch then pending.published=true end
   end
  end);
 end
@@ -450,7 +673,7 @@ function T.BeforeQueue(action)
   local arm=arms[action]; local intent=state().intents[action];
   assert(arm and intent and arm.token==intent.token and arm.turn==intent.turn and arm.saved and
    not arm.sent and arm.turn==Game.GetCurrentGameTurn(),'third spy request was reloaded, unsaved or already sent');
-  local o=T.Read(); checkReady(o); T.CheckRoster(ui.roster(0)); arm.sent=true;
+  local o=T.Read(); checkReady(o); T.CheckRoster(ui.roster(0)); arm.sent=true; arm.observed=copy(o);
   if action~='BUILD_SPY' then
    assert(o.mapCount==1 and o.activeCount==0 and o.map.id==intent.spyID and
     o.map.id==Game:GetProperty(RETRY).spyID and o.map.owner==0 and o.map.unitType==o.spyType and
