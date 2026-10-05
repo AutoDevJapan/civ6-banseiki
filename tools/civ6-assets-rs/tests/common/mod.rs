@@ -22,9 +22,13 @@ pub fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 pub fn temp() -> tempfile::TempDir {
-    let work = fixtures().join("work");
-    fs::create_dir_all(&work).unwrap();
-    tempfile::tempdir_in(work).unwrap()
+    // SQLite on Windows can reject >260-character database paths. Agent
+    // worktrees may be nested; private test output should not inherit their
+    // path length or write into the immutable fixture source directory.
+    tempfile::Builder::new()
+        .prefix("civ6-assets-")
+        .tempdir()
+        .unwrap()
 }
 pub static MAPS: LazyLock<Maps> = LazyLock::new(|| {
     let t = temp();
