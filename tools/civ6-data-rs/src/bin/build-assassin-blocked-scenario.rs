@@ -50,6 +50,7 @@ local function Placed(row)
   assert(count==1,'native unit is not present exactly once in its plot')
 end
 local function AssetFree(plot)
+  assert(not plot:IsNaturalWonder(),'fixture would modify a natural wonder')
   assert(plot:GetResourceType()==-1 and plot:GetImprovementType()==-1 and
     plot:GetDistrictType()==-1 and plot:GetRouteType()==-1,'fixture would modify a plot with assets')
 end
@@ -416,6 +417,7 @@ local function Plot(x,y)
     GetImprovementType=function() return PROBE_MODE=='improvement' and x==2 and 1 or -1 end,
     GetDistrictType=function() return PROBE_MODE=='district' and x==2 and 1 or -1 end,
     GetRouteType=function() return PROBE_MODE=='route' and x==2 and 1 or -1 end,
+    IsNaturalWonder=function() return PROBE_MODE=='natural_wonder' and x==2 end,
     IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
     IsWater=function() return (PROBE_MODE=='water' or PROBE_MODE=='water_candidate') and x==2 end,
     IsImpassable=function() return terrain[key]==9 end}
@@ -526,6 +528,7 @@ end
             "improvement",
             "district",
             "route",
+            "natural_wonder",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
@@ -572,6 +575,14 @@ end
                     .unwrap_err()
                     .to_string()
                     .contains("fixture would modify a plot with assets"));
+                lua.load("CheckPreflightUnchanged()").exec()?;
+            }
+            if mode == "natural_wonder" {
+                assert!(result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixture would modify a natural wonder"));
                 lua.load("CheckPreflightUnchanged()").exec()?;
             }
             if mode == "water_candidate" {
