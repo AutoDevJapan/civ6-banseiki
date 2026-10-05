@@ -1,0 +1,284 @@
+{
+  "name": "Assassin: native target country elimination, four fixed combinations, pending and two resolved save/load cycles",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620995,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\nlocal function FixtureReveal(owner,x,y)\n      local ok,why=R.TestRevealTile(owner,x,y)\n      assert(ok,'fixture reveal failed: '..tostring(why))\n    end; local function Grant(owner,kind,city)\n      assert(Game:GetProperty(R.TEST)==1,'fixture grant requires test mode')\n      local x,y=city:GetX(),city:GetY()\n      assert(x>=0 and y>=0,'fixture anchor has invalid coordinates: '..x..','..y)\n      local found\n      for radius=1,6 do\n        local before={}; for _,u in Players[owner]:GetUnits():Members() do before[u:GetID()]=true end\n        UnitManager.InitUnitValidAdjacentHex(owner,kind,x,y,radius)\n        for _,u in Players[owner]:GetUnits():Members() do\n          if not before[u:GetID()] and u:GetType()==GameInfo.Units[kind].Index then\n            if u:GetX()>=0 and u:GetY()>=0 and Map.GetPlotDistance(x,y,u:GetX(),u:GetY())<=6 then found=u\n            else\n              print('[JAC_ASN_FIXTURE] unplaced unit owner='..owner..' kind='..kind..' radius='..radius..\n                ' xy='..u:GetX()..','..u:GetY())\n              UnitManager.Kill(u)\n            end\n          end\n        end\n        if found then break end\n      end\n      assert(found,'fixture unit has no valid placement within six tiles: '..kind..' owner='..owner)\n      if R.IsAssassin(found) then FixtureReveal(owner,x,y); FixtureReveal(owner,found:GetX(),found:GetY()) end\n      return found\n    end; local function TrainedUnit(owner,id)\n      local u=Players[owner]:GetUnits():FindID(id)\n      assert(u and R.IsAssassin(u) and u:GetX()>=0 and u:GetY()>=0,\n        'trained unit is not placed on the map: id='..tostring(id)..' turn='..R.Turn()..\n        ' type='..tostring(u and u:GetType())..' x='..tostring(u and u:GetX())..' y='..tostring(u and u:GetY()))\n      return u\n    end; local function TrainedSnapshot(owner,id)\n      local u=Players[owner]:GetUnits():FindID(id)\n      local row={ID=id,Present=u~=nil}\n      if u then row.Type=u:GetType(); row.X=u:GetX(); row.Y=u:GetY(); row.Damage=u:GetDamage() end\n      print('[JAC_ASN_TRACE] snapshot turn='..R.Turn()..' id='..id..' present='..tostring(row.Present)..\n        ' type='..tostring(row.Type)..' xy='..tostring(row.X)..','..tostring(row.Y)..' damage='..tostring(row.Damage))\n      return row\n    end; local function ParkTrainedUnit(owner,id,cityID)\n      assert(Game:GetProperty(R.TEST)==1,'trained parking requires test mode')\n      local u=TrainedUnit(owner,id); local city=Players[owner]:GetCities():FindID(cityID)\n      assert(city and city:GetOwner()==owner,'trained parking requires an owned city')\n      local blockers={}\n      for _,other in Players[owner]:GetUnits():Members() do\n        if other:GetID()~=id and other:GetX()==city:GetX() and other:GetY()==city:GetY() then\n          assert(not R.IsAssassin(other),'trained parking would remove another assassin')\n          blockers[#blockers+1]=other\n        end\n      end\n      -- Clear the fixture's native garrison to avoid stacking two combat units.\n      -- Keep the production ID; do not replace it with a fixture-granted unit.\n      for _,other in ipairs(blockers) do UnitManager.Kill(other) end\n      -- Official DLC/AustraliaScenario/Scripts/AustraliaScenario.lua:854.\n      UnitManager.PlaceUnit(u,city:GetX(),city:GetY())\n      assert(u:GetX()==city:GetX() and u:GetY()==city:GetY(),'trained parking did not reach city center')\n      return TrainedSnapshot(owner,id)\n    end; local function TrainingUnits(owner)\n      local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n        if R.IsAssassin(u) then ids[tostring(u:GetID())]=true end\n      end; return ids\n    end; local function NewTrainedUnit(owner,before,id)\n      local count=0; for key in pairs(TrainingUnits(owner)) do if not before[key] then\n        count=count+1; assert(tonumber(key)==id,'completion recorded an old or different unit')\n      end end\n      assert(count==1,'training did not create exactly one new assassin')\n      return TrainedUnit(owner,id)\n    end; \nlocal MODE='target'\n\nGame:SetProperty(R.TEST,1)\nlocal houses={}\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  houses[PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()]=p:GetID()\nend\nt={Mode=MODE,Jobs={},Assets={},PendingTurn=R.Turn()}\nt.Target=assert(houses.CIVILIZATION_JAC_MATSUDAIRA,'target absent')\nlocal targetCity=assert(Players[t.Target]:GetCities():GetCapitalCity(),'target capital absent')\nt.Nations=Game:GetProperty(R.NATIONS); t.Nation=Players[t.Target]:GetProperty(R.NATION)\nt.Ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')\nlocal names={'CIVILIZATION_JAC_DATE','CIVILIZATION_JAC_ASHINA','CIVILIZATION_JAC_HOJO','CIVILIZATION_JAC_YAMANOUCHI_UESUGI'}\nfor i,name in ipairs(names) do\n  local a=assert(houses[name],'actor absent: '..name); assert(not Players[a]:IsHuman(),'actor must be AI')\n  local city=assert(Players[a]:GetCities():GetCapitalCity(),'actor capital absent')\n  local u=Grant(a,R.UnitForPlayer(a),targetCity)\n  FixtureReveal(a,targetCity:GetX(),targetCity:GetY())\n  Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=i>2 and 1 or 0,Detected=i%2==0 and 1 or 0,Branch='FREE_STATE'})\n  assert(R.StartAttempt(a,u:GetID(),t.Target,'LEADER'))\n  if MODE=='actor' then assert(R.StartProduction(a,city:GetID())) end\n  assert(R.TestAdvanceDeadlines(a,{Mission=true}))\n  local state=R.State(a)\n  assert(state.Mission.Due==R.Turn()+1,'mission hook did not shorten deadline')\n  t.Jobs[#t.Jobs+1]={Actor=a,Unit=u:GetID(),Pending=state,ParkX=city:GetX(),ParkY=city:GetY()}\n  if MODE=='target' then ParkTrainedUnit(a,u:GetID(),city:GetID()) end\nend\nlocal ids={}\nif MODE=='actor' then for _,job in ipairs(t.Jobs) do ids[#ids+1]=job.Actor end else ids={t.Target} end\nt.Dead=ids\n-- Official AustraliaScenario.lua and the existing free-state branch: clear units\n-- before transferring the last city. Never overwrite Player:IsAlive or saved jobs.\nfor _,id in ipairs(ids) do\n  local unitIDs={}; for _,u in Players[id]:GetUnits():Members() do unitIDs[#unitIDs+1]=u:GetID() end\n  for _,uid in ipairs(unitIDs) do UnitManager.Kill(assert(Players[id]:GetUnits():FindID(uid))) end\n  local cityIDs={}; for _,c in Players[id]:GetCities():Members() do cityIDs[#cityIDs+1]=c:GetID() end\n  assert(#cityIDs>0,'elimination requires actual cities')\n  for _,cid in ipairs(cityIDs) do\n    local c=assert(Players[id]:GetCities():FindID(cid)); local x,y=c:GetX(),c:GetY()\n    CityManager.TransferCityToFreeCities(c)\n    t.Assets[#t.Assets+1]={X=x,Y=y,Owner=PlayerManager.GetFreeCitiesPlayerID()}\n  end\n  NativeDead(id)\nend\nif MODE=='actor' then\n  for _,c in Players[t.Target]:GetCities():Members() do t.Assets[#t.Assets+1]={X=c:GetX(),Y=c:GetY(),Owner=t.Target} end\nend\nt.BeforeDenouncements=Denouncements()\nGame:SetProperty('JAC_ASN_ELIM_TEST',t)\nPending()\nreturn 'four fixed result combinations pending after native '..MODE..' elimination'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-target-Pending",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-target-Pending",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\nPending(); R.Tick(); Pending(); return 'pending eliminated-country properties survive same-turn reload'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\n\n      t.ResolvedTurn=R.Turn(); assert(t.ResolvedTurn==t.PendingTurn+1,'resolution overshot the deadline')\n      Resolved(); t.Final={}\n      for _,job in ipairs(t.Jobs) do t.Final[tostring(job.Actor)]=R.State(job.Actor) end\n      t.AfterDenouncements=Denouncements(); Game:SetProperty('JAC_ASN_ELIM_TEST',t)\n      R.Tick(); Resolved(); return 'fixed results and exact penalty deltas resolved once'\n    "
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-target-Resolved",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-target-Resolved",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\nResolved(); R.Tick(); Resolved(); return 'resolved results and penalty ledger survive first reload'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\nResolved(); return 'next native turn does not repeat resolution or city transfers'"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Assassin-target-Stable",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC-Assassin-target-Stable",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "local R=ExposedMembers.JAC_Assassin; assert(R,'Assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_ELIM_TEST')\nlocal function Copy(v)\n  if type(v)~='table' then return v end\n  local c={}; for k,x in pairs(v) do c[k]=Copy(x) end; return c\nend\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function NativeDead(id)\n  assert(not Players[id]:IsAlive(),'native player still alive: '..id)\n  assert(Players[id]:GetCities():GetCount()==0,'eliminated country retained cities')\n  assert(Players[id]:GetUnits():GetCount()==0,'eliminated country retained units')\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    assert(p:GetID()~=id,'eliminated country remains in alive-major enumeration')\n  end\nend\nlocal function Cities(rows)\n  for _,row in ipairs(rows) do\n    local city=CityManager.GetCityAt(row.X,row.Y)\n    assert(city and city:GetOwner()==row.Owner,'saved city ownership changed')\n  end\nend\nlocal function NoSuccess()\n  assert(Same(Game:GetProperty(R.NATIONS),t.Nations),'country history changed')\n  assert(Same(Players[t.Target]:GetProperty(R.NATION),t.Nation),'leader death was applied')\n  Cities(t.Assets)\nend\nlocal function Denouncements()\n  local rows={}\n  for _,p in ipairs(PlayerManager.GetAliveMajors()) do\n    local id=p:GetID(); local r={}\n    for _,job in ipairs(t.Jobs) do\n      r[tostring(job.Actor)]=p:GetProperty('JAC_ASN_DENOUNCE_'..job.Actor)\n    end\n    rows[tostring(id)]=r\n  end\n  return rows\nend\nlocal function Pending()\n  NoSuccess()\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),t.Ledger),'penalty applied before deadline')\n  for _,job in ipairs(t.Jobs) do\n    assert(Same(R.State(job.Actor),job.Pending),'pending state changed across save/load')\n    if t.Mode=='actor' then NativeDead(job.Actor) else assert(Players[job.Actor]:IsAlive(),'actor eliminated') end\n    local found=false\n    for _,id in ipairs(Game:GetProperty(R.ACTORS) or {}) do if id==job.Actor then found=true end end\n    assert(found,'saved work owner absent from actor registry')\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(R.Turn()==t.PendingTurn,'pending load advanced the turn')\nend\nlocal function Resolved()\n  NoSuccess()\n  local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}\n  expected.Applied=expected.Applied or {}\n  for _,job in ipairs(t.Jobs) do\n    local s=R.State(job.Actor); local m=s.LastMission\n    assert(s.Mission==nil,'mission still pending')\n    assert(s.CommandUnlock==job.Pending.CommandUnlock,'nationwide wait changed')\n    local want=Copy(job.Pending.Mission)\n    want.Result=t.Mode=='actor' and 'ACTOR_GONE' or 'TARGET_GONE'\n    want.Cancelled=t.Mode=='actor'; want.Resolved=t.ResolvedTurn\n    assert(Same(m,want),'fixed rolls, result or resolution changed')\n    if t.Mode=='actor' then\n      NativeDead(job.Actor)\n      assert(s.Production==nil,'eliminated actor retained training')\n      assert(s.LastCompletion==job.Pending.LastCompletion,'eliminated actor completed training')\n      assert(s.ProductionUnlock==job.Pending.ProductionUnlock,'eliminated actor changed training lock')\n    else\n      assert(Players[job.Actor]:IsAlive(),'actor eliminated')\n      local u=Players[job.Actor]:GetUnits():FindID(job.Unit)\n      if not want.Success then assert(u==nil,'failed assassin not removed')\n      else\n        assert(u and u:GetProperty(R.TOKEN)==want.ActorIdentity,'surviving actor changed identity')\n        assert(u:GetID()==job.Unit and u:GetOwner()==job.Actor,'surviving actor was replaced')\n      end\n    end\n    if t.Mode=='actor' or not want.Success or want.Detected then\n      local key=tostring(job.Actor)\n      expected.Grievances[key]=(expected.Grievances[key] or 0)+want.PenaltyGrievances\n      expected.Friendship[key]=(expected.Friendship[key] or 0)-want.PenaltyFriendship\n      expected.Applied[want.ID]=1\n      if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end\n    end\n    print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..\n      ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..\n      ' resolved='..m.Resolved..' wait='..s.CommandUnlock)\n  end\n  if t.Mode=='target' then NativeDead(t.Target) end\n  assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')\n  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end\n  if t.Final then\n    for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end\n    assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')\n  end\nend\n\nResolved(); R.Tick(); Resolved(); Game:SetProperty(R.TEST,nil); return 'second resolved reload remains identical; test mode cleared'"
+    }
+  ]
+}
