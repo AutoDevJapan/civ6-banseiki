@@ -25,6 +25,18 @@ local priest
 for _,u in p:GetUnits():Members() do if not before[u:GetID()] then assert(not priest,'ambiguous new unit');priest=u end end
 assert(priest and GameInfo.Units[priest:GetType()].UnitType=='UNIT_MISSIONARY','missionary creation failed')
 priest:GetReligion():SetReligionType(r.ReligionType)
+assert(priest:GetReligion():GetReligionType()==r.Index,'core religion initialization failed')
+-- The native religion setter changes gameplay state without publishing it to UI.
+-- Publish the initialized unit through a real placement on another valid plot.
+local destination
+for dir=0,5 do
+ local q=Map.GetAdjacentPlot(target:GetX(),target:GetY(),dir)
+ if q and q:GetOwner()==from and not q:IsWater() and not q:IsMountain() and q:GetDistrictType()<0
+  and (q:GetX()~=priest:GetX() or q:GetY()~=priest:GetY()) then destination=q;break end
+end
+assert(destination,'no second valid target-adjacent plot for native publication')
+UnitManager.PlaceUnit(priest,destination:GetX(),destination:GetY())
+assert(priest:GetX()==destination:GetX() and priest:GetY()==destination:GetY(),'native placement rejected destination')
 print('[JAC_SPENT_SPREAD_192] created xy='..priest:GetX()..','..priest:GetY()..' target='..target:GetX()..','..target:GetY()..' core_religion='..priest:GetReligion():GetReligionType()..' expected_religion='..r.Index)
 assert(priest:GetX()>=0 and priest:GetY()>=0 and Map.GetPlotDistance(priest:GetX(),priest:GetY(),target:GetX(),target:GetY())<=1,'missionary not on a valid target-adjacent plot')
 local e={From=from,To=to,UnitID=priest:GetID(),Religion=r.Index,TargetOwner=target:GetOwner(),TargetID=target:GetID(),X=target:GetX(),Y=target:GetY(),StartTurn=Game.GetCurrentGameTurn()}
