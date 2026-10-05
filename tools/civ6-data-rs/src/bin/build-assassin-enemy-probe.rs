@@ -67,17 +67,33 @@ local function NewUnits(owner,old,record)
   return rows
 end
 local function Remove(record)
+  local failures={}
   for _,row in ipairs(record) do
-    local u=Players[row.Owner]:GetUnits():FindID(row.ID)
-    assert(u and u:GetID()==row.ID and u:GetOwner()==row.Owner and u:GetType()==row.Type and
-      u:GetProperty('JAC_ASN_OCCUPANCY_MARKER')==row.Marker,'probe cleanup identity mismatch')
-    UnitManager.Kill(u)
+    local ok,why=pcall(function()
+      local function Matches(u)
+        return u and u:GetID()==row.ID and u:GetOwner()==row.Owner and u:GetType()==row.Type and
+          u:GetProperty('JAC_ASN_OCCUPANCY_MARKER')==row.Marker
+      end
+      local units=Players[row.Owner]:GetUnits(); local u=units:FindID(row.ID)
+      if not Matches(u) then
+        u=nil
+        for _,candidate in units:Members() do if Matches(candidate) then
+          assert(not u,'probe cleanup has ambiguous identity'); u=candidate
+        end end
+      end
+      assert(Matches(u),'probe cleanup identity mismatch')
+      UnitManager.Kill(u)
+    end)
+    if not ok then failures[#failures+1]=tostring(why) end
   end
+  return #failures==0,table.concat(failures,'; ')
 end
 local qualified=false
 Game:SetProperty(R.TEST,1)
 local ok,why=xpcall(function()
-  Players[enemy]:GetDiplomacy():DeclareWarOn(actor,WarTypes.FORMAL_WAR,true)
+  if not Players[enemy]:GetDiplomacy():IsAtWarWith(actor) then
+    Players[enemy]:GetDiplomacy():DeclareWarOn(actor,WarTypes.FORMAL_WAR,true)
+  end
   assert(Players[enemy]:GetDiplomacy():IsAtWarWith(actor),'native war not established')
   for _,p in ipairs(plots) do
     local old=Rows(enemy)
@@ -106,15 +122,17 @@ local ok,why=xpcall(function()
 end,function(err) return tostring(err) end)
 -- Remove only identities created by this probe. Even a failed qualification
 -- must never remove a pre-existing unit via a reused FindID reference.
-local cleaned,cleanupWhy=pcall(function() Remove(probes); Remove(fixtures) end)
+local probesClean,probeWhy=Remove(probes)
+local fixturesClean,fixtureWhy=Remove(fixtures)
 Game:SetProperty(R.TEST,nil)
-assert(cleaned,'probe cleanup failed: '..tostring(cleanupWhy))
+assert(probesClean and fixturesClean,'probe cleanup failed: '..probeWhy..'; '..fixtureWhy)
 assert(Same(Rows(actor),before) and Same(Rows(enemy),enemyBefore),'probe left changed unit inventories')
 CityAndTerrain()
 assert(Same(R.State(actor),initial),'probe changed native training state')
 assert(ok,'probe rejected: '..tostring(why))
 print('[JAC_ASN_OCCUPANCY] qualified='..tostring(qualified)..' city='..cityID..' xy='..x..','..y..
-  ' actor='..actor..' enemy='..enemy..' restored=true recovery_acceptance=false')
+  ' actor='..actor..' enemy='..enemy..' cities_and_units_preserved=true terrain_preserved=true'..
+  ' war_restoration_attempted=false recovery_acceptance=false')
 return 'qualification='..tostring(qualified)..'; city and existing units preserved; training/save/recovery not tested'
 "#;
 
@@ -180,7 +198,14 @@ mod tests {
     fn qualification_distinguishes_native_placement_and_preserves_existing_identities() -> Result<()>
     {
         let repo = Repository::checked_in();
-        for mode in ["blocked", "unplaced", "placed", "wrong_type", "alias"] {
+        for mode in [
+            "blocked",
+            "unplaced",
+            "placed",
+            "wrong_type",
+            "alias",
+            "corrupt_marker",
+        ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
                 .exec()?;
@@ -200,6 +225,14 @@ Players[1].GetDiplomacy=function() return {DeclareWarOn=function() DATA[1].Wars[
 ExposedMembers={JAC_Assassin={TEST='JAC_ASN_TEST_MODE',State=function() return {} end,
   UnitForPlayer=function() return 'UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' end}}
 OLD_ACTOR=GRANT(0,4,0,0):GetID(); OLD_ENEMY=GRANT(1,4,30,0):GetID()
+local originalMake=makeUnit
+if MODE=='corrupt_marker' then makeUnit=function(d)
+  local u=originalMake(d)
+  if d.Owner==0 and d.ID~=OLD_ACTOR then
+    u.GetProperty=function(_,k) if k=='JAC_ASN_OCCUPANCY_MARKER' then return 'changed' end return d.Properties[k] end
+  end
+  return u
+end end
 UnitManager.InitUnit=function(owner,kind,x,y) GRANT(owner,GameInfo.Units[kind].Index,x,y) end
 UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,radius)
   assert(owner==0 and kind=='UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' and x==0 and y==0 and radius==1)
@@ -218,20 +251,26 @@ end
 function CheckInventories()
   assert(Players[0]:GetUnits():GetCount()==1 and Players[1]:GetUnits():GetCount()==1)
 end
+function CheckUnauthenticatedProbe()
+  assert(Players[0]:GetUnits():GetCount()==2 and Players[1]:GetUnits():GetCount()==1)
+  assert(#KILLS==7)
+end
 "#).exec()?;
             let outcome = lua.load(PROBE).eval::<String>();
-            if matches!(mode, "wrong_type" | "alias") {
+            if matches!(mode, "wrong_type" | "corrupt_marker") {
                 assert!(outcome.is_err(), "{mode}");
             } else {
                 let outcome = outcome?;
-                assert!(outcome.contains(if mode == "placed" {
+                assert!(outcome.contains(if matches!(mode, "placed" | "alias") {
                     "qualification=false"
                 } else {
                     "qualification=true"
                 }));
             }
             lua.load("CheckOriginals()").exec()?;
-            if mode != "alias" {
+            if mode == "corrupt_marker" {
+                lua.load("CheckUnauthenticatedProbe()").exec()?;
+            } else {
                 lua.load("CheckInventories()").exec()?;
             }
         }
