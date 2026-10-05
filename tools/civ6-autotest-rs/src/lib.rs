@@ -2,6 +2,7 @@
 pub mod capture;
 pub mod carrier_sync;
 pub mod carrier_transport;
+pub mod catalog_check;
 pub mod catalog_scenario;
 pub mod checkpoint;
 pub mod click;
