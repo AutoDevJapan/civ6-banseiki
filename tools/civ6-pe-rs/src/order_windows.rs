@@ -142,8 +142,7 @@ fn qualify_exception(
     d: &mut Debugger,
     event: &DEBUG_EVENT,
     steps: &BTreeMap<u32, Step>,
-    phase: Phase,
-    req: &Request,
+    sites: &[u64],
 ) -> Result<(), String> {
     if event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT {
         return Ok(());
@@ -165,10 +164,6 @@ fn qualify_exception(
             if let Some(step) = steps.get(&tid) {
                 plan::verify_step(step.expected, address, c.Rip, c.Dr6, c.EFlags)?;
             } else {
-                let sites: Vec<_> = plan::prefix(phase, req.count(phase))?
-                    .iter()
-                    .map(|s| d.module_base + s.rva)
-                    .collect();
                 if c.EFlags & TF != 0
                     || plan::classify_hit(
                         address,
@@ -176,7 +171,7 @@ fn qualify_exception(
                         [c.Dr0, c.Dr1, c.Dr2, c.Dr3],
                         c.Dr7,
                         c.Dr6,
-                        &sites,
+                        sites,
                     )?
                     .is_none()
                 {
@@ -200,17 +195,21 @@ fn qualify_exception(
     Ok(())
 }
 
-#[cfg(test)]
-fn log_exception(
+fn classify_then_record(
     d: &mut Debugger,
     event: &DEBUG_EVENT,
-    write: impl FnOnce() -> std::io::Result<()>,
+    steps: &BTreeMap<u32, Step>,
+    sites: &[u64],
+    record: impl FnOnce(&mut Debugger) -> std::io::Result<()>,
 ) -> Result<(), String> {
-    let status = d.status_after_error(event);
-    d.cleanup_event = Some((*event, status));
-    let (preserved, result) = plan::protocol::log_classified(status, write);
-    debug_assert_eq!(preserved, status);
-    result.map_err(|e| e.to_string())
+    plan::protocol::classify_then_record(
+        d,
+        |d| {
+            qualify_exception(d, event, steps, sites)?;
+            Ok(d.status_after_error(event))
+        },
+        record,
+    )
 }
 
 fn core_module(pid: u32) -> Result<Option<Module>, String> {
@@ -400,8 +399,35 @@ pub fn observe(req: Request) -> Result<(), String> {
     }
     let game_guard = exact_process(req.pid, req.created, &exe.path, false)?;
     let output = Jsonl::new(&req.output)?;
-    writeln!(std::io::stdout(),"{}",json!({"type":"order_attach_start","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created})).map_err(|e|e.to_string())?;
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
+    let token = std::env::var("TODO880_ATTACH_TOKEN").map_err(|_| "parent attach token missing")?;
+    if token.len() != 64 || !token.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("invalid attach token".into());
+    }
+    let identity = json!({"type":"attach_ready","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll_sha256":req.source_dll_sha,"observer_pid":std::process::id(),"attach_token":token});
+    emit(&identity)?;
+    let go_deadline = Instant::now() + Duration::from_secs(8);
+    let mut go_buffer = Vec::new();
+    loop {
+        if Instant::now() >= go_deadline {
+            return Err("GO grant timeout; target unchanged".into());
+        }
+        let incoming = commands(&mut go_buffer)?;
+        if !incoming.is_empty() {
+            if incoming.len() != 1 || incoming[0] != format!("GO {token}") {
+                return Err("attach cancelled before GO; target unchanged".into());
+            }
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    verify_lock(lock, req.chain_pid, &chain)?;
+    if !alive(&controller)? || !alive(&game_guard)? || process_created(&game_guard)? != req.created
+    {
+        return Err("identity changed after GO".into());
+    }
+    let mut attached = identity;
+    attached["type"] = json!("order_attach_start");
+    emit(&attached)?;
     // Attach in existing non-hardware mode. Only this explicit capability then
     // arms the fixed EXE sites; old live hardware modes stay rejected.
     let mut d = Debugger::attach(
@@ -579,12 +605,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                 EXCEPTION_DEBUG_EVENT => {
                     let info = unsafe { event.u.Exception };
                     let address = info.ExceptionRecord.ExceptionAddress as u64;
-                    qualify_exception(&mut d,&event,&steps,phase,&req)?;
                     let row=json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":address,"first_chance":info.dwFirstChance!=0,"phase":phase.name()});
-                    // Qualification is durable before the first fallible output.
-                    let preserved=d.status_after_error(&event);
-                    let (_,recorded)=plan::protocol::log_classified(preserved,||mark(&mut d,row).map_err(std::io::Error::other));
-                    recorded.map_err(|e|e.to_string())?;
+                    let sites:Vec<_>=plan::prefix(phase,req.count(phase))?.iter().map(|s|exe.base+s.rva).collect();
+                    classify_then_record(&mut d,&event,&steps,&sites,|d|mark(d,row).map_err(std::io::Error::other))?;
                     if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT {
                         if steps.contains_key(&tid) {
                             d.last_dispatch = DispatchOutcome::Ambiguous(
@@ -755,6 +778,17 @@ pub fn observe(req: Request) -> Result<(), String> {
         Err(e) if !d.critical => d.critical_wait_for_game_close(e),
         Err(e) => Err(e),
     };
+    if cleanup.is_err() && d.critical && d.attached {
+        // The existing critical path exhausted its bounded attempt. Retain the
+        // debugger, pending event/thread handles and source pin until OS exit;
+        // never publish order_stop or drop them merely because time elapsed.
+        if unsafe { WaitForSingleObject(d.game.0, u32::MAX) } != WAIT_OBJECT_0 {
+            plan::protocol::hold_recovery_handles("observer critical target wait failed");
+        }
+        d.attached = false;
+        d.terminal = TerminalKind::TargetExited;
+        d.held.clear();
+    }
     let rows:Vec<_>=plan::FRONT.iter().chain(plan::LOAD.iter()).map(|s|json!({"site":s.name,"completed":counts.get(s.name).copied().unwrap_or(0),"armed_windows":armed_windows.get(s.name).copied().unwrap_or(0),"coverage":"bounded_phase_only","missing_is_not_zero_calls":true})).collect();
     let terminal = d.terminal.label();
     let handles = d.threads.len();
@@ -771,10 +805,69 @@ pub fn observe(req: Request) -> Result<(), String> {
 /// Parent stub: only invoke from the existing live_chain-owned controller lane.
 /// Keeps Child + pinned game HANDLE through restoration/critical close, forwards
 /// phase acknowledgements, and emits a separate real child-reaping receipt.
+struct NativeRecovery {
+    game: Handle,
+    chain: Handle,
+    req: Request,
+    termination_requested: bool,
+}
+impl plan::protocol::Recovery for NativeRecovery {
+    fn authorize(&mut self) -> Result<(), String> {
+        verify_lock(
+            Path::new("D:/CC/Tools/civ6-live/civ6.lock"),
+            self.req.chain_pid,
+            &self.chain,
+        )?;
+        if !alive(&self.game)?
+            || process_created(&self.game)? != self.req.created
+            || !is_pinned_dx11_exe(&process_path(&self.game)?)
+        {
+            return Err("pinned game changed before GO".into());
+        }
+        Ok(())
+    }
+    fn request_close(&mut self) -> Result<bool, String> {
+        if self.target_exited() {
+            return Ok(self.termination_requested);
+        }
+        if !self.termination_requested {
+            if unsafe {
+                windows_sys::Win32::System::Threading::TerminateProcess(self.game.0, 0x880)
+            } == 0
+            {
+                return Err(win_error("TerminateProcess(pinned recovery)"));
+            }
+            self.termination_requested = true;
+        }
+        Ok(true)
+    }
+    fn target_exited(&mut self) -> bool {
+        (unsafe { WaitForSingleObject(self.game.0, 0) }) == WAIT_OBJECT_0
+    }
+    fn wait_target_exit(&mut self) {
+        // Existing native recovery handles termination acknowledgement. The
+        // owning stack remains alive after its bounded attempt expires.
+        let _ = announce_critical_and_wait_for_owned_game(
+            &self.game,
+            self.req.pid,
+            "retained parent recovery",
+            None,
+            false,
+            None,
+            None,
+            None,
+            true,
+        );
+        if unsafe { WaitForSingleObject(self.game.0, u32::MAX) } != WAIT_OBJECT_0 {
+            plan::protocol::hold_recovery_handles("target wait failed");
+        }
+    }
+}
+
 pub fn parent(mut value: Value) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     use std::process::{Command, Stdio};
-    use windows_sys::Win32::System::Threading::{TerminateProcess, PROCESS_TERMINATE};
+    use windows_sys::Win32::System::Threading::PROCESS_TERMINATE;
     let parent_pid_value = std::process::id();
     let self_handle = process(parent_pid_value, false)?;
     value["controller_pid"] = json!(parent_pid_value);
@@ -825,37 +918,58 @@ pub fn parent(mut value: Value) -> Result<(), String> {
     serde_json::to_writer_pretty(&mut file, &value).map_err(|e| e.to_string())?;
     file.flush().map_err(|e| e.to_string())?;
     drop(file);
+    let token = format!(
+        "{:x}",
+        Sha256::digest(
+            format!(
+                "{}:{}:{}:{}:{:?}",
+                req.pid,
+                req.created,
+                req.controller_created,
+                req.source_dll_sha,
+                Instant::now()
+            )
+            .as_bytes()
+        )
+    );
     let child = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
         .args([std::ffi::OsStr::new("observe"), manifest.as_os_str()])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
+        .env("TODO880_ATTACH_TOKEN", &token)
         .creation_flags(0x08000000)
         .spawn()
         .map_err(|e| e.to_string())?;
     let witness = plan::protocol::Witness::Native {
         pid: req.pid,
         created: req.created,
+        chain_pid: req.chain_pid,
+        chain_created: req.chain_created,
+        controller_pid: req.controller_pid,
+        controller_created: req.controller_created,
+        source_dll_sha: req.source_dll_sha.clone(),
+        token,
     };
-    let mut termination_requested = false;
+    let recovery = NativeRecovery {
+        game,
+        chain,
+        req: req.clone(),
+        termination_requested: false,
+    };
     let mut guard =
-        plan::protocol::ChildGuard::new(child, witness, Duration::from_secs(req.seconds), || {
-            if unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0 {
-                return Ok((termination_requested, true));
-            }
-            if !termination_requested {
-                if unsafe { TerminateProcess(game.0, 0x880) } == 0 {
-                    return Err(win_error("TerminateProcess(pinned owned game)"));
-                }
-                termination_requested = true;
-            }
-            Ok((
-                termination_requested,
-                unsafe { WaitForSingleObject(game.0, 0) } == WAIT_OBJECT_0,
-            ))
-        });
+        plan::protocol::ChildGuard::new(child, witness, Duration::from_secs(req.seconds), recovery);
     let (input_reader, input) = reader(Arc::new(AtomicBool::new(false)));
-    let receipt = guard.run(&mut std::io::stdout(), &input);
+    let outcome = guard.run(&mut std::io::stdout(), &input);
+    if outcome == plan::protocol::Outcome::CriticalRecovery {
+        let _ = emit(
+            &json!({"type":"critical_recovery_retained","bounded_api_expired":true,"cleanup_confirmed":false,"game_pid":req.pid}),
+        );
+        guard.resolve_critical();
+    }
+    let receipt = guard
+        .receipt()
+        .ok_or("recovery responsibility not discharged")?;
     drop(input_reader);
     let mut row = receipt.json();
     row["type"] = json!("order_parent_receipt");
@@ -863,7 +977,7 @@ pub fn parent(mut value: Value) -> Result<(), String> {
     row["game_pid"] = json!(req.pid);
     row["game_created_filetime"] = json!(req.created);
     row["source_dll_sha256"] = json!(req.source_dll_sha);
-    row["live_receipt"] = json!(receipt.attach_attempted);
+    row["live_receipt"] = json!(receipt.permit_granted);
     row["console_lease_generation_verified"] = json!(false);
     emit(&row)?;
     if receipt.cleanup_confirmed && receipt.exit_code == Some(0) && receipt.error.is_none() {
@@ -911,25 +1025,33 @@ mod tests {
                     continue;
                 }
                 d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
-                let status = d.handle_event(&event).unwrap();
+                let status;
                 if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
                     && unsafe { event.u.Exception.ExceptionRecord.ExceptionCode }
                         == EXCEPTION_SINGLE_STEP
                 {
-                    assert!(matches!(d.last_dispatch, DispatchOutcome::OwnedProven(_)));
+                    d.last_dispatch = DispatchOutcome::Unrelated;
                     // Actual OS file-write refusal while our real Rust child is
                     // stopped on a real hardware event; no forged game identity.
                     let mut readonly = File::open(&path).unwrap();
-                    assert!(
-                        log_exception(&mut d, &event, || readonly.write_all(b"cannot write"))
-                            .is_err()
-                    );
+                    assert!(classify_then_record(
+                        &mut d,
+                        &event,
+                        &BTreeMap::new(),
+                        &[base + CAN_EVER_RVA, base + CAN_APPOINT_RVA],
+                        |d| {
+                            assert_eq!(d.status_after_error(&event), DBG_CONTINUE);
+                            readonly.write_all(b"cannot write")
+                        }
+                    )
+                    .is_err());
                     assert_eq!(d.status_after_error(&event), DBG_CONTINUE);
                     assert_eq!(d.cleanup_event.as_ref().unwrap().1, DBG_CONTINUE);
                     d.cleanup(Some((&event, DBG_CONTINUE))).unwrap();
                     assert_eq!(d.terminal, TerminalKind::Detached);
                     return path;
                 }
+                status = d.handle_event(&event).unwrap();
                 d.continue_pending_with_status(status).unwrap();
                 if d.ready {
                     d.ready = false;

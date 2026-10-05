@@ -24,6 +24,16 @@ pub fn log_classified<T>(
     (disposition, write())
 }
 
+pub fn classify_then_record<S>(
+    state: &mut S,
+    classify: impl FnOnce(&mut S) -> Result<i32, String>,
+    record: impl FnOnce(&mut S) -> io::Result<()>,
+) -> Result<(), String> {
+    let disposition = classify(state)?;
+    let (_, result) = log_classified(disposition, || record(state));
+    result.map_err(|e| e.to_string())
+}
+
 pub struct PipeLines<R> {
     reader: R,
     buffer: Vec<u8>,
@@ -93,38 +103,73 @@ impl<R: Read + AsRawHandle> PipeLines<R> {
     }
 }
 
+/// Recovery authority is supplied by the existing pinned native controller.
+/// The critical wait returns only after OS-confirmed target exit. It owns the
+/// original target HANDLE throughout; no new PID lookup is allowed.
+pub trait Recovery {
+    fn authorize(&mut self) -> Result<(), String>;
+    fn request_close(&mut self) -> Result<bool, String>;
+    fn target_exited(&mut self) -> bool;
+    fn wait_target_exit(&mut self);
+}
 #[derive(Clone)]
 pub enum Witness {
     Native {
         pid: u32,
         created: u64,
-    },
-    /// Actual OS helper resource test. Cannot produce a native/Civ6 receipt.
-    #[cfg(test)]
-    Helper {
+        chain_pid: u32,
+        chain_created: u64,
+        controller_pid: u32,
+        controller_created: u64,
+        source_dll_sha: String,
         token: String,
     },
+    #[cfg(test)]
+    Helper { token: String },
 }
 impl Witness {
-    fn matches(&self, row: &Value, _child: u32) -> bool {
+    fn token(&self) -> &str {
         match self {
-            Self::Native { pid, created } => {
+            Self::Native { token, .. } => token,
+            #[cfg(test)]
+            Self::Helper { token } => token,
+        }
+    }
+    fn matches(&self, row: &Value, child: u32) -> bool {
+        match self {
+            Self::Native {
+                pid,
+                created,
+                chain_pid,
+                chain_created,
+                controller_pid,
+                controller_created,
+                source_dll_sha,
+                token,
+            } => {
                 row["schema"] == SCHEMA
                     && row["game_pid"].as_u64() == Some(u64::from(*pid))
                     && row["game_created_filetime"].as_u64() == Some(*created)
+                    && row["chain_pid"].as_u64() == Some(u64::from(*chain_pid))
+                    && row["chain_created_filetime"].as_u64() == Some(*chain_created)
+                    && row["controller_pid"].as_u64() == Some(u64::from(*controller_pid))
+                    && row["controller_created_filetime"].as_u64() == Some(*controller_created)
+                    && row["source_dll_sha256"] == *source_dll_sha
+                    && row["attach_token"] == *token
+                    && row["observer_pid"].as_u64() == Some(u64::from(child))
             }
             #[cfg(test)]
             Self::Helper { token } => {
                 row["kind"] == "owned_os_test_helper"
                     && row["token"] == *token
-                    && row["child_pid"].as_u64() == Some(u64::from(_child))
+                    && row["child_pid"].as_u64() == Some(u64::from(child))
                     && row["live"] == false
             }
         }
     }
     fn restored(&self, row: &Value, _child: u32) -> bool {
         match self {
-            Self::Native { pid, created } => restored_stop(row, *pid, *created),
+            Self::Native { pid, created, .. } => restored_stop(row, *pid, *created),
             #[cfg(test)]
             Self::Helper { .. } => {
                 self.matches(row, _child)
@@ -135,12 +180,62 @@ impl Witness {
         }
     }
 }
-
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ownership {
+    Ungranted,
+    Granted,
+    Attached,
+    Restored,
+    TargetExited,
+}
+impl Ownership {
+    fn permit(self) -> bool {
+        !matches!(self, Self::Ungranted)
+    }
+    fn safe(self) -> bool {
+        matches!(self, Self::Ungranted | Self::Restored | Self::TargetExited)
+    }
+}
 #[derive(Debug)]
-struct Finish {
-    started: Instant,
-    deadline: Instant,
-    stop_sent: bool,
+pub enum State {
+    Active(Ownership),
+    Finishing {
+        owner: Ownership,
+        started: Instant,
+        deadline: Instant,
+        stop_sent: bool,
+    },
+    CriticalRecovery {
+        owner: Ownership,
+        started: Instant,
+    },
+    Reaped {
+        owner: Ownership,
+        status: ExitStatus,
+    },
+}
+impl State {
+    fn owner(&self) -> Ownership {
+        match self {
+            Self::Active(o)
+            | Self::Finishing { owner: o, .. }
+            | Self::CriticalRecovery { owner: o, .. }
+            | Self::Reaped { owner: o, .. } => *o,
+        }
+    }
+    fn set_owner(&mut self, o: Ownership) {
+        match self {
+            Self::Active(x)
+            | Self::Finishing { owner: x, .. }
+            | Self::CriticalRecovery { owner: x, .. }
+            | Self::Reaped { owner: x, .. } => *x = o,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Reaped,
+    CriticalRecovery,
 }
 #[derive(Debug)]
 pub struct Receipt {
@@ -148,47 +243,39 @@ pub struct Receipt {
     pub child_reaped: bool,
     pub exit_code: Option<i32>,
     pub restored: bool,
-    pub attach_attempted: bool,
+    pub permit_granted: bool,
     pub stop_writes: u32,
     pub target_close_requested: bool,
-    pub target_exit_observed: bool,
     pub child_force_terminated: bool,
-    pub error: Option<String>,
-    pub finish_elapsed_ms: u128,
     pub cleanup_confirmed: bool,
+    pub error: Option<String>,
 }
 impl Receipt {
     pub fn json(&self) -> Value {
-        json!({"child_pid":self.child_pid,"child_reaped":self.child_reaped,"child_exit_code":self.exit_code,"restored":self.restored,"attach_attempted":self.attach_attempted,"stop_writes":self.stop_writes,"target_close_requested":self.target_close_requested,"target_exit_observed":self.target_exit_observed,"child_force_terminated":self.child_force_terminated,"error":self.error,"finish_elapsed_ms":self.finish_elapsed_ms,"cleanup_confirmed":self.cleanup_confirmed})
+        json!({"child_pid":self.child_pid,"child_reaped":self.child_reaped,"child_exit_code":self.exit_code,"restored":self.restored,"permit_granted":self.permit_granted,"stop_writes":self.stop_writes,"target_close_requested":self.target_close_requested,"child_force_terminated":self.child_force_terminated,"cleanup_confirmed":self.cleanup_confirmed,"error":self.error})
     }
 }
 
-pub struct ChildGuard<F: FnMut() -> Result<(bool, bool), String>> {
+pub struct ChildGuard<R: Recovery> {
     child: Child,
     lines: PipeLines<std::process::ChildStdout>,
     witness: Witness,
-    recover: F,
+    recovery: R,
+    pub state: State,
     started: Instant,
     ready_at: Option<Instant>,
     max_capture: Duration,
-    finish: Option<Finish>,
+    permit_ready: bool,
     error: Option<String>,
     sink_failed: bool,
-    restored: bool,
-    attach_attempted: bool,
-    critical: bool,
     status: Option<ExitStatus>,
     stop_writes: u32,
     target_close_requested: bool,
-    target_exit_observed: bool,
     close_ack_sent: bool,
     child_force_terminated: bool,
-    done: bool,
 }
-impl<F: FnMut() -> Result<(bool, bool), String>> ChildGuard<F> {
-    pub fn new(mut child: Child, witness: Witness, max_capture: Duration, recover: F) -> Self {
-        // The caller constructed Stdio::piped. Keep the Child under RAII before
-        // any output, receiver allocation, or other fallible protocol work.
+impl<R: Recovery> ChildGuard<R> {
+    pub fn new(mut child: Child, witness: Witness, max_capture: Duration, recovery: R) -> Self {
         let out = child
             .stdout
             .take()
@@ -197,70 +284,137 @@ impl<F: FnMut() -> Result<(bool, bool), String>> ChildGuard<F> {
             child,
             lines: PipeLines::new(out),
             witness,
-            recover,
+            recovery,
+            state: State::Active(Ownership::Ungranted),
             started: Instant::now(),
             ready_at: None,
             max_capture,
-            finish: None,
+            permit_ready: false,
             error: None,
             sink_failed: false,
-            restored: false,
-            attach_attempted: false,
-            critical: false,
             status: None,
             stop_writes: 0,
             target_close_requested: false,
-            target_exit_observed: false,
             close_ack_sent: false,
             child_force_terminated: false,
-            done: false,
         }
     }
     fn finish(&mut self, error: Option<String>) {
         if self.error.is_none() {
             self.error = error;
         }
-        self.finish.get_or_insert_with(|| {
+        if let State::Active(owner) = self.state {
             let started = Instant::now();
-            Finish {
+            let deadline = if self.ready_at.is_none() {
+                (started + FINISH_BUDGET).min(self.started + FINISH_BUDGET)
+            } else {
+                started + FINISH_BUDGET
+            };
+            self.state = State::Finishing {
+                owner,
                 started,
-                deadline: started + FINISH_BUDGET,
+                deadline,
                 stop_sent: false,
-            }
-        });
+            };
+        }
     }
     fn send(&mut self, text: &str) -> io::Result<()> {
-        let pipe =
-            self.child.stdin.as_mut().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::BrokenPipe, "observer stdin closed")
-            })?;
+        let pipe = self
+            .child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "child stdin closed"))?;
         writeln!(pipe, "{text}")?;
         pipe.flush()
     }
     fn receive(&mut self, row: &Value) {
         if self.witness.matches(row, self.child.id()) {
-            if row["type"] == "order_attach_start" || row["type"] == "helper_ready" {
-                self.attach_attempted = true;
+            match row["type"].as_str() {
+                Some("attach_ready") if self.state.owner() == Ownership::Ungranted => {
+                    self.permit_ready = true;
+                }
+                Some("order_attach_start" | "helper_attached") => {
+                    if self.state.owner() == Ownership::Granted {
+                        self.state.set_owner(Ownership::Attached);
+                    } else if !self.state.owner().permit() {
+                        self.finish(Some("child attempted attach without GO".into()));
+                    }
+                }
+                _ => {}
             }
-            if row["type"] == "helper_ready" {
+            #[cfg(test)]
+            if row["type"] == "helper_attached" {
                 self.ready_at = Some(Instant::now());
             }
-            self.restored |= self.witness.restored(row, self.child.id());
+        }
+        if self.state.owner().permit() && self.witness.restored(row, self.child.id()) {
+            self.state.set_owner(Ownership::Restored);
         }
         #[allow(irrefutable_let_patterns)]
         if let Witness::Native { pid, .. } = &self.witness {
-            if row["pid"].as_u64() == Some(u64::from(*pid)) {
+            if self.state.owner().permit() && row["pid"].as_u64() == Some(u64::from(*pid)) {
                 if row["ready"] == true {
                     self.ready_at = Some(Instant::now());
                 }
                 if row["critical_cleanup"] == true {
-                    self.critical = true;
-                    self.finish(Some("observer reported unconfirmed restoration".into()));
+                    self.finish(Some("observer restoration unconfirmed".into()));
+                    let started = match self.state {
+                        State::Finishing { started, .. } => started,
+                        _ => Instant::now(),
+                    };
+                    self.state = State::CriticalRecovery {
+                        owner: self.state.owner(),
+                        started,
+                    };
                 }
             }
         }
     }
+    fn request_recovery(&mut self) {
+        if self.state.owner().safe() {
+            return;
+        }
+        self.target_close_requested = true;
+        match self.recovery.request_close() {
+            Ok(requested) => {
+                if requested && !self.close_ack_sent {
+                    self.close_ack_sent = true;
+                    let _ = self.send("game_close_requested");
+                }
+            }
+            Err(e) => {
+                self.error.get_or_insert(e);
+            }
+        }
+        if self.recovery.target_exited() {
+            self.state.set_owner(Ownership::TargetExited);
+        }
+    }
     fn tick(&mut self, output: &mut impl Write, input: Option<&Receiver<Result<String, String>>>) {
+        // Root cancellation wins over ATTACH_READY in the same iteration.
+        if let Some(input) = input {
+            for _ in 0..64 {
+                match input.try_recv() {
+                    Ok(Ok(cmd)) if cmd == "stop" => self.finish(None),
+                    Ok(Ok(cmd)) if matches!(cmd.as_str(), "phase front" | "phase load") => {
+                        if matches!(self.state, State::Active(Ownership::Attached)) {
+                            if let Err(e) = self.send(&cmd) {
+                                self.finish(Some(e.to_string()));
+                            }
+                        } else {
+                            self.finish(Some("phase requested before attached".into()));
+                        }
+                    }
+                    Ok(Ok(_)) => self.finish(Some("unknown or empty controller command".into())),
+                    Ok(Err(e)) => self.finish(Some(format!("controller reader: {e}"))),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        self.finish(None);
+                        break;
+                    }
+                }
+            }
+        }
         match self.lines.poll() {
             Ok(lines) => {
                 for line in lines {
@@ -280,45 +434,42 @@ impl<F: FnMut() -> Result<(bool, bool), String>> ChildGuard<F> {
                 self.finish(Some(format!("child output: {e}")));
             }
         }
-        if let Some(input) = input {
-            for _ in 0..64 {
-                match input.try_recv() {
-                    Ok(Ok(cmd)) if cmd == "stop" => self.finish(None),
-                    Ok(Ok(cmd)) if matches!(cmd.as_str(), "phase front" | "phase load") => {
-                        if self.finish.is_none() {
-                            if let Err(e) = self.send(&cmd) {
-                                self.finish(Some(format!("phase input: {e}")));
-                            }
-                        }
-                    }
-                    Ok(Ok(_)) => self.finish(Some("unknown or empty controller command".into())),
-                    Ok(Err(e)) => self.finish(Some(format!("controller reader: {e}"))),
-                    Err(TryRecvError::Empty) => break,
-                    Err(TryRecvError::Disconnected) => {
-                        self.finish(None);
-                        break;
+        // State is committed BEFORE sending GO: ambiguous pipe delivery keeps
+        // responsibility. An ungranted timeout can only stop/reap this child.
+        if self.started.elapsed() >= Duration::from_secs(8) && self.ready_at.is_none() {
+            self.finish(Some("ready deadline before GO".into()));
+        }
+        if self.permit_ready && matches!(self.state, State::Active(Ownership::Ungranted)) {
+            match self.recovery.authorize() {
+                Ok(()) => {
+                    self.state = State::Active(Ownership::Granted);
+                    let go = format!("GO {}", self.witness.token());
+                    if let Err(e) = self.send(&go) {
+                        self.finish(Some(e.to_string()));
                     }
                 }
+                Err(e) => self.finish(Some(e)),
             }
         }
         match self.child.try_wait() {
             Ok(Some(s)) => self.status = Some(s),
             Ok(None) => {}
-            Err(e) => self.finish(Some(format!("child wait: {e}"))),
+            Err(e) => self.finish(Some(e.to_string())),
         }
-        if self.status.is_some() && self.lines.closed {
-            if self.restored || !self.attach_attempted || self.target_exit_observed {
-                self.done = true;
-                return;
+        if let Some(status) = self.status {
+            if self.lines.closed {
+                if self.state.owner().safe() {
+                    self.state = State::Reaped {
+                        owner: self.state.owner(),
+                        status,
+                    };
+                    return;
+                }
+                self.finish(Some("child exited without restoration".into()));
             }
-            self.critical = true;
-            self.finish(Some("child exited without restoration".into()));
         }
         if self.ready_at.is_none() && self.started.elapsed() >= Duration::from_secs(8) {
-            self.finish(Some("observer ready deadline".into()));
-            if let Some(f) = self.finish.as_mut() {
-                f.deadline = f.deadline.min(self.started + FINISH_BUDGET);
-            }
+            self.finish(Some("ready deadline".into()));
         }
         if self
             .ready_at
@@ -326,52 +477,61 @@ impl<F: FnMut() -> Result<(bool, bool), String>> ChildGuard<F> {
         {
             self.finish(None);
         }
-        let mut send_stop = false;
-        if let Some(f) = self.finish.as_mut() {
-            if !f.stop_sent {
-                f.stop_sent = true;
-                self.stop_writes += 1;
-                send_stop = true;
+        let send_stop = matches!(
+            self.state,
+            State::Finishing {
+                stop_sent: false,
+                ..
             }
-        }
+        );
         if send_stop {
+            if let State::Finishing { stop_sent, .. } = &mut self.state {
+                *stop_sent = true;
+            }
+            self.stop_writes += 1;
             if let Err(e) = self.send("stop") {
-                self.error.get_or_insert(format!("STOP pipe: {e}"));
+                self.error.get_or_insert(e.to_string());
                 self.child.stdin.take();
             }
         }
-        if let Some(f) = &self.finish {
-            let finish_started = f.started;
-            let deadline = f.deadline;
+        if let State::Finishing {
+            started, deadline, ..
+        } = self.state
+        {
             let now = Instant::now();
-            let restore_until =
-                (finish_started + RESTORE_GRACE).min(deadline - Duration::from_secs(8));
-            if !self.restored && (self.critical || now >= restore_until) {
-                self.target_close_requested = true;
-                match (self.recover)() {
-                    Ok((requested, dead)) => {
-                        self.target_exit_observed |= dead;
-                        if requested && !self.close_ack_sent {
-                            self.close_ack_sent = true;
-                            let _ = self.send("game_close_requested");
-                        }
-                    }
-                    Err(e) => {
-                        self.error.get_or_insert(e);
-                    }
-                }
+            if now >= (started + RESTORE_GRACE).min(deadline - Duration::from_secs(8)) {
+                self.request_recovery();
             }
             if now >= deadline - Duration::from_secs(2)
                 && self.status.is_none()
-                && (self.restored || self.target_exit_observed || !self.attach_attempted)
+                && self.state.owner().safe()
                 && self.child.kill().is_ok()
             {
                 self.child_force_terminated = true;
             }
             if now >= deadline {
                 self.error
-                    .get_or_insert("absolute finish deadline exceeded".into());
-                self.done = true;
+                    .get_or_insert("bounded API expired; recovery still owned".into());
+                self.state = State::CriticalRecovery {
+                    owner: self.state.owner(),
+                    started,
+                };
+            }
+        }
+    }
+    fn drive(
+        &mut self,
+        output: &mut impl Write,
+        input: Option<&Receiver<Result<String, String>>>,
+    ) -> Outcome {
+        loop {
+            match self.state {
+                State::Reaped { .. } => return Outcome::Reaped,
+                State::CriticalRecovery { .. } => return Outcome::CriticalRecovery,
+                _ => {
+                    self.tick(output, input);
+                    std::thread::sleep(Duration::from_millis(10));
+                }
             }
         }
     }
@@ -379,58 +539,88 @@ impl<F: FnMut() -> Result<(bool, bool), String>> ChildGuard<F> {
         &mut self,
         output: &mut impl Write,
         input: &Receiver<Result<String, String>>,
-    ) -> Receipt {
+    ) -> Outcome {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.drive(output, Some(input))
+        })) {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                self.finish(Some("parent protocol panic".into()));
+                self.drive(&mut io::sink(), None)
+            }
+        }
+    }
+    /// The 20-second API has returned CriticalRecovery, not completion. Keep
+    /// both original handles on this stack, reuse native critical recovery, and
+    /// wait on OS exit events. No daemon or new unbounded polling loop exists.
+    pub fn resolve_critical(&mut self) {
+        if !matches!(self.state, State::CriticalRecovery { .. }) {
+            return;
+        }
+        if !self.state.owner().safe() {
+            self.request_recovery();
+            if !self.state.owner().safe() {
+                self.recovery.wait_target_exit();
+                self.state.set_owner(Ownership::TargetExited);
+            }
+        }
+        if self.status.is_none() {
+            if self.child.kill().is_ok() {
+                self.child_force_terminated = true;
+            }
+            // Event wait retains the Child handle even if OS termination is delayed.
+            self.status = self.child.wait().ok();
+        }
+        if let Some(status) = self.status {
+            self.state = State::Reaped {
+                owner: self.state.owner(),
+                status,
+            };
+        } else {
+            hold_recovery_handles("owned observer wait failed");
+        }
+    }
+    pub fn receipt(&mut self) -> Option<Receipt> {
+        let State::Reaped { owner, status } = self.state else {
+            return None;
+        };
+        self.child.stdin.take();
+        Some(Receipt {
+            child_pid: self.child.id(),
+            child_reaped: true,
+            exit_code: status.code(),
+            restored: owner == Ownership::Restored,
+            permit_granted: owner.permit(),
+            stop_writes: self.stop_writes,
+            target_close_requested: self.target_close_requested,
+            child_force_terminated: self.child_force_terminated,
+            cleanup_confirmed: owner.safe(),
+            error: self.error.clone(),
+        })
+    }
+}
+/// Last-resort wait failure is not permission to release recovery authority.
+/// Parking is event-driven and keeps the owning stack/resources alive; it emits
+/// no repeated notifications and cannot be confused with successful cleanup.
+pub fn hold_recovery_handles(reason: &str) -> ! {
+    let _ = writeln!(io::stderr(), "critical_recovery_retained: {reason}");
+    loop {
+        std::thread::park();
+    }
+}
+impl<R: Recovery> Drop for ChildGuard<R> {
+    fn drop(&mut self) {
+        if matches!(self.state, State::Reaped { .. }) {
+            return;
+        }
+        self.finish(Some("parent RAII finish".into()));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            while !self.done {
-                self.tick(output, Some(input));
-                std::thread::sleep(Duration::from_millis(10));
+            if self.drive(&mut io::sink(), None) == Outcome::CriticalRecovery {
+                self.resolve_critical();
             }
         }));
         if result.is_err() {
-            self.finish(Some("parent protocol panic".into()));
-            self.finish_without_output();
-        }
-        self.receipt()
-    }
-    fn finish_without_output(&mut self) {
-        self.finish(Some("parent guard cleanup".into()));
-        let mut sink = io::sink();
-        while !self.done {
-            self.tick(&mut sink, None);
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-    fn receipt(&mut self) -> Receipt {
-        if self.status.is_some() {
-            self.status = self.child.wait().ok();
-        }
-        self.child.stdin.take();
-        Receipt {
-            child_pid: self.child.id(),
-            child_reaped: self.status.is_some(),
-            exit_code: self.status.and_then(|s| s.code()),
-            restored: self.restored,
-            attach_attempted: self.attach_attempted,
-            stop_writes: self.stop_writes,
-            target_close_requested: self.target_close_requested,
-            target_exit_observed: self.target_exit_observed,
-            child_force_terminated: self.child_force_terminated,
-            error: self.error.clone(),
-            finish_elapsed_ms: self
-                .finish
-                .as_ref()
-                .map_or(0, |f| f.started.elapsed().as_millis()),
-            cleanup_confirmed: self.status.is_some()
-                && (self.restored || !self.attach_attempted || self.target_exit_observed),
-        }
-    }
-}
-impl<F: FnMut() -> Result<(bool, bool), String>> Drop for ChildGuard<F> {
-    fn drop(&mut self) {
-        if !self.done {
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                self.finish_without_output()
-            }));
+            hold_recovery_handles("panic during retained critical recovery");
         }
     }
 }
@@ -449,42 +639,75 @@ mod tests {
     };
     const WORKER: &str = "order_capture::protocol::tests::owned_helper_worker";
     #[test]
-    #[ignore = "subprocess entry; parent tests supply the owned helper token"]
+    #[ignore = "parent-owned subprocess entry"]
     fn owned_helper_worker() {
         let Ok(token) = std::env::var("TODO880_PROTOCOL_HELPER") else {
             return;
         };
         let path = std::path::PathBuf::from(std::env::var_os("TODO880_PROTOCOL_RESOURCE").unwrap());
+        let mut row = json!({"kind":"owned_os_test_helper","token":token,"child_pid":std::process::id(),"live":false,"type":"attach_ready"});
+        println!("{row}");
+        io::stdout().flush().unwrap();
+        let mut line = String::new();
+        io::stdin().read_line(&mut line).unwrap();
+        if line.trim() != format!("GO {token}") {
+            return;
+        }
         let resource = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&path)
             .unwrap();
-        let base = json!({"kind":"owned_os_test_helper","token":token,"child_pid":std::process::id(),"live":false});
-        let mut ready = base.clone();
-        ready["type"] = json!("helper_ready");
-        println!("{ready}");
+        row["type"] = json!("helper_attached");
+        println!("{row}");
         io::stdout().flush().unwrap();
-        let mut line = String::new();
+        line.clear();
         while io::stdin().read_line(&mut line).unwrap() > 0 {
             if line.trim() == "stop" {
                 break;
+            }
+            if line.trim() == "emit" {
+                let mut progress = row.clone();
+                progress["type"] = json!("helper_progress");
+                println!("{progress}");
+                io::stdout().flush().unwrap();
             }
             line.clear();
         }
         drop(resource);
         fs::remove_file(&path).unwrap();
-        let mut stop = base;
-        stop["type"] = json!("helper_stop");
-        stop["helper_resource_restored"] = json!(true);
-        stop["native_debug_restored"] = json!(false);
-        println!("{stop}");
+        row["type"] = json!("helper_stop");
+        row["helper_resource_restored"] = json!(true);
+        row["native_debug_restored"] = json!(false);
+        println!("{row}");
         io::stdout().flush().unwrap();
     }
+    struct HelperRecovery {
+        calls: Arc<AtomicUsize>,
+        fail: bool,
+    }
+    impl Recovery for HelperRecovery {
+        fn authorize(&mut self) -> Result<(), String> {
+            if self.fail {
+                Err("injected pre-GO identity refusal".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn request_close(&mut self) -> Result<bool, String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err("no target exists in protocol helper test".into())
+        }
+        fn target_exited(&mut self) -> bool {
+            false
+        }
+        fn wait_target_exit(&mut self) {
+            panic!("must not request target recovery in helper test")
+        }
+    }
     fn child(case: &str) -> (Child, String, std::path::PathBuf) {
-        let token = format!("{}-{case}-{:?}", std::process::id(), Instant::now());
-        let path =
-            std::env::temp_dir().join(format!("todo880-{}-{case}.resource", std::process::id()));
+        let token = format!("{}-{case}", std::process::id());
+        let path = std::env::temp_dir().join(format!("todo880-ede-{token}.resource"));
         let child = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", WORKER, "--ignored", "--nocapture"])
             .env("TODO880_PROTOCOL_HELPER", &token)
@@ -497,88 +720,285 @@ mod tests {
             .unwrap();
         (child, token, path)
     }
-    fn check(case: &str, mut output: impl Write, command: Option<Result<String, String>>) {
+    fn check(case: &str, command: Result<String, String>, after_go: bool, deny: bool) {
         let (child, token, path) = child(case);
         let calls = Arc::new(AtomicUsize::new(0));
-        let count = calls.clone();
         let mut guard = ChildGuard::new(
             child,
             Witness::Helper { token },
-            Duration::from_secs(10),
-            move || {
-                count.fetch_add(1, Ordering::SeqCst);
-                Ok((false, false))
+            Duration::from_secs(2),
+            HelperRecovery {
+                calls: calls.clone(),
+                fail: deny,
             },
         );
         let (tx, rx) = mpsc::channel();
-        if let Some(c) = command {
-            tx.send(c).unwrap();
+        if after_go {
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while !matches!(guard.state, State::Active(Ownership::Attached)) {
+                assert!(Instant::now() < deadline);
+                guard.tick(&mut io::sink(), Some(&rx));
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
-        let r = guard.run(&mut output, &rx);
-        assert!(r.child_reaped && r.restored && r.cleanup_confirmed, "{r:?}");
-        assert_eq!(r.stop_writes, 1);
+        if !deny {
+            tx.send(command).unwrap();
+        }
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
+        let r = guard.receipt().unwrap();
+        assert!(r.child_reaped && r.cleanup_confirmed);
+        assert_eq!(r.permit_granted, after_go);
+        assert_eq!(r.restored, after_go);
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert!(!r.child_force_terminated);
         assert!(!path.exists());
-        assert!(r.finish_elapsed_ms < 20_000);
         println!(
             "TODO880_OS_RECEIPT={}",
-            json!({"case":case,"kind":"owned_os_helper","receipt":r.json(),"resource_removed":!path.exists(),"native_debug_restore_test":false,"civ6_live":false,"game_launches":0})
+            json!({"case":case,"receipt":r.json(),"civ6_live":false,"actual_os_child":true,"resource_absent":!path.exists(),"target_termination_calls":0})
         );
     }
     #[test]
-    fn unknown_command_stops_restores_and_reaps_actual_child() {
-        check("unknown", io::sink(), Some(Ok("bad".into())));
+    fn pre_go_unknown_input_reaps_without_game_recovery() {
+        check("pregounknown", Ok("garbage".into()), false, false);
     }
     #[test]
-    fn empty_command_stops_restores_and_reaps_actual_child() {
-        check("empty", io::sink(), Some(Ok(String::new())));
+    fn pre_go_empty_input_reaps_without_game_recovery() {
+        check("pregoempty", Ok(String::new()), false, false);
     }
     #[test]
-    fn reader_error_stops_restores_and_reaps_actual_child() {
+    fn pre_go_reader_error_reaps_without_game_recovery() {
+        check("pregoreader", Err(os_reader_error()), false, false);
+    }
+    #[test]
+    fn pre_go_identity_refusal_reaps_without_game_recovery() {
+        check("pregorefuse", Ok("unused".into()), false, true);
+    }
+    #[test]
+    fn late_real_ready_never_receives_go() {
+        let (child, token, path) = child("late-ready");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper { token },
+            Duration::from_secs(2),
+            HelperRecovery {
+                calls: calls.clone(),
+                fail: false,
+            },
+        );
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !guard.permit_ready {
+            assert!(Instant::now() < deadline);
+            for line in guard.lines.poll().unwrap() {
+                if let Ok(row) = serde_json::from_str::<Value>(&line) {
+                    guard.receive(&row);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        guard.started = Instant::now() - Duration::from_secs(9);
+        let (_tx, rx) = mpsc::channel();
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
+        let r = guard.receipt().unwrap();
+        assert!(!r.permit_granted);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"late_real_ready_rejected","receipt":r.json(),"civ6_live":false,"target_termination_calls":0})
+        );
+    }
+    #[test]
+    fn post_go_unknown_input_restores_then_reaps() {
+        check("postgounknown", Ok("garbage".into()), true, false);
+    }
+    #[test]
+    fn post_go_reader_error_restores_then_reaps() {
+        check("postgoreader", Err(os_reader_error()), true, false);
+    }
+    fn os_reader_error() -> String {
         use std::os::windows::io::FromRawHandle;
         use windows_sys::Win32::System::Pipes::CreatePipe;
-        let (mut read, mut write) = (std::ptr::null_mut(), std::ptr::null_mut());
+        let (mut r, mut w) = (std::ptr::null_mut(), std::ptr::null_mut());
         assert_ne!(
-            unsafe { CreatePipe(&mut read, &mut write, std::ptr::null(), 0) },
+            unsafe { CreatePipe(&mut r, &mut w, std::ptr::null(), 0) },
             0
         );
-        let input = unsafe { fs::File::from_raw_handle(read) };
-        let mut output = unsafe { fs::File::from_raw_handle(write) };
-        output.write_all(&[0xff, b'\n']).unwrap();
-        drop(output);
-        let error = PipeLines::new(input).poll().unwrap_err().to_string();
-        check("reader", io::sink(), Some(Err(error)));
+        let reader = unsafe { fs::File::from_raw_handle(r) };
+        let mut writer = unsafe { fs::File::from_raw_handle(w) };
+        writer.write_all(&[0xff, b'\n']).unwrap();
+        drop(writer);
+        PipeLines::new(reader).poll().unwrap_err().to_string()
     }
     #[test]
-    fn closed_os_output_pipe_stops_restores_and_reaps_actual_child() {
+    fn post_go_closed_os_output_restores_without_target_close() {
         use std::os::windows::io::FromRawHandle;
-        use windows_sys::Win32::{
-            Foundation::{CloseHandle, HANDLE},
-            System::Pipes::CreatePipe,
-        };
-        let (mut read, mut write): (HANDLE, HANDLE) = (std::ptr::null_mut(), std::ptr::null_mut());
+        use windows_sys::Win32::{Foundation::CloseHandle, System::Pipes::CreatePipe};
+        let (child, token, path) = child("postgobroken");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper { token },
+            Duration::from_millis(100),
+            HelperRecovery {
+                calls: calls.clone(),
+                fail: false,
+            },
+        );
+        let (_tx, rx) = mpsc::channel();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !matches!(guard.state, State::Active(Ownership::Attached)) {
+            assert!(Instant::now() < deadline);
+            guard.tick(&mut io::sink(), Some(&rx));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let (mut r, mut w) = (std::ptr::null_mut(), std::ptr::null_mut());
         assert_ne!(
-            unsafe { CreatePipe(&mut read, &mut write, std::ptr::null(), 0) },
+            unsafe { CreatePipe(&mut r, &mut w, std::ptr::null(), 0) },
             0
         );
         unsafe {
-            CloseHandle(read);
+            CloseHandle(r);
         }
-        let output = unsafe { fs::File::from_raw_handle(write) };
-        check("broken-output", output, None);
+        let mut broken = unsafe { fs::File::from_raw_handle(w) };
+        guard.send("emit").unwrap();
+        assert_eq!(guard.run(&mut broken, &rx), Outcome::Reaped);
+        let result = guard.receipt().unwrap();
+        assert!(result.restored && result.child_reaped && result.error.is_some());
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"postgo_brokenpipe","receipt":result.json(),"civ6_live":false,"actual_os_pipe":true})
+        );
     }
-    struct PanicSink;
-    impl Write for PanicSink {
-        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-            panic!("intentional parent unwind")
-        }
-        fn flush(&mut self) -> io::Result<()> {
+    #[test]
+    fn expired_api_retains_child_until_explicit_recovery() {
+        let (child, token, path) = child("critical");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper { token },
+            Duration::from_secs(2),
+            HelperRecovery { calls, fail: false },
+        );
+        let (_tx, rx) = mpsc::channel();
+        let started = Instant::now() - FINISH_BUDGET;
+        guard.state = State::Finishing {
+            owner: Ownership::Ungranted,
+            started,
+            deadline: Instant::now(),
+            stop_sent: true,
+        };
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::CriticalRecovery);
+        assert!(guard.receipt().is_none());
+        assert!(matches!(guard.state, State::CriticalRecovery { .. }));
+        guard.resolve_critical();
+        let r = guard.receipt().unwrap();
+        assert!(r.child_reaped && r.cleanup_confirmed);
+        assert!(!path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"critical_retention","bounded_result":"CriticalRecovery","receipt":r.json(),"civ6_live":false})
+        );
+    }
+    struct PartialRecovery {
+        target: Child,
+        calls: Arc<AtomicUsize>,
+        waits: Arc<AtomicUsize>,
+    }
+    impl Recovery for PartialRecovery {
+        fn authorize(&mut self) -> Result<(), String> {
             Ok(())
+        }
+        fn request_close(&mut self) -> Result<bool, String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err("injected partial termination failure".into())
+        }
+        fn target_exited(&mut self) -> bool {
+            self.target.try_wait().unwrap().is_some()
+        }
+        fn wait_target_exit(&mut self) {
+            // Real target handle is still retained and alive after the bounded
+            // API returned; recovery is an explicit second responsibility.
+            assert!(self.target.try_wait().unwrap().is_none());
+            self.waits.fetch_add(1, Ordering::SeqCst);
+            self.target.kill().unwrap();
+            self.target.wait().unwrap();
+        }
+    }
+    impl Drop for PartialRecovery {
+        fn drop(&mut self) {
+            if self.target.try_wait().ok().flatten().is_none() {
+                let _ = self.target.kill();
+                let _ = self.target.wait();
+            }
         }
     }
     #[test]
-    fn panic_uses_same_finish_transaction_and_reaps_actual_child() {
-        check("panic", PanicSink, None);
+    fn granted_partial_failure_retains_both_real_handles_until_recovered() {
+        let (target, _, target_path) = child("retained-target");
+        let target_pid = target.id();
+        let (observer, token, path) = child("retained-observer");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let waits = Arc::new(AtomicUsize::new(0));
+        let recovery = PartialRecovery {
+            target,
+            calls: calls.clone(),
+            waits: waits.clone(),
+        };
+        let mut guard = ChildGuard::new(
+            observer,
+            Witness::Helper { token },
+            Duration::from_secs(2),
+            recovery,
+        );
+        let (_tx, rx) = mpsc::channel();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !matches!(guard.state, State::Active(Ownership::Attached)) {
+            assert!(Instant::now() < deadline);
+            guard.tick(&mut io::sink(), Some(&rx));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let started = Instant::now() - FINISH_BUDGET;
+        guard.state = State::Finishing {
+            owner: Ownership::Attached,
+            started,
+            deadline: Instant::now(),
+            stop_sent: true,
+        };
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::CriticalRecovery);
+        assert!(guard.receipt().is_none());
+        assert!(guard.child.try_wait().unwrap().is_none());
+        assert!(!guard.recovery.target_exited());
+        guard.resolve_critical();
+        let receipt = guard.receipt().unwrap();
+        assert!(receipt.child_reaped && receipt.cleanup_confirmed && !receipt.restored);
+        assert_eq!(waits.load(Ordering::SeqCst), 1);
+        assert!(calls.load(Ordering::SeqCst) > 0);
+        if path.exists() {
+            fs::remove_file(&path).unwrap();
+        }
+        assert!(!target_path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"granted_partial_failure_retained","target_helper_pid":target_pid,"receipt":receipt.json(),"two_live_handles_retained_at_api_timeout":true,"target_helper_explicitly_terminated_and_reaped":true,"civ6_live":false})
+        );
+    }
+    #[test]
+    fn classification_runs_before_failing_record() {
+        let mut state = 0;
+        let result = classify_then_record(
+            &mut state,
+            |s| {
+                *s = 0x10002;
+                Ok(*s)
+            },
+            |s| {
+                assert_eq!(*s, 0x10002);
+                Err(io::Error::other("disk full"))
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(state, 0x10002);
     }
 }

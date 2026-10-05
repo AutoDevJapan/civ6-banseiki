@@ -193,3 +193,19 @@ debug exceptionの所有判定・継続状態保存を最初のログ書込よ�
 review19749944の対象検査は13件成功（lib 10件＋実CLI 3件）。helper用subprocess入口1件は直接実行対象から除外し、各親テストから実際に起動した。unknown/empty/reader/BrokenPipe/panicの5ケースはSTOP1回・資源復元・子回収を確認し、強制終了0。実hardware例外の書込失敗ではDBG_CONTINUEとDR復元後、同じRust子を明示終了・waitした。6件の実測行は `D:/CC/Work/todo880/review19749944-owned-helper-receipts.json`。残存helperは0。Civ6の実機復元・lease世代は未検証。
 
 Clippyは実行したが、依存先native-admissionの`question_mark`2件、既存probeの`unnecessary_lazy_evaluations`/`too_many_arguments`/`single_match`/`collapsible_match`/`collapsible_if`計6件で未通過。今回追加部の2件は修正した。元probeのunion読取を含むため、自動提案の`then_some`置換は行っていない。既存native領域はこのworkerの書込対象外であり、Clippy全通過とは報告しない。親による修正版レビューは未受領。
+
+## EDEの許可境界と回収責任
+
+旧`done`と`attach_attempted`の組合せを廃止した。所有状態は `Ungranted / Granted / Attached / Restored / TargetExited`、実行状態は `Active / Finishing / CriticalRecovery / Reaped`で表す。20秒の終了APIが切れた場合の戻り値は`CriticalRecovery`であり、終了成功のreceiptを取得できない。ChildGuardが元のChild・pipe・対象HANDLEを持ち続け、明示回収またはRAIIでOS終了確認まで保持する。新規ポーリングdaemonは作らない。既存native critical cleanupの有界試行の後も未終了なら、OSの終了event待ちで同じ所有stackを残す。wait失敗もハンドルを解放する理由にせず、回収状態を保持する。
+
+attachは次の順序に固定する：子がSHA/opcode等の読取検査を終える → `attach_ready`を送る → 親が保留入力と出力エラーを処理する → まだActive/Ungrantedの場合だけleaseと元HANDLEのidentityを再照合 → 親がGrantedへ遷移してtoken付きGOを送る → 子が正しいGOとPID/FILETIMEを再確認 → `Debugger::attach`。tokenは親のPID/FILETIME・対象identity・source hashに結び付け、readyにはchain/controller/対象のPID/FILETIMEとobserver PIDを含む。GO送信結果が曖昧な場合はGrantedの回収責任を保持する。GO前のキャンセル、入力不正、readinessの遅延、同一性拒否では対象終了APIを呼ばず、子だけSTOP／終了／waitする。
+
+終了責任を検査するhelperもGO前には資源を作らない。GO前拒否とGO後復元を別々に実測し、部分的な終了失敗では20秒APIを期限切れにした後も、2つの自生成OS子が生存したまま保持されることを確認する。明示回収後にのみtarget/observerをwaitする。この検査の対象はRust helperでありCiv6ではない。
+
+ログ失敗の検査は本番と同じ`classify_then_record`を呼ぶ。実hardware eventを旧handle_eventで先に分類してから別のwrite関数だけを検査する形をやめ、共通関数が所有とDBGSTATUSを確定した後にOS書込拒否を発生させる。write側はDBG_CONTINUEが先に保存済みであることを検査するため、順序を逆にすると失敗する。固定Civ6 identityは偽装しない。
+
+追加費用、APIキー呼出し、新しい外部保管先、実機Civ6起動は0を維持する。
+
+EDE修正の先行対象検査は18件成功（lib 15件＋実CLI 3件）。GO前4ケースはpermit=false・対象終了要求0、GO後の入力／実OS BrokenPipeはrestore→reap成功。部分終了失敗では20秒API後も対象helperとobserver helperの両方が生存していることを確認し、明示回収で両方を終了・waitした。共通classify_then_recordの実hardware例外＋OS書込拒否検査も成功。結果行は `D:/CC/Work/todo880/ede-owned-os-receipts.json`、残存helper0。
+
+最後に追加した遅延ready拒否テストを含む再検査は `D:/CC/Work/todo880/ede-final-tests.log`／`.exit`。Clippyの通常実行（`--no-deps`、`-D warnings`なし）は終了0で、今回の書式指摘1件は修正済み。既存probeの6警告は書込範囲外として残し、警告ゼロとは報告しない。親の同一レビューセッションでの受入はまだ未確認。
