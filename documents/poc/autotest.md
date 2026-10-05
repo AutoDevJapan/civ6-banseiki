@@ -84,6 +84,7 @@ cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-judge -- --baseli
 | `exit_to_menu` | なし | メインメニューへ戻ったことを確認する |
 | `wait_for` | `condition` | `{"type":"lua","state_name":"InGame","code":"return ..."}`、`{"type":"log_line","log":"Lua.log","contains":"..."}`、`{"type":"state","name":"InGame"}` のいずれかを待つ |
 | `manual` | `prompt` | 人または Computer Use の操作を促し、期限なしで Enter まで待つ。`timeout` は指定不可 |
+| `pause` | `seconds` | FireTuner 接続を解放して指定秒数だけ待つ。Civ6 は同時に1つの接続しか受け付けないため、共有実機ロックを保持した別の画面検査ツールがこの間に接続できる。次の Lua 操作では接続を作り直す |
 
 `enable_mods` は依存関係から無効化の順序を決め、同じ MOD を重ねて無効化しない。`ids` に含まれる MOD は無効化しない。その MOD が無効化対象に依存している場合や、対象の依存関係が循環している場合は、変更前にエラーにする。UUID の大文字・小文字の違いでこの検査を回避できない。無効化対象やその依存元に当たらない MOD は維持する。
 

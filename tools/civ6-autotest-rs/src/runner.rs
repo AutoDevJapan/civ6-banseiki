@@ -1607,6 +1607,9 @@ impl Runner {
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
+                // Civ6 accepts one FireTuner client. Release it during pauses so
+                // an independent native UI probe can inspect the held game.
+                self.disconnect();
                 self.clock.sleep(seconds);
                 Ok(format!("paused {seconds}s for UI animation"))
             }
