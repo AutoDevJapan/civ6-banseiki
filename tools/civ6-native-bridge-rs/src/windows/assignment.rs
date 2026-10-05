@@ -298,6 +298,9 @@ unsafe extern "system" fn assign_calibration_end(
     } else {
         result
     };
+    if composite::ENABLED.load(Ordering::Acquire) {
+        composite::record_effective(token, result);
+    }
     if let Some(trace) = unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() } {
         if token > 0 && token <= ASSIGN_CAPACITY as u64 {
             let row = &trace.rows[token as usize - 1];

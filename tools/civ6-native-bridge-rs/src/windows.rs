@@ -27,6 +27,7 @@ use windows_sys::Win32::System::Threading::{
 mod assignment;
 #[path = "windows/composite.rs"]
 mod composite;
+pub use composite::CompositeTrace;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
 use assignment::{
@@ -2820,13 +2821,17 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.trace_address == 0
         || !matches!(config.mode, 0..=8)
         || config.trace_size as usize
-            != match config.mode {
-                0 => BridgeMode::CanEver.trace_size(),
-                3 => BridgeMode::CanEverCalibration.trace_size(),
-                5 | 6 => BridgeMode::JoinedAdmission.trace_size(),
-                8 => BridgeMode::PromotionCall.trace_size(),
-                7 => BridgeMode::AssignCalibration.trace_size(),
-                _ => BridgeMode::Property.trace_size(),
+            != if composite_requested {
+                std::mem::size_of::<CompositeTrace>()
+            } else {
+                match config.mode {
+                    0 => BridgeMode::CanEver.trace_size(),
+                    3 => BridgeMode::CanEverCalibration.trace_size(),
+                    5 | 6 => BridgeMode::JoinedAdmission.trace_size(),
+                    8 => BridgeMode::PromotionCall.trace_size(),
+                    7 => BridgeMode::AssignCalibration.trace_size(),
+                    _ => BridgeMode::Property.trace_size(),
+                }
             }
         || !committed_range(
             config.trace_address as usize,
@@ -2991,6 +2996,8 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                     return BridgeStatus::GameCoreIdentity;
                 };
                 let assign = unsafe { (module as *mut u8).add(PINNED_CAN_ASSIGN_RVA) };
+                let trace = trace.cast::<CompositeTrace>();
+                unsafe { CompositeTrace::initialize_at(trace) };
                 return match unsafe {
                     composite::install(
                         entry,

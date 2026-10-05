@@ -968,6 +968,13 @@ pub fn run() -> Result<(), String> {
                 identity["scope_key_ranges"] =
                     json!([[900000, 900255], [901000, 901255], [903000, 903255]]);
                 identity["reset_key_range"] = json!([902000, 902063]);
+                if parsed.paid_experiment {
+                    identity["scope_key_ranges"] =
+                        json!(civ6_native_bridge_rs::paid_artifact::KEY_RANGES);
+                    identity["assignment_rva"] =
+                        json!(civ6_native_bridge_rs::PINNED_CAN_ASSIGN_RVA);
+                    identity["artifact_schema"] = json!(1);
+                }
             } else {
                 identity["scope_key_ids"] = json!([ASHINA_ADMISSION_KEY_ID]);
             }
@@ -1006,7 +1013,12 @@ pub fn run() -> Result<(), String> {
         if install_rva >= bridge.size || uninstall_rva >= bridge.size {
             return Err("bridge exports outside remote DLL image".into());
         }
-        let trace_remote = remote_alloc(&game, parsed.mode.trace_size())?;
+        let trace_size = if parsed.paid_experiment {
+            size_of::<civ6_native_bridge_rs::CompositeTrace>()
+        } else {
+            parsed.mode.trace_size()
+        };
+        let trace_remote = remote_alloc(&game, trace_size)?;
         let mut config = match parsed.mode {
             BridgeMode::AssignCalibration => BridgeConfig::for_assign_calibration(
                 parsed.pid,
@@ -1043,6 +1055,7 @@ pub fn run() -> Result<(), String> {
         config.max_seconds = parsed.duration;
         if parsed.paid_experiment {
             config.version = civ6_native_bridge_rs::EXPERIMENTAL_PAID_CONFIG_VERSION;
+            config.trace_size = trace_size as u32;
         }
         let config_bytes = unsafe {
             std::slice::from_raw_parts(
@@ -1173,13 +1186,33 @@ pub fn run() -> Result<(), String> {
                 }
             }
         }
+        if parsed.paid_experiment {
+            let base = target - parsed.mode.rva();
+            let mut actual = [0u8; 8];
+            read_remote(
+                &game,
+                base + civ6_native_bridge_rs::PINNED_CAN_ASSIGN_RVA,
+                &mut actual,
+            )?;
+            let expected = pinned_entry_bytes(
+                &game,
+                base + civ6_native_bridge_rs::PINNED_CAN_ASSIGN_RVA,
+                BridgeMode::AssignCalibration,
+            )?;
+            if actual != expected {
+                return Err("composite assignment entry was not restored".into());
+            }
+        }
         write_json(
             &mut writer,
             json!({"kind":"uninstall","status":uninstall_status,
                 "entry_restored":true,
+                "assignment_restored":parsed.paid_experiment,
                 "prefix_retained_until_exit":installed_prefix.is_some()}),
         )?;
-        let (row_count, dropped, in_flight, observed_calls, filtered_calls) = match parsed.mode {
+        let (mut row_count, dropped, in_flight, mut observed_calls, filtered_calls) = match parsed
+            .mode
+        {
             BridgeMode::PromotionCall => {
                 let snapshot = drained_promotion_trace(&game, trace_remote)?;
                 let rows = snapshot.complete_rows().map_err(str::to_string)?;
@@ -1422,6 +1455,39 @@ pub fn run() -> Result<(), String> {
                 )
             }
         };
+        if parsed.paid_experiment {
+            use civ6_native_bridge_rs::CompositeTrace;
+            let snapshot = drained_assign_calibration_trace(
+                &game,
+                trace_remote + std::mem::offset_of!(CompositeTrace, assignment),
+            )?;
+            let rows = snapshot.complete_rows().map_err(str::to_string)?;
+            for row in &rows {
+                let mut bytes = [0u8; 8];
+                read_remote(
+                    &game,
+                    trace_remote
+                        + std::mem::offset_of!(CompositeTrace, effective_rax)
+                        + (row.sequence as usize - 1) * 8,
+                    &mut bytes,
+                )?;
+                let effective = u64::from_le_bytes(bytes);
+                if effective != row.original_rax && effective != row.original_rax & !255 {
+                    return Err("paid assignment changed bits outside AL".into());
+                }
+                write_json(
+                    &mut writer,
+                    json!({"kind":"paid_assignment", "sequence":row.sequence,
+                    "player_id":row.player_id,"governor_index":row.governor_index,
+                    "original_rax":format!("0x{:016x}",row.original_rax),
+                    "effective_rax":format!("0x{effective:016x}"),
+                    "original_al":row.original_al,"effective_al":effective & 255,
+                    "payment_authority":false,"observation_only":true}),
+                )?;
+            }
+            row_count += rows.len();
+            observed_calls += snapshot.next.load(std::sync::atomic::Ordering::Acquire);
+        }
         let result = if control_error.is_some() {
             "error"
         } else if parsed.mode.is_property() && dropped != 0 {
@@ -1451,6 +1517,7 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::CanEverCalibration => "can_ever_calibration",
                 BridgeMode::AssignCalibration => "assign_calibration",
                 BridgeMode::JoinedAdmission => "joined_admission",
+                BridgeMode::ProductionAdmission if parsed.paid_experiment => "paid_assignment_experimental",
                 BridgeMode::ProductionAdmission => "production_admission",
                 BridgeMode::PromotionCall => "promotion_call_entry_only",
                 _ => "raw_collection",

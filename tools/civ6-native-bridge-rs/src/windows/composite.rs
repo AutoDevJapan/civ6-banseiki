@@ -11,6 +11,45 @@ static CATALOG: [AtomicJoinedWord; PRODUCTION_OWNER_LIMIT * BITS] =
 static COMMIT: [AtomicJoinedWord; PRODUCTION_OWNER_LIMIT] =
     [const { AtomicJoinedWord::new() }; PRODUCTION_OWNER_LIMIT];
 pub(super) static ASSIGNMENT_HOOK: Mutex<Option<Hook>> = Mutex::new(None);
+static TRACE: AtomicPtr<CompositeTrace> = AtomicPtr::new(null_mut());
+
+/// The ordinary joined trace remains the prefix. Assignment decisions have
+/// their own storage; mode7's diagnostic layout and raw RAX stay unchanged.
+#[repr(C)]
+pub struct CompositeTrace {
+    pub joined: JoinedTrace,
+    pub assignment: AssignCalibrationTrace,
+    pub effective_rax: [AtomicU64; assignment::ASSIGN_CAPACITY],
+}
+
+impl CompositeTrace {
+    pub fn boxed() -> Box<Self> {
+        let mut value = Box::<Self>::new_uninit();
+        unsafe {
+            Self::initialize_at(value.as_mut_ptr());
+            value.assume_init()
+        }
+    }
+    pub(super) unsafe fn initialize_at(trace: *mut Self) {
+        unsafe {
+            ptr::addr_of_mut!((*trace).joined).write(JoinedTrace::default());
+            ptr::addr_of_mut!((*trace).joined.property).write(PropertyTrace::production_scoped());
+            AssignCalibrationTrace::initialize_at(ptr::addr_of_mut!((*trace).assignment));
+            let rows = ptr::addr_of_mut!((*trace).effective_rax).cast::<AtomicU64>();
+            for n in 0..assignment::ASSIGN_CAPACITY {
+                rows.add(n).write(AtomicU64::new(0));
+            }
+        }
+    }
+}
+
+pub(super) fn record_effective(token: u64, result: u64) {
+    if token > 0 && token <= assignment::ASSIGN_CAPACITY as u64 {
+        if let Some(trace) = unsafe { TRACE.load(Ordering::Acquire).as_ref() } {
+            trace.effective_rax[token as usize - 1].store(result, Ordering::Release);
+        }
+    }
+}
 
 pub(super) fn handles(key: u32) -> bool {
     paid_assignment::is_key(key) || key == COMMIT_KEY || paid_catalog::bit_index(key).is_some()
@@ -134,7 +173,7 @@ pub(super) unsafe fn install(
     can: *mut u8,
     property: *mut u8,
     assign: *mut u8,
-    trace: *mut JoinedTrace,
+    trace: *mut CompositeTrace,
     can_bytes: [u8; 8],
     property_bytes: [u8; 8],
     assign_bytes: [u8; 8],
@@ -143,20 +182,21 @@ pub(super) unsafe fn install(
     // catalog. Thus partial installation never temporarily permits personas.
     product_deactivate();
     ENABLED.store(true, Ordering::Release);
-    let assignment = Box::into_raw(AssignCalibrationTrace::boxed());
+    TRACE.store(trace, Ordering::Release);
+    let assignment = unsafe { ptr::addr_of_mut!((*trace).assignment) };
     let result = (|| {
         unsafe { install_assign_calibration_at(assign, assignment, assign_bytes) }?;
         unsafe {
             install_property_at(
                 property,
-                ptr::addr_of_mut!((*trace).property),
+                ptr::addr_of_mut!((*trace).joined.property),
                 property_bytes,
             )
         }?;
         unsafe {
             install_hook(
                 can,
-                ptr::addr_of_mut!((*trace).calibration).cast(),
+                ptr::addr_of_mut!((*trace).joined.calibration).cast(),
                 can_bytes,
                 BridgeMode::ProductionAdmission,
             )
@@ -255,8 +295,7 @@ mod tests {
         }
         let cbytes = can_code[..8].try_into().unwrap();
         let abytes = assign_code[..8].try_into().unwrap();
-        let mut trace = Box::new(JoinedTrace::default());
-        trace.property = PropertyTrace::production_scoped();
+        let mut trace = CompositeTrace::boxed();
         unsafe {
             install(
                 can,
@@ -385,8 +424,18 @@ mod tests {
         );
         assert_eq!(unsafe { ptr::read(assign.cast::<[u8; 8]>()) }, abytes);
         assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
-        assert_eq!(trace.property.in_flight.load(Ordering::Acquire), 0);
-        assert_eq!(trace.calibration.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(trace.joined.property.in_flight.load(Ordering::Acquire), 0);
+        assert_eq!(
+            trace.joined.calibration.in_flight.load(Ordering::Acquire),
+            0
+        );
+        let decisions = trace.assignment.complete_rows().unwrap();
+        assert_eq!(decisions.len(), 8);
+        assert_eq!(
+            trace.effective_rax[0].load(Ordering::Acquire),
+            sentinel & !255
+        );
+        assert_eq!(trace.effective_rax[4].load(Ordering::Acquire), sentinel);
         // A third-entry failure must restore the first two entries as well.
         unsafe {
             ptr::copy_nonoverlapping(PROPERTY_PREFIX_PAD.as_ptr(), property.sub(5), 5);
