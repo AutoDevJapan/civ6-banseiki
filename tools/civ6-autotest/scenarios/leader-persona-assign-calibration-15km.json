@@ -293,7 +293,7 @@
     },
     {
       "action": "ui_lua",
-      "state_name": "InGame",
+      "state_name": "JAC_LeaderPersona_View",
       "code": "local cities={}; for _,c in Players[0]:GetCities():Members() do cities[#cities+1]=c end; table.sort(cities,function(a,b) return a:GetID()<b:GetID() end); local c=assert(cities[1]); JAC_AssignLeader('LEADER_JAC_ASHINA_MORIKIYO',c:GetID()); return 'ASSIGN1433_REQUEST one official assignment to own cityID='..c:GetID()"
     },
     {

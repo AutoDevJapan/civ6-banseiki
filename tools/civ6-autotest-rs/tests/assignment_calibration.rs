@@ -36,6 +36,23 @@ fn assignment_stage_a_keeps_manual_appointment_and_observes_only_after_joined_re
             .count(),
         1
     );
+    let assign = all
+        .iter()
+        .find(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("JAC_AssignLeader("))
+        })
+        .unwrap();
+    let view_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua");
+    let view = std::fs::read_to_string(&view_path).unwrap();
+    assert!(view.contains("function JAC_AssignLeader("));
+    assert_eq!(
+        assign["state_name"].as_str(),
+        view_path.file_stem().and_then(|s| s.to_str()),
+        "assignment must execute in the UI context that declares its function"
+    );
     assert_eq!(
         all.iter()
             .filter(|s| s["code"]
