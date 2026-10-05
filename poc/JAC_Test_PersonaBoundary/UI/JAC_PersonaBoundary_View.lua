@@ -443,29 +443,42 @@ ReadSpyRoster=function(owner)
             end
         end
     end
-    -- Live 86 exposed the same captive once in the captor's roster and once
-    -- as an off-map sentinel. Retain both raw records, and discount only the
-    -- unique exact sentinel belonging to the unique captive. Real travel has
-    -- a future ReturnTurn and must always count as another operative.
-    if #roster.captured==1 then
-        local captive=roster.captured[1];
-        local defaultName=GameInfo.Units["UNIT_SPY"].Name;
-        local matchIndex, matches=nil,0;
-        for i,record in ipairs(roster.offMap) do
-            local namesMatch=record.name==captive.name or
-                (record.name=="" and captive.name==defaultName) or
-                (captive.name=="" and record.name==defaultName);
-            if record.returnTurn==-1 and record.x==-9999 and record.y==-9999 and
-                namesMatch and record.level==captive.level then
-                matchIndex=i; matches=matches+1;
-            end
+    -- Live 86/160 expose captive entries again as exact off-map sentinels.
+    -- Compare whole name/rank groups, retaining both native lists. Equal group
+    -- cardinality proves the count overlap, NOT an individual's identity.
+    -- Anonymous captives never receive invented one-to-one identity links.
+    local groups, discounted={},{};
+    local defaultName=GameInfo.Units["UNIT_SPY"].Name;
+    local function Group(record)
+        local name=record.name==defaultName and "" or record.name;
+        local key=R.Serialize({name=name,level=record.level});
+        if not groups[key] then groups[key]={name=name,level=record.level,offMapIndices={},captiveIndices={}}; end
+        return groups[key];
+    end
+    for i,record in ipairs(roster.captured) do
+        local group=Group(record); group.captiveIndices[#group.captiveIndices+1]=i;
+    end
+    for i,record in ipairs(roster.offMap) do
+        if record.returnTurn==-1 and record.x==-9999 and record.y==-9999 then
+            local group=Group(record); group.offMapIndices[#group.offMapIndices+1]=i;
         end
-        if matches==1 then
-            roster.capturedPlaceholder={offMapIndex=matchIndex,captiveIndex=1};
+    end
+    roster.capturedPlaceholderGroups={};
+    local keys={}; for key in pairs(groups) do keys[#keys+1]=key; end; table.sort(keys);
+    for _,key in ipairs(keys) do
+        local group=groups[key];
+        local count=#group.captiveIndices;
+        if count>0 and count==#group.offMapIndices then
+            group.count=count; roster.capturedPlaceholderGroups[#roster.capturedPlaceholderGroups+1]=group;
+            for _,index in ipairs(group.offMapIndices) do discounted[index]=true; end
+            -- Preserve the existing unique-single-captive protocol only.
+            if #roster.captured==1 and count==1 then
+                roster.capturedPlaceholder={offMapIndex=group.offMapIndices[1],captiveIndex=group.captiveIndices[1]};
+            end
         end
     end
     for i,record in ipairs(roster.offMap) do
-        if not roster.capturedPlaceholder or roster.capturedPlaceholder.offMapIndex~=i then
+        if not discounted[i] then
             roster.activeOffMap[#roster.activeOffMap+1]=record;
         end
     end

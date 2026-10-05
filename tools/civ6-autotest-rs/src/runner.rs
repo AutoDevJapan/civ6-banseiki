@@ -2229,6 +2229,20 @@ impl Runner {
                 }
                 Ok(results.join("; "))
             }
+            "inspect_native_spy_failures" => {
+                let raw = self.lua(
+                    "InGame",
+                    crate::spy_failures::READ,
+                    self.budget(deadline, 30.0)?,
+                )?;
+                // Preserve raw native data even when interpretation rejects it.
+                fs::write(self.output.join("native-spy-failures-raw.json"), &raw)?;
+                let report = crate::spy_failures::diagnose(&raw)?;
+                let json = serde_json::to_string_pretty(&report)
+                    .map_err(|e| Error::scenario(e.to_string()))?;
+                fs::write(self.output.join("native-spy-failures-report.json"), json)?;
+                Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
+            }
             "ui_lua" => {
                 let mut attempts = 0;
                 let lua_timeout = step["lua_timeout"].as_f64().unwrap_or(5.0);

@@ -975,6 +975,31 @@ fn preserved_failure_diagnostic_logs_native_history_without_fixture_writes() {
 }
 
 #[test]
+fn two_anonymous_captives_count_twice_without_inventing_individual_matches() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; SPY_CAPACITY=2; CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1},{OwningPlayer=0,Name='',Level=1,NameIndex=-1}}; OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; local before=#WRITES; local s=ExposedMembers.JAC_PersonaBoundary.ReadEnemy(); local r=s.spyRoster; assert(r.physicalCount==2 and #r.captured==2 and #r.offMap==2 and #r.activeOffMap==0); assert(not r.capturedPlaceholder and #r.capturedPlaceholderGroups==1 and r.capturedPlaceholderGroups[1].count==2); assert(#WRITES==before and s.spy.present==false and ExposedMembers.JAC_PersonaBoundary.ReadEnemyResultDiagnostic()=='FAILED')");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.EnemyRetryDiagnosis()",
+        "unambiguous original operative roster",
+    );
+}
+
+#[test]
+fn multiple_captive_groups_keep_mismatched_sentinels_and_real_travel_visible() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1},{OwningPlayer=0,Name='Other',Level=2,NameIndex=7}}; OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},{Name='Other',Level=2,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},{Name='',Level=1,ReturnTurn=TURN+4,XLocation=CONTROL.x,YLocation=CONTROL.y}}; local r=ExposedMembers.JAC_PersonaBoundary.ReadEnemy().spyRoster; assert(r.physicalCount==3 and #r.activeOffMap==1 and #r.capturedPlaceholderGroups==2 and not r.capturedPlaceholder); OFF_MAP[1].Level=3; r=ExposedMembers.JAC_PersonaBoundary.ReadEnemy().spyRoster; assert(r.physicalCount==4 and #r.activeOffMap==2 and #r.capturedPlaceholderGroups==1)");
+}
+
+#[test]
+fn more_sentinels_than_captives_cannot_be_discounted_from_an_anonymous_group() {
+    let h = Enemy::new();
+    h.failed();
+    h.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1},{OwningPlayer=0,Name='',Level=1,NameIndex=-1}}; OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; local r=ExposedMembers.JAC_PersonaBoundary.ReadEnemy().spyRoster; assert(r.physicalCount==5 and #r.activeOffMap==3 and #r.capturedPlaceholderGroups==0 and not r.capturedPlaceholder)");
+}
+
+#[test]
 fn native_captive_occupies_capacity_and_prevents_new_production() {
     let h = Enemy::new();
     h.failed();
