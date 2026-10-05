@@ -1,0 +1,17 @@
+{
+  "schema": "todo880-order-v1",
+  "pid": 1,
+  "created_filetime": 100,
+  "chain_pid": 2,
+  "chain_created_filetime": 90,
+  "controller_pid": 3,
+  "controller_created_filetime": 95,
+  "source_dll": "D:/CC/Work/todo880/not-installed-fixture.dll",
+  "source_dll_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "output": "D:/CC/Work/todo880/not-observed-fixture.jsonl",
+  "max_seconds": 20,
+  "max_hits": 4,
+  "front_prefix": 4,
+  "load_prefix": 4,
+  "phase": "front"
+}

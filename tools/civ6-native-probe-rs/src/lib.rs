@@ -49,6 +49,11 @@ pub fn is_pinned_dx11_exe(path: &std::path::Path) -> bool {
 
 mod return_correlation;
 
+// Optional entry only; implementation and fixed EXE capability live in the PE lane.
+#[cfg(feature = "bootstrap-order")]
+#[path = "../../civ6-pe-rs/src/order_capture.rs"]
+pub mod order_capture;
+
 /// One parent/child startup contract. The parent stops waiting for ready at
 /// 10 seconds and reserves the remainder of its 20 second absolute deadline
 /// for the child's 6 second restore and verified owned-game closure.
