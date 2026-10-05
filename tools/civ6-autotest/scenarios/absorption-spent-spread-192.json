@@ -1,0 +1,198 @@
+{
+  "name": "AI official spread operation diagnostic for ToDo 192",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroLifespanKey~=nil and ExposedMembers.JAC_HeroReadAPI~=nil"
+      },
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "local from,to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()\n if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_DATE' then to=p:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman() and not Players[to]:IsHuman(),'need two AI houses')\nlocal p=Players[from];local cap=assert(p:GetCities():GetCapitalCity())\nlocal r=assert(GameInfo.Religions.RELIGION_CUSTOM_1)\nassert(p:GetReligion():GetReligionTypeCreated()<0,'fixture religion already founded')\np:GetReligion():SetHolyCity(cap);Game.GetReligion():FoundReligion(from,r.Index)\nfor _,kind in ipairs({'BELIEF_DIVINE_INSPIRATION','BELIEF_CATHEDRAL'}) do Game.GetReligion():AddBelief(from,GameInfo.Beliefs[kind].Index) end\ncap:GetReligion():SetAllCityToReligion(r.Index)\nlocal target=assert(Players[Game.GetLocalPlayer()]:GetCities():GetCapitalCity())\nassert(target:GetReligion():GetMajorityReligion()~=r.Index,'target already converted')\nlocal before={};for _,u in p:GetUnits():Members() do before[u:GetID()]=true end\nUnitManager.InitUnitValidAdjacentHex(from,'UNIT_MISSIONARY',target:GetX(),target:GetY(),8)\nlocal priest\nfor _,u in p:GetUnits():Members() do if not before[u:GetID()] then assert(not priest,'ambiguous new unit');priest=u end end\nassert(priest and GameInfo.Units[priest:GetType()].UnitType=='UNIT_MISSIONARY','missionary creation failed')\npriest:GetReligion():SetReligionType(r.ReligionType)\nUnitManager.PlaceUnit(priest,target:GetX(),target:GetY())\nassert(priest:GetX()==target:GetX() and priest:GetY()==target:GetY(),'missionary target placement failed')\nlocal e={From=from,To=to,UnitID=priest:GetID(),Religion=r.Index,TargetOwner=target:GetOwner(),TargetID=target:GetID(),X=target:GetX(),Y=target:GetY(),StartTurn=Game.GetCurrentGameTurn()}\nGame:SetProperty('JAC_ABSORPTION_SPENT_SPREAD_192',e)\nprint('[JAC_SPENT_SPREAD_192] fixture owner='..from..' unit='..e.UnitID..' gameplay_request='..type(UnitManager.RequestOperation)..' gameplay_can='..type(UnitManager.CanStartOperation))\nreturn 'AI missionary fixture created without changing spread charges'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 45,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local e=Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192');if not e then return false end;local u=Players[e.From]:GetUnits():FindID(e.UnitID);return u and u:GetID()==e.UnitID and u:GetReligionType()==e.Religion and u:GetSpreadCharges()==3"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'))\nlocal u=assert(Players[e.From]:GetUnits():FindID(e.UnitID));assert(u:GetID()==e.UnitID and u:GetOwner()==e.From,'fixture identity mismatch')\nassert(u:GetSpreadCharges()==3 and u:GetReligionType()==e.Religion,'fixture native state mismatch')\nJAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),Requests=0,Events={}}\nlocal function charges(owner,id)\n if owner==e.From and id==e.UnitID then\n  local unit=Players[owner]:GetUnits():FindID(id)\n  JAC192_SPREAD.Events[#JAC192_SPREAD.Events+1]={Turn=Game.GetCurrentGameTurn(),Charges=unit and unit:GetSpreadCharges() or -1}\n end\nend\nEvents.UnitChargesChanged.Add(charges)\nlocal function send(owner)\n if owner~=e.From or JAC192_SPREAD.Requests~=0 then return end\n Events.PlayerTurnActivated.Remove(send)\n local unit=assert(Players[owner]:GetUnits():FindID(e.UnitID));assert(unit:GetID()==e.UnitID,'AI unit identity reused')\n local op=assert(UnitOperationTypes.SPREAD_RELIGION,'official spread operation absent')\n local ok,reasons=UnitManager.CanStartOperation(unit,op,nil,false,true)\n JAC192_SPREAD.CanStart=ok;JAC192_SPREAD.Active=Players[owner]:IsTurnActive();JAC192_SPREAD.Turn=Game.GetCurrentGameTurn()\n print('[JAC_SPENT_SPREAD_192] official_can='..tostring(ok)..' active='..tostring(JAC192_SPREAD.Active)..' local='..Game.GetLocalPlayer()..' owner='..owner)\n if not ok then JAC192_SPREAD.Error='official AI spread unavailable';return end\n JAC192_SPREAD.Requests=1\n local accepted,result=pcall(UnitManager.RequestOperation,unit,op)\n JAC192_SPREAD.CallOK=accepted;JAC192_SPREAD.Result=tostring(result)\n print('[JAC_SPENT_SPREAD_192] official_request='..tostring(accepted)..' result='..tostring(result))\nend\nEvents.PlayerTurnActivated.Add(send)\nreturn 'one official spread request armed for donor AI turn'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'));local o=assert(JAC192_SPREAD)\nlocal u=assert(Players[e.From]:GetUnits():FindID(e.UnitID),'spent donor disappeared')\nassert(u:GetID()==e.UnitID and u:GetOwner()==e.From and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index,'donor identity changed')\nlocal n=u:GetSpreadCharges()\nprint('[JAC_SPENT_SPREAD_192] observed before='..o.Before..' after='..n..' requests='..o.Requests..' can='..tostring(o.CanStart)..' call='..tostring(o.CallOK)..' result='..tostring(o.Result))\nassert(o.Requests==1 and o.CanStart and o.CallOK,'official AI request not sent')\nassert(n>0 and n<o.Before,'official AI spread did not consume native charge')\nreturn ExposedMembers.JAC_Absorption.Canonical({Fixture=e,Observation=o,Charges=n,Owner=u:GetOwner(),ID=u:GetID(),Religion=u:GetReligionType()})"
+    },
+    {
+      "action": "save",
+      "name": "jac-spent-spread-192"
+    }
+  ],
+  "test_mode": {
+    "skipped_turns": 0,
+    "continuous_performance_valid": false
+  }
+}
