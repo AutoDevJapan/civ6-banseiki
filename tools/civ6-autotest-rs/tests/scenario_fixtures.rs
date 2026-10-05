@@ -1536,6 +1536,22 @@ fn native_trace_separates_ui_ai_and_refused_official_request_without_changing_qu
 }
 
 #[test]
+fn ui_lua_comparison_requires_a_recorded_value() {
+    let mut data = json!({
+        "name": "snapshot comparison",
+        "steps": [
+            {"action": "ui_lua", "state_name": "InGame", "code": "return 1", "capture": "BEFORE"},
+            {"action": "ui_lua", "state_name": "InGame", "code": "return 1", "equals_capture": "BEFORE"}
+        ]
+    });
+    let error = validate_scenario(&data).unwrap_err();
+    assert!(error.message.contains("earlier capture_as"));
+
+    data["steps"][0]["capture_as"] = json!("BEFORE");
+    validate_scenario(&data).unwrap();
+}
+
+#[test]
 fn ages_every_chunk_is_followed_by_a_full_previous_era_record() {
     let data = scenario("ages-probe.json");
     let s = steps(&data);

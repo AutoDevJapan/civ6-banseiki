@@ -20,6 +20,8 @@ pub struct Checkpoint {
     pub city_id: i64,
     pub city: Value,
     pub locations: Vec<Value>,
+    #[serde(default)]
+    pub transport_receipts: Option<Value>,
 }
 
 fn invalid(message: impl Into<String>) -> Error {
@@ -145,7 +147,7 @@ impl Checkpoint {
             return Err(invalid("carrier city snapshot is incomplete"));
         }
         if self.city["Districts"] != self.city["Assets"]["Districts"] {
-            return Err(invalid("independent district records disagree"));
+            return Err(invalid("copied district records disagree"));
         }
         let before = &self.carrier["Before"];
         if !before["Name"].is_string()
@@ -351,6 +353,7 @@ pub fn compare(left: &Checkpoint, right: &Checkpoint, peers: bool) -> Result<()>
         || left.city_id != right.city_id
         || left.city != right.city
         || left.locations != right.locations
+        || left.transport_receipts != right.transport_receipts
     {
         return Err(invalid(
             "saved state or observed original differs at the boundary",
@@ -513,5 +516,6 @@ return '{"schema_version":1,"candidate":' .. quote(candidate)
   .. ',"city_owner":' .. tostring(city:GetOwner())
   .. ',"city_id":' .. tostring(city:GetID())
   .. ',"city":' .. encode(cityState)
-  .. ',"locations":[' .. table.concat(works, ',') .. ']}'
+  .. ',"locations":[' .. table.concat(works, ',') .. ']'
+  .. ',"transport_receipts":' .. encode(Game:GetProperty('JAC_CARRIER_BOUNDARY_V1')) .. '}'
 "#;

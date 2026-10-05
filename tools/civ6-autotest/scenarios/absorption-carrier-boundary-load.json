@@ -1,0 +1,87 @@
+{
+  "name": "Carrier boundary receiver loads and rejects SP without changing the saved ledger before and after reload",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "load",
+      "exact_name": true,
+      "name": "JAC-native-acquired-carrier-stage-absorb-flow-95-47efb215632a",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_CarrierBoundary~=nil and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CarrierBoundary",
+      "code": "assert(not GameConfiguration.IsAnyMultiplayer(),'single-player regression required')\nassert(ExposedMembers.JAC_CarrierBoundary,'boundary receiver failed to load')\nassert(Game:GetProperty('JAC_CARRIER_BOUNDARY_V1')==nil,'unexpected accepted receipt before probe')\nlocal before=Game:GetProperty('JAC_ABSORPTION_STATE_V1')\nassert(before,'saved absorption ledger missing')\nlocal R=assert(JAC_AbsorptionRules)\nlocal snapshot=R.Copy(before)\nGameEvents.JAC_CarrierBoundary_Operation.Call(0,{Version=1,Command='BOUNDARY'})\nassert(Game:GetProperty('JAC_CARRIER_BOUNDARY_V1')==nil,'single-player operation accepted a receipt')\nassert(R.Equal(snapshot,Game:GetProperty('JAC_ABSORPTION_STATE_V1')),'rejected boundary changed saved carrier intent')\nprint('[JAC_CARRIER_BOUNDARY_SP_GUARD] rejected; saved ledger unchanged')\nreturn 'boundary receiver loaded and single-player guard preserved saved intent'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 10,
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "multiplayer boundary required"
+      }
+    },
+    {
+      "action": "save",
+      "timeout": 90,
+      "name": "JAC-carrier-boundary-sp-guard"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "timeout": 600,
+      "name": "JAC-carrier-boundary-sp-guard"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_CarrierBoundary~=nil and ExposedMembers.JAC_Absorption~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_CarrierBoundary",
+      "code": "assert(not GameConfiguration.IsAnyMultiplayer(),'single-player regression required')\nassert(ExposedMembers.JAC_CarrierBoundary,'boundary receiver failed to load')\nassert(Game:GetProperty('JAC_CARRIER_BOUNDARY_V1')==nil,'unexpected accepted receipt before probe')\nlocal before=Game:GetProperty('JAC_ABSORPTION_STATE_V1')\nassert(before,'saved absorption ledger missing')\nlocal R=assert(JAC_AbsorptionRules)\nlocal snapshot=R.Copy(before)\nGameEvents.JAC_CarrierBoundary_Operation.Call(0,{Version=1,Command='BOUNDARY'})\nassert(Game:GetProperty('JAC_CARRIER_BOUNDARY_V1')==nil,'single-player operation accepted a receipt')\nassert(R.Equal(snapshot,Game:GetProperty('JAC_ABSORPTION_STATE_V1')),'rejected boundary changed saved carrier intent')\nprint('[JAC_CARRIER_BOUNDARY_SP_GUARD] rejected; saved ledger unchanged')\nreturn 'boundary receiver loaded and single-player guard preserved saved intent'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 10,
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "multiplayer boundary required"
+      }
+    }
+  ]
+}

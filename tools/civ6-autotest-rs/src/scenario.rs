@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 33] = [
+pub const ACTIONS: [&str; 34] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -13,6 +13,7 @@ pub const ACTIONS: [&str; 33] = [
     "end_turn",
     "ui_lua",
     "carrier_checkpoint",
+    "carrier_exchange",
     "screenshot",
     "save",
     "exit_to_menu",
@@ -119,6 +120,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut promotion_used = false;
     let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
+    let mut lua_captures = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -444,7 +446,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     ));
                 }
             }
-            "carrier_checkpoint" => {
+            "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
                 let token = step["token"]
                     .as_str()
@@ -453,11 +455,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .as_str()
                     .ok_or_else(|| fail("carrier checkpoint needs candidate".into()))?;
                 crate::carrier_sync::query(token, candidate).map_err(|e| fail(e.to_string()))?;
-                safe_relative_path(
-                    step["path"]
-                        .as_str()
-                        .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
-                )?;
+                if action == "carrier_checkpoint" {
+                    safe_relative_path(
+                        step["path"]
+                            .as_str()
+                            .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
+                    )?;
+                }
                 for key in ["capture_as", "equals_capture"] {
                     if step.get(key).is_some_and(|v| !type_id(v)) {
                         return Err(fail(format!("invalid {key}")));
@@ -482,6 +486,16 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     if step.get(key).is_some_and(|v| !type_id(v)) {
                         return Err(fail(format!("invalid {key}")));
                     }
+                }
+                if let Some(key) = step["equals_capture"].as_str() {
+                    if !lua_captures.contains(key) {
+                        return Err(fail(format!(
+                            "equals_capture needs an earlier capture_as: {key}"
+                        )));
+                    }
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    lua_captures.insert(key);
                 }
                 crate::tuner::validate_lua_code(step["code"].as_str().unwrap())
                     .map_err(|e| fail(e.to_string()))?;
