@@ -2563,7 +2563,9 @@ impl Runner {
             "ui_lua" => {
                 let native_before = self.backend.validate_native_bridge_target()?;
                 let mut attempts = 0;
-                let lua_timeout = step["lua_timeout"].as_f64().unwrap_or(5.0);
+                let lua_timeout = step["lua_timeout"]
+                    .as_f64()
+                    .unwrap_or(self.remaining(deadline)?);
                 let value = loop {
                     match self.lua(
                         text(step, "state_name"),
