@@ -663,6 +663,42 @@ mod native_transport {
     }
 
     #[test]
+    fn receiver_rechecks_saved_city_relationship_on_each_gameplay_client() {
+        for code in [
+            "c.OriginalCity=999",
+            "c.Owner=9;c.Borrower=8",
+            "c.Phase='MOVE';c.MoveToken=c.BorrowToken;c.Borrower=3;c.BorrowedCity=999",
+            "c.Phase='RETURN';c.ReturnToken=c.BorrowToken;c.Borrower=3;c.BorrowedCity=999",
+            "c.Phase='PROVED';c.ReturnToken=c.BorrowToken;c.FinalSlot={Owner=3,City=999,X=16,Y=0,Building=1,Slot=0}",
+        ] {
+            let lua=ready();let mut p=message(&lua);
+            lua.load(format!("TEST_STATE_EDIT(function(s) local c=s.Transactions.checkpoint.NativeWorks[1].Carrier;{code} end)")).exec().unwrap();
+            let carrier=lua.load("return ExposedMembers.JAC_Absorption.GetState().Transactions.checkpoint.NativeWorks[1].Carrier").eval::<mlua::Table>().unwrap();
+            for name in ["OriginalCity","Owner","Borrower","Phase"] {
+                let value=carrier.get::<mlua::Value>(name).unwrap();
+                p[name]=match value {mlua::Value::String(s)=>json!(s.to_str().unwrap().to_string()),
+                    mlua::Value::Integer(n)=>json!(n),mlua::Value::Number(n)=>json!(n as i64),_=>panic!("bad fixture")};
+            }
+            p["RequestID"]=json!(transport::key(&p).unwrap());
+            assert!(!receive(&lua,2,&p),"{code}");
+        }
+        let lua = ready();
+        let mut p = message(&lua);
+        lua.load("CityManager.TransferCity(CITIES[16],1)")
+            .exec()
+            .unwrap();
+        p["CityOwner"] = json!(1);
+        p["CityID"] = json!(lua.load("return CITIES[16]:GetID()").eval::<i64>().unwrap());
+        p["RequestID"] = json!(transport::key(&p).unwrap());
+        assert!(!receive(&lua, 2, &p), "unissued BORROW cannot be adopted");
+        lua.load("TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.BorrowIssued=true end)").exec().unwrap();
+        assert!(
+            receive(&lua, 2, &p),
+            "issued BORROW may precede saved BorrowedCity"
+        );
+    }
+
+    #[test]
     fn two_gameplay_vms_receive_the_same_packet_without_local_ui_or_a_move() {
         let left = ready();
         let right = ready();
