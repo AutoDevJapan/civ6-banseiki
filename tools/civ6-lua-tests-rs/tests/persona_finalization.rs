@@ -365,3 +365,94 @@ fn fully_paid_native_prefix_still_needs_explicit_valid_saved_receipt() {
         }
     }
 }
+
+#[test]
+fn both_completion_entries_reject_bad_receipts_before_any_native_read() {
+    for cost in 1..=3 {
+        for field in ["EVOLUTION_COST", "EVOLUTION_SURCHARGE"] {
+            for bad in ["nil", "false", "{}", "'2'", "-1", "0.5", "4", "0/0"] {
+                let lua = scene(cost);
+                exec(&lua, &format!("Game:SetProperty(KEY..'{field}',{bad})"));
+                exec(
+                    &lua,
+                    r#"
+                    local savedCost=Game:GetProperty(KEY..'EVOLUTION_COST')
+                    local savedSurcharge=Game:GetProperty(KEY..'EVOLUTION_SURCHARGE')
+                    local read=ExposedMembers.JAC_LeaderPersonaNativeRead
+                    READ_CALLS=0
+                    ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
+                        READ_CALLS=READ_CALLS+1
+                        error('bad receipt reached native reader')
+                    end
+                    finalize(); retain(1)
+                    assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='TITLE_PAYMENT_PENDING')
+                    ExposedMembers.JAC_LeaderPersona.Reconcile(); retain(1)
+                    assert(READ_CALLS==0,'Reconcile performed a pre-validation read')
+                    assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='TITLE_PAYMENT_PENDING')
+                    local function unchanged(before,after)
+                        return before==after or (type(before)=='number' and before~=before and after~=after)
+                    end
+                    assert(unchanged(savedCost,Game:GetProperty(KEY..'EVOLUTION_COST')))
+                    assert(unchanged(savedSurcharge,Game:GetProperty(KEY..'EVOLUTION_SURCHARGE')))
+                    ExposedMembers.JAC_LeaderPersonaNativeRead=read
+                "#,
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn bad_receipt_does_not_abort_later_owners_reconciliation_or_admission() {
+    for field in ["EVOLUTION_COST", "EVOLUTION_SURCHARGE"] {
+        for bad in ["nil", "false", "{}", "'invalid'", "0", "3"] {
+            let lua = scene(2);
+            exec(
+                &lua,
+                r#"
+                -- Ashina follows Date in GameInfo, belongs to another owner,
+                -- and pays through the same engine queue before corruption.
+                FIRE('JAC_LeaderPersonaJoin',1,{Source=2})
+                assert(Players[1]:GetProperty('JAC_PERSONA_RESULT')=='JOINED')
+                Players[1].points=1
+                FIRE('JAC_LeaderPersonaEvolve',1,{Leader=ASHINA})
+                local def=GameInfo.Governors[GameInfo.JAC_LeaderPersonas[ASHINA].GovernorType]
+                OTHER_INDEX=def.Index
+                OTHER_KEY='JAC_PERSONA_'..ASHINA..'_'
+                OTHER_ID=Game:GetProperty(OTHER_KEY..'UNIT')
+                UI.RequestPlayerOperation(1,PlayerOperations.APPOINT_GOVERNOR,
+                    {[PlayerOperations.PARAM_GOVERNOR_TYPE]=def.Index})
+                assert(deliver() and #REQUESTS==0)
+                assert(Players[1].spent==1 and Players[2].spent==1 and DESTROYS==0)
+            "#,
+            );
+            exec(&lua, &format!("Game:SetProperty(KEY..'{field}',{bad})"));
+            exec(
+                &lua,
+                r#"
+                local read=ExposedMembers.JAC_LeaderPersonaNativeRead
+                BAD_READS,OTHER_READS=0,0
+                ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
+                    if leader==LEADER then
+                        BAD_READS=BAD_READS+1
+                        error('invalid owner must not interrupt another owner')
+                    end
+                    if owner==1 and leader==ASHINA then OTHER_READS=OTHER_READS+1 end
+                    return read(owner,leader)
+                end
+                ExposedMembers.JAC_LeaderPersona.Reconcile()
+                assert(BAD_READS==0 and OTHER_READS>=2)
+                assert(Game:GetProperty(KEY..'STATE')=='EVOLVING')
+                assert(Players[2]:GetUnits():FindID(PERSON_ID))
+                assert(Game:GetProperty(KEY..'UNIT')==PERSON_ID)
+                assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='TITLE_PAYMENT_PENDING')
+                assert(Game:GetProperty(OTHER_KEY..'STATE')=='GOVERNOR')
+                assert(not Players[1]:GetUnits():FindID(OTHER_ID))
+                assert(Players[1]:GetProperty('JAC_PERSONA_RESULT')=='EVOLVED')
+                assert(Players[1]:GetProperty(901000+OTHER_INDEX)==true)
+                assert(DESTROYS==1 and Players[1].spent==1 and Players[2].spent==1)
+            "#,
+            );
+        }
+    }
+}
