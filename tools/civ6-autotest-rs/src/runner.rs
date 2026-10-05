@@ -76,6 +76,8 @@ pub trait Backend: Send {
     fn list_states(&mut self, _timeout: f64) -> Result<Vec<String>> {
         Err(Error::tuner("backend has no FireTuner"))
     }
+    // Tuner errors guarantee that no Lua command bytes were sent. Once a
+    // write is attempted, an uncertain outcome must be LuaResponseUnknown.
     fn run_lua(&mut self, _state: &str, _code: &str, _timeout: f64) -> Result<String> {
         Err(Error::tuner("backend has no FireTuner"))
     }
@@ -894,6 +896,7 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     pub lua_captures: BTreeMap<String, String>,
+    pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
     checkpoint_run_id: String,
     checkpoint_sequence: u64,
@@ -944,6 +947,7 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             lua_captures: BTreeMap::new(),
+            carrier_captures: BTreeMap::new(),
             ruleset: None,
             checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
             checkpoint_sequence: 0,
@@ -1330,12 +1334,22 @@ impl Runner {
     pub fn retry_idempotent<T>(
         &mut self,
         deadline: f64,
+        action: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<T> {
+        self.retry_when(deadline, action, |e| {
+            retryable(e) && e.kind != ErrorKind::LuaExecution
+        })
+    }
+    fn retry_when<T>(
+        &mut self,
+        deadline: f64,
         mut action: impl FnMut(&mut Self) -> Result<T>,
+        retry: impl Fn(&Error) -> bool,
     ) -> Result<T> {
         let mut delay = 0.5;
         loop {
             match action(self) {
-                Err(e) if retryable(&e) && e.kind != ErrorKind::LuaExecution => {
+                Err(e) if retry(&e) => {
                     if self.clock.now() + delay >= deadline {
                         return Err(e);
                     }
@@ -1383,15 +1397,26 @@ impl Runner {
         Ok(!closed.is_empty())
     }
     pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
-        let budget = self.budget(deadline, 5.0)?;
-        if !self
-            .states(budget)?
+        // A busy AI turn can outlive one five-second state lookup. Keep all
+        // pre-send lookups in one budget; never replay an uncertain OnReturn.
+        let query_deadline = deadline.min(self.clock.now() + 30.0);
+        let states =
+            self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
+        if !states
             .iter()
             .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
         {
             return Ok(false);
         }
-        let closed=self.lua("InGameTopOptionsMenu","if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",self.budget(deadline,5.0)?)?=="true";
+        let closed = self.retry_when(
+            query_deadline,
+            |r| r.lua(
+                "InGameTopOptionsMenu",
+                "if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",
+                r.budget(query_deadline, 5.0)?,
+            ),
+            |e| e.kind == ErrorKind::Tuner,
+        )? == "true";
         if closed {
             self.wait(&json!({"type":"lua","state_name":"InGameTopOptionsMenu","code":"return ContextPtr:IsHidden()"}),self.budget(deadline,5.0)?,false)?;
             println!("Closed in-game options menu");
@@ -2449,6 +2474,46 @@ impl Runner {
                 fs::write(self.output.join("native-spy-failures-report.json"), json)?;
                 Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
             }
+            "carrier_checkpoint" => {
+                let token = text(step, "token");
+                let candidate = text(step, "candidate");
+                let flow_required = step["direct_apply"] != true;
+                let code = crate::carrier_sync::query_with_scope(token, candidate, flow_required)?;
+                let base = resolve_path(&self.output)?;
+                let target =
+                    resolve_path(&base.join(scenario::safe_relative_path(text(step, "path"))?))?;
+                if !target.starts_with(&base) {
+                    return Err(Error::scenario(
+                        "Carrier checkpoint path escapes output directory",
+                    ));
+                }
+                let raw = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
+                let checkpoint = crate::carrier_sync::Checkpoint::parse(&raw, token, candidate)?;
+                if checkpoint.flow_required != flow_required {
+                    return Err(Error::scenario("Carrier evidence has the wrong flow scope"));
+                }
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let mut evidence = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&target)?;
+                evidence.write_all(&serde_json::to_vec_pretty(&checkpoint)?)?;
+                if let Some(key) = step["equals_capture"].as_str() {
+                    let before = self.carrier_captures.get(key).ok_or_else(|| {
+                        Error::scenario(format!("Missing carrier capture: {key}"))
+                    })?;
+                    crate::carrier_sync::compare(before, &checkpoint, false)?;
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    self.carrier_captures.insert(key.into(), checkpoint);
+                }
+                Ok(format!(
+                    "native carrier evidence written to {}",
+                    target.display()
+                ))
+            }
             "ui_lua" => {
                 let native_before = self.backend.validate_native_bridge_target()?;
                 let mut attempts = 0;
@@ -2568,7 +2633,11 @@ impl Runner {
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
+                // Release our socket while an independent native UI probe
+                // inspects the game held by the same live_chain owner.
+                self.disconnect();
                 self.clock.sleep(seconds);
+                self.remaining(deadline)?;
                 Ok(format!("paused {seconds}s for UI animation"))
             }
             _ => Err(Error::scenario(format!("Unknown action: {action}"))),
