@@ -122,6 +122,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
+    let mut carrier_captures = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -470,6 +471,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         if !type_id(value) {
                             return Err(fail(format!("invalid {key}")));
                         }
+                    }
+                }
+                if action == "carrier_checkpoint" {
+                    if let Some(key) = step["equals_capture"].as_str() {
+                        if !carrier_captures.contains(key) {
+                            return Err(fail(
+                                "carrier equals_capture needs an earlier capture_as".into(),
+                            ));
+                        }
+                    }
+                    if let Some(key) = step["capture_as"].as_str() {
+                        carrier_captures.insert(key.to_owned());
                     }
                 }
             }

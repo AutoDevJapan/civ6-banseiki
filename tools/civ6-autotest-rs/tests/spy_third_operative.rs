@@ -38,6 +38,9 @@ impl Third {
         lua.load("GameEvents.JAC_BoundaryThirdSpyStep=event()")
             .exec()
             .unwrap();
+        lua.load("ORIGINAL_NATIVE_UI=UI; ORIGINAL_NATIVE_REQUEST=UI.RequestPlayerOperation")
+            .exec()
+            .unwrap();
         lua.load(spy_completed_failure::LUA).exec().unwrap();
         lua.globals()
             .set(
@@ -367,6 +370,18 @@ impl Third {
         );
         self.preserved_failures();
     }
+}
+
+#[test]
+fn third_generation_owned_sender_keeps_the_native_api_namespace_unchanged() {
+    let t = Third::new();
+    t.produce();
+    t.bind();
+    t.run(
+        "assert(UI==ORIGINAL_NATIVE_UI and UI.RequestPlayerOperation==ORIGINAL_NATIVE_REQUEST); \
+         assert(rawget(UI,'RequestPlayerOperation')==ORIGINAL_NATIVE_REQUEST); \
+         assert(UI_CORE_CALLS==0)",
+    );
 }
 
 #[test]

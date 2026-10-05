@@ -3265,7 +3265,8 @@ local function Submit(command)
         if action == "LOSE_CITY" then B.Check("SETTLED"); end
         local events={LOSE_CITY="JAC_BoundaryLoseCity",SPAWN_SPY="JAC_BoundarySpawnSpy",
             PROGRESS_SPY="JAC_BoundaryProgressSpy",BIND_SPY="JAC_BoundaryBindSpy"};
-        UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
+        local sender=R.Third and R.Third.SendOwnedRequest or UI.RequestPlayerOperation;
+        sender(owner,PlayerOperations.EXECUTE_SCRIPT,
             {OnStart=events[action]});
     elseif action == "BUILD_SPY" then
         local prepared=B.SpyPrerequisitesReady();
@@ -3486,7 +3487,8 @@ ContextPtr:SetUpdate(function()
         local receipt=missionEventPending;
         if not receipt.sent then
             receipt.sent=true; B.enemyMissionStatus="SENT";
-            local ok,err=pcall(UI.RequestPlayerOperation,receipt.attacker,
+            local sender=R.Third and R.Third.SendOwnedRequest or UI.RequestPlayerOperation;
+            local ok,err=pcall(sender,receipt.attacker,
                 PlayerOperations.EXECUTE_SCRIPT,
                 {OnStart="JAC_BoundaryRecordEnemyMission",Attacker=receipt.attacker,
                  MissionID=receipt.id});

@@ -1718,6 +1718,19 @@ fn carrier_exchange_rejects_unimplemented_comparisons_but_checkpoint_retains_the
     checkpoint["steps"][0]["path"] = json!("carrier/before.json");
     checkpoint["steps"][0]["capture_as"] = json!("BEFORE");
     checkpoint["steps"][0]["equals_capture"] = json!("BEFORE");
+    assert!(validate_scenario(&checkpoint)
+        .unwrap_err()
+        .message
+        .contains("earlier capture_as"));
+    checkpoint["steps"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("equals_capture");
+    let mut after = checkpoint["steps"][0].clone();
+    after["path"] = json!("carrier/after.json");
+    after.as_object_mut().unwrap().remove("capture_as");
+    after["equals_capture"] = json!("BEFORE");
+    checkpoint["steps"].as_array_mut().unwrap().push(after);
     validate_scenario(&checkpoint).unwrap();
 }
 

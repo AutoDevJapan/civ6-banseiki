@@ -498,11 +498,10 @@ function T.InstallUI(hooks)
   return p
  end
  local B=hooks.boundary;
- -- Only this diagnostic View's API namespace is decorated. All unrelated
- -- operations pass unchanged to the original native UI library.
+ -- The diagnostic's two owned call sites use this private sender. The
+ -- native UI namespace and RequestPlayerOperation remain untouched.
  nativeUI=nativeUI or UI;
- UI=setmetatable({}, {__index=nativeUI});
- UI.RequestPlayerOperation=function(owner,operation,params)
+ T.SendOwnedRequest=function(owner,operation,params)
   if operation==PlayerOperations.EXECUTE_SCRIPT and T.IsThird(Game:GetProperty(RETRY)) and
    type(params)=='table' and
    (params.OnStart=='JAC_BoundaryProgressSpy' or params.OnStart=='JAC_BoundaryRecordEnemyMission') then
