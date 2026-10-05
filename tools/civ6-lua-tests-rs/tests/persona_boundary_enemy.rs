@@ -117,6 +117,7 @@ impl Enemy {
             r#"
             TURN=45; UNITS[0]={}; SPY_CAPACITY=2;
             local old=HISTORY[0][0]; old.CompletionTurn=23;
+            old.EscapeResult=EspionageResultTypes.NO_RESULT;
             local event=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION');
             event.id=1; event.turn=45;
             HISTORY[0][1]={Operation=old.Operation,PlotIndex=old.PlotIndex,
