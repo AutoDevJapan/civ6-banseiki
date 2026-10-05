@@ -788,6 +788,26 @@ fn travel_tick_distinguishes_old_captive_placeholder_from_moving_spy() {
 }
 
 #[test]
+fn travel_window_preserves_each_verified_turn_without_replaying_dispatch() {
+    let single = scenario("leader-persona-spy-neutralization-travel-tick.json");
+    let window = scenario("leader-persona-spy-neutralization-travel-window.json");
+    validate_scenario(&window).unwrap();
+    assert_eq!(window["strict_lua_errors"], true);
+    let actions = steps(&window);
+    assert_eq!(&actions[..2], &steps(&single)[..2]);
+    assert_eq!(actions.len(), 18);
+    for turn in actions[2..17].chunks_exact(5) {
+        assert_eq!(turn, &steps(&single)[2..7]);
+        assert_eq!(turn[0]["action"], "end_turn");
+        assert_eq!(turn[0]["turns"], 1);
+        assert_eq!(turn[3]["action"], "save");
+        assert_eq!(turn[3]["checkpoint"], true);
+        assert_eq!(turn[4]["action"], "ui_lua");
+    }
+    assert_eq!(actions.last().unwrap(), steps(&single).last().unwrap());
+}
+
+#[test]
 fn retry_prepare_saves_only_a_ready_or_waiting_capacity_spy() {
     let data = scenario("leader-persona-spy-neutralization-retry-prepare.json");
     let source = ui_codes(&data).last().copied().unwrap();
