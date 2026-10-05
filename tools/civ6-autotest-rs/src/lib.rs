@@ -3,6 +3,7 @@ pub mod capture;
 pub mod carrier_sync;
 pub mod click;
 pub mod error;
+pub mod growth_sync;
 pub mod judge;
 pub mod metrics;
 pub mod restart;
