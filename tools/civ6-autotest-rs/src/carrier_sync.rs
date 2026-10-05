@@ -110,7 +110,7 @@ impl Checkpoint {
         }
         for (id, recovery) in recoveries {
             if recovery["NativeCarrier"]["Token"] == token {
-                if self.flow_required
+                if (self.flow_required || id.starts_with("recovery:"))
                     && !id
                         .strip_prefix("recovery:")
                         .is_some_and(|key| self.flow["World"][key].is_object())
@@ -143,6 +143,9 @@ impl Checkpoint {
             .any(|key| !self.city[*key].is_object())
         {
             return Err(invalid("carrier city snapshot is incomplete"));
+        }
+        if self.city["Districts"] != self.city["Assets"]["Districts"] {
+            return Err(invalid("independent district records disagree"));
         }
         let before = &self.carrier["Before"];
         if !before["Name"].is_string()
@@ -257,6 +260,11 @@ impl Checkpoint {
         if self.carrier["Phase"] == "PROVED" {
             if self.carrier["Owner"].as_i64() != Some(self.city_owner) {
                 return Err(invalid("proved carrier city was not returned"));
+            }
+            if self.carrier["FinalSlot"] != carrier_slot {
+                return Err(invalid(
+                    "returned carrier slot differs from the saved final slot",
+                ));
             }
             let slot = if self.carrier["Route"] == "FROM_FREE" {
                 &self.carrier["Target"]

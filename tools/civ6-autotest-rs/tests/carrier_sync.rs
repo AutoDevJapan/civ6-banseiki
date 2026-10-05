@@ -364,6 +364,71 @@ fn physical_city_ids_change_during_borrow_return_and_rollback() {
 }
 
 #[test]
+fn from_free_proof_checks_returned_carrier_and_original_target_separately() {
+    let lua = world(1);
+    lua.load(
+        r#"
+      WORK_X=16
+      TEST_STATE_EDIT(function(s)
+        local snap=s.Transactions.checkpoint.NativeWorks[1]
+        snap.Source=JAC_AbsorptionGameplay.NativeWorkLocations(900)[1]
+        snap.Carrier.Source=snap.Source;snap.Carrier.Route='FROM_FREE'
+      end)
+      CityManager.TransferCity(CITIES[16],1);WORK_X=4
+      CityManager.TransferCity(CITIES[16],3)
+      TEST_STATE_EDIT(function(s)
+        local c=s.Transactions.checkpoint.NativeWorks[1].Carrier
+        c.Phase='PROVED';c.FinalSlot={Owner=3,City=CITIES[16]:GetID(),X=16,Y=0,Building=1,Slot=0}
+        c.Target={Owner=1,City=CITIES[4]:GetID(),X=4,Y=0,Building=1,Slot=0}
+      end)
+    "#,
+    )
+    .exec()
+    .unwrap();
+    let good = checkpoint(&lua);
+    for (field, keys) in [
+        ("FinalSlot", ["Owner", "City", "X", "Y", "Building", "Slot"]),
+        ("Target", ["Owner", "City", "X", "Y", "Building", "Slot"]),
+    ] {
+        for key in keys {
+            let mut bad = good.clone();
+            bad.carrier[field][key] = json!(999);
+            bad.ledger["Transactions"]["checkpoint"]["NativeWorks"]["1"]["Carrier"] =
+                bad.carrier.clone();
+            assert!(bad.validate(TOKEN, CANDIDATE).is_err(), "{field}.{key}");
+        }
+    }
+}
+
+#[test]
+fn product_recovery_prefix_requires_world_evidence_even_for_direct_apply() {
+    let mut record = checkpoint(&world(1));
+    let snap = record.ledger["Transactions"]["checkpoint"]["NativeWorks"]["1"].clone();
+    record.ledger["Transactions"] = json!({});
+    record.ledger["Recoveries"] = json!({"recovery:reward900":{"NativeCarrier":snap["Carrier"],"NativeSource":snap["Source"]}});
+    assert!(!record.flow_required);
+    assert!(record.validate(TOKEN, CANDIDATE).is_err());
+    record.flow = json!({"Flows":{},"World":{"reward900":{"Status":"CLAIMED"}}});
+    record.validate(TOKEN, CANDIDATE).unwrap();
+    record.flow["World"] = json!({"other":{"Status":"CLAIMED"}});
+    assert!(record.validate(TOKEN, CANDIDATE).is_err());
+}
+
+#[test]
+fn duplicate_district_views_must_be_complete_and_consistent() {
+    let baseline = checkpoint(&world(1));
+    let mut bad = baseline.clone();
+    bad.city["Districts"] = json!({});
+    assert!(bad.validate(TOKEN, CANDIDATE).is_err());
+    let mut missing = baseline;
+    missing.city["Assets"]
+        .as_object_mut()
+        .unwrap()
+        .remove("Districts");
+    assert!(missing.validate(TOKEN, CANDIDATE).is_err());
+}
+
+#[test]
 fn missing_and_duplicate_saved_intents_fail_before_recording() {
     let lua = world(1);
     let code = query("unknown", CANDIDATE).unwrap();
