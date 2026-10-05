@@ -4,6 +4,13 @@ if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
 include("JAC_Absorption_Flow")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
+if GameInfo.JAC_RP_Religions then
+  JAC_RP_AdapterInclude = true
+  include("JAC_ReligionPersistence")
+  JAC_RP_AdapterInclude = nil
+  include("JAC_RP_AbsorptionAdapter")
+  A.RegisterAdapter("religion-persistence", assert(JAC_RP_AbsorptionAdapter))
+end
 local R = A.Rules
 local methods = {
   ENGINE = { Apply=true, Resume=true, Verify=true, RequestVerification=true,

@@ -851,10 +851,13 @@ end
 
 -- The turn hook ONLY expires alliance restrictions; never replays effects.
 -- Official gameplay turn event: BlackDeathScenario.lua:64.
-GameEvents.OnGameTurnStarted.Add(RP.RefreshReligiousAlliances)
--- Read fresh on every call:
--- an old save in the same process cannot inherit the previous game's Lua locals.
-ExposedMembers.JAC_ReligionPersistence = RP
+if not JAC_RP_AdapterInclude then
+  GameEvents.OnGameTurnStarted.Add(RP.RefreshReligiousAlliances)
+  -- Read fresh on every call: old saves cannot inherit previous Lua locals.
+  ExposedMembers.JAC_ReligionPersistence = RP
+end
+-- An includer in the same Gameplay context can register adapters directly.
+JAC_ReligionPersistenceGameplay = RP
 local loaded = read()
 print("[JAC_RP] loaded schema=" .. loaded.schema .. " revision=" .. loaded.revision
   .. " religions=" .. #keys(loaded.religions))
