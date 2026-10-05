@@ -555,6 +555,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-native-type-run-artifact-scatter.json",
                 "absorption-return-boundary.json",
                 "multiplayer-hotseat-growth.json",
+                "mod-selection-rollback.json",
             ]
             .into_iter()
             .map(str::to_string),
