@@ -116,10 +116,10 @@ pub(super) fn observe(
     product_publish_word(cell, receiver, session, ticket, payload == 1);
     if key == COMMIT_KEY && runtime::owned() {
         if payload == 0 {
-            runtime::begin_catalog(owner, joined_ticket(binding));
+            runtime::begin_catalog(owner, binding);
         } else {
             let complete = catalog(owner, receiver, session).is_some();
-            runtime::publication(owner, joined_ticket(binding), complete, complete);
+            runtime::publication(owner, binding, complete, complete);
         }
     }
 }
@@ -255,15 +255,25 @@ mod tests {
     }
     #[test]
     fn composite_win64_owned_child() {
-        owned_child(false);
+        owned_child(false, "full");
     }
 
     #[test]
     fn runtime_win64_owned_child() {
-        owned_child(true);
+        owned_child(true, "full");
     }
 
-    fn owned_child(runtime: bool) {
+    #[test]
+    fn runtime_old_reset_cannot_roll_back_committed_owner() {
+        owned_child(true, "reset-race");
+    }
+
+    #[test]
+    fn runtime_pending_callback_stop_retains_authority_and_reports_undrained() {
+        owned_child(true, "pending");
+    }
+
+    fn owned_child(runtime: bool, case: &str) {
         let mut child = OwnedChild(
             std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
@@ -273,6 +283,7 @@ mod tests {
                 ])
                 .env("JAC_PAID_COMPOSITE_CHILD", "1")
                 .env("JAC_RUNTIME_CHILD", if runtime { "1" } else { "0" })
+                .env("JAC_RUNTIME_CASE", case)
                 .creation_flags(0x08000000)
                 .spawn()
                 .unwrap(),
@@ -354,6 +365,62 @@ mod tests {
         let get: extern "system" fn(u64, u32) -> u64 = unsafe { std::mem::transmute(property) };
         let assign_call: extern "system" fn(u64, u64, u64, u64) -> u64 =
             unsafe { std::mem::transmute(assign) };
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("pending") {
+            // Model the callback that cannot reach its end (including a
+            // foreign unwind). Do not claim execution of a real Core SEH.
+            let session = PRODUCT_SESSION.load(Ordering::Acquire);
+            let token = unsafe { assignment::assign_calibration_begin(0, 0, 0, 0, 0) };
+            assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 1);
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Critical as u32
+            );
+            assert!(PRODUCT_ACTIVE.load(Ordering::Acquire));
+            assert_eq!(PRODUCT_SESSION.load(Ordering::Acquire), session);
+            assert!(HOOK.lock().unwrap().is_some());
+            assert!(ASSIGNMENT_HOOK.lock().unwrap().is_some());
+            assert!(JOINED_PROPERTY_HOOK.lock().unwrap().is_some());
+            assert_eq!(
+                unsafe { assignment::assign_calibration_end(token, 0xaabb01, 0, 0) },
+                0xaabb00
+            );
+            assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 0);
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            return;
+        }
+        if !is_runtime {
+            // Competing runtime exports must refuse the existing bounded
+            // owner without deactivating it or redirecting any trace mapping.
+            let session = PRODUCT_SESSION.load(Ordering::Acquire);
+            let pointer = CALIBRATION_TRACE_PTR.load(Ordering::Acquire);
+            let callers = (0..4)
+                .map(|_| {
+                    std::thread::spawn(|| {
+                        let mut config = BridgeConfig::for_production(0, 0, 0);
+                        config.version = runtime::RUNTIME_CONFIG_VERSION;
+                        config.trace_size = 0;
+                        runtime::BridgeRuntimeInstall((&mut config as *mut BridgeConfig).cast())
+                    })
+                })
+                .collect::<Vec<_>>();
+            for caller in callers {
+                assert_eq!(
+                    caller.join().unwrap(),
+                    if supports_atomic_promotion_fetch() {
+                        BridgeStatus::HookFailure as u32
+                    } else {
+                        BridgeStatus::InvalidInput as u32
+                    }
+                );
+            }
+            assert!(!runtime::owned());
+            assert!(PRODUCT_ACTIVE.load(Ordering::Acquire));
+            assert_eq!(PRODUCT_SESSION.load(Ordering::Acquire), session);
+            assert_eq!(CALIBRATION_TRACE_PTR.load(Ordering::Acquire), pointer);
+        }
         let mut player = [0u64; 192];
         player[0xd8 / 8] = 2;
         let mut raw = [0u64; 3];
@@ -440,8 +507,8 @@ mod tests {
             }
             assert_eq!(
                 can_call(this, 77),
-                0,
-                "runtime must not promote original false to true"
+                1,
+                "joined persona appointment must reflect admission despite original AL=0"
             );
             unsafe {
                 ptr::write_volatile(can.add(9), 1);
@@ -490,6 +557,93 @@ mod tests {
             assign_call(this, person, 0, sentinel & !255),
             sentinel & !255
         );
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("reset-race") {
+            for stage in [1, 2] {
+                runtime::RESET_STAGE.store(stage, Ordering::Release);
+                runtime::RESET_PAUSED.store(false, Ordering::Release);
+                runtime::RESET_RELEASE.store(false, Ordering::Release);
+                runtime::RESET_PAUSE.store(true, Ordering::Release);
+                struct ResetWorker(Option<std::thread::JoinHandle<u64>>);
+                impl ResetWorker {
+                    fn finish(&mut self) {
+                        runtime::RESET_RELEASE.store(true, Ordering::Release);
+                        if let Some(worker) = self.0.take() {
+                            worker.join().unwrap();
+                        }
+                    }
+                }
+                impl Drop for ResetWorker {
+                    fn drop(&mut self) {
+                        self.finish();
+                    }
+                }
+                let mut worker = ResetWorker(Some(std::thread::spawn(move || {
+                    get(receiver, PAID_RESET_BASE + 2)
+                })));
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while !runtime::RESET_PAUSED.load(Ordering::Acquire)
+                    && std::time::Instant::now() < deadline
+                {
+                    std::thread::yield_now();
+                }
+                assert!(
+                    runtime::RESET_PAUSED.load(Ordering::Acquire),
+                    "old reset reaches the fixed ticket/pending-epoch stop"
+                );
+                if stage == 2 {
+                    assert_eq!(
+                        runtime::phase(2),
+                        3,
+                        "epoch-pending binding cannot publish ready"
+                    );
+                    assert_eq!(can_call(this, 77), 0);
+                    assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+                }
+                // This strictly newer reset publishes every real catalog/payment
+                // cell through the installed getter before the old one resumes.
+                publish(PAID_RESET_BASE + 2, true);
+                publish(COMMIT_KEY, false);
+                for bit in 0..BITS {
+                    publish(
+                        paid_catalog::bit_key(bit),
+                        words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                    );
+                }
+                publish(COMMIT_KEY, true);
+                for (base, value) in [
+                    (PRODUCTION_CLOSE_BASE, true),
+                    (PRODUCTION_ALLOW_BASE, false),
+                    (PRODUCTION_MANIFEST_BASE, true),
+                    (PRODUCTION_ALLOW_BASE, true),
+                    (PAID_CLOSE_BASE, true),
+                    (PAID_ALLOW_BASE, false),
+                    (PAID_MANIFEST_BASE, true),
+                    (PAID_ALLOW_BASE, true),
+                ] {
+                    publish(base + 77, value);
+                }
+                assert_eq!(runtime::phase(2), 2);
+                let binding = PRODUCT_OWNERS[2].load();
+                let generation = runtime::generation();
+                assert_eq!(can_call(this, 77), 1);
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+                worker.finish();
+                assert_eq!(runtime::phase(2), 2, "old reset must not roll ready back");
+                assert_eq!(
+                    PRODUCT_OWNERS[2].load(),
+                    binding,
+                    "old reset must not change the owner binding"
+                );
+                assert_eq!(
+                    runtime::generation(),
+                    generation,
+                    "old reset must not advance invocation generation"
+                );
+                assert_eq!(can_call(this, 77), 1);
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            }
+            runtime::RESET_STAGE.store(1, Ordering::Release);
+        }
         if is_runtime {
             // Fill real gateway samples; do not simulate capacity by editing
             // counters. Gate decisions still run on caller scratch/current

@@ -13,11 +13,27 @@ static INSTALLED: AtomicBool = AtomicBool::new(false);
 static RECORDING: AtomicBool = AtomicBool::new(false);
 static SAMPLE_FLIGHTS: AtomicU32 = AtomicU32::new(0);
 static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
-static GENERATION: AtomicU32 = AtomicU32::new(1);
+// Reset stamp and invocation generation change in ONE cmpxchg16b. A reset
+// paused after its phase CAS cannot advance generation after a newer reset.
+static EPOCH: AtomicJoinedWord = AtomicJoinedWord::new();
 static PHASE: [AtomicU64; PRODUCTION_OWNER_LIMIT] =
     [const { AtomicU64::new(0) }; PRODUCTION_OWNER_LIMIT];
 pub(super) static INSTALL_LOCK: Mutex<()> = Mutex::new(());
-// 0 closed, 1 rebuilding, 2 ready. Ready requires a complete natural catalog.
+// 0 closed, 1 rebuilding, 2 ready, together with session (27) and ticket (31).
+
+fn stamp(session: u32, ticket: u32) -> u64 {
+    (u64::from(session) << 31) | u64::from(ticket)
+}
+
+fn phase_word(binding: u128, phase: u64) -> u64 {
+    stamp(joined_session(binding), joined_ticket(binding)) << 2 | phase
+}
+
+fn live_session(session: u32) -> bool {
+    PRODUCT_ACTIVE.load(Ordering::Acquire)
+        && !PRODUCT_EXHAUSTED.load(Ordering::Acquire)
+        && PRODUCT_SESSION.load(Ordering::Acquire) == session
+}
 
 pub(super) fn owned() -> bool {
     OWNED.load(Ordering::Acquire)
@@ -26,13 +42,12 @@ pub(super) fn owned() -> bool {
 pub(super) fn ready(owner: usize) -> bool {
     !owned()
         || (owner < PRODUCTION_OWNER_LIMIT
-            && PHASE[owner].load(Ordering::Acquire)
-                == (u64::from(joined_ticket(PRODUCT_OWNERS[owner].load())) << 2 | 2))
+            && PHASE[owner].load(Ordering::Acquire) == phase_word(PRODUCT_OWNERS[owner].load(), 2))
 }
 
 pub(super) fn generation() -> u32 {
     if owned() {
-        GENERATION.load(Ordering::Acquire)
+        joined_session(EPOCH.load())
     } else {
         0
     }
@@ -43,37 +58,115 @@ pub(super) fn current(generation: u32) -> bool {
 }
 
 fn advance() -> bool {
-    if GENERATION
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
-        .is_err()
-    {
-        product_deactivate();
-        for phase in &PHASE {
-            phase.store(0, Ordering::Release);
+    advance_epoch(None)
+}
+
+fn advance_epoch(reset: Option<(usize, u128)>) -> bool {
+    loop {
+        let current = EPOCH.load();
+        let reset_stamp = match reset {
+            Some((owner, binding)) => {
+                if !live_session(joined_session(binding))
+                    || PRODUCT_OWNERS[owner].load() != binding
+                    || PHASE[owner].load(Ordering::Acquire) != phase_word(binding, 3)
+                {
+                    return false;
+                }
+                joined_receiver(current).max(stamp(joined_session(binding), joined_ticket(binding)))
+            }
+            None => joined_receiver(current),
+        };
+        let Some(generation) = joined_session(current).checked_add(1) else {
+            product_deactivate();
+            for phase in &PHASE {
+                phase.store(0, Ordering::Release);
+            }
+            return false;
+        };
+        if EPOCH
+            .compare_exchange(current, joined_word(reset_stamp, generation, 0, false))
+            .is_ok()
+        {
+            return true;
         }
+    }
+}
+
+pub(super) fn reset_owner(owner: usize, receiver: u64, session: u32, ticket: u32) -> bool {
+    if !owned() || owner >= PRODUCTION_OWNER_LIMIT || !live_session(session) {
         return false;
     }
-    true
-}
-
-pub(super) fn reset_owner(owner: usize, ticket: u32) {
-    if owned() && owner < PRODUCTION_OWNER_LIMIT {
-        PHASE[owner].store(u64::from(ticket) << 2 | 1, Ordering::Release);
-        advance();
+    let binding = joined_word(receiver, session, ticket, false);
+    let next_stamp = stamp(session, ticket);
+    // Changing the owner binding first closes the prior catalog immediately:
+    // ready() and every copied cell must match this exact session/ticket.
+    loop {
+        let current = PRODUCT_OWNERS[owner].load();
+        if !live_session(session)
+            || stamp(joined_session(current), joined_ticket(current)) >= next_stamp
+        {
+            return false;
+        }
+        if PRODUCT_OWNERS[owner]
+            .compare_exchange(current, binding)
+            .is_ok()
+        {
+            break;
+        }
+    }
+    loop {
+        let phase = PHASE[owner].load(Ordering::Acquire);
+        if !live_session(session)
+            || PRODUCT_OWNERS[owner].load() != binding
+            || phase >> 2 >= next_stamp
+        {
+            return false;
+        }
+        // Internal phase 3 is closed while the epoch CAS is pending. A
+        // publication cannot make this binding ready before its generation.
+        if PHASE[owner]
+            .compare_exchange(
+                phase,
+                phase_word(binding, 3),
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+        {
+            #[cfg(test)]
+            if RESET_STAGE.load(Ordering::Acquire) == 2 {
+                pause_reset();
+            }
+            if !advance_epoch(Some((owner, binding))) {
+                return false;
+            }
+            return PHASE[owner]
+                .compare_exchange(
+                    phase_word(binding, 3),
+                    phase_word(binding, 1),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok();
+        }
     }
 }
 
-pub(super) fn publication(owner: usize, binding_ticket: u32, valid: bool, committed: bool) {
-    if !owned() || owner >= PRODUCTION_OWNER_LIMIT {
+pub(super) fn publication(owner: usize, binding: u128, valid: bool, committed: bool) {
+    if !owned()
+        || owner >= PRODUCTION_OWNER_LIMIT
+        || !live_session(joined_session(binding))
+        || PRODUCT_OWNERS[owner].load() != binding
+    {
         return;
     }
     if !valid {
         let phase = PHASE[owner].load(Ordering::Acquire);
-        if phase >> 2 == u64::from(binding_ticket)
+        if phase >> 2 == phase_word(binding, 0) >> 2
             && PHASE[owner]
                 .compare_exchange(
                     phase,
-                    u64::from(binding_ticket) << 2,
+                    phase_word(binding, 0),
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 )
@@ -83,8 +176,8 @@ pub(super) fn publication(owner: usize, binding_ticket: u32, valid: bool, commit
         }
     } else if committed {
         let _ = PHASE[owner].compare_exchange(
-            u64::from(binding_ticket) << 2 | 1,
-            u64::from(binding_ticket) << 2 | 2,
+            phase_word(binding, 1),
+            phase_word(binding, 2),
             Ordering::AcqRel,
             Ordering::Acquire,
         );
@@ -93,15 +186,19 @@ pub(super) fn publication(owner: usize, binding_ticket: u32, valid: bool, commit
 
 /// The producer's typed COMMIT=false starts a transaction; it is not a failed
 /// publish. It closes authority while preserving the reset's rebuild fence.
-pub(super) fn begin_catalog(owner: usize, binding_ticket: u32) {
-    if !owned() || owner >= PRODUCTION_OWNER_LIMIT {
+pub(super) fn begin_catalog(owner: usize, binding: u128) {
+    if !owned()
+        || owner >= PRODUCTION_OWNER_LIMIT
+        || !live_session(joined_session(binding))
+        || PRODUCT_OWNERS[owner].load() != binding
+    {
         return;
     }
-    let ready = u64::from(binding_ticket) << 2 | 2;
+    let ready = phase_word(binding, 2);
     if PHASE[owner]
         .compare_exchange(
             ready,
-            u64::from(binding_ticket) << 2 | 1,
+            phase_word(binding, 1),
             Ordering::AcqRel,
             Ordering::Acquire,
         )
@@ -166,7 +263,37 @@ fn stop_observation() -> BridgeStatus {
 pub(super) fn allocate_trace() -> *mut CompositeTrace {
     let trace = Box::into_raw(CompositeTrace::boxed());
     OWNED.store(true, Ordering::Release);
+    advance();
     trace
+}
+
+#[cfg(test)]
+pub(super) static RESET_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static RESET_STAGE: AtomicU32 = AtomicU32::new(1);
+#[cfg(test)]
+pub(super) static RESET_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static RESET_RELEASE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+pub(super) fn pause_reset_after_ticket() {
+    if RESET_STAGE.load(Ordering::Acquire) == 1 {
+        pause_reset();
+    }
+}
+
+#[cfg(test)]
+fn pause_reset() {
+    if RESET_PAUSE
+        .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        RESET_PAUSED.store(true, Ordering::Release);
+        while !RESET_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+    }
 }
 
 pub(super) fn start_observation(seconds: u32) {
@@ -235,6 +362,28 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         {
             return BridgeStatus::ProcessIdentity as u32;
         }
+        // Relay trampolines return into this exact image. Pin its verified
+        // loader module as well as the bridge; ordinary FreeLibrary cannot
+        // unmap it while a gateway or an already-fetched jump is executing.
+        let gamecore = unsafe { GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr()) };
+        if gamecore.is_null()
+            || !module_path(gamecore).is_some_and(|path| same_file(&path, GAMECORE))
+            || pinned_gamecore(Path::new(GAMECORE), BridgeMode::ProductionAdmission).is_none()
+        {
+            return BridgeStatus::GameCoreIdentity as u32;
+        }
+        let mut pinned_core = null_mut();
+        if unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                gamecore.cast(),
+                &mut pinned_core,
+            )
+        } == 0
+            || pinned_core != gamecore
+        {
+            return BridgeStatus::GameCoreIdentity as u32;
+        }
         // Pin before publishing any executable relay. A fetched jump may live
         // beyond restoration even when installation fails halfway through.
         let mut module = null_mut();
@@ -270,6 +419,54 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         product_deactivate();
         BridgeStatus::Panic as u32
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
+        let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
+        let before = (
+            owned(),
+            PRODUCT_ACTIVE.load(Ordering::Acquire),
+            PRODUCT_SESSION.load(Ordering::Acquire),
+            EPOCH.load(),
+        );
+        for input in [
+            null_mut(),
+            std::ptr::dangling_mut(),
+            usize::MAX as *mut c_void,
+        ] {
+            assert_eq!(
+                BridgeRuntimeInstall(input),
+                BridgeStatus::InvalidInput as u32
+            );
+        }
+        let mut invalid = BridgeConfig::for_production(0, 0, 0);
+        // This export accepts only its explicit version and game-owned trace.
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        invalid.version = RUNTIME_CONFIG_VERSION;
+        invalid.trace_size = 0;
+        invalid.max_seconds = 0;
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        assert_eq!(
+            (
+                owned(),
+                PRODUCT_ACTIVE.load(Ordering::Acquire),
+                PRODUCT_SESSION.load(Ordering::Acquire),
+                EPOCH.load()
+            ),
+            before
+        );
+    }
 }
 
 #[unsafe(no_mangle)]

@@ -953,12 +953,19 @@ fn product_property_begin(receiver: u64, key: u32) -> u64 {
         return 0;
     };
     if reset_owner.is_some() {
-        runtime::reset_owner(owner, ticket);
+        #[cfg(test)]
+        runtime::pause_reset_after_ticket();
         // The synchronized producer reads only its own owner key. Binding and
         // closing at getter entry also work when Gameplay has no CanEver API.
         // Invalidate the previous permission before clearing duplicate owners:
         // a concurrent CanEver cannot observe the old word in that interval.
-        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+        if runtime::owned() {
+            if !runtime::reset_owner(owner, receiver, session, ticket) {
+                return 0;
+            }
+        } else {
+            product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+        }
         #[cfg(test)]
         if PRODUCT_TEST_RESET_PAUSE.load(Ordering::Acquire) {
             PRODUCT_TEST_RESET_PAUSED.store(true, Ordering::Release);
@@ -1419,15 +1426,7 @@ unsafe extern "system" fn calibration_end(
             row.property_receiver.load(Ordering::Relaxed),
             row.joined_session.load(Ordering::Relaxed),
         ) {
-            result = if runtime::owned() {
-                if permitted {
-                    original_rax
-                } else {
-                    original_rax & !0xff
-                }
-            } else {
-                (original_rax & !0xff) | u64::from(permitted)
-            };
+            result = (original_rax & !0xff) | u64::from(permitted);
         }
     }
     if runtime::owned()
@@ -1698,7 +1697,7 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
             {
                 runtime::publication(
                     owner,
-                    joined_ticket(binding),
+                    binding,
                     state == 1 && tag == 1 && payload <= 1 && flags == 0,
                     false,
                 );
