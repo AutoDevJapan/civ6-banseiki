@@ -12,6 +12,7 @@ pub const MAX_ACTIVE_SECONDS: u32 = 300;
 pub const PINNED_GAMECORE_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 
+pub mod appointment_glue;
 pub mod governor_payment;
 pub mod paid_artifact;
 pub mod paid_catalog;
