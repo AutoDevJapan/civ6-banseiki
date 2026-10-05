@@ -70,8 +70,79 @@ pub(super) fn generation() -> u32 {
         0
     }
 }
-pub(super) fn current(generation: u32) -> bool {
-    !owned() || (generation != 0 && generation == self::generation())
+/// Invocation-local fence, independent of telemetry and the delayed epoch
+/// callback. Numeric receiver identity is used only during this invocation.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub(super) struct CallFence {
+    pub session: u32,
+    pub ticket: u32,
+    pub owner: u32,
+    pub read_state: u32,
+    pub receiver: u64,
+}
+const _: () = assert!(std::mem::size_of::<CallFence>() == 24);
+
+fn call_owner(governors: u64) -> Option<(u32, u64)> {
+    let player = u64::from_le_bytes(copy_current::<8>(governors.checked_add(0x70)?)?);
+    if player == 0 {
+        return None;
+    }
+    let owner = u32::from_le_bytes(copy_current::<4>(player.checked_add(0xd8)?)?);
+    let receiver = player.checked_add(0x528)?;
+    (owner < PRODUCTION_OWNER_LIMIT as u32 && receiver & 7 == 0).then_some((owner, receiver))
+}
+
+pub(super) fn call_begin(governors: u64) -> CallFence {
+    if !owned() {
+        return CallFence::default();
+    }
+    let session = PRODUCT_SESSION.load(Ordering::Acquire);
+    let ticket = if live_session(session) {
+        product_next_ticket().unwrap_or(0)
+    } else {
+        0
+    };
+    let Some((owner, receiver)) = call_owner(governors) else {
+        return CallFence {
+            session,
+            ticket,
+            ..CallFence::default()
+        };
+    };
+    CallFence {
+        session,
+        ticket,
+        owner,
+        read_state: 1,
+        receiver,
+    }
+}
+
+pub(super) fn call_current(fence: CallFence, governors: u64) -> bool {
+    if !owned() {
+        return true;
+    }
+    if fence.read_state != 1
+        || fence.ticket == 0
+        || !live_session(fence.session)
+        || call_owner(governors) != Some((fence.owner, fence.receiver))
+    {
+        return false;
+    }
+    let owner = fence.owner as usize;
+    let binding = PRODUCT_OWNERS[owner].load();
+    let snapshot = STATE[owner].load();
+    state_phase(snapshot) == 2
+        && snapshot & BIND_MASK == binding_stamp(binding)
+        && joined_session(binding) == fence.session
+        && joined_receiver(binding) == fence.receiver
+        && joined_ticket(binding) <= fence.ticket
+        && state_begin(snapshot) <= fence.ticket
+        && state_ticket(snapshot) <= fence.ticket
+        && STATE[owner].load() == snapshot
+        && PRODUCT_OWNERS[owner].load() == binding
+        && live_session(fence.session)
 }
 
 #[derive(Clone, Copy)]

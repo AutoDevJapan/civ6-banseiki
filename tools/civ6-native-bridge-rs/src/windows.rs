@@ -479,6 +479,7 @@ pub struct CalibrationRow {
     pub effective_al: AtomicU32,
     pub property_receiver: AtomicU64,
     pub joined_session: AtomicU32,
+    pub entry_ticket: AtomicU32,
 }
 
 #[repr(C)]
@@ -1317,6 +1318,7 @@ unsafe extern "system" fn calibration_begin(
         &trace.rows[slot]
     };
     row.joined_session.store(session, Ordering::Relaxed);
+    row.entry_ticket.store(bind_ticket, Ordering::Relaxed);
     row.sequence.store(runtime_generation, Ordering::Relaxed);
     row.governor_index.store(governor_index, Ordering::Relaxed);
     row.governors_this.store(governors_this, Ordering::Relaxed);
@@ -1414,7 +1416,6 @@ unsafe extern "system" fn calibration_end(
         };
     }
     let row = unsafe { &*row };
-    let runtime_generation = row.sequence.load(Ordering::Relaxed);
     row.original_al
         .store((original_rax & 0xff) as u32, Ordering::Relaxed);
     let mut result = original_rax;
@@ -1440,7 +1441,16 @@ unsafe extern "system" fn calibration_end(
         }
     }
     if runtime::owned()
-        && (!PRODUCT_ACTIVE.load(Ordering::Acquire) || !runtime::current(runtime_generation))
+        && !runtime::call_current(
+            runtime::CallFence {
+                session: row.joined_session.load(Ordering::Relaxed),
+                ticket: row.entry_ticket.load(Ordering::Relaxed),
+                owner: row.player_id.load(Ordering::Relaxed),
+                read_state: row.owner_read_state.load(Ordering::Relaxed),
+                receiver: row.property_receiver.load(Ordering::Relaxed),
+            },
+            governors_this,
+        )
     {
         result &= !0xff;
     }

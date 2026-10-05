@@ -395,6 +395,11 @@ mod tests {
         owned_child(true, "accept-gap");
     }
 
+    #[test]
+    fn runtime_call_started_before_accepted_false_is_rejected_without_epoch_advance() {
+        owned_child(true, "caller-fence");
+    }
+
     fn owned_child(runtime: bool, case: &str) {
         let mut child = OwnedChild(
             std::process::Command::new(std::env::current_exe().unwrap())
@@ -491,7 +496,8 @@ mod tests {
             // Model the callback that cannot reach its end (including a
             // foreign unwind). Do not claim execution of a real Core SEH.
             let session = PRODUCT_SESSION.load(Ordering::Acquire);
-            let token = unsafe { assignment::assign_calibration_begin(0, 0, 0, 0, 0) };
+            let mut fence = runtime::CallFence::default();
+            let token = unsafe { assignment::assign_calibration_begin(0, 0, 0, 0, 0, &mut fence) };
             assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 1);
             assert_eq!(
                 runtime::BridgeRuntimeStopObservation(null_mut()),
@@ -503,7 +509,7 @@ mod tests {
             assert!(ASSIGNMENT_HOOK.lock().unwrap().is_some());
             assert!(JOINED_PROPERTY_HOOK.lock().unwrap().is_some());
             assert_eq!(
-                unsafe { assignment::assign_calibration_end(token, 0xaabb01, 0, 0) },
+                unsafe { assignment::assign_calibration_end(token, 0xaabb01, 0, 0, &fence) },
                 0xaabb00
             );
             assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 0);
@@ -904,6 +910,128 @@ mod tests {
             assert_eq!(can_call(this, 77), 1);
             assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
         }
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("caller-fence") {
+            for observing in [true, false] {
+                if !observing {
+                    runtime::expire_observation();
+                }
+                let old_generation = runtime::generation();
+                let mut old_row = CalibrationRow::default();
+                let mut old_fence = runtime::CallFence::default();
+                let old_can = unsafe { calibration_begin(this, 77, 0, &mut old_row) };
+                let old_assign = unsafe {
+                    assignment::assign_calibration_begin(
+                        this,
+                        person,
+                        0,
+                        sentinel,
+                        0,
+                        &mut old_fence,
+                    )
+                };
+                COMMIT_STAGE.store(2, Ordering::Release);
+                COMMIT_PAUSED.store(false, Ordering::Release);
+                COMMIT_RELEASE.store(false, Ordering::Release);
+                COMMIT_PAUSE.store(true, Ordering::Release);
+                unsafe {
+                    ptr::write_volatile(raw_tag.add(1), 0);
+                }
+                struct CallerWorker(Option<std::thread::JoinHandle<u64>>);
+                impl CallerWorker {
+                    fn finish(&mut self) {
+                        COMMIT_RELEASE.store(true, Ordering::Release);
+                        if let Some(worker) = self.0.take() {
+                            worker.join().unwrap();
+                        }
+                    }
+                }
+                impl Drop for CallerWorker {
+                    fn drop(&mut self) {
+                        self.finish();
+                    }
+                }
+                let mut worker =
+                    CallerWorker(Some(std::thread::spawn(move || get(receiver, COMMIT_KEY))));
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while !COMMIT_PAUSED.load(Ordering::Acquire) && std::time::Instant::now() < deadline
+                {
+                    std::thread::yield_now();
+                }
+                assert!(COMMIT_PAUSED.load(Ordering::Acquire));
+                assert_eq!(runtime::phase(2), 1);
+                // No reset or second false: finish the accepted transaction while
+                // its epoch callback is paused, then publish this person's payment.
+                for bit in 0..BITS {
+                    publish(
+                        paid_catalog::bit_key(bit),
+                        words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                    );
+                }
+                publish(COMMIT_KEY, true);
+                for (base, value) in [
+                    (PAID_CLOSE_BASE, true),
+                    (PAID_ALLOW_BASE, false),
+                    (PAID_MANIFEST_BASE, true),
+                    (PAID_ALLOW_BASE, true),
+                ] {
+                    publish(base + 77, value);
+                }
+                assert_eq!(runtime::phase(2), 2);
+                assert_eq!(
+                    runtime::generation(),
+                    old_generation,
+                    "accepted false has not advanced epoch"
+                );
+                assert_eq!(
+                    unsafe { calibration_end(old_can, sentinel, 77, this) },
+                    sentinel & !255,
+                    "old appointment call must be fenced by transaction entry, not delayed epoch"
+                );
+                assert_eq!(
+                    unsafe {
+                        assignment::assign_calibration_end(
+                            old_assign, sentinel, this, person, &old_fence,
+                        )
+                    },
+                    sentinel & !255,
+                    "old assignment call must be fenced by transaction entry, not delayed epoch"
+                );
+                assert_eq!(
+                    can_call(this, 77),
+                    1,
+                    "new appointment call uses new transaction"
+                );
+                assert_eq!(
+                    assign_call(this, person, 0, sentinel),
+                    sentinel,
+                    "new paid assignment uses new transaction"
+                );
+                assert_eq!(
+                    assign_call(this, person, 0, sentinel & !255),
+                    sentinel & !255
+                );
+                worker.finish();
+                assert_eq!(
+                    runtime::generation(),
+                    old_generation,
+                    "obsolete epoch update is dropped"
+                );
+                COMMIT_STAGE.store(0, Ordering::Release);
+            }
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            assert!(HOOK.lock().unwrap().is_some());
+            assert!(ASSIGNMENT_HOOK.lock().unwrap().is_some());
+            assert!(JOINED_PROPERTY_HOOK.lock().unwrap().is_some());
+            assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 0);
+            assert_eq!(
+                trace.joined.calibration.in_flight.load(Ordering::Acquire),
+                0
+            );
+            return;
+        }
         if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("accept-gap") {
             for kind in [0u32, 2] {
                 let binding = PRODUCT_OWNERS[2].load();
@@ -1119,8 +1247,10 @@ mod tests {
             );
             // Capture both entry callbacks before reload; finish them only
             // after a new generation has rebuilt a complete catalog/payment.
-            let old_assign =
-                unsafe { assignment::assign_calibration_begin(this, person, 0, sentinel, 0) };
+            let mut old_fence = runtime::CallFence::default();
+            let old_assign = unsafe {
+                assignment::assign_calibration_begin(this, person, 0, sentinel, 0, &mut old_fence)
+            };
             let mut scratch = CalibrationRow::default();
             let old_can = unsafe { calibration_begin(this, 77, 0, &mut scratch) };
             let old_property = composite::begin(receiver, PAID_ALLOW_BASE + 77);
@@ -1153,7 +1283,11 @@ mod tests {
             }
             assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
             assert_eq!(
-                unsafe { assignment::assign_calibration_end(old_assign, sentinel, this, person) },
+                unsafe {
+                    assignment::assign_calibration_end(
+                        old_assign, sentinel, this, person, &old_fence,
+                    )
+                },
                 sentinel & !255
             );
             assert_eq!(
