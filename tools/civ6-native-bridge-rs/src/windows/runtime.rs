@@ -8,6 +8,15 @@ use windows_sys::Win32::System::LibraryLoader::{
 };
 
 pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0001;
+// Relocated data exports identify the exact gateway for each entry. Read
+// their values in the loaded DLL, not a DONT_RESOLVE_DLL_REFERENCES image.
+#[unsafe(no_mangle)]
+pub static BRIDGE_RUNTIME_APPOINTMENT_GATEWAY: unsafe extern "system" fn() = calibration_gateway;
+#[unsafe(no_mangle)]
+pub static BRIDGE_RUNTIME_PROPERTY_GATEWAY: unsafe extern "system" fn() = property_gateway;
+#[unsafe(no_mangle)]
+pub static BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY: unsafe extern "system" fn() =
+    assignment::assign_calibration_gateway;
 static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 static RECORDING: AtomicBool = AtomicBool::new(false);
@@ -16,35 +25,44 @@ static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
 // Reset stamp and invocation generation change in ONE cmpxchg16b. A reset
 // paused after its phase CAS cannot advance generation after a newer reset.
 static EPOCH: AtomicJoinedWord = AtomicJoinedWord::new();
-static PHASE: [AtomicU64; PRODUCTION_OWNER_LIMIT] =
-    [const { AtomicU64::new(0) }; PRODUCTION_OWNER_LIMIT];
+// One CAS value carries binding(session27/ticket31), latest transition ticket31,
+// transaction-start ticket31 and phase2. Owner is the array index; the exact
+// receiver is revalidated against PRODUCT_OWNERS before every CAS.
+static STATE: [AtomicJoinedWord; PRODUCTION_OWNER_LIMIT] =
+    [const { AtomicJoinedWord::new() }; PRODUCTION_OWNER_LIMIT];
 pub(super) static INSTALL_LOCK: Mutex<()> = Mutex::new(());
-// 0 closed, 1 rebuilding, 2 ready, together with session (27) and ticket (31).
+const BIND_MASK: u128 = (1u128 << 58) - 1;
+const TICKET_MASK: u128 = (1u128 << 31) - 1;
 
 fn stamp(session: u32, ticket: u32) -> u64 {
     (u64::from(session) << 31) | u64::from(ticket)
 }
-
-fn phase_word(binding: u128, phase: u64) -> u64 {
-    stamp(joined_session(binding), joined_ticket(binding)) << 2 | phase
+fn binding_stamp(binding: u128) -> u128 {
+    u128::from(stamp(joined_session(binding), joined_ticket(binding)))
 }
-
+fn state_word(binding: u128, ticket: u32, begin: u32, phase: u32) -> u128 {
+    binding_stamp(binding)
+        | (u128::from(ticket) << 58)
+        | (u128::from(begin) << 89)
+        | (u128::from(phase) << 120)
+}
+fn state_ticket(state: u128) -> u32 {
+    ((state >> 58) & TICKET_MASK) as u32
+}
+fn state_begin(state: u128) -> u32 {
+    ((state >> 89) & TICKET_MASK) as u32
+}
+fn state_phase(state: u128) -> u32 {
+    ((state >> 120) & 3) as u32
+}
 fn live_session(session: u32) -> bool {
     PRODUCT_ACTIVE.load(Ordering::Acquire)
         && !PRODUCT_EXHAUSTED.load(Ordering::Acquire)
         && PRODUCT_SESSION.load(Ordering::Acquire) == session
 }
-
 pub(super) fn owned() -> bool {
     OWNED.load(Ordering::Acquire)
 }
-
-pub(super) fn ready(owner: usize) -> bool {
-    !owned()
-        || (owner < PRODUCTION_OWNER_LIMIT
-            && PHASE[owner].load(Ordering::Acquire) == phase_word(PRODUCT_OWNERS[owner].load(), 2))
-}
-
 pub(super) fn generation() -> u32 {
     if owned() {
         joined_session(EPOCH.load())
@@ -52,43 +70,116 @@ pub(super) fn generation() -> u32 {
         0
     }
 }
-
 pub(super) fn current(generation: u32) -> bool {
     !owned() || (generation != 0 && generation == self::generation())
 }
 
+#[derive(Clone, Copy)]
+struct Fence {
+    owner: usize,
+    binding: u128,
+    ticket: u32,
+    commit: Option<u128>,
+}
+impl Fence {
+    fn live(self) -> bool {
+        self.owner < PRODUCTION_OWNER_LIMIT
+            && live_session(joined_session(self.binding))
+            && PRODUCT_OWNERS[self.owner].load() == self.binding
+            && self
+                .commit
+                .is_none_or(|commit| composite::commit_word(self.owner) == commit)
+    }
+}
 fn advance() -> bool {
     advance_epoch(None)
 }
-
-fn advance_epoch(reset: Option<(usize, u128)>) -> bool {
+fn advance_epoch(fence: Option<(Fence, u128)>) -> bool {
     loop {
         let current = EPOCH.load();
-        let reset_stamp = match reset {
-            Some((owner, binding)) => {
-                if !live_session(joined_session(binding))
-                    || PRODUCT_OWNERS[owner].load() != binding
-                    || PHASE[owner].load(Ordering::Acquire) != phase_word(binding, 3)
-                {
-                    return false;
-                }
-                joined_receiver(current).max(stamp(joined_session(binding), joined_ticket(binding)))
+        let latest_stamp = if let Some((fence, expected)) = fence {
+            if !fence.live() || STATE[fence.owner].load() != expected {
+                return false;
             }
-            None => joined_receiver(current),
+            joined_receiver(current).max(stamp(joined_session(fence.binding), fence.ticket))
+        } else {
+            joined_receiver(current)
         };
         let Some(generation) = joined_session(current).checked_add(1) else {
             product_deactivate();
-            for phase in &PHASE {
-                phase.store(0, Ordering::Release);
+            for state in &STATE {
+                state.store(0);
             }
             return false;
         };
         if EPOCH
-            .compare_exchange(current, joined_word(reset_stamp, generation, 0, false))
+            .compare_exchange(current, joined_word(latest_stamp, generation, 0, false))
             .is_ok()
         {
             return true;
         }
+    }
+}
+
+// Reset and every accepted COMMIT use this same monotonic transition. Checking
+// only a successful cell write is insufficient: the callback may be paused
+// after acceptance. The latest entry stamp remains in the state even when its
+// phase repeats, so no ready -> rebuilding -> ready ABA can authorize old work.
+fn transition(fence: Fence, requested: u32) -> bool {
+    loop {
+        let state = STATE[fence.owner].load();
+        let incoming = binding_stamp(fence.binding);
+        if !fence.live()
+            || state & BIND_MASK > incoming
+            || (state & BIND_MASK == incoming && state_ticket(state) >= fence.ticket)
+        {
+            return false;
+        }
+        let begin = if fence.commit.is_none() {
+            0
+        } else if requested == 1 {
+            fence.ticket
+        } else if state & BIND_MASK == incoming {
+            state_begin(state)
+        } else {
+            0
+        };
+        let phase = if requested == 2
+            && (begin == 0 || state & BIND_MASK != incoming || !matches!(state_phase(state), 1 | 2))
+        {
+            0
+        } else {
+            requested
+        };
+        let pending = state_word(
+            fence.binding,
+            fence.ticket,
+            begin,
+            if phase == 2 { 2 } else { 3 },
+        );
+        if STATE[fence.owner].compare_exchange(state, pending).is_err() {
+            continue;
+        }
+        #[cfg(test)]
+        if fence.commit.is_none() && RESET_STAGE.load(Ordering::Acquire) == 2 {
+            pause_reset();
+        }
+        #[cfg(test)]
+        if fence.commit.is_some() {
+            composite::pause_commit(3);
+        }
+        if phase == 2 {
+            return true;
+        }
+        if !advance_epoch(Some((fence, pending))) {
+            return false;
+        }
+        return STATE[fence.owner]
+            .compare_exchange(
+                pending,
+                state_word(fence.binding, fence.ticket, begin, phase),
+            )
+            .is_ok();
     }
 }
 
@@ -97,14 +188,9 @@ pub(super) fn reset_owner(owner: usize, receiver: u64, session: u32, ticket: u32
         return false;
     }
     let binding = joined_word(receiver, session, ticket, false);
-    let next_stamp = stamp(session, ticket);
-    // Changing the owner binding first closes the prior catalog immediately:
-    // ready() and every copied cell must match this exact session/ticket.
     loop {
         let current = PRODUCT_OWNERS[owner].load();
-        if !live_session(session)
-            || stamp(joined_session(current), joined_ticket(current)) >= next_stamp
-        {
+        if !live_session(session) || binding_stamp(current) >= binding_stamp(binding) {
             return false;
         }
         if PRODUCT_OWNERS[owner]
@@ -114,98 +200,68 @@ pub(super) fn reset_owner(owner: usize, receiver: u64, session: u32, ticket: u32
             break;
         }
     }
-    loop {
-        let phase = PHASE[owner].load(Ordering::Acquire);
-        if !live_session(session)
-            || PRODUCT_OWNERS[owner].load() != binding
-            || phase >> 2 >= next_stamp
-        {
-            return false;
-        }
-        // Internal phase 3 is closed while the epoch CAS is pending. A
-        // publication cannot make this binding ready before its generation.
-        if PHASE[owner]
-            .compare_exchange(
-                phase,
-                phase_word(binding, 3),
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            )
-            .is_ok()
-        {
-            #[cfg(test)]
-            if RESET_STAGE.load(Ordering::Acquire) == 2 {
-                pause_reset();
-            }
-            if !advance_epoch(Some((owner, binding))) {
-                return false;
-            }
-            return PHASE[owner]
-                .compare_exchange(
-                    phase_word(binding, 3),
-                    phase_word(binding, 1),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                )
-                .is_ok();
-        }
-    }
+    transition(
+        Fence {
+            owner,
+            binding,
+            ticket,
+            commit: None,
+        },
+        1,
+    )
 }
 
-pub(super) fn publication(owner: usize, binding: u128, valid: bool, committed: bool) {
-    if !owned()
-        || owner >= PRODUCTION_OWNER_LIMIT
-        || !live_session(joined_session(binding))
-        || PRODUCT_OWNERS[owner].load() != binding
-    {
-        return;
-    }
-    if !valid {
-        let phase = PHASE[owner].load(Ordering::Acquire);
-        if phase >> 2 == phase_word(binding, 0) >> 2
-            && PHASE[owner]
-                .compare_exchange(
-                    phase,
-                    phase_word(binding, 0),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                )
-                .is_ok()
-        {
-            advance();
-        }
-    } else if committed {
-        let _ = PHASE[owner].compare_exchange(
-            phase_word(binding, 1),
-            phase_word(binding, 2),
-            Ordering::AcqRel,
-            Ordering::Acquire,
+pub(super) fn observe_commit(owner: usize, binding: u128, commit: u128, phase: u32) {
+    if owned() {
+        transition(
+            Fence {
+                owner,
+                binding,
+                ticket: joined_ticket(commit),
+                commit: Some(commit),
+            },
+            phase,
         );
     }
 }
 
-/// The producer's typed COMMIT=false starts a transaction; it is not a failed
-/// publish. It closes authority while preserving the reset's rebuild fence.
-pub(super) fn begin_catalog(owner: usize, binding: u128) {
-    if !owned()
-        || owner >= PRODUCTION_OWNER_LIMIT
+pub(super) fn catalog_begin(owner: usize, binding: u128) -> Option<u32> {
+    if !owned() {
+        return Some(joined_ticket(binding));
+    }
+    if owner >= PRODUCTION_OWNER_LIMIT
         || !live_session(joined_session(binding))
         || PRODUCT_OWNERS[owner].load() != binding
     {
-        return;
+        return None;
     }
-    let ready = phase_word(binding, 2);
-    if PHASE[owner]
-        .compare_exchange(
-            ready,
-            phase_word(binding, 1),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        )
-        .is_ok()
-    {
-        advance();
+    let state = STATE[owner].load();
+    (state & BIND_MASK == binding_stamp(binding)
+        && matches!(state_phase(state), 1 | 2)
+        && state_begin(state) > joined_ticket(binding))
+    .then_some(state_begin(state))
+}
+
+pub(super) fn ready(owner: usize) -> bool {
+    if !owned() {
+        return true;
     }
+    if owner >= PRODUCTION_OWNER_LIMIT {
+        return false;
+    }
+    let state = STATE[owner].load();
+    let binding = PRODUCT_OWNERS[owner].load();
+    let commit = composite::commit_word(owner);
+    state_phase(state) == 2
+        && state & BIND_MASK == binding_stamp(binding)
+        && state_ticket(state) == joined_ticket(commit)
+        && joined_permitted(commit)
+        && joined_session(commit) == joined_session(binding)
+        && joined_receiver(commit) == joined_receiver(binding)
+        && live_session(joined_session(binding))
+        && STATE[owner].load() == state
+        && PRODUCT_OWNERS[owner].load() == binding
+        && composite::commit_word(owner) == commit
 }
 
 /// Acquisition/recheck makes observation stop drain only sampled callbacks.
@@ -310,7 +366,12 @@ pub(super) fn expire_observation() {
 
 #[cfg(test)]
 pub(super) fn phase(owner: usize) -> u32 {
-    PHASE[owner].load(Ordering::Acquire) as u32 & 3
+    state_phase(STATE[owner].load())
+}
+
+#[cfg(test)]
+pub(super) fn state_for_test(owner: usize) -> u128 {
+    STATE[owner].load()
 }
 
 /// Config is also a receipt: success returns the game-owned trace address.
@@ -487,10 +548,10 @@ fn close() -> u32 {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput as u32;
     }
-    for phase in &PHASE {
-        phase.store(0, Ordering::Release);
-    }
     product_deactivate();
+    for state in &STATE {
+        state.store(0);
+    }
     if advance() {
         BridgeStatus::Ok as u32
     } else {

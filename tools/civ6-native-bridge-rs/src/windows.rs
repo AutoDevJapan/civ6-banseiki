@@ -900,22 +900,32 @@ fn product_publish_word(
     ticket: u32,
     bit: bool,
 ) {
+    let _ = product_try_publish_word(cell, receiver, session, ticket, bit);
+}
+
+fn product_try_publish_word(
+    cell: &AtomicJoinedWord,
+    receiver: u64,
+    session: u32,
+    ticket: u32,
+    bit: bool,
+) -> Option<u128> {
     loop {
         if !PRODUCT_ACTIVE.load(Ordering::Acquire)
             || PRODUCT_SESSION.load(Ordering::Acquire) != session
             || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
         {
-            return;
+            return None;
         }
         let current = cell.load();
-        if joined_session(current) == session && joined_ticket(current) >= ticket {
-            return;
-        }
-        if cell
-            .compare_exchange(current, joined_word(receiver, session, ticket, bit))
-            .is_ok()
+        if joined_session(current) > session
+            || (joined_session(current) == session && joined_ticket(current) >= ticket)
         {
-            return;
+            return None;
+        }
+        let published = joined_word(receiver, session, ticket, bit);
+        if cell.compare_exchange(current, published).is_ok() {
+            return Some(published);
         }
     }
 }
@@ -1684,29 +1694,13 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
     };
     if trace.scope == BridgeMode::ProductionAdmission as u32 {
-        if runtime::owned() && token != 0 {
-            let owner = ((token >> 31) & 63) as usize;
-            let session = (token >> 37) as u32;
-            let ticket = token as u32 & JOINED_TICKET_MAX;
-            let binding = PRODUCT_OWNERS[owner].load();
-            if PRODUCT_ACTIVE.load(Ordering::Acquire)
-                && session == PRODUCT_SESSION.load(Ordering::Acquire)
-                && joined_session(binding) == session
-                && joined_receiver(binding) == property
-                && joined_ticket(binding) < ticket
-            {
-                runtime::publication(
-                    owner,
-                    binding,
-                    state == 1 && tag == 1 && payload <= 1 && flags == 0,
-                    false,
-                );
-            }
-        }
         if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
             composite::observe(property, key_id, token, state, tag, payload, flags);
         } else {
             product_observe_property(property, key_id, token, state, tag, payload, flags);
+            if runtime::owned() && !(state == 1 && tag == 1 && flags == 0 && payload <= 1) {
+                composite::invalidate(property, token);
+            }
         }
     }
     #[cfg(test)]

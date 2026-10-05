@@ -1,7 +1,13 @@
 //! Explicit ownership transfer, separate from the bounded uninstall contract.
 use super::*;
 
-fn exports(path: &Path) -> Result<(usize, usize), String> {
+struct Exports {
+    install: usize,
+    stop: usize,
+    gateways: [usize; 3],
+}
+
+fn exports(path: &Path) -> Result<Exports, String> {
     let dll = LocalDll(unsafe {
         LoadLibraryExW(
             wide(&path.to_string_lossy()).as_ptr(),
@@ -16,13 +22,28 @@ fn exports(path: &Path) -> Result<(usize, usize), String> {
         .ok_or("runtime install export missing")? as usize;
     let stop = unsafe { GetProcAddress(dll.0, c"BridgeRuntimeStopObservation".as_ptr().cast()) }
         .ok_or("runtime observation stop export missing")? as usize;
-    Ok((install - dll.0 as usize, stop - dll.0 as usize))
+    let mut gateways = [0usize; 3];
+    for (slot, name) in gateways.iter_mut().zip([
+        c"BRIDGE_RUNTIME_APPOINTMENT_GATEWAY",
+        c"BRIDGE_RUNTIME_PROPERTY_GATEWAY",
+        c"BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY",
+    ]) {
+        *slot = unsafe { GetProcAddress(dll.0, name.as_ptr().cast()) }
+            .ok_or("runtime gateway data export missing")? as usize
+            - dll.0 as usize;
+    }
+    Ok(Exports {
+        install: install - dll.0 as usize,
+        stop: stop - dll.0 as usize,
+        gateways,
+    })
 }
 
 #[derive(Clone, Copy)]
 struct BridgeImage {
     base: usize,
     size: usize,
+    gateways: [u64; 3],
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -31,6 +52,7 @@ struct PatchedEntries {
     assignment: [u8; 8],
     property: [u8; 8],
     prefix: [u8; PROPERTY_PREFIX_LEN],
+    relays: [[u8; 14]; 3],
 }
 
 fn verify_relay(
@@ -38,7 +60,8 @@ fn verify_relay(
     entry: usize,
     branch: &[u8],
     bridge: BridgeImage,
-) -> Result<(), String> {
+    expected_gateway: u64,
+) -> Result<[u8; 14], String> {
     if branch.len() < 5 || branch[0] != 0xe9 {
         return Err("runtime branch missing".into());
     }
@@ -56,7 +79,10 @@ fn verify_relay(
     if gateway < bridge.base || gateway - bridge.base >= bridge.size {
         return Err("runtime relay gateway is outside its pinned bridge DLL".into());
     }
-    Ok(())
+    if gateway as u64 != expected_gateway {
+        return Err("runtime relay gateway differs from the expected entry".into());
+    }
+    Ok(code)
 }
 
 fn patched_entries(
@@ -68,6 +94,7 @@ fn patched_entries(
     bridge: BridgeImage,
 ) -> Result<PatchedEntries, String> {
     let mut entries = [[0u8; 8]; 2];
+    let mut relays = [[0u8; 14]; 3];
     for (slot, (rva, expected)) in [
         (PINNED_CAN_EVER_RVA, can_original),
         (
@@ -83,7 +110,13 @@ fn patched_entries(
         if bytes[0] != 0xe9 || bytes[5..] != expected[5..] {
             return Err("runtime entry publication differs".into());
         }
-        verify_relay(game, base + rva, &bytes, bridge)?;
+        relays[slot] = verify_relay(
+            game,
+            base + rva,
+            &bytes,
+            bridge,
+            bridge.gateways[if slot == 0 { 0 } else { 2 }],
+        )?;
         entries[slot] = bytes;
     }
     let mut bytes = [0u8; 8];
@@ -100,17 +133,19 @@ fn patched_entries(
     if prefix[0] != 0xe9 {
         return Err("runtime prefix missing".into());
     }
-    verify_relay(
+    relays[2] = verify_relay(
         game,
         base + PINNED_PROPERTY_GET_RVA - PROPERTY_PREFIX_LEN,
         &prefix,
         bridge,
+        bridge.gateways[1],
     )?;
     Ok(PatchedEntries {
         appointment: entries[0],
         assignment: entries[1],
         property: bytes,
         prefix,
+        relays,
     })
 }
 
@@ -132,7 +167,8 @@ pub(super) fn run(
     )?;
     let dll = bridge_dll()?;
     let bridge_sha = sha256(&dll)?;
-    let (install_rva, stop_rva) = exports(&dll)?;
+    let exports = exports(&dll)?;
+    let (install_rva, stop_rva) = (exports.install, exports.stop);
     let loader = remote_load_library(parsed.pid)?;
     let mut writer = BufWriter::new(File::create_new(&parsed.out).map_err(|e| e.to_string())?);
     write_json(
@@ -157,7 +193,13 @@ pub(super) fn run(
             .into_iter()
             .find(|m| same_path(&m.path, &dll))
             .ok_or("runtime DLL missing")?;
-        if install_rva >= bridge.size || stop_rva >= bridge.size {
+        if install_rva >= bridge.size
+            || stop_rva >= bridge.size
+            || exports
+                .gateways
+                .iter()
+                .any(|rva| rva.checked_add(8).is_none_or(|end| end > bridge.size))
+        {
             return Err("runtime exports outside remote DLL".into());
         }
         let mut config = BridgeConfig::for_production(parsed.pid, parsed.created, 0);
@@ -196,9 +238,19 @@ pub(super) fn run(
         {
             return Err("runtime ownership receipt differs".into());
         }
+        let mut gateways = [0u64; 3];
+        for (slot, rva) in gateways.iter_mut().zip(exports.gateways) {
+            let mut bytes = [0u8; 8];
+            read_remote(game, bridge.base + rva, &mut bytes)?;
+            *slot = u64::from_le_bytes(bytes);
+            if *slot < bridge.base as u64 || *slot - bridge.base as u64 >= bridge.size as u64 {
+                return Err("runtime expected gateway export is outside loaded DLL".into());
+            }
+        }
         let image = BridgeImage {
             base: bridge.base,
             size: bridge.size,
+            gateways,
         };
         let entries = patched_entries(
             game,
@@ -289,14 +341,23 @@ mod tests {
         let game = open_process(unsafe { GetCurrentProcessId() }, PROCESS_VM_READ).unwrap();
         let mut core = vec![0u8; PINNED_PROPERTY_GET_RVA + 16];
         let base = core.as_ptr() as usize;
-        let image = BridgeImage { base, size: 64 };
+        let image = BridgeImage {
+            base,
+            size: 64,
+            gateways: [(base + 1) as u64, (base + 2) as u64, (base + 3) as u64],
+        };
         let originals = [
             [0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x6c],
             [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30],
         ];
         for offset in [0, 16, 32, 48] {
             core[offset..offset + 6].copy_from_slice(&[0xff, 0x25, 0, 0, 0, 0]);
-            core[offset + 6..offset + 14].copy_from_slice(&(image.base as u64).to_le_bytes());
+            let gateway = image.gateways[match offset {
+                16 => 2,
+                32 => 1,
+                _ => 0,
+            }];
+            core[offset + 6..offset + 14].copy_from_slice(&gateway.to_le_bytes());
         }
         let jump = |entry: usize, relay: usize| {
             let delta = i32::try_from(relay as i64 - (entry + 5) as i64).unwrap();
@@ -337,5 +398,9 @@ mod tests {
         assert!(capture()
             .unwrap_err()
             .contains("outside its pinned bridge DLL"));
+        core[6..14].copy_from_slice(&image.gateways[1].to_le_bytes());
+        assert!(capture()
+            .unwrap_err()
+            .contains("differs from the expected entry"));
     }
 }

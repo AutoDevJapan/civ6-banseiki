@@ -90,6 +90,9 @@ pub(super) fn observe(
             payload,
             flags,
         );
+        if runtime::owned() && !(state == 1 && tag == 1 && flags == 0 && payload <= 1) {
+            invalidate(receiver, token);
+        }
         return;
     }
     let owner = ((token >> 31) & 63) as usize;
@@ -99,27 +102,94 @@ pub(super) fn observe(
     if joined_receiver(binding) != receiver
         || joined_session(binding) != session
         || joined_ticket(binding) >= ticket
+        || PRODUCT_SESSION.load(Ordering::Acquire) != session
     {
         return;
     }
     if state != 1 || tag != 1 || flags != 0 || payload > 1 {
-        product_publish_word(&COMMIT[owner], receiver, session, ticket, false);
+        #[cfg(test)]
+        pause_commit(1);
+        publish_commit(owner, binding, ticket, false, true);
         return;
     }
-    let cell = if key == COMMIT_KEY {
-        &COMMIT[owner]
+    if key == COMMIT_KEY {
+        #[cfg(test)]
+        pause_commit(1);
+        publish_commit(owner, binding, ticket, payload == 1, false);
     } else if let Some(bit) = paid_catalog::bit_index(key) {
-        &CATALOG[owner * BITS + bit]
-    } else {
+        product_publish_word(
+            &CATALOG[owner * BITS + bit],
+            receiver,
+            session,
+            ticket,
+            payload == 1,
+        );
+    }
+}
+
+pub(super) fn commit_word(owner: usize) -> u128 {
+    COMMIT[owner].load()
+}
+
+fn publish_commit(owner: usize, binding: u128, ticket: u32, permitted: bool, invalid: bool) {
+    let Some(commit) = product_try_publish_word(
+        &COMMIT[owner],
+        joined_receiver(binding),
+        joined_session(binding),
+        ticket,
+        permitted,
+    ) else {
         return;
     };
-    product_publish_word(cell, receiver, session, ticket, payload == 1);
-    if key == COMMIT_KEY && runtime::owned() {
-        if payload == 0 {
-            runtime::begin_catalog(owner, binding);
-        } else {
-            let complete = catalog(owner, receiver, session).is_some();
-            runtime::publication(owner, binding, complete, complete);
+    #[cfg(test)]
+    pause_commit(2);
+    let phase = if invalid {
+        0
+    } else if !permitted {
+        1
+    } else if catalog_at(owner, binding, commit).is_some() {
+        2
+    } else {
+        0
+    };
+    runtime::observe_commit(owner, binding, commit, phase);
+}
+
+pub(super) fn invalidate(receiver: u64, token: u64) {
+    if !runtime::owned() || token == 0 {
+        return;
+    }
+    let owner = ((token >> 31) & 63) as usize;
+    let session = (token >> 37) as u32;
+    let ticket = token as u32 & JOINED_TICKET_MAX;
+    let binding = PRODUCT_OWNERS[owner].load();
+    if joined_session(binding) == session
+        && joined_receiver(binding) == receiver
+        && joined_ticket(binding) < ticket
+        && PRODUCT_SESSION.load(Ordering::Acquire) == session
+    {
+        publish_commit(owner, binding, ticket, false, true);
+    }
+}
+
+#[cfg(test)]
+pub(super) static COMMIT_STAGE: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+pub(super) static COMMIT_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static COMMIT_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static COMMIT_RELEASE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) fn pause_commit(stage: u32) {
+    if COMMIT_STAGE.load(Ordering::Acquire) == stage
+        && COMMIT_PAUSE
+            .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    {
+        COMMIT_PAUSED.store(true, Ordering::Release);
+        while !COMMIT_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
         }
     }
 }
@@ -137,6 +207,16 @@ pub(super) fn catalog(
     }
     let binding = PRODUCT_OWNERS[owner].load();
     let commit = COMMIT[owner].load();
+    if joined_receiver(binding) != receiver || joined_session(binding) != session {
+        return None;
+    }
+    catalog_at(owner, binding, commit)
+}
+
+fn catalog_at(owner: usize, binding: u128, commit: u128) -> Option<[PaymentDefinition; COUNT]> {
+    let receiver = joined_receiver(binding);
+    let session = joined_session(binding);
+    let begin = runtime::catalog_begin(owner, binding)?;
     if joined_receiver(binding) != receiver
         || joined_session(binding) != session
         || joined_receiver(commit) != receiver
@@ -151,7 +231,7 @@ pub(super) fn catalog(
         let value = cell.load();
         if joined_receiver(value) != receiver
             || joined_session(value) != session
-            || joined_ticket(value) <= joined_ticket(binding)
+            || joined_ticket(value) <= begin
             || joined_ticket(value) >= joined_ticket(commit)
         {
             return None;
@@ -271,6 +351,11 @@ mod tests {
     #[test]
     fn runtime_pending_callback_stop_retains_authority_and_reports_undrained() {
         owned_child(true, "pending");
+    }
+
+    #[test]
+    fn runtime_old_commit_returns_cannot_roll_back_new_ready_without_reset() {
+        owned_child(true, "commit-race");
     }
 
     fn owned_child(runtime: bool, case: &str) {
@@ -643,6 +728,144 @@ mod tests {
                 assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
             }
             runtime::RESET_STAGE.store(1, Ordering::Release);
+        }
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("commit-race") {
+            // Before write, after accepted write, and after the transition CAS
+            // (including its pending epoch). Cover false, true and invalid.
+            for stage in [1, 2, 3] {
+                for kind in [0u32, 1, 2] {
+                    let binding = PRODUCT_OWNERS[2].load();
+                    let session = PRODUCT_SESSION.load(Ordering::Acquire);
+                    COMMIT_STAGE.store(stage, Ordering::Release);
+                    COMMIT_PAUSED.store(false, Ordering::Release);
+                    COMMIT_RELEASE.store(false, Ordering::Release);
+                    COMMIT_PAUSE.store(true, Ordering::Release);
+                    unsafe {
+                        ptr::write_volatile(raw_tag, if kind == 2 { 2 } else { 1 });
+                        ptr::write_volatile(raw_tag.add(1), u64::from(kind != 0));
+                    }
+                    struct CommitWorker(Option<std::thread::JoinHandle<u64>>);
+                    impl CommitWorker {
+                        fn finish(&mut self) {
+                            COMMIT_RELEASE.store(true, Ordering::Release);
+                            if let Some(worker) = self.0.take() {
+                                worker.join().unwrap();
+                            }
+                        }
+                    }
+                    impl Drop for CommitWorker {
+                        fn drop(&mut self) {
+                            self.finish();
+                        }
+                    }
+                    let mut worker =
+                        CommitWorker(Some(std::thread::spawn(move || get(receiver, COMMIT_KEY))));
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                    while !COMMIT_PAUSED.load(Ordering::Acquire)
+                        && std::time::Instant::now() < deadline
+                    {
+                        std::thread::yield_now();
+                    }
+                    assert!(
+                        COMMIT_PAUSED.load(Ordering::Acquire),
+                        "old COMMIT reaches fixed pause"
+                    );
+                    unsafe {
+                        ptr::write_volatile(raw_tag, 1);
+                    }
+                    // No owner reset. Re-publish all 22 definitions in this
+                    // same binding, with a changed catalog as an independent
+                    // witness that stale work cannot borrow the new commit.
+                    let next_index = 50 + (stage * 3 + kind) as u64;
+                    words[1] = words[1] & !255 | next_index;
+                    publish(COMMIT_KEY, false);
+                    for bit in 0..BITS {
+                        publish(
+                            paid_catalog::bit_key(bit),
+                            words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                        );
+                    }
+                    publish(COMMIT_KEY, true);
+                    for (base, value) in [
+                        (PAID_CLOSE_BASE, true),
+                        (PAID_ALLOW_BASE, false),
+                        (PAID_MANIFEST_BASE, true),
+                        (PAID_ALLOW_BASE, true),
+                    ] {
+                        publish(base + 77, value);
+                    }
+                    assert_eq!(
+                        PRODUCT_OWNERS[2].load(),
+                        binding,
+                        "new full transaction does not reset binding"
+                    );
+                    assert_eq!(runtime::phase(2), 2);
+                    let state = runtime::state_for_test(2);
+                    let generation = runtime::generation();
+                    let commit = commit_word(2);
+                    assert_eq!(
+                        ready_catalog(2, receiver, session).unwrap()[1].governor_index,
+                        next_index as u32
+                    );
+                    assert_eq!(can_call(this, 77), 1);
+                    assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+                    worker.finish();
+                    assert_eq!(
+                        commit_word(2),
+                        commit,
+                        "old COMMIT must not overwrite new accepted cell"
+                    );
+                    assert_eq!(
+                        runtime::state_for_test(2),
+                        state,
+                        "old COMMIT must not roll back stamped ready"
+                    );
+                    assert_eq!(
+                        runtime::generation(),
+                        generation,
+                        "old COMMIT must not advance new generation"
+                    );
+                    assert_eq!(PRODUCT_OWNERS[2].load(), binding);
+                    assert_eq!(
+                        ready_catalog(2, receiver, session).unwrap()[1].governor_index,
+                        next_index as u32
+                    );
+                    assert_eq!(can_call(this, 77), 1);
+                    assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+                }
+            }
+            COMMIT_STAGE.store(0, Ordering::Release);
+            // A new transaction in the SAME binding must copy all definitions
+            // again. New true cannot use one new bit plus the previous catalog.
+            publish(COMMIT_KEY, false);
+            publish(paid_catalog::bit_key(0), words[0] & 1 != 0);
+            publish(COMMIT_KEY, true);
+            assert_eq!(
+                runtime::phase(2),
+                0,
+                "partial new catalog cannot borrow old definitions"
+            );
+            assert_eq!(can_call(this, 77), 0);
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+            publish(COMMIT_KEY, false);
+            for bit in 0..BITS {
+                publish(
+                    paid_catalog::bit_key(bit),
+                    words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                );
+            }
+            publish(COMMIT_KEY, true);
+            for (base, value) in [
+                (PAID_CLOSE_BASE, true),
+                (PAID_ALLOW_BASE, false),
+                (PAID_MANIFEST_BASE, true),
+                (PAID_ALLOW_BASE, true),
+            ] {
+                publish(base + 77, value);
+            }
+            assert_eq!(runtime::phase(2), 2);
+            assert_eq!(can_call(this, 77), 1);
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
         }
         if is_runtime {
             // Fill real gateway samples; do not simulate capacity by editing
