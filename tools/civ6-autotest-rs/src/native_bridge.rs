@@ -3,6 +3,46 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AssignmentSubject {
+    pub owner: u32,
+    pub governor: u32,
+}
+impl AssignmentSubject {
+    pub fn parse(raw: &str) -> Result<Self> {
+        let (owner, governor) = raw
+            .split_once('|')
+            .ok_or_else(|| Error::input("assignment subject owner/Index unavailable"))?;
+        let subject = Self {
+            owner: owner
+                .parse()
+                .map_err(|_| Error::input("invalid assignment subject owner"))?,
+            governor: governor
+                .parse()
+                .map_err(|_| Error::input("invalid assignment subject Index"))?,
+        };
+        if subject.owner >= 64 || subject.governor >= 256 {
+            return Err(Error::input("assignment subject exceeds native bounds"));
+        }
+        Ok(subject)
+    }
+}
+
+pub fn assignment_subject_code(owner: u32, leader: &str) -> String {
+    format!(
+        r#"
+local owner={owner}; local leader={leader}
+local row=assert(GameInfo.JAC_LeaderPersonas[leader],'assignment subject definition missing')
+local def=assert(GameInfo.Governors[row.GovernorType])
+assert(Game:GetProperty('JAC_PERSONA_'..leader..'_OWNER')==owner,'assignment subject owner differs')
+local gs=assert(Players[owner]):GetGovernors(); local gov=assert(gs:GetGovernor(def.Hash))
+assert(type(def.Index)=='number' and def.Index%1==0 and def.Index>=0 and def.Index<256 and gov:GetType()==def.Index,'assignment subject identity differs')
+return tostring(owner)..'|'..tostring(def.Index)
+"#,
+        leader = crate::scenario::lua_string(leader)
+    )
+}
+
 #[cfg(windows)]
 mod platform {
     use super::*;
@@ -84,7 +124,29 @@ mod platform {
         true
     }
 
+    #[cfg(test)]
     fn terminal_artifact(path: &Path, pid: u32, created: u64, mode: BridgeMode) -> Result<usize> {
+        terminal_artifact_for_subject(path, pid, created, mode, None)
+    }
+
+    fn terminal_artifact_for_subject(
+        path: &Path,
+        pid: u32,
+        created: u64,
+        mode: BridgeMode,
+        subject: Option<AssignmentSubject>,
+    ) -> Result<usize> {
+        if subject.is_some_and(|s| s.owner >= 64 || s.governor >= 256)
+            || (subject.is_some() && mode != BridgeMode::AssignCalibration)
+        {
+            return Err(Error::input(
+                "invalid bounded assignment observation subject",
+            ));
+        }
+        let subject = subject.unwrap_or(AssignmentSubject {
+            owner: 0,
+            governor: 4,
+        });
         let dual = matches!(
             mode,
             BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission
@@ -287,9 +349,9 @@ mod platform {
                         return Err(Error::input("invalid read-only native promotion snapshot"));
                     }
                     if row["read_flags"] == 7
-                        && row["player_id"] == 0
-                        && row["governor_index"] == 4
-                        && row["city_d8"] == 0
+                        && row["player_id"] == subject.owner
+                        && row["governor_index"] == subject.governor
+                        && row["city_d8"] == subject.owner
                         && row["original_al"].as_u64().is_some_and(|n| n <= 1)
                         && [
                             "governors_this",
@@ -767,6 +829,7 @@ mod platform {
         close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         finished: bool,
         mode: BridgeMode,
+        assignment_subject: Option<AssignmentSubject>,
     }
 
     impl Session {
@@ -884,6 +947,7 @@ mod platform {
                 close_game,
                 finished: false,
                 mode,
+                assignment_subject: None,
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -936,8 +1000,54 @@ mod platform {
                     stderr.trim()
                 )));
             }
-            terminal_artifact(&self.artifact, self.pid, self.created, self.mode)?;
+            terminal_artifact_for_subject(
+                &self.artifact,
+                self.pid,
+                self.created,
+                self.mode,
+                self.assignment_subject,
+            )?;
             Ok(self.artifact.clone())
+        }
+
+        pub fn select_assignment_subject(
+            &mut self,
+            observed_pid: u32,
+            observed_started: f64,
+            subject: AssignmentSubject,
+        ) -> Result<()> {
+            if self.mode != BridgeMode::AssignCalibration
+                || self.assignment_subject.is_some()
+                || subject.owner >= 64
+                || subject.governor >= 256
+                || self.finished
+            {
+                return Err(Error::input(
+                    "assignment subject cannot be selected for this session",
+                ));
+            }
+            let (created, _) = pinned_created(observed_pid, observed_started)?;
+            if observed_pid != self.pid
+                || created != self.created
+                || unsafe { WaitForSingleObject(self.target.0, 0) } == WAIT_OBJECT_0
+            {
+                return Err(Error::input(
+                    "assignment subject belongs to another game process",
+                ));
+            }
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(self.artifact.with_extension("subject.json"))?;
+            serde_json::to_writer(
+                file,
+                &serde_json::json!({
+                    "owner":subject.owner,"governor":subject.governor,
+                    "pid":self.pid,"created_filetime":self.created,"payment_authority":false
+                }),
+            )?;
+            self.assignment_subject = Some(subject);
+            Ok(())
         }
 
         pub fn stop(&mut self) -> Result<PathBuf> {
@@ -1399,6 +1509,79 @@ mod platform {
                 terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).unwrap(),
                 2
             );
+            // A normal person and another owner require their own matching
+            // UI/update pair; they cannot certify the old owner0/Index4 probe.
+            for subject in [
+                AssignmentSubject {
+                    owner: 0,
+                    governor: 9,
+                },
+                AssignmentSubject {
+                    owner: 3,
+                    governor: 12,
+                },
+            ] {
+                let mut normal = rows.clone();
+                for row in &mut normal[3..5] {
+                    row["player_id"] = json!(subject.owner);
+                    row["city_d8"] = json!(subject.owner);
+                    row["governor_index"] = json!(subject.governor);
+                    row["promotion_owner"] = json!(subject.owner);
+                    row["promotion_index"] = json!(subject.governor);
+                }
+                write(&normal);
+                assert!(terminal_artifact(&path, 7, 123, BridgeMode::AssignCalibration).is_err());
+                assert_eq!(
+                    terminal_artifact_for_subject(
+                        &path,
+                        7,
+                        123,
+                        BridgeMode::AssignCalibration,
+                        Some(subject)
+                    )
+                    .unwrap(),
+                    2
+                );
+                for field in ["player_id", "city_d8", "governor_index"] {
+                    let mut mixed = normal.clone();
+                    mixed[4][field] = json!(99);
+                    write(&mixed);
+                    assert!(
+                        terminal_artifact_for_subject(
+                            &path,
+                            7,
+                            123,
+                            BridgeMode::AssignCalibration,
+                            Some(subject)
+                        )
+                        .is_err(),
+                        "{field}"
+                    );
+                }
+            }
+            write(&rows);
+            assert!(terminal_artifact_for_subject(
+                &path,
+                7,
+                123,
+                BridgeMode::AssignCalibration,
+                Some(AssignmentSubject {
+                    owner: 64,
+                    governor: 4
+                })
+            )
+            .is_err());
+            assert!(terminal_artifact_for_subject(
+                &path,
+                7,
+                123,
+                BridgeMode::AssignCalibration,
+                Some(AssignmentSubject {
+                    owner: 0,
+                    governor: 256
+                })
+            )
+            .is_err());
             for (index, field, value) in [
                 (3, "original_rax", json!("0xaabbccdd00000000")),
                 (3, "effective_al", json!(0)),
@@ -1696,6 +1879,16 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn select_assignment_subject(
+        &mut self,
+        _: u32,
+        _: f64,
+        _: AssignmentSubject,
+    ) -> Result<()> {
+        Err(Error::input(
+            "native assignment observation requires Windows",
+        ))
+    }
     pub fn start(
         _pid: u32,
         _started: f64,

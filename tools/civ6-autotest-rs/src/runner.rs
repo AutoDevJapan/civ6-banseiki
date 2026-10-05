@@ -113,6 +113,16 @@ pub trait Backend: Send {
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
+    fn select_native_assignment_subject(
+        &mut self,
+        _: u32,
+        _: f64,
+        _: crate::native_bridge::AssignmentSubject,
+    ) -> Result<()> {
+        Err(Error::input(
+            "bounded assignment subject selection unsupported",
+        ))
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -255,6 +265,129 @@ mod native_trace_step_tests {
             self.0.lock().unwrap().push("stop".into());
             Ok(Some(PathBuf::from("bridge.jsonl")))
         }
+    }
+
+    struct SubjectBackend {
+        calls: Arc<Mutex<Vec<String>>>,
+        raw: &'static str,
+        selection_error: bool,
+    }
+    impl Backend for SubjectBackend {
+        fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+            Ok(Some((19, 1.5)))
+        }
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["InGame".into()])
+        }
+        fn run_lua(&mut self, _: &str, code: &str, _: f64) -> Result<String> {
+            assert!(code.contains("gov:GetType()==def.Index"));
+            self.calls.lock().unwrap().push("read".into());
+            Ok(self.raw.into())
+        }
+        fn start_native_bridge(&mut self, _: &Path, _: &str, _: u64, mode: &str) -> Result<()> {
+            self.calls.lock().unwrap().push(format!("start:{mode}"));
+            Ok(())
+        }
+        fn select_native_assignment_subject(
+            &mut self,
+            pid: u32,
+            started: f64,
+            subject: crate::native_bridge::AssignmentSubject,
+        ) -> Result<()> {
+            self.calls.lock().unwrap().push(format!(
+                "select:{pid}:{started}:{}:{}",
+                subject.owner, subject.governor
+            ));
+            if self.selection_error {
+                return Err(Error::input("injected subject selection failure"));
+            }
+            Ok(())
+        }
+        fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+            self.calls.lock().unwrap().push("stop".into());
+            Ok(Some(PathBuf::from("restored-subject.jsonl")))
+        }
+    }
+
+    #[test]
+    fn runner_selects_a_real_subject_before_accepting_assignment_observation() {
+        for raw in ["0|9", "1|9"] {
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let output = std::env::temp_dir().join("pr86-normal-assignment-subject-dispatch");
+            let mut runner = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                output.clone(),
+                output.clone(),
+                output,
+                4318,
+                Box::new(SubjectBackend {
+                    calls: Arc::clone(&calls),
+                    raw,
+                    selection_error: false,
+                }),
+                Arc::new(SystemClock),
+            );
+            let result = runner.run_step(&json!({"action":"start_native_assign_calibration",
+                "name":"normal","max_seconds":30,"owner":0,"leader":"LEADER_JAC_DATE_TANEMUNE"}));
+            let observed = calls.lock().unwrap().clone();
+            if raw == "0|9" {
+                assert!(result.unwrap().contains("normal.jsonl"));
+                assert_eq!(
+                    observed,
+                    ["read", "start:assign-calibration", "select:19:1.5:0:9"]
+                );
+            } else {
+                assert!(result.unwrap_err().message.contains("owner changed"));
+                assert_eq!(observed, ["read"]);
+            }
+        }
+    }
+
+    #[test]
+    fn failed_subject_selection_still_stops_the_installed_observer_and_fails_the_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let read = crate::native_bridge::assignment_subject_code(0, "LEADER_JAC_DATE_TANEMUNE");
+        let mut runner = Runner::with_backend(
+            json!({"name":"selection failure cleanup","steps":[
+                {"action":"ui_lua","state_name":"InGame","code":read},
+                {"action":"start_native_assign_calibration","name":"normal","max_seconds":30,
+                 "owner":0,"leader":"LEADER_JAC_DATE_TANEMUNE"},
+                {"action":"stop_native_assign_calibration"}
+            ]}),
+            directory.path().join("result"),
+            directory.path().to_path_buf(),
+            directory.path().to_path_buf(),
+            4318,
+            Box::new(SubjectBackend {
+                calls: Arc::clone(&calls),
+                raw: "0|9",
+                selection_error: true,
+            }),
+            Arc::new(SystemClock),
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            [
+                "read",
+                "read",
+                "start:assign-calibration",
+                "select:19:1.5:0:9",
+                "stop"
+            ]
+        );
+        let result: Value = serde_json::from_slice(
+            &std::fs::read(directory.path().join("result/result.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result["passed"], false);
+        let steps = std::fs::read_to_string(directory.path().join("result/steps.jsonl")).unwrap();
+        assert!(steps.contains("injected subject selection failure"));
     }
 
     #[test]
@@ -609,6 +742,17 @@ impl Backend for SystemBackend {
             }
             None => Ok(None),
         }
+    }
+    fn select_native_assignment_subject(
+        &mut self,
+        pid: u32,
+        started: f64,
+        subject: crate::native_bridge::AssignmentSubject,
+    ) -> Result<()> {
+        self.native_bridge
+            .as_mut()
+            .ok_or_else(|| Error::input("native assignment observation is absent"))?
+            .select_assignment_subject(pid, started, subject)
     }
     fn memory(&mut self, pid: u32) -> Result<Value> {
         metrics::process_memory(pid)
@@ -2053,12 +2197,39 @@ impl Runner {
                     }
                     _ => return Err(Error::scenario("invalid native bridge scope")),
                 };
+                let assignment_subject = if let Some(leader) = step["leader"].as_str() {
+                    let observed = self
+                        .backend
+                        .single_process(0.0)?
+                        .ok_or_else(|| Error::input("assignment subject game is absent"))?;
+                    let owner = step["owner"]
+                        .as_u64()
+                        .filter(|n| *n < 64)
+                        .ok_or_else(|| Error::scenario("invalid assignment subject owner"))?
+                        as u32;
+                    let raw = self.lua(
+                        "InGame",
+                        &crate::native_bridge::assignment_subject_code(owner, leader),
+                        self.remaining(deadline)?,
+                    )?;
+                    let subject = crate::native_bridge::AssignmentSubject::parse(&raw)?;
+                    if subject.owner != owner {
+                        return Err(Error::input("assignment subject owner changed"));
+                    }
+                    Some((observed, subject))
+                } else {
+                    None
+                };
                 self.backend.start_native_bridge(
                     &self.output,
                     text(step, "name"),
                     step["max_seconds"].as_u64().unwrap(),
                     mode,
                 )?;
+                if let Some(((pid, started), subject)) = assignment_subject {
+                    self.backend
+                        .select_native_assignment_subject(pid, started, subject)?;
+                }
                 Ok(if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {
