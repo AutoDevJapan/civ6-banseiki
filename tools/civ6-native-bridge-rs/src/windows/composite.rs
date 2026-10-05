@@ -128,10 +128,26 @@ pub(super) fn observe(
 }
 
 pub(super) fn commit_word(owner: usize) -> u128 {
-    COMMIT[owner].load()
+    if runtime::owned() {
+        runtime::state_for_authority(owner)
+    } else {
+        COMMIT[owner].load()
+    }
 }
 
 fn publish_commit(owner: usize, binding: u128, ticket: u32, permitted: bool, invalid: bool) {
+    if runtime::owned() {
+        runtime::accept_commit(owner, binding, ticket, permitted, invalid);
+        // Bounded compatibility/telemetry only. No runtime decision reads it.
+        product_publish_word(
+            &COMMIT[owner],
+            joined_receiver(binding),
+            joined_session(binding),
+            ticket,
+            permitted && !invalid,
+        );
+        return;
+    }
     let Some(commit) = product_try_publish_word(
         &COMMIT[owner],
         joined_receiver(binding),
@@ -141,18 +157,7 @@ fn publish_commit(owner: usize, binding: u128, ticket: u32, permitted: bool, inv
     ) else {
         return;
     };
-    #[cfg(test)]
-    pause_commit(2);
-    let phase = if invalid {
-        0
-    } else if !permitted {
-        1
-    } else if catalog_at(owner, binding, commit).is_some() {
-        2
-    } else {
-        0
-    };
-    runtime::observe_commit(owner, binding, commit, phase);
+    let _ = commit;
 }
 
 pub(super) fn invalidate(receiver: u64, token: u64) {
@@ -206,17 +211,18 @@ pub(super) fn catalog(
         return None;
     }
     let binding = PRODUCT_OWNERS[owner].load();
-    let commit = COMMIT[owner].load();
     if joined_receiver(binding) != receiver || joined_session(binding) != session {
         return None;
     }
-    catalog_at(owner, binding, commit)
+    if runtime::owned() {
+        return runtime::ready_catalog(owner, binding);
+    }
+    catalog_at(owner, binding, COMMIT[owner].load())
 }
 
 fn catalog_at(owner: usize, binding: u128, commit: u128) -> Option<[PaymentDefinition; COUNT]> {
     let receiver = joined_receiver(binding);
     let session = joined_session(binding);
-    let begin = runtime::catalog_begin(owner, binding)?;
     if joined_receiver(binding) != receiver
         || joined_session(binding) != session
         || joined_receiver(commit) != receiver
@@ -226,13 +232,32 @@ fn catalog_at(owner: usize, binding: u128, commit: u128) -> Option<[PaymentDefin
     {
         return None;
     }
+    let catalog = copy_catalog(
+        owner,
+        binding,
+        joined_ticket(binding),
+        joined_ticket(commit),
+    )?;
+    (COMMIT[owner].load() == commit).then_some(catalog)
+}
+
+pub(super) fn copy_catalog(
+    owner: usize,
+    binding: u128,
+    begin: u32,
+    end: u32,
+) -> Option<[PaymentDefinition; COUNT]> {
+    let receiver = joined_receiver(binding);
+    let session = joined_session(binding);
     let mut words = [0u64; COUNT];
+    let mut copied = [0u128; BITS];
     for (bit, cell) in CATALOG[owner * BITS..(owner + 1) * BITS].iter().enumerate() {
         let value = cell.load();
+        copied[bit] = value;
         if joined_receiver(value) != receiver
             || joined_session(value) != session
             || joined_ticket(value) <= begin
-            || joined_ticket(value) >= joined_ticket(commit)
+            || joined_ticket(value) >= end
         {
             return None;
         }
@@ -243,9 +268,16 @@ fn catalog_at(owner: usize, binding: u128, commit: u128) -> Option<[PaymentDefin
     // ticket fence after copying; no borrowed pointer survives the callback.
     if CATALOG[owner * BITS..(owner + 1) * BITS]
         .iter()
-        .any(|cell| joined_ticket(cell.load()) >= joined_ticket(commit))
+        .enumerate()
+        .any(|(bit, cell)| {
+            let value = cell.load();
+            value != copied[bit]
+                || joined_receiver(value) != receiver
+                || joined_session(value) != session
+                || joined_ticket(value) <= begin
+                || joined_ticket(value) >= end
+        })
         || PRODUCT_OWNERS[owner].load() != binding
-        || COMMIT[owner].load() != commit
         || PRODUCT_SESSION.load(Ordering::Acquire) != session
         || !PRODUCT_ACTIVE.load(Ordering::Acquire)
     {
@@ -255,6 +287,9 @@ fn catalog_at(owner: usize, binding: u128, commit: u128) -> Option<[PaymentDefin
 }
 
 pub(super) fn payment_after_catalog(owner: usize, ticket: u32) -> bool {
+    if runtime::owned() {
+        return owner < PRODUCTION_OWNER_LIMIT && runtime::payment_after_catalog(owner, ticket);
+    }
     owner < PRODUCTION_OWNER_LIMIT && joined_ticket(COMMIT[owner].load()) < ticket
 }
 
@@ -263,11 +298,7 @@ pub(super) fn ready_catalog(
     receiver: u64,
     session: u32,
 ) -> Option<[PaymentDefinition; COUNT]> {
-    if !runtime::ready(owner) {
-        return None;
-    }
-    let catalog = catalog(owner, receiver, session)?;
-    runtime::ready(owner).then_some(catalog)
+    catalog(owner, receiver, session)
 }
 
 pub(super) unsafe fn install(
@@ -356,6 +387,11 @@ mod tests {
     #[test]
     fn runtime_old_commit_returns_cannot_roll_back_new_ready_without_reset() {
         owned_child(true, "commit-race");
+    }
+
+    #[test]
+    fn runtime_false_or_invalid_acceptance_cannot_borrow_previous_begin() {
+        owned_child(true, "accept-gap");
     }
 
     fn owned_child(runtime: bool, case: &str) {
@@ -866,6 +902,117 @@ mod tests {
             assert_eq!(runtime::phase(2), 2);
             assert_eq!(can_call(this, 77), 1);
             assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+        }
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("accept-gap") {
+            for kind in [0u32, 2] {
+                let binding = PRODUCT_OWNERS[2].load();
+                COMMIT_STAGE.store(2, Ordering::Release);
+                COMMIT_PAUSED.store(false, Ordering::Release);
+                COMMIT_RELEASE.store(false, Ordering::Release);
+                COMMIT_PAUSE.store(true, Ordering::Release);
+                unsafe {
+                    ptr::write_volatile(raw_tag, if kind == 2 { 2 } else { 1 });
+                    ptr::write_volatile(raw_tag.add(1), u64::from(kind != 0));
+                }
+                struct AcceptWorker(Option<std::thread::JoinHandle<u64>>);
+                impl AcceptWorker {
+                    fn finish(&mut self) {
+                        COMMIT_RELEASE.store(true, Ordering::Release);
+                        if let Some(worker) = self.0.take() {
+                            worker.join().unwrap();
+                        }
+                    }
+                }
+                impl Drop for AcceptWorker {
+                    fn drop(&mut self) {
+                        self.finish();
+                    }
+                }
+                let mut worker =
+                    AcceptWorker(Some(std::thread::spawn(move || get(receiver, COMMIT_KEY))));
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while !COMMIT_PAUSED.load(Ordering::Acquire) && std::time::Instant::now() < deadline
+                {
+                    std::thread::yield_now();
+                }
+                assert!(
+                    COMMIT_PAUSED.load(Ordering::Acquire),
+                    "false/invalid accepted before main continues"
+                );
+                unsafe {
+                    ptr::write_volatile(raw_tag, 1);
+                }
+                // NO new false and NO reset. Only one fresh bit, then true.
+                publish(paid_catalog::bit_key(0), words[0] & 1 != 0);
+                publish(COMMIT_KEY, true);
+                assert_eq!(
+                    runtime::phase(2),
+                    0,
+                    "accepted false/invalid must not borrow old begin for partial true"
+                );
+                assert_eq!(can_call(this, 77), 0);
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+                let state = runtime::state_for_test(2);
+                let generation = runtime::generation();
+                worker.finish();
+                assert_eq!(runtime::state_for_test(2), state);
+                assert_eq!(runtime::generation(), generation);
+                assert_eq!(PRODUCT_OWNERS[2].load(), binding);
+                // A distinct explicit false and a complete new copy recover.
+                publish(COMMIT_KEY, false);
+                for bit in 0..BITS {
+                    publish(
+                        paid_catalog::bit_key(bit),
+                        words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                    );
+                }
+                publish(COMMIT_KEY, true);
+                for (base, value) in [
+                    (PAID_CLOSE_BASE, true),
+                    (PAID_ALLOW_BASE, false),
+                    (PAID_MANIFEST_BASE, true),
+                    (PAID_ALLOW_BASE, true),
+                ] {
+                    publish(base + 77, value);
+                }
+                assert_eq!(runtime::phase(2), 2);
+                assert_eq!(can_call(this, 77), 1);
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+                // Ready duplicate true cannot widen the previous committed
+                // fence to include even one bit published after that commit.
+                publish(paid_catalog::bit_key(0), words[0] & 1 != 0);
+                publish(COMMIT_KEY, true);
+                assert_eq!(
+                    runtime::phase(2),
+                    0,
+                    "duplicate true cannot borrow bit beyond old commit fence"
+                );
+                publish(COMMIT_KEY, true);
+                assert_eq!(
+                    runtime::phase(2),
+                    0,
+                    "closed transaction needs a distinct new false"
+                );
+                publish(COMMIT_KEY, false);
+                for bit in 0..BITS {
+                    publish(
+                        paid_catalog::bit_key(bit),
+                        words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0,
+                    );
+                }
+                publish(COMMIT_KEY, true);
+                for (base, value) in [
+                    (PAID_CLOSE_BASE, true),
+                    (PAID_ALLOW_BASE, false),
+                    (PAID_MANIFEST_BASE, true),
+                    (PAID_ALLOW_BASE, true),
+                ] {
+                    publish(base + 77, value);
+                }
+                assert_eq!(runtime::phase(2), 2);
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            }
+            COMMIT_STAGE.store(0, Ordering::Release);
         }
         if is_runtime {
             // Fill real gateway samples; do not simulate capacity by editing

@@ -79,16 +79,12 @@ struct Fence {
     owner: usize,
     binding: u128,
     ticket: u32,
-    commit: Option<u128>,
 }
 impl Fence {
     fn live(self) -> bool {
         self.owner < PRODUCTION_OWNER_LIMIT
             && live_session(joined_session(self.binding))
             && PRODUCT_OWNERS[self.owner].load() == self.binding
-            && self
-                .commit
-                .is_none_or(|commit| composite::commit_word(self.owner) == commit)
     }
 }
 fn advance() -> bool {
@@ -121,11 +117,16 @@ fn advance_epoch(fence: Option<(Fence, u128)>) -> bool {
     }
 }
 
-// Reset and every accepted COMMIT use this same monotonic transition. Checking
-// only a successful cell write is insufficient: the callback may be paused
-// after acceptance. The latest entry stamp remains in the state even when its
-// phase repeats, so no ready -> rebuilding -> ready ABA can authorize old work.
-fn transition(fence: Fence, requested: u32) -> bool {
+// STATE is the sole runtime transaction authority. Commit acceptance, begin,
+// latest ticket and phase change in the SAME CAS. Legacy COMMIT is not read.
+#[derive(Clone, Copy)]
+enum Update {
+    Reset,
+    False,
+    Invalid,
+    True,
+}
+fn transition(fence: Fence, update: Update) -> bool {
     loop {
         let state = STATE[fence.owner].load();
         let incoming = binding_stamp(fence.binding);
@@ -135,51 +136,57 @@ fn transition(fence: Fence, requested: u32) -> bool {
         {
             return false;
         }
-        let begin = if fence.commit.is_none() {
-            0
-        } else if requested == 1 {
-            fence.ticket
-        } else if state & BIND_MASK == incoming {
-            state_begin(state)
-        } else {
-            0
+        let (begin, phase) = match update {
+            Update::Reset => (0, 3),
+            Update::False => (fence.ticket, 1),
+            Update::Invalid => (0, 0),
+            Update::True => {
+                let begin = state_begin(state);
+                let valid = state & BIND_MASK == incoming
+                    && begin > joined_ticket(fence.binding)
+                    && state_phase(state) == 1
+                    && composite::copy_catalog(fence.owner, fence.binding, begin, fence.ticket)
+                        .is_some();
+                if valid {
+                    (begin, 2)
+                } else {
+                    (0, 0)
+                }
+            }
         };
-        let phase = if requested == 2
-            && (begin == 0 || state & BIND_MASK != incoming || !matches!(state_phase(state), 1 | 2))
+        // Catalog copying is bounded and uses no saved pointer. CAS below
+        // rechecks the exact transaction snapshot used for that entire copy.
+        if !fence.live() {
+            return false;
+        }
+        let accepted = state_word(fence.binding, fence.ticket, begin, phase);
+        if STATE[fence.owner]
+            .compare_exchange(state, accepted)
+            .is_err()
         {
-            0
-        } else {
-            requested
-        };
-        let pending = state_word(
-            fence.binding,
-            fence.ticket,
-            begin,
-            if phase == 2 { 2 } else { 3 },
-        );
-        if STATE[fence.owner].compare_exchange(state, pending).is_err() {
             continue;
         }
         #[cfg(test)]
-        if fence.commit.is_none() && RESET_STAGE.load(Ordering::Acquire) == 2 {
+        if matches!(update, Update::Reset) && RESET_STAGE.load(Ordering::Acquire) == 2 {
             pause_reset();
         }
         #[cfg(test)]
-        if fence.commit.is_some() {
+        if !matches!(update, Update::Reset) {
+            composite::pause_commit(2);
             composite::pause_commit(3);
         }
         if phase == 2 {
             return true;
         }
-        if !advance_epoch(Some((fence, pending))) {
+        if !advance_epoch(Some((fence, accepted))) {
             return false;
         }
-        return STATE[fence.owner]
-            .compare_exchange(
-                pending,
-                state_word(fence.binding, fence.ticket, begin, phase),
-            )
-            .is_ok();
+        if matches!(update, Update::Reset) {
+            return STATE[fence.owner]
+                .compare_exchange(accepted, state_word(fence.binding, fence.ticket, 0, 1))
+                .is_ok();
+        }
+        return true;
     }
 }
 
@@ -205,63 +212,69 @@ pub(super) fn reset_owner(owner: usize, receiver: u64, session: u32, ticket: u32
             owner,
             binding,
             ticket,
-            commit: None,
         },
-        1,
+        Update::Reset,
     )
 }
 
-pub(super) fn observe_commit(owner: usize, binding: u128, commit: u128, phase: u32) {
-    if owned() {
-        transition(
-            Fence {
-                owner,
-                binding,
-                ticket: joined_ticket(commit),
-                commit: Some(commit),
-            },
-            phase,
-        );
-    }
+pub(super) fn accept_commit(
+    owner: usize,
+    binding: u128,
+    ticket: u32,
+    permitted: bool,
+    invalid: bool,
+) {
+    transition(
+        Fence {
+            owner,
+            binding,
+            ticket,
+        },
+        if invalid {
+            Update::Invalid
+        } else if permitted {
+            Update::True
+        } else {
+            Update::False
+        },
+    );
 }
 
-pub(super) fn catalog_begin(owner: usize, binding: u128) -> Option<u32> {
-    if !owned() {
-        return Some(joined_ticket(binding));
-    }
+pub(super) fn ready_catalog(
+    owner: usize,
+    binding: u128,
+) -> Option<[crate::governor_payment::PaymentDefinition; crate::paid_catalog::COUNT]> {
     if owner >= PRODUCTION_OWNER_LIMIT
         || !live_session(joined_session(binding))
         || PRODUCT_OWNERS[owner].load() != binding
     {
         return None;
     }
-    let state = STATE[owner].load();
-    (state & BIND_MASK == binding_stamp(binding)
-        && matches!(state_phase(state), 1 | 2)
-        && state_begin(state) > joined_ticket(binding))
-    .then_some(state_begin(state))
+    let snapshot = STATE[owner].load();
+    if snapshot & BIND_MASK != binding_stamp(binding) || state_phase(snapshot) != 2 {
+        return None;
+    }
+    let catalog = composite::copy_catalog(
+        owner,
+        binding,
+        state_begin(snapshot),
+        state_ticket(snapshot),
+    )?;
+    (STATE[owner].load() == snapshot
+        && live_session(joined_session(binding))
+        && PRODUCT_OWNERS[owner].load() == binding)
+        .then_some(catalog)
 }
 
-pub(super) fn ready(owner: usize) -> bool {
-    if !owned() {
-        return true;
-    }
-    if owner >= PRODUCTION_OWNER_LIMIT {
-        return false;
-    }
-    let state = STATE[owner].load();
+pub(super) fn payment_after_catalog(owner: usize, ticket: u32) -> bool {
     let binding = PRODUCT_OWNERS[owner].load();
-    let commit = composite::commit_word(owner);
-    state_phase(state) == 2
-        && state & BIND_MASK == binding_stamp(binding)
-        && state_ticket(state) == joined_ticket(commit)
-        && joined_permitted(commit)
-        && joined_session(commit) == joined_session(binding)
-        && joined_receiver(commit) == joined_receiver(binding)
+    let snapshot = STATE[owner].load();
+    state_phase(snapshot) == 2
+        && snapshot & BIND_MASK == binding_stamp(binding)
+        && state_ticket(snapshot) < ticket
         && live_session(joined_session(binding))
-        && STATE[owner].load() == state
         && PRODUCT_OWNERS[owner].load() == binding
-        && composite::commit_word(owner) == commit
+        && STATE[owner].load() == snapshot
 }
 
 /// Acquisition/recheck makes observation stop drain only sampled callbacks.
@@ -371,6 +384,10 @@ pub(super) fn phase(owner: usize) -> u32 {
 
 #[cfg(test)]
 pub(super) fn state_for_test(owner: usize) -> u128 {
+    STATE[owner].load()
+}
+
+pub(super) fn state_for_authority(owner: usize) -> u128 {
     STATE[owner].load()
 }
 
