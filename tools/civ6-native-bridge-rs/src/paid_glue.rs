@@ -15,24 +15,34 @@ pub fn source() -> String {
 
 const TEMPLATE: &str = r#"-- BEGIN RUST GENERATED PAID ASSIGNMENT GLUE
 -- Regenerate with civ6-native-bridge-rs/generate-paid-glue. Opt-in only.
-local function SyncProductionAdmission(forceClosed, onlyOwner)
+local function ClosePaidAdmissionOwners()
+    local confirmed = true;
+    for owner=0,63 do
+        -- Protect acquisition of the player and method as well as the call.
+        -- Failure in either namespace must not skip the other or next owner.
+        for _,key in ipairs({907000 + owner, ADMISSION_RESET + owner}) do
+            local ok = pcall(function()
+                local p = Player(owner, false);
+                if p then p:GetProperty(key); end
+            end);
+            if not ok then confirmed = false; end
+        end
+    end
+    admissionSnapshots = {};
+    return confirmed;
+end
+local function PublishProductionAdmission(forceClosed, onlyOwner)
+    local close = ClosePaidAdmissionOwners;
     local schema = Game:GetProperty("@SCHEMA@");
     local enabled = Game:GetProperty("@EXPERIMENT@") == true;
     local ids = PlayerManager.GetAliveMajorIDs();
-    local function close()
-        for owner=0,63 do
-            local p = Player(owner, false);
-            if p then pcall(p.GetProperty, p, 907000 + owner); end
-        end
-        admissionSnapshots = {};
-    end
     if not enabled then
-        if schema ~= nil then close(); end
+        if schema ~= nil and not close() then return; end
         SyncAppointmentAdmission(forceClosed, onlyOwner);
         return;
     end
     -- Close before reading definitions, including reload and rejected schema.
-    close();
+    if not close() then return; end
     if not AdmissionOwnerIDsValid(ids) or (schema ~= nil and schema ~= 1) then return; end
     local rows = AdmissionRows();
     if not rows or #rows ~= @COUNT@ then return; end
@@ -64,22 +74,30 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
     end
     -- Claim every reserved key, including currently unused catalog slots.
     if schema == nil then
+        local function vacant(p, key)
+            local ok, value = pcall(p.GetProperty, p, key);
+            return ok and value == nil;
+        end
         for owner=0,63 do
             local p = Player(owner, false);
             if p then
                 for _,base in ipairs({904000,905000,906000}) do
-                    for index=0,255 do if p:GetProperty(base+index) ~= nil then return; end end
+                    for index=0,255 do
+                        if not vacant(p, base+index) then close(); return; end
+                    end
                 end
-                for id=0,63 do if p:GetProperty(907000+id) ~= nil then return; end end
-                if p:GetProperty(@COMMIT@) ~= nil then return; end
-                for bit=0,@BITS@-1 do if p:GetProperty(bitkey(bit)) ~= nil then return; end end
+                for id=0,63 do if not vacant(p, 907000+id) then close(); return; end end
+                if not vacant(p, @COMMIT@) then close(); return; end
+                for bit=0,@BITS@-1 do if not vacant(p, bitkey(bit)) then close(); return; end end
             end
         end
         Game:SetProperty("@SCHEMA@", 1);
     end
     local function write(p, key, value)
-        p:SetProperty(key, value);
-        return p:GetProperty(key) == value;
+        local written = pcall(p.SetProperty, p, key, value);
+        if not written then return false; end
+        local ok, actual = pcall(p.GetProperty, p, key);
+        return ok and actual == value;
     end
     -- Reset each owner once, then let appointment initialization use its own
     -- reset before either catalog or paid cells are published in that binding.
@@ -113,6 +131,15 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
                 Get(row.LeaderType, "UNIT") == nil and Get(row.LeaderType, "EVOLUTION_COST") == row.EvolutionCost;
             if eligible and not write(p, 905000+entry.index, true) then close(); return; end
         end
+    end
+end
+local function SyncProductionAdmission(forceClosed, onlyOwner)
+    -- A failed projection must not strand a catalog published for an earlier
+    -- owner. Reclose every owner and let the next normal callback retry from
+    -- the saved ledger; never retry a title payment here.
+    local ok = pcall(PublishProductionAdmission, forceClosed, onlyOwner);
+    if not ok then
+        ClosePaidAdmissionOwners();
     end
 end
 -- END RUST GENERATED PAID ASSIGNMENT GLUE
