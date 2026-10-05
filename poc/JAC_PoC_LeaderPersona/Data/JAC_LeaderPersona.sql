@@ -93,7 +93,7 @@ INSERT INTO GreatPersonClasses
      GenerateDuplicateIndividuals, PseudoYieldType)
 VALUES ('GREAT_PERSON_CLASS_JAC_PERSONA', 'LOC_JAC_PERSONA_CLASS', 'UNIT_JAC_PERSONA',
         'DISTRICT_CITY_CENTER', '[ICON_GreatGeneral]', 'ICON_UNITOPERATION_GENERAL_ACTION', 0,
-        1, 'PSEUDOYIELD_GPP_GENERAL');
+        0, 'PSEUDOYIELD_GPP_GENERAL');
 INSERT INTO GreatPersonIndividuals
     (GreatPersonIndividualType, Name, GreatPersonClassType, EraType, ActionCharges, Gender)
 SELECT PersonType, Name, 'GREAT_PERSON_CLASS_JAC_PERSONA', 'ERA_ANCIENT', 0, 'M' FROM JAC_LeaderPersonas;
