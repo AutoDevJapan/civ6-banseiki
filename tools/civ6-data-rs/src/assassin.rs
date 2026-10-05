@@ -11,6 +11,9 @@ const MOD: &str = "poc/JAC_PoC_Assassin";
 const BASE_SCENARIO: &str = "tools/civ6-autotest/scenarios/court-arbitration.json";
 const SCENARIO: &str = "tools/civ6-autotest/scenarios/assassin-leader-save-load.json";
 const LANGUAGES: [&str; 3] = ["ja_JP", "en_US", "ru_RU"];
+const PANEL_TEMPLATE: &str = include_str!("../../../poc/JAC_PoC_Assassin/UI/JAC_AssassinPanel.lua");
+#[path = "assassin_panel_initializer.rs"]
+mod panel_initializer;
 
 const TEXT: &[(&str, [&str; 3])] = &[
     ("MOD_NAME", ["JAC PoC：暗殺者", "JAC PoC: Assassin", "JAC PoC: убийца"]),
@@ -1028,6 +1031,12 @@ pub fn scenarios(repo: &Repository) -> Result<Outputs> {
 pub fn outputs(repo: &Repository) -> Result<Outputs> {
     let mut output = packaging();
     output.extend(scenarios(repo)?);
+    // InGame.LoadNewContext creates every add-in context hidden. Emit only
+    // this engine initialization; keep the existing panel implementation.
+    output.insert(
+        PathBuf::from(MOD).join("UI/JAC_AssassinPanel.lua"),
+        panel_initializer::initialize(PANEL_TEMPLATE),
+    );
     Ok(output)
 }
 
