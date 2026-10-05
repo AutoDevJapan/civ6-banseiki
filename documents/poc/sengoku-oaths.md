@@ -368,6 +368,7 @@ AIは乱数を使わず、表示順を同点の順位とする。戦争中は軍
 `build-oaths-migration` と `build-oaths-friendship` は、製品のLuaを変更せず、有限の実機検査用JSONを指定したフォルダーへ生成するRust実行器である。
 
 ```powershell
+$env:CARGO_TARGET_DIR = Join-Path (Get-Location) 'tools/target'
 cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin build-oaths-migration -- D:/CC/Work/todo134/scenarios
 cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin build-oaths-friendship -- D:/CC/Work/todo134/scenarios
 ```
