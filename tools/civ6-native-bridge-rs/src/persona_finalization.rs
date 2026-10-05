@@ -7,6 +7,7 @@ const FUNCTION: &str = "local function CompleteEvolution(owner, leader)";
 const NEXT: &str = "local function Reconcile(onlyOwner)";
 const AFTER_RECONCILE: &str = "local function Parameter(name)";
 const READ: &str = "            local native = NativeGovernor(owner, row);";
+#[cfg(test)]
 const TAIL: &str = "        end\n    end\n    SyncProductionAdmission(false, onlyOwner);\nend\n\n";
 
 pub fn reconcile_open_source() -> &'static str {
@@ -117,44 +118,128 @@ pub fn regenerate(text: &str) -> Result<String, &'static str> {
     regenerate_reconcile(&completion)
 }
 
+/// Line views retain byte offsets; line endings are inspected, never normalized.
+#[derive(Clone, Copy)]
+struct Line<'a> {
+    start: usize,
+    end: usize,
+    body: &'a str,
+    eol: &'a str,
+}
+
+fn lines(text: &str) -> Vec<Line<'_>> {
+    let mut offset = 0;
+    text.split_inclusive('\n')
+        .map(|raw| {
+            let eol = if raw.ends_with("\r\n") {
+                "\r\n"
+            } else if raw.ends_with('\n') {
+                "\n"
+            } else {
+                ""
+            };
+            let line = Line {
+                start: offset,
+                end: offset + raw.len(),
+                body: &raw[..raw.len() - eol.len()],
+                eol,
+            };
+            offset += raw.len();
+            line
+        })
+        .collect()
+}
+
+fn unique_line(rows: &[Line<'_>], body: &str) -> Result<usize, &'static str> {
+    let mut matches = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.body == body);
+    let index = matches.next().ok_or("required line missing")?.0;
+    if matches.next().is_some() {
+        return Err("duplicate anchor line");
+    }
+    Ok(index)
+}
+
 fn regenerate_reconcile(text: &str) -> Result<String, &'static str> {
-    let start = text.find(NEXT).ok_or("reconciliation missing")?;
-    if text.matches(AFTER_RECONCILE).count() != 1 {
-        return Err("expected unique reconciliation end boundary");
+    let all = lines(text);
+    let first = unique_line(&all, NEXT)?;
+    let last = all
+        .iter()
+        .enumerate()
+        .skip(first + 1)
+        .find(|(_, line)| line.body.starts_with("local function "))
+        .ok_or("reconciliation end missing")?
+        .0;
+    if !all[last].body.starts_with(AFTER_RECONCILE) {
+        return Err("unexpected next function");
     }
-    let finish = text
-        .find(AFTER_RECONCILE)
-        .ok_or("reconciliation end missing")?;
-    if finish <= start {
-        return Err("reversed reconciliation boundary");
-    }
-    let original = &text[start..finish];
-    let mut block = original.replace("\r\n", "\n");
-    if block.matches(reconcile_open_source()).count()
-        != block.matches(reconcile_close_source()).count()
+    let rows = &all[first..last];
+    let read = unique_line(rows, READ)?;
+    let publish = unique_line(rows, "    SyncProductionAdmission(false, onlyOwner);")?;
+    if publish < 2
+        || publish + 1 >= rows.len()
+        || rows[publish - 2].body != "        end"
+        || rows[publish - 1].body != "    end"
+        || rows[publish + 1].body != "end"
+        || rows[publish + 2..].iter().any(|line| !line.body.is_empty())
     {
-        return Err("unpaired reconciliation guard");
+        return Err("unexpected reconciliation tail");
     }
-    // Strip only exact snippets we own; unexpected edits fail rather than
-    // rewriting the native reads, missing-person handling or callbacks.
-    for snippet in [reconcile_open_source(), reconcile_close_source()] {
-        if block.matches(snippet).count() > 1 {
-            return Err("duplicate reconciliation guard");
+    let tail = publish - 2;
+    if read == 0 || read >= tail {
+        return Err("reversed reconciliation anchors");
+    }
+    let marker = "RUST GENERATED RECONCILE RECEIPT GUARD";
+    let marked = rows
+        .iter()
+        .filter(|line| line.body.contains(marker))
+        .count();
+    if text.matches(marker).count() != marked {
+        return Err("guard marker outside reconciliation function");
+    }
+    let open = reconcile_open_source();
+    let close = reconcile_close_source();
+    let open_lines = open.lines().count();
+    let close_lines = close.lines().count();
+    if marked != 0 {
+        if marked != 4 || read < open_lines || tail < close_lines {
+            return Err("incomplete or duplicate reconciliation guards");
         }
-        block = block.replacen(snippet, "", 1);
+        let open_start = rows[read - open_lines].start;
+        let close_start = rows[tail - close_lines].start;
+        let read_start = rows[read].start;
+        let tail_start = rows[tail].start;
+        if !(open_start < read_start && rows[read].end <= close_start && close_start < tail_start) {
+            return Err("reversed or overlapping reconciliation guards");
+        }
+        // Only the exact previously generated body, immediately before its
+        // anchor, is accepted. Mixed EOL inside a marked body is ambiguous.
+        for (actual, expected) in [
+            (&text[open_start..read_start], open),
+            (&text[close_start..tail_start], close),
+        ] {
+            if actual != expected && actual != expected.replace('\n', "\r\n") {
+                return Err("edited or misplaced reconciliation guard");
+            }
+        }
+        return Ok(text.to_owned());
     }
-    if block.contains("RUST GENERATED RECONCILE RECEIPT GUARD")
-        || block.matches(READ).count() != 1
-        || block.matches(TAIL).count() != 1
-    {
-        return Err("unexpected reconciliation guard or anchors");
-    }
-    block = block.replacen(READ, &(reconcile_open_source().to_owned() + READ), 1);
-    block = block.replacen(TAIL, &(reconcile_close_source().to_owned() + TAIL), 1);
-    if original.contains("\r\n") {
-        block = block.replace('\n', "\r\n");
-    }
-    Ok(format!("{}{}{}", &text[..start], block, &text[finish..]))
+    // New bytes only: splice before the two anchors, copying every existing
+    // byte, including mixed EOL and the original file's final newline.
+    let open = open.replace('\n', rows[read].eol);
+    let close = close.replace('\n', rows[tail].eol);
+    let read = rows[read].start;
+    let tail = rows[tail].start;
+    Ok(format!(
+        "{}{}{}{}{}",
+        &text[..read],
+        open,
+        &text[read..tail],
+        close,
+        &text[tail..]
+    ))
 }
 
 #[cfg(test)]
@@ -233,6 +318,129 @@ mod tests {
             ),
         ] {
             assert!(regenerate_reconcile(&invalid).is_err());
+        }
+    }
+
+    fn real_legacy_fixture() -> String {
+        // Actual shipped function, rather than a reconstruction of its branches.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let shipped = std::fs::read_to_string(
+            root.join("poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua"),
+        )
+        .unwrap();
+        let mut legacy = shipped;
+        for guard in [reconcile_open_source(), reconcile_close_source()] {
+            for variant in [guard.to_owned(), guard.replace('\n', "\r\n")] {
+                legacy = legacy.replace(&variant, "");
+            }
+        }
+        assert!(!legacy.contains("RUST GENERATED RECONCILE RECEIPT GUARD"));
+        legacy
+    }
+
+    #[test]
+    fn real_function_mixed_eol_preserves_every_original_byte_and_final_newline() {
+        let legacy = real_legacy_fixture();
+        for style in 0..4 {
+            for final_newline in [false, true] {
+                let mut input = String::new();
+                for (index, line) in legacy.lines().enumerate() {
+                    input.push_str(line);
+                    let crlf = match style {
+                        0 => false,
+                        1 => true,
+                        2 => index % 2 == 0,
+                        _ => index % 3 == 0,
+                    };
+                    input.push_str(if crlf { "\r\n" } else { "\n" });
+                }
+                if !final_newline {
+                    input.truncate(input.trim_end_matches(['\r', '\n']).len());
+                }
+                let result = regenerate_reconcile(&input).unwrap();
+                let mut recovered = result.clone();
+                for guard in [reconcile_open_source(), reconcile_close_source()] {
+                    let crlf = guard.replace('\n', "\r\n");
+                    assert_eq!(
+                        recovered.matches(guard).count() + recovered.matches(&crlf).count(),
+                        1
+                    );
+                    recovered = recovered.replace(guard, "").replace(&crlf, "");
+                }
+                assert_eq!(
+                    recovered.as_bytes(),
+                    input.as_bytes(),
+                    "style={style}, final={final_newline}"
+                );
+                assert_eq!(result.ends_with('\n'), input.ends_with('\n'));
+                assert_eq!(
+                    regenerate_reconcile(&result).unwrap().as_bytes(),
+                    result.as_bytes()
+                );
+                // Full generator must accept the result too and leave all bytes
+                // before/after the owned completion block intact.
+                let full = regenerate(&result).unwrap();
+                let begin = result.find(BEGIN).unwrap();
+                let next = result.find(NEXT).unwrap();
+                assert_eq!(&full[..begin], &result[..begin]);
+                assert_eq!(&full[full.find(NEXT).unwrap()..], &result[next..]);
+                assert_eq!(regenerate(&full).unwrap(), full);
+            }
+        }
+    }
+
+    #[test]
+    fn real_function_rejects_reversed_misplaced_partial_or_edited_guards() {
+        let legacy = real_legacy_fixture().replace("\r\n", "\n");
+        let valid = regenerate_reconcile(&legacy).unwrap();
+        let open = reconcile_open_source();
+        let close = reconcile_close_source();
+        let reversed = valid
+            .replace(open, "GUARD_SWAP_SENTINEL")
+            .replace(close, open)
+            .replace("GUARD_SWAP_SENTINEL", close);
+        let open_at = valid.find(open).unwrap();
+        let next_statement = open_at + open.len() + READ.len() + 1;
+        let mut late_open = valid.clone();
+        late_open.insert_str(next_statement, open);
+        late_open.replace_range(open_at..open_at + open.len(), "");
+        let cases = [
+            reversed,
+            late_open,
+            valid.replace(open, &(open.to_owned() + "            -- unrelated line\n")),
+            valid.replace(
+                close,
+                &(close.to_owned() + "            -- unrelated line\n"),
+            ),
+            valid.replace(open, &(open.to_owned() + open)),
+            valid.replace(close, &(close.to_owned() + close)),
+            valid.replace(close, ""),
+            valid.replace(open, ""),
+            valid.replace(
+                "            -- END RUST GENERATED RECONCILE RECEIPT GUARD\n",
+                "",
+            ),
+            valid.replace(
+                "            -- BEGIN RUST GENERATED RECONCILE RECEIPT GUARD\n",
+                "",
+            ),
+            valid.replace(open, &open.replace("Finish(owner", "Other(owner")),
+            // Uniform LF/CRLF bodies are known output; mixed EOL within a
+            // marked body indicates an edited receipt, not legacy line endings.
+            valid.replace(open, &open.replacen('\n', "\r\n", 1)),
+            valid.replace(close, &close.replacen('\n', "\r\n", 1)),
+            format!("{}\n{open}{close}", legacy),
+            valid.replace(NEXT, &format!("{NEXT}\n{NEXT}")),
+        ];
+        for (index, invalid) in cases.iter().enumerate() {
+            assert!(
+                regenerate_reconcile(invalid).is_err(),
+                "accepted mutation {index}"
+            );
+            assert!(
+                regenerate(invalid).is_err(),
+                "full generator accepted mutation {index}"
+            );
         }
     }
 }
