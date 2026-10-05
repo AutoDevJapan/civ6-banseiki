@@ -1432,6 +1432,38 @@ impl Runner {
             false,
         )
     }
+    /// Hosting/loading hotseat opens StagingRoom; its official Ready button launches it.
+    pub fn launch_hotseat_staging(&mut self, before: usize, deadline: f64) -> Result<bool> {
+        while self.clock.now() < deadline {
+            if self.loadscreen_count()? > before {
+                return Ok(false);
+            }
+            if self
+                .states(self.budget(deadline, 5.0)?)?
+                .iter()
+                .any(|s| state_name_eq(s, "StagingRoom"))
+            {
+                let ready = self.lua("StagingRoom", "return not ContextPtr:IsHidden() and Controls.ReadyButton ~= nil and not Controls.ReadyButton:IsDisabled()", self.budget(deadline, 5.0)?);
+                match ready {
+                    Ok(v) if v == "true" => {
+                        let launched = self.lua("StagingRoom", "if not GameConfiguration.IsHotseat() or not Network.IsGameHost() then error('hotseat host required') end\nif ContextPtr:IsHidden() or Controls.ReadyButton:IsDisabled() then error('hotseat staging not ready') end\nControls.ReadyButton:DoLeftClick()\nreturn true", self.budget(deadline, 5.0)?);
+                        return match launched {
+                            Ok(_) => Ok(false),
+                            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => Ok(true),
+                            Err(e) => Err(e),
+                        };
+                    }
+                    Ok(_) => {}
+                    Err(e) if retryable(&e) => self.disconnect(),
+                    Err(e) => return Err(e),
+                }
+            }
+            self.sleep_until(deadline, 0.2);
+        }
+        Err(Error::scenario(
+            "Timed out waiting for the hotseat StagingRoom Ready button",
+        ))
+    }
     pub fn choose_dedication(&mut self, human: i64, deadline: f64) -> Result<Option<String>> {
         let code = format!("local h = {human}\n{DEDICATION_CODE}");
         let value = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
@@ -1530,7 +1562,7 @@ impl Runner {
                     );
                 }
                 let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nNetwork.HostGame(ServerType.{})\nreturn true", session.guard_code(), session.server_type());
-                let unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+                let mut unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
                     Ok(_) => false,
                     Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                         println!("HostGame response interrupted during transition: {e}");
@@ -1538,6 +1570,9 @@ impl Runner {
                     }
                     Err(e) => return Err(e),
                 };
+                if session == scenario::SessionType::Hotseat {
+                    unknown |= self.launch_hotseat_staging(before, deadline)?;
+                }
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
                 self.accept_hotseat_turn(deadline, true)?;
@@ -1757,7 +1792,7 @@ impl Runner {
         let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
-        let unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+        let mut unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
             Ok(_) => false,
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                 println!("LoadGame response interrupted during transition: {e}");
@@ -1765,6 +1800,9 @@ impl Runner {
             }
             Err(e) => return Err(e),
         };
+        if session == scenario::SessionType::Hotseat {
+            unknown |= self.launch_hotseat_staging(before, deadline)?;
+        }
         self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
         self.accept_hotseat_turn(deadline, true)?;
         if step["metrics"] == true {

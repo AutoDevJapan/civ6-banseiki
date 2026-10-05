@@ -117,6 +117,16 @@ fn hotseat_handoff_does_not_wait_for_a_whole_round_or_end_twice() {
         1
     );
     assert_eq!(h.count_code("OnKeyUp_Return()"), 2);
+    let confirmations: Vec<_> = h
+        .calls()
+        .into_iter()
+        .filter(|(_, code)| code.contains("OnKeyUp_Return()"))
+        .map(|(_, code)| code.lines().next().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        confirmations,
+        ["local requireDialog = false", "local requireDialog = true"]
+    );
 }
 
 #[test]
@@ -297,4 +307,46 @@ fn growth_snapshot_rejects_inert_growth_and_duplicate_credit() {
         lua.load(code).eval::<String>().is_err(),
         "two credits in one new turn must fail"
     );
+}
+
+fn staging_baseline(h: &mut Harness) {
+    for name in civ6_autotest_rs::judge::LOG_NAMES {
+        std::fs::write(h.runner.logs.join(name), "").unwrap();
+    }
+    h.runner.baseline = Some(civ6_autotest_rs::judge::snapshot_logs(&h.runner.logs).unwrap());
+}
+
+#[test]
+fn staging_launches_once_and_never_replays_an_unknown_button_result() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["StagingRoom".into()]))
+        .lua(|_, code| {
+            if code.contains("DoLeftClick()") {
+                return Err(Error::unknown("launch acknowledgement lost"));
+            }
+            Ok("true".into())
+        });
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    staging_baseline(&mut h);
+    assert!(h.runner.launch_hotseat_staging(0, 5.0).unwrap());
+    assert_eq!(h.count_code("DoLeftClick()"), 1);
+}
+
+#[test]
+fn disabled_staging_button_is_not_clicked_and_loading_skips_the_lobby() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["StagingRoom".into()]))
+        .lua(|_, _| Ok("false".into()));
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    staging_baseline(&mut h);
+    assert!(h.runner.launch_hotseat_staging(0, 1.0).is_err());
+    assert_eq!(h.count_code("DoLeftClick()"), 0);
+    std::fs::write(
+        h.runner.logs.join("Lua.log"),
+        "LoadScreen: OnLoadGameViewStateDone\n",
+    )
+    .unwrap();
+    let calls = h.calls().len();
+    assert!(!h.runner.launch_hotseat_staging(0, 5.0).unwrap());
+    assert_eq!(h.calls().len(), calls);
 }
