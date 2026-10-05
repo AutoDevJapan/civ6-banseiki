@@ -354,6 +354,15 @@ name = "civ6-pe-rs"
 version = "0.1.0"
 
 [[package]]
+name = "civ6-persona-events-rs"
+version = "0.1.0"
+dependencies = [
+ "civ6-autotest-rs",
+ "mlua",
+ "serde_json",
+]
+
+[[package]]
 name = "civ6-persona-merit-rs"
 version = "0.1.0"
 dependencies = [
