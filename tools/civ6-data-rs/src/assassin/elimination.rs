@@ -64,6 +64,7 @@ local function Resolved()
   NoSuccess()
   local expected=Copy(t.Ledger) or {Grievances={},Friendship={},WarReason={}}
   expected.Applied=expected.Applied or {}
+  local expectedDenouncements=Copy(t.BeforeDenouncements)
   for _,job in ipairs(t.Jobs) do
     local s=R.State(job.Actor); local m=s.LastMission
     assert(s.Mission==nil,'mission still pending')
@@ -93,13 +94,18 @@ local function Resolved()
       expected.Applied[want.ID]=1
       if t.Mode=='target' and want.Detected then expected.WarReason[key]=want.Due end
     end
+    if t.Mode=='target' and want.Detected then
+      for id,row in pairs(expectedDenouncements) do
+        if tonumber(id)~=job.Actor and tonumber(id)~=t.Target then row[tostring(job.Actor)]=want.Due end
+      end
+    end
     print('[JAC_ASN_ELIM] mode='..t.Mode..' actor='..job.Actor..' alive='..tostring(Players[job.Actor]:IsAlive())..
       ' mission='..m.ID..' result='..m.Result..' success='..tostring(m.Success)..' detected='..tostring(m.Detected)..
       ' resolved='..m.Resolved..' wait='..s.CommandUnlock)
   end
   if t.Mode=='target' then NativeDead(t.Target) end
   assert(Same(Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1'),expected),'missing or duplicate penalty')
-  if t.Mode=='actor' then assert(Same(Denouncements(),t.BeforeDenouncements),'cancelled actor caused denunciation') end
+  assert(Same(Denouncements(),expectedDenouncements),'missing or unexpected denunciation')
   if t.Final then
     for _,job in ipairs(t.Jobs) do assert(Same(R.State(job.Actor),t.Final[tostring(job.Actor)]),'resolved state changed') end
     assert(Same(Denouncements(),t.AfterDenouncements),'denunciation changed across save/load')
@@ -129,6 +135,9 @@ for i,name in ipairs(names) do
   if MODE=='actor' then assert(R.StartProduction(a,city:GetID())) end
   assert(R.TestAdvanceDeadlines(a,{Mission=true}))
   local state=R.State(a)
+  assert(state.Mission.Success==(i>2),'forced success combination not applied')
+  assert(state.Mission.Detected==(i%2==0),'forced detection combination not applied')
+  assert(Players[a]:GetProperty('JAC_ASN_FORCE_NEXT')==nil,'forced result not consumed')
   assert(state.Mission.Due==R.Turn()+1,'mission hook did not shorten deadline')
   t.Jobs[#t.Jobs+1]={Actor=a,Unit=u:GetID(),Pending=state,ParkX=city:GetX(),ParkY=city:GetY()}
   if MODE=='target' then ParkTrainedUnit(a,u:GetID(),city:GetID()) end
@@ -301,6 +310,7 @@ mod tests {
                 r#"
               local t=Game:GetProperty('JAC_ASN_ELIM_TEST')
               local ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+              GOOD_LEDGER=clone(ledger)
               ledger.Grievances[tostring(t.Jobs[1].Actor)]=999
               Players[t.Target]:SetProperty('JAC_ASN_DIPLOMACY_V1',ledger)
             "#,
@@ -312,6 +322,22 @@ mod tests {
                 .unwrap_err();
             assert!(
                 err.to_string().contains("missing or duplicate penalty"),
+                "{err}"
+            );
+            lua.load(format!(
+                r#"{PREFIX}
+              Players[t.Target]:SetProperty('JAC_ASN_DIPLOMACY_V1',GOOD_LEDGER)
+              Players[0]:SetProperty('JAC_ASN_DENOUNCE_'..t.Jobs[2].Actor,999)
+            "#
+            ))
+            .exec()?;
+            let err = lua
+                .load(format!("{PREFIX}\nResolved()"))
+                .exec()
+                .unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("missing or unexpected denunciation"),
                 "{err}"
             );
         }

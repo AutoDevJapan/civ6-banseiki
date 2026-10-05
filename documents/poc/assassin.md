@@ -229,4 +229,4 @@ cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin genera
 D:/CC/Tools/civ6-live/live_chain.exe agent/agent-todo-172-2d8d64aff0e8:assassin-actor-eliminated-save-load.json agent/agent-todo-172-2d8d64aff0e8:assassin-target-eliminated-save-load.json --stop-on-failure
 ```
 
-生成したLua 5.1の全24チャンクの構文と、Gameplayを読み直して全検査を動かす2種類の模擬試験に成功した。模擬試験では保存後の罰則の改変も拒否した。本体で滅亡した国の保存情報へのアクセスと実際の保存・読込は、実機結果が出るまで未確認とする。
+生成したLua 5.1の全24チャンクの構文と、Gameplayを読み直して全検査を動かす2種類の模擬試験に成功した。模擬試験では保存後の罰則と第三国の非難の改変も拒否した。別モデルのレビューで指摘された検査不足を修正し、受理した任務が指定した4組合せであることと、非難が初期値から作った期待値に一致することも確認する。本体で滅亡した国の保存情報へのアクセスと実際の保存・読込は、実機結果が出るまで未確認とする。
