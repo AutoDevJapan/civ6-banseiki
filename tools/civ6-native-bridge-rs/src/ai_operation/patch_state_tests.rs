@@ -142,24 +142,26 @@ fn failed_make_writable_and_combined_cleanup_failure_remain_retryable() {
 
 #[test]
 fn install_failure_cleans_all_sites_sharing_rx_page_without_recursive_lock() {
-    let guard = INSTALL.lock().unwrap();
-    let page = Page::new();
-    let r = Registration::prepare_locked(vec![page.patch(16), page.patch(24)], &guard).unwrap();
-    assert_eq!(
-        r.install_locked(&guard, &Faults::new(2, 0)),
-        Err(Failure::Patch)
-    );
-    r.close_locked(&guard, &SystemApi).unwrap();
-    for offset in [16, 24] {
-        assert_eq!(u64_at((page.0 + offset) as u64), Some(0x1234));
+    for (protect, cache) in [(2, 0), (0, 1)] {
+        let guard = INSTALL.lock().unwrap();
+        let page = Page::new();
+        let r = Registration::prepare_locked(vec![page.patch(16), page.patch(24)], &guard).unwrap();
+        assert_eq!(
+            r.install_locked(&guard, &Faults::new(protect, cache)),
+            Err(Failure::Patch)
+        );
+        r.close_locked(&guard, &SystemApi).unwrap();
+        for offset in [16, 24] {
+            assert_eq!(u64_at((page.0 + offset) as u64), Some(0x1234));
+        }
+        assert!(r
+            .states
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|s| s.original_protection == PAGE_EXECUTE_READ && s.phase == Phase::Restored));
+        assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READ));
     }
-    assert!(r
-        .states
-        .lock()
-        .unwrap()
-        .iter()
-        .all(|s| s.original_protection == PAGE_EXECUTE_READ && s.phase == Phase::Restored));
-    assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READ));
 }
 
 struct Pause {
@@ -187,6 +189,7 @@ fn concurrent_close_and_recovery_cannot_restore_rx_before_other_cas() {
         let guard = INSTALL.lock().unwrap();
         installed(&page, &guard)
     };
+    assert!(RECOVERY.set(r.clone()).is_ok());
     let pause = Arc::new(Pause {
         entered: Barrier::new(2),
         release: Barrier::new(2),
@@ -201,12 +204,11 @@ fn concurrent_close_and_recovery_cannot_restore_rx_before_other_cas() {
         });
         pause.entered.wait();
         assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READWRITE));
-        let b = r.clone();
         let barrier = Arc::new(Barrier::new(2));
         let other = barrier.clone();
         let second = scope.spawn(move || {
             other.wait();
-            let result = b.close();
+            let result = recover_failed_registration();
             sent.send(()).unwrap();
             result
         });
