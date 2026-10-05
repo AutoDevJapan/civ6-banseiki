@@ -63,6 +63,17 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         return Err(Error::scenario("Scenario needs a name"));
     }
     let session = SessionType::from_scenario(data)?;
+    if let Some(nonce) = data.get("hotseat_bridge_nonce") {
+        if session != SessionType::Hotseat
+            || !nonce
+                .as_str()
+                .is_some_and(crate::hotseat_bridge::nonce_valid)
+        {
+            return Err(Error::scenario(
+                "hotseat_bridge_nonce needs a 32-digit nonce and hotseat session",
+            ));
+        }
+    }
     if let Some(mode) = data.get("test_mode") {
         validate_test_mode(mode)?;
     }

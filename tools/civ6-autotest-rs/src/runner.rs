@@ -1603,6 +1603,18 @@ impl Runner {
                     )?;
                 }
                 self.lua("FrontEnd",&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),self.budget(deadline,5.0)?)?;
+                if let Some(nonce) = self.scenario["hotseat_bridge_nonce"]
+                    .as_str()
+                    .map(str::to_string)
+                {
+                    let code = format!("GameConfiguration.SetValue('JAC_HOTSEAT_BRIDGE_NONCE', {})\nreturn GameConfiguration.GetValue('JAC_HOTSEAT_BRIDGE_NONCE')", scenario::lua_string(&nonce));
+                    let observed = self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?)?;
+                    if observed.trim().trim_matches('"') != nonce {
+                        return Err(Error::scenario(
+                            "hotseat test nonce did not persist in GameConfiguration",
+                        ));
+                    }
+                }
                 Ok(format!(
                     "{}, {}, {}, seed={}, players={}{}",
                     text(step, "ruleset"),

@@ -4,6 +4,7 @@ pub mod carrier_sync;
 pub mod carrier_transport;
 pub mod click;
 pub mod error;
+pub mod hotseat_bridge;
 pub mod judge;
 pub mod metrics;
 pub mod restart;
