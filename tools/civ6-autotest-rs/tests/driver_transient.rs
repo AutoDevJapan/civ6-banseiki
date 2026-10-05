@@ -211,3 +211,140 @@ fn options_close_with_lost_acknowledgement_is_not_replayed() {
     assert!(h.calls()[0].1.contains("OnReturn(); CloseImmediately()"));
     assert_eq!(h.clock.at(), 0.0);
 }
+
+fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::{Clock, SystemClock},
+        tuner::{recv_frame, send_frame, TunerClient, COMMAND, HANDSHAKE},
+        Result,
+    };
+    use std::{
+        io,
+        net::TcpListener,
+        sync::Arc,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    struct SocketBackend(Option<TunerClient>);
+    impl Backend for SocketBackend {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
+            if self.0.is_none() {
+                self.0 = Some(TunerClient::connect(port, timeout)?);
+            }
+            Ok(())
+        }
+        fn disconnect(&mut self) {
+            if let Some(mut client) = self.0.take() {
+                client.close();
+            }
+        }
+        fn list_states(&mut self, timeout: f64) -> Result<Vec<String>> {
+            self.0.as_mut().unwrap().list_states(timeout)
+        }
+        fn run_lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
+            self.0
+                .as_mut()
+                .unwrap()
+                .run_lua(state, code, timeout)
+                .map(|r| r.value)
+        }
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let mut queries = 0;
+        let mut commands = Vec::new();
+        let limit = Instant::now() + Duration::from_secs(12);
+        for connection_index in 0..2 {
+            let (mut connection, _) = loop {
+                match listener.accept() {
+                    Ok(pair) => break pair,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < limit, "missing retry connection");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => panic!("accept failed: {e}"),
+                }
+            };
+            connection.set_nonblocking(false).unwrap();
+            while let Ok(frame) = recv_frame(
+                &mut connection,
+                Some(civ6_autotest_rs::time::monotonic() + 10.0),
+            ) {
+                match frame.payload.as_str() {
+                    "APP:" => send_frame(&mut connection, HANDSHAKE, "Civilization VI").unwrap(),
+                    "LSQ:" => {
+                        queries += 1;
+                        if queries == fail_query {
+                            break; // Disconnect before any command bytes are received.
+                        }
+                        send_frame(&mut connection, HANDSHAKE, "0\nInGameTopOptionsMenu").unwrap();
+                    }
+                    _ => {
+                        assert_eq!(frame.tag, COMMAND);
+                        let start = frame.payload.find("JAC_AUTOTEST_").unwrap();
+                        let token = &frame.payload[start..start + "JAC_AUTOTEST_".len() + 32];
+                        let ack = format!("{token}|OK|true");
+                        commands.push(frame.payload);
+                        if lose_ack {
+                            break;
+                        }
+                        send_frame(&mut connection, COMMAND, &ack).unwrap();
+                    }
+                }
+            }
+            if connection_index == 1 {
+                break;
+            }
+        }
+        commands
+    });
+    let root = tempfile::tempdir().unwrap();
+    let clock = Arc::new(SystemClock);
+    let mut runner = Runner::with_backend(
+        json!({}),
+        root.path().into(),
+        root.path().into(),
+        root.path().into(),
+        port,
+        Box::new(SocketBackend(None)),
+        clock.clone(),
+    );
+    let result = runner.close_options_menu(clock.now() + 10.0);
+    runner.disconnect();
+    let commands = server.join().unwrap();
+    assert_eq!(
+        commands.iter().filter(|c| c.contains("OnReturn()")).count(),
+        1
+    );
+    if lose_ack {
+        assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+        assert_eq!(commands.len(), 1);
+    } else {
+        assert!(result.unwrap());
+        assert_eq!(commands.len(), 2);
+        assert!(commands[1].contains("return ContextPtr:IsHidden()"));
+    }
+}
+
+#[test]
+fn options_close_recovers_when_runner_pre_send_state_query_disconnects() {
+    close_options_over_socket(3, false);
+}
+
+#[test]
+fn options_close_recovers_when_tuner_state_index_query_disconnects() {
+    close_options_over_socket(4, false);
+}
+
+#[test]
+fn options_close_after_state_index_recovery_never_replays_lost_ack() {
+    close_options_over_socket(4, true);
+}
