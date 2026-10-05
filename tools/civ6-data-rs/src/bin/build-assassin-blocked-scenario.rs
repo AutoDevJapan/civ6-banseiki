@@ -370,6 +370,8 @@ ExposedMembers={JAC_Assassin={TEST='JAC_ASN_TEST_MODE',State=function() return {
   Turn=function() return NOW end,UnitForPlayer=function() return 'UNIT_JAC_JAPAN_SENGOKU_ASSASSIN' end,
   IsAssassin=function(u) return u:GetType()==0 or u:GetType()==5 end}}
 local unrelated=GRANT(0,1,1000,0):GetID()
+local otherCityUnit
+if PROBE_MODE=='other_city' then otherCityUnit=GRANT(0,4,1,0):GetID() end
 UnitManager.InitUnit=function(owner,kind,x,y) GRANT(owner,GameInfo.Units[kind].Index,x,y) end
 NATIVE_CALLS=0
 UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,arg)
@@ -401,6 +403,11 @@ function CheckRestored()
   assert(Players[0]:GetCities():FindID(10))
   assert(Players[0]:GetUnits():GetCount()==1 and Players[0]:GetUnits():FindID(unrelated))
 end
+function CheckOtherCityUnchanged()
+  assert(Map.GetPlot(1,0):GetTerrainType()==1 and Map.GetPlot(1,0):GetFeatureType()==-1)
+  local u=Players[0]:GetUnits():FindID(otherCityUnit)
+  assert(u and u:GetOwner()==0 and u:GetType()==4 and u:GetX()==1 and u:GetY()==0 and u:GetDamage()==0)
+end
 "#;
         for mode in [
             "fallback",
@@ -419,6 +426,14 @@ end
             let result = lua.load(setup).exec();
             let safe = matches!(mode, "fallback" | "unplaced");
             assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
+            if mode == "other_city" {
+                assert!(result
+                    .as_ref()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixture would modify another city"));
+                lua.load("CheckOtherCityUnchanged()").exec()?;
+            }
             if safe {
                 lua.load("CheckFootprint()").exec()?;
                 lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
