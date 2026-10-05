@@ -2,6 +2,12 @@
 //! bytes are written. The only target changes are per-thread debug registers,
 //! which are snapshotted and restored before detach.
 use crate::return_correlation::{EntryInput, EntryKind, Incomplete, ReturnCorrelation};
+
+// Reuse this debugger's private attach identity, pinned handles and cleanup gate.
+// Existing governor/property entry points remain withheld.
+#[cfg(feature = "bootstrap-order")]
+#[path = "../../civ6-pe-rs/src/order_windows.rs"]
+pub mod order_capture;
 use crate::startup_contract::{
     CHILD_READY as ATTACH_READY_BUDGET, CRITICAL_WAIT as CRITICAL_CLOSE_BUDGET,
     RESTORE as RESTORE_BUDGET,

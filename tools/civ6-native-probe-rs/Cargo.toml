@@ -3,6 +3,19 @@ name = "civ6-native-probe-rs"
 version = "0.1.0"
 edition.workspace = true
 
+[features]
+bootstrap-order = []
+
+[[bin]]
+name = "civ6-order-observer"
+path = "../civ6-pe-rs/src/bin/civ6-order-observer.rs"
+required-features = ["bootstrap-order"]
+
+[[test]]
+name = "order-capture-contract"
+path = "../civ6-pe-rs/tests/order_capture_contract.rs"
+required-features = ["bootstrap-order"]
+
 [[bin]]
 name = "civ6-native-probe"
 path = "src/main.rs"
@@ -13,7 +26,7 @@ serde_json = "1"
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Wdk_System_Threading", "Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Threading"] }
+windows-sys = { version = "0.61.2", features = ["Wdk_System_Threading", "Win32_Foundation", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Kernel", "Win32_System_LibraryLoader", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_Threading"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_System_JobObjects", "Win32_System_Pipes"] }

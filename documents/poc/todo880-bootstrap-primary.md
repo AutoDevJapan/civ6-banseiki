@@ -120,3 +120,62 @@ Microsoft一次資料：[Process Creation Flags](https://learn.microsoft.com/en-
 Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その後の走査末尾6 byte対応と表示修正は再ビルド・4テスト・実PE照合を通した。Clippyの重複再検査は共有枠待ちで終了し、最終差分に対するClippy成功とは数えない。
 
 別モデル `gpt-6-luna` の読み取り専用レビューはMustなし。「選択」を実装確定と誤読される点のSuggestionを反映した。実機懸念は上記の不足条件として残す。
+
+## 追加のcapture-only候補
+
+`civ6-order-observer`をfeature `bootstrap-order`の明示指定時だけビルドする。実装は `tools/civ6-pe-rs/src/order_capture.rs`、`order_windows.rs`、`bin/civ6-order-observer.rs`。既存native-probe側はCargoのfeature/bin/dependency宣言とmodule入口だけを追加し、同じソースのDebugger、attach識別、thread HANDLE、CleanupGateを再利用する。既存governor/propertyの実機hardware禁止を解除していない。324 runtimeは変更していない。旧probe一式のcloneは0。
+
+```powershell
+$env:CARGO_TARGET_DIR='D:/CC/Work/todo880/bootstrap-target'
+& D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-probe-rs --features bootstrap-order --bin civ6-order-observer
+& D:/CC/Work/todo880/bootstrap-target/debug/civ6-order-observer.exe snapshot $exe
+```
+
+snapshotはPEをファイルとして読むだけ。SHA・opcode・実行sectionを確認し、ソースファイル一覧と各SHA、コンパイル時source digest、生成時checkout HEADをJSONに出す。コンパイル後にソースが変わっていれば拒否する。`live_runs=0`、未観測counterはnull、共通境界とGameplay同定はunknown。checkout HEADとcompiled source digestを分け、未コミット編集をHEADだけで同一と扱わない。
+
+| phase | slot 0 | slot 1 | slot 2 | slot 3 |
+|---|---|---|---|---|
+| `front` | loader復帰 `0xF8577` | factory call `0xF845D` | factory復帰 `0xF845F` | lua_newstate復帰 `0x972BBD` |
+| `load` | 保持解除 `0xF7110` | 保持変更 `0xF7830` | Lua close call `0x971B11` | Lua close call `0x971CB7` |
+
+新しいLua生成位置の根拠は、EXEの `lua_newstate` import IAT `0xF962B8` → thunk `0xDBD848`、直接call `0x972BB8`の `E8 8B AC 44 00`、復帰 `0x972BBD`の `44 8B C6`。RAXは返されたLua state、RBXは次の `0x972BC0`でstateを `+0x10`へ格納する所有オブジェクト。UI Luaを含むためGameplayだと断定しない。初期画面ですでにGameCoreロード済みでもfuture factory/newstateは捕捉できるが、attach以前の初回factoryはunknownのまま残す。
+
+### 親から渡すmanifestと実行契約
+
+`validate <request.json>`は構造だけを検査し、プロセス・lock・ゲームを開かない。`parent <request.json>`は現在のlive_chain子孫である親からのみ起動する。controllerのPID/FILETIME欄は親stub自身の値で埋め直し、出力と同じ場所へ新規 `*.request.json`を保存する。直接 `observe` を起動する場合は実際のOS親controllerの値を渡す。
+
+必須キーは `schema`=`todo880-order-v1`、`pid`、`created_filetime`、`chain_pid`、`chain_created_filetime`、`controller_pid`、`controller_created_filetime`、`source_dll`、`source_dll_sha256`、`output`、`max_seconds`、`max_hits`、`front_prefix`、`load_prefix`、`phase`。未知のキーを拒否する。PID/FILETIMEは正の整数、各prefixは1–4、秒数1–300、hit数1–256。source DLLは絶対パスと64桁SHAを照合して書換え・削除を防ぐ読み取りハンドルを保持する。DLLをロードもinstallもしない。
+
+親は標準入力pipeを開いたまま保持する。stdoutの `ready=true`後に対象操作を開始する。`phase load\n` / `phase front\n`を送った場合、`phase_ready`を受け取ってから次の操作へ進む。最大8回。切替はpending instructionがなく、全追跡threadを停止している時だけ行い、切替の欠測期間を `phase_gap`に記録する。上限は固定集合のprefix選択であり、任意address・opcodeは受け付けない。`stop\n`またはEOFは復元を要求する。現在のcatalog予約とは同時実行しない。このworkerはobserve/parentを実行していない。
+
+`order_identity`にPID/FILETIME、source DLL SHA、EXE base、初期Context値とGameCore baseを出す。`instruction_before`は元のRAX/RBX/RCX/RDX/R8/R9/RSP/RIP、thread ID、pointer candidate、単調増加sequence/capture_seqを記録する。保持オブジェクトの `+0x450`を読むが、owner IDやGameplay stateと断定しない。attach時のロード済みmodule列挙は `module_attach_snapshot`、ready後の実ロード/アンロードは別のeventとして記録する。
+
+### 元命令と例外の扱い
+
+breakpointはDR0–3だけに設定する。固定SHAと命令窓に加え、対象pageがMEM_IMAGE・同じEXEのAllocationBase・実行可能・非GUARDであることを照合する。`WriteProcessMemory`、注入、RIP飛越、NOP化、元命令のemulationは行わない。
+
+最初の停止は例外address=RIP=設定DR、DR7の実行breakpoint設定、対応DR6 B-bitを要求する。不明thread、先行breakpoint、TF、DRの不一致は拒否する。欠落DR6を推測でowned扱いしない。既存probeがDR6欠落を許容する経路は、この新しい実機未検証候補には適用しない。
+
+そのthreadへRFとTFを設定し、元命令をCPUに実行させる。次のfirst-chance single-stepでDR6.BSと静的な次のRIPを照合できた時だけ `original_instruction_executions=1`を出す。factory callの次RIPは固定GameCoreのexport `base+0x752D50`。Lua close callの次RIPはEXEのthunk `base+0xDBD83C`。**この1はcall命令1回を意味し、calleeの完了ではない。** factoryのcallee完了は別のfactory-return siteで観測する。Lua close完了はこの8点では証明しない。
+
+無関係な例外は `DBG_EXCEPTION_NOT_HANDLED`。ownedか曖昧な例外は正常detachへ進まず、既存critical cleanupに従って所有ゲームの終了を親へ要求する。正常終了では全追跡threadのDRを保存値へ戻し、照合してからdetachし、追加した停止回数を戻す。pending TFも除去する。observerのreader threadはjoinし、親stubはChild終了と復元済み `order_stop`の両方を確認する。復元済み記録のない子の終了では、保持中の同じゲームHANDLEの終了確認まで回収を続ける。ゲーム終了を確認できない失敗は成功receiptにせず、ハンドルを保持して通知する。観測に失敗しても復元とdetachを確認できた場合は、失敗を返してゲームを残せる。
+
+この順序は [Microsoft Debugging Events](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events)、[SetThreadContext](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setthreadcontext)、[ContinueDebugEvent](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent) の停止・継続契約に基づく。TF/RFの実配送と全thread復元は実機未検証。実測なしで将来の例外配送成功を宣言しない。
+
+Microsoftの [x86 Flags](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x86-architecture#x86-flags) はTFによる1命令後のSTATUS_SINGLE_STEPを説明し、[x64 Architecture](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/x64-architecture) はx86由来のflagsを示す。ただしWindowsが本対象のCONTEXTでTF/DR6をどう配送するかは未実測。固定条件に合わなければ拒否し、欠落bitを推測で補って反復しない。命令完了はDR6の原因bitがBSのみであることを要求し、混在を消費しない。phase切替では停止後の保留debug eventを旧phaseで処理してから再武装する。
+
+### 親が取る3種類の順序receipt候補
+
+1. 既知の初期画面でfrontを準備してから新規/Continueへ進む。初期module/context値、最初に捕捉したfactory、Lua生成を照合する。すでに完了していたloader/factoryは欠測。
+2. 既知のゲーム中状態でloadの準備完了後にLoad/QuickLoadを行う。保持変更と各Lua closeのthread・pointer・sequenceを記録する。
+3. 同じ所有セッションでLeaveGameを行い、必要なら初期画面でfrontへ戻して次のfactoryを取る。全操作の合流点・Gameplay同定は実データから判定し、phase外の呼出しを0件とはみなさない。
+
+これらは親の予約内で行う候補であり、workerによる起動・予約追加は0。product installやCOMMIT公開の受入とは別である。
+
+構造確認専用のmanifestは `tools/civ6-pe-rs/tests/fixtures/order-request-no-live.json`。PID・FILETIME・DLL SHAは明示的なテスト値であり、`validate`以外に渡さない。実機identityの成功を模擬する用途ではない。
+
+追加候補の別モデルレビューでは、親自身のchain確認、子の異常終了時の回収、DR6混在原因、phase切替時の旧イベント競合を修正した。最後の読み取り専用再レビューはMustなし。既存critical cleanupはstdout通知を持つため、「通知がない」という初回指摘は撤回された。実機のthread/例外配送は未検証のままである。
+
+追加候補の最終検査：共有cargo_gate・専用targetで `cargo test --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-probe-rs --features bootstrap-order --lib --test order-capture-contract order_capture` を実行し、純粋な否定テスト4件と実CLI/ディスク照合3件が成功。生成済みの同じlib test実行ファイルで `windows::tests::live_hardware_modes_are_rejected_before_attach_or_process_access --exact` も1件成功した。合計8件。いずれもゲーム起動・debug attachは0。request fixtureはvalidateだけに渡し、`manifest_valid=true, process_identity_verified=false`を確認した。形式・差分検査も成功。capture追加差分のClippyおよびworkspace全件は未実行。
+
+commit後の成果物は `D:/CC/Work/todo880/order-observer-snapshot.json`（全8sites、source一覧、生成時HEAD）、`D:/CC/Work/todo880/order-observer-summary.json`（短い同一性結果）、`D:/CC/Work/todo880/order-observer-manifest-validation.json`（構造確認）。いずれもRust CLIの出力をそのまま保存し、runtime counterを作らない。親stubの実際の起動・子回収・例外配送の検証は親の実機receiptに残る。
