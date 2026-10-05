@@ -2357,7 +2357,11 @@ impl Runner {
                 let ids = strings(&step["ids"]);
                 let disabled = self.lua(
                     "FrontEnd",
-                    &scenario::enable_mods_code(&ids, &strings(&step["disable_ids"])),
+                    &scenario::enable_mods_code_with_scope(
+                        &ids,
+                        &strings(&step["disable_ids"]),
+                        step["exclusive_user_mods"] == true,
+                    ),
                     // Switching the selection rebuilds configuration databases.
                     // Wait within the scenario's deadline for this one mutation;
                     // a short query budget can lose its acknowledgment mid-rebuild.
