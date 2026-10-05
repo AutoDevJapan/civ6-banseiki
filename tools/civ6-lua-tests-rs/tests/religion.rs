@@ -222,6 +222,15 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
             "revival",
         ),
         ("s.heroes['0'].verification='PENDING'", "hero"),
+        ("s.revision='broken'", "revision type"),
+        ("s.revision=-1", "negative revision"),
+        ("s.revision=1.5", "fractional revision"),
+        ("s.revision=2147483647", "revision overflow"),
+        ("s.absorptionReceipts=false", "receipt type"),
+        (
+            "s.absorptionReceipts={['rp-absorb-1']={}}",
+            "receipt ID collision",
+        ),
         (
             "s.heroes['0'].heroClass=11",
             "reused hero ID with another class",
@@ -240,7 +249,7 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
         let error = h
             .lua
             .load("return ADAPTER.Prepare(TX)")
-            .eval::<Value>()
+            .eval::<MultiValue>()
             .unwrap_err();
         assert!(!error.to_string().is_empty(), "{label}");
         assert_eq!(h.export(), before, "{label}");
@@ -251,7 +260,7 @@ fn absorption_adapter_rejects_pending_conflicts_and_nontransferred_hero_before_w
     assert!(h
         .lua
         .load("return ADAPTER.Prepare(TX)")
-        .eval::<Value>()
+        .eval::<MultiValue>()
         .is_err());
 }
 

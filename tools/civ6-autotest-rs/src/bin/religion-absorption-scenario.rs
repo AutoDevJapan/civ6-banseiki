@@ -67,26 +67,44 @@ return saved
 "#;
 
 const REVIVE: &str = r#"
+-- Intentional loss in a fresh, isolated test game; not an absorption effect.
 local RP=assert(ExposedMembers.JAC_ReligionPersistence)
+local A=assert(JAC_AbsorptionGameplay)
 local e=assert(Game:GetProperty('JAC_ABSORPTION_LIVE_EXPECT_V1'))
 local id='JAC_RP_PLACEHOLDER_01'
+local function counts(c)
+ local out={Population=c:GetPopulation()}
+ for row in GameInfo.Religions() do if row.Index>0 then out[tostring(row.Index)]=c:GetReligion():GetNumFollowers(row.Index) end end
+ return A.Canonical(out)
+end
+local unaffected={}
+for _,p in ipairs(PlayerManager.GetAlive()) do for _,c in p:GetCities():Members() do
+ if c:GetReligion():GetNumFollowers(e.Religion)==0 then unaffected[#unaffected+1]={Owner=p:GetID(),ID=c:GetID(),Counts=counts(c)} end
+end end
+assert(#unaffected>0,'isolated fixture must contain cities without this religion')
 for _,p in ipairs(PlayerManager.GetAlive()) do
  for _,c in p:GetCities():Members() do
   c:GetReligion():RemovePressureOneReligion(e.Religion,8388607,-1)
   c:GetReligion():RemovePressureOneReligion(e.Religion,1,-1)
  end
 end
+for _,v in ipairs(unaffected) do assert(counts(Players[v.Owner]:GetCities():FindID(v.ID))==v.Counts,'loss preparation changed an unrelated city') end
 local lost=RP.Inspect(id)
 assert(RP.NativeFollowers(id)==0 and lost.lost and lost.canRevive,'zero native citizens must permit revival from transferred scripture')
 local p=Players[e.To]
 p:GetReligion():ChangeFaithBalance(200-p:GetReligion():GetFaithBalance())
 local city=p:GetCities():GetCapitalCity()
+local otherCities={}
+for _,owner in ipairs(PlayerManager.GetAlive()) do for _,c in owner:GetCities():Members() do
+ if c:GetOwner()~=e.To or c:GetID()~=city:GetID() then otherCities[#otherCities+1]={Owner=c:GetOwner(),ID=c:GetID(),Counts=counts(c)} end
+end end
 local f=p:GetReligion():GetFaithBalance()
 RP.Revive(id,'joint_revival','joint_scripture','joint_reborn',e.To,city:GetID())
 local s=RP.Inspect(id)
 assert(RP.NativeFollowers(id)==1 and s.followers==1 and not s.lost and not s.canRevive,'revival failed to create an actual citizen')
 assert(s.revivalCount==1 and s.revivals.joint_revival.effects=='APPLIED','revival not recorded once')
 assert(p:GetReligion():GetFaithBalance()==f-RP.Rules().REVIVAL_FAITH_COST,'revival did not charge the rule cost once')
+for _,v in ipairs(otherCities) do assert(counts(Players[v.Owner]:GetCities():FindID(v.ID))==v.Counts,'revival changed another city') end
 Game:SetProperty('JAC_JOINT_REVIVED_FAITH_V1',p:GetReligion():GetFaithBalance())
 local saved=RP.Snapshot()
 assert(not pcall(RP.Revive,id,'joint_revival','joint_scripture','joint_reborn',e.To,city:GetID()),'duplicate revival accepted')

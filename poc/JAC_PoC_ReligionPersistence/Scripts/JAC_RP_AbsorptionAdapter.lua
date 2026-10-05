@@ -23,6 +23,11 @@ local function requireState()
   assert(state.schema == 1 and type(state.religions) == "table"
     and type(state.heroes) == "table" and type(state.artifacts) == "table",
     "unsupported RP save")
+  assert(type(state.revision) == "number" and state.revision >= 0
+    and state.revision < 2147483647 and state.revision == math.floor(state.revision),
+    "unsupported RP revision")
+  assert(state.absorptionReceipts == nil or type(state.absorptionReceipts) == "table",
+    "damaged RP absorption receipts")
   return state
 end
 
@@ -157,6 +162,8 @@ function Adapter.Prepare(tx)
   assert(type(tx.ID) == "string" and type(tx.From) == "number"
     and type(tx.To) == "number" and tx.From ~= tx.To, "invalid RP absorption transaction")
   local state = requireState()
+  assert(not state.absorptionReceipts or state.absorptionReceipts[tx.ID] == nil,
+    "RP absorption receipt ID already used")
   inspect(state, tx) -- read-only; no reservation or property write
   return { Version = 1, From = tx.From, To = tx.To,
     HeroUnit = state.heroes[tostring(tx.From)] and state.heroes[tostring(tx.From)].unit,

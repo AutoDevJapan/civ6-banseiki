@@ -265,6 +265,29 @@ fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutatio
 }
 
 #[test]
+fn religion_adapter_corrupt_metadata_rejects_before_native_absorption_mutation() -> mlua::Result<()>
+{
+    for change in [
+        "state.revision='broken'",
+        "state.revision=1.5",
+        "state.revision=0/0",
+        "state.absorptionReceipts=false",
+    ] {
+        let lua = joint_adapter_world()?;
+        lua.load(format!(r#"
+          local A=TEST_ABSORPTION
+          local state=Game:GetProperty('JAC_RP_STATE_V1')
+          {change}
+          local ok=pcall(A.Apply,PLAN)
+          assert(not ok,'corrupt metadata was accepted')
+          assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0,'metadata failure occurred after native assets moved')
+          assert(Players[1].units[13] and CITIES[4]:GetOwner()==1)
+        "#)).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn religion_adapter_failed_property_write_resumes_without_second_native_transfer()
 -> mlua::Result<()> {
     let lua = joint_adapter_world()?;
