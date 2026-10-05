@@ -438,68 +438,14 @@ struct Patch {
     new: u64,
     wide: bool,
 }
-#[derive(Clone)]
-pub struct Registration {
-    patches: Vec<Patch>,
-}
-unsafe impl Send for Registration {}
-static INSTALL: Mutex<()> = Mutex::new(());
-static RECOVERY: OnceLock<Registration> = OnceLock::new();
-/// Remains available after CriticalRestore; patch ownership is never dropped.
+#[path = "patch_state.rs"]
+mod patch_state;
+pub use patch_state::Registration;
 pub fn recover_failed_registration() -> Result<(), Failure> {
-    RECOVERY.get().ok_or(Failure::AlreadyUsed)?.close()
+    patch_state::recover_failed_registration()
 }
-fn writable(address: usize, size: usize) -> bool {
-    let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
-    (unsafe { VirtualQuery(address as *const _, &mut info, std::mem::size_of_val(&info)) != 0 })
-        && info.State == MEM_COMMIT
-        && info.Protect & (PAGE_GUARD | PAGE_NOACCESS) == 0
-        && address
-            .checked_add(size)
-            .is_some_and(|end| end <= info.BaseAddress as usize + info.RegionSize)
-}
-unsafe fn exchange(p: &Patch, restore: bool) -> Result<(), Failure> {
-    let size = if p.wide { 8 } else { 4 };
-    if !writable(p.address, size) {
-        return Err(Failure::Memory);
-    }
-    let mut previous = 0;
-    if unsafe {
-        VirtualProtect(
-            p.address as *const _,
-            size,
-            PAGE_EXECUTE_READWRITE,
-            &mut previous,
-        )
-    } == 0
-    {
-        return Err(Failure::Patch);
-    }
-    let (old, new) = if restore {
-        (p.new, p.old)
-    } else {
-        (p.old, p.new)
-    };
-    let success = if p.wide {
-        unsafe { &*(p.address as *const AtomicU64) }
-            .compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-    } else {
-        unsafe { &*(p.address as *const AtomicU32) }
-            .compare_exchange(old as u32, new as u32, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-    };
-    let mut discard = 0;
-    let protection =
-        unsafe { VirtualProtect(p.address as *const _, size, previous, &mut discard) } != 0;
-    let flush =
-        unsafe { FlushInstructionCache(GetCurrentProcess(), p.address as *const _, size) } != 0;
-    if success && protection && flush {
-        Ok(())
-    } else {
-        Err(Failure::Patch)
-    }
-}
+use patch_state::{SystemApi, INSTALL, RECOVERY};
+
 unsafe fn relay(call: usize, gateway: usize) -> Result<usize, Failure> {
     for step in 1..=0x4000usize {
         for addr in [
@@ -691,21 +637,19 @@ pub unsafe fn register(
     if !lease.current(stamp, player) {
         return Err(Failure::Lease);
     }
-    let registration = Registration { patches };
+    let registration = Registration::prepare_locked(patches, &_lock)?;
     RECOVERY
         .set(registration.clone())
         .map_err(|_| Failure::AlreadyUsed)?;
-    for patch in &registration.patches {
-        if unsafe { exchange(patch, false) }.is_err() {
-            return if registration.close().is_err() {
-                Err(Failure::CriticalRestore)
-            } else {
-                Err(Failure::Patch)
-            };
-        }
+    if registration.install_locked(&_lock, &SystemApi).is_err() {
+        return if registration.close_locked(&_lock, &SystemApi).is_err() {
+            Err(Failure::CriticalRestore)
+        } else {
+            Err(Failure::Patch)
+        };
     }
     if !lease.current(stamp, player) {
-        return if registration.close().is_err() {
+        return if registration.close_locked(&_lock, &SystemApi).is_err() {
             Err(Failure::CriticalRestore)
         } else {
             Err(Failure::Lease)
@@ -713,26 +657,6 @@ pub unsafe fn register(
     }
     ACTIVE.store(true, Ordering::Release);
     Ok(registration)
-}
-impl Registration {
-    pub fn close(&self) -> Result<(), Failure> {
-        ACTIVE.store(false, Ordering::Release);
-        let mut result = Ok(());
-        for p in self.patches.iter().rev() {
-            let current = if p.wide {
-                u64_at(p.address as u64)
-            } else {
-                u32_at(p.address as u64).map(u64::from)
-            };
-            if current == Some(p.old) {
-                continue;
-            }
-            if unsafe { exchange(p, true) }.is_err() {
-                result = Err(Failure::Patch)
-            }
-        }
-        result
-    }
 }
 pub fn observations() -> (Vec<Observation>, u32) {
     (

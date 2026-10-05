@@ -145,7 +145,7 @@ unsafe extern "system" {
     fn original_unwinds();
 }
 
-fn child(test: &str, marker: &str) -> bool {
+pub(super) fn child(test: &str, marker: &str) -> bool {
     if std::env::var_os(marker).is_some() {
         return true;
     }
@@ -187,6 +187,64 @@ fn seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return() {
         return;
     }
     AI_GATE_TARGETS[0].store(original_unwinds as *const () as u64, Ordering::Release);
+    let mut arena = vec![0u8; 0x400];
+    let receiver = arena.as_ptr() as u64;
+    let player = receiver + 0x200;
+    arena[0x98..0xa0].copy_from_slice(&player.to_le_bytes());
+    arena[0x2d8..0x2dc].copy_from_slice(&3u32.to_le_bytes());
+    let mut created = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut exit = created;
+    let mut kernel = created;
+    let mut user = created;
+    assert_ne!(
+        unsafe {
+            GetProcessTimes(
+                GetCurrentProcess(),
+                &mut created,
+                &mut exit,
+                &mut kernel,
+                &mut user,
+            )
+        },
+        0
+    );
+    let context = Context {
+        epoch: Epoch {
+            pid: unsafe { GetCurrentProcessId() },
+            created: u64::from(created.dwHighDateTime) << 32 | u64::from(created.dwLowDateTime),
+            generation: 1,
+        },
+        thread: unsafe { GetCurrentThreadId() },
+        module_base: 0x180000000,
+    };
+    let raw = civ6_native_bridge_rs::PromotionObservation {
+        sequence: 1,
+        thread_id: context.thread,
+        rcx: receiver,
+        rdx: 2,
+        r8: 0,
+        r9: 0,
+        return_address: context.module_base + 0x401537,
+    };
+    let capture = Capture::begin(
+        context,
+        context.module_base + 0x4a7ad0,
+        raw,
+        PaymentDefinition {
+            governor_index: 8,
+            cost: 2,
+            base: 3,
+            titles: [Some(4), None],
+        },
+        4,
+        &Memory,
+    )
+    .unwrap();
+    CAPTURE.with(|c| *c.borrow_mut() = Some(capture));
+    assert!(CAPTURE.with(|c| c.borrow().is_some()));
     DEPTH.with(|d| d.set(3));
     INVOCATION.with(|c| {
         c.set(Some(Invocation {
@@ -279,6 +337,30 @@ fn gateway_child_preserves_original_once_registers_flags_and_true_stack() {
         }
         assert_eq!(context.Rip, 0x12345678);
         assert_eq!(context.Rsp, stack.as_ptr() as u64 + 0x1c0);
+        // Use the actual loaded pre-RET instruction, not a fabricated RVA.
+        let length = (base + unsafe { (*entry).EndAddress as u64 } - gateway as u64) as usize;
+        let code = unsafe { std::slice::from_raw_parts(gateway as *const u8, length) };
+        let epilogue = code
+            .windows(9)
+            .position(|w| w == [0x48, 0x8d, 0xa4, 0x24, 0xb8, 0x01, 0x00, 0x00, 0xc3])
+            .expect("actual LEA/RET epilogue");
+        stack[0] = 0x87654321;
+        context.Rsp = stack.as_ptr() as u64;
+        context.Rip = gateway as u64 + epilogue as u64 + 8;
+        unsafe {
+            RtlVirtualUnwind(
+                0,
+                base,
+                context.Rip,
+                entry,
+                &mut context,
+                &mut handler,
+                &mut establisher,
+                ptr::null_mut(),
+            );
+        }
+        assert_eq!(context.Rip, 0x87654321);
+        assert_eq!(context.Rsp, stack.as_ptr() as u64 + 8);
     }
 }
 
@@ -329,23 +411,181 @@ fn true_caller_span_is_bounded_and_unreadable_frame_has_no_copy() {
     assert_eq!(frame.out, [0xaa; 0x60]);
 }
 
-#[test]
-fn atomic_registration_pointer_cas_and_restoration_are_exact() {
-    let slot = Box::new(AtomicU64::new(0x1234));
-    let patch = Patch {
-        address: (&*slot as *const AtomicU64) as usize,
-        old: 0x1234,
-        new: 0x5678,
-        wide: true,
-    };
-    unsafe { exchange(&patch, false) }.unwrap();
-    assert_eq!(slot.load(Ordering::Acquire), 0x5678);
-    assert_eq!(unsafe { exchange(&patch, false) }, Err(Failure::Patch));
-    unsafe { exchange(&patch, true) }.unwrap();
-    assert_eq!(slot.load(Ordering::Acquire), 0x1234);
+struct Reject;
+
+core::arch::global_asm!(
+    ".globl accepted_stage_driver",
+    ".seh_proc accepted_stage_driver",
+    "accepted_stage_driver:",
+    "sub rsp,0x68",
+    ".seh_stackalloc 0x68",
+    ".seh_endprologue",
+    "mov r11,rdx",
+    "mov edx,2",
+    "xor r8d,r8d",
+    "call r11",
+    ".globl accepted_stage_return",
+    "accepted_stage_return:",
+    "add rsp,0x68",
+    "ret",
+    ".seh_endproc"
+);
+unsafe extern "system" {
+    fn accepted_stage_driver(receiver: u64, target: usize) -> u64;
+    fn accepted_stage_return();
+}
+static FIXTURE_EPOCH: AtomicU32 = AtomicU32::new(1);
+static FIXTURE_CALLS: AtomicU32 = AtomicU32::new(0);
+static FIXTURE_ARMED: AtomicU32 = AtomicU32::new(0);
+static FIXTURE_ACTION: AtomicU32 = AtomicU32::new(0);
+struct DynamicLease {
+    stamp: LeaseStamp,
+    player: u64,
+    thread: u32,
+}
+unsafe impl RuntimeLease for DynamicLease {
+    fn begin(&self, owner: u32, player: u64) -> Option<LeaseStamp> {
+        (owner == self.stamp.owner
+            && player == self.player
+            && unsafe { GetCurrentThreadId() } == self.thread)
+            .then_some(LeaseStamp {
+                generation: FIXTURE_EPOCH.load(Ordering::SeqCst),
+                ..self.stamp
+            })
+    }
+    fn current(&self, s: LeaseStamp, player: u64) -> bool {
+        s == self.stamp
+            && player == self.player
+            && FIXTURE_EPOCH.load(Ordering::SeqCst) == s.generation
+            && unsafe { GetCurrentThreadId() } == self.thread
+    }
+}
+unsafe extern "system" fn accepted_original(receiver: u64, _phase: u32) -> u64 {
+    FIXTURE_CALLS.fetch_add(1, Ordering::SeqCst);
+    if CAPTURE.with(|c| c.borrow().is_some()) {
+        FIXTURE_ARMED.fetch_add(1, Ordering::SeqCst);
+    }
+    match FIXTURE_ACTION.swap(0, Ordering::SeqCst) {
+        1 => unsafe {
+            accepted_stage_driver(receiver, gateways()[0]);
+        },
+        2 => {
+            FIXTURE_EPOCH.fetch_add(1, Ordering::SeqCst);
+        }
+        _ => {}
+    }
+    0x1234
 }
 
-struct Reject;
+#[test]
+fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() {
+    if !child("gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection","CIV6_ACCEPTED_GATEWAY_CHILD"){return}
+    let mut memory = vec![0u8; 0x600];
+    let receiver = memory.as_ptr() as u64;
+    let player = receiver + 0x300;
+    memory[0x98..0xa0].copy_from_slice(&player.to_le_bytes());
+    memory[0x3d8..0x3dc].copy_from_slice(&3u32.to_le_bytes());
+    let mut c = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let mut e = c;
+    let mut k = c;
+    let mut u = c;
+    assert_ne!(
+        unsafe { GetProcessTimes(GetCurrentProcess(), &mut c, &mut e, &mut k, &mut u) },
+        0
+    );
+    let stamp = LeaseStamp {
+        pid: unsafe { GetCurrentProcessId() },
+        created: u64::from(c.dwHighDateTime) << 32 | u64::from(c.dwLowDateTime),
+        owner: 3,
+        generation: 1,
+        session: 1,
+        begin_ticket: 1,
+        arm_token: 7,
+    };
+    let lease = Box::leak(Box::new(DynamicLease {
+        stamp,
+        player,
+        thread: unsafe { GetCurrentThreadId() },
+    }));
+    // Explicit in-process layout fixture. This is NOT a parent RuntimeLease implementation.
+    let return_address = accepted_stage_return as *const () as u64;
+    let base = return_address - 0x401537;
+    assert!(BINDING
+        .set(Binding {
+            base,
+            callback_return: return_address,
+            receiver,
+            player,
+            owner: 3,
+            definition: PaymentDefinition {
+                governor_index: 8,
+                cost: 2,
+                base: 3,
+                titles: [Some(4), None]
+            },
+            lease,
+            installed: stamp,
+            promotion: 4
+        })
+        .is_ok());
+    ROWS.lock().unwrap().reserve_exact(CAPACITY);
+    ACTIVE.store(true, Ordering::Release);
+    AI_GATE_TARGETS[0].store(accepted_original as *const () as u64, Ordering::Release);
+    assert_eq!(
+        unsafe { accepted_stage_driver(receiver, gateways()[0]) },
+        0x1234
+    );
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 1);
+    assert_eq!(FIXTURE_ARMED.load(Ordering::SeqCst), 1);
+    let rows = observations().0;
+    assert_eq!(rows.len(), 2);
+    assert!(rows
+        .iter()
+        .all(|r| r.accepted && r.capture_entry && r.owner == Some(3)));
+    memory[0x3d8..0x3dc].copy_from_slice(&4u32.to_le_bytes());
+    unsafe {
+        accepted_stage_driver(receiver, gateways()[0]);
+    }
+    let rows = observations().0;
+    assert!(!rows[2].accepted && !rows[3].accepted);
+    memory[0x3d8..0x3dc].copy_from_slice(&3u32.to_le_bytes());
+    FIXTURE_ACTION.store(1, Ordering::SeqCst);
+    unsafe {
+        accepted_stage_driver(receiver, gateways()[0]);
+    }
+    let rows = observations().0;
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 4);
+    assert!(!rows[5].accepted && !rows[6].accepted);
+    assert!(rows[4].accepted && rows[7].accepted);
+    std::thread::spawn(move || unsafe { accepted_stage_driver(receiver, gateways()[0]) })
+        .join()
+        .unwrap();
+    let rows = observations().0;
+    assert!(!rows[8].accepted && !rows[9].accepted);
+    FIXTURE_ACTION.store(2, Ordering::SeqCst);
+    unsafe {
+        accepted_stage_driver(receiver, gateways()[0]);
+    }
+    let rows = observations().0;
+    assert!(rows[10].accepted);
+    assert!(!rows[11].accepted);
+    unsafe {
+        accepted_stage_driver(receiver, gateways()[0]);
+    }
+    let rows = observations().0;
+    assert!(!rows[12].accepted && !rows[13].accepted);
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), 7);
+    assert_eq!(rows.len(), 14);
+    let entries: Vec<_> = rows
+        .iter()
+        .filter(|r| !r.after)
+        .map(|r| r.sequence)
+        .collect();
+    assert_eq!(entries, vec![1, 2, 3, 4, 5, 6, 7]);
+}
 #[test]
 fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {
     let original = LeaseStamp {
