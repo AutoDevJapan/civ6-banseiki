@@ -374,6 +374,7 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     pub lua_captures: BTreeMap<String, String>,
+    pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
     pub backend: Box<dyn Backend>,
     pub clock: Arc<dyn Clock>,
@@ -422,6 +423,7 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             lua_captures: BTreeMap::new(),
+            carrier_captures: BTreeMap::new(),
             ruleset: None,
             backend,
             clock,
@@ -1556,6 +1558,46 @@ impl Runner {
                     results.push(self.end_turn(self.remaining(deadline)?, Some(deadline))?);
                 }
                 Ok(results.join("; "))
+            }
+            "carrier_checkpoint" => {
+                let token = text(step, "token");
+                let candidate = text(step, "candidate");
+                let flow_required = step["direct_apply"] != true;
+                let code = crate::carrier_sync::query_with_scope(token, candidate, flow_required)?;
+                let base = resolve_path(&self.output)?;
+                let target =
+                    resolve_path(&base.join(scenario::safe_relative_path(text(step, "path"))?))?;
+                if !target.starts_with(&base) {
+                    return Err(Error::scenario(
+                        "Carrier checkpoint path escapes output directory",
+                    ));
+                }
+                let raw = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
+                let checkpoint = crate::carrier_sync::Checkpoint::parse(&raw, token, candidate)?;
+                if checkpoint.flow_required != flow_required {
+                    return Err(Error::scenario("Carrier evidence has the wrong flow scope"));
+                }
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let mut evidence = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&target)?;
+                evidence.write_all(&serde_json::to_vec_pretty(&checkpoint)?)?;
+                if let Some(key) = step["equals_capture"].as_str() {
+                    let before = self.carrier_captures.get(key).ok_or_else(|| {
+                        Error::scenario(format!("Missing carrier capture: {key}"))
+                    })?;
+                    crate::carrier_sync::compare(before, &checkpoint, false)?;
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    self.carrier_captures.insert(key.into(), checkpoint);
+                }
+                Ok(format!(
+                    "native carrier evidence written to {}",
+                    target.display()
+                ))
             }
             "ui_lua" => {
                 let mut attempts = 0;
