@@ -1,8 +1,11 @@
 mod support_fixture;
 
-use civ6_autotest_rs::scenario::{enable_mods_code, validate_scenario};
+use civ6_autotest_rs::scenario::{
+    enable_mods_code, enable_mods_code_with_scope, validate_scenario,
+};
 use mlua::{Lua, Table};
-use serde_json::json;
+use serde_json::{json, Value};
+use std::{fs, path::Path};
 use support_fixture::{expect_error, lua_error};
 
 const BASE: u8 = 1;
@@ -12,6 +15,7 @@ const SIBLING: u8 = 4;
 const KEEP: u8 = 5;
 const OFF: u8 = 6;
 const MISSING: u8 = 7;
+const OFFICIAL: u8 = 8;
 
 fn id(n: u8) -> String {
     format!("abcdef{n:02x}-1234-1234-1234-123456789abc")
@@ -39,6 +43,7 @@ impl Graph {
             definition
                 .set("Enabled", !disabled.contains(number))
                 .unwrap();
+            definition.set("Official", false).unwrap();
             let deps = lua
                 .create_sequence_from(dependencies.iter().map(|n| spell(*n)))
                 .unwrap();
@@ -67,6 +72,25 @@ impl Graph {
             .map(|&n| id(n).to_uppercase())
             .collect::<Vec<_>>();
         self.lua.load(enable_mods_code(&enabled, &disabled)).eval()
+    }
+
+    fn run_exclusive(&self, enabled: &[u8], disabled: &[u8]) -> mlua::Result<String> {
+        let enabled = enabled.iter().map(|&n| id(n)).collect::<Vec<_>>();
+        let disabled = disabled.iter().map(|&n| id(n)).collect::<Vec<_>>();
+        self.lua
+            .load(enable_mods_code_with_scope(&enabled, &disabled, true))
+            .eval()
+    }
+
+    fn set_official(&self, number: u8) {
+        self.lua
+            .globals()
+            .get::<Table>("MODS")
+            .unwrap()
+            .get::<Table>(id(number))
+            .unwrap()
+            .set("Official", true)
+            .unwrap();
     }
 
     fn disabled(&self) -> Vec<String> {
@@ -205,6 +229,115 @@ fn no_disable_targets_leaves_unrelated_mods_enabled() {
     assert!(g.disabled().is_empty());
     assert!(g.enabled(BASE));
     assert!(g.enabled(KEEP));
+}
+
+#[test]
+fn exclusive_selection_disables_extra_user_mods_but_keeps_official_content() {
+    let g = Graph::new(
+        &[(BASE, &[]), (LEAF, &[BASE]), (KEEP, &[]), (OFFICIAL, &[])],
+        &[KEEP],
+        false,
+    );
+    g.set_official(OFFICIAL);
+    assert_eq!(
+        g.run_exclusive(&[KEEP], &[]).unwrap(),
+        [id(LEAF), id(BASE)].join(", ")
+    );
+    assert_eq!(g.disabled(), [id(LEAF), id(BASE)]);
+    assert!(g.enabled(KEEP) && g.enabled(OFFICIAL));
+    assert!(!g.enabled(BASE) && !g.enabled(LEAF));
+    assert_eq!(g.updates(), 1);
+}
+
+#[test]
+fn exclusive_selection_rejects_a_kept_mod_depending_on_an_extra_user_mod() {
+    let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[], false);
+    lua_error(
+        g.run_exclusive(&[KEEP], &[]),
+        "scenario omits required user mod",
+    );
+    assert!(g.disabled().is_empty());
+    assert!(g.enabled(BASE) && g.enabled(KEEP));
+    assert_eq!(g.updates(), 0);
+}
+
+#[test]
+fn exclusive_selection_rejects_disabled_extra_dependency_before_changes() {
+    let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[BASE, KEEP], false);
+    lua_error(
+        g.run_exclusive(&[KEEP], &[]),
+        "scenario omits required user mod",
+    );
+    assert!(!g.enabled(BASE) && !g.enabled(KEEP));
+    assert_eq!(g.updates(), 0);
+}
+
+#[test]
+fn normal_300_prestart_checks_configured_user_mods_after_update() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../civ6-autotest/scenarios/japan-15km-300turn-full-metrics.json");
+    let scenario: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    let steps = scenario["steps"].as_array().unwrap();
+    let ids = steps[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let start = steps
+        .iter()
+        .position(|step| step["action"] == "start_game")
+        .unwrap();
+    assert_eq!(steps[start - 1]["action"], "ui_lua");
+    assert_eq!(steps[start - 1]["state_name"], "FrontEnd");
+    let check = steps[start - 1]["code"].as_str().unwrap();
+
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        let definition = lua.create_table().unwrap();
+        definition.set("Id", id.as_str()).unwrap();
+        definition.set("Enabled", true).unwrap();
+        definition.set("Official", false).unwrap();
+        definition
+            .set("Dependencies", lua.create_table().unwrap())
+            .unwrap();
+        definitions.set(i + 1, definition).unwrap();
+    }
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code_with_scope(&ids, &[], true))
+        .eval::<String>()
+        .unwrap();
+    assert_eq!(
+        lua.load(check).eval::<String>().unwrap(),
+        "configured user mods=7"
+    );
+
+    let configured = lua.globals().get::<Table>("CONFIGURED").unwrap();
+    let official = lua.create_table().unwrap();
+    official.set("Id", id(OFFICIAL)).unwrap();
+    official.set("Official", true).unwrap();
+    configured.set(ids.len() + 1, official).unwrap();
+    assert_eq!(
+        lua.load(check).eval::<String>().unwrap(),
+        "configured user mods=7"
+    );
+    let extra = lua.create_table().unwrap();
+    extra.set("Id", id(MISSING)).unwrap();
+    extra.set("Official", false).unwrap();
+    configured.set(ids.len() + 2, extra).unwrap();
+    lua_error(
+        lua.load(check).eval::<String>(),
+        "unexpected configured user mod",
+    );
+    configured.set(ids.len() + 2, mlua::Value::Nil).unwrap();
+    configured.set(ids.len(), mlua::Value::Nil).unwrap();
+    lua_error(
+        lua.load(check).eval::<String>(),
+        "configured user mod missing",
+    );
 }
 
 #[test]

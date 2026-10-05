@@ -1,0 +1,278 @@
+{
+  "measured_code_commit": "34b0ec5936ac4a5c77b6c4ecce5f71ab5e01dada",
+  "baseline_commit": "4d037b5f",
+  "profile": "debug",
+  "results": [
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 72600,
+          "layouts": 300,
+          "state_reads": 36600,
+          "unit_classifications": 90000
+        },
+        "events": 300,
+        "median_ms": 4.2456000000000005,
+        "p95_ms": 8.8454,
+        "rows": 123,
+        "total_ms": 1472.2831999999992
+      },
+      "major_factions": 22,
+      "open_ms": 5.7014,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 72600,
+          "layouts": 300,
+          "state_reads": 36600,
+          "unit_classifications": 90000
+        },
+        "events": 300,
+        "median_ms": 5.5381,
+        "p95_ms": 6.9829,
+        "rows": 123,
+        "total_ms": 1653.7275999999997
+      },
+      "target_units": 100,
+      "version": "baseline",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 72600,
+          "layouts": 300,
+          "state_reads": 36600,
+          "unit_classifications": 90000
+        },
+        "events": 300,
+        "median_ms": 5.662000000000001,
+        "p95_ms": 11.9777,
+        "rows": 123,
+        "total_ms": 1907.2435000000005
+      }
+    },
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.00039999999999999996,
+        "p95_ms": 0.0005,
+        "rows": 0,
+        "total_ms": 0.10859999999999978
+      },
+      "major_factions": 22,
+      "open_ms": 5.4449,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.0005,
+        "p95_ms": 0.0005,
+        "rows": 123,
+        "total_ms": 0.14800000000000005
+      },
+      "target_units": 100,
+      "version": "visible_only",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 72600,
+          "layouts": 300,
+          "state_reads": 36600,
+          "unit_classifications": 90000
+        },
+        "events": 300,
+        "median_ms": 5.833900000000001,
+        "p95_ms": 9.951,
+        "rows": 123,
+        "total_ms": 1866.4520999999993
+      }
+    },
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 612600,
+          "layouts": 300,
+          "state_reads": 306600,
+          "unit_classifications": 900000
+        },
+        "events": 300,
+        "median_ms": 59.649,
+        "p95_ms": 90.5219,
+        "rows": 1023,
+        "total_ms": 18449.4402
+      },
+      "major_factions": 22,
+      "open_ms": 58.3868,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 612600,
+          "layouts": 300,
+          "state_reads": 306600,
+          "unit_classifications": 900000
+        },
+        "events": 300,
+        "median_ms": 56.3461,
+        "p95_ms": 87.0562,
+        "rows": 1023,
+        "total_ms": 17696.615599999997
+      },
+      "target_units": 1000,
+      "version": "baseline",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 612600,
+          "layouts": 300,
+          "state_reads": 306600,
+          "unit_classifications": 900000
+        },
+        "events": 300,
+        "median_ms": 53.2411,
+        "p95_ms": 81.719,
+        "rows": 1023,
+        "total_ms": 16907.157199999998
+      }
+    },
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.0003,
+        "p95_ms": 0.0003,
+        "rows": 0,
+        "total_ms": 0.08049999999999993
+      },
+      "major_factions": 22,
+      "open_ms": 53.7097,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.0003,
+        "p95_ms": 0.00039999999999999996,
+        "rows": 1023,
+        "total_ms": 0.09070000000000011
+      },
+      "target_units": 1000,
+      "version": "visible_only",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 612600,
+          "layouts": 300,
+          "state_reads": 306600,
+          "unit_classifications": 900000
+        },
+        "events": 300,
+        "median_ms": 52.8572,
+        "p95_ms": 73.4104,
+        "rows": 1023,
+        "total_ms": 16433.898500000003
+      }
+    },
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 3012600,
+          "layouts": 300,
+          "state_reads": 1506600,
+          "unit_classifications": 4500000
+        },
+        "events": 300,
+        "median_ms": 365.8331,
+        "p95_ms": 525.8753,
+        "rows": 5023,
+        "total_ms": 115414.61740000005
+      },
+      "major_factions": 22,
+      "open_ms": 401.4887,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 3012600,
+          "layouts": 300,
+          "state_reads": 1506600,
+          "unit_classifications": 4500000
+        },
+        "events": 300,
+        "median_ms": 400.6927,
+        "p95_ms": 562.6817,
+        "rows": 5023,
+        "total_ms": 124063.65080000006
+      },
+      "target_units": 5000,
+      "version": "baseline",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 3012600,
+          "layouts": 300,
+          "state_reads": 1506600,
+          "unit_classifications": 4500000
+        },
+        "events": 300,
+        "median_ms": 388.82189999999997,
+        "p95_ms": 542.8243,
+        "rows": 5023,
+        "total_ms": 119608.67050000008
+      }
+    },
+    {
+      "closed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.00039999999999999996,
+        "p95_ms": 0.0007,
+        "rows": 0,
+        "total_ms": 0.17489999999999986
+      },
+      "major_factions": 22,
+      "open_ms": 450.97159999999997,
+      "reclosed": {
+        "counts": {
+          "candidate_resolutions": 0,
+          "layouts": 0,
+          "state_reads": 0,
+          "unit_classifications": 0
+        },
+        "events": 300,
+        "median_ms": 0.00039999999999999996,
+        "p95_ms": 0.0005,
+        "rows": 5023,
+        "total_ms": 0.1212999999999998
+      },
+      "target_units": 5000,
+      "version": "visible_only",
+      "visible": {
+        "counts": {
+          "candidate_resolutions": 3012600,
+          "layouts": 300,
+          "state_reads": 1506600,
+          "unit_classifications": 4500000
+        },
+        "events": 300,
+        "median_ms": 392.716,
+        "p95_ms": 531.3841,
+        "rows": 5023,
+        "total_ms": 122237.89849999995
+      }
+    }
+  ],
+  "scope": "Lua 5.1 / deterministic stubs / host elapsed time; not an in-game or 300-turn measurement"
+}

@@ -1,3 +1,4 @@
+ContextPtr:SetHide(false)
 -- Display and synchronized requests only. Gameplay and UI filenames must differ.
 include "InstanceManager"
 include "JAC_Assassin_Rules"
@@ -30,7 +31,9 @@ end
 local function Refresh()
   local id=Game.GetLocalPlayer(); local player=Players[id]
   Controls.OpenButton:SetHide(not player or not player:IsAlive())
-  if not player then return end
+  -- Keep the launcher current, but rebuild candidates only while the panel is visible.
+  -- Opening always calls Refresh, so changes received while hidden are read then.
+  if not player or Controls.Panel:IsHidden() then return end
   rows:ResetInstances()
   local s=R.State(id); local turn=R.Turn()
   Controls.Status:SetText(Locale.Lookup("LOC_JAC_ASN_STATUS",
