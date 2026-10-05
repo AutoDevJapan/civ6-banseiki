@@ -1,3 +1,4 @@
+use crate::PINNED_GAMECORE_SHA256;
 use core::arch::global_asm;
 use sha2::{Digest, Sha256};
 use std::cell::UnsafeCell;
@@ -24,11 +25,20 @@ use windows_sys::Win32::System::Threading::{
 
 #[path = "windows/assignment.rs"]
 mod assignment;
+#[path = "windows/composite.rs"]
+mod composite;
+pub use composite::CompositeTrace;
+#[path = "windows/paid_assignment.rs"]
+mod paid_assignment;
 use assignment::{
     assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
     ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
 };
 pub use assignment::{AssignCalibrationObservation, AssignCalibrationTrace, PINNED_CAN_ASSIGN_RVA};
+pub use paid_assignment::{
+    PaidAssignmentConsumer, PaidAssignmentRead, PAID_ALLOW_BASE, PAID_CLOSE_BASE,
+    PAID_MANIFEST_BASE, PAID_RESET_BASE,
+};
 
 pub const TRACE_CAPACITY: usize = 4096;
 const TRACE_MAGIC: u32 = 0x4a41_4342; // JACB
@@ -44,6 +54,7 @@ pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
 pub const PRODUCTION_MANIFEST_BASE: u32 = 900_000;
 pub const PRODUCTION_ALLOW_BASE: u32 = 901_000;
 pub const PRODUCTION_RESET_KEY: u32 = 902_000;
+pub const PRODUCTION_RESET_LAST_KEY: u32 = PRODUCTION_RESET_KEY + PRODUCTION_OWNER_LIMIT as u32 - 1;
 pub const PRODUCTION_CLOSE_BASE: u32 = 903_000;
 pub const PRODUCTION_INDEX_LIMIT: usize = 256;
 pub const PRODUCTION_OWNER_LIMIT: usize = 64;
@@ -60,8 +71,6 @@ const PROPERTY_PREFIX_LEN: usize = 5;
 const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
 // EB F9 jumps from entry+2 to entry-5. Entry+2..+7 are never modified.
 const PROPERTY_SHORT_JUMP: [u8; 2] = [0xeb, 0xf9];
-pub const PINNED_GAMECORE_SHA256: &str =
-    "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const PINNED_CAN_EVER_RVA: usize = 0x2d_ddd0;
 const PINNED_CAN_EVER_FILE_OFFSET: u64 = 0x2dd1d0;
 pub const PINNED_PROPERTY_GET_RVA: usize = 0x99_f5c0;
@@ -79,6 +88,7 @@ pub const PROMOTION_TRACE_CAPACITY: usize = 2048;
 pub const GAME_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const CONFIG_VERSION: u32 = 1;
+pub const EXPERIMENTAL_PAID_CONFIG_VERSION: u32 = 0x0853_0001;
 use crate::MAX_ACTIVE_SECONDS;
 
 /// AMD64 APM 3.11 permits an asynchronous single atomic store to a code
@@ -754,6 +764,12 @@ static PRODUCT_SESSION: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_NEXT_TICKET: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PRODUCT_EXHAUSTED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_RELEASE: AtomicBool = AtomicBool::new(false);
 
 fn product_cell(owner: usize, index: usize, manifest: bool) -> &'static AtomicJoinedWord {
     let offset = owner * PRODUCTION_INDEX_LIMIT + index;
@@ -868,6 +884,12 @@ fn product_close_index(key: u32) -> Option<usize> {
         .then(|| (key - PRODUCTION_CLOSE_BASE) as usize)
 }
 
+fn product_reset_owner(key: u32) -> Option<usize> {
+    (PRODUCTION_RESET_KEY..=PRODUCTION_RESET_LAST_KEY)
+        .contains(&key)
+        .then(|| (key - PRODUCTION_RESET_KEY) as usize)
+}
+
 fn product_publish_word(
     cell: &AtomicJoinedWord,
     receiver: u64,
@@ -896,46 +918,65 @@ fn product_publish_word(
 }
 
 fn product_property_begin(receiver: u64, key: u32) -> u64 {
-    if (product_key(key).is_none()
-        && product_close_index(key).is_none()
-        && key != PRODUCTION_RESET_KEY)
+    let reset_owner = product_reset_owner(key);
+    if (product_key(key).is_none() && product_close_index(key).is_none() && reset_owner.is_none())
         || receiver == 0
+        || receiver & 7 != 0
         || !PRODUCT_ACTIVE.load(Ordering::Acquire)
         || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
     {
         return 0;
     }
     let session = PRODUCT_SESSION.load(Ordering::Acquire);
-    let mut found = None;
-    for (owner, binding) in PRODUCT_OWNERS.iter().enumerate() {
-        let current = binding.load();
-        if joined_session(current) == session && joined_receiver(current) == receiver {
-            if found.is_some() {
-                return 0;
+    let owner = if let Some(owner) = reset_owner {
+        owner
+    } else {
+        let mut found = None;
+        for (owner, binding) in PRODUCT_OWNERS.iter().enumerate() {
+            let current = binding.load();
+            if joined_session(current) == session && joined_receiver(current) == receiver {
+                if found.is_some() {
+                    return 0;
+                }
+                found = Some(owner);
             }
-            found = Some(owner);
         }
-    }
-    let Some(owner) = found else {
-        return 0;
+        let Some(owner) = found else {
+            return 0;
+        };
+        owner
     };
     let Some(ticket) = product_next_ticket() else {
         return 0;
     };
+    if reset_owner.is_some() {
+        // The synchronized producer reads only its own owner key. Binding and
+        // closing at getter entry also work when Gameplay has no CanEver API.
+        // Invalidate the previous permission before clearing duplicate owners:
+        // a concurrent CanEver cannot observe the old word in that interval.
+        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+        #[cfg(test)]
+        if PRODUCT_TEST_RESET_PAUSE.load(Ordering::Acquire) {
+            PRODUCT_TEST_RESET_PAUSED.store(true, Ordering::Release);
+            while !PRODUCT_TEST_RESET_RELEASE.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+        }
+        product_bind(owner, receiver, session, ticket);
+    }
     let binding = PRODUCT_OWNERS[owner].load();
     if !PRODUCT_ACTIVE.load(Ordering::Acquire)
         || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
         || PRODUCT_SESSION.load(Ordering::Acquire) != session
         || joined_session(binding) != session
         || joined_receiver(binding) != receiver
-        || joined_ticket(binding) >= ticket
+        || (reset_owner.is_some() && joined_ticket(binding) != ticket)
+        || (reset_owner.is_none() && joined_ticket(binding) >= ticket)
     {
         return 0;
     }
     // Closure happens at entry, independent of the getter's stale/raw return.
-    if key == PRODUCTION_RESET_KEY {
-        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
-    } else if let Some(index) = product_close_index(key) {
+    if let Some(index) = product_close_index(key) {
         product_publish_word(
             &PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index],
             receiver,
@@ -957,7 +998,10 @@ fn product_observe_property(
     flags: u32,
 ) {
     let cell_key = product_key(key);
-    if cell_key.is_none() && product_close_index(key).is_none() && key != PRODUCTION_RESET_KEY {
+    if cell_key.is_none()
+        && product_close_index(key).is_none()
+        && product_reset_owner(key).is_none()
+    {
         return;
     }
     if token == 0
@@ -982,25 +1026,9 @@ fn product_observe_property(
     if product_close_index(key).is_some() {
         return;
     }
-    if key == PRODUCTION_RESET_KEY {
-        // The reset is a closure even if its raw value is malformed/missing.
-        // It advances the binding threshold rather than clearing 512 cells.
-        let owner_word = &PRODUCT_OWNERS[owner];
-        loop {
-            let current = owner_word.load();
-            if joined_session(current) != session
-                || joined_receiver(current) != receiver
-                || joined_ticket(current) >= ticket
-            {
-                return;
-            }
-            if owner_word
-                .compare_exchange(current, joined_word(receiver, session, ticket, false))
-                .is_ok()
-            {
-                return;
-            }
-        }
+    if product_reset_owner(key).is_some() {
+        // The binding threshold was advanced at entry, before the raw read.
+        return;
     }
     let (index, manifest) = cell_key.expect("validated production property key");
     let offset = owner * PRODUCTION_INDEX_LIMIT + index;
@@ -1043,6 +1071,17 @@ fn product_index_known(index: usize, session: u32) -> bool {
 // None means a non-persona governor: preserve GameCore's own result.
 // Some(false) means a manifested persona with no current positive permission.
 fn product_permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
+    if composite::ENABLED.load(Ordering::Acquire) {
+        let Some(catalog) = composite::catalog(owner, receiver, session) else {
+            return Some(false);
+        };
+        if !catalog
+            .iter()
+            .any(|definition| definition.governor_index as usize == index)
+        {
+            return None;
+        }
+    }
     if index >= PRODUCTION_INDEX_LIMIT || !PRODUCT_ACTIVE.load(Ordering::Acquire) {
         return None;
     }
@@ -1139,6 +1178,9 @@ fn joined_bind(receiver: u64, session: u32, ticket: u32) {
 // Returns a session/ticket token only for the one numeric Core property and
 // the currently bound receiver. This runs before the original getter once.
 unsafe extern "system" fn joined_property_begin(property: u64, key: u32) -> u64 {
+    if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key) {
+        return composite::begin(property, key);
+    }
     if PRODUCT_ACTIVE.load(Ordering::Acquire) {
         return product_property_begin(property, key);
     }
@@ -1583,7 +1625,8 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         || (trace.scope == BridgeMode::ProductionAdmission as u32
             && product_key(key_id).is_none()
             && product_close_index(key_id).is_none()
-            && key_id != PRODUCTION_RESET_KEY)
+            && product_reset_owner(key_id).is_none()
+            && !(composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id)))
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
         return;
@@ -1610,7 +1653,11 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
     };
     if trace.scope == BridgeMode::ProductionAdmission as u32 {
-        product_observe_property(property, key_id, token, state, tag, payload, flags);
+        if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
+            composite::observe(property, key_id, token, state, tag, payload, flags);
+        } else {
+            product_observe_property(property, key_id, token, state, tag, payload, flags);
+        }
     }
     #[cfg(test)]
     if returned != 0 && returned == PROPERTY_TEST_RAW_MUTATE_RETURNED.load(Ordering::Acquire) {
@@ -2367,7 +2414,13 @@ unsafe fn install_hook(
     if target.is_null() || trace.is_null() || !(target as usize).is_multiple_of(8) {
         return Err("unaligned or missing hook input");
     }
-    let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
+    let hook_slot =
+        if mode == BridgeMode::AssignCalibration && composite::ENABLED.load(Ordering::Acquire) {
+            &composite::ASSIGNMENT_HOOK
+        } else {
+            &HOOK
+        };
+    let mut guard = hook_slot.lock().map_err(|_| "bridge lock poisoned")?;
     if guard.is_some() {
         return Err("bridge already installed");
     }
@@ -2555,9 +2608,10 @@ unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
     product_deactivate();
     let promotion = unsafe { restore_promotion_call() }?;
+    let assignment = restore_one(&composite::ASSIGNMENT_HOOK)?;
     let main = restore_one(&HOOK)?;
     let property = restore_one(&JOINED_PROPERTY_HOOK)?;
-    if !main && !property && !promotion {
+    if !main && !property && !promotion && !assignment {
         return Err("bridge not installed");
     }
     Ok(())
@@ -2757,7 +2811,9 @@ fn pe_file_offset(file: &mut File, rva: u32) -> Option<u64> {
 }
 
 fn guarded_install(config: BridgeConfig) -> BridgeStatus {
-    if config.version != CONFIG_VERSION
+    let composite_requested = config.version == EXPERIMENTAL_PAID_CONFIG_VERSION
+        && config.mode == BridgeMode::ProductionAdmission as u32;
+    if (config.version != CONFIG_VERSION && !composite_requested)
         || config.size as usize != std::mem::size_of::<BridgeConfig>()
         || config.game_pid == 0
         || config.created_filetime == 0
@@ -2765,13 +2821,17 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         || config.trace_address == 0
         || !matches!(config.mode, 0..=8)
         || config.trace_size as usize
-            != match config.mode {
-                0 => BridgeMode::CanEver.trace_size(),
-                3 => BridgeMode::CanEverCalibration.trace_size(),
-                5 | 6 => BridgeMode::JoinedAdmission.trace_size(),
-                8 => BridgeMode::PromotionCall.trace_size(),
-                7 => BridgeMode::AssignCalibration.trace_size(),
-                _ => BridgeMode::Property.trace_size(),
+            != if composite_requested {
+                std::mem::size_of::<CompositeTrace>()
+            } else {
+                match config.mode {
+                    0 => BridgeMode::CanEver.trace_size(),
+                    3 => BridgeMode::CanEverCalibration.trace_size(),
+                    5 | 6 => BridgeMode::JoinedAdmission.trace_size(),
+                    8 => BridgeMode::PromotionCall.trace_size(),
+                    7 => BridgeMode::AssignCalibration.trace_size(),
+                    _ => BridgeMode::Property.trace_size(),
+                }
             }
         || !committed_range(
             config.trace_address as usize,
@@ -2886,7 +2946,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                 return BridgeStatus::HookFailure;
             }
             let trace = config.trace_address as *mut AssignCalibrationTrace;
-            unsafe { ptr::write(trace, AssignCalibrationTrace::default()) };
+            unsafe { AssignCalibrationTrace::initialize_at(trace) };
             unsafe { install_assign_calibration_at(entry, trace, disk_bytes) }
         }
         BridgeMode::CanEver => {
@@ -2923,6 +2983,37 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             }
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
+            if composite_requested {
+                if ASSIGN_USED
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    return BridgeStatus::HookFailure;
+                }
+                let Some(assign_bytes) =
+                    pinned_gamecore(Path::new(GAMECORE), BridgeMode::AssignCalibration)
+                else {
+                    return BridgeStatus::GameCoreIdentity;
+                };
+                let assign = unsafe { (module as *mut u8).add(PINNED_CAN_ASSIGN_RVA) };
+                let trace = trace.cast::<CompositeTrace>();
+                unsafe { CompositeTrace::initialize_at(trace) };
+                return match unsafe {
+                    composite::install(
+                        entry,
+                        property,
+                        assign,
+                        trace,
+                        disk_bytes,
+                        property_bytes,
+                        assign_bytes,
+                    )
+                } {
+                    Ok(()) => BridgeStatus::Ok,
+                    Err(reason) if reason.starts_with("critical:") => BridgeStatus::Critical,
+                    Err(_) => BridgeStatus::HookFailure,
+                };
+            }
             let property_result = unsafe {
                 install_property_at(
                     property,
@@ -3056,6 +3147,83 @@ mod tests {
     }
 
     #[test]
+    fn production_owner_reset_binds_from_its_natural_property_read() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        let receiver = 0x1000;
+        let reset = product_property_begin(receiver, PRODUCTION_RESET_KEY + 2);
+        assert_ne!(
+            reset, 0,
+            "owner reset must bind without a Gameplay CanEver call"
+        );
+        product_observe_property(receiver, PRODUCTION_RESET_KEY + 2, reset, 1, 1, 1, 0);
+        open_product(receiver, 77);
+        assert_eq!(product_permission(2, 77, receiver, session), Some(true));
+        assert_ne!(product_permission(1, 77, receiver, session), Some(true));
+        let stale = product_property_begin(receiver, PRODUCTION_ALLOW_BASE + 77);
+        let replacement = 0x2000;
+        assert_ne!(
+            product_property_begin(replacement, PRODUCTION_RESET_KEY + 2),
+            0
+        );
+        product_observe_property(receiver, PRODUCTION_ALLOW_BASE + 77, stale, 1, 1, 1, 0);
+        assert_ne!(product_permission(2, 77, receiver, session), Some(true));
+        assert_eq!(product_permission(2, 77, replacement, session), Some(false));
+        open_product(replacement, 77);
+        assert_eq!(product_permission(2, 77, replacement, session), Some(true));
+        assert_ne!(
+            product_property_begin(replacement, PRODUCTION_RESET_KEY + 3),
+            0
+        );
+        assert_ne!(product_permission(2, 77, replacement, session), Some(true));
+        assert_eq!(product_permission(3, 77, replacement, session), Some(false));
+        product_bind(2, replacement, session, product_next_ticket().unwrap());
+        assert_eq!(product_permission(2, 77, replacement, session), Some(false));
+        assert_ne!(product_permission(3, 77, replacement, session), Some(true));
+        assert_eq!(
+            product_property_begin(replacement, PRODUCTION_RESET_LAST_KEY + 1),
+            0
+        );
+        product_deactivate();
+    }
+
+    #[test]
+    fn production_reset_closes_before_a_concurrent_appointment_read() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        let receiver = 0x1000;
+        product_bind(2, receiver, session, product_next_ticket().unwrap());
+        open_product(receiver, 77);
+        assert_eq!(product_permission(2, 77, receiver, session), Some(true));
+        PRODUCT_TEST_RESET_PAUSED.store(false, Ordering::Release);
+        PRODUCT_TEST_RESET_RELEASE.store(false, Ordering::Release);
+        PRODUCT_TEST_RESET_PAUSE.store(true, Ordering::Release);
+        let reset =
+            std::thread::spawn(move || product_property_begin(receiver, PRODUCTION_RESET_KEY + 2));
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !PRODUCT_TEST_RESET_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        let paused = PRODUCT_TEST_RESET_PAUSED.load(Ordering::Acquire);
+        let observed = product_permission(2, 77, receiver, session);
+        PRODUCT_TEST_RESET_RELEASE.store(true, Ordering::Release);
+        let token = reset.join().unwrap();
+        PRODUCT_TEST_RESET_PAUSE.store(false, Ordering::Release);
+        product_deactivate();
+        assert!(paused, "reset did not reach the controlled boundary");
+        assert_ne!(token, 0);
+        assert_ne!(
+            observed,
+            Some(true),
+            "a reset in progress returned old permission"
+        );
+    }
+
+    #[test]
     fn production_cache_keys_owner_and_gameinfo_index_and_rejects_old_reads() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         product_deactivate();
@@ -3084,7 +3252,7 @@ mod tests {
         product_observe_property(0x1000, 901077, bad, 1, 2, 1, 0);
         assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
         let stale = product_property_begin(0x1000, 901078);
-        let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY);
+        let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY + 1);
         assert_ne!(reset, 0);
         assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
         product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
@@ -3239,12 +3407,18 @@ mod tests {
         }
         .unwrap();
         assert!(product_activate());
-        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
         let publish = |key, payload| {
             value[8] = payload;
             assert_eq!(property(receiver, key), value.as_ptr() as usize);
         };
         let mut publish = publish;
+        publish(PRODUCTION_RESET_KEY + 2, 1);
+        assert_eq!(
+            joined_receiver(PRODUCT_OWNERS[2].load()),
+            receiver as u64,
+            "Win64 property gateway binds owner before any CanEver call"
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
         publish(PRODUCTION_CLOSE_BASE + 77, 1);
         publish(PRODUCTION_ALLOW_BASE + 77, 0);
         publish(PRODUCTION_MANIFEST_BASE + 77, 1);
@@ -3307,9 +3481,13 @@ mod tests {
             original_calls,
             trace.calibration.next.load(Ordering::Acquire)
         );
-        println!("production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
-            original_calls, getter_calls, trace.calibration.dropped.load(Ordering::Acquire),
-            trace.property.dropped.load(Ordering::Acquire));
+        println!(
+            "production original_count={} getter_original_count={} calibration_unsampled={} property_unsampled={}",
+            original_calls,
+            getter_calls,
+            trace.calibration.dropped.load(Ordering::Acquire),
+            trace.property.dropped.load(Ordering::Acquire)
+        );
         unsafe { uninstall() }.unwrap();
         assert_eq!(
             unsafe { ptr::read(can_entry.cast::<[u8; 8]>()) },
@@ -3374,7 +3552,7 @@ mod tests {
         CreateThread, GetExitCodeThread, ResumeThread, WaitForSingleObject, THREAD_CREATE_SUSPENDED,
     };
 
-    static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
+    pub(super) static HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     struct PausedFixtureWorker<T> {
         release: &'static AtomicBool,

@@ -21,16 +21,46 @@ const IO_BUDGET: Duration = Duration::from_secs(8);
 const REAP_BUDGET: Duration = Duration::from_secs(15);
 const CASE_BUDGET: Duration = Duration::from_secs(50);
 
-pub(super) fn join_observer<T>(observer: thread::JoinHandle<T>) -> thread::Result<T> {
-    let deadline = Instant::now() + Duration::from_secs(40);
-    while !observer.is_finished() {
-        assert!(
-            Instant::now() < deadline,
-            "debugger thread did not finish; the outer case Job will recover its tree"
-        );
-        thread::sleep(Duration::from_millis(10));
+pub(super) trait ObserverJoin {
+    type Output;
+    fn bounded_join(self) -> thread::Result<Self::Output>;
+}
+impl<T> ObserverJoin for thread::JoinHandle<T> {
+    type Output = T;
+    fn bounded_join(self) -> thread::Result<T> {
+        let deadline = Instant::now() + Duration::from_secs(40);
+        while !self.is_finished() {
+            assert!(
+                Instant::now() < deadline,
+                "debugger thread did not finish; the outer case Job will recover its tree"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        self.join()
     }
-    observer.join()
+}
+pub(super) fn join_observer<O: ObserverJoin>(observer: O) -> thread::Result<O::Output> {
+    observer.bounded_join()
+}
+pub(super) struct FixtureObserver<T> {
+    result: std::sync::mpsc::Receiver<thread::Result<T>>,
+}
+impl<T> FixtureObserver<T> {
+    pub(super) fn join(self) -> thread::Result<T> {
+        self.result
+            .recv_timeout(Duration::from_secs(30))
+            .unwrap_or_else(|error| {
+                Err(Box::new(format!(
+                    "fixture observer did not finish: {error}"
+                )))
+            })
+    }
+}
+impl<T> ObserverJoin for FixtureObserver<T> {
+    type Output = T;
+    fn bounded_join(self) -> thread::Result<T> {
+        self.join()
+    }
 }
 
 fn wait_child(child: &mut Child, budget: Duration) -> Result<ExitStatus, String> {
@@ -450,6 +480,9 @@ pub(super) struct Fixture {
     buffered: Vec<u8>,
     pub entry: u64,
     pub original_regs: String,
+    observers: Vec<thread::JoinHandle<()>>,
+    stops: Vec<std::sync::mpsc::Sender<()>>,
+    close_ack: std::sync::Arc<AtomicBool>,
 }
 impl Fixture {
     pub fn start() -> Self {
@@ -474,6 +507,9 @@ impl Fixture {
             buffered: Vec::new(),
             entry: 0,
             original_regs: String::new(),
+            observers: Vec::new(),
+            stops: Vec::new(),
+            close_ack: std::sync::Arc::new(AtomicBool::new(false)),
         };
         let ready = fixture.response("PROBE_FIXTURE_READY:", IO_BUDGET).unwrap();
         let (address, regs) = ready.split_once(':').unwrap();
@@ -542,6 +578,20 @@ impl Fixture {
         self.send(cmd)?;
         self.response(prefix, budget)
     }
+    pub(super) fn observe<T: Send + 'static>(
+        &mut self,
+        stop: &std::sync::mpsc::Sender<()>,
+        work: impl FnOnce(std::sync::Arc<AtomicBool>) -> T + Send + 'static,
+    ) -> FixtureObserver<T> {
+        self.stops.push(stop.clone());
+        let ack = std::sync::Arc::clone(&self.close_ack);
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.observers.push(thread::spawn(move || {
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(ack)));
+            let _ = tx.send(outcome);
+        }));
+        FixtureObserver { result: rx }
+    }
     pub fn send(&mut self, cmd: &str) -> Result<(), String> {
         writeln!(self.input, "{cmd}").map_err(|e| e.to_string())?;
         self.input.flush().map_err(|e| e.to_string())
@@ -559,6 +609,29 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        for stop in &self.stops {
+            let _ = stop.send(());
+        }
+        if !self.observers.is_empty() {
+            // The parent version's panic recovery is preserved inside the
+            // isolated Job: close this pinned child before releasing events.
+            if self.child.kill().is_ok()
+                || self.child.try_wait().is_ok_and(|status| status.is_some())
+            {
+                self.close_ack.store(true, Ordering::SeqCst);
+            }
+            let deadline = Instant::now() + Duration::from_secs(30);
+            for observer in self.observers.drain(..) {
+                while !observer.is_finished() && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                assert!(
+                    observer.is_finished(),
+                    "owned observer not reaped; outer isolated Job will recover its tree"
+                );
+                let _ = observer.join();
+            }
+        }
         let _ = writeln!(self.input, "X");
         let _ = self.input.flush();
         if wait_child(&mut self.child, Duration::from_secs(1)).is_err() {

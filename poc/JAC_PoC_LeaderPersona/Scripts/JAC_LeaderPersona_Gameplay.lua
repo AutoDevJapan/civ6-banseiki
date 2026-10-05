@@ -99,6 +99,8 @@ end
 -- The separate native consumer accepts only the two reserved key ranges.
 local ADMISSION_MANIFEST = 900000;
 local ADMISSION_ALLOW = 901000;
+-- The owner is encoded in the reset key, so its natural property read can
+-- bind the Core receiver without a Gameplay CanEverAppointGovernor binding.
 local ADMISSION_RESET = 902000;
 local ADMISSION_LIMIT = 256;
 local ADMISSION_SCHEMA = "JAC_PERSONA_ADMISSION_SCHEMA_V1";
@@ -254,9 +256,11 @@ local ADMISSION_CLOSE = 903000;
 local admissionSnapshots = {};
 local admissionRowsFingerprint;
 local function CloseAdmissionOwner(p)
-    p:SetProperty(ADMISSION_RESET, true);
-    local closed = p:GetProperty(ADMISSION_RESET) == true;
-    admissionSnapshots[p:GetID()] = nil;
+    local owner = p:GetID();
+    if type(owner) ~= "number" or owner % 1 ~= 0 or owner < 0 or owner >= 64 then return false; end
+    p:SetProperty(ADMISSION_RESET + owner, true);
+    local closed = p:GetProperty(ADMISSION_RESET + owner) == true;
+    admissionSnapshots[owner] = nil;
     return closed;
 end
 
@@ -265,7 +269,7 @@ local function CloseAllAdmissionOwners()
     for owner=0,63 do
         local p = Player(owner, false);
         if p then
-            local ok, value = pcall(p.GetProperty, p, ADMISSION_RESET);
+            local ok, value = pcall(p.GetProperty, p, ADMISSION_RESET + owner);
             if not ok or value ~= true then confirmed = false; end
         end
     end
@@ -273,12 +277,28 @@ local function CloseAllAdmissionOwners()
     return confirmed;
 end
 
-local function SyncProductionAdmission(forceClosed, onlyOwner)
+local function AdmissionOwnerIDsValid(ids)
+    if type(ids) ~= "table" then return false; end
+    local count, seen = 0, {};
+    for slot, owner in pairs(ids) do
+        if type(slot) ~= "number" or slot % 1 ~= 0 or slot < 1 or
+           type(owner) ~= "number" or owner % 1 ~= 0 or owner < 0 or owner >= 64 or
+           seen[owner] then return false; end
+        seen[owner] = true;
+        count = count + 1;
+        if count > 64 then return false; end
+    end
+    if count == 0 then return false; end
+    for slot=1,count do if ids[slot] == nil then return false; end end
+    return true;
+end
+
+local function SyncAppointmentAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     local ids = PlayerManager.GetAliveMajorIDs();
-    if type(ids) ~= "table" then CloseAllAdmissionOwners(); return; end
+    if not AdmissionOwnerIDsValid(ids) then CloseAllAdmissionOwners(); return; end
     local schema = Game:GetProperty(ADMISSION_SCHEMA);
-    if (schema ~= nil and schema ~= 1 and schema ~= 2) or not rows then
+    if (schema ~= nil and schema ~= 1 and schema ~= 2 and schema ~= 3) or not rows then
         -- Even an invalid table/schema after reload must invalidate the old
         -- native generation. A reset read closes it without owning the value.
         CloseAllAdmissionOwners();
@@ -298,6 +318,19 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         Game:SetProperty(ADMISSION_SCHEMA, 2);
         schema = 2;
     end
+    if schema == 2 then
+        -- Version 2 owned only key 902000 on each player. Claim the new
+        -- owner-specific reset keys only when no saved foreign value occupies
+        -- one; the old key on owners 1..63 is left untouched.
+        for owner=1,63 do
+            local p = Player(owner, false);
+            if p and p:GetProperty(ADMISSION_RESET + owner) ~= nil then
+                CloseAllAdmissionOwners(); return;
+            end
+        end
+        Game:SetProperty(ADMISSION_SCHEMA, 3);
+        schema = 3;
+    end
     local fingerprint = "JAC:";
     for _,entry in ipairs(rows) do
         fingerprint = fingerprint .. entry.row.LeaderType .. ":" .. tostring(entry.index) .. ";";
@@ -310,14 +343,14 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         -- Check every reserved namespace before taking it, including close.
         for _,owner in ipairs(ids) do
             local p = Player(owner, true);
-            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET) ~= nil then CloseAllAdmissionOwners(); return; end
+            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET + owner) ~= nil then CloseAllAdmissionOwners(); return; end
             for _,entry in ipairs(rows) do
                 for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
                     if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return; end
                 end
             end
         end
-        Game:SetProperty(ADMISSION_SCHEMA, 2);
+        Game:SetProperty(ADMISSION_SCHEMA, 3);
     end
     local alive = {};
     for _,owner in ipairs(ids) do alive[owner] = true; end
@@ -332,12 +365,8 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         local snapshot = admissionSnapshots[owner];
         if not p or owner >= 64 then initialized = false;
         elseif not snapshot or snapshot.player ~= p then
-            local governors = p:GetGovernors();
-            local def = GameInfo.Governors[rows[1].row.GovernorType];
-            local ok = governors and type(governors.CanEverAppointGovernor) == "function" and
-                pcall(governors.CanEverAppointGovernor, governors, def.Hash);
             local resetOK, closed = pcall(CloseAdmissionOwner, p);
-            if not ok or not resetOK or not closed then initialized = false;
+            if not resetOK or not closed then initialized = false;
             else admissionSnapshots[owner] = {player=p, values={}}; end
         end
     end
@@ -378,6 +407,109 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         end
     end
 end
+-- BEGIN RUST GENERATED PAID ASSIGNMENT GLUE
+-- Regenerate with civ6-native-bridge-rs/generate-paid-glue. Opt-in only.
+local function SyncProductionAdmission(forceClosed, onlyOwner)
+    local schema = Game:GetProperty("JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA");
+    local enabled = Game:GetProperty("JAC_TEST853_PAID_ASSIGNMENT_V1") == true;
+    local ids = PlayerManager.GetAliveMajorIDs();
+    local function close()
+        for owner=0,63 do
+            local p = Player(owner, false);
+            if p then pcall(p.GetProperty, p, 907000 + owner); end
+        end
+        admissionSnapshots = {};
+    end
+    if not enabled then
+        if schema ~= nil then close(); end
+        SyncAppointmentAdmission(forceClosed, onlyOwner);
+        return;
+    end
+    -- Close before reading definitions, including reload and rejected schema.
+    close();
+    if not AdmissionOwnerIDsValid(ids) or (schema ~= nil and schema ~= 1) then return; end
+    local rows = AdmissionRows();
+    if not rows or #rows ~= 22 then return; end
+    local function integer(n, maximum)
+        return type(n) == "number" and n >= 0 and n < maximum and n % 1 == 0;
+    end
+    local packed, used = {}, {};
+    for slot,entry in ipairs(rows) do
+        local row, cost = entry.row, entry.row.EvolutionCost;
+        local governor = GameInfo.Governors[row.GovernorType];
+        if not integer(cost, 4) or cost == 0 or not governor or governor.GovernorType ~= row.GovernorType or
+           row.BasePromotionType ~= "GOVERNOR_PROMOTION_JAC_PERSONA_" .. string.sub(row.LeaderType,12) .. "_BASE" then return; end
+        local values = {};
+        for step=0,cost-1 do
+            local name = row.BasePromotionType;
+            if step > 0 then name = name .. "_TITLE_" .. step; end
+            local promotion = GameInfo.GovernorPromotions[name];
+            if not promotion or promotion.GovernorPromotionType ~= name or
+               not integer(promotion.Index, 4096) or used[promotion.Index] then return; end
+            used[promotion.Index] = true;
+            values[step+1] = promotion.Index;
+        end
+        packed[slot] = entry.index + cost * 256 + values[1] * 1024 +
+            (values[2] or 0) * 4194304 + (values[3] or 0) * 17179869184;
+    end
+    local function bitkey(bit)
+        if bit < 744 then return 905256 + bit; end
+        return 906256 + bit - 744;
+    end
+    -- Claim every reserved key, including currently unused catalog slots.
+    if schema == nil then
+        for owner=0,63 do
+            local p = Player(owner, false);
+            if p then
+                for _,base in ipairs({904000,905000,906000}) do
+                    for index=0,255 do if p:GetProperty(base+index) ~= nil then return; end end
+                end
+                for id=0,63 do if p:GetProperty(907000+id) ~= nil then return; end end
+                if p:GetProperty(904999) ~= nil then return; end
+                for bit=0,1012-1 do if p:GetProperty(bitkey(bit)) ~= nil then return; end end
+            end
+        end
+        Game:SetProperty("JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA", 1);
+    end
+    local function write(p, key, value)
+        p:SetProperty(key, value);
+        return p:GetProperty(key) == value;
+    end
+    -- Reset each owner once, then let appointment initialization use its own
+    -- reset before either catalog or paid cells are published in that binding.
+    for _,owner in ipairs(ids) do
+        local p = Player(owner, true);
+        if not p or not write(p, 907000+owner, true) then close(); return; end
+    end
+    SyncAppointmentAdmission(forceClosed, nil);
+    for _,owner in ipairs(ids) do
+        local p = Player(owner, true);
+        if not p then close(); return; end
+        if not write(p, 904999, false) then close(); return; end
+        for bit=0,1012-1 do
+            local slot = math.floor(bit / 46) + 1;
+            local value = math.floor(packed[slot] / (2 ^ (bit % 46))) % 2 == 1;
+            if not write(p, bitkey(bit), value) then close(); return; end
+        end
+        -- All 22 are closed and acknowledge typed false before a single true.
+        for _,entry in ipairs(rows) do
+            if not write(p, 906000+entry.index, true) or not write(p, 905000+entry.index, false) or
+               not write(p, 904000+entry.index, true) then close(); return; end
+        end
+        if not write(p, 904999, true) then close(); return; end
+        for _,entry in ipairs(rows) do
+            local row = entry.row;
+            local person, ready, count = FindPerson(owner, row);
+            -- A request to inspect this same native person, not proof of paid
+            -- titles. Rust still requires BASE and all TITLE bits in this call.
+            local eligible = not forceClosed and ready and person == nil and count == 0 and
+                Get(row.LeaderType, "OWNER") == owner and Get(row.LeaderType, "STATE") == "GOVERNOR" and
+                Get(row.LeaderType, "UNIT") == nil and Get(row.LeaderType, "EVOLUTION_COST") == row.EvolutionCost;
+            if eligible and not write(p, 905000+entry.index, true) then close(); return; end
+        end
+    end
+end
+-- END RUST GENERATED PAID ASSIGNMENT GLUE
 local function Join(owner, source, personality, trait)
     local p, other = Player(owner, true), Player(source, false);
     if not p or not other or owner == source then return Finish(owner, "INVALID"); end

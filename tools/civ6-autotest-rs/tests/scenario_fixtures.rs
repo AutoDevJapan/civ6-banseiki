@@ -161,6 +161,32 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
 }
 
 #[test]
+fn multi_failure_inspection_preserves_the_latest_checkpoint_without_mutation() {
+    let data = scenario("leader-persona-spy-neutralization-multi-failure-diagnose.json");
+    validate_scenario(&data).unwrap();
+    assert_eq!(steps(&data).len(), 5);
+    assert_eq!(
+        steps(&data)[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert!(steps(&data)[0].get("checkpoint").is_none());
+    assert_eq!(steps(&data)[0]["exact_name"], true);
+    assert!(steps(&data).iter().all(|step| ![
+        "save",
+        "end_turn",
+        "configure",
+        "start_game",
+        "enable_mods"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    let lua = Lua::new();
+    compile_lua(&lua, civ6_autotest_rs::spy_failures::READ);
+    let mut bad = data.clone();
+    bad["steps"][3]["code"] = json!("Game:SetProperty('changed',1)");
+    assert!(validate_scenario(&bad).is_err());
+}
+
+#[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
     let mut checkpoint_count = 0;

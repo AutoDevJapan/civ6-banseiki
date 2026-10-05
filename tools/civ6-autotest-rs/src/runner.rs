@@ -76,6 +76,8 @@ pub trait Backend: Send {
     fn list_states(&mut self, _timeout: f64) -> Result<Vec<String>> {
         Err(Error::tuner("backend has no FireTuner"))
     }
+    // Tuner errors guarantee that no Lua command bytes were sent. Once a
+    // write is attempted, an uncertain outcome must be LuaResponseUnknown.
     fn run_lua(&mut self, _state: &str, _code: &str, _timeout: f64) -> Result<String> {
         Err(Error::tuner("backend has no FireTuner"))
     }
@@ -111,6 +113,22 @@ pub trait Backend: Send {
         ))
     }
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
+    fn select_native_assignment_subject(
+        &mut self,
+        _: u32,
+        _: f64,
+        _: crate::native_bridge::AssignmentSubject,
+    ) -> Result<()> {
+        Err(Error::input(
+            "bounded assignment subject selection unsupported",
+        ))
+    }
+    fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+        None
+    }
+    fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
         Ok(None)
     }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
@@ -255,6 +273,129 @@ mod native_trace_step_tests {
             self.0.lock().unwrap().push("stop".into());
             Ok(Some(PathBuf::from("bridge.jsonl")))
         }
+    }
+
+    struct SubjectBackend {
+        calls: Arc<Mutex<Vec<String>>>,
+        raw: &'static str,
+        selection_error: bool,
+    }
+    impl Backend for SubjectBackend {
+        fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+            Ok(Some((19, 1.5)))
+        }
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["InGame".into()])
+        }
+        fn run_lua(&mut self, _: &str, code: &str, _: f64) -> Result<String> {
+            assert!(code.contains("gov:GetType()==def.Index"));
+            self.calls.lock().unwrap().push("read".into());
+            Ok(self.raw.into())
+        }
+        fn start_native_bridge(&mut self, _: &Path, _: &str, _: u64, mode: &str) -> Result<()> {
+            self.calls.lock().unwrap().push(format!("start:{mode}"));
+            Ok(())
+        }
+        fn select_native_assignment_subject(
+            &mut self,
+            pid: u32,
+            started: f64,
+            subject: crate::native_bridge::AssignmentSubject,
+        ) -> Result<()> {
+            self.calls.lock().unwrap().push(format!(
+                "select:{pid}:{started}:{}:{}",
+                subject.owner, subject.governor
+            ));
+            if self.selection_error {
+                return Err(Error::input("injected subject selection failure"));
+            }
+            Ok(())
+        }
+        fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+            self.calls.lock().unwrap().push("stop".into());
+            Ok(Some(PathBuf::from("restored-subject.jsonl")))
+        }
+    }
+
+    #[test]
+    fn runner_selects_a_real_subject_before_accepting_assignment_observation() {
+        for raw in ["0|9", "1|9"] {
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let output = std::env::temp_dir().join("pr86-normal-assignment-subject-dispatch");
+            let mut runner = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                output.clone(),
+                output.clone(),
+                output,
+                4318,
+                Box::new(SubjectBackend {
+                    calls: Arc::clone(&calls),
+                    raw,
+                    selection_error: false,
+                }),
+                Arc::new(SystemClock),
+            );
+            let result = runner.run_step(&json!({"action":"start_native_assign_calibration",
+                "name":"normal","max_seconds":30,"owner":0,"leader":"LEADER_JAC_DATE_TANEMUNE"}));
+            let observed = calls.lock().unwrap().clone();
+            if raw == "0|9" {
+                assert!(result.unwrap().contains("normal.jsonl"));
+                assert_eq!(
+                    observed,
+                    ["read", "start:assign-calibration", "select:19:1.5:0:9"]
+                );
+            } else {
+                assert!(result.unwrap_err().message.contains("owner changed"));
+                assert_eq!(observed, ["read"]);
+            }
+        }
+    }
+
+    #[test]
+    fn failed_subject_selection_still_stops_the_installed_observer_and_fails_the_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let read = crate::native_bridge::assignment_subject_code(0, "LEADER_JAC_DATE_TANEMUNE");
+        let mut runner = Runner::with_backend(
+            json!({"name":"selection failure cleanup","steps":[
+                {"action":"ui_lua","state_name":"InGame","code":read},
+                {"action":"start_native_assign_calibration","name":"normal","max_seconds":30,
+                 "owner":0,"leader":"LEADER_JAC_DATE_TANEMUNE"},
+                {"action":"stop_native_assign_calibration"}
+            ]}),
+            directory.path().join("result"),
+            directory.path().to_path_buf(),
+            directory.path().to_path_buf(),
+            4318,
+            Box::new(SubjectBackend {
+                calls: Arc::clone(&calls),
+                raw: "0|9",
+                selection_error: true,
+            }),
+            Arc::new(SystemClock),
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            [
+                "read",
+                "read",
+                "start:assign-calibration",
+                "select:19:1.5:0:9",
+                "stop"
+            ]
+        );
+        let result: Value = serde_json::from_slice(
+            &std::fs::read(directory.path().join("result/result.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(result["passed"], false);
+        let steps = std::fs::read_to_string(directory.path().join("result/steps.jsonl")).unwrap();
+        assert!(steps.contains("injected subject selection failure"));
     }
 
     #[test]
@@ -598,6 +739,25 @@ impl Backend for SystemBackend {
         )?);
         Ok(())
     }
+    fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+        self.native_bridge
+            .as_ref()
+            .map(|session| session.process_identity())
+    }
+    fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+        if self.native_bridge.is_none() {
+            return Ok(None);
+        }
+        self.require_single_process()?;
+        let (pid, started) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("observed game is absent"))?;
+        self.native_bridge
+            .as_ref()
+            .unwrap()
+            .verify_current_process(pid, started)
+            .map(Some)
+    }
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         match self.native_bridge.as_mut() {
             Some(bridge) => {
@@ -609,6 +769,17 @@ impl Backend for SystemBackend {
             }
             None => Ok(None),
         }
+    }
+    fn select_native_assignment_subject(
+        &mut self,
+        pid: u32,
+        started: f64,
+        subject: crate::native_bridge::AssignmentSubject,
+    ) -> Result<()> {
+        self.native_bridge
+            .as_mut()
+            .ok_or_else(|| Error::input("native assignment observation is absent"))?
+            .select_assignment_subject(pid, started, subject)
     }
     fn memory(&mut self, pid: u32) -> Result<Value> {
         metrics::process_memory(pid)
@@ -725,6 +896,7 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     pub lua_captures: BTreeMap<String, String>,
+    pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
     checkpoint_run_id: String,
     checkpoint_sequence: u64,
@@ -775,6 +947,7 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             lua_captures: BTreeMap::new(),
+            carrier_captures: BTreeMap::new(),
             ruleset: None,
             checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
             checkpoint_sequence: 0,
@@ -1161,12 +1334,22 @@ impl Runner {
     pub fn retry_idempotent<T>(
         &mut self,
         deadline: f64,
+        action: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<T> {
+        self.retry_when(deadline, action, |e| {
+            retryable(e) && e.kind != ErrorKind::LuaExecution
+        })
+    }
+    fn retry_when<T>(
+        &mut self,
+        deadline: f64,
         mut action: impl FnMut(&mut Self) -> Result<T>,
+        retry: impl Fn(&Error) -> bool,
     ) -> Result<T> {
         let mut delay = 0.5;
         loop {
             match action(self) {
-                Err(e) if retryable(&e) && e.kind != ErrorKind::LuaExecution => {
+                Err(e) if retry(&e) => {
                     if self.clock.now() + delay >= deadline {
                         return Err(e);
                     }
@@ -1214,15 +1397,26 @@ impl Runner {
         Ok(!closed.is_empty())
     }
     pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
-        let budget = self.budget(deadline, 5.0)?;
-        if !self
-            .states(budget)?
+        // A busy AI turn can outlive one five-second state lookup. Keep all
+        // pre-send lookups in one budget; never replay an uncertain OnReturn.
+        let query_deadline = deadline.min(self.clock.now() + 30.0);
+        let states =
+            self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
+        if !states
             .iter()
             .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
         {
             return Ok(false);
         }
-        let closed=self.lua("InGameTopOptionsMenu","if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",self.budget(deadline,5.0)?)?=="true";
+        let closed = self.retry_when(
+            query_deadline,
+            |r| r.lua(
+                "InGameTopOptionsMenu",
+                "if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",
+                r.budget(query_deadline, 5.0)?,
+            ),
+            |e| e.kind == ErrorKind::Tuner,
+        )? == "true";
         if closed {
             self.wait(&json!({"type":"lua","state_name":"InGameTopOptionsMenu","code":"return ContextPtr:IsHidden()"}),self.budget(deadline,5.0)?,false)?;
             println!("Closed in-game options menu");
@@ -2053,17 +2247,54 @@ impl Runner {
                     }
                     _ => return Err(Error::scenario("invalid native bridge scope")),
                 };
+                let assignment_subject = if let Some(leader) = step["leader"].as_str() {
+                    let observed = self
+                        .backend
+                        .single_process(0.0)?
+                        .ok_or_else(|| Error::input("assignment subject game is absent"))?;
+                    let owner = step["owner"]
+                        .as_u64()
+                        .filter(|n| *n < 64)
+                        .ok_or_else(|| Error::scenario("invalid assignment subject owner"))?
+                        as u32;
+                    let raw = self.lua(
+                        "InGame",
+                        &crate::native_bridge::assignment_subject_code(owner, leader),
+                        self.remaining(deadline)?,
+                    )?;
+                    let subject = crate::native_bridge::AssignmentSubject::parse(&raw)?;
+                    if subject.owner != owner {
+                        return Err(Error::input("assignment subject owner changed"));
+                    }
+                    Some((observed, subject))
+                } else {
+                    None
+                };
                 self.backend.start_native_bridge(
                     &self.output,
                     text(step, "name"),
                     step["max_seconds"].as_u64().unwrap(),
                     mode,
                 )?;
+                if let Some(((pid, started), subject)) = assignment_subject {
+                    self.backend
+                        .select_native_assignment_subject(pid, started, subject)?;
+                }
+                let process = self
+                    .backend
+                    .native_bridge_identity()
+                    .map(|(pid, created)| {
+                        format!(
+                            "; process={}",
+                            json!({"pid":pid,"created_filetime":created})
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {
                     format!(
-                        "native {mode} original-return telemetry ready; artifact {}.jsonl",
+                        "native {mode} original-return telemetry ready; artifact {}.jsonl{process}",
                         text(step, "name")
                     )
                 })
@@ -2229,7 +2460,62 @@ impl Runner {
                 }
                 Ok(results.join("; "))
             }
+            "inspect_native_spy_failures" => {
+                let raw = self.lua(
+                    "InGame",
+                    crate::spy_failures::READ,
+                    self.budget(deadline, 30.0)?,
+                )?;
+                // Preserve raw native data even when interpretation rejects it.
+                fs::write(self.output.join("native-spy-failures-raw.json"), &raw)?;
+                let report = crate::spy_failures::diagnose(&raw)?;
+                let json = serde_json::to_string_pretty(&report)
+                    .map_err(|e| Error::scenario(e.to_string()))?;
+                fs::write(self.output.join("native-spy-failures-report.json"), json)?;
+                Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
+            }
+            "carrier_checkpoint" => {
+                let token = text(step, "token");
+                let candidate = text(step, "candidate");
+                let flow_required = step["direct_apply"] != true;
+                let code = crate::carrier_sync::query_with_scope(token, candidate, flow_required)?;
+                let base = resolve_path(&self.output)?;
+                let target =
+                    resolve_path(&base.join(scenario::safe_relative_path(text(step, "path"))?))?;
+                if !target.starts_with(&base) {
+                    return Err(Error::scenario(
+                        "Carrier checkpoint path escapes output directory",
+                    ));
+                }
+                let raw = self.lua("InGame", &code, self.budget(deadline, 5.0)?)?;
+                let checkpoint = crate::carrier_sync::Checkpoint::parse(&raw, token, candidate)?;
+                if checkpoint.flow_required != flow_required {
+                    return Err(Error::scenario("Carrier evidence has the wrong flow scope"));
+                }
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let mut evidence = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&target)?;
+                evidence.write_all(&serde_json::to_vec_pretty(&checkpoint)?)?;
+                if let Some(key) = step["equals_capture"].as_str() {
+                    let before = self.carrier_captures.get(key).ok_or_else(|| {
+                        Error::scenario(format!("Missing carrier capture: {key}"))
+                    })?;
+                    crate::carrier_sync::compare(before, &checkpoint, false)?;
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    self.carrier_captures.insert(key.into(), checkpoint);
+                }
+                Ok(format!(
+                    "native carrier evidence written to {}",
+                    target.display()
+                ))
+            }
             "ui_lua" => {
+                let native_before = self.backend.validate_native_bridge_target()?;
                 let mut attempts = 0;
                 let lua_timeout = step["lua_timeout"].as_f64().unwrap_or(5.0);
                 let value = loop {
@@ -2261,6 +2547,12 @@ impl Runner {
                         Err(e) => return Err(e),
                     }
                 };
+                let native_after = self.backend.validate_native_bridge_target()?;
+                if native_before != native_after {
+                    return Err(Error::input(
+                        "native observation changed during UI execution",
+                    ));
+                }
                 if let Some(key) = step["equals_capture"].as_str() {
                     if self.lua_captures.get(key) != Some(&value) {
                         return Err(Error::scenario(format!(
@@ -2272,8 +2564,19 @@ impl Runner {
                 if let Some(key) = step["capture_as"].as_str() {
                     self.lua_captures.insert(key.into(), value.clone());
                 }
+                let process_receipt = if value.starts_with(crate::persona_payment::MARKER) {
+                    let (pid, created) = native_after.ok_or_else(|| {
+                        Error::input("payment UI read requires a pinned native observation")
+                    })?;
+                    format!(
+                        "; native_process={}",
+                        json!({"pid":pid,"created_filetime":created})
+                    )
+                } else {
+                    String::new()
+                };
                 Ok(format!(
-                    "ran Lua in {}; return={value}",
+                    "ran Lua in {}; return={value}{process_receipt}",
                     text(step, "state_name")
                 ))
             }
@@ -2330,7 +2633,11 @@ impl Runner {
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
+                // Release our socket while an independent native UI probe
+                // inspects the game held by the same live_chain owner.
+                self.disconnect();
                 self.clock.sleep(seconds);
+                self.remaining(deadline)?;
                 Ok(format!("paused {seconds}s for UI animation"))
             }
             _ => Err(Error::scenario(format!("Unknown action: {action}"))),
