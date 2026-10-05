@@ -646,6 +646,14 @@ impl Runner {
             }
         }
     }
+    /// Only Tuner errors precede the mutating send; unknown replies must escape.
+    fn send_frontend_transition(&mut self, code: &str, deadline: f64) -> Result<String> {
+        self.retry_when(
+            deadline,
+            |this| this.lua("FrontEnd", code, this.budget(deadline, 5.0)?),
+            |error| error.kind == ErrorKind::Tuner,
+        )
+    }
     pub fn unblock_ingame(&mut self, state: &str, deadline: f64, attempts: usize) -> Result<bool> {
         if !state_name_eq(state, "InGame") || attempts >= 3 {
             return Ok(false);
@@ -1627,7 +1635,7 @@ impl Runner {
                     );
                 }
                 let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nNetwork.HostGame(ServerType.{})\nreturn true", session.guard_code(), session.server_type());
-                let mut unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+                let mut unknown = match self.send_frontend_transition(&code, deadline) {
                     Ok(_) => false,
                     Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                         println!("HostGame response interrupted during transition: {e}");
@@ -1948,7 +1956,7 @@ impl Runner {
         let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
-        let mut unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+        let mut unknown = match self.send_frontend_transition(&code, deadline) {
             Ok(_) => false,
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                 println!("LoadGame response interrupted during transition: {e}");
