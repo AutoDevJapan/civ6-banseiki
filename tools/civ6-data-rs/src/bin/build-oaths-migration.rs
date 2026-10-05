@@ -211,6 +211,44 @@ if h then for _,k in ipairs({'age','oathReign','oathChosen','oathDue'}) do out[#
 return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
 "#;
 
+// Read the engine's session and commemoration state without acknowledging it.
+// FindOpenSessionID/GetSessionInfo: official DiplomacyActionView.lua:2052-2054.
+const SESSION_DIAGNOSTIC: &str = r#"
+local out={}
+if ContextPtr and type(ContextPtr.IsHidden)=='function' then out[#out+1]='contextHidden='..tostring(ContextPtr:IsHidden()) end
+if DiplomacyManager and type(DiplomacyManager.FindOpenSessionID)=='function' then
+ for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+  local id=p:GetID()
+  if id~=0 then
+   local ok,session=pcall(DiplomacyManager.FindOpenSessionID,0,id)
+   out[#out+1]='session.p'..id..'='..(ok and tostring(session) or 'unavailable')
+   if ok and type(session)=='number' and session>=0 and type(DiplomacyManager.GetSessionInfo)=='function' then
+    local success,info=pcall(DiplomacyManager.GetSessionInfo,session)
+    if success and type(info)=='table' then
+     local keys={}; for key in pairs(info) do keys[#keys+1]=tostring(key) end; table.sort(keys)
+     for _,key in ipairs(keys) do out[#out+1]='sessionInfo.'..id..'.'..key..'='..tostring(info[key]) end
+    end
+   end
+  end
+ end
+end
+if type(Game.GetEras)=='function' then
+ local ok,eras=pcall(Game.GetEras)
+ if ok and eras then
+  for _,name in ipairs({'GetPlayerNumAllowedCommemorations','GetPlayerCommemorateChoices'}) do
+   local found,fn=pcall(function()return eras[name] end)
+   if found and type(fn)=='function' then
+    local success,value=pcall(fn,eras,0)
+    out[#out+1]=name..'='..(success and (type(value)=='table' and tostring(#value) or tostring(value)) or 'unavailable')
+   end
+  end
+ end
+end
+return 'LEGACY_SESSION_DIAGNOSTIC '..table.concat(out,' ')
+"#;
+
+const CLOSE_VISIBLE_STATEMENT: &str = "if ContextPtr:IsHidden() then return 'statement already hidden; no close sent' end\nOnClose(); return 'visible statement close requested once; no end-turn resend'";
+
 fn turn_event_observer() -> String {
     format!(
         r#"
@@ -245,11 +283,26 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     // when the engine rejects the request or human control never returns.
     // This scene diagnoses a stall; its completion is never acceptance.
     let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","diagnostic_only":true,"steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",&turn_event_observer()),lua("InGame",&turn_event_observer()),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"observe_for","seconds":120,"timeout":135}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
+    let mut recovery = diagnostic.clone();
+    recovery["name"] =
+        "旧保存：外交画面を1回閉じた後の手番とセッションを観測する（受入合格に数えない）".into();
+    let steps = recovery["steps"].as_array_mut().unwrap();
+    steps.extend([
+        lua("InGame", SESSION_DIAGNOSTIC),
+        lua("DiplomacyActionView", SESSION_DIAGNOSTIC),
+        lua("DiplomacyActionView", CLOSE_VISIBLE_STATEMENT),
+        json!({"action":"observe_for","seconds":120,"timeout":135}),
+        lua("GameCore_Tuner", TURN_DIAGNOSTIC),
+        lua("InGame", TURN_DIAGNOSTIC),
+        lua("InGame", SESSION_DIAGNOSTIC),
+        lua("DiplomacyActionView", SESSION_DIAGNOSTIC),
+    ]);
     Ok(vec![
         ("legacy-capabilities.json", probe),
         ("legacy-migration.json", migration),
         ("legacy-tenbun.json", pre),
         ("legacy-control-diagnostic.json", diagnostic),
+        ("legacy-control-recovery-diagnostic.json", recovery),
     ])
 }
 
@@ -283,6 +336,77 @@ mod tests {
         for (name, scene) in scenarios(&Repository::checked_in())? {
             civ6_autotest_rs::scenario::validate_scenario(&scene).with_context(|| name)?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_diagnostic_closes_only_visible_statement_and_never_resends_turn() -> Result<()> {
+        let scene = scenarios(&Repository::checked_in())?
+            .into_iter()
+            .find(|(name, _)| *name == "legacy-control-recovery-diagnostic.json")
+            .unwrap()
+            .1;
+        assert_eq!(scene["diagnostic_only"], true);
+        let steps = scene["steps"].as_array().unwrap();
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["code"]
+                    .as_str()
+                    .is_some_and(|c| c.contains("UI.RequestAction(")))
+                .count(),
+            1
+        );
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["action"] == "observe_for")
+                .count(),
+            2
+        );
+        let close = steps
+            .iter()
+            .position(|s| s["code"] == CLOSE_VISIBLE_STATEMENT)
+            .unwrap();
+        assert_eq!(steps[close - 1]["state_name"], "DiplomacyActionView");
+        assert_eq!(steps[close + 1]["action"], "observe_for");
+        assert_eq!(steps[close + 2]["state_name"], "GameCore_Tuner");
+        assert_eq!(steps[close + 3]["state_name"], "InGame");
+        let vm = mlua::Lua::new();
+        vm.load("hidden=true; closes=0; ContextPtr={IsHidden=function()return hidden end}; OnClose=function()closes=closes+1;hidden=true end").exec()?;
+        let hidden: String = vm.load(CLOSE_VISIBLE_STATEMENT).eval()?;
+        assert!(hidden.contains("no close sent"));
+        assert_eq!(vm.globals().get::<i32>("closes")?, 0);
+        vm.load("hidden=false").exec()?;
+        let visible: String = vm.load(CLOSE_VISIBLE_STATEMENT).eval()?;
+        assert!(visible.contains("requested once"));
+        let _: String = vm.load(CLOSE_VISIBLE_STATEMENT).eval()?;
+        assert_eq!(vm.globals().get::<i32>("closes")?, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn session_diagnostic_reads_sessions_and_choices_without_closing_or_selecting() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load(r#"
+PlayerManager={GetAliveMajors=function()return {{GetID=function()return 0 end},{GetID=function()return 4 end}} end}
+ContextPtr={IsHidden=function()return false end}
+DiplomacyManager={FindOpenSessionID=function(a,b)assert(a==0 and b==4);return 7 end,GetSessionInfo=function(id)assert(id==7);return {FromPlayer=4,ToPlayer=0} end}
+Game={GetEras=function()return {GetPlayerNumAllowedCommemorations=function(_,id)assert(id==0);return 1 end,GetPlayerCommemorateChoices=function(_,id)assert(id==0);return {8,9} end} end}
+"#).exec()?;
+        let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+        for expected in [
+            "contextHidden=false",
+            "session.p4=7",
+            "sessionInfo.4.FromPlayer=4",
+            "GetPlayerNumAllowedCommemorations=1",
+            "GetPlayerCommemorateChoices=2",
+        ] {
+            assert!(text.contains(expected), "{text}");
+        }
+        vm.load("DiplomacyManager=nil;Game.GetEras=nil").exec()?;
+        let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+        assert_eq!(text, "LEGACY_SESSION_DIAGNOSTIC contextHidden=false");
         Ok(())
     }
 
