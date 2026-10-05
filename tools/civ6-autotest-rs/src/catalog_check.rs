@@ -11,7 +11,9 @@ use std::{
     path::Path,
 };
 
+mod contracts;
 mod steps;
+pub use contracts::SourceContractVersion;
 pub use steps::{evidence_from_steps, CatalogEntry, Evidence, Matrix};
 
 // These RVAs are Windows-only exports upstream. Keep the offline wire contract
@@ -143,6 +145,7 @@ pub struct Report {
     pub trace_sha256: String,
     pub steps_sha256: String,
     pub scenario_contract_sha256: String,
+    pub source_contract_version: SourceContractVersion,
     pub catalog: Vec<CatalogEntry>,
     pub pairs: Vec<PairCount>,
     pub calibration_rows: usize,
@@ -274,6 +277,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         baseline_unmeasured: vec!["initial UI closed484", "per-join UI negatives", "complete native call history", "AI-initiated payment", "startup/load", "unpaid placement", "multiplayer", "113-step suite", "neutralization and recovery"],
         process: evidence.process.clone(), gamecore_sha256: PINNED_GAMECORE_SHA256,
         trace_sha256: digest(trace), steps_sha256: evidence.steps_sha256.clone(), scenario_contract_sha256: evidence.scenario_contract_sha256.clone(),
+        source_contract_version:evidence.source_contract_version,
         catalog: evidence.catalog.clone(), pairs: Vec::new(), calibration_rows: 0, property_rows: 0,
         property_subject_unknown_rows:0,
         property_subject_metadata_scope:"controller packed owner/index on cell keys; denial_checked is a denial result, not a validity flag; absent/all-zero false metadata is unknown and cannot prove positivity",

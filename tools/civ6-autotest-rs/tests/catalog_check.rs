@@ -552,3 +552,224 @@ fn immutable_contract_and_receipts_have_independent_pinned_hashes() {
         "b3ab6a0fcda4ebcd1c0d241c7c6abbad6d560fa31abc0b86035b9183d70de7d0"
     );
 }
+
+fn nil_adjusted_model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
+    let (trace, mut steps) = model(directory);
+    let contract: Value = serde_json::from_str(include_str!(
+        "fixtures/catalog-check/source-contract-nil-adjusted-068.json"
+    ))
+    .unwrap();
+    for row in &mut steps {
+        if row["status"] == "START" {
+            let action = row["action"].as_str().unwrap();
+            let n: usize = action.split_once('/').unwrap().0.parse().unwrap();
+            row["detail"] = json!(contract["steps"][n - 1].to_string());
+        }
+    }
+    (trace, steps)
+}
+
+#[test]
+fn frozen_nil_adjusted_success_model_cli_zero_never_product_acceptance() {
+    let dir = tempfile::tempdir().unwrap();
+    let (trace, steps) = nil_adjusted_model(dir.path());
+    let r = check(&trace, &steps).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::NilAdjusted068
+    );
+    assert_eq!(
+        r.scenario_contract_sha256,
+        "cbebf7fe0cb633e8d541205f667762b637c4cadd3ca19e90337a9738bec67e42"
+    );
+    assert!(r.scenario_complete && r.capture_valid && r.qualification_positive22);
+    assert!(!r.product_acceptance && !r.payment_authority);
+    let t = dir.path().join("normal-catalog22.jsonl");
+    let s = dir.path().join("steps.jsonl");
+    std::fs::write(&t, lines(&trace)).unwrap();
+    std::fs::write(&s, lines(&steps)).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-catalog-check"))
+        .arg("check")
+        .arg(&t)
+        .arg(&s)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["source_contract_version"], "NilAdjusted068");
+    assert_eq!(report["qualification_positive22"], true);
+    assert_eq!(report["product_acceptance"], false);
+}
+
+#[test]
+fn frozen_legacy_success_and_partial_models_keep_their_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut trace, mut steps) = model(dir.path());
+    let r = check(&trace, &steps).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::Legacy4cd
+    );
+    assert_eq!(
+        r.scenario_contract_sha256,
+        "2ce6c4df27af3f82a9fd4f9f8d4bce52ddfba604241b4e17a1258d8d80d0f3f2"
+    );
+    // Complete native restoration but Lua fails before the first UI native read.
+    steps.truncate(23);
+    steps[22]["status"] = json!("FAIL");
+    steps[22]["detail"] = json!("legacy zero-return tostring error");
+    trace.drain(3..25);
+    let stop = trace.last_mut().unwrap();
+    stop["rows"] = json!(110);
+    stop["observed_calls"] = json!(110);
+    stop["getter_calls_seen"] = json!(120);
+    let t = dir.path().join("normal-catalog22.jsonl");
+    let s = dir.path().join("steps.jsonl");
+    std::fs::write(&t, lines(&trace)).unwrap();
+    std::fs::write(&s, lines(&steps)).unwrap();
+    let r = catalog_check::check_files(&t, &s).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::Legacy4cd
+    );
+    assert!(r.capture_valid && !r.qualification_positive22);
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-catalog-check"))
+        .arg("check")
+        .arg(&t)
+        .arg(&s)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["capture_valid"], true);
+    assert_eq!(report["qualification_positive22"], false);
+}
+
+#[test]
+fn mixed_versions_at_every_distinct_step_are_rejected_in_both_directions() {
+    let (trace, legacy) = model(Path::new("unit-model"));
+    let (_, adjusted) = nil_adjusted_model(Path::new("unit-model"));
+    let mut mutations = 0;
+    for i in 0..legacy.len() {
+        if legacy[i]["status"] == "START" && legacy[i]["detail"] != adjusted[i]["detail"] {
+            let mut mixed = legacy.clone();
+            mixed[i] = adjusted[i].clone();
+            assert!(
+                catalog_check::evidence_from_steps(&lines(&mixed)).is_err(),
+                "legacy step {i}"
+            );
+            let mut mixed = adjusted.clone();
+            mixed[i] = legacy[i].clone();
+            assert!(
+                catalog_check::evidence_from_steps(&lines(&mixed)).is_err(),
+                "adjusted step {i}"
+            );
+            mutations += 1;
+        }
+    }
+    assert_eq!(mutations, 34);
+    // Choosing the opposite first code cannot be undone by subsequent codes.
+    assert!(check(&trace, &adjusted).unwrap().qualification_positive22);
+}
+
+#[test]
+fn unknown_future_header_code_is_not_admitted_by_current_generator() {
+    for adjusted in [false, true] {
+        let (_, mut steps) = if adjusted {
+            nil_adjusted_model(Path::new("unit-model"))
+        } else {
+            model(Path::new("unit-model"))
+        };
+        let first = steps
+            .iter_mut()
+            .find(|r| r["status"] == "START" && r["action"].as_str().unwrap().ends_with(" ui_lua"))
+            .unwrap();
+        let mut source: Value = serde_json::from_str(first["detail"].as_str().unwrap()).unwrap();
+        source["code"] = json!(format!(
+            "{}\n-- unknown future contract",
+            source["code"].as_str().unwrap()
+        ));
+        first["detail"] = json!(source.to_string());
+        assert!(catalog_check::evidence_from_steps(&lines(&steps)).is_err());
+    }
+}
+
+#[test]
+fn nil_adjusted_contract_is_a_fixed_three_property_only_header_change() {
+    use sha2::{Digest, Sha256};
+    let old: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/source-contract.json")).unwrap();
+    let new: Value = serde_json::from_str(include_str!(
+        "fixtures/catalog-check/source-contract-nil-adjusted-068.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(include_bytes!(
+                "fixtures/catalog-check/source-contract-nil-adjusted-068.json"
+            ))
+        ),
+        "cbebf7fe0cb633e8d541205f667762b637c4cadd3ca19e90337a9738bec67e42"
+    );
+    assert_eq!(old["name"], new["name"]);
+    let a = old["steps"].as_array().unwrap();
+    let b = new["steps"].as_array().unwrap();
+    assert_eq!(a.len(), b.len());
+    let mut changed = 0;
+    for (a, b) in a.iter().zip(b) {
+        let mut expected = a.clone();
+        if let Some(code) = a["code"].as_str() {
+            // Test-only explicit known patch, never acceptance normalization.
+            let old_line=" return identity..':'..tostring(Game:GetProperty(prefix..'STATE'))..':'..tostring(Game:GetProperty(prefix..'UNIT'))..':'..tostring(Game:GetProperty(prefix..'EVOLUTION_SURCHARGE'))..':'..ownerGov:GetGovernorPoints()..':'..ownerGov:GetGovernorPointsSpent(),positives,negatives";
+            let new_line=" -- Civ6 returns zero Lua values for an absent property. Parentheses adjust\n -- that to one nil only for display; the ledger assertions above stay strict.\n return identity..':'..tostring((Game:GetProperty(prefix..'STATE')))..':'..tostring((Game:GetProperty(prefix..'UNIT')))..':'..tostring((Game:GetProperty(prefix..'EVOLUTION_SURCHARGE')))..':'..ownerGov:GetGovernorPoints()..':'..ownerGov:GetGovernorPointsSpent(),positives,negatives";
+            if code.contains(old_line) {
+                assert_eq!(code.matches(old_line).count(), 1);
+                expected["code"] = json!(code.replace(old_line, new_line));
+                changed += 1;
+            }
+        }
+        assert_eq!(expected, *b);
+    }
+    assert_eq!(changed, 34);
+}
+
+#[test]
+fn nil_adjusted_shipping_restart_keeps_version_binding_before_and_after_native_start() {
+    let (trace, mut steps) = nil_adjusted_model(Path::new("unit-model"));
+    for row in &mut steps {
+        let a = row["action"].as_str().unwrap();
+        if let Some((n, operation)) = a.split_once(' ') {
+            let (n, _) = n.split_once('/').unwrap();
+            row["action"] = json!(format!(
+                "{}/44 {operation}",
+                n.parse::<usize>().unwrap() + 1
+            ));
+        }
+    }
+    steps.insert(1,json!({"at":"2026-10-06T00:00:00Z","action":"1/44 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}));
+    steps.insert(2,json!({"at":"2026-10-06T00:00:00Z","action":"1/44 restart_game","status":"OK","detail":"synthetic restart model only"}));
+    let r = check(&trace, &steps).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::NilAdjusted068
+    );
+    assert!(r.qualification_positive22);
+    let old: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/source-contract.json")).unwrap();
+    for original_index in [6, 37] {
+        let mut mixed = steps.clone();
+        let row = mixed
+            .iter_mut()
+            .find(|r| {
+                r["status"] == "START"
+                    && r["action"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with(&format!("{}/44 ", original_index + 2))
+            })
+            .unwrap();
+        row["detail"] = json!(old["steps"][original_index].to_string());
+        assert!(catalog_check::evidence_from_steps(&lines(&mixed)).is_err());
+    }
+}

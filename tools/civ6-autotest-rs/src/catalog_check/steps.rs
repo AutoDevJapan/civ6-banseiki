@@ -1,6 +1,6 @@
 //! Freeze generated action/code associations and consume only successful reads.
-use super::{digest, json, require};
-use crate::{catalog_scenario, persona_payment::ProcessIdentity, Error, Result};
+use super::{contracts::Contract, digest, json, require, SourceContractVersion};
+use crate::{persona_payment::ProcessIdentity, Error, Result};
 use civ6_native_bridge_rs::paid_catalog::COUNT;
 use serde::Serialize;
 use serde_json::Value;
@@ -39,6 +39,7 @@ pub struct Evidence {
     pub(super) gameplay: Matrix,
     pub(super) steps_sha256: String,
     pub(super) scenario_contract_sha256: String,
+    pub(super) source_contract_version: SourceContractVersion,
     pub(super) scenario_complete: bool,
     pub(super) gameplay_closed484: bool,
     pub(super) failure: Option<String>,
@@ -51,7 +52,7 @@ fn decimal<T: std::str::FromStr>(text: &str) -> Result<T> {
     text.parse()
         .map_err(|_| Error::input("receipt decimal overflow"))
 }
-fn catalog(value: &str) -> Result<Vec<CatalogEntry>> {
+fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
     let rest = value
         .strip_prefix("CATALOG880 STABLE turn=")
         .ok_or_else(|| Error::input("stable receipt missing"))?;
@@ -62,8 +63,7 @@ fn catalog(value: &str) -> Result<Vec<CatalogEntry>> {
     let (records, titles) = rest
         .split_once(" titles=")
         .ok_or_else(|| Error::input("stable titles missing"))?;
-    let normal: Value = json(catalog_scenario::NORMAL)?;
-    let players = normal["steps"][1]["players"].as_array().unwrap();
+    let players = contract["steps"][2]["players"].as_array().unwrap();
     let mut entries = Vec::new();
     let mut indices = BTreeSet::new();
     let mut hashes = BTreeSet::new();
@@ -229,9 +229,11 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
 }
 
 pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evidence> {
-    let normal = json(catalog_scenario::NORMAL)?;
-    let contract = catalog_scenario::build(&normal)?;
-    let mut expected = contract["steps"].as_array().unwrap().clone();
+    let legacy = Contract::load(SourceContractVersion::Legacy4cd)?;
+    let adjusted = Contract::load(SourceContractVersion::NilAdjusted068)?;
+    let mut candidates = vec![legacy, adjusted];
+    let mut shipping_restart = None;
+    let mut expected = candidates[0].data["steps"].as_array().unwrap().clone();
     let mut next = 0;
     let mut pending = false;
     let mut started = false;
@@ -274,7 +276,12 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
         )?;
         if action == "start" {
             require(
-                !started && next == 0 && status == "OK" && Value::from(detail) == contract["name"],
+                !started
+                    && next == 0
+                    && status == "OK"
+                    && candidates
+                        .iter()
+                        .all(|c| Value::from(detail) == c.data["name"]),
                 "wrong/duplicate scenario start",
             )?;
             started = true;
@@ -343,7 +350,32 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                             .is_none_or(|v| v.as_u64().is_some_and(|n| n > 0 && n <= 600)),
                     "invalid shipping restart",
                 )?;
+                shipping_restart = Some(prefix.clone());
                 expected.insert(0, prefix);
+            }
+        }
+        if status == "START" && !pending {
+            let submitted = json(detail)?;
+            candidates.retain(|c| {
+                let source_steps = c.data["steps"].as_array().unwrap();
+                let candidate = if let Some(prefix) = &shipping_restart {
+                    if next == 0 {
+                        Some(prefix)
+                    } else {
+                        source_steps.get(next - 1)
+                    }
+                } else {
+                    source_steps.get(next)
+                };
+                candidate == Some(&submitted)
+            });
+            require(
+                !candidates.is_empty(),
+                "unknown or mixed source contract version",
+            )?;
+            expected = candidates[0].data["steps"].as_array().unwrap().clone();
+            if let Some(prefix) = &shipping_restart {
+                expected.insert(0, prefix.clone());
             }
         }
         let step = expected
@@ -414,15 +446,16 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                     .strip_prefix(&format!("ran Lua in {state}; return="))
                     .ok_or_else(|| Error::input("Lua successful return missing or wrong state"))?
                     .trim_end_matches(['\r', '\n']);
-                let code = step["code"].as_str().unwrap();
                 let key = step["capture_as"]
                     .as_str()
                     .or_else(|| step["equals_capture"].as_str());
-                if code == catalog_scenario::stable_code()
-                    || step["capture_as"] == "CATALOG880_STABLE"
+                let frozen_steps = candidates[0].data["steps"].as_array().unwrap();
+                let is_prepare = step == &frozen_steps[5];
+                let is_closed_read = step == &frozen_steps[9];
+                if step["capture_as"] == "CATALOG880_STABLE"
                     || step["equals_capture"] == "CATALOG880_STABLE"
                 {
-                    let read = catalog(value)?;
+                    let read = catalog(value, &candidates[0].data)?;
                     if entries.is_none() {
                         entries = Some(read);
                     }
@@ -445,10 +478,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                             .ok_or_else(|| Error::input("stable catalog absent"))?,
                         phase,
                     )?;
-                } else if key.is_none()
-                    && code != catalog_scenario::prepare_code()
-                    && code != crate::payment_scenario::READ_CLOSED_ADMISSION
-                {
+                } else if key.is_none() && !is_prepare && !is_closed_read {
                     let core = state == "GameCore_Tuner";
                     let matrix = raw_matrix(
                         value,
@@ -484,9 +514,9 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                         .as_ref()
                         .ok_or_else(|| Error::input("stable catalog absent"))?;
                     ledger(raw, &entries[first..(first + 4).min(COUNT)], phase)?;
-                } else if code == catalog_scenario::prepare_code() {
+                } else if is_prepare {
                     require(value=="CATALOG880 official civics only; UI automatic submission paused; no game turn requested", "prepare receipt differs")?;
-                } else if code == crate::payment_scenario::READ_CLOSED_ADMISSION {
+                } else if is_closed_read {
                     // READ_CLOSED_ADMISSION asserts the original synchronized
                     // close/reset read. It is not the initial UI closed484 test.
                     require(value=="PAYMENT880 observed 484 existing closed Core qualifications after observer installation", "closed admission receipt differs")?;
@@ -527,6 +557,11 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
     };
     let complete = judged && failure.is_none();
     require(
+        candidates.len() == 1,
+        "run has not selected a unique source contract version",
+    )?;
+    let contract = &candidates[0];
+    require(
         !complete || (ui.is_some() && gameplay.is_some() && artifact_path.is_some()),
         "completed scenario missing final raw matrices or stop path",
     )?;
@@ -538,7 +573,8 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
         ui: ui.unwrap_or_else(|| unmeasured("UI_NATIVE_QUALIFICATION")),
         gameplay: gameplay.unwrap_or_else(|| unmeasured("GAMEPLAY_PROJECTION")),
         steps_sha256: digest(text),
-        scenario_contract_sha256: digest(&contract.to_string()),
+        scenario_contract_sha256: contract.sha256.into(),
+        source_contract_version: contract.version,
         scenario_complete: complete,
         gameplay_closed484: captures.contains_key("CATALOG880_CLOSED"),
         failure,
