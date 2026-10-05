@@ -158,7 +158,9 @@ local function Occupy(p)
     CheckCity('after-kill-'..id)
   end
   if p:IsCity() then
-    row.BarrierFeature=GameInfo.Features.FEATURE_TSINGY.Index
+    -- Tsingy removes the existing city (live diagnostic 06).
+    -- Ice is an ordinary impassable feature; verify city retention immediately.
+    row.BarrierFeature=GameInfo.Features.FEATURE_ICE.Index
     TerrainBuilder.SetFeatureType(p,row.BarrierFeature)
     CheckCity('after-city-feature')
   else
@@ -360,7 +362,7 @@ mod tests {
 Game.GetLocalPlayer=function() return 0 end
 local terrain={['2,0']=4}; local features={['0,0']=3}
 GameInfo.Terrains={TERRAIN_GRASS_MOUNTAIN={Index=9}}
-GameInfo.Features={FEATURE_TSINGY={Index=11}}
+GameInfo.Features={FEATURE_ICE={Index=11}}
 local function Plot(x,y)
   local key=x..','..y
   return {GetX=function() return x end,GetY=function() return y end,
