@@ -460,3 +460,101 @@ function PRODUCTION_ADMISSION_CASES.schema_two_rejects_foreign_owner_reset_key()
     expect(2,Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1'),'collision keeps old schema')
     expect('foreign-reset',Players[1]:GetProperty(902001),'foreign reset remains untouched')
 end
+
+function PRODUCTION_ADMISSION_CASES.dead_major_foreign_keys_are_not_claimed_on_revival()
+    local schema = 'JAC_PERSONA_ADMISSION_SCHEMA_V1'
+    local original = PlayerManager.GetAliveMajorIDs
+    Players[2].alive = false
+    PlayerManager.GetAliveMajorIDs = function() return {0,1} end
+    for _,foreignKey in ipairs({900004,901004,902002,903004}) do
+        Game:SetProperty(schema,nil)
+        for owner=0,2 do
+            local p = Players[owner]
+            p:SetProperty(902000+owner,nil)
+            for row in GameInfo.JAC_LeaderPersonas() do
+                local index = GameInfo.Governors[row.GovernorType].Index
+                for _,base in ipairs({900000,901000,903000}) do
+                    p:SetProperty(base+index,nil)
+                end
+            end
+        end
+        Players[2]:SetProperty(foreignKey,'foreign-dead-major-value')
+        assert(loadstring(GAMEPLAY_SOURCE))()
+        expect(nil,Game:GetProperty(schema),'foreign value on a dead major blocks initial ownership')
+        expect('foreign-dead-major-value',Players[2]:GetProperty(foreignKey),'foreign value is preserved')
+        Players[2].alive = true
+        PlayerManager.GetAliveMajorIDs = function() return {0,1,2} end
+        ExposedMembers.JAC_LeaderPersona.Reconcile()
+        expect('foreign-dead-major-value',Players[2]:GetProperty(foreignKey),'revival must not overwrite foreign data')
+        Players[2].alive = false
+        PlayerManager.GetAliveMajorIDs = function() return {0,1} end
+    end
+    Players[2].alive = true
+    PlayerManager.GetAliveMajorIDs = original
+end
+
+function PRODUCTION_ADMISSION_CASES.dead_major_getter_failure_closes_every_owner()
+    local schema = 'JAC_PERSONA_ADMISSION_SCHEMA_V1'
+    Game:SetProperty(schema,nil)
+    for owner=0,2 do
+        local p = Players[owner]
+        p:SetProperty(902000+owner,nil)
+        for row in GameInfo.JAC_LeaderPersonas() do
+            local index = GameInfo.Governors[row.GovernorType].Index
+            for _,base in ipairs({900000,901000,903000}) do
+                p:SetProperty(base+index,nil)
+            end
+        end
+    end
+    Players[2].alive = false
+    PlayerManager.GetAliveMajorIDs = function() return {0,1} end
+    local resetReads = {}
+    for owner=0,2 do
+        local p, id = Players[owner], owner
+        local get = p.GetProperty
+        p.GetProperty = function(self,key)
+            if key == 902000+id then resetReads[id] = (resetReads[id] or 0)+1 end
+            if id == 2 and key == 900004 then error('injected dead-major getter failure') end
+            return get(self,key)
+        end
+    end
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    expect(nil,Game:GetProperty(schema),'failed getter must not claim the namespace')
+    for owner=0,2 do
+        assert((resetReads[owner] or 0)>0,'failure must close owner '..owner)
+    end
+end
+
+function PRODUCTION_ADMISSION_CASES.legacy_getter_failure_preserves_schema_and_closes_every_owner()
+    local schema = 'JAC_PERSONA_ADMISSION_SCHEMA_V1'
+    for _,case in ipairs({{version=1,failed=903004,foreign=903154},
+                           {version=2,failed=902002,foreign=902002}}) do
+        for owner=0,2 do
+            local p = Players[owner]
+            p:SetProperty(902000+owner,nil)
+            for row in GameInfo.JAC_LeaderPersonas() do
+                local index = GameInfo.Governors[row.GovernorType].Index
+                p:SetProperty(903000+index,nil)
+            end
+        end
+        Players[2]:SetProperty(case.foreign,'foreign-legacy-value')
+        Game:SetProperty(schema,case.version)
+        local resetReads, originals = {}, {}
+        for owner=0,2 do
+            local p, id = Players[owner], owner
+            originals[id] = p.GetProperty
+            p.GetProperty = function(self,key)
+                if key == 902000+id then resetReads[id] = (resetReads[id] or 0)+1 end
+                if id == 2 and key == case.failed then error('injected legacy getter failure') end
+                return originals[id](self,key)
+            end
+        end
+        assert(loadstring(GAMEPLAY_SOURCE))()
+        expect(case.version,Game:GetProperty(schema),'getter failure keeps the previous schema')
+        for owner=0,2 do
+            assert((resetReads[owner] or 0)>0,'legacy failure must close owner '..owner)
+            Players[owner].GetProperty = originals[owner]
+        end
+        expect('foreign-legacy-value',Players[2]:GetProperty(case.foreign),'foreign legacy value is preserved')
+    end
+end

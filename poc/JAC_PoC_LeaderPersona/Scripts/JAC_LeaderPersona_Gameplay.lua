@@ -399,6 +399,11 @@ local function CloseAllAdmissionOwners()
     return confirmed;
 end
 
+local function AdmissionKeyVacant(p, key)
+    local ok, value = pcall(p.GetProperty, p, key);
+    return ok and value == nil;
+end
+
 local function AdmissionOwnerIDsValid(ids)
     if type(ids) ~= "table" then return false; end
     local count, seen = 0, {};
@@ -431,7 +436,7 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
             local p = Player(owner, false);
             if p then
                 for _,entry in ipairs(rows) do
-                    if p:GetProperty(ADMISSION_CLOSE + entry.index) ~= nil then
+                    if not AdmissionKeyVacant(p, ADMISSION_CLOSE + entry.index) then
                         CloseAllAdmissionOwners(); return;
                     end
                 end
@@ -446,7 +451,7 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
         -- one; the old key on owners 1..63 is left untouched.
         for owner=1,63 do
             local p = Player(owner, false);
-            if p and p:GetProperty(ADMISSION_RESET + owner) ~= nil then
+            if p and not AdmissionKeyVacant(p, ADMISSION_RESET + owner) then
                 CloseAllAdmissionOwners(); return;
             end
         end
@@ -462,13 +467,22 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
     end
     admissionRowsFingerprint = fingerprint;
     if schema == nil then
-        -- Check every reserved namespace before taking it, including close.
+        -- Every listed owner must have a live Core player before claiming the
+        -- namespace. Dead major players can later return to the alive list,
+        -- so their saved properties must be checked too.
         for _,owner in ipairs(ids) do
-            local p = Player(owner, true);
-            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET + owner) ~= nil then CloseAllAdmissionOwners(); return; end
-            for _,entry in ipairs(rows) do
-                for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
-                    if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return; end
+            if not Player(owner, true) then CloseAllAdmissionOwners(); return; end
+        end
+        -- Check every existing major, including the dead, before taking the
+        -- reset, manifest, admission and close ranges for this saved game.
+        for owner=0,63 do
+            local p = Player(owner, false);
+            if p then
+                if not AdmissionKeyVacant(p, ADMISSION_RESET + owner) then CloseAllAdmissionOwners(); return; end
+                for _,entry in ipairs(rows) do
+                    for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
+                        if not AdmissionKeyVacant(p, base + entry.index) then CloseAllAdmissionOwners(); return; end
+                    end
                 end
             end
         end

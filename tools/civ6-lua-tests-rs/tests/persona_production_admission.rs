@@ -115,6 +115,21 @@ fn schema_two_rejects_foreign_owner_reset_key() {
 }
 
 #[test]
+fn dead_major_foreign_keys_are_not_claimed_on_revival() {
+    run_case("dead_major_foreign_keys_are_not_claimed_on_revival");
+}
+
+#[test]
+fn dead_major_getter_failure_closes_every_owner() {
+    run_case("dead_major_getter_failure_closes_every_owner");
+}
+
+#[test]
+fn legacy_getter_failure_preserves_schema_and_closes_every_owner() {
+    run_case("legacy_getter_failure_preserves_schema_and_closes_every_owner");
+}
+
+#[test]
 fn sparse_alive_ids_on_reload_close_omitted_owner() {
     run_case("sparse_alive_ids_on_reload_close_omitted_owner");
 }
