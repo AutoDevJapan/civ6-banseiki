@@ -126,6 +126,32 @@ fn real_observer_and_rust_diagnosis_keep_both_failures_without_any_write() {
     );
     run(&lua, "THIRD_PROGRESS=-1");
     assert!(read_research().is_err());
+    run(
+        &lua,
+        "THIRD_OWNED=true; Game:GetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT').token=nil",
+    );
+    let missing: String = lua.load(spy_research::read()).eval().unwrap();
+    let observed: serde_json::Value = serde_json::from_str(&missing).unwrap();
+    assert!(observed["civic"]["intentToken"].is_null());
+    assert_eq!(observed["failures"]["failures"][1]["turn"], 45);
+    let output = tempfile::tempdir().unwrap();
+    spy_research::preserve_raw(output.path(), "after_reload", &missing).unwrap();
+    assert!(spy_research::diagnose(&missing).is_err());
+    let raw_path = output.path().join("native-spy-civic-after_reload-raw.json");
+    assert_eq!(std::fs::read_to_string(&raw_path).unwrap(), missing);
+    assert!(spy_research::preserve_raw(output.path(), "after_reload", "replacement").is_err());
+    assert_eq!(std::fs::read_to_string(&raw_path).unwrap(), missing);
+    run(&lua, "ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus=function() error('native observer unavailable') end");
+    let unavailable: String = lua.load(spy_research::read()).eval().unwrap();
+    let observed: serde_json::Value = serde_json::from_str(&unavailable).unwrap();
+    assert_eq!(observed["failures"]["failures"][0]["turn"], 23);
+    assert!(observed["observationErrors"][0]
+        .as_str()
+        .unwrap()
+        .contains("native observer unavailable"));
+    spy_research::preserve_raw(output.path(), "after_acceptance", &unavailable).unwrap();
+    assert!(spy_research::diagnose(&unavailable).is_err());
+    assert!(spy_research::preserve_raw(output.path(), "../outside", &unavailable).is_err());
     assert_eq!(
         lua.load("return #WRITES").eval::<usize>().unwrap(),
         writes_before_research_read

@@ -1,6 +1,7 @@
 //! Native research acceptance is distinct from the later capacity effect.
 use crate::{spy_failures, Error, Result};
 use serde::{Deserialize, Serialize};
+use std::{fs::OpenOptions, io::Write, path::Path};
 
 pub const PHASES: [&str; 4] = [
     "after_acceptance",
@@ -13,30 +14,45 @@ pub const PHASES: [&str; 4] = [
 pub fn read() -> String {
     format!(
         r#"local failure=function() {failure} end
-local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus()
 local function quote(v)
  return '"'..string.gsub(v,'[%z\1-\31\\"]',function(ch)
   return string.format('\\u%04x',string.byte(ch))
  end)..'"'
 end
+local errors={{}}
+local failureOK,failureRaw=pcall(failure)
+if not failureOK then errors[#errors+1]=quote('failures: '..tostring(failureRaw)); failureRaw='null' end
+local civicOK,s=pcall(function() return ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus() end)
+if not civicOK then errors[#errors+1]=quote('civic: '..tostring(s)); s=nil end
+if civicOK and type(s)~='table' then errors[#errors+1]=quote('civic observer returned '..type(s)); s=nil end
 local parts={{}}
 for _,key in ipairs({{'stage','turn','civic','civicIndex','civicHash','prerequisiteOwned','owned','progressing','capacity','captured','intentToken'}}) do
- local value=s[key]
- assert(value~=nil,'native Civic observation missing '..key)
+ local value=s and s[key] or nil
+ if s and s[key]==false then value=false end
  local kind=type(value)
- local encoded
+ local encoded='null'
  if kind=='string' then encoded=quote(value)
  elseif kind=='boolean' then encoded=value and 'true' or 'false'
- elseif kind=='number' then
-  assert(value==value and math.abs(value)<math.huge)
+ elseif kind=='number' and value==value and math.abs(value)<math.huge then
   encoded=string.format('%.17g',value)
- else error('unsupported native Civic observation '..key) end
+ elseif value~=nil then errors[#errors+1]=quote('unsupported Civic field '..key..' ('..kind..')') end
  parts[#parts+1]=quote(key)..':'..encoded
 end
-return '{{"failures":'..failure()..',"civic":{{'..table.concat(parts,',')..'}}}}'
+return '{{"failures":'..failureRaw..',"civic":{{'..table.concat(parts,',')..'}},"observationErrors":['..table.concat(errors,',')..']}}'
 "#,
         failure = spy_failures::READ
     )
+}
+
+/// Preserve the actual response even if parsing or native observations fail.
+pub fn preserve_raw(output: &Path, phase: &str, raw: &str) -> Result<()> {
+    if !PHASES.contains(&phase) {
+        return Err(problem("unknown inspection phase"));
+    }
+    let path = output.join(format!("native-spy-civic-{phase}-raw.json"));
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+    file.write_all(raw.as_bytes())?;
+    Ok(())
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -78,6 +94,14 @@ fn problem(message: &str) -> Error {
 pub fn diagnose(raw: &str) -> Result<Report> {
     let value: serde_json::Value =
         serde_json::from_str(raw).map_err(|e| problem(&e.to_string()))?;
+    if value["observationErrors"]
+        .as_array()
+        .is_none_or(|errors| !errors.is_empty())
+    {
+        return Err(problem(
+            "native observation errors were retained in the raw record",
+        ));
+    }
     let civic: Civic = serde_json::from_value(value["civic"].clone())
         .map_err(|e| problem(&format!("incomplete Civic snapshot: {e}")))?;
     let failures = spy_failures::diagnose(&value["failures"].to_string())?;

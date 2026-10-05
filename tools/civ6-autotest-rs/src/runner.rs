@@ -2253,18 +2253,15 @@ impl Runner {
                     &crate::spy_research::read(),
                     self.budget(deadline, 30.0)?,
                 )?;
-                let raw_path = self
-                    .output
-                    .join(format!("native-spy-civic-{phase}-raw.json"));
                 let report_path = self
                     .output
                     .join(format!("native-spy-civic-{phase}-report.json"));
-                if raw_path.exists() || report_path.exists() {
+                if report_path.exists() {
                     return Err(Error::scenario(
                         "native research evidence already exists for this phase",
                     ));
                 }
-                fs::write(raw_path, &raw)?;
+                crate::spy_research::preserve_raw(&self.output, phase, &raw)?;
                 let report = crate::spy_research::diagnose(&raw)?;
                 if phase == "after_reload" {
                     let before: serde_json::Value = serde_json::from_str(&fs::read_to_string(
