@@ -46,6 +46,7 @@ fn fixture(cost: u8) -> (Vec<Value>, Evidence) {
                 created_filetime: 123,
             },
             artifact: "test.jsonl".into(),
+            artifact_path: "D:/test/test.jsonl".into(),
         },
     )
 }
@@ -141,8 +142,8 @@ fn complete_lossless_envelope_and_both_native_callers_required() {
 fn completed_steps(r: &Evidence) -> Vec<Value> {
     vec![
         json!({"action":"25/32 start_native_assign_calibration","status":"OK", "detail":format!("native assign-calibration original-return telemetry ready; artifact test.jsonl; process={}",serde_json::to_string(&r.process).unwrap())}),
-        json!({"action":"26/32 ui_lua","status":"OK","detail":format!("ran Lua in InGame; return={}{}",persona_payment::MARKER,serde_json::to_string(&r.receipt).unwrap())}),
-        json!({"action":"30/32 stop_native_assign_calibration","status":"OK","detail":"native entry restored; artifact D:/test/test.jsonl"}),
+        json!({"action":"26/32 ui_lua","status":"OK","detail":format!("ran Lua in InGame; return={}{}; native_process={}",persona_payment::MARKER,serde_json::to_string(&r.receipt).unwrap(),serde_json::to_string(&r.process).unwrap())}),
+        json!({"action":"30/32 stop_native_assign_calibration","status":"OK","detail":format!("native entry restored; artifact {}",r.artifact_path.display())}),
         json!({"action":"32/32 exit_to_menu","status":"OK","detail":"main menu reached"}),
         json!({"action":"judge","status":"OK","detail":"6/6 checks passed"}),
     ]
@@ -175,6 +176,12 @@ fn receipt_requires_a_complete_same_process_observation() {
     let mut failed = steps;
     failed[4]["status"] = json!("FAIL");
     assert!(persona_payment::evidence_from_steps(&trace(&failed)).is_err());
+    let mut different_ui = completed_steps(&r);
+    different_ui[1]["detail"] = json!(different_ui[1]["detail"]
+        .as_str()
+        .unwrap()
+        .replace("\"created_filetime\":123", "\"created_filetime\":124"));
+    assert!(persona_payment::evidence_from_steps(&trace(&different_ui)).is_err());
 }
 #[test]
 fn sentinel_failure_cannot_hide_between_healthy_ui_and_core_rows() {
@@ -264,8 +271,9 @@ fn cli_generation_keeps_every_original_step_and_check_rejects_mixed_directories(
     )
     .unwrap();
     assert_eq!(*steps, original["steps"].as_array().unwrap().clone());
-    let (rows, r) = fixture(1);
+    let (rows, mut r) = fixture(1);
     let native = temp.path().join("test.jsonl");
+    r.artifact_path = native.clone();
     let step_path = temp.path().join("steps.jsonl");
     std::fs::write(&native, trace(&rows)).unwrap();
     std::fs::write(&step_path, trace(&completed_steps(&r))).unwrap();
@@ -290,4 +298,82 @@ fn cli_generation_keeps_every_original_step_and_check_rejects_mixed_directories(
     let mixed = other.join("steps.jsonl");
     std::fs::copy(&step_path, &mixed).unwrap();
     assert!(!invoke(&mixed).status.success());
+    let other_trace = other.join("test.jsonl");
+    std::fs::copy(&native, &other_trace).unwrap();
+    r.artifact_path = other_trace;
+    std::fs::write(&step_path, trace(&completed_steps(&r))).unwrap();
+    assert!(
+        !invoke(&step_path).status.success(),
+        "different restoration directory accepted"
+    );
+}
+
+#[test]
+fn runner_pins_ui_reads_before_and_after_and_rejects_switched_processes() {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::SystemClock,
+        Result,
+    };
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
+    struct Reader {
+        identities: VecDeque<Option<(u32, u64)>>,
+        calls: Arc<Mutex<usize>>,
+        output: String,
+    }
+    impl Backend for Reader {
+        fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+            Ok(self.identities.pop_front().unwrap())
+        }
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["InGame".into()])
+        }
+        fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            *self.calls.lock().unwrap() += 1;
+            Ok(self.output.clone())
+        }
+    }
+    let (_, receipt) = fixture(1);
+    let output = format!(
+        "{}{}",
+        persona_payment::MARKER,
+        serde_json::to_string(&receipt.receipt).unwrap()
+    );
+    for (after, expected) in [
+        (Some((10, 123)), true),
+        (Some((11, 123)), false),
+        (Some((10, 124)), false),
+        (None, false),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let calls = Arc::new(Mutex::new(0));
+        let backend = Reader {
+            identities: VecDeque::from([Some((10, 123)), after]),
+            calls: calls.clone(),
+            output: output.clone(),
+        };
+        let mut runner = Runner::with_backend(
+            json!({"name":"current UI process","steps":[]}),
+            temp.path().into(),
+            temp.path().into(),
+            temp.path().into(),
+            4318,
+            Box::new(backend),
+            Arc::new(SystemClock),
+        );
+        let result = runner.run_step(
+            &json!({"action":"ui_lua","state_name":"InGame","code":"return 'independent read'"}),
+        );
+        assert_eq!(result.is_ok(), expected);
+        assert_eq!(*calls.lock().unwrap(), 1);
+        if expected {
+            assert!(result.unwrap().contains("; native_process={"));
+        }
+    }
 }

@@ -51,6 +51,11 @@ fn run(args: Args) -> Result<()> {
                     "trace filename differs from observed start and stop",
                 ));
             }
+            if evidence.artifact_path.canonicalize()? != trace {
+                return Err(civ6_autotest_rs::Error::input(
+                    "trace path differs from the observed restoration path",
+                ));
+            }
             let report = persona_payment::verify(&fs::read_to_string(trace)?, &evidence)?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }

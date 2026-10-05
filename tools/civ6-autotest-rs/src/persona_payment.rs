@@ -73,7 +73,7 @@ pub struct Report {
     pub scope: &'static str,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessIdentity {
     pub pid: u32,
@@ -84,12 +84,14 @@ pub struct Evidence {
     pub receipt: Receipt,
     pub process: ProcessIdentity,
     pub artifact: String,
+    pub artifact_path: std::path::PathBuf,
 }
 
 /// Bind the independent UI result to one observed process and a completed run.
 pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
     let mut process = None;
     let mut artifact = None;
+    let mut artifact_path = None;
     let mut opened = false;
     let mut closed = false;
     let mut exited = false;
@@ -139,7 +141,15 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
             let raw = detail
                 .strip_prefix(&format!("ran Lua in InGame; return={MARKER}"))
                 .unwrap();
-            found = Some(serde_json::from_str(raw)?);
+            let (receipt, native_process) = raw
+                .split_once("; native_process=")
+                .ok_or_else(|| Error::input("UI read lacks its current pinned process"))?;
+            let ui_identity: ProcessIdentity = serde_json::from_str(native_process)?;
+            require(
+                process.as_ref() == Some(&ui_identity),
+                "UI receipt is from a different game process",
+            )?;
+            found = Some(serde_json::from_str(receipt)?);
         } else if action.ends_with(" stop_native_assign_calibration") {
             require(
                 opened && !closed && found.is_some(),
@@ -153,6 +163,7 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
                 name.rsplit('/').next() == artifact.as_deref(),
                 "stop receipt belongs to a different artifact",
             )?;
+            artifact_path = Some(std::path::PathBuf::from(name));
             closed = true;
         } else if action.ends_with(" exit_to_menu") {
             require(
@@ -175,6 +186,7 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
         receipt: found.unwrap(),
         process: process.unwrap(),
         artifact: artifact.unwrap(),
+        artifact_path: artifact_path.unwrap(),
     })
 }
 
