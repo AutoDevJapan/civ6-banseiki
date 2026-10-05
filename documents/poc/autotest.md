@@ -225,9 +225,9 @@ Rust から Windows のメモリ API を呼ぶ。列は [Microsoftの構造体�
 
 シナリオ先頭の `session_type: "hotseat"` で、同じPCを交代して使う2人以上の人間プレイヤーを設定できる。省略時は従来の単独プレイで、人間は1人に限る。LAN・インターネットの接続と端末間同期はこの追加の対象外で、ホットシートの成功を通信同期の証明には数えない。
 
-公式の `Base/Assets/UI/FrontEnd/Multiplayer/MultiplayerSelect.lua` と `LobbyTypes.lua` に合わせ、設定は `GameModeTypes.HOTSEAT`、起動と読込は `SERVER_TYPE_HOTSEAT` を使う。読込時はホットシートの設定を復元してから `Network.GetGameConfigurationSaveType()` で保存種別を解決する。保存先は `Saves/Multi`。`--saves` が指定された場合はそのフォルダーを使う。
+公式の `Base/Assets/UI/FrontEnd/Multiplayer/MultiplayerSelect.lua` と `LobbyTypes.lua` に合わせ、設定は `GameModeTypes.HOTSEAT`、起動と読込は `SERVER_TYPE_HOTSEAT` を使う。読込時はホットシートを設定してから `Network.GetGameConfigurationSaveType()` で保存種別を解決する。保存先には `Saves/Multi` を使うが、この場所は実機での確認が必要。`--saves` が指定された場合はそのフォルダーを使う。
 
-`end_turn` の1回は、今の人間から次の人間への交代を意味する。同じラウンドの次の人間に移る場合も待機を終える。交代画面は公式 `Popups/PlayerChange.lua` の `OnKeyUp_Return` で開始し、パスワードがある場合は停止する。交代が期限内に確認できなくても、手番終了は再送しない。人間1人を前提とする `autoplay` と `--owner-start` はホットシートでは使えない。
+`end_turn` の1回は、今の人間から次の人間への交代を意味する。同じラウンドの次の人間に移る場合も待機を終える。起動・読込・交代の後は、交代画面が表示された手番と人を記録して、公式 `Popups/PlayerChange.lua` の `OnKeyUp_Return` で開始する。表示される前の非表示を成功にせず、画面が閉じて一時停止が解除されたことまで確認する。パスワードがある場合は停止する。交代が期限内に確認できなくても、手番終了は再送しない。人間1人を前提とする `autoplay` と `--owner-start` はホットシートでは使えない。
 
 `multiplayer-hotseat-growth.json` は、成長PoCだけを有効にし、2人それぞれの開始ユニット2体の記録を取得する。途中の手番で保存し、読込後に所有者・Unit ID・レベル・経験値・性格・特性・装備・遺物・経験値を加算した手番と、現在の手番・操作する人が一致することを比較する。通常の手番を進め、2度目の保存と読込でも比較する。実機結果は検証後に追記する。
 

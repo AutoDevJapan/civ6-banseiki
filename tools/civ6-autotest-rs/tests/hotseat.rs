@@ -189,7 +189,7 @@ fn start_turn_requires_an_active_human_and_an_unpaused_game() {
     lua.load(
         r#"
       hidden=true; active=true; human=true; paused=true; password=''; presses=0
-      Game={GetLocalPlayer=function() return 1 end}
+      Game={GetLocalPlayer=function() return 1 end, GetCurrentGameTurn=function() return 7 end}
       Players={[1]={IsHuman=function() return human end, IsTurnActive=function() return active end}}
       PlayerConfigurations={[1]={GetHotseatPassword=function() return password end}}
       GameConfiguration={IsPaused=function() return paused end}
@@ -217,4 +217,80 @@ fn start_turn_requires_an_active_human_and_an_unpaused_game() {
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
     assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
+    lua.load("JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG=true; JAC_AUTOTEST_HOTSEAT_CONFIRMATION=nil; hidden=true; paused=false").exec().unwrap();
+    assert!(
+        !lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap(),
+        "unobserved hidden dialog must not pass after load"
+    );
+    lua.load("hidden=false; paused=true").exec().unwrap();
+    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 2);
+    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 2);
+}
+
+#[test]
+fn growth_snapshot_rejects_inert_growth_and_duplicate_credit() {
+    let scenario: Value = serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json"
+    ))
+    .unwrap();
+    let code = scenario["steps"][4]["code"].as_str().unwrap();
+    let lua = Lua::new();
+    lua.load(r#"
+      turn=0; localID=0; records={}; units={}; Players={}
+      Game={GetLocalPlayer=function() return localID end, GetCurrentGameTurn=function() return turn end,
+        GetProperty=function(_, key) assert(key=='JAC_POC_GROWTHUI_INITIALIZED'); return true end}
+      GameConfiguration={IsHotseat=function() return true end}
+      for pid=0,1 do
+        units[pid]={}; records[pid]={}
+        for id=1,2 do
+          local r={Level=1, XP=0, Personality='brave', Trait='valiant', Equipment={'blade'}}
+          records[pid][id]=r
+          units[pid][id]={GetID=function() return id end, GetProperty=function() return r end}
+        end
+        Players[pid]={IsHuman=function() return true end,
+          GetUnits=function() return {Members=function() return ipairs(units[pid]) end} end}
+      end
+      function credit(pid, t, total)
+        for _,r in ipairs(records[pid]) do
+          r.LastXPTurn=t; r.Level=total>=30 and 2 or 1; r.XP=total>=30 and total-30 or total
+        end
+      end
+    "#).exec().unwrap();
+    lua.load(code).eval::<String>().unwrap();
+    lua.load("localID=1").exec().unwrap();
+    assert!(
+        lua.load(code).eval::<String>().is_err(),
+        "active human without a credited turn must fail"
+    );
+    lua.load("credit(1,0,20)").exec().unwrap();
+    let once = lua.load(code).eval::<String>().unwrap();
+    assert_eq!(
+        lua.load(code).eval::<String>().unwrap(),
+        once,
+        "same turn does not add experience"
+    );
+    lua.load("credit(1,0,40)").exec().unwrap();
+    assert!(
+        lua.load(code).eval::<String>().is_err(),
+        "same stamp with extra XP must fail"
+    );
+    lua.load("credit(1,0,20); turn=1; localID=0; credit(0,1,20)")
+        .exec()
+        .unwrap();
+    lua.load(code).eval::<String>().unwrap();
+    lua.load("localID=1; credit(1,1,40)").exec().unwrap();
+    let next = lua.load(code).eval::<String>().unwrap();
+    lua.load("JAC_HOTSEAT_GROWTH_PREVIOUS=nil").exec().unwrap();
+    assert_eq!(
+        lua.load(code).eval::<String>().unwrap(),
+        next,
+        "new UI after load returns the identical gameplay record"
+    );
+    lua.load("turn=2; credit(1,2,80)").exec().unwrap();
+    assert!(
+        lua.load(code).eval::<String>().is_err(),
+        "two credits in one new turn must fail"
+    );
 }

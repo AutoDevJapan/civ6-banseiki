@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  OnKeyUp_Return()\nend\nreturn ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
+pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
     fn startup_cancel_check(&mut self) -> Result<()> {
@@ -1361,7 +1361,7 @@ impl Runner {
     pub fn end_turn(&mut self, timeout: f64, deadline: Option<f64>) -> Result<String> {
         let deadline = deadline.unwrap_or_else(|| self.clock.now() + timeout);
         let session = scenario::SessionType::from_scenario(&self.scenario)?;
-        self.accept_hotseat_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, false)?;
         self.lua("InGame", CLOSE_NOTEBOOKS, self.budget(deadline, 5.0)?)?;
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
@@ -1398,7 +1398,7 @@ impl Runner {
             self.remaining(deadline)?,
             true,
         )?;
-        self.accept_hotseat_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, true)?;
         self.dismiss_advisor(deadline)?;
         self.remaining(deadline)?;
         if let Some(human) = human {
@@ -1409,13 +1409,26 @@ impl Runner {
         }
     }
     /// Use the official start-turn button handler, which also respects passwords.
-    fn accept_hotseat_turn(&mut self, deadline: f64) -> Result<()> {
+    fn accept_hotseat_turn(&mut self, deadline: f64, require_dialog: bool) -> Result<()> {
         if scenario::SessionType::from_scenario(&self.scenario)? != scenario::SessionType::Hotseat {
             return Ok(());
         }
         self.lua(
             "InGame",
             scenario::SessionType::Hotseat.guard_code(),
+            self.budget(deadline, 5.0)?,
+        )?;
+        self.lua(
+            "PlayerChange",
+            &format!(
+                "JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG = {}\n{}return true",
+                require_dialog,
+                if require_dialog {
+                    "JAC_AUTOTEST_HOTSEAT_CONFIRMATION = nil\n"
+                } else {
+                    ""
+                }
+            ),
             self.budget(deadline, 5.0)?,
         )?;
         self.wait(
@@ -1532,7 +1545,7 @@ impl Runner {
                 };
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
-                self.accept_hotseat_turn(deadline)?;
+                self.accept_hotseat_turn(deadline, true)?;
                 Ok(match session {
                     scenario::SessionType::SinglePlayer => "single-player game reached InGame",
                     scenario::SessionType::Hotseat => {
@@ -1689,7 +1702,7 @@ impl Runner {
                 target.display()
             )));
         }
-        self.accept_hotseat_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, false)?;
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
         let code=format!("JAC_AUTOTEST_SAVE_DONE = false\nif JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\nJAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\nEvents.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\nlocal result = Network.SaveGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false}})\nif result == false then error('Network.SaveGame returned false') end\nreturn true",scenario::lua_string(&name));
@@ -1758,7 +1771,7 @@ impl Runner {
             Err(e) => return Err(e),
         };
         self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
-        self.accept_hotseat_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, true)?;
         if step["metrics"] == true {
             let seconds = self.clock.now() - started;
             let turn = parse_integer(&self.lua(
