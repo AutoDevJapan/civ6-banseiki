@@ -3116,7 +3116,7 @@ local function Submit(command)
     elseif action == "SAVE_TRAVEL" then
         local receipt=assert(travelReference,"accepted travel receipt missing");
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart="JAC_BoundarySaveSpyTravel",OldID=receipt.oldID,Name=R.EncodeText(receipt.name),
+            {OnStart="JAC_BoundarySaveSpyTravel",OldID=receipt.oldID,Name=R.EncodeText(R.StoredText(receipt,"name")),
                 Level=receipt.level,TargetOwner=receipt.targetOwner,TargetID=receipt.targetID});
     elseif action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "PROGRESS_SPY" or action == "BIND_SPY" then
         if action == "LOSE_CITY" then B.Check("SETTLED"); end
@@ -3210,7 +3210,7 @@ local function Submit(command)
         assert(#roster.activeOffMap==0 and #roster.map==1,
             "arrived native spy roster is ambiguous");
         local arrived=roster.map[1];
-        assert(arrived.name==prior.name and arrived.level==prior.level and
+        assert(arrived.name==R.StoredText(prior,"name") and arrived.level==prior.level and
             InTargetCity(arrived.x,arrived.y,prior.targetOwner,prior.targetID),
             "arrived native spy does not match the accepted travel");
         return {action=action,stage="ADOPT_PENDING",before={owner=owner,id=prior.oldID},

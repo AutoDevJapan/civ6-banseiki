@@ -1514,7 +1514,14 @@ fn capacity_spawn_binds_only_the_new_native_spy_and_keeps_failed_history() {
 
 #[test]
 fn retry_names_survive_execute_script_empty_and_numeric_string_coercion() {
-    for name in ["", "0", "123", "JAC_TEXT_V1:", "Spy 15"] {
+    for name in [
+        "",
+        "0",
+        "123",
+        "JAC_TEXT_V1:",
+        "Spy 15",
+        "LOC_UNIT_SPY_NAME",
+    ] {
         let h = Enemy::new();
         h.captured_with_capacity_spy();
         h.run(&format!(
@@ -1542,8 +1549,23 @@ fn retry_names_survive_execute_script_empty_and_numeric_string_coercion() {
              ExposedMembers.JAC_PersonaBoundary.Queue('SAVE_TRAVEL'); FRAME(); \
              ENEMY_CASES.fireCore('JAC_BoundarySaveSpyTravel',REQUESTS[#REQUESTS].params); \
              assert(JAC_PersonaBoundaryRules.StoredText(Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'),'name')=={})",
-            serde_json::to_string(name).unwrap()
+             serde_json::to_string(name).unwrap()
         ));
+        // Reload the real view so adoption cannot read the transient, plain-text
+        // travelReference instead of the encoded receipt restored from a save.
+        exec(&h.0, &read_repo(VIEW));
+        h.run("ARRIVE_OFFMAP(786441)");
+        if name.is_empty() {
+            // The native arrival double returns a default unit name for an empty
+            // off-map name. A different saved unit name still needs rejection.
+            h.reject(
+                "ExposedMembers.JAC_PersonaBoundary.TryAdoptEnemySpy()",
+                "native spy did not arrive in the enemy Governor city",
+            );
+            h.run("assert(Game:GetProperty('JAC_BOUNDARY_SPY').id==786440 and Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive.eventID==0 and #CAPTURED[1]==1)");
+            continue;
+        }
+        h.run("assert(ExposedMembers.JAC_PersonaBoundary.TryAdoptEnemySpy()=='ADOPT_QUEUED'); FRAME(); FRAME(); local adopt=REQUESTS[#REQUESTS]; assert(adopt.params.OnStart=='JAC_BoundaryAdoptSpyIdentity'); ENEMY_CASES.fireCore('JAC_BoundaryAdoptSpyIdentity',adopt.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_ADOPT_SPY'); local retry=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY'); assert(retry.spyID==786441 and retry.archive.spyID==655368 and retry.archive.eventID==0 and #CAPTURED[1]==1 and HISTORY[0][0].CompletionTurn==23); assert(Game:GetProperty('JAC_BOUNDARY_SPY').id==786441)");
     }
 }
 
