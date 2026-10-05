@@ -68,6 +68,14 @@ fn unchanged_turns_do_not_republish_numeric_keys() {
     run_case("unchanged_turns_do_not_republish_numeric_keys");
 }
 #[test]
+fn late_native_attach_replays_joined_owner_and_closes_others() {
+    run_case("late_native_attach_replays_joined_owner_and_closes_others");
+}
+#[test]
+fn failed_late_rebind_never_republishes() {
+    run_case("failed_late_rebind_never_republishes");
+}
+#[test]
 fn stale_true_during_closure_aborts_owner_publication() {
     run_case("stale_true_during_closure_aborts_owner_publication");
 }

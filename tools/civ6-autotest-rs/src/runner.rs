@@ -238,6 +238,16 @@ mod native_trace_step_tests {
 
     struct BridgeBackend(Arc<Mutex<Vec<String>>>);
     impl Backend for BridgeBackend {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["Gameplay".into()])
+        }
+        fn run_lua(&mut self, state: &str, code: &str, _: f64) -> Result<String> {
+            self.0.lock().unwrap().push(format!("lua:{state}:{code}"));
+            Ok("admission replayed".into())
+        }
         fn start_native_bridge(
             &mut self,
             _: &Path,
@@ -284,6 +294,77 @@ mod native_trace_step_tests {
             *calls.lock().unwrap(),
             ["start:can-ever:25:can-ever", "stop"]
         );
+    }
+
+    #[test]
+    fn production_bridge_rebinds_gameplay_after_hook_installation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-production-admission-rebind");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        runner
+            .run_step(&json!({"action":"start_native_production_admission",
+                "name":"production","max_seconds":120}))
+            .unwrap();
+        runner
+            .run_step(&json!({"action":"stop_native_production_admission"}))
+            .unwrap();
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 3);
+        assert_eq!(calls[0], "start:production:120:production-admission");
+        assert!(calls[1].starts_with("lua:Gameplay:"));
+        assert!(calls[1].contains("RebindProductionAdmission"));
+        assert_eq!(calls[2], "stop");
+    }
+
+    struct RebindFailureBackend(Arc<Mutex<Vec<String>>>);
+    impl Backend for RebindFailureBackend {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["Gameplay".into()])
+        }
+        fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            self.0.lock().unwrap().push("lua-failed".into());
+            Err(Error::tuner("Gameplay rejected admission replay"))
+        }
+        fn start_native_bridge(&mut self, _: &Path, _: &str, _: u64, _: &str) -> Result<()> {
+            self.0.lock().unwrap().push("start".into());
+            Ok(())
+        }
+        fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+            self.0.lock().unwrap().push("stop".into());
+            Ok(Some(PathBuf::from("bridge.jsonl")))
+        }
+    }
+
+    #[test]
+    fn failed_production_rebind_stops_the_active_native_bridge() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-production-admission-rebind-failure");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(RebindFailureBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        let error = runner
+            .run_step(&json!({"action":"start_native_production_admission",
+                "name":"production","max_seconds":120}))
+            .unwrap_err();
+        assert!(error.to_string().contains("admission replay failed"));
+        assert_eq!(*calls.lock().unwrap(), ["start", "lua-failed", "stop"]);
     }
 
     #[test]
@@ -2053,12 +2134,33 @@ impl Runner {
                     }
                     _ => return Err(Error::scenario("invalid native bridge scope")),
                 };
+                let max_seconds = step["max_seconds"].as_u64().unwrap();
                 self.backend.start_native_bridge(
                     &self.output,
                     text(step, "name"),
-                    step["max_seconds"].as_u64().unwrap(),
+                    max_seconds,
                     mode,
                 )?;
+                if mode == "production-admission" {
+                    // Gameplay may have published its unchanged values before
+                    // this late native attach. Replay from Game/Core only
+                    // after both hooks are live, before the first AI turn.
+                    let replay = self
+                        .budget(deadline, (max_seconds as f64 / 2.0).min(45.0))
+                        .and_then(|remaining| {
+                        self.lua(
+                            "Gameplay",
+                            "local p=assert(ExposedMembers.JAC_LeaderPersona); assert(type(p.RebindProductionAdmission)=='function'); assert(p.RebindProductionAdmission(), 'admission replay failed'); return 'admission replayed'",
+                            remaining,
+                        )
+                    });
+                    if let Err(error) = replay {
+                        let cleanup = self.backend.stop_native_bridge();
+                        return Err(Error::scenario(format!(
+                            "native admission replay failed: {error}; cleanup={cleanup:?}"
+                        )));
+                    }
+                }
                 Ok(if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {

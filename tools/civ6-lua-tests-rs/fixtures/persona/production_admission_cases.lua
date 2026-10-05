@@ -194,6 +194,73 @@ function PRODUCTION_ADMISSION_CASES.unchanged_turns_do_not_republish_numeric_key
     expect(0, reads, '300 unchanged turns read no numeric admission keys')
 end
 
+function PRODUCTION_ADMISSION_CASES.late_native_attach_replays_joined_owner_and_closes_others()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    expect(true, gate(1,4), 'joined owner before late attach')
+    local reads, writes, anchors = 0, 0, 0
+    for owner=0,2 do
+        local p = Players[owner]
+        local get, set, governors = p.GetProperty, p.SetProperty, p.GetGovernors
+        p.GetProperty = function(self, key)
+            if type(key) == 'number' and key >= 900000 and key < 904000 then reads = reads + 1 end
+            return get(self, key)
+        end
+        p.SetProperty = function(self, key, value)
+            if type(key) == 'number' and key >= 900000 and key < 904000 then writes = writes + 1 end
+            return set(self, key, value)
+        end
+        p.GetGovernors = function()
+            local g = governors()
+            local original = g.CanEverAppointGovernor
+            g.CanEverAppointGovernor = function(self, hash)
+                anchors = anchors + 1
+                return original(self, hash)
+            end
+            return g
+        end
+    end
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(0, reads, 'unchanged state has no getter traffic before attach')
+    expect(0, writes, 'unchanged state has no publication before attach')
+    anchors = 0
+    expect(true, ExposedMembers.JAC_LeaderPersona.RebindProductionAdmission(),
+        'late bridge requires a complete replay')
+    expect(3*(1+22*3)+1, writes, 'reset and all 22 cells replay for every owner')
+    expect(writes+3, reads, 'every write is acknowledged after all owners close')
+    expect(3, anchors, 'fresh native owner binding for every owner')
+    expect(true, gate(1,4), 'joined owner reopens from Game/Core proof')
+    expect(false, gate(0,4), 'other owner stays closed')
+    expect(false, gate(1,22), 'unjoined person stays closed')
+end
+
+function PRODUCTION_ADMISSION_CASES.failed_late_rebind_never_republishes()
+    FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
+    Players[1].points = 1
+    FIRE('JAC_LeaderPersonaEvolve', 1, {Leader=ASHINA})
+    local reads, writes = {}, 0
+    for owner=0,2 do
+        local p, id = Players[owner], owner
+        local get, set = p.GetProperty, p.SetProperty
+        p.GetProperty = function(self, key)
+            if key == 902000 then
+                reads[id] = (reads[id] or 0) + 1
+                if id == 0 then return 'invalid-reset' end
+            end
+            return get(self, key)
+        end
+        p.SetProperty = function(self, key, value)
+            if type(key) == 'number' and key >= 900000 and key < 904000 then writes = writes + 1 end
+            return set(self, key, value)
+        end
+    end
+    expect(false, ExposedMembers.JAC_LeaderPersona.RebindProductionAdmission(),
+        'invalid reset acknowledgment aborts replay')
+    expect(0, writes, 'no permission can be republished after failed close')
+    for owner=0,2 do assert((reads[owner] or 0)>0, 'every owner reset was read') end
+end
+
 function PRODUCTION_ADMISSION_CASES.stale_true_during_closure_aborts_owner_publication()
     FIRE('JAC_LeaderPersonaJoin', 1, {Source=2})
     Players[1].points = 1

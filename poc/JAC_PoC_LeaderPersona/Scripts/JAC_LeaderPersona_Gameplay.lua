@@ -276,13 +276,13 @@ end
 local function SyncProductionAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     local ids = PlayerManager.GetAliveMajorIDs();
-    if type(ids) ~= "table" then CloseAllAdmissionOwners(); return; end
+    if type(ids) ~= "table" then CloseAllAdmissionOwners(); return false; end
     local schema = Game:GetProperty(ADMISSION_SCHEMA);
     if (schema ~= nil and schema ~= 1 and schema ~= 2) or not rows then
         -- Even an invalid table/schema after reload must invalidate the old
         -- native generation. A reset read closes it without owning the value.
         CloseAllAdmissionOwners();
-        return;
+        return false;
     end
     if schema == 1 then
         for owner=0,63 do
@@ -290,7 +290,7 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
             if p then
                 for _,entry in ipairs(rows) do
                     if p:GetProperty(ADMISSION_CLOSE + entry.index) ~= nil then
-                        CloseAllAdmissionOwners(); return;
+                        CloseAllAdmissionOwners(); return false;
                     end
                 end
             end
@@ -310,10 +310,10 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         -- Check every reserved namespace before taking it, including close.
         for _,owner in ipairs(ids) do
             local p = Player(owner, true);
-            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET) ~= nil then CloseAllAdmissionOwners(); return; end
+            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET) ~= nil then CloseAllAdmissionOwners(); return false; end
             for _,entry in ipairs(rows) do
                 for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
-                    if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return; end
+                    if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return false; end
                 end
             end
         end
@@ -341,7 +341,7 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
             else admissionSnapshots[owner] = {player=p, values={}}; end
         end
     end
-    if not initialized then CloseAllAdmissionOwners(); return; end
+    if not initialized then CloseAllAdmissionOwners(); return false; end
     for _,owner in ipairs(ids) do
         local p = Player(owner, true);
         local snapshot = admissionSnapshots[owner];
@@ -363,7 +363,7 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
                 p:SetProperty(ADMISSION_ALLOW + index, false);
                 if p:GetProperty(ADMISSION_ALLOW + index) ~= false then valid = false; break; end
             end
-            if not valid then CloseAdmissionOwner(p); return; end
+            if not valid then CloseAdmissionOwner(p); return false; end
             for _,change in ipairs(changes) do
                 local index = change.entry.index;
                 p:SetProperty(ADMISSION_MANIFEST + index, true);
@@ -374,9 +374,18 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
                 end
                 snapshot.values[index] = change.desired;
             end
-            if not valid then CloseAdmissionOwner(p); return; end
+            if not valid then CloseAdmissionOwner(p); return false; end
         end
     end
+    return true;
+end
+
+-- A native bridge attached after Gameplay initialization has no observations
+-- from the initial publication. Close its current generation and replay the
+-- derived values from Game/Core before the first native AI decision.
+local function RebindProductionAdmission()
+    if not CloseAllAdmissionOwners() then return false; end
+    return SyncProductionAdmission(false);
 end
 local function Join(owner, source, personality, trait)
     local p, other = Player(owner, true), Player(source, false);
@@ -850,6 +859,7 @@ ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
     Reconcile = Reconcile, EvolutionCost = EvolutionCost,
     CoreAdmissionCapabilities = CoreAdmissionCapabilities,
+    RebindProductionAdmission = RebindProductionAdmission,
     OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
 };
 print("JAC_LeaderPersona_Gameplay: ready");
