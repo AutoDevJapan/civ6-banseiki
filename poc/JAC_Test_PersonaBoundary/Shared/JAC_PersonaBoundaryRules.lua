@@ -1,6 +1,12 @@
 -- Test-only read/validation rules. No native or persona state is written here.
 JAC_PersonaBoundaryRules = {};
 local R = JAC_PersonaBoundaryRules;
+function R.IsCurrentSpyGeneration(retry)
+    return retry.current==2 or (R.Third and R.Third.IsThird(retry)) or false;
+end
+function R.IsArchivedSpyEvent(retry,id)
+    return id==retry.archive.eventID or (R.Third and R.Third.ArchivedEvent(retry,id)) or false;
+end
 -- EXECUTE_SCRIPT converts an empty string to numeric zero in live 146.
 -- Prefix text so empty and numeric-looking names retain their exact identity.
 local TEXT_PREFIX = "JAC_TEXT_V1:";
@@ -145,3 +151,4 @@ function R.Check(s, phase, merit)
         "target and required control city observations are missing");
     return true;
 end
+include("JAC_PersonaThirdSpy");

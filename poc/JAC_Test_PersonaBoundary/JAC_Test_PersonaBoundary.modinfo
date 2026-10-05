@@ -24,6 +24,7 @@
     <UpdateDatabase id="BoundaryCapacity20Settlers" criteria="Boundary20Settlers"><Properties><LoadOrder>901</LoadOrder></Properties><File>Data/JAC_PersonaBoundary_Capacity.sql</File></UpdateDatabase>
     <ImportFiles id="BoundaryImports">
       <File>Shared/JAC_PersonaBoundaryRules.lua</File>
+      <File>Shared/JAC_PersonaThirdSpy.lua</File>
       <File>UI/JAC_PersonaBoundary_View.lua</File>
       <File>UI/JAC_PersonaBoundary_View.xml</File>
     </ImportFiles>
@@ -40,6 +41,7 @@
     <File>Data/JAC_PersonaBoundary_Capacity.sql</File>
     <File>Data/JAC_PersonaBoundary_ThirdSpy.sql</File>
     <File>Shared/JAC_PersonaBoundaryRules.lua</File>
+    <File>Shared/JAC_PersonaThirdSpy.lua</File>
     <File>Scripts/JAC_PersonaBoundary_Fixture.lua</File>
     <File>UI/JAC_PersonaBoundary_View.lua</File>
     <File>UI/JAC_PersonaBoundary_View.xml</File>

@@ -99,6 +99,7 @@ end
 local function CheckArchivedMission(c)
     local retry=Game:GetProperty(RETRY);
     if not retry then return nil; end
+    if R.Third and R.Third.IsThird(retry) then return R.Third.CheckHistory(c,retry); end
     local a=assert(retry.archive,"retry has no archived native failure");
     assert(retry.current==2 and a.eventID>=0 and a.spyID>=0 and
         a.targetOwner==c.owner and a.targetID==c.cityID and
@@ -1811,7 +1812,9 @@ function B.RetryLivingSpy()
     R.Check(state,"SETTLED");
     local roster=ReadSpyRoster(c.attacker);
     Log("ENEMY_SPY_RETRY_LIVING",{retry=retry,roster=roster});
-    if retry.mode=="CAPACITY_MAP" then
+    if R.Third and R.Third.IsThird(retry) then
+        R.Third.CheckRoster(roster);
+    elseif retry.mode=="CAPACITY_MAP" then
         local captive=roster.captured[1];
         local old=retry.archive;
         assert(#roster.captured==1 and captive and
@@ -2230,7 +2233,8 @@ function B.SpyPrerequisitesReady()
     Log("SPY_PRODUCTION_PREREQUISITES", {civic=unit.PrereqCivic, capacity=capacity, existing=existing});
     local retry=Game:GetProperty(RETRY);
     if retry then
-        assert(retry.current==2 and retry.mode=="PRODUCE" and retry.archive and
+        assert(R.IsCurrentSpyGeneration(retry) and
+            (retry.mode=="PRODUCE" or (R.Third and R.Third.IsThird(retry))) and retry.archive and
             #roster.map==0 and #roster.activeOffMap==0 and existing==#roster.captured,
             "retry production requires a proven free native spy slot");
     else
@@ -2367,6 +2371,7 @@ function B.Queue(action, params)
         "a boundary frame request is already pending");
     assert(not Game:GetProperty(RETRY_PENDING),"capacity retry attestation pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
+    if R.Third then R.Third.BeforeQueue(action); end
     assert(action == "PREPARE" or action == "PREPARE_ENEMY" or action == "EVOLVE_ENEMY" or
         action == "CONFIRM_ENEMY" or action == "BEGIN_SPY_RETRY" or
         action == "MARK_CAPTIVE_EXCHANGE" or
@@ -2409,7 +2414,7 @@ function B.Queue(action, params)
     local retry=Game:GetProperty(RETRY);
     if retry and action=="SPY_MISSION" then
         local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"retry spy missing");
-        assert(retry.current==2 and retry.spyID==spy.id and not retry.missionRequested and
+        assert(R.IsCurrentSpyGeneration(retry) and retry.spyID==spy.id and not retry.missionRequested and
             not Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
             "retry native mission has already been requested or completed");
     end
@@ -3368,6 +3373,7 @@ local function Submit(command)
             newID=arrived:GetID(),targetOwner=city:GetOwner(),targetID=city:GetID()};
     else
         local spy=LocalSpy(); local city=assert(CityManager.GetCity(params.owner,params.city), "spy target missing");
+        if R.Third then R.Third.BeforeNativeDispatch(action,spy); end
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
         local plot=Map.GetPlot(city:GetX(),city:GetY());
         if action == "SPY_TRAVEL" then
@@ -3474,6 +3480,7 @@ ContextPtr:SetHide(false);
 ContextPtr:SetUpdate(function()
     frameSerial=frameSerial+1;
     if UI.IsGameCoreBusy() then return; end
+    if R.Third and R.Third.UpdateUI and R.Third.UpdateUI() then return; end
     if missionEventPending then
         local receipt=missionEventPending;
         if not receipt.sent then
@@ -4104,7 +4111,7 @@ Events.SpyMissionCompleted.Add(function(attacker, missionID)
     if c and attacker==c.attacker and c.cityID then
         local retry=Game:GetProperty(RETRY);
         if retry then
-            if missionID==retry.archive.eventID then
+            if R.IsArchivedSpyEvent(retry,missionID) then
                 Log("ARCHIVED_MISSION_EVENT_IGNORED",{attacker=attacker,id=missionID});
                 return;
             end
@@ -4128,3 +4135,9 @@ Events.SpyMissionCompleted.Add(function(attacker, missionID)
     end
     Observe("MISSION_SNAPSHOT");
 end);
+if R.Third then
+    R.Third.InstallUI({boundary=B,config=EnemyConfig,readEnemy=B.ReadEnemy,roster=ReadSpyRoster,
+        frame=function() return frameSerial; end,epoch=function() return publishEpoch; end,
+        busy=function() return pending or verification or buildPending or enemyPending or enemyVerification; end,
+        buildReady=function() return B.lastAction=="READY_BUILD_SPY"; end});
+end

@@ -1,0 +1,19 @@
+{
+  "name": "Reserve generation three and produce one native spy after the test Civic grants capacity three",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"load","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"timeout":300},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local p=Players[0]; local b=ExposedMembers.JAC_PersonaBoundary; return p and p:IsTurnActive() and b and type(b.ThirdSpyReserve)=='function'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); return 'third generation snapshot and BUILD reservation queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.thirdLast; if a=='ERROR_BEGIN' then error(a) end; return a=='ACCEPTED_BEGIN'"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"return ExposedMembers.JAC_PersonaBoundary.ThirdSpySend('BUILD_SPY')"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_BUILD_SPY' or a=='REJECTED_BUILD_SPY' then error(a) end; return a=='READY_BUILD_SPY'"}},
+    {"action":"ui_lua","state_name":"InGame","code":"ExposedMembers.JAC_PersonaBoundary.Queue('PROGRESS_SPY'); return 'one synchronized native AddProgress queued'"},
+    {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"local b=ExposedMembers.JAC_PersonaBoundary; if b.lastAction=='ERROR_PROGRESS_SPY' then error(b.lastAction) end; local p=Game:GetProperty('JAC_BOUNDARY_SPY_PROGRESS'); return p and p.generation==3"}},
+    {"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true},
+    {"action":"ui_lua","state_name":"InGame","code":"local p=assert(Game:GetProperty('JAC_BOUNDARY_SPY_PRODUCTION')); assert(p.generation==3 and p.progressed and p.beforeCount==0); assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE')); return 'THIRD_PRODUCTION_QUEUED'"},
+    {"action":"exit_to_menu"}
+  ]
+}

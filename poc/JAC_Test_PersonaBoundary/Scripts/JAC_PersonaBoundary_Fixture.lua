@@ -243,6 +243,7 @@ end);
 
 GameEvents.JAC_BoundaryProgressSpy.Add(function(owner)
     Config(owner);
+    if R.Third and R.Third.IsThird(Game:GetProperty(RETRY)) then R.Third.Progress(owner); return; end
     local production=assert(Game:GetProperty(PRODUCTION),"spy production preparation missing");
     assert(production.owner == owner and not production.progressed,
         "spy production progress was not prepared or was already added");
@@ -308,8 +309,9 @@ GameEvents.JAC_BoundarySpyBarrier.Add(function(owner, params)
     assert(spy.owner == owner and spy.id == params.SpyID, "spy barrier identity mismatch");
     local retry=Game:GetProperty(RETRY);
     if retry then
-        assert(retry.current==2 and retry.spyID==spy.id,
+        assert(R.IsCurrentSpyGeneration(retry) and retry.spyID==spy.id,
             "retry barrier belongs to the archived spy");
+        if R.Third then R.Third.OperationBarrier(retry,params.Action,spy.id); end
         if params.Action=="SPY_MISSION" then
             assert(not retry.missionRequested,
                 "a second official mission request is forbidden in one retry");
@@ -336,7 +338,8 @@ GameEvents.JAC_BoundaryAdoptSpyIdentity.Add(function(owner, params)
         "arrived native spy destination mismatch");
     local retry=Game:GetProperty(RETRY);
     if retry then
-        assert(retry.current==2 and retry.spyID==params.OldID,
+        assert(R.IsCurrentSpyGeneration(retry) and retry.spyID==params.OldID and
+            (not R.Third or not R.Third.IsThird(retry) or R.Third.AllowedID(params.NewID)),
             "new native spy identity does not follow the current retry");
         retry.spyID=spy:GetID();
         if retry.mode=="RETURN" then retry.mode="MAP"; end
@@ -582,8 +585,9 @@ GameEvents.JAC_BoundaryRecordEnemyMission.Add(function(controller,params)
     local c=EnemyConfig(controller);
     local retry=Game:GetProperty(RETRY);
     if retry then
-        assert(retry.current==2 and retry.spyID and params.MissionID~=retry.archive.eventID,
+        assert(R.IsCurrentSpyGeneration(retry) and retry.spyID and not R.IsArchivedSpyEvent(retry,params.MissionID),
             "archived failed native mission cannot be recorded for the retry");
+        if R.Third then R.Third.RecordMission(controller,params); end
     end
     assert(c.cityID and type(params)=="table" and params.Attacker==c.attacker and
         type(params.MissionID)=="number" and params.MissionID>=0 and
@@ -1920,4 +1924,5 @@ GameEvents.JAC_BoundaryThirdSpyCivicIntent.Add(function(controller,params)
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;
+if R.Third then R.Third.InstallCore({config=EnemyConfig,native=NativeEnemy}); end
 print("JAC_PersonaBoundary_Fixture: ready (test only; no automatic mutations)");
