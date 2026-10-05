@@ -15,3 +15,6 @@ rusqlite = { version = "0.37", features = ["bundled", "functions", "backup"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"
 walkdir = "2"
+
+[dev-dependencies]
+civ6-autotest-rs = { path = "../civ6-autotest-rs" }

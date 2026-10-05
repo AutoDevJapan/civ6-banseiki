@@ -244,7 +244,7 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     // A bounded observation always reaches the post-request snapshots, even
     // when the engine rejects the request or human control never returns.
     // This scene diagnoses a stall; its completion is never acceptance.
-    let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",&turn_event_observer()),lua("InGame",&turn_event_observer()),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"pause","seconds":120,"timeout":135}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
+    let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","diagnostic_only":true,"steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",&turn_event_observer()),lua("InGame",&turn_event_observer()),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"observe_for","seconds":120,"timeout":135}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
     Ok(vec![
         ("legacy-capabilities.json", probe),
         ("legacy-migration.json", migration),
@@ -278,6 +278,14 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn every_emitted_scene_passes_the_real_driver_schema() -> Result<()> {
+        for (name, scene) in scenarios(&Repository::checked_in())? {
+            civ6_autotest_rs::scenario::validate_scenario(&scene).with_context(|| name)?;
+        }
+        Ok(())
+    }
+
     #[test]
     fn stalled_diagnostic_still_captures_both_contexts_and_event_history() -> Result<()> {
         let scene = scenarios(&Repository::checked_in())?
@@ -314,7 +322,7 @@ print=function(s)logs[#logs+1]=s end
                         .eval::<bool>()?);
                     assert_eq!(vm.globals().get::<i32>("requests")?, 0);
                 }
-                "pause" => {
+                "pause" | "observe_for" => {
                     let seconds = step["seconds"].as_i64().unwrap();
                     assert!(step["timeout"].as_i64().unwrap_or(120) > seconds);
                     paused += seconds;

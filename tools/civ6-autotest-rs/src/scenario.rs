@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 16] = [
+pub const ACTIONS: [&str; 17] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -20,6 +20,7 @@ pub const ACTIONS: [&str; 16] = [
     "load",
     "wait_for",
     "pause",
+    "observe_for",
     "manual",
 ];
 pub fn lua_string(value: &str) -> String {
@@ -73,6 +74,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     {
         return Err(Error::scenario(
             "judge_profile must be bundle0, generic, growth or japan_map",
+        ));
+    }
+    if data.get("diagnostic_only").is_some_and(|v| !v.is_boolean())
+        || (data["diagnostic_only"] == true && profile != "generic")
+    {
+        return Err(Error::scenario(
+            "diagnostic_only must be boolean and use the generic profile",
         ));
     }
     if profile == "growth" && !data["expected_units"].as_i64().is_some_and(|n| n > 0) {
@@ -322,6 +330,21 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0)
                 {
                     return Err(fail("pause seconds must be in (0, 10]".into()));
+                }
+            }
+            "observe_for" => {
+                if data["diagnostic_only"] != true {
+                    return Err(fail("observe_for requires diagnostic_only: true".into()));
+                }
+                let seconds = step["seconds"]
+                    .as_f64()
+                    .filter(|n| n.is_finite() && *n > 0.0 && *n <= 120.0)
+                    .ok_or_else(|| fail("observation seconds must be in (0, 120]".into()))?;
+                if !step["timeout"]
+                    .as_f64()
+                    .is_some_and(|n| n.is_finite() && n > seconds)
+                {
+                    return Err(fail("observation timeout must exceed its duration".into()));
                 }
             }
             "manual" => {

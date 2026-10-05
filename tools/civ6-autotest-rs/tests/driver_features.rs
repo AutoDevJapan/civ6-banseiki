@@ -229,6 +229,51 @@ fn end_turn_rejects_overshoot_during_human_control_wait() {
 }
 
 #[test]
+fn diagnostic_observation_is_bounded_and_never_acceptance() {
+    let step = json!({"action":"observe_for","seconds":120,"timeout":135});
+    let data = json!({"name":"diagnosis","diagnostic_only":true,"steps":[step.clone()]});
+    scenario::validate_scenario(&data).unwrap();
+    let mut h = Harness::new(data.clone(), FakeBackend::new());
+    let detail = h.runner.run_step(&step).unwrap();
+    assert!(detail.contains("no acceptance"));
+    assert_eq!(h.clock.at(), 120.0);
+    assert!(h.calls().is_empty());
+    h.runner.result_passed = true;
+    h.runner.write_result().unwrap();
+    let result: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(h.runner.output.join("result.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result["observation_completed"], true);
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["acceptance_passed"], false);
+    for value in [
+        json!(false),
+        json!(1),
+        json!("true"),
+        serde_json::Value::Null,
+    ] {
+        let mut rejected = data.clone();
+        rejected["diagnostic_only"] = value;
+        assert!(scenario::validate_scenario(&rejected).is_err());
+    }
+    for seconds in [json!(0), json!(121), json!(true)] {
+        let mut rejected = data.clone();
+        rejected["steps"][0]["seconds"] = seconds;
+        assert!(scenario::validate_scenario(&rejected).is_err());
+    }
+    let mut rejected = data.clone();
+    rejected["steps"][0]["timeout"] = 120.into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+    rejected = data.clone();
+    rejected["judge_profile"] = "growth".into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+    rejected = data;
+    rejected["steps"][0]["action"] = "pause".into();
+    assert!(scenario::validate_scenario(&rejected).is_err());
+}
+
+#[test]
 fn test_end_turn_rejects_invalid_counts() {
     for value in [json!(0), json!(-1), json!(true), json!(1.5), json!("2")] {
         for key in ["turns", "test_turns"] {

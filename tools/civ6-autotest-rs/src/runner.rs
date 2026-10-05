@@ -1724,8 +1724,20 @@ impl Runner {
                 self.wait(&step["condition"], self.remaining(deadline)?, false)?;
                 Ok(format!("condition met: {}", step["condition"]))
             }
-            "pause" => {
-                let seconds = step["seconds"].as_f64().unwrap();
+            "pause" | "observe_for" => {
+                if action == "observe_for" && self.scenario["diagnostic_only"] != true {
+                    return Err(Error::scenario(
+                        "observe_for requires diagnostic_only: true",
+                    ));
+                }
+                let seconds = step["seconds"].as_f64().ok_or_else(|| {
+                    Error::scenario("observation or pause requires numeric seconds")
+                })?;
+                if action == "observe_for"
+                    && (!seconds.is_finite() || seconds <= 0.0 || seconds > 120.0)
+                {
+                    return Err(Error::scenario("observation seconds must be in (0, 120]"));
+                }
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
@@ -1734,7 +1746,11 @@ impl Runner {
                 self.disconnect();
                 self.clock.sleep(seconds);
                 self.remaining(deadline)?;
-                Ok(format!("paused {seconds}s for UI animation"))
+                Ok(if action == "observe_for" {
+                    format!("observed {seconds}s; diagnostic only, no acceptance")
+                } else {
+                    format!("paused {seconds}s for UI animation")
+                })
             }
             _ => Err(Error::scenario(format!("Unknown action: {action}"))),
         }
@@ -2578,7 +2594,13 @@ impl Runner {
             .into_iter()
             .map(|(name, rows)| (name, metrics::summarize_turns(&rows)))
             .collect();
-        let result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        let mut result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        if self.scenario["diagnostic_only"] == true {
+            result["diagnostic_only"] = true.into();
+            result["observation_completed"] = self.result_passed.into();
+            result["passed"] = false.into();
+            result["acceptance_passed"] = false.into();
+        }
         fs::write(
             self.output.join("result.json"),
             format!("{}\n", serde_json::to_string_pretty(&result)?),
