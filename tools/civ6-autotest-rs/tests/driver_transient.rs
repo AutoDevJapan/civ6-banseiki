@@ -4,6 +4,38 @@ use civ6_autotest_rs::{Error, ErrorKind};
 use serde_json::json;
 use support_driver::{FakeBackend, Harness};
 
+#[test]
+fn pause_releases_connection_and_next_lua_reconnects() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    h.events.lock().unwrap().clear();
+    h.runner
+        .run_step(&json!({"action":"pause","seconds":1}))
+        .unwrap();
+    assert_eq!(h.events(), ["disconnect"]);
+    assert_eq!(h.clock.at(), 1.0);
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    assert_eq!(
+        h.events(),
+        ["disconnect", "connect", "states", "connect", "lua:InGame"]
+    );
+}
+
+#[test]
+fn pause_fails_when_sleep_overshoots_step_deadline() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    h.events.lock().unwrap().clear();
+    h.clock.set_min_sleep(3.0);
+    let err = h
+        .runner
+        .run_step(&json!({"action":"pause","seconds":1,"timeout":2}))
+        .unwrap_err();
+    assert!(err.to_string().contains("deadline expired"));
+    assert_eq!(h.events(), ["disconnect"]);
+    assert_eq!(h.clock.at(), 3.0);
+}
+
 fn timeout_backend(failures: usize, error: Error, reply: &str) -> FakeBackend {
     let mut remaining = failures;
     let reply = reply.to_owned();
