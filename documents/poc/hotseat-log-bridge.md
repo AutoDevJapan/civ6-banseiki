@@ -14,6 +14,8 @@ Lua側は公式の `Game`、`Players`、`Unit:GetProperty` から、その時点
 
 この担当はゲームを起動していない。以下は主担当が実機枠で使うための入口である。`<...>` は主担当の実環境のパスに置き換える。生成先は空のフォルダとする。
 
+共有の実機枠は `live_chain` で `hotseat-bridge-live-hold.json` を実行して保持する。この短いシナリオはゲームを起動し、別のRustコマンドが元の21手順を実行して最後の実ログを出すまで待つだけで、受け入れの代替にはならない。枠の取得時刻以降に作られた成果物だけを観測する。枠が終わるとゲームを閉じるため、最終手順の記録後の30秒以内にRust側の照合を終える。
+
 ```powershell
 cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- prepare tools/civ6-autotest/scenarios/multiplayer-hotseat-growth.json --output <空の出力先>
 ```
