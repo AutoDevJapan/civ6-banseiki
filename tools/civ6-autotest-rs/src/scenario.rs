@@ -39,7 +39,7 @@ impl SessionType {
         }
     }
 }
-pub const ACTIONS: [&str; 15] = [
+pub const ACTIONS: [&str; 16] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -48,6 +48,7 @@ pub const ACTIONS: [&str; 15] = [
     "end_turn",
     "ui_lua",
     "carrier_checkpoint",
+    "carrier_exchange",
     "screenshot",
     "save",
     "exit_to_menu",
@@ -152,6 +153,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "enable_mods" => {
+                bool_flags(&["exclusive_user_mods"])?;
                 let valid = |v: &Value| {
                     matches(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$", v)
                 };
@@ -264,7 +266,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
-            "carrier_checkpoint" => {
+            "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
                 let token = step["token"]
                     .as_str()
@@ -273,11 +275,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .as_str()
                     .ok_or_else(|| fail("carrier checkpoint needs candidate".into()))?;
                 crate::carrier_sync::query(token, candidate).map_err(|e| fail(e.to_string()))?;
-                safe_relative_path(
-                    step["path"]
-                        .as_str()
-                        .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
-                )?;
+                if action == "carrier_checkpoint" {
+                    safe_relative_path(
+                        step["path"]
+                            .as_str()
+                            .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
+                    )?;
+                }
                 for key in ["capture_as", "equals_capture"] {
                     if step.get(key).is_some_and(|v| !type_id(v)) {
                         return Err(fail(format!("invalid {key}")));
@@ -498,22 +502,52 @@ pub fn build_setup_code(players: &[Value]) -> String {
     lines.join("\n")
 }
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
-    format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\n{}",ids.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),disabled.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),ENABLE_MODS_BODY)
+    enable_mods_code_with_scope(ids, disabled, false)
+}
+pub fn enable_mods_code_with_scope(
+    ids: &[String],
+    disabled: &[String],
+    exclusive_user_mods: bool,
+) -> String {
+    format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\nlocal exclusiveUserMods = {}\n{}",ids.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),disabled.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),exclusive_user_mods,ENABLE_MODS_BODY)
 }
 const ENABLE_MODS_BODY: &str = r###"local keep, disabled = {}, {}
 for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
-local handles, dependents, original = {}, {}, {}
+local handles, dependents, prerequisites, original = {}, {}, {}, {}
 for _, installed in ipairs(Modding.GetInstalledMods()) do
     local info = Modding.GetModInfo(installed.Handle)
     local id = string.lower(info.Id)
     handles[id] = installed.Handle
     original[id] = info.Enabled
     local dependencies = Modding.GetModAssociations(installed.Handle)
+    prerequisites[id] = {}
     for _, dependency in ipairs(dependencies or {}) do
       local target = string.lower(dependency.Id)
+      table.insert(prerequisites[id], target)
       dependents[target] = dependents[target] or {}
       table.insert(dependents[target], id)
     end
+end
+if exclusiveUserMods then
+  for _, requested in ipairs(enableIDs) do
+    local id = string.lower(requested)
+    for _, target in ipairs(prerequisites[id] or {}) do
+      local handle = handles[target]
+      if not handle then error('required mod is not installed: ' .. target) end
+      if not Modding.GetModInfo(handle).Official and not keep[target] then
+        error('scenario omits required user mod: ' .. target)
+      end
+    end
+  end
+  local extra = {}
+  for id, handle in pairs(handles) do
+    local info = Modding.GetModInfo(handle)
+    if info.Enabled and not info.Official and not keep[id] then
+      extra[#extra + 1] = id
+    end
+  end
+  table.sort(extra)
+  for _, id in ipairs(extra) do disableIDs[#disableIDs + 1] = id end
 end
 local order = {}
 if #disableIDs > 0 then
@@ -578,6 +612,14 @@ end
 for _, id in ipairs(disableIDs) do
   local handle = Modding.GetModHandle(id)
   if handle and Modding.GetModInfo(handle).Enabled then error('mod stayed enabled: ' .. id) end
+end
+if exclusiveUserMods then
+  for id, handle in pairs(handles) do
+    local info = Modding.GetModInfo(handle)
+    if info.Enabled and not info.Official and not keep[id] then
+      error('unexpected enabled user mod: ' .. id)
+    end
+  end
 end
 GameConfiguration.UpdateEnabledMods()
 end)
