@@ -89,6 +89,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         .as_array()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| Error::scenario("Scenario needs a nonempty steps array"))?;
+    let mut lua_captures = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -239,6 +240,16 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     if step.get(key).is_some_and(|v| !type_id(v)) {
                         return Err(fail(format!("invalid {key}")));
                     }
+                }
+                if let Some(key) = step["equals_capture"].as_str() {
+                    if !lua_captures.contains(key) {
+                        return Err(fail(format!(
+                            "equals_capture needs an earlier capture_as: {key}"
+                        )));
+                    }
+                }
+                if let Some(key) = step["capture_as"].as_str() {
+                    lua_captures.insert(key);
                 }
                 crate::tuner::validate_lua_code(step["code"].as_str().unwrap())
                     .map_err(|e| fail(e.to_string()))?;
