@@ -209,3 +209,11 @@ attachは次の順序に固定する：子がSHA/opcode等の読取検査を終�
 EDE修正の先行対象検査は18件成功（lib 15件＋実CLI 3件）。GO前4ケースはpermit=false・対象終了要求0、GO後の入力／実OS BrokenPipeはrestore→reap成功。部分終了失敗では20秒API後も対象helperとobserver helperの両方が生存していることを確認し、明示回収で両方を終了・waitした。共通classify_then_recordの実hardware例外＋OS書込拒否検査も成功。結果行は `D:/CC/Work/todo880/ede-owned-os-receipts.json`、残存helper0。
 
 最後に追加した遅延ready拒否テストを含む再検査は `D:/CC/Work/todo880/ede-final-tests.log`／`.exit`。Clippyの通常実行（`--no-deps`、`-D warnings`なし）は終了0で、今回の書式指摘1件は修正済み。既存probeの6警告は書込範囲外として残し、警告ゼロとは報告しない。親の同一レビューセッションでの受入はまだ未確認。
+
+## GOとSTOPの同時受信・GO後の拒否
+
+本番とOS helperは同じbuffer付き`commands`読取と`Admission`を使う。GO＋STOPを1回のpipe writeで送った場合は、同じbatch全体を評価してattach前キャンセルとする。GO後のlease/identity再照合で失敗しても、`Admission`が対象PID/FILETIME・chain/controller identity・source hash・tokenを含む`NEVER_ATTACHED` terminalを送る。親は完全一致した通知だけを受理し、GrantedからNeverAttachedへ移して子だけ回収する。
+
+二段目の`ATTACH_ENTER`／`ENTER_ACK`を追加した。親がENTERを受信して所有状態をAttachedへ進める前に、子はnative APIを呼べない。親がSTOP中ならACKを出さず、Grantedは対象未変更として子だけ回収できる。子がENTERを送った後はNEVER_ATTACHEDを出さず、正しいACK後にnative-call-attempted状態を先に確定してDebuggerへ渡す。ACKとSTOPが同時なら、許可済みattach後の即時STOPとして復元する。ENTER後の失敗を「未attach」と偽って責任解除しない。
+
+`go-stop-tests.log`／`.exit`には、実OS子と本番と同じ一括読取経路によるGO＋STOP、GO後再照合拒否、ENTER後の偽NEVER_ATTACHED拒否を含む対象テストを保存する。Civ6実機観測は0、追加費用0。親レビュー前の成功宣言はしない。

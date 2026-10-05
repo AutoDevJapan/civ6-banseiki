@@ -15,6 +15,113 @@ use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 pub const FINISH_BUDGET: Duration = Duration::from_secs(20);
 const RESTORE_GRACE: Duration = Duration::from_secs(12);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChildPhase {
+    AwaitGo,
+    Granted,
+    EnterSent,
+    NativeCallAttempted,
+    NeverAttached,
+}
+pub struct Admission {
+    phase: ChildPhase,
+    identity: Value,
+    token: String,
+    buffer: Vec<u8>,
+    pending_stop: bool,
+}
+fn emit_control(row: &Value) -> Result<(), String> {
+    writeln!(io::stdout(), "{row}")
+        .and_then(|_| io::stdout().flush())
+        .map_err(|e| e.to_string())
+}
+impl Admission {
+    pub fn new(identity: Value, token: String) -> Self {
+        Self {
+            phase: ChildPhase::AwaitGo,
+            identity,
+            token,
+            buffer: Vec::new(),
+            pending_stop: false,
+        }
+    }
+    pub fn await_go(&mut self) -> Result<(), String> {
+        let deadline = Instant::now() + Duration::from_secs(8);
+        let mut seen = false;
+        loop {
+            if Instant::now() >= deadline {
+                return Err("GO timeout before attach".into());
+            }
+            for line in commands(&mut self.buffer)? {
+                if !seen && line == format!("GO {}", self.token) {
+                    seen = true;
+                } else {
+                    return Err("cancelled or invalid coalesced GO input".into());
+                }
+            }
+            if seen && self.buffer.is_empty() {
+                self.phase = ChildPhase::Granted;
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    pub fn enter_and_call<T>(
+        &mut self,
+        call: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        if self.phase != ChildPhase::Granted {
+            return Err("attach requires granted admission".into());
+        }
+        if !commands(&mut self.buffer)?.is_empty() || !self.buffer.is_empty() {
+            return Err("cancelled before ATTACH_ENTER".into());
+        }
+        // Once ENTER is published no NEVER_ATTACHED may be emitted. The parent
+        // commits its recovery ownership before acknowledging this transition.
+        self.phase = ChildPhase::EnterSent;
+        let mut row = self.identity.clone();
+        row["type"] = json!("ATTACH_ENTER");
+        emit_control(&row)?;
+        let deadline = Instant::now() + Duration::from_secs(8);
+        loop {
+            if Instant::now() >= deadline {
+                return Err("ENTER acknowledgement timeout".into());
+            }
+            let mut ack = false;
+            for line in commands(&mut self.buffer)? {
+                if !ack && line == format!("ENTER_ACK {}", self.token) {
+                    ack = true;
+                } else if ack {
+                    self.pending_stop = true;
+                } else {
+                    return Err("ENTER cancelled before native invocation".into());
+                }
+            }
+            if ack {
+                self.pending_stop |= !self.buffer.is_empty();
+                self.phase = ChildPhase::NativeCallAttempted;
+                return call();
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    pub fn stop_requested(&self) -> bool {
+        self.pending_stop
+    }
+}
+impl Drop for Admission {
+    fn drop(&mut self) {
+        if matches!(self.phase, ChildPhase::AwaitGo | ChildPhase::Granted) {
+            self.phase = ChildPhase::NeverAttached;
+            let mut row = self.identity.clone();
+            row["type"] = json!("NEVER_ATTACHED");
+            row["native_call_attempted"] = json!(false);
+            row["terminal_kind"] = json!("never_attached");
+            let _ = emit_control(&row);
+        }
+    }
+}
+
 /// Call only after the event's ownership and continuation disposition have
 /// been stored. An I/O error is evidence loss, never a new exception owner.
 pub fn log_classified<T>(
@@ -185,15 +292,27 @@ pub enum Ownership {
     Ungranted,
     Granted,
     Attached,
+    NeverAttached { granted: bool },
     Restored,
     TargetExited,
 }
 impl Ownership {
     fn permit(self) -> bool {
-        !matches!(self, Self::Ungranted)
+        match self {
+            Self::Ungranted => false,
+            Self::NeverAttached { granted } => granted,
+            _ => true,
+        }
     }
     fn safe(self) -> bool {
-        matches!(self, Self::Ungranted | Self::Restored | Self::TargetExited)
+        matches!(
+            self,
+            Self::Ungranted
+                | Self::Granted
+                | Self::NeverAttached { .. }
+                | Self::Restored
+                | Self::TargetExited
+        )
     }
 }
 #[derive(Debug)]
@@ -333,12 +452,29 @@ impl<R: Recovery> ChildGuard<R> {
                 Some("attach_ready") if self.state.owner() == Ownership::Ungranted => {
                     self.permit_ready = true;
                 }
-                Some("order_attach_start" | "helper_attached") => {
-                    if self.state.owner() == Ownership::Granted {
-                        self.state.set_owner(Ownership::Attached);
-                    } else if !self.state.owner().permit() {
-                        self.finish(Some("child attempted attach without GO".into()));
+                Some("ATTACH_ENTER") => {
+                    if matches!(self.state, State::Active(Ownership::Granted)) {
+                        match self.recovery.authorize() {
+                            Ok(()) => {
+                                self.state.set_owner(Ownership::Attached);
+                                let ack = format!("ENTER_ACK {}", self.witness.token());
+                                if let Err(e) = self.send(&ack) {
+                                    self.finish(Some(e.to_string()));
+                                }
+                            }
+                            Err(e) => self.finish(Some(e)),
+                        }
                     }
+                }
+                Some("NEVER_ATTACHED")
+                    if matches!(
+                        self.state.owner(),
+                        Ownership::Ungranted | Ownership::Granted
+                    ) && row["native_call_attempted"] == false
+                        && row["terminal_kind"] == "never_attached" =>
+                {
+                    let granted = self.state.owner().permit();
+                    self.state.set_owner(Ownership::NeverAttached { granted });
                 }
                 _ => {}
             }
@@ -648,21 +784,28 @@ mod tests {
         let mut row = json!({"kind":"owned_os_test_helper","token":token,"child_pid":std::process::id(),"live":false,"type":"attach_ready"});
         println!("{row}");
         io::stdout().flush().unwrap();
-        let mut line = String::new();
-        io::stdin().read_line(&mut line).unwrap();
-        if line.trim() != format!("GO {token}") {
+        let mut admission = Admission::new(row.clone(), token);
+        if admission.await_go().is_err() {
             return;
         }
-        let resource = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .unwrap();
+        if std::env::var("TODO880_RECHECK_FAIL").as_deref() == Ok("1") {
+            return;
+        }
+        let Ok(resource) = admission.enter_and_call(|| {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+                .map_err(|e| e.to_string())
+        }) else {
+            return;
+        };
+        let mut line = String::new();
         row["type"] = json!("helper_attached");
         println!("{row}");
         io::stdout().flush().unwrap();
         line.clear();
-        while io::stdin().read_line(&mut line).unwrap() > 0 {
+        while !admission.stop_requested() && io::stdin().read_line(&mut line).unwrap() > 0 {
             if line.trim() == "stop" {
                 break;
             }
@@ -712,6 +855,10 @@ mod tests {
             .args(["--exact", WORKER, "--ignored", "--nocapture"])
             .env("TODO880_PROTOCOL_HELPER", &token)
             .env("TODO880_PROTOCOL_RESOURCE", &path)
+            .env(
+                "TODO880_RECHECK_FAIL",
+                if case == "recheck" { "1" } else { "0" },
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -1001,4 +1148,153 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(state, 0x10002);
     }
+    #[test]
+    fn coalesced_go_stop_shared_os_reader_proves_never_attached() {
+        let (child, token, path) = child("coalesced");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper {
+                token: token.clone(),
+            },
+            Duration::from_secs(2),
+            HelperRecovery {
+                calls: calls.clone(),
+                fail: false,
+            },
+        );
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !guard.permit_ready {
+            assert!(Instant::now() < deadline);
+            for line in guard.lines.poll().unwrap() {
+                if let Ok(row) = serde_json::from_str::<Value>(&line) {
+                    guard.receive(&row);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        guard.state = State::Active(Ownership::Granted);
+        let pipe = guard.child.stdin.as_mut().unwrap();
+        pipe.write_all(format!("GO {token}\nstop\n").as_bytes())
+            .unwrap();
+        pipe.flush().unwrap();
+        let (_tx, rx) = mpsc::channel();
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
+        assert!(matches!(
+            guard.state,
+            State::Reaped {
+                owner: Ownership::NeverAttached { granted: true },
+                ..
+            }
+        ));
+        let r = guard.receipt().unwrap();
+        assert!(r.child_reaped && r.cleanup_confirmed && !r.restored);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"coalesced_go_stop","authenticated_never_attached":true,"receipt":r.json(),"same_production_pipe_reader":true,"single_write_batch":true,"civ6_live":false})
+        );
+    }
+    #[test]
+    fn post_go_recheck_failure_proves_never_attached() {
+        let (child, token, path) = child("recheck");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper { token },
+            Duration::from_secs(2),
+            HelperRecovery {
+                calls: calls.clone(),
+                fail: false,
+            },
+        );
+        let (_tx, rx) = mpsc::channel();
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
+        assert!(matches!(
+            guard.state,
+            State::Reaped {
+                owner: Ownership::NeverAttached { granted: true },
+                ..
+            }
+        ));
+        let r = guard.receipt().unwrap();
+        assert!(r.child_reaped && r.cleanup_confirmed);
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert!(!path.exists());
+        println!(
+            "TODO880_OS_RECEIPT={}",
+            json!({"case":"postgo_recheck_refusal","authenticated_never_attached":true,"receipt":r.json(),"target_termination_calls":0,"civ6_live":false})
+        );
+    }
+    #[test]
+    fn authenticated_never_attached_cannot_override_entered() {
+        let (child, token, path) = child("terminal-auth");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut guard = ChildGuard::new(
+            child,
+            Witness::Helper {
+                token: token.clone(),
+            },
+            Duration::from_secs(2),
+            HelperRecovery { calls, fail: false },
+        );
+        let row = json!({"kind":"owned_os_test_helper","token":token,"child_pid":guard.child.id(),"live":false,"type":"NEVER_ATTACHED","native_call_attempted":false,"terminal_kind":"never_attached"});
+        guard.state = State::Active(Ownership::Attached);
+        guard.receive(&row);
+        assert_eq!(guard.state.owner(), Ownership::Attached);
+        // Test assigned state did not authorize the actual helper; it remains at
+        // its real pre-GO pipe. Restore bookkeeping before normal child reaping.
+        guard.state = State::Active(Ownership::Ungranted);
+        let (tx, rx) = mpsc::channel();
+        tx.send(Ok("stop".into())).unwrap();
+        assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
+        assert!(!path.exists());
+    }
+}
+
+pub fn commands(buffer: &mut Vec<u8>) -> Result<Vec<String>, String> {
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE};
+    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    let mut available = 0;
+    if unsafe {
+        PeekNamedPipe(
+            h,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    } == 0
+    {
+        if std::io::Error::last_os_error().raw_os_error() == Some(109) {
+            return Ok(vec!["eof".into()]);
+        }
+        return Err("controller stdin must be a live pipe".into());
+    }
+    if available > 0 {
+        let mut bytes = vec![0; available.min(1024) as usize];
+        let n = std::io::stdin()
+            .read(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Ok(vec!["eof".into()]);
+        }
+        buffer.extend_from_slice(&bytes[..n]);
+    }
+    if buffer.len() > 4096 {
+        return Err("controller command exceeds limit".into());
+    }
+    let mut out = Vec::new();
+    while let Some(n) = buffer.iter().position(|b| *b == b'\n') {
+        let bytes: Vec<_> = buffer.drain(..=n).collect();
+        out.push(
+            std::str::from_utf8(&bytes)
+                .map_err(|e| e.to_string())?
+                .trim()
+                .into(),
+        );
+    }
+    Ok(out)
 }

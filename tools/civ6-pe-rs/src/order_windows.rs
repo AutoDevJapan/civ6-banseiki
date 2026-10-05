@@ -1,12 +1,9 @@
 //! Capture-only adapter over the existing observer's attach/cleanup machinery.
 use super::*;
 use crate::order_capture::{self as plan, Phase, Request, Site};
-use windows_sys::Win32::System::{
-    Memory::{
-        VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE, PAGE_EXECUTE,
-        PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD,
-    },
-    Pipes::PeekNamedPipe,
+use windows_sys::Win32::System::Memory::{
+    VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE, PAGE_EXECUTE,
+    PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD,
 };
 
 const TF: u32 = 1 << 8;
@@ -235,49 +232,7 @@ fn chain_descendant(pid: u32, chain_pid: u32) -> Result<(), String> {
 
 // Nonblocking pipe reads let the owned reader join, including after a timeout.
 fn commands(buffer: &mut Vec<u8>) -> Result<Vec<String>, String> {
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE};
-    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
-    let mut available = 0;
-    if unsafe {
-        PeekNamedPipe(
-            h,
-            std::ptr::null_mut(),
-            0,
-            std::ptr::null_mut(),
-            &mut available,
-            std::ptr::null_mut(),
-        )
-    } == 0
-    {
-        if std::io::Error::last_os_error().raw_os_error() == Some(109) {
-            return Ok(vec!["eof".into()]);
-        }
-        return Err("controller stdin must be a live pipe".into());
-    }
-    if available > 0 {
-        let mut bytes = vec![0; available.min(1024) as usize];
-        let n = std::io::stdin()
-            .read(&mut bytes)
-            .map_err(|e| e.to_string())?;
-        if n == 0 {
-            return Ok(vec!["eof".into()]);
-        }
-        buffer.extend_from_slice(&bytes[..n]);
-    }
-    if buffer.len() > 4096 {
-        return Err("controller command exceeds limit".into());
-    }
-    let mut out = Vec::new();
-    while let Some(n) = buffer.iter().position(|b| *b == b'\n') {
-        let bytes: Vec<_> = buffer.drain(..=n).collect();
-        out.push(
-            std::str::from_utf8(&bytes)
-                .map_err(|e| e.to_string())?
-                .trim()
-                .into(),
-        );
-    }
-    Ok(out)
+    plan::protocol::commands(buffer)
 }
 
 struct Reader {
@@ -405,39 +360,25 @@ pub fn observe(req: Request) -> Result<(), String> {
     }
     let identity = json!({"type":"attach_ready","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll_sha256":req.source_dll_sha,"observer_pid":std::process::id(),"attach_token":token});
     emit(&identity)?;
-    let go_deadline = Instant::now() + Duration::from_secs(8);
-    let mut go_buffer = Vec::new();
-    loop {
-        if Instant::now() >= go_deadline {
-            return Err("GO grant timeout; target unchanged".into());
-        }
-        let incoming = commands(&mut go_buffer)?;
-        if !incoming.is_empty() {
-            if incoming.len() != 1 || incoming[0] != format!("GO {token}") {
-                return Err("attach cancelled before GO; target unchanged".into());
-            }
-            break;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
+    let mut admission = plan::protocol::Admission::new(identity, token);
+    admission.await_go()?;
     verify_lock(lock, req.chain_pid, &chain)?;
     if !alive(&controller)? || !alive(&game_guard)? || process_created(&game_guard)? != req.created
     {
         return Err("identity changed after GO".into());
     }
-    let mut attached = identity;
-    attached["type"] = json!("order_attach_start");
-    emit(&attached)?;
     // Attach in existing non-hardware mode. Only this explicit capability then
     // arms the fixed EXE sites; old live hardware modes stay rejected.
-    let mut d = Debugger::attach(
-        req.pid,
-        game,
-        exe.base,
-        exe.size,
-        output,
-        ProbeMode::Lifecycle,
-    )?;
+    let mut d = admission.enter_and_call(|| {
+        Debugger::attach(
+            req.pid,
+            game,
+            exe.base,
+            exe.size,
+            output,
+            ProbeMode::Lifecycle,
+        )
+    })?;
     d.mode = ProbeMode::Property; // existing restoration walks our pinned threads
     d.attach_ready_deadline = Some(Instant::now() + ATTACH_READY_BUDGET);
     let initial_core = core_module(req.pid)?;
@@ -458,7 +399,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     let mut counts: BTreeMap<String, u64> = BTreeMap::new();
     let (input_reader, input) = reader(d.close_ack.clone());
     let started = Instant::now();
-    let mut stop = false;
+    let mut stop = admission.stop_requested();
     let mut hits = 0;
     let mut drain_deadline = None;
     let mut phase_changes = 0;
