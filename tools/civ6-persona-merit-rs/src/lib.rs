@@ -55,21 +55,24 @@ function Q.Capture(row, deed, identity, city, a)
     local leader = row.LeaderType
     local owner = a.Get(leader, 'OWNER')
     local key = leader .. '_' .. deed .. '_' .. identity
-    local pending = Game:GetProperty(PENDING) or {{}}
+    local pending = Game:GetProperty(PENDING)
+    if pending == nil then pending = {{}} end
     if type(pending) ~= 'table' then return false end
     if pending[key] or a.Get(leader, 'DEED_' .. deed .. '_' .. identity) ~= nil then return false end
     if not city or not a.Player(owner, true) or city:GetOwner() ~= owner then return false end
     local turn = Game.GetCurrentGameTurn()
     local cap = deed == 'GOVERN_TURN' and 1 or a.Parameter(deed .. '_DEEDS_PER_TURN')
     local reward = GameInfo.JAC_PersonaMeritRules[GameInfo.JAC_PersonaTreePeople[leader].MeritProfile][deed]
-    local buckets = Game:GetProperty(BUCKETS) or {{}}
+    local buckets = Game:GetProperty(BUCKETS)
+    if buckets == nil then buckets = {{}} end
     if type(buckets) ~= 'table' then return false end
     local bucket = leader .. '_' .. deed .. '_' .. turn
     local count = buckets[bucket]
     if count == nil then count = a.Get(leader, deed .. '_COUNT_TURN') == turn and (a.Get(leader, deed .. '_COUNT') or 0) or 0 end
     local amount, reserved = Q.Reserve(true, count, cap, reward)
     if amount == nil then return false end
-    local priorSequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE') or 0
+    local priorSequence = Game:GetProperty('JAC_PERSONA_PENDING_SEQUENCE')
+    if priorSequence == nil then priorSequence = 0 end
     if not integer(priorSequence) or priorSequence >= 9007199254740991 then return false end
     local sequence = priorSequence + 1
     pending[key] = {{version={version}, leader=leader, owner=owner, deed=deed,
@@ -83,8 +86,10 @@ function Q.Capture(row, deed, identity, city, a)
     return amount > 0
 end
 function Q.Drain(a)
-    local pending = Game:GetProperty(PENDING) or {{}}
-    local buckets = Game:GetProperty(BUCKETS) or {{}}
+    local pending = Game:GetProperty(PENDING)
+    local buckets = Game:GetProperty(BUCKETS)
+    if pending == nil then pending = {{}} end
+    if buckets == nil then buckets = {{}} end
     if type(pending) ~= 'table' or type(buckets) ~= 'table' then return end
     local changed = false
     local completedBuckets = {{}}
@@ -180,13 +185,13 @@ mod tests {
                 Player=function() return true end,Parameter=function() return 2 end,
                 Merit=function() return 0 end,Set=function() error('unexpected award') end}
             local city={GetID=function() return 1 end,GetOwner=function() return 0 end}
-            for _,value in ipairs({1,'invalid'}) do
+            for _,value in ipairs({false,1,'invalid'}) do
                 pending=value; buckets=nil; q.Drain(a)
                 assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
                 pending=nil; buckets=value; q.Drain(a)
                 assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
                 buckets=nil; sequence=value
-                if value=='invalid' then assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false) end
+                if value=='invalid' or value==false then assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false) end
             end
             sequence=9007199254740991
             assert(q.Capture({LeaderType='L'},'BUILDING','one',city,a)==false)
