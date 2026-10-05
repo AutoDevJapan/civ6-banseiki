@@ -1,0 +1,103 @@
+{
+  "name": "ToDo995 Gameplay/UI positive envoy API and save/load diagnostic",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "build_setup": false,
+      "map_size": "MAPSIZE_DUEL",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 1,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal from,to\nfor _,player in ipairs(PlayerManager.GetAliveMinors()) do from=player:GetID();break end\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  if player:IsHuman() then to=player:GetID();break end\nend\nassert(from and to,'one minor and one human major required')\nlocal recipient=Players[from]:GetInfluence()\nlocal sender=Players[to]:GetInfluence()\nassert(type(recipient.GetTokensReceived)=='function','Gameplay GetTokensReceived unavailable')\nassert(type(sender.GiveFreeTokenToPlayer)=='function','official influence grant unavailable')\nlocal before=recipient:GetTokensReceived(to)\nassert(type(before)=='number' and before>=0,'invalid starting envoy count')\nsender:GiveFreeTokenToPlayer(from)\nlocal after=recipient:GetTokensReceived(to)\nassert(after==before+1,'official envoy grant did not increment recipient count once')\nGame:SetProperty('JAC_ADMISSION_ENVOY_PROBE_V1',{From=from,To=to,Before=before,After=after})\nreturn 'Gameplay positive envoy count verified: '..tostring(before)..' -> '..tostring(after)\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))\nassert(Players[t.From]:GetInfluence():GetTokensReceived(t.To)==t.After,'UI and Gameplay envoy counts differ')\nreturn 'UI recipient envoy count agrees with game-core'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-admission-995-envoys",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-admission-995-envoys",
+      "timeout": 600
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))\nassert(Players[t.From]:GetInfluence():GetTokensReceived(t.To)==t.After,'saved Gameplay envoy count changed')\nreturn 'real save/load preserved positive Gameplay envoy count'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_ADMISSION_ENVOY_PROBE_V1'))\nassert(Players[t.From]:GetInfluence():GetTokensReceived(t.To)==t.After,'UI and Gameplay envoy counts differ')\nreturn 'UI recipient envoy count agrees with game-core'\n"
+    }
+  ]
+}

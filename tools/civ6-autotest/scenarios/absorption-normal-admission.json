@@ -1,0 +1,268 @@
+{
+  "name": "ToDo995 normal merger admission: unmet offer, natural turn, save/load, single P1",
+  "judge_profile": "generic",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "8424840C-92EF-4426-A9B4-B4E0CB818049",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "61320778-2e75-4c11-9009-94101b519aba"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620981,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ],
+      "build_setup": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "GameConfiguration.SetValue('GAMEMODE_HEROES',true);local v=GameConfiguration.GetValue('GAMEMODE_HEROES');assert(v==true or v==1,'Heroes & Legends not enabled');return 'GAMEMODE_HEROES=1'"
+    },
+    {
+      "action": "start_game",
+      "timeout": 600
+    },
+    {
+      "state_name": "InGame",
+      "code": "local p=Players[Game.GetLocalPlayer()];local city=p:GetCities():GetCapitalCity();local objects={Buildings=city:GetBuildings(),PlayerCulture=p:GetCulture(),GreatPeople=Game.GetGreatPeople()};if Game.GetCulture then objects.GameCulture=Game.GetCulture() end;if Game.GetGreatWorks then objects.GreatWorks=Game.GetGreatWorks() end;local out={};for name,obj in pairs(objects) do for _,method in ipairs({'CreateGreatWork','RemoveGreatWork','MoveGreatWork','TransferGreatWork','SetGreatWork','SetGreatWorkInSlot','GetGreatWorkInSlot','GetGreatWorkType'}) do local ok,value=pcall(function() return obj[method] end);out[#out+1]=name..'.'..method..'='..(ok and type(value) or 'unavailable') end end;table.sort(out);print('[JAC_NATIVE_WORK_METHODS] '..table.concat(out,','));return table.concat(out,',')",
+      "action": "ui_lua"
+    },
+    {
+      "timeout": 120,
+      "action": "wait_for",
+      "condition": {
+        "code": "return Game.GetLocalPlayer()>=0 and Players[Game.GetLocalPlayer()]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil",
+        "state_name": "InGame",
+        "type": "lua"
+      }
+    },
+    {
+      "code": "local from,to;for _,p in ipairs(PlayerManager.GetAliveMajors()) do local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName();if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end end;assert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman() and Game.GetLocalPlayer()==to,'AI Ashina and human Oda required');local count=0;for def in GameInfo.HeroClasses() do count=count+1;assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','stock Hero enabled') end;assert(count==2,'two Sengoku Heroes required');Game:SetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST',{From=from,To=to});return 'human Oda, AI Ashina and two custom Heroes verified'",
+      "state_name": "JAC_Absorption_Entry",
+      "action": "ui_lua"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST'))\nassert(not Game:GetProperty('JAC_ABSORPTION_FLOW_TEST_MODE'))\nlocal treasury=Players[t.To]:GetTreasury()\nlocal minimum=treasury:GetGoldBalance()+1000000\nlocal offer={ID='todo995-normal-merger',From=t.From,To=t.To,AreaKm2=10000,\n  Requirements={{ID='test-reserve',Kind='GOLD_MINIMUM',Minimum=minimum}},\n  RelationRequirements={}, RelationsReviewed=true}\n-- Explicit diagnostic demand, not a universal balance rule or a payment.\nN.DefineOffer(offer)\nGame:SetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1',{ID=offer.ID,From=t.From,To=t.To,Minimum=minimum})\nreturn 'normal leader offer saved; no test start used'\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()];return p and p:IsTurnActive() and ExposedMembers.JAC_AbsorptionFlow~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nlocal receipt=assert(N.Get('leader-offer',t.ID))\nassert(receipt.Status=='WAITING' and not receipt.Plan and not receipt.LastError)\nassert(not JAC_AbsorptionFlowGameplay.Get(receipt.FlowID))\nreturn 'ordinary turn waited for unmet live demand'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-admission-995-waiting",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-admission-995-waiting",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()];return p and p:IsTurnActive() and ExposedMembers.JAC_AbsorptionFlow~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nassert(N.Get('leader-offer',t.ID).Status=='WAITING')\nlocal treasury=Players[t.To]:GetTreasury()\ntreasury:ChangeGoldBalance(math.max(0,t.Minimum+1000000-treasury:GetGoldBalance()))\nreturn 'waiting offer restored; diagnostic reserve supplied without calling absorption'\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 180
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()];return p and p:IsTurnActive() and ExposedMembers.JAC_AbsorptionFlow~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nlocal receipt=assert(N.Get('leader-offer',t.ID))\nassert(receipt.Status=='STARTED',receipt.LastError or receipt.Status)\nlocal flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID))\nassert(flow.Mode=='MERGER' and flow.Phase=='CHOICE' and flow.Phase1Complete)\nassert(flow.From==t.From and flow.To==t.To and #flow.Entries>0)\nassert(Players[t.From]:GetCities():GetCount()>0,'phase one transferred cities')\nGame:SetProperty('JAC_ABSORPTION_ADMISSION_LIVE_FLOW_V1',JAC_AbsorptionGameplay.Canonical(flow))\nreturn 'ordinary turn entered saved three-stage choice'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-admission-995-choice",
+      "timeout": 90
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-admission-995-choice",
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()];return p and p:IsTurnActive() and ExposedMembers.JAC_AbsorptionFlow~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal N,F,A=assert(JAC_AbsorptionAdmissionGameplay),assert(JAC_AbsorptionFlowGameplay),assert(JAC_AbsorptionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1'))\nlocal receipt=assert(N.Get('leader-offer',t.ID))\nlocal before=assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_LIVE_FLOW_V1'))\nassert(receipt.Status=='STARTED' and A.Canonical(F.Get(receipt.FlowID))==before)\nN.Request('leader-offer',t.ID,t.From,t.To)\nassert(A.Canonical(F.Get(receipt.FlowID))==before,'normal request repeated first-stage rolls')\nreturn 'real save/load preserved choice and all first-stage rolls; duplicate request inert'\n"
+    }
+  ]
+}
