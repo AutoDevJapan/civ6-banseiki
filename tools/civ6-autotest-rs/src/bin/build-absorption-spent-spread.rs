@@ -181,7 +181,7 @@ fn full(mut probe: Value) -> Value {
         steps.push(json!({"action":"wait_for","timeout":45,"condition":{"type":"lua","state_name":"InGame","code":READY}}));
         steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":RESUME}));
     }
-    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":BLOCKED,"capture":"SPENT_SPREAD_BLOCKED"}));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":BLOCKED,"capture_as":"SPENT_SPREAD_BLOCKED"}));
     steps.push(json!({"action":"save","name":"jac-spent-spread-blocked-192"}));
     steps.push(json!({"action":"exit_to_menu"}));
     steps.push(json!({"action":"load","name":"jac-spent-spread-blocked-192","timeout":600}));
