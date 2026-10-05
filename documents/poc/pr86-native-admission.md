@@ -617,3 +617,7 @@ PatchStateは全地点の初期ページ保護を最初の変更前に保存す�
 Jason指摘修正後の対象binは29件成功（失敗・ignored・上位filtered0、警告0）。内訳は前回24件から旧slot単発検査1件を共有状態のRX復旧5件へ置き換え、正常Captureの動的owner/generation子検査1件を追加したもの。独立子は原ABI、非空Captureの実SEH、正常観測、並行解除の4本で、各1成功・28内部filteredを上位29件へ重ねて加算しない。実ロード済gatewayのRET直前の仮想unwindも成功した。ログは `D:/CC/Work/todo880/ai-patchstate-final.log`。
 
 GPT-6-Sol/max再レビューはMust0。Suggestionの導入途中flush失敗と公開recover_failed_registration経由の再試行を検査へ追加し、Nitの名称と実処理の差も解消した。この最終差分は復旧5件を再実行して5成功・24filtered・失敗ignored0・警告0（`ai-patchstate-recovery-final.log`）。29+5を別の34ケースとして数えない。全workspaceの追加実行はしていない。親runtimeの実lease adapterは未接続、通常登録・実AI観測・ゲーム起動は0のまま。
+
+Jason追加提案のphase不一致検査を確定した。試験用機械語callerをphase引数付きにし、同じowner/thread/ARM/世代のphase2→phase1→phase2を原gateway経由で呼ぶ。phase1は原関数へそのまま届き、原callは1回だけ増え、受理receiptは0、Capture/INVOCATION/DEPTHは解除済み。続くphase2は正常に再受理される。誤owner・再入・別thread・世代変更も含め、子試験の合計を9原call・18行・入口連番1..9で検査した。世代を巻き戻してphase検査を通していない。
+
+変更はgateway_tests.rsと本書のみ。対象子検査を共有cargo_gateと専用targetで再コンパイルし、1成功・28filtered・失敗ignored0・警告0（D:/CC/Work/todo880/ai-phase-final.log）。直前の対象29成功、復旧API5成功・24filteredと合わせて検証範囲を保持し、重複加算しない。全workspaceの追加実行は0。source上のproduction ABI/RuntimeLease契約に変更はなく、本体の実adapter登録・AI支払い実観測・通常接続成功は依然0である。
