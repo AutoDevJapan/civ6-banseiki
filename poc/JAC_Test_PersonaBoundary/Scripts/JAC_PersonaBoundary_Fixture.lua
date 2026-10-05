@@ -9,6 +9,7 @@ local ENEMY_LEADER = "LEADER_JAC_ASHINA_MORIKIYO";
 local SPY_CIVIC = "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE";
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local RETRY_PENDING = "JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING";
+local THIRD_CIVIC_INTENT = "JAC_BOUNDARY_THIRD_CIVIC_INTENT";
 local PRODUCTION = "JAC_BOUNDARY_SPY_PRODUCTION";
 local GAMEPLAY_API_PROBE = "JAC_BOUNDARY_GAMEPLAY_API_PROBE";
 local CAPACITY_CIVIC_RECEIPT = "JAC_BOUNDARY_CAPACITY_CIVIC_RECEIPT";
@@ -517,7 +518,8 @@ GameEvents.JAC_BoundaryEnemyFixtureBarrier.Add(function(controller,params)
         params.Action=="CLASSIFY_CAPACITY_GOVERNMENT" or
         params.Action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION" or
         params.Action=="PROBE_CAPACITY_GOVERNMENT_API" or
-        params.Action=="PROGRESS_CAPACITY_DISTRICT",
+        params.Action=="PROGRESS_CAPACITY_DISTRICT" or
+        params.Action=="THIRD_SPY_CIVIC_INTENT",
         "unknown enemy fixture barrier");
     local previous=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
     local marker={action=params.Action,token=params.Token,turn=params.Turn,
@@ -1867,6 +1869,54 @@ GameEvents.JAC_BoundaryCaptureEnemyRecovery.Add(function(controller,params)
         nodesOwned=nodes,spent=Players[c.owner]:GetGovernors():GetGovernorPointsSpent(),
         remaining=remaining,unassignedAtCapture=params.Unassigned,
         turn=Game.GetCurrentGameTurn()});
+end);
+
+-- Reserve the one native research request before it is sent from UI. The
+-- scenario saves this marker first; a reloaded UI has no matching local
+-- armed token and cannot submit the request a second time.
+GameEvents.JAC_BoundaryThirdSpyCivicIntent.Add(function(controller,params)
+    EnemyReceipt(controller,params,"THIRD_SPY_CIVIC_INTENT");
+    local c=EnemyConfig(controller);
+    assert(c.cityID and not Game:GetProperty(THIRD_CIVIC_INTENT),
+        "third spy Civic intent already reserved");
+    local retry=assert(Game:GetProperty(RETRY),"first failed mission archive missing");
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "second failed mission event missing");
+    local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),
+        "second failed spy reference missing");
+    local native=NativeEnemy(c);
+    assert(retry.current==2 and retry.archive and
+        retry.archive.eventID==0 and retry.archive.eventTurn==23 and
+        event.attacker==controller and event.id==1 and event.turn==45 and
+        spy.owner==controller and spy.id==851976 and
+        native.appointed and native.base and native.established and
+        native.neutralized==0 and native.cityOwner==c.owner and
+        native.cityID==c.cityID and params.EventID==event.id and
+        params.EventTurn==event.turn and params.SpyID==spy.id and
+        params.BeforeCapacity==2,
+        "native failed attempts or Governor changed before Civic intent");
+    local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_NANBAN_ENVOYS"],
+        "test-only native spy grant Civic missing");
+    local prereq=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS"],
+        "Nanban Civic prerequisite missing");
+    local culture=Players[controller]:GetCulture();
+    assert(civic.Index==params.CivicIndex and civic.Hash==params.CivicHash and
+        not culture:HasCivic(civic.Index) and culture:HasCivic(prereq.Index),
+        "native Civic identity or research prerequisites changed");
+    local grants=0;
+    for row in GameInfo.CivicModifiers() do
+        if row.CivicType==civic.CivicType and row.ModifierId=="CIVIC_GRANT_SPY" then
+            grants=grants+1;
+        end
+    end
+    assert(grants==1,"test-only native spy grant was not installed");
+    Game:SetProperty(THIRD_CIVIC_INTENT,{owner=controller,status="RESERVED",
+        token=params.Token,turn=params.Turn,frame=params.Frame,
+        publishEpoch=params.PublishEpoch,civicIndex=civic.Index,
+        civicHash=civic.Hash,eventID=event.id,eventTurn=event.turn,
+        spyID=spy.id,capacitySource="UI",beforeCapacity=params.BeforeCapacity});
+    print("JAC_BOUNDARY THIRD_SPY_CIVIC_INTENT "..
+        R.Serialize(Game:GetProperty(THIRD_CIVIC_INTENT)));
 end);
 
 ExposedMembers.JAC_PersonaBoundaryGameplayRead = ReadGameplay;

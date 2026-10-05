@@ -223,8 +223,10 @@ fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() 
 fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it() {
     let request = scenario("leader-persona-spy-third-civic-request.json");
     let tick = scenario("leader-persona-spy-third-civic-tick.json");
+    let ready = scenario("leader-persona-spy-third-civic-ready.json");
     validate_scenario(&request).unwrap();
     validate_scenario(&tick).unwrap();
+    validate_scenario(&ready).unwrap();
     let request_steps = steps(&request);
     let tick_steps = steps(&tick);
     assert_eq!(
@@ -239,17 +241,43 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
             .count(),
         1
     );
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC_INTENT')"))
+            .count(),
+        1
+    );
     assert!(request_steps.iter().all(|step| !action(step, "end_turn")));
+    let intent_index = request_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC_INTENT')")
+        })
+        .unwrap();
     let request_index = request_steps
         .iter()
         .position(|step| action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC')"))
         .unwrap();
-    let request_save = request_steps
+    let saves: Vec<_> = request_steps
         .iter()
-        .position(|step| action(step, "save"))
+        .enumerate()
+        .filter_map(|(i, step)| action(step, "save").then_some(i))
+        .collect();
+    assert_eq!(saves.len(), 2);
+    let reload = request_steps
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, step)| action(step, "load").then_some(i))
         .unwrap();
-    assert!(request_index < request_save);
-    assert_eq!(request_steps[request_save]["checkpoint"], true);
+    assert!(intent_index < saves[0] && saves[0] < request_index);
+    assert!(request_index < saves[1] && saves[1] < reload);
+    assert!(saves
+        .iter()
+        .all(|&i| request_steps[i]["checkpoint"] == true));
+    assert_eq!(request_steps[reload]["checkpoint"], true);
+    assert!(code(&request_steps[reload + 2]).contains("survive save/load"));
     assert_eq!(tick_steps[0]["checkpoint"], true);
     assert_eq!(
         tick_steps
@@ -268,7 +296,15 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
         .unwrap();
     assert!(turn < save && save < tick_steps.len() - 2);
     assert_eq!(tick_steps[turn]["turns"], 1);
-    for data in [&request, &tick] {
+    let ready_steps = steps(&ready);
+    assert_eq!(ready_steps.len(), 4);
+    assert_eq!(ready_steps[0]["checkpoint"], true);
+    assert!(code(&ready_steps[2]).contains("s.capacity==3"));
+    assert!(code(&ready_steps[2]).contains("s.captured==2"));
+    assert!(ready_steps
+        .iter()
+        .all(|step| !action(step, "save") && !action(step, "end_turn")));
+    for data in [&request, &tick, &ready] {
         assert_eq!(data["strict_lua_errors"], true);
         assert!(steps(data)
             .iter()

@@ -610,6 +610,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-spy-third-capacity-probe.json".to_string(),
             "leader-persona-spy-third-civic-request.json".to_string(),
             "leader-persona-spy-third-civic-tick.json".to_string(),
+            "leader-persona-spy-third-civic-ready.json".to_string(),
             "leader-persona-spy-neutralization-retry-diagnose.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange-probe.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange.json".to_string(),

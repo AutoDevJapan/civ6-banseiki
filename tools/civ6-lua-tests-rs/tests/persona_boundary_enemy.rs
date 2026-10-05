@@ -145,6 +145,9 @@ impl Enemy {
                     return has(self,index)
                 end;
                 culture.GetProgressingCivic=function() return THIRD_CIVIC_PROGRESS end;
+                culture.CanProgress=function(_,index)
+                    return index==20 and THIRD_CAN_PROGRESS~=false
+                end;
                 return culture
             end;
             PlayerOperations.PROGRESS_CIVIC=4;
@@ -154,6 +157,10 @@ impl Enemy {
             assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='NOT_REQUESTED');
             "#,
         );
+    }
+
+    fn arm_third_civic(&self) {
+        self.run("local b=ExposedMembers.JAC_PersonaBoundary; b.Queue('THIRD_SPY_CIVIC_INTENT'); FRAME(); local first=REQUESTS[#REQUESTS]; assert(first.params.OnStart=='JAC_BoundaryThirdSpyCivicIntent'); ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyCivicIntent',first.params); FRAME(); local barrier=REQUESTS[#REQUESTS]; assert(barrier.params.OnStart=='JAC_BoundaryEnemyFixtureBarrier'); ENEMY_CASES.fireCore('JAC_BoundaryEnemyFixtureBarrier',barrier.params); fire(Events.GameCoreEventPublishComplete); FRAME(); assert(b.lastAction=='ACCEPTED_THIRD_SPY_CIVIC_INTENT' and b.ThirdSpyCivicStatus().stage=='RESERVED'); local intent=Game:GetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT'); assert(intent.status=='RESERVED' and intent.eventID==1 and intent.eventTurn==45 and intent.spyID==851976)");
     }
 
     fn captured_district(&self) {
@@ -789,6 +796,12 @@ fn native_reassignment_before_human_request_uses_a_recorded_unassigned_baseline(
 fn official_third_spy_civic_request_requires_native_research_progress() {
     let h = Enemy::new();
     h.third_civic_state();
+    h.arm_third_civic();
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "native third spy Civic is not eligible",
+    );
+    h.run("fire(Events.SaveComplete)");
     h.run("local b=ExposedMembers.JAC_PersonaBoundary; BASE_REQUESTS=#REQUESTS; b.Queue('THIRD_SPY_CIVIC'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(#REQUESTS==BASE_REQUESTS+1 and r.owner==0 and r.op==PlayerOperations.PROGRESS_CIVIC and r.params.civic==2020 and r.params.insert==PlayerOperations.VALUE_EXCLUSIVE and b.lastAction=='DISPATCHED_THIRD_SPY_CIVIC')");
     h.run("THIRD_CIVIC_PROGRESS=20; FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_THIRD_SPY_CIVIC' and ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='RESEARCHING'); THIRD_CIVIC_OWNED=true; SPY_CAPACITY=3; assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='CAPACITY_READY')");
     h.reject(
@@ -806,7 +819,7 @@ fn third_spy_research_rejects_missing_native_grant_and_wrong_failure_history() {
         "GameInfo.CivicModifiers=function() return function() end end; BASE_REQUESTS=#REQUESTS",
     );
     missing.reject(
-        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
         "native spy capacity grant was not loaded exactly once",
     );
     missing.run("assert(#REQUESTS==BASE_REQUESTS)");
@@ -815,7 +828,7 @@ fn third_spy_research_rejects_missing_native_grant_and_wrong_failure_history() {
     changed.third_civic_state();
     changed.run("Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id=2; BASE_REQUESTS=#REQUESTS");
     changed.reject(
-        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
         "two failed native attempts or captive roster changed",
     );
     changed.run("assert(#REQUESTS==BASE_REQUESTS)");
@@ -825,12 +838,54 @@ fn third_spy_research_rejects_missing_native_grant_and_wrong_failure_history() {
 fn unknown_third_spy_research_response_never_sends_a_second_request() {
     let h = Enemy::new();
     h.third_civic_state();
+    h.arm_third_civic();
+    h.run("fire(Events.SaveComplete)");
     h.run("local b=ExposedMembers.JAC_PersonaBoundary; BASE_REQUESTS=#REQUESTS; b.Queue('THIRD_SPY_CIVIC'); FRAME(); ELAPSED=11; FRAME(); assert(b.lastAction=='UNKNOWN_THIRD_SPY_CIVIC' and #REQUESTS==BASE_REQUESTS+1)");
+    exec(&h.0, &read_repo(VIEW));
     h.reject(
         "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
         "native third spy Civic is not eligible",
     );
     h.run("assert(#REQUESTS==BASE_REQUESTS+1)");
+}
+
+#[test]
+fn reloaded_reserved_third_civic_intent_cannot_send_the_native_request() {
+    let h = Enemy::new();
+    h.third_civic_state();
+    h.arm_third_civic();
+    h.run("fire(Events.SaveComplete); BASE_REQUESTS=#REQUESTS");
+    exec(&h.0, &read_repo(VIEW));
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "native third spy Civic is not eligible",
+    );
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
+        "native third spy Civic intent is not eligible",
+    );
+    h.run("assert(#REQUESTS==BASE_REQUESTS and Game:GetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT').status=='RESERVED')");
+}
+
+#[test]
+fn official_third_spy_civic_preflight_rejects_missing_turn_permission() {
+    let no_progress = Enemy::new();
+    no_progress.third_civic_state();
+    no_progress.run("THIRD_CAN_PROGRESS=false; BASE_REQUESTS=#REQUESTS");
+    no_progress.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
+        "native third spy Civic intent is not eligible",
+    );
+    no_progress.run("assert(#REQUESTS==BASE_REQUESTS)");
+
+    let no_commands = Enemy::new();
+    no_commands.third_civic_state();
+    no_commands.run("GOV_STRATEGIC_COMMANDS=false; BASE_REQUESTS=#REQUESTS");
+    no_commands.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
+        "native third spy Civic intent is not eligible",
+    );
+    no_commands.run("assert(#REQUESTS==BASE_REQUESTS)");
 }
 
 #[test]

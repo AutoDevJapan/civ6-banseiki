@@ -21,6 +21,28 @@
       "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyCivicStatus(); assert(s.stage=='NOT_REQUESTED' and s.prerequisiteOwned and s.capacity==2,'third native spy research preconditions missing'); return s.stage"
     },
     {
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT'); return 'one durable research intent queued'",
+      "state_name": "InGame",
+      "lua_timeout": 20,
+      "action": "ui_lua",
+      "timeout": 60
+    },
+    {
+      "condition": {
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_THIRD_SPY_CIVIC_INTENT' or a=='UNKNOWN_THIRD_SPY_CIVIC_INTENT' or a=='REJECTED_THIRD_SPY_CIVIC_INTENT' then error(a) end; return a=='ACCEPTED_THIRD_SPY_CIVIC_INTENT'",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for",
+      "timeout": 60
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
       "action": "ui_lua",
       "state_name": "InGame",
       "timeout": 60,
@@ -28,8 +50,13 @@
       "code": "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC'); return 'one official Civic research request queued'"
     },
     {
-      "action": "pause",
-      "seconds": 3
+      "condition": {
+        "code": "local a=ExposedMembers.JAC_PersonaBoundary.lastAction; if a=='ERROR_THIRD_SPY_CIVIC' or a=='UNKNOWN_THIRD_SPY_CIVIC' or a=='REJECTED_THIRD_SPY_CIVIC' then error(a) end; return a=='ACCEPTED_THIRD_SPY_CIVIC'",
+        "state_name": "InGame",
+        "type": "lua"
+      },
+      "action": "wait_for",
+      "timeout": 60
     },
     {
       "action": "ui_lua",
@@ -43,6 +70,27 @@
       "name": "JAC-Enemy-Neutralization",
       "exact_name": true,
       "checkpoint": true
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "timeout": 300,
+      "checkpoint": true
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyCivicStatus(); assert(s.stage=='RESEARCHING' or s.stage=='CAPACITY_READY','native Civic research did not survive save/load'); assert(s.intentToken and s.captured==2,'saved one-shot intent or captives missing'); return s.stage",
+      "state_name": "InGame",
+      "lua_timeout": 20,
+      "action": "ui_lua",
+      "timeout": 60
     },
     {
       "action": "exit_to_menu"
