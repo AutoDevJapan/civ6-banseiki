@@ -222,7 +222,7 @@ fn announce_critical_and_wait_for_owned_game(
     let deadline = Instant::now() + CRITICAL_CLOSE_BUDGET;
     while Instant::now() < deadline {
         let target_exited = matches!(alive(game), Ok(false));
-        // An ambiguous exception must remain pending until the controller has
+        // An exception with unverified restoration must remain pending until the controller has
         // successfully requested termination of this pinned game. This avoids
         // treating an application exception as handled while normal play runs.
         if !target_exited && close_ack.is_some_and(|ack| !ack.load(Ordering::SeqCst)) {
@@ -1263,6 +1263,8 @@ struct Debugger {
     #[cfg(test)]
     restore_faults: usize,
     #[cfg(test)]
+    freeze_refused: bool,
+    #[cfg(test)]
     critical_signal: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     output: Jsonl,
     next_id: u64,
@@ -1386,6 +1388,8 @@ impl Debugger {
             critical: false,
             #[cfg(test)]
             restore_faults: 0,
+            #[cfg(test)]
+            freeze_refused: false,
             #[cfg(test)]
             critical_signal: None,
             output,
@@ -2179,7 +2183,7 @@ impl Debugger {
             &reason,
             self.cleanup_event.take(),
             self.attached,
-            None,
+            Some(&self.close_ack),
             Some(&mut self.attach_origin),
             Some(self.query_thread_start),
             false,
@@ -2368,6 +2372,10 @@ impl CleanupOps for Debugger {
         matches!(alive(&self.game), Ok(false))
     }
     fn freeze(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        if self.freeze_refused {
+            return Err("injected SuspendThread refusal before verified restoration".into());
+        }
         if self.mode == ProbeMode::Lifecycle {
             return Ok(());
         }
@@ -2957,6 +2965,14 @@ mod tests {
             return;
         }
         verify_watchdog_failure();
+    }
+
+    #[test]
+    fn unassigned_worker_reap_requires_native_exit_signal() {
+        if isolated_test("unassigned_worker_reap_requires_native_exit_signal") {
+            return;
+        }
+        test_support::verify_unassigned_worker_reap();
     }
 
     #[test]
@@ -4365,6 +4381,7 @@ mod tests {
         let base = child.entry - CAN_EVER_RVA;
         let signal = Arc::new(AtomicBool::new(false));
         let observer_signal = Arc::clone(&signal);
+        let (ack_tx, ack_rx) = mpsc::channel();
         let (stop_tx, stop_rx) = mpsc::channel();
         let observer = thread::spawn(move || {
             let game = process(pid, true).unwrap();
@@ -4372,6 +4389,7 @@ mod tests {
                 Debugger::attach(pid, game, base, 0x500000, output, ProbeMode::Governor).unwrap();
             debugger.restore_faults = usize::MAX;
             debugger.critical_signal = Some(observer_signal);
+            ack_tx.send(Arc::clone(&debugger.close_ack)).unwrap();
             let mut gate = CleanupGate::new();
             gate.deadline = Instant::now() + Duration::from_millis(250);
             debugger.cleanup_gate = Some(gate);
@@ -4384,6 +4402,7 @@ mod tests {
                 debugger.lifecycle.exit_code,
             )
         });
+        let close_ack = ack_rx.recv().unwrap();
         let start = Instant::now();
         while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
             assert!(
@@ -4400,7 +4419,9 @@ mod tests {
             );
             thread::sleep(Duration::from_millis(20));
         }
-        let child_status = child.terminate(); // Only this case's synthetic child.
+        child.child.kill().unwrap(); // Only this case's synthetic child.
+        close_ack.store(true, Ordering::SeqCst);
+        let child_status = child.wait_for_exit();
         let (result, attached, critical, terminal, exit_code) = join_observer(observer).unwrap();
         assert!(result
             .unwrap_err()
@@ -4411,6 +4432,72 @@ mod tests {
         assert_eq!(exit_code, child_status.code().map(|code| code as u32));
         let trace = fs::read_to_string(&path).unwrap();
         assert!(trace.contains("injected SetThreadContext refusal"));
+        assert!(trace.contains("\"type\":\"target_exit_observed\""));
+        drop(child);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn pending_restore_refusal_requires_owned_close_ack() {
+        if isolated_test("pending_restore_refusal_requires_owned_close_ack") {
+            return;
+        }
+        let mut child = Fixture::start();
+        let pid = child.child.id();
+        let path = std::env::temp_dir().join(format!(
+            "pr86-pending-refusal-{}-{pid}.jsonl",
+            std::process::id()
+        ));
+        let output = Jsonl::new(&path).unwrap();
+        let base = child.entry - CAN_EVER_RVA;
+        let signal = Arc::new(AtomicBool::new(false));
+        let observer_signal = Arc::clone(&signal);
+        let (ack_tx, ack_rx) = mpsc::channel();
+        let (_stop_tx, stop_rx) = mpsc::channel();
+        let observer = thread::spawn(move || {
+            let mut debugger = Debugger::attach(
+                pid,
+                process(pid, true).unwrap(),
+                base,
+                0x500000,
+                output,
+                ProbeMode::Governor,
+            )
+            .unwrap();
+            debugger.panic_on_owned_event = true;
+            debugger.freeze_refused = true;
+            debugger.critical_signal = Some(observer_signal);
+            ack_tx.send(Arc::clone(&debugger.close_ack)).unwrap();
+            let mut gate = CleanupGate::new();
+            gate.deadline = Instant::now() + Duration::from_millis(500);
+            debugger.cleanup_gate = Some(gate);
+            debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
+        });
+        let close_ack = ack_rx.recv().unwrap();
+        let started = Instant::now();
+        while !fs::read_to_string(&path).is_ok_and(|s| s.contains("\"type\":\"ready\"")) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(10));
+        }
+        child.send("T").unwrap();
+        while !signal.load(Ordering::SeqCst) {
+            assert!(started.elapsed() < Duration::from_secs(5));
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(child.child.try_wait().unwrap().is_none());
+        // Even the original call may not complete while registers are unverified.
+        let response = child.command_with_budget("T", "PROBE_OUT:", Duration::from_millis(200));
+        assert!(response.unwrap_err().contains("did not answer"));
+        assert!(child.child.try_wait().unwrap().is_none());
+        child.child.kill().unwrap();
+        close_ack.store(true, Ordering::SeqCst);
+        child.wait_for_exit();
+        assert!(
+            join_observer(observer).is_err(),
+            "injected panic became success"
+        );
+        let trace = fs::read_to_string(&path).unwrap();
+        assert!(trace.contains("\"type\":\"critical_cleanup\""));
         assert!(trace.contains("\"type\":\"target_exit_observed\""));
         drop(child);
         fs::remove_file(path).unwrap();

@@ -156,14 +156,15 @@ impl OwnedCase {
         }
         let deadline = Instant::now() + REAP_BUDGET;
         loop {
-            let _ = self.child.try_wait().map_err(|e| e.to_string())?;
+            let worker_exited = self.child.try_wait().map_err(|e| e.to_string())?.is_some();
             let members_exited = self
                 .members
                 .values()
                 .all(|member| matches!(alive(member), Ok(false)));
-            if self.active_processes()? == 0 && members_exited {
+            if worker_exited && self.active_processes()? == 0 && members_exited {
                 // Empty accounting does not mean process handles are signaled.
-                // Require termination of every member pinned before cleanup.
+                // Require the worker's own exit even if assignment failed,
+                // and termination of every member pinned before cleanup.
                 return captured;
             }
             if Instant::now() >= deadline {
@@ -361,6 +362,85 @@ pub(super) fn verify_watchdog_failure() {
         );
         assert_eq!(peer.command("T", "PROBE_OUT:"), "1");
     }
+}
+
+pub(super) fn verify_unassigned_worker_reap() {
+    let child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "windows::tests::fixture_child_worker",
+            "--nocapture",
+        ])
+        .env("PR86_PROBE_TEST_CHILD", "1")
+        .creation_flags(0x0800_0000)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let job = Handle::new(
+        unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) },
+        "unassigned test Job",
+    )
+    .unwrap();
+    let mut owner = OwnedCase {
+        child,
+        job,
+        members: BTreeMap::new(),
+    };
+    let pid = owner.child.id();
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let debugger = thread::spawn(move || {
+        assert_ne!(unsafe { DebugActiveProcess(pid) }, 0);
+        assert_ne!(unsafe { DebugSetProcessKillOnExit(0) }, 0);
+        let mut event = DEBUG_EVENT::default();
+        assert_ne!(unsafe { WaitForDebugEventEx(&mut event, 3000) }, 0);
+        ready_tx.send(()).unwrap();
+        // Native termination signaling cannot complete until this real pending
+        // debugger event is released. The empty Job is deliberately unassigned.
+        thread::sleep(Duration::from_millis(250));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match event.dwDebugEventCode {
+                CREATE_PROCESS_DEBUG_EVENT => {
+                    let file = unsafe { event.u.CreateProcessInfo.hFile };
+                    if !file.is_null() {
+                        unsafe {
+                            CloseHandle(file);
+                        }
+                    }
+                }
+                LOAD_DLL_DEBUG_EVENT => {
+                    let file = unsafe { event.u.LoadDll.hFile };
+                    if !file.is_null() {
+                        unsafe {
+                            CloseHandle(file);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            let exited = event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT;
+            assert_ne!(
+                unsafe { ContinueDebugEvent(event.dwProcessId, event.dwThreadId, DBG_CONTINUE) },
+                0
+            );
+            if exited {
+                return;
+            }
+            assert!(Instant::now() < deadline);
+            assert_ne!(unsafe { WaitForDebugEventEx(&mut event, 3000) }, 0);
+        }
+    });
+    ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(owner.active_processes().unwrap(), 0);
+    assert!(owner.members.is_empty());
+    owner.reap().unwrap();
+    assert!(
+        owner.child.try_wait().unwrap().is_some(),
+        "empty unassigned Job hid a live worker"
+    );
+    debugger.join().unwrap();
 }
 
 pub(super) struct Fixture {
