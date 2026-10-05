@@ -38,6 +38,8 @@ const ACTIONS: [&str; 21] = [
 ];
 const WITNESS: &str = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_HotseatWitness.lua");
 const XML: &str = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_HotseatWitness.xml");
+const ORIGINAL_SCENARIO: &str =
+    include_str!("../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json");
 
 pub fn check_scenario(data: &Value) -> Result<()> {
     scenario::validate_scenario(data)?;
@@ -61,6 +63,29 @@ pub fn check_scenario(data: &Value) -> Result<()> {
         || data["steps"][19]["name"] != data["steps"][17]["name"]
     {
         return Err(Error::scenario("hotseat save/load pairs changed"));
+    }
+    let mut original: Value = serde_json::from_str(ORIGINAL_SCENARIO)?;
+    if let Some(nonce) = data.get("hotseat_bridge_nonce").and_then(Value::as_str) {
+        let ids = data["steps"][0]["ids"]
+            .as_array()
+            .ok_or_else(|| Error::scenario("hotseat MOD IDs missing"))?;
+        let extra = ids
+            .last()
+            .filter(|id| {
+                id.as_str()
+                    .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
+            })
+            .ok_or_else(|| Error::scenario("prepared hotseat MOD ID missing"))?;
+        original["steps"][0]["ids"]
+            .as_array_mut()
+            .unwrap()
+            .push(extra.clone());
+        original["hotseat_bridge_nonce"] = nonce.into();
+    }
+    if data != &original {
+        return Err(Error::scenario(
+            "hotseat bridge requires the unchanged original 21-step scenario",
+        ));
     }
     Ok(())
 }
@@ -90,6 +115,21 @@ pub struct Bundle {
     pub scenario: String,
 }
 
+fn manifest_text(mod_id: &str, nonce: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<Mod id="{mod_id}" version="1">
+  <Properties><Name>JAC Hotseat Test Witness {nonce}</Name><Description>Test-only log witness</Description><Teaser>Hotseat test only</Teaser><Authors>JAC</Authors></Properties>
+  <InGameActions>
+    <AddUserInterfaces id="JAC_HotseatWitness_UI"><Properties><Context>InGame</Context></Properties><File>UI/JAC_HotseatWitness.xml</File></AddUserInterfaces>
+    <ImportFiles id="JAC_HotseatWitness_Files"><File>UI/JAC_HotseatWitness.xml</File><File>UI/JAC_HotseatWitness.lua</File><File>UI/JAC_HotseatPlan.lua</File></ImportFiles>
+  </InGameActions>
+  <Files><File>UI/JAC_HotseatWitness.xml</File><File>UI/JAC_HotseatWitness.lua</File><File>UI/JAC_HotseatPlan.lua</File></Files>
+</Mod>
+"#
+    )
+}
+
 /// Build an installable, per-run MOD beside a scenario copy; never touch the user's Mods folder.
 pub fn prepare(data: &Value, output: &Path, nonce: &str, mod_id: &str) -> Result<Bundle> {
     check_scenario(data)?;
@@ -103,19 +143,10 @@ pub fn prepare(data: &Value, output: &Path, nonce: &str, mod_id: &str) -> Result
     let output = output.canonicalize()?;
     let mod_folder = output.join("JAC_Test_HotseatBridge");
     fs::create_dir_all(mod_folder.join("UI"))?;
-    let modinfo = format!(
-        r#"<?xml version="1.0" encoding="utf-8"?>
-<Mod id="{mod_id}" version="1">
-  <Properties><Name>JAC Hotseat Test Witness {nonce}</Name><Description>Test-only log witness</Description><Teaser>Hotseat test only</Teaser><Authors>JAC</Authors></Properties>
-  <InGameActions>
-    <AddUserInterfaces id="JAC_HotseatWitness_UI"><Properties><Context>InGame</Context></Properties><File>UI/JAC_HotseatWitness.xml</File></AddUserInterfaces>
-    <ImportFiles id="JAC_HotseatWitness_Files"><File>UI/JAC_HotseatWitness.xml</File><File>UI/JAC_HotseatWitness.lua</File><File>UI/JAC_HotseatPlan.lua</File></ImportFiles>
-  </InGameActions>
-  <Files><File>UI/JAC_HotseatWitness.xml</File><File>UI/JAC_HotseatWitness.lua</File><File>UI/JAC_HotseatPlan.lua</File></Files>
-</Mod>
-"#
-    );
-    fs::write(mod_folder.join("JAC_Test_HotseatBridge.modinfo"), modinfo)?;
+    fs::write(
+        mod_folder.join("JAC_Test_HotseatBridge.modinfo"),
+        manifest_text(mod_id, nonce),
+    )?;
     fs::write(mod_folder.join("UI/JAC_HotseatWitness.xml"), XML)?;
     fs::write(mod_folder.join("UI/JAC_HotseatWitness.lua"), WITNESS)?;
     fs::write(mod_folder.join("UI/JAC_HotseatPlan.lua"), plan(data, nonce))?;
@@ -139,6 +170,36 @@ pub fn prepare(data: &Value, output: &Path, nonce: &str, mod_id: &str) -> Result
         serde_json::to_vec_pretty(&bundle)?,
     )?;
     Ok(bundle)
+}
+
+pub fn verify_installed(bundle: &Bundle, data: &Value, mods: &Path) -> Result<()> {
+    check_scenario(data)?;
+    if data["hotseat_bridge_nonce"] != bundle.nonce
+        || data["steps"][0]["ids"]
+            .as_array()
+            .and_then(|ids| ids.last())
+            .and_then(Value::as_str)
+            != Some(bundle.mod_id.as_str())
+    {
+        return Err(Error::scenario("installed hotseat bundle identity differs"));
+    }
+    let root = mods.join("JAC_Test_HotseatBridge");
+    for (relative, expected) in [
+        (
+            "JAC_Test_HotseatBridge.modinfo",
+            manifest_text(&bundle.mod_id, &bundle.nonce),
+        ),
+        ("UI/JAC_HotseatWitness.xml", XML.to_owned()),
+        ("UI/JAC_HotseatWitness.lua", WITNESS.to_owned()),
+        ("UI/JAC_HotseatPlan.lua", plan(data, &bundle.nonce)),
+    ] {
+        if fs::read(root.join(relative))? != expected.as_bytes() {
+            return Err(Error::scenario(format!(
+                "installed hotseat file differs from the checked source: {relative}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -222,6 +283,16 @@ fn parse_chunk(line: &str) -> Result<Option<Chunk>> {
 
 /// Reject interleaved, missing, duplicate, and out-of-order chunks. A stale nonce is an error.
 pub fn parse_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
+    parse_frames_inner(log, nonce, false)
+}
+
+/// Log writes are not atomic as a whole frame. Polling may observe the final
+/// line or frame before the witness has finished printing its remaining parts.
+pub fn parse_available_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
+    parse_frames_inner(log, nonce, true)
+}
+
+fn parse_frames_inner(log: &str, nonce: &str, allow_incomplete_tail: bool) -> Result<Vec<Frame>> {
     if !nonce_valid(nonce) {
         return Err(Error::scenario("invalid expected nonce"));
     }
@@ -229,8 +300,16 @@ pub fn parse_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
     let mut last_serial = None;
     let mut current: Option<Chunk> = None;
     let mut hex = String::new();
-    for line in log.lines() {
-        let Some(chunk) = parse_chunk(line)? else {
+    let lines: Vec<_> = log.lines().collect();
+    for (index, line) in lines.iter().enumerate() {
+        let chunk = match parse_chunk(line) {
+            Ok(chunk) => chunk,
+            Err(_) if allow_incomplete_tail && index + 1 == lines.len() && !log.ends_with('\n') => {
+                break;
+            }
+            Err(error) => return Err(error),
+        };
+        let Some(chunk) = chunk else {
             continue;
         };
         if chunk.nonce != nonce {
@@ -283,7 +362,7 @@ pub fn parse_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
             current = Some(chunk)
         }
     }
-    if current.is_some() {
+    if current.is_some() && !allow_incomplete_tail {
         return Err(Error::scenario("incomplete hotseat log frame"));
     }
     Ok(frames)
@@ -299,7 +378,7 @@ pub fn fresh_frames(log_dir: &Path, baseline: &Value, nonce: &str) -> Result<Vec
             "Lua.log generation changed after hotseat baseline",
         ));
     }
-    parse_frames(&judge::slice_log_bytes(&bytes, marker, inode), nonce)
+    parse_available_frames(&judge::slice_log_bytes(&bytes, marker, inode), nonce)
 }
 
 /// The witness's fixed-length values preserve nil, types, and all four complete growth records.
@@ -340,15 +419,16 @@ pub struct WitnessSnapshot {
     pub hotseat: bool,
     pub paused: bool,
     pub dialog: bool,
+    pub dialog_ready: bool,
     pub fields: Vec<String>,
 }
 
 impl WitnessSnapshot {
     pub fn parse(body: &str) -> Result<Self> {
         let fields = decode_fields(body)?;
-        if fields.len() != 48 {
+        if fields.len() != 49 {
             return Err(Error::scenario(format!(
-                "expected 48 witness fields, got {}",
+                "expected 49 witness fields, got {}",
                 fields.len()
             )));
         }
@@ -374,17 +454,21 @@ impl WitnessSnapshot {
             hotseat: boolean(5)?,
             paused: boolean(6)?,
             dialog: boolean(7)?,
+            dialog_ready: boolean(8)?,
             fields,
         };
         if !snapshot.hotseat || !(0..=1).contains(&snapshot.local) || !snapshot.human {
             return Err(Error::scenario("witness is not a two-human hotseat state"));
         }
+        if snapshot.dialog_ready && (!snapshot.dialog || !snapshot.paused || !snapshot.active) {
+            return Err(Error::scenario("PlayerChange ready state is inconsistent"));
+        }
         for pid in 0..2 {
-            if snapshot.fields[8 + pid * 20] != "boolean:true" {
+            if snapshot.fields[9 + pid * 20] != "boolean:true" {
                 return Err(Error::scenario("witness player is not human"));
             }
             for unit in 0..2 {
-                let base = 10 + pid * 20 + unit * 9;
+                let base = 11 + pid * 20 + unit * 9;
                 if snapshot.fields[base] != format!("number:{pid}") {
                     return Err(Error::scenario("growth unit owner mismatch"));
                 }
@@ -402,7 +486,7 @@ impl WitnessSnapshot {
         let mut key = vec![self.fields[0].as_str(), self.fields[2].as_str()];
         for pid in 0..2 {
             for unit in 0..2 {
-                let base = 10 + pid * 20 + unit * 9;
+                let base = 11 + pid * 20 + unit * 9;
                 key.extend(self.fields[base..base + 9].iter().map(String::as_str));
             }
         }
@@ -618,10 +702,12 @@ impl<I: TransportIo> Controller<I> {
                 }
                 if frame.kind == "DIALOG_OPEN" {
                     let state = WitnessSnapshot::parse(&frame.body)?;
-                    if !state.dialog || !state.paused {
+                    if !state.dialog || !state.dialog_ready || !state.paused {
                         return Err(Error::scenario("PlayerChange was not visibly paused"));
                     }
                     dialog_open = Some(state);
+                } else if frame.kind == "DIALOG_WAIT" || frame.kind == "DIALOG_CLOSED" {
+                    dialog_open = None;
                 }
             }
             let complete = match action {
@@ -678,7 +764,11 @@ impl<I: TransportIo> Controller<I> {
         deadline: f64,
         mut mark_spent: impl FnMut(usize) -> Result<()>,
     ) -> Result<WitnessSnapshot> {
-        if !opened.dialog || !opened.paused || self.return_sent.contains(&after_step) {
+        if !opened.dialog
+            || !opened.dialog_ready
+            || !opened.paused
+            || self.return_sent.contains(&after_step)
+        {
             return Err(Error::scenario(
                 "PlayerChange Return requires a fresh visible paused dialog",
             ));
@@ -700,6 +790,7 @@ impl<I: TransportIo> Controller<I> {
                 if frame.kind == "DIALOG_CLOSED" {
                     let closed = WitnessSnapshot::parse(&frame.body)?;
                     if closed.dialog
+                        || closed.dialog_ready
                         || closed.paused
                         || !closed.active
                         || !closed.human

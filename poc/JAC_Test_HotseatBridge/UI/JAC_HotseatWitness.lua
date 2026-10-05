@@ -4,13 +4,16 @@ local plan = JAC_HOTSEAT_PLAN
 if not plan or type(plan.nonce) ~= "string" or #plan.nonce ~= 32 then return end
 if not GameConfiguration.IsHotseat() then return end
 if GameConfiguration.GetValue("JAC_HOTSEAT_BRIDGE_NONCE") ~= plan.nonce then return end
+-- AddUserInterfaces starts hidden. This empty context receives keys but draws nothing.
+ContextPtr:SetHide(false)
 
 local nonce = plan.nonce
 local scene = string.gsub(tostring(ContextPtr), "[^%w]", "") .. "." ..
     tostring(Game.GetCurrentGameTurn()) .. "." .. tostring(Game.GetLocalPlayer())
 local used = {}
 local booted = false
-local lastDialog = nil
+local lastShown = nil
+local lastReady = nil
 local lastError = nil
 local NIL = {}
 local serial = 0
@@ -50,17 +53,28 @@ local function dialog()
   local control = ContextPtr:LookUpControl("/InGame/PlayerChange")
   if not control then error("PlayerChange context missing") end
   local shown = not control:IsHidden() and UIManager:IsInPopupQueue(control)
-  return shown, control
+  if not shown then return false, false end
+  local panel = ContextPtr:LookUpControl("/InGame/PlayerChange/PopupAlphaIn")
+  local button = ContextPtr:LookUpControl("/InGame/PlayerChange/OkButton")
+  if not panel or not button then error("PlayerChange turn controls missing") end
+  local id = Game.GetLocalPlayer()
+  local config = PlayerConfigurations[id]
+  local player = Players[id]
+  if not config or not player then error("PlayerChange player missing") end
+  local ready = not panel:IsHidden() and not button:IsHidden() and not button:IsDisabled()
+      and config:GetHotseatPassword() == "" and player:IsHuman()
+      and player:IsTurnActive() and GameConfiguration.IsPaused()
+  return true, ready == true
 end
 
 local function snapshot()
-  local shown = dialog()
+  local shown, ready = dialog()
   local localID = Game.GetLocalPlayer()
   local current = Players[localID]
   if not current then error("local player missing") end
   local result = {Game.GetCurrentGameTurn(), GameConfiguration.GetStartTurn(), localID,
     current:IsTurnActive(), current:IsHuman(), GameConfiguration.IsHotseat(),
-    GameConfiguration.IsPaused(), shown}
+    GameConfiguration.IsPaused(), shown, ready}
   for pid = 0, 1 do
     local player = Players[pid]
     if not player then error("human player " .. pid .. " missing") end
@@ -102,12 +116,14 @@ local function observe()
     booted = true
     emit("BOOT", 0, observed)
   end
-  local shown = dialog()
-  if shown ~= lastDialog then
-    if shown then emit("DIALOG_OPEN", 0, observed)
-    elseif lastDialog == true then emit("DIALOG_CLOSED", 0, observed) end
-    lastDialog = shown
+  local shown, ready = dialog()
+  if shown and not ready and (lastShown ~= true or lastReady == true) then
+    emit("DIALOG_WAIT", 0, observed)
   end
+  if ready and lastReady ~= true then emit("DIALOG_OPEN", 0, observed) end
+  if not shown and lastShown == true then emit("DIALOG_CLOSED", 0, observed) end
+  lastShown = shown
+  lastReady = ready
 end
 
 local function execute(step, action)

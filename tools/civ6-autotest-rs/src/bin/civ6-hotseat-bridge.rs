@@ -71,14 +71,7 @@ enum Command {
 
 fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16) -> Result<()> {
     let (bundle, scenario, journal_path) = bundle_data(bundle_path)?;
-    let manifest = mods.join("JAC_Test_HotseatBridge/JAC_Test_HotseatBridge.modinfo");
-    let installed = fs::read_to_string(&manifest)?;
-    let plan = fs::read_to_string(mods.join("JAC_Test_HotseatBridge/UI/JAC_HotseatPlan.lua"))?;
-    if !installed.contains(&bundle.mod_id) || !plan.contains(&bundle.nonce) {
-        return Err(Error::scenario(
-            "installed hotseat test MOD differs from prepared bundle",
-        ));
-    }
+    hs::verify_installed(&bundle, &scenario, mods)?;
     let sent_path = journal_path.with_file_name("pregame-sent.txt");
     if sent_path.exists() {
         return Err(Error::scenario(
@@ -87,6 +80,11 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
     }
     let mut owner_check = hs::SystemTransport { logs };
     let owner = owner_check.owner()?;
+    let audit_baseline = judge::snapshot_logs(logs)?;
+    fs::write(
+        journal_path.with_file_name("pregame-log-baseline.json"),
+        serde_json::to_vec_pretty(&audit_baseline)?,
+    )?;
     let mut runner = Runner::new(
         scenario.clone(),
         journal_path.parent().unwrap().to_path_buf(),
@@ -119,6 +117,7 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
     let result = runner.lua("FrontEnd", code, 10.0);
     runner.disconnect();
     result?;
+    validate_runtime_logs(logs, &audit_baseline)?;
     println!("HostGame sent once. Verify StagingRoom ReadyButton geometry before one click; then wait for the nonce-matched InGame BOOT and DIALOG_OPEN.");
     Ok(())
 }
@@ -137,6 +136,35 @@ struct Journal {
     captures: BTreeMap<String, (String, hs::WitnessSnapshot)>,
     saved: BTreeMap<usize, hs::WitnessSnapshot>,
     post_exit_baseline: Option<Value>,
+    audit_baseline: Value,
+}
+
+fn validate_runtime_logs(logs: &Path, baseline: &Value) -> Result<()> {
+    for name in judge::LOG_NAMES {
+        let marker = &baseline["files"][name];
+        if !marker.is_object() {
+            return Err(Error::scenario(format!("missing {name} audit baseline")));
+        }
+        let (bytes, inode) = judge::read_log_file(&logs.join(name))?;
+        if judge::log_marker_replaced(&bytes, marker, inode) {
+            return Err(Error::scenario(format!(
+                "{name} generation changed during hotseat audit"
+            )));
+        }
+    }
+    let fresh = judge::read_since(logs, baseline)?;
+    let failed: Vec<_> = judge::judge(&fresh, "generic", None, true)
+        .into_iter()
+        .filter(|check| !check.passed)
+        .map(|check| format!("{}: {}", check.name, check.detail))
+        .collect();
+    if !failed.is_empty() {
+        return Err(Error::scenario(format!(
+            "hotseat runtime log checks failed: {}",
+            failed.join("; ")
+        )));
+    }
+    Ok(())
 }
 
 fn bundle_data(path: &Path) -> Result<(hs::Bundle, Value, PathBuf)> {
@@ -148,6 +176,14 @@ fn bundle_data(path: &Path) -> Result<(hs::Bundle, Value, PathBuf)> {
     hs::check_scenario(&scenario)?;
     if scenario["hotseat_bridge_nonce"] != bundle.nonce {
         return Err(Error::scenario("bundle and scenario nonce differ"));
+    }
+    if scenario["steps"][0]["ids"]
+        .as_array()
+        .and_then(|ids| ids.last())
+        .and_then(Value::as_str)
+        != Some(bundle.mod_id.as_str())
+    {
+        return Err(Error::scenario("bundle and scenario MOD ID differ"));
     }
     let parent = path
         .parent()
@@ -194,7 +230,7 @@ fn current_frames(logs: &Path, nonce: &str) -> Result<(Vec<hs::Frame>, usize)> {
         .rposition(|line| line.contains("|BOOT|1/"))
         .ok_or_else(|| Error::scenario("nonce-matched BOOT is missing"))?;
     Ok((
-        hs::parse_frames(&matching[start..].join("\n"), nonce)?,
+        hs::parse_available_frames(&matching[start..].join("\n"), nonce)?,
         boots,
     ))
 }
@@ -210,7 +246,10 @@ fn last_boot(frames: &[hs::Frame]) -> Result<&hs::Frame> {
 fn last_open<'a>(frames: &'a [hs::Frame], scene: &str) -> Result<&'a hs::Frame> {
     let latest = frames
         .iter()
-        .filter(|f| f.scene == scene && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_CLOSED"))
+        .filter(|f| {
+            f.scene == scene
+                && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_WAIT" || f.kind == "DIALOG_CLOSED")
+        })
         .last();
     latest
         .filter(|f| f.kind == "DIALOG_OPEN")
@@ -224,6 +263,9 @@ fn init(bundle_path: &Path, logs: &Path) -> Result<()> {
             "hotseat journal already exists; input will not be repeated",
         ));
     }
+    let audit_baseline: Value =
+        serde_json::from_slice(&fs::read(path.with_file_name("pregame-log-baseline.json"))?)?;
+    validate_runtime_logs(logs, &audit_baseline)?;
     let (frames, boot_count) = current_frames(logs, &bundle.nonce)?;
     if boot_count != 1 {
         return Err(Error::scenario("initial hotseat scene is not unique"));
@@ -245,6 +287,7 @@ fn init(bundle_path: &Path, logs: &Path) -> Result<()> {
         captures: BTreeMap::new(),
         saved: BTreeMap::new(),
         post_exit_baseline: None,
+        audit_baseline,
     };
     append_journal(&path, &state)?;
     let deadline = controller.io.now() + 120.0;
@@ -254,6 +297,7 @@ fn init(bundle_path: &Path, logs: &Path) -> Result<()> {
     })?;
     state.accepted_turns.insert(3);
     append_journal(&path, &state)?;
+    validate_runtime_logs(logs, &state.audit_baseline)?;
     println!("initial PlayerChange accepted once; next step 4");
     Ok(())
 }
@@ -264,6 +308,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
     }
     let (bundle, scenario, path) = bundle_data(bundle_path)?;
     let mut state = journal(&path)?;
+    validate_runtime_logs(logs, &state.audit_baseline)?;
     if state.nonce != bundle.nonce || state.next != number {
         return Err(Error::scenario(format!(
             "hotseat step out of order: expected {}, got {number}",
@@ -382,6 +427,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
         append_journal(&path, &state)?;
         println!("step {number} witnessed; next step {}", state.next);
     }
+    validate_runtime_logs(logs, &state.audit_baseline)?;
     Ok(())
 }
 
@@ -401,8 +447,10 @@ fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
     let baseline = state
         .post_exit_baseline
         .as_ref()
+        .cloned()
         .ok_or_else(|| Error::scenario("missing pre-load log baseline"))?;
-    let frames = hs::fresh_frames(logs, baseline, &bundle.nonce)?;
+    validate_runtime_logs(logs, &baseline)?;
+    let frames = hs::fresh_frames(logs, &baseline, &bundle.nonce)?;
     let boot = last_boot(&frames)?;
     let saved = state
         .saved
@@ -422,6 +470,7 @@ fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
     state.boot_count = boot_count;
     state.next = next;
     state.post_exit_baseline = None;
+    state.audit_baseline = baseline.clone();
     append_journal(&path, &state)?;
     let deadline = controller.io.now() + 120.0;
     controller.accept_turn(load_step, &opened, deadline, |n| {
@@ -430,6 +479,7 @@ fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
     })?;
     state.accepted_turns.insert(load_step);
     append_journal(&path, &state)?;
+    validate_runtime_logs(logs, &state.audit_baseline)?;
     println!("fresh load scene and full four-unit equality witnessed; next step {next}");
     Ok(())
 }
@@ -437,6 +487,7 @@ fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
 fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
     let (bundle, scenario_data, path) = bundle_data(bundle_path)?;
     let mut state = journal(&path)?;
+    validate_runtime_logs(logs, &state.audit_baseline)?;
     let number = state.next;
     if number != 11 && number != 20 {
         return Err(Error::scenario("no pending menu load"));
@@ -489,6 +540,21 @@ fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result
 }
 
 fn run(args: Args) -> Result<()> {
+    // Hold one OS file lock across each state transition. The journal alone
+    // cannot prevent two commands from reading the same `next` concurrently.
+    let _bundle_lock = match &args.command {
+        Command::Prepare { .. } => None,
+        Command::Pregame { bundle, .. }
+        | Command::Init { bundle, .. }
+        | Command::Step { bundle, .. }
+        | Command::MenuLoad { bundle, .. }
+        | Command::AdoptLoad { bundle, .. } => {
+            let file = OpenOptions::new().read(true).write(true).open(bundle)?;
+            file.try_lock()
+                .map_err(|_| Error::scenario("hotseat bundle is already in use"))?;
+            Some(file)
+        }
+    };
     match args.command {
         Command::Prepare { scenario, output } => {
             let data: Value = serde_json::from_slice(&fs::read(scenario)?)?;
@@ -533,5 +599,26 @@ fn main() -> std::process::ExitCode {
             eprintln!("hotseat bridge: {error}");
             std::process::ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_audit_rejects_unframed_lua_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in judge::LOG_NAMES {
+            fs::write(dir.path().join(name), b"baseline\n").unwrap();
+        }
+        let baseline = judge::snapshot_logs(dir.path()).unwrap();
+        validate_runtime_logs(dir.path(), &baseline).unwrap();
+        fs::write(
+            dir.path().join("Lua.log"),
+            b"baseline\nRuntime Error: original scenario failed\n",
+        )
+        .unwrap();
+        assert!(validate_runtime_logs(dir.path(), &baseline).is_err());
     }
 }

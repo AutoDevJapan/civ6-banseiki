@@ -53,7 +53,7 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
         .unwrap();
     lua.load(format!(r#"
       runNonce = '{NONCE}'
-      localID = 0; turn = 0; dialogVisible = false; paused = false
+      localID = 0; turn = 0; dialogVisible = false; paused = false; dialogReady = false
       GameConfiguration = {{IsHotseat=function() return true end, GetValue=function(key) if key == 'JAC_HOTSEAT_BRIDGE_NONCE' then return runNonce end end,
         GetStartTurn=function() return 0 end, IsPaused=function() return paused end}}
       Game = {{GetLocalPlayer=function() return localID end, GetCurrentGameTurn=function() return turn end,
@@ -74,7 +74,15 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
           GetUnits=function() return {{Members=function() local i=0; return function() i=i+1; if i<=2 then return i,records[pid][i] end end end}} end}}
       end
       UIManager = {{IsInPopupQueue=function() return dialogVisible end}}
-      ContextPtr = {{LookUpControl=function() return {{IsHidden=function() return not dialogVisible end}} end,
+      PlayerConfigurations = {{[0]={{GetHotseatPassword=function() return '' end}},
+        [1]={{GetHotseatPassword=function() return '' end}}}}
+      ContextPtr = {{LookUpControl=function(_, path)
+          if path == '/InGame/PlayerChange' then return {{IsHidden=function() return not dialogVisible end}} end
+          if path == '/InGame/PlayerChange/PopupAlphaIn' then return {{IsHidden=function() return not dialogReady end}} end
+          if path == '/InGame/PlayerChange/OkButton' then return {{IsHidden=function() return false end,
+            IsDisabled=function() return not dialogReady end}} end
+        end,
+        SetHide=function(_, hidden) contextHidden=hidden end,
         SetInputHandler=function(_, f) inputHandler=f end, SetUpdate=function(_, f) updateHandler=f end}}
       KeyEvents = {{KeyUp=1}}
       ActionTypes = {{ACTION_ENDTURN=5}}; actions=0
@@ -89,7 +97,9 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
     "#)).exec().unwrap();
     lua.load(&plan).exec().unwrap();
     lua.load(&witness).exec().unwrap();
+    lua.load("assert(contextHidden == false)").exec().unwrap();
     lua.load(format!("updateHandler(); assert(key(124)); assert(key(125)); assert(key(125)); assert(key(133)); assert(key(133)); localID=1; updateHandler(); assert(key(126)); assert(key(127)); assert(key(134)); assert(savedName=='JAC-Hotseat-Mid-Round-'..runNonce); assert(saveType==1); assert(key(128)); localID=0; turn=1; for uid=1,2 do local r=growthRecords[0][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP={xp}; r.LastXPTurn=1 end; assert(key(129)); assert(key(130)); localID=1; for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end; assert(key(131)); assert(key(134)); assert(savedName=='JAC-Hotseat-Next-Player-'..runNonce); assert(key(132))")).exec().unwrap();
+    lua.load("dialogVisible=true; dialogReady=false; paused=false; updateHandler(); dialogReady=true; paused=true; updateHandler(); dialogVisible=false; dialogReady=false; paused=false; updateHandler()").exec().unwrap();
     let log = lines.lock().unwrap().join("\n");
     (hs::parse_frames(&log, NONCE).unwrap(), log)
 }
@@ -107,11 +117,14 @@ fn actual_scenario_lua_runs_in_lua51_and_witness_returns_real_fields() {
         (snapshot.turn, snapshot.local, snapshot.hotseat),
         (0, 0, true)
     );
-    assert_eq!(snapshot.fields.len(), 48);
-    assert_eq!(snapshot.fields[10], "number:0");
-    assert_eq!(snapshot.fields[11], "number:1");
-    assert_eq!(snapshot.fields[13], "number:0");
-    assert_eq!(snapshot.fields[17], "nil");
+    assert_eq!(snapshot.fields.len(), 49);
+    assert_eq!(snapshot.fields[11], "number:0");
+    assert_eq!(snapshot.fields[12], "number:1");
+    assert_eq!(snapshot.fields[14], "number:0");
+    assert_eq!(snapshot.fields[18], "nil");
+    assert!(frames.iter().any(|f| f.kind == "DIALOG_WAIT"));
+    assert!(frames.iter().any(|f| f.kind == "DIALOG_OPEN"));
+    assert!(frames.iter().any(|f| f.kind == "DIALOG_CLOSED"));
     let start = frames
         .iter()
         .find(|f| f.step == 4 && f.kind == "RESULT")
@@ -195,7 +208,7 @@ fn full_growth_comparison_catches_a_single_xp_change_and_bad_epochs() {
     captures.insert("MID_ROUND".into(), ("value".into(), state.clone()));
     hs::matching_capture(&captures, "MID_ROUND", "value", &state).unwrap();
     let mut changed = state.clone();
-    changed.fields[13] = "number:20".into();
+    changed.fields[14] = "number:20".into();
     assert!(hs::matching_capture(&captures, "MID_ROUND", "value", &changed).is_err());
     assert!(hs::matching_capture(&captures, "MID_ROUND", "other", &state).is_err());
     assert!(hs::WitnessSnapshot::parse("3:nil").is_err());
@@ -226,6 +239,21 @@ fn log_baseline_rejects_old_ack_and_changed_generation() {
 }
 
 #[test]
+fn polling_waits_for_the_tail_of_a_chunked_frame() {
+    let (complete, log) = lua_run();
+    let first = log.lines().next().unwrap();
+    assert!(hs::parse_frames(first, NONCE).is_err());
+    assert!(hs::parse_available_frames(first, NONCE).unwrap().is_empty());
+    assert_eq!(hs::parse_available_frames(&log, NONCE).unwrap(), complete);
+    let interrupted = format!("{log}\nJAC_HS|1|{NONCE}|unfinished");
+    assert_eq!(
+        hs::parse_available_frames(&interrupted, NONCE).unwrap(),
+        complete
+    );
+    assert!(hs::parse_available_frames(&format!("{interrupted}\n"), NONCE).is_err());
+}
+
+#[test]
 fn changed_scenario_and_unsupported_commands_are_rejected() {
     let mut data = original();
     hs::check_scenario(&data).unwrap();
@@ -234,7 +262,32 @@ fn changed_scenario_and_unsupported_commands_are_rejected() {
     data = original();
     data["steps"][10]["name"] = json!("wrong-save");
     assert!(hs::check_scenario(&data).is_err());
+    data = original();
+    data["steps"][4]["code"] = json!("return 'fabricated growth'");
+    assert!(hs::check_scenario(&data).is_err());
     assert!(scenario::validate_scenario(&original()).is_ok());
+}
+
+#[test]
+fn installed_lua_must_match_the_generated_original_scenario() {
+    let output = tempfile::tempdir().unwrap();
+    let bundle = hs::prepare(
+        &original(),
+        output.path(),
+        NONCE,
+        "78ea4ad5-d526-4ca0-bd0e-cc4519261719",
+    )
+    .unwrap();
+    let prepared: Value = serde_json::from_slice(&fs::read(&bundle.scenario).unwrap()).unwrap();
+    hs::verify_installed(&bundle, &prepared, output.path()).unwrap();
+    fs::write(
+        output
+            .path()
+            .join("JAC_Test_HotseatBridge/UI/JAC_HotseatPlan.lua"),
+        "return 'fabricated'",
+    )
+    .unwrap();
+    assert!(hs::verify_installed(&bundle, &prepared, output.path()).is_err());
 }
 
 struct FakeIo {
@@ -337,13 +390,16 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
     };
     let mut fields = hs::decode_fields(&boot.body).unwrap();
     fields[2] = "number:1".into();
-    fields[6] = "boolean:true".into();
     fields[7] = "boolean:true".into();
-    fields[9] = "boolean:false".into();
-    fields[29] = "boolean:true".into();
+    fields[10] = "boolean:false".into();
+    fields[30] = "boolean:true".into();
+    let waiting = packed(&fields);
+    fields[6] = "boolean:true".into();
+    fields[8] = "boolean:true".into();
     let opened = packed(&fields);
     fields[6] = "boolean:false".into();
     fields[7] = "boolean:false".into();
+    fields[8] = "boolean:false".into();
     let closed = packed(&fields);
     let frame = |serial, step, kind: &str, body: String| hs::Frame {
         nonce: NONCE.into(),
@@ -359,10 +415,11 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
         vec![
             frame(2, 6, "BEFORE", boot.body.clone()),
             frame(3, 6, "REQUESTED", boot.body.clone()),
-            frame(4, 0, "DIALOG_OPEN", opened),
+            frame(4, 0, "DIALOG_WAIT", waiting),
+            frame(5, 0, "DIALOG_OPEN", opened),
         ],
     );
-    by_key.insert(0x0d, vec![frame(5, 0, "DIALOG_CLOSED", closed)]);
+    by_key.insert(0x0d, vec![frame(6, 0, "DIALOG_CLOSED", closed)]);
     let fake = FakeIo {
         owner,
         now: 0.0,
@@ -374,7 +431,7 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
     let mut controller = hs::Controller::new(fake, NONCE, &boot).unwrap();
     let receipt = controller.step(6, &original(), 3.0, |_| Ok(())).unwrap();
     let opened = receipt.dialog_open.unwrap();
-    assert!(opened.dialog && opened.paused);
+    assert!(opened.dialog && opened.dialog_ready && opened.paused);
     let closed = controller.accept_turn(6, &opened, 3.0, |_| Ok(())).unwrap();
     assert!(!closed.dialog && !closed.paused && closed.active && closed.human);
     assert_eq!(controller.io.keys, vec![hs::KEY_END_TURN, 0x0d]);
