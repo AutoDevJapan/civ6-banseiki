@@ -11,6 +11,7 @@ pub const ACTIONS: [&str; 17] = [
     "start_game",
     "autoplay",
     "end_turn",
+    "choose_dedication",
     "ui_lua",
     "carrier_checkpoint",
     "carrier_exchange",
@@ -218,6 +219,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     {
                         return Err(fail(format!("{key} must be positive")));
                     }
+                }
+            }
+            "choose_dedication" => {
+                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
+                    return Err(fail(
+                        "choose_dedication human must be an integer in [0, 63]".into(),
+                    ));
                 }
             }
             "carrier_checkpoint" | "carrier_exchange" => {
