@@ -10,6 +10,10 @@ schemaはGame property `JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA=1`。904000..904255�
 
 初回は全予約領域の既存値を照合し、衝突時は既存値を上書きしない。再読込は保存済みtrueを使わずowner reset、22件のfalse ACK、定義commitをやり直す。現在は試験専用で全定義を再同期するため、通常有効化前に本体受入と所要時間の計測が必要。合成検査と実機の結果は区別して記録する。
 
+試験用設定は専用の共有traceを確保し、mode7のlayoutを変えずにCanAssignの原RAXと実際に返したRAXを保存する。終了後は三入口の元bytesを確認し、配置traceの未完了呼出しと容量超過があれば成功記録を出さない。記録identityは `paid-assignment-experimental`、schema 1、明示した全予約範囲を持ち、既存mode6判定器へ渡さない。専用の `check-paid-artifact <JSONL> <PID> <created-filetime>` で順序、三入口の復元、予約キー、各sequenceと件数、AL以外の保持を検査する。出力 `capture_valid=true` は記録の整合性だけを示し、`product_acceptance=false` を必ず併記する。実験用シナリオを通常一覧へ追加していない。
+
+169fbc30の全件検査は117対象、1815成功、2失敗、ignored/filtered 0、exit101。新しい三入口Win64子と旧mode7子は各1成功（各48 filteredを別集計）で、未払い・本人費用3・別owner・reset・三入口復元・第3入口失敗の巻戻しを確認した。失敗2件は生成Luaの更新漏れと、使わないTITLEを重複させた異常fixtureで、2916cbbeで再生成と実BASEの重複へ修正した。全体成功へ読み替えない。以後の配置trace追加版は別候補として検証する。
+
 ## ToDo1433再開：配置資格の独立受信処理B1
 
 **配置の共通経路は親の実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した担当用作業場所を、親のc21b145fと通常資格修正51cb6b42まで早送りした。親・実機担当の作業場所と本体メモリには接続しない。
