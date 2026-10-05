@@ -91,7 +91,13 @@ impl SafetyBackend {
         Self {
             trace,
             on_connect: None,
-            on_states: Box::new(|_| Ok(vec!["FrontEnd".into(), "InGame".into()])),
+            on_states: Box::new(|_| {
+                Ok(vec![
+                    "FrontEnd".into(),
+                    "InGame".into(),
+                    "GameCore_Tuner".into(),
+                ])
+            }),
             on_lua: Box::new(|_, _, _| Ok("true".into())),
             on_process: Box::new(|_| Ok(Some((1234, 1.0)))),
             on_require_process: None,

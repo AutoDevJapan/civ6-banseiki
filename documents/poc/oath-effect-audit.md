@@ -1,6 +1,6 @@
 # 誓約66件の強い効果を有限手番で測る
 
-Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を、能力診断1本と個別シナリオ66本にする。**今回の実機実行は0件で、全66件・軍事生産速度を合格とはしていない。** 産出の補正前基準を確定できない場合は実数の観測を保存し、最後の数量受入を不合格にする。生成器・形式・Luaの検査成功は、この数量受入の代わりにならない。
+Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を、能力診断1本と個別シナリオ66本にする。**今回の実機実行は0件で、全66件・軍事生産速度を合格とはしていない。** 検査専用の100%補正を切り替えて実測差を物差しにする。物差しを実機で確認できない場合は、最後の数量受入を不合格にする。生成器・形式・Luaの検査成功は、この数量受入の代わりにならない。
 
 生成先は `tools/civ6-autotest/scenarios/oath-effects/`。[一覧](data/oath-effect-scenarios.json)には全66件の誓約、文明、期待する割合、対象と非対象の建造、各シナリオの手番数を記録する。
 
@@ -18,8 +18,8 @@ Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を�
 
 | 観測 | APIと公式の使用箇所 | 数量受入の条件 |
 |---|---|---|
-| 生産・金・科学・文化・信仰・食料 | `city:GetYield`。`Base/Assets/UI/CitySupport.lua:316–332` | 実効値を記録する。補正前の総産出を返す公式の使用実績があるgetterは見つかっていないため、期待差分は `null`、数量確認は `false` |
-| 成長の割合と総倍率 | `GetOtherGrowthModifier`、`GetOverallGrowthModifier`、`GetHousingGrowthModifier`、`GetHappinessGrowthModifier`。同ファイル490・557・570–574 | その他の成長補正が要求割合だけ増え、住宅を含む公式UIの式と総倍率の差分が一致すること |
+| 生産・金・科学・文化・信仰・食料 | `city:GetYield`。`Base/Assets/UI/CitySupport.lua:316–332` | 同じ都市と同じ種類の100%補正による実測差を要求割合で割り戻して比較する。切替・復元・他家の不変・十分な精度が欠ければ不合格 |
+| 成長の割合と総倍率 | `GetOtherGrowthModifier`、`GetFoodSurplus`、`GetLoyaltyGrowthModifier`、`GetOverallGrowthModifier`、`GetHousingGrowthModifier`、`GetHappinessGrowthModifier`。同ファイル486・490・557・570–574、DLC/Expansion2/UI/Replacements/CityPanelOverview_Expansion1.lua:45 | その他の成長補正が要求割合だけ増え、住宅を含む公式UIの式と総倍率の差分が一致すること |
 | 軍事・水軍の生産 | `GetCurrentProductionTypeHash`、`GetUnitProgress`、`GetUnitCost`。同ファイル233–257 | 各段階で1回の1手番進捗を測り、進捗の合計を手番前の実都市生産量の合計で割る。解除時の比率が両側で1と観測できた場合に、適用時の比率を `1 + 要求割合/100` と厳密に比較する |
 | 防壁3種類の生産 | `GetBuildingProgress`、`GetBuildingCost`。同ファイル206–215 | 古代・中世・ルネサンス防壁を個別に指定し、軍事・水軍と同じ実進捗の条件で比較する |
 
@@ -29,7 +29,7 @@ Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を�
 
 占領・食料不足・忠誠度低下で式の適用条件を満たさない都市は、観測値と理由を記録する。少なくとも1都市で実際に総倍率が増えることを要求する。
 
-産出は、他の加算割合があると「解除時の実効値×要求割合/100」で期待差を求められない。生産キューも、解除時の比率が1でなければ既存補正の計算順を公式Luaだけでは確定できない。その場合、実進捗の増加・復元を観測しても、要求割合の数量確認には数えない。整数の残り手番、SQLのAmount、旗の値だけで数量合格にしない。
+産出は、他の加算割合があると「解除時の実効値×要求割合/100」で期待差を求められない。検査専用のPoCは自動で効果を適用せず、公式のPlayer:AttachModifierByIDを検査手順から呼び、所有都市の専用旗を操作する。6産出に各6の検査入力を加え、誓約と同じMODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIERのAmount=100をオン・オフして実測差を得る。この差に要求割合/100を掛けた量と誓約による実測差を照合し、隣の1%を区別できない誤差幅では数量未確認にする。生産速度を測る前に生産以外の検査入力を消し、最後に生産入力と100%補正も消す。自然な経済や年齢判定の証明には含めない。公式の取付例はDLC/BlackDeathScenario/Scripts/BlackDeathScenario.lua:1204、同じ定量型の資料はBase/Assets/Gameplay/Data/Modifiers.xmlと戦国の誓約SQL。生産キューも、解除時の比率が1でなければ既存補正の計算順を公式Luaだけでは確定できない。その場合、実進捗の増加・復元を観測しても、要求割合の数量確認には数えない。整数の残り手番、SQLのAmount、旗の値だけで数量合格にしない。
 
 ## 生産を測る手番
 

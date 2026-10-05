@@ -129,6 +129,46 @@ fn test_end_turn_honours_count_default_and_shared_deadline() {
 }
 
 #[test]
+fn end_turn_uses_gameplay_when_ui_turn_is_ahead_and_does_not_resend() {
+    for overshoot in [false, true] {
+        let turn = Arc::new(Mutex::new(66));
+        let game_turn = turn.clone();
+        let fake = FakeBackend::new().lua(move |state, code| {
+            if code.trim() == "return Game.GetCurrentGameTurn()" {
+                return Ok(if state == "GameCore_Tuner" {
+                    game_turn.lock().unwrap().to_string()
+                } else {
+                    "67".into()
+                });
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+                *game_turn.lock().unwrap() = if overshoot { 68 } else { 67 };
+            }
+            if state == "GameCore_Tuner" && code.contains("end_turn advanced past") {
+                assert!(code.contains("turn == 67"));
+                if overshoot {
+                    return Err(Error::scenario(
+                        "end_turn advanced past its single-turn target",
+                    ));
+                }
+            }
+            Ok("true".into())
+        });
+        let mut h = Harness::new(json!({}), fake);
+        let result = h.runner.run_step(&json!({"action":"end_turn"}));
+        if overshoot {
+            assert!(result.unwrap_err().to_string().contains("advanced past"));
+        } else {
+            assert_eq!(result.unwrap(), "human turn 66->67");
+        }
+        assert_eq!(
+            h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+            1
+        );
+    }
+}
+
+#[test]
 fn test_end_turn_rejects_invalid_counts() {
     for value in [json!(0), json!(-1), json!(true), json!(1.5), json!("2")] {
         for key in ["turns", "test_turns"] {

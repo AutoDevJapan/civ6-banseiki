@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="e4117d8c-4112-4f75-9a50-7d159e361fa4" version="1">
+  <Properties><Name>JAC diagnostic oath meter</Name><Description>Controlled diagnostic inputs and a 100 percent reference; inactive until explicitly attached and activated.</Description><Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions></Properties>
+  <Dependencies><Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="Sengoku Trees"/></Dependencies>
+  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria></ActionCriteria>
+  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase></InGameActions>
+  <Files><File>Data/Meter.sql</File></Files>
+</Mod>

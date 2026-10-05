@@ -273,6 +273,109 @@ fn growth_uses_housing_formula_and_raw_yield_quantity_remains_unaccepted() -> Re
     Ok(())
 }
 
+#[test]
+fn native_reference_proves_yield_percentage_and_rejects_wrong_reference_or_leakage() -> Result<()> {
+    let code = generated_code(&growth_case(), "local spec=")?;
+    let lua = Lua::new();
+    let reference = r#"
+local function copy(value)
+ if type(value)~='table' then return value end
+ local result={}; for k,v in pairs(value) do result[k]=copy(v) end; return result
+end
+local a=JAC_OATH_AUDIT
+a.selected.own[1].y.science=2.4; a.restored.own[1].y.science=2.4
+a.reference=copy(a.baseline); a.reference_off=copy(a.baseline)
+a.reference.own[1].y.science=a.baseline.own[1].y.science+8
+"#;
+    lua.load(CITY_OBSERVATIONS).exec()?;
+    lua.load(reference).exec()?;
+    let result = decode(&lua, &code)?;
+    assert_eq!(result["quantity_verified"], true);
+    assert_eq!(result["results"][1]["expected_delta"], 0.4);
+    assert_eq!(
+        result["results"][1]["reason"],
+        "native_100_percent_reference_delta"
+    );
+    for mutation in [
+        "a.reference.own[1].y.science=a.baseline.own[1].y.science",
+        "a.reference.own[1].y.science=a.baseline.own[1].y.science+9",
+        "a.reference_off.own[1].y.science=99",
+        "a.reference.own[1].id=99",
+        "a.reference.own[1].owner=99",
+        "a.reference.foreign={}",
+        "a.reference_off=nil",
+        "a.reference.foreign[1].y.gold=99",
+        "a.reference_off.foreign[1].owner=0",
+    ] {
+        lua.load(CITY_OBSERVATIONS).exec()?;
+        lua.load(reference).exec()?;
+        lua.load(format!("local a=JAC_OATH_AUDIT; {mutation}"))
+            .exec()?;
+        assert!(decode(&lua, &code).is_err(), "accepted {mutation}");
+    }
+    lua.load(CITY_OBSERVATIONS).exec()?;
+    lua.load(reference).exec()?;
+    lua.load("local a=JAC_OATH_AUDIT; a.reference.own[1].y.science=a.baseline.own[1].y.science+2; a.selected.own[1].y.science=2.1; a.restored.own[1].y.science=2.1").exec()?;
+    assert_eq!(decode(&lua, &code)?["quantity_verified"], false);
+    Ok(())
+}
+
+#[test]
+fn reference_mod_has_only_explicit_scoped_inputs_and_twelve_valid_modifier_definitions(
+) -> Result<()> {
+    let files = meter_outputs();
+    let sql = &files[&PathBuf::from(format!("{METER_DIR}/Data/Meter.sql"))];
+    let db = rusqlite::Connection::open_in_memory()?;
+    db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
+    db.execute_batch(sql)?;
+    let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
+    assert_eq!(count, 12);
+    for kind in ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"] {
+        for (mode, amount, suffix) in [("BASE", "6", "CHANGE"), ("CAL", "100", "MODIFIER")] {
+            let id = format!("JAC_TODO134_{mode}_{kind}");
+            let modifier: String = db.query_row(
+                "SELECT ModifierType FROM Modifiers WHERE ModifierId=?",
+                [&id],
+                |r| r.get(0),
+            )?;
+            assert_eq!(
+                modifier,
+                format!("MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_{suffix}")
+            );
+            let value: String = db.query_row(
+                "SELECT Value FROM ModifierArguments WHERE ModifierId=? AND Name='Amount'",
+                [&id],
+                |r| r.get(0),
+            )?;
+            assert_eq!(value, amount);
+            let yield_type: String = db.query_row(
+                "SELECT Value FROM ModifierArguments WHERE ModifierId=? AND Name='YieldType'",
+                [&id],
+                |r| r.get(0),
+            )?;
+            assert_eq!(yield_type, format!("YIELD_{kind}"));
+        }
+    }
+    assert!(
+        !sql.contains("TraitModifiers"),
+        "diagnostic must not attach automatically"
+    );
+    let meta = &files[&PathBuf::from(format!("{METER_DIR}/JAC_PoC_OathMeter.modinfo"))];
+    let document = roxmltree::Document::parse(meta)?;
+    assert_eq!(document.root_element().attribute("id"), Some(METER_ID));
+    assert!(document
+        .descendants()
+        .any(|n| n.has_tag_name("RuleSetInUse") && n.text() == Some("RULESET_JAC_BANSEIKI")));
+    assert!(document
+        .descendants()
+        .any(|n| n.has_tag_name("UpdateDatabase")
+            && n.attribute("criteria") == Some("JAC_OathMeter_Banseiki")));
+    assert!(!document
+        .descendants()
+        .any(|n| n.has_tag_name("AddGameplayScripts")));
+    Ok(())
+}
+
 const FINAL_NATIVE_FIXTURE: &str = r#"
 local oath='JAC_OATH_ODA_TENKA_FUBU'
 local ledger={reign=1,houses={p0={civ='CIVILIZATION_JAC_ODA',oathChosen=1,oaths={[oath]=true}}}}
@@ -499,6 +602,13 @@ fn incomplete_catalogues_duplicate_metrics_and_invalid_map_rosters_are_rejected(
         outputs(&repo).is_err(),
         "accepted a duplicated and missing real house"
     );
+    for field in ["ruleset", "map_file", "map_size"] {
+        let (_directory, repo) = copied_source()?;
+        let mut base = repo.json(BASE)?;
+        base["steps"][1][field] = json!("UNRELATED");
+        std::fs::write(repo.path(BASE), serde_json::to_vec(&base)?)?;
+        assert!(outputs(&repo).is_err(), "accepted unrelated {field}");
+    }
     Ok(())
 }
 

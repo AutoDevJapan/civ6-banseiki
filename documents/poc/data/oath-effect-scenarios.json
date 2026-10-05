@@ -4,7 +4,8 @@
   "oath_count": 66,
   "house_count": 22,
   "max_turns": 12,
-  "quantity_acceptance": "requires_documented_or_observed_unmodified_basis; unresolved yields never pass",
+  "quantity_acceptance": "native_100_percent_yield_reference_and_observed_unmodified_production_basis; unresolved quantities never pass",
+  "diagnostic_mod": "e4117d8c-4112-4f75-9a50-7d159e361fa4",
   "scenarios": [
     {
       "house": "ODA",

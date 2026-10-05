@@ -1009,7 +1009,7 @@ fn test_end_turn_closes_successive_ai_statements_without_repeating_action() {
     let state_for_states = state.clone();
     backend.on_states = Box::new(move |_| {
         let (action_sent, closed) = *state_for_states.lock().unwrap();
-        let mut states = vec!["InGame".into()];
+        let mut states = vec!["InGame".into(), "GameCore_Tuner".into()];
         if action_sent && closed < 2 {
             states.push("DiplomacyActionView".into());
         }

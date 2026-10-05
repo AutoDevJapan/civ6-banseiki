@@ -9,6 +9,53 @@ const BASE: &str = "tools/civ6-autotest/scenarios/sengoku-oaths-oda.json";
 const DIR: &str = "tools/civ6-autotest/scenarios/oath-effects";
 const INVENTORY: &str = "documents/poc/data/oath-effect-scenarios.json";
 const PRODUCTION_SAMPLES: usize = 1;
+const METER_ID: &str = "e4117d8c-4112-4f75-9a50-7d159e361fa4";
+const METER_DIR: &str = "poc/JAC_PoC_OathMeter";
+
+fn meter_outputs() -> Outputs {
+    let mut sql = String::from(
+        "-- Diagnostic only: attach explicitly, activate by owned city plot properties.\n",
+    );
+    for kind in ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"] {
+        for (mode, amount, modifier_type, property) in [
+            (
+                "BASE",
+                6,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
+                format!("JAC_TODO134_BASE_{kind}"),
+            ),
+            (
+                "CAL",
+                100,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER",
+                "JAC_TODO134_CAL_ON".into(),
+            ),
+        ] {
+            let id = format!("JAC_TODO134_{mode}_{kind}");
+            sql.push_str(&format!("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('{id}_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('{id}_REQ','PropertyName','{property}'),('{id}_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('{id}_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('{id}_SET','{id}_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('{id}','{modifier_type}','{id}_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('{id}','YieldType','YIELD_{kind}'),('{id}','Amount','{amount}');\n"));
+        }
+    }
+    let modinfo = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<Mod id="{METER_ID}" version="1">
+  <Properties><Name>JAC diagnostic oath meter</Name><Description>Controlled diagnostic inputs and a 100 percent reference; inactive until explicitly attached and activated.</Description><Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions></Properties>
+  <Dependencies><Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="Sengoku Trees"/></Dependencies>
+  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria></ActionCriteria>
+  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase></InGameActions>
+  <Files><File>Data/Meter.sql</File></Files>
+</Mod>
+"#
+    );
+    [
+        (PathBuf::from(format!("{METER_DIR}/Data/Meter.sql")), sql),
+        (
+            PathBuf::from(format!("{METER_DIR}/JAC_PoC_OathMeter.modinfo")),
+            modinfo,
+        ),
+    ]
+    .into_iter()
+    .collect()
+}
 
 fn bounded_turns(steps: &[Value]) -> usize {
     steps
@@ -157,6 +204,17 @@ fn first_steps(base: &Value, civ: &str) -> Result<Vec<Value>> {
         bail!("base scenario start contract changed");
     }
     let mut steps = source[..4].to_vec();
+    if steps[1]["ruleset"] != "RULESET_JAC_BANSEIKI"
+        || steps[1]["map_file"]
+            != "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map"
+        || steps[1]["map_size"] != "MAPSIZE_HUGE"
+    {
+        bail!("audit requires Banseiki, the 15km Japan map and huge map size");
+    }
+    steps[0]["ids"]
+        .as_array_mut()
+        .context("enabled mods")?
+        .push(json!(METER_ID));
     let players = steps[1]["players"].as_array_mut().context("base players")?;
     let civs: BTreeSet<_> = players.iter().filter_map(|p| p["civ"].as_str()).collect();
     if players.len() != 22 || civs.len() != 22 {
@@ -176,6 +234,44 @@ fn first_steps(base: &Value, civ: &str) -> Result<Vec<Value>> {
     ));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); local p=Players[0]; return l and l.houses and l.houses.p0 and p and p:GetCities():GetCapitalCity()~=nil"}}));
     Ok(steps)
+}
+
+const METER_ATTACH: &str = r#"
+assert(not Game:GetProperty('JAC_TODO134_METER_ATTACHED'),'reference modifiers already attached')
+local p=assert(Players[0]); assert(p:IsHuman(),'reference requires human player 0')
+assert(type(p.AttachModifierByID)=='function','official player modifier attachment unavailable')
+for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
+ p:AttachModifierByID('JAC_TODO134_BASE_'..kind)
+ p:AttachModifierByID('JAC_TODO134_CAL_'..kind)
+ for _,city in p:GetCities():Members() do
+  local plot=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(plot:GetOwner()==0,'reference city owner changed')
+  plot:SetProperty('JAC_TODO134_BASE_'..kind,1); plot:SetProperty('JAC_TODO134_CAL_ON',0)
+ end
+end
+Game:SetProperty('JAC_TODO134_METER_ATTACHED',true)
+return 'diagnostic base input +6; explicit native 100-percent reference attached but off; no natural balance claim'
+"#;
+
+const METER_TOGGLE: &str = r#"
+assert(Game:GetProperty('JAC_TODO134_METER_ATTACHED'),'reference not attached')
+for _,city in Players[0]:GetCities():Members() do
+ local plot=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(city:GetOwner()==0 and plot:GetOwner()==0,'reference owner changed')
+ plot:SetProperty('JAC_TODO134_CAL_ON',__CAL__)
+ for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
+  plot:SetProperty('JAC_TODO134_BASE_'..kind,(__BASE__==1 or (__KEEP_PRODUCTION__==1 and kind=='PRODUCTION')) and 1 or 0)
+ end
+end
+return 'diagnostic reference flags updated'
+"#;
+
+fn meter_toggle(cal: u8, base: u8, keep_production: u8) -> Value {
+    ui(
+        "GameCore_Tuner",
+        METER_TOGGLE
+            .replace("__CAL__", &cal.to_string())
+            .replace("__BASE__", &base.to_string())
+            .replace("__KEEP_PRODUCTION__", &keep_production.to_string()),
+    )
 }
 
 const CAPABILITY: &str = r#"
@@ -353,6 +449,10 @@ local all=assert(JAC_OATH_AUDIT,'UI samples missing')
 local base=assert(all.baseline); local on=assert(all.selected)
 local off=assert(all.off); local back=assert(all.restored)
 assert(#base.own==#on.own and #on.own==#off.own and #off.own==#back.own,'owned city inventory changed')
+if all.reference or all.reference_off then
+ assert(all.reference and all.reference_off,'reference on/off evidence missing')
+ for _,phase in ipairs({'reference','reference_off'}) do assert(#all[phase].own==#base.own and #all[phase].foreign==#base.foreign,'reference city inventory incomplete') end
+end
 local function close(a,b) return finite(a) and finite(b) and math.abs(a-b)<=0.00002 end
 local function metric(r,kind) if kind=='growth' then return r.growth else return r.y[kind] end end
 local reports={}; local proven={}; local quantities=true
@@ -388,12 +488,29 @@ for i,a in ipairs(base.own) do
      if expected>0.00002 then proven[e.kind]=proven[e.kind]+1 end
     else quantities=false; reason='occupied_deficit_or_loyalty_growth_requires_diagnosis' end
    else
-    -- GetYield is an effective value, not a documented unmodified yield. Other
-    -- additive percentages make off*amount/100 an invalid quantity oracle.
-    quantities=false
-    assert(observed>=-0.00002,'selected yield decreased unexpectedly')
-    if observed>0.00002 then proven[e.kind]=proven[e.kind]+1
-    elseif av>0.03 then error('selected yield did not actually increase') end
+    local ref=all.reference and all.reference.own[i]
+    local ref_off=all.reference_off and all.reference_off.own[i]
+    if ref and ref_off then
+     assert(ref.id==a.id and ref.plot==a.plot and ref.owner==a.owner and ref_off.id==a.id and ref_off.plot==a.plot and ref_off.owner==a.owner,'reference city changed')
+     assert(close(metric(ref_off,e.kind),av),'reference did not turn off to original yield')
+     local hundred=metric(ref,e.kind)-av
+     assert(finite(hundred) and hundred>0.03,'no measurable actual 100-percent reference')
+     local tolerance=0.02*(1+e.amount/100)+0.00002
+     if tolerance<hundred*0.005 then
+      expected=hundred*e.amount/100
+      assert(math.abs(observed-expected)<=tolerance,'oath yield differs from independently measured 100-percent reference')
+      quantity=true; reason='native_100_percent_reference_delta'
+      proven[e.kind]=proven[e.kind]+1
+     else
+      quantities=false; reason='native_reference_resolution_insufficient'
+      if observed>0.00002 then proven[e.kind]=proven[e.kind]+1 end
+     end
+    else
+     quantities=false
+     assert(observed>=-0.00002,'selected yield decreased unexpectedly')
+     if observed>0.00002 then proven[e.kind]=proven[e.kind]+1
+     elseif av>0.03 then error('selected yield did not actually increase') end
+    end
    end
    reports[#reports+1]=string.format('{"city":%d,"kind":"%s","off":%.9f,"on":%.9f,"off_again":%.9f,"restored":%.9f,"expected_percent":%d,"expected_delta":%s,"observed_delta":%.9f,"quantity_verified":%s,"reason":"%s"}',a.id,e.kind,av,bv,cv,dv,e.amount,expected and string.format('%.9f',expected) or 'null',observed,tostring(quantity),reason)
   end
@@ -420,6 +537,13 @@ for i,a in ipairs(base.foreign) do
  for _,kind in ipairs({'production','gold','science','culture','faith','food','growth'}) do
   assert(close(metric(a,kind),metric(b,kind)) and close(metric(b,kind),metric(c,kind)) and close(metric(c,kind),metric(d,kind)),'foreign city changed while testing '..oath..'/'..kind)
  end
+ for _,phase in ipairs({'reference','reference_off'}) do
+  local sample=all[phase] and all[phase].foreign[i]
+  if sample then
+   assert(sample.id==a.id and sample.owner==a.owner and sample.plot==a.plot,'reference foreign city changed')
+   for _,kind in ipairs({'production','gold','science','culture','faith','food','growth'}) do assert(close(metric(a,kind),metric(sample,kind)),'reference leaked to foreign city') end
+  end
+ end
 end
 all.quantities_verified=quantities; all.yield_growth_observed=true
 return '{"oath":"'..oath..'","path":"real_ui_selection","quantity_verified":'..tostring(quantities)..',"results":['..table.concat(reports,',')..']}'
@@ -444,6 +568,8 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do for _,city in p:GetCities()
   local expected=p:GetID()==0 and row.OathType==oath and 1 or 0
   assert((plot:GetProperty(row.OathType..'_ON') or 0)==expected,'diagnostic oath flags not restored')
  end
+ assert((plot:GetProperty('JAC_TODO134_CAL_ON') or 0)==0,'100-percent diagnostic reference not disabled')
+ for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do assert((plot:GetProperty('JAC_TODO134_BASE_'..kind) or 0)==0,'diagnostic base input not disabled') end
 end end
 assert(count==56,'original city inventory changed during production diagnostics')
 local complete=true
@@ -469,10 +595,21 @@ fn effect_lua(case: &Case) -> String {
 
 fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     let mut steps = first_steps(base, &case.civ)?;
+    steps.push(ui("GameCore_Tuner", METER_ATTACH.into()));
     steps.push(ui("GameCore_Tuner", substitute(FIXTURE, case, &[])));
     steps.push(ui(
         "InGame",
         substitute(MEASURE, case, &[("__PHASE__", "\"baseline\"")]),
+    ));
+    steps.push(meter_toggle(1, 1, 0));
+    steps.push(ui(
+        "InGame",
+        substitute(MEASURE, case, &[("__PHASE__", "\"reference\"")]),
+    ));
+    steps.push(meter_toggle(0, 1, 0));
+    steps.push(ui(
+        "InGame",
+        substitute(MEASURE, case, &[("__PHASE__", "\"reference_off\"")]),
     ));
     steps.push(ui("DedicationPopup", substitute(POPUP, case, &[])));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":format!("local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; return h and h.oathChosen==1 and h.oaths[{}]==true",lua_string(&case.oath))}}));
@@ -500,6 +637,9 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
         "InGame",
         substitute(COMPARE, case, &[("__EFFECTS__", &effect_lua(case))]),
     ));
+    // Restore all diagnostic inputs except production, which supplies measurable
+    // one-turn progress without inventing an accepted quantity.
+    steps.push(meter_toggle(0, 0, 1));
     for effect in &case.effects {
         if ["military", "naval", "walls"].contains(&effect.kind.as_str()) {
             for target in production_targets(&effect.kind) {
@@ -518,6 +658,7 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
         "GameCore_Tuner",
         substitute(FLAG, case, &[("__FLAG__", "1")]),
     ));
+    steps.push(meter_toggle(0, 0, 0));
     let expected_targets = production_expectations(case)
         .iter()
         .map(|(target, amount)| format!("{{target={},amount={amount}}}", lua_string(target)))
@@ -836,7 +977,7 @@ fn production_steps(
 pub fn outputs(repo: &Repository) -> Result<Outputs> {
     let base = repo.json(BASE)?;
     let cases = cases(repo)?;
-    let mut result = Outputs::new();
+    let mut result = meter_outputs();
     let capability = capability_scenario(&base)?;
     result.insert(
         PathBuf::from(format!("{DIR}/capabilities.json")),
@@ -866,7 +1007,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
         );
     }
     let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":12,
-        "quantity_acceptance":"requires_documented_or_observed_unmodified_basis; unresolved yields never pass","scenarios":inventory});
+        "quantity_acceptance":"native_100_percent_yield_reference_and_observed_unmodified_production_basis; unresolved quantities never pass","diagnostic_mod":METER_ID,"scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
         format!("{}\n", serde_json::to_string_pretty(&manifest)?),
@@ -925,7 +1066,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 68);
+        assert_eq!(generated.len(), 70);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));
@@ -983,7 +1124,7 @@ mod tests {
         let lua = Lua::new();
         let mut compiled = 0;
         for (path, content) in outputs(&repo)? {
-            if path == PathBuf::from(INVENTORY) {
+            if !path.starts_with(DIR) {
                 continue;
             }
             let scenario: Value = serde_json::from_str(&content)?;

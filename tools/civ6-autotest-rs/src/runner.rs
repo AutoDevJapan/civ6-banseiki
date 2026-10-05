@@ -1387,7 +1387,7 @@ impl Runner {
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
         let start = parse_integer(&self.lua(
-            "InGame",
+            "GameCore_Tuner",
             "return Game.GetCurrentGameTurn()",
             self.budget(deadline, 5.0)?,
         )?)?;
@@ -1397,7 +1397,8 @@ impl Runner {
             "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
             self.budget(deadline, 5.0)?,
         )?;
-        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",start+1)}),self.remaining(deadline)?,true)?;
+        self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":format!("local turn=Game.GetCurrentGameTurn(); if turn>{} then error('end_turn advanced past its single-turn target') end; return turn == {}",start+1,start+1)}),self.remaining(deadline)?,true)?;
+        self.wait(&json!({"type":"lua","state_name":"InGame","code":"local p=Game.GetLocalPlayer(); return p>=0 and Players[p]:IsTurnActive()"}),self.remaining(deadline)?,true)?;
         self.dismiss_advisor(deadline)?;
         self.remaining(deadline)?;
         Ok(format!("human turn {start}->{}", start + 1))

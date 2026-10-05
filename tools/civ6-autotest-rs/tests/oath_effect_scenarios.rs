@@ -44,6 +44,12 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
             validate_scenario(&data).unwrap_or_else(|e| panic!("{path}: {e}"));
             let steps = data["steps"].as_array().expect("steps");
             let players = steps[1]["players"].as_array().expect("players");
+            assert_eq!(steps[1]["ruleset"], "RULESET_JAC_BANSEIKI");
+            assert_eq!(
+                steps[1]["map_file"],
+                "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map"
+            );
+            assert_eq!(steps[1]["map_size"], "MAPSIZE_HUGE");
             assert_eq!(players.len(), 22);
             assert_eq!(players[0]["civ"], format!("CIVILIZATION_JAC_{id}"));
             assert!(players[0]["human"].as_bool().expect("human"));
