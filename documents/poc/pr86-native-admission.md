@@ -600,3 +600,20 @@ AI chooserは `0x4A7C1F` と `0x4A7D01/0x4A7D98` で評価値を既存の最良�
 
 今回の検証は、capture追加前のworkspace全対象が139群・1980件成功（独立Win64子2群の各1成功・54内部filteredを加えると141群・1982件）、失敗・ignored0。Lua 5.1全件を含む。captureと費用欠損拒否を含む最終追加binは17件成功、失敗・ignored・filtered0。待機後の最初のコンパイルでは試験連番の型推論が失敗し、u32を明示してから17件を再実行した。対象Rust整形とgit diff --checkは成功。capture再レビューは原Spentの対保存とR8byteの修正後にMust/Suggestion/Nit各0。これらは有限候補の検証であり、ゲームの起動・操作・実受入は0である。親が扱うGameplayの進化完了・追加費用欠落修正には触れていない。
 完成版の監査binをインストール済み固定DLLに実行し、全SHA・18個の分岐・9個の引数/共通caller命令を再照合して終了0。出力はexecution_enabled=false、runtime_installed=false、receipt_complete=falseを維持した。実機のreceiptを生成したわけではない。
+
+## ToDo880・1466：自然AI callbackの4地点gateway登録候補
+
+`cc7525ae` 基点の独立writerで、`ai_operation/gateway.rs` と検査、任意実行bin `ai-gateway-observer` を追加した。親 `runtime-integration` の `32af6210` および `0051068e` のCallFence・所有者識別・loader helperは読むだけで、既存runtime/composite/bootstrapを変更していない。通常runtime登録・実AI観測は0のまま。
+
+登録候補は、現在のAI owner `+0x1B8` の集合（上限256、要素幅0x40、callableポインタ+0x38）から一意の本人callableを確認する。vtable `base+0x9FB4B8`、receiver+8、元関数slot+0x10=`base+0x4A7AD0`、owner+0x90とreceiver+0x98の同一playerを照合し、slot+0x10の整列64bit CASで観測gatewayへ切り替える。共通caller `0x401534` の原戻り先 `0x401537` とEDX段階2が一致した自然呼出しから、既存 `Capture::begin` へ生値を渡す。
+
+同じ登録単位に、AI CanPromote `0x4A7D67`、正式CanPromote `0x30EC0F`、原Spent `0x2DDBCB` の3つのE8変位を加える。すべてoperandは4byte整列。signed rel32の上下限を検査して近傍relayを確保し、元E8を保持して変位だけCASする。CPU条件は既存mode8と同じAMD判定を再利用する。filter `0x4A7EF0`、Execute `0x4A7F18`、反映 `0x30EC24` の非整列変位は変更しない。操作hash `0x7D3DA99D` と二つのparameter keyは前節の一次命令が正本であり、不明なenum番号53へ置換しない。
+
+4つのgatewayは原関数を一度だけ呼ぶ。真callerのRSP+8から0x60byteを `ReadProcessMemory(GetCurrentProcess())` で有限コピーし、observerのshadow領域とは別に保存した後、原call前にhome領域を含めて復元する。読み取れなければ元stackへ戻して原calleeへtail jumpし、観測は採用しない。RCX/RDX/R8/R9/RAX/R10/R11・XMM0..5・RFLAGSを観測前後に保存し、returnの元結果を復元する。gatewayは元calleeから見たreturn addressを自身のreturnラベルへ変えるため、ログでは元callerのreturn addressを別フィールドに保持する。無加工の元return addressをcalleeが読むという保証はしない。
+
+SEHのpdata/xdataを持たせ、巻戻り時の終了handlerでそのthreadの呼出し情報・深さ・Captureを破棄する。親の原例外処理へ検索を続け、例外を成功にしない。再入呼出しは外側の所有者文脈を借りず、観測拒否にする。元targetは登録前に一度だけ確定し、停止後も書き換えない。GameCoreとgateway moduleをpinし、relayもプロセス終了まで保持する。途中失敗は逆順復元を試し、失敗した場合は `CriticalRestore` と静的保持したRegistrationを残す。`recover_failed_registration` で元所有者が再復元できる。
+
+`RuntimeLease` は親内部で実lease/ARMとCallFenceへつなぐunsafeなRust契約であり、実装済の許可ではない。開始時のPID/作成時刻/owner/generation/session/ticket/arm tokenと、現在のowner transactionを原呼出し前後に検査する必要がある。今回読んだ親ソースに `PRODARM` という公開型は見つからず、数値propertyや常にtrueを返すアダプターは作っていない。世代変更後に古いcallableを再利用しない。親が安全な現caller registrationと同一leaseを保証するまで、CLIは状態JSONを表示するだけで、登録を実行しない。
+
+この4地点だけではfilterの原AL・実Execute・反映後の原Spentを揃えた完全receiptにはならない。実測できていない点を架空のstatusや機械アドレス0で埋めず、将来の3操作・途中読込1回の校正では前節の追加地点と合わせる。property getter内からOP/VM/Lua getterを呼ばず、Spent・本体昇進flag・追加許可flagを生成しない。
+親ソースの実enumはProductionAdmission=6、PromotionCall=8である。新候補は既存enumへ架空の53や9を足さず、独立binと任意のRust登録関数に留めた。最新SEH試験ではWindows SDK準拠のFFIを試験内だけに宣言し、Rust activationを飛び越さない明示Win64の例外発生元を使う。
