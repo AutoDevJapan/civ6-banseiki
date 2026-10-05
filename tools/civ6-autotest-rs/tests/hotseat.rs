@@ -102,7 +102,7 @@ fn hotseat_handoff_does_not_wait_for_a_whole_round_or_end_twice() {
                 assert!(code.contains("turn >= 7"));
                 assert!(code.contains("p:IsTurnActive()"));
             }
-            if code.contains("tostring(Game.GetCurrentGameTurn()) .. '|' ..") {
+            if code == "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Game.GetLocalPlayer())" {
                 return Ok("7|1".into());
             }
             Ok("true".into())
