@@ -24,12 +24,15 @@ struct Game {
     cleanup_fail_once: bool,
     cleanup_calls: usize,
     alive_ack_lost_once: bool,
+    dies_after_lost_ack: bool,
+    alive: bool,
     next_screen: Option<String>,
 }
 impl Game {
     fn new(turns: &[i64]) -> Self {
         let mut game = Self {
             turn: 1,
+            alive: true,
             pending: turns.iter().copied().collect(),
             ..Default::default()
         };
@@ -97,11 +100,14 @@ impl Game {
             if self.alive_ack_lost_once {
                 self.alive_ack_lost_once = false;
                 self.advance();
+                if self.dies_after_lost_ack {
+                    self.alive = false;
+                }
                 return Err(Error::unknown(
                     "alive read ran but FireTuner acknowledgement was lost",
                 ));
             }
-            return Ok(format!("{}|true", self.turn));
+            return Ok(format!("{}|{}", self.turn, self.alive));
         }
         Ok("true".into())
     }
@@ -179,6 +185,29 @@ fn autoplay_retries_only_the_alive_read_after_lost_acknowledgement() {
     assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
     assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
     assert!(h.events().iter().any(|event| event == "disconnect"));
+}
+
+#[test]
+fn lost_alive_ack_does_not_record_a_death_on_the_old_turn() {
+    let mut game = Game::new(&[]);
+    game.alive_ack_lost_once = true;
+    game.dies_after_lost_ack = true;
+    let (mut h, game) = harness(game);
+    let result = h.runner.autoplay(
+        2,
+        600.0,
+        AutoplayOptions {
+            allow_human_elimination: true,
+            ..Default::default()
+        },
+    );
+    assert!(result
+        .unwrap()
+        .contains("human_elimination_first_observed_turn=3"));
+    assert_eq!(game.lock().unwrap().turn, 3);
+    assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+    assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
+    assert!(h.log().contains("first_observed_turn=3"));
 }
 
 #[test]
