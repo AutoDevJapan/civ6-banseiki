@@ -144,6 +144,19 @@ impl Checkpoint {
         {
             return Err(invalid("carrier city snapshot is incomplete"));
         }
+        let before = &self.carrier["Before"];
+        if !before["Name"].is_string()
+            || !before["Population"].as_i64().is_some_and(|n| n > 0)
+            || !before["Loyalty"]
+                .as_f64()
+                .is_some_and(|n| (0.0..=100.0).contains(&n))
+            || !before["Assets"]["Districts"].is_object()
+            || ["Assets", "Religion", "UnitsOnCenter", "PurchasedPlots"]
+                .iter()
+                .any(|key| !before[*key].is_object())
+        {
+            return Err(invalid("pre-borrow city baseline is incomplete"));
+        }
         for key in [
             "X",
             "Y",

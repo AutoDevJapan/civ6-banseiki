@@ -274,6 +274,11 @@ fn detached_or_duplicated_carrier_evidence_cannot_pass_validation() {
         .unwrap()
         .remove("Source");
     assert!(missing.validate(TOKEN, CANDIDATE).is_err());
+    let mut no_before = checkpoint(&world(1));
+    no_before.carrier.as_object_mut().unwrap().remove("Before");
+    no_before.ledger["Transactions"]["checkpoint"]["NativeWorks"]["1"]["Carrier"] =
+        no_before.carrier.clone();
+    assert!(compare(&no_before, &no_before, false).is_err());
 }
 
 #[test]
