@@ -316,7 +316,7 @@ fn final_generated_report_and_gate_require_true_quantity_and_every_production_re
         lua.load(FINAL_NATIVE_FIXTURE).exec()?;
         lua.load(format!(r#"
 JAC_OATH_AUDIT.quantities_verified={quantity}
-local function proof(amount) return {{quantity_verified=true,expected_percent=amount,sample_count=9,off_first={{}},on={{}},off_last={{}}}} end
+local function proof(amount) return {{quantity_verified=true,expected_percent=amount,sample_count=3,off_first={{}},on={{}},off_last={{}}}} end
 JAC_OATH_AUDIT.production={{UNIT_SPEARMAN=proof(15),UNIT_BUILDER=proof(0)}}
 "#)).exec()?;
         let result = decode(&lua, &final_code)?;
@@ -335,11 +335,13 @@ JAC_OATH_AUDIT.production={{UNIT_SPEARMAN=proof(15),UNIT_BUILDER=proof(0)}}
         "a.production.UNIT_SPEARMAN.expected_percent=1",
         "a.production.UNIT_SPEARMAN.off_last=nil",
         "a.production.UNIT_SPEARMAN.sample_count=nil",
+        "a.production.UNIT_SPEARMAN.sample_count=9",
+        "a.production.UNIT_SPEARMAN.sample_count=2",
         "a.production={}; a.production_quantities_verified=true",
     ] {
         lua.load("JAC_OATH_AUDIT=nil").exec()?;
         lua.load(FINAL_NATIVE_FIXTURE).exec()?;
-        lua.load("JAC_OATH_AUDIT.quantities_verified=true; local function p(amount) return {quantity_verified=true,expected_percent=amount,sample_count=9,off_first={},on={},off_last={}} end; JAC_OATH_AUDIT.production={UNIT_SPEARMAN=p(15),UNIT_BUILDER=p(0)}").exec()?;
+        lua.load("JAC_OATH_AUDIT.quantities_verified=true; local function p(amount) return {quantity_verified=true,expected_percent=amount,sample_count=3,off_first={},on={},off_last={}} end; JAC_OATH_AUDIT.production={UNIT_SPEARMAN=p(15),UNIT_BUILDER=p(0)}").exec()?;
         lua.load(format!("local a=JAC_OATH_AUDIT; {mutation}"))
             .exec()?;
         let result = decode(&lua, &final_code)?;
