@@ -4,7 +4,8 @@ use civ6_autotest_rs::scenario::{
     enable_mods_code, enable_mods_code_with_scope, validate_scenario,
 };
 use mlua::{Lua, Table};
-use serde_json::json;
+use serde_json::{json, Value};
+use std::{fs, path::Path};
 use support_fixture::{expect_error, lua_error};
 
 const BASE: u8 = 1;
@@ -253,7 +254,7 @@ fn exclusive_selection_rejects_a_kept_mod_depending_on_an_extra_user_mod() {
     let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[], false);
     lua_error(
         g.run_exclusive(&[KEEP], &[]),
-        "scenario enables a dependent mod",
+        "scenario omits required user mod",
     );
     assert!(g.disabled().is_empty());
     assert!(g.enabled(BASE) && g.enabled(KEEP));
@@ -261,11 +262,74 @@ fn exclusive_selection_rejects_a_kept_mod_depending_on_an_extra_user_mod() {
 }
 
 #[test]
-fn exclusive_selection_restores_implicitly_enabled_extra_dependency() {
+fn exclusive_selection_rejects_disabled_extra_dependency_before_changes() {
     let g = Graph::new(&[(BASE, &[]), (KEEP, &[BASE])], &[BASE, KEEP], false);
-    lua_error(g.run_exclusive(&[KEEP], &[]), "unexpected enabled user mod");
+    lua_error(
+        g.run_exclusive(&[KEEP], &[]),
+        "scenario omits required user mod",
+    );
     assert!(!g.enabled(BASE) && !g.enabled(KEEP));
-    assert_eq!(g.updates(), 1);
+    assert_eq!(g.updates(), 0);
+}
+
+#[test]
+fn normal_300_prestart_checks_configured_user_mods_after_update() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../civ6-autotest/scenarios/japan-15km-300turn-full-metrics.json");
+    let scenario: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    let steps = scenario["steps"].as_array().unwrap();
+    let ids = steps[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let start = steps
+        .iter()
+        .position(|step| step["action"] == "start_game")
+        .unwrap();
+    assert_eq!(steps[start - 1]["action"], "ui_lua");
+    assert_eq!(steps[start - 1]["state_name"], "FrontEnd");
+    let check = steps[start - 1]["code"].as_str().unwrap();
+
+    let lua = Lua::new();
+    let definitions = lua.create_table().unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        let definition = lua.create_table().unwrap();
+        definition.set("Id", id.as_str()).unwrap();
+        definition.set("Enabled", true).unwrap();
+        definition.set("Official", false).unwrap();
+        definition
+            .set("Dependencies", lua.create_table().unwrap())
+            .unwrap();
+        definitions.set(i + 1, definition).unwrap();
+    }
+    lua.load(include_str!("fixtures/modding_stub.lua"))
+        .call::<()>(definitions)
+        .unwrap();
+    lua.load(enable_mods_code_with_scope(&ids, &[], true))
+        .eval::<String>()
+        .unwrap();
+    assert_eq!(
+        lua.load(check).eval::<String>().unwrap(),
+        "configured user mods=7"
+    );
+
+    let configured = lua.globals().get::<Table>("CONFIGURED").unwrap();
+    let extra = lua.create_table().unwrap();
+    extra.set("Id", id(MISSING)).unwrap();
+    extra.set("Official", false).unwrap();
+    configured.set(ids.len() + 1, extra).unwrap();
+    lua_error(
+        lua.load(check).eval::<String>(),
+        "unexpected configured user mod",
+    );
+    configured.set(ids.len() + 1, mlua::Value::Nil).unwrap();
+    configured.set(ids.len(), mlua::Value::Nil).unwrap();
+    lua_error(
+        lua.load(check).eval::<String>(),
+        "configured user mod missing",
+    );
 }
 
 #[test]

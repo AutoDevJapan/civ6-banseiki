@@ -143,6 +143,11 @@
       ]
     },
     {
+      "action": "ui_lua",
+      "state_name": "FrontEnd",
+      "code": "local expected={}\nfor _,id in ipairs({'bd7a82c5-6b38-4b69-a7f5-8dc9af534249','ba3a1c58-9287-4654-a22f-85f9e6841e9b','7696e937-2044-4f3c-8e13-4e27632e2710','26c967d0-c10d-4eeb-8aaf-c83dc7e621e7','403be889-1455-4de7-967b-ad54c0ff3431','f6398d3b-707c-4d0a-8b19-e68333efa200','4785cfe4-8d9a-4deb-89ea-d2d566551fec'}) do expected[id]=true end\nlocal seen,count={},0\nfor _,mod in ipairs(GameConfiguration.GetEnabledMods()) do\n  if not mod.Official then\n    local raw=mod.Id or mod.ModId or mod.ModID\n    if type(raw)~='string' then error('enabled user mod missing ID') end\n    local id=string.lower(raw)\n    if not expected[id] then error('unexpected configured user mod: '..id) end\n    if seen[id] then error('duplicate configured user mod: '..id) end\n    seen[id]=true; count=count+1\n  end\nend\nfor id in pairs(expected) do if not seen[id] then error('configured user mod missing: '..id) end end\nif count~=7 then error('configured user mod count '..count) end\nreturn 'configured user mods=7'"
+    },
+    {
       "action": "start_game",
       "timeout": 600
     },

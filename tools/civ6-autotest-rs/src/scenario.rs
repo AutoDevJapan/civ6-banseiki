@@ -425,20 +425,32 @@ pub fn enable_mods_code_with_scope(
 }
 const ENABLE_MODS_BODY: &str = r###"local keep, disabled = {}, {}
 for _, id in ipairs(enableIDs) do keep[string.lower(id)] = true end
-local handles, dependents, original = {}, {}, {}
+local handles, dependents, prerequisites, original = {}, {}, {}, {}
 for _, installed in ipairs(Modding.GetInstalledMods()) do
     local info = Modding.GetModInfo(installed.Handle)
     local id = string.lower(info.Id)
     handles[id] = installed.Handle
     original[id] = info.Enabled
     local dependencies = Modding.GetModAssociations(installed.Handle)
+    prerequisites[id] = {}
     for _, dependency in ipairs(dependencies or {}) do
       local target = string.lower(dependency.Id)
+      table.insert(prerequisites[id], target)
       dependents[target] = dependents[target] or {}
       table.insert(dependents[target], id)
     end
 end
 if exclusiveUserMods then
+  for _, requested in ipairs(enableIDs) do
+    local id = string.lower(requested)
+    for _, target in ipairs(prerequisites[id] or {}) do
+      local handle = handles[target]
+      if not handle then error('required mod is not installed: ' .. target) end
+      if not Modding.GetModInfo(handle).Official and not keep[target] then
+        error('scenario omits required user mod: ' .. target)
+      end
+    end
+  end
   local extra = {}
   for id, handle in pairs(handles) do
     local info = Modding.GetModInfo(handle)
