@@ -602,6 +602,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .cloned()
             .collect::<BTreeSet<_>>(),
         BTreeSet::from([
+            "leader-persona-ai-skills-save-load.json".to_string(),
             "leader-persona-spy-neutralization-travel-window.json".to_string(),
             "leader-persona-spy-neutralization-mission-window.json".to_string(),
             "leader-persona-property-abi-15km.json".to_string(),
