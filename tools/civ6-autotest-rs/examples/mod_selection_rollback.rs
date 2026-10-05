@@ -69,9 +69,10 @@ fn parse_original(text: &str) -> Result<std::collections::BTreeMap<String, bool>
     let mut original = std::collections::BTreeMap::new();
     let mut seen_guids = std::collections::BTreeSet::new();
     let mut counted = false;
+    let mut rows_finished = false;
     for line in text.lines() {
         if let Some(row) = line.strip_prefix("FrontEnd: TODO241 ORIGINAL ") {
-            if counted {
+            if counted || rows_finished {
                 return Err("original rows from multiple runs".into());
             }
             let (id, flag) = row.split_once('=').ok_or("incomplete original row")?;
@@ -99,7 +100,14 @@ fn parse_original(text: &str) -> Result<std::collections::BTreeMap<String, bool>
                 return Err("duplicate original row".into());
             }
             original.insert(id.to_ascii_lowercase(), enabled);
-        } else if let Some(pass) = line.strip_prefix("FrontEnd: TODO241 PASS ") {
+        } else {
+            // A native audit emits the whole snapshot without yielding. A new
+            // ORIGINAL block after other output belongs to a different run,
+            // even if the first run never reached its PASS marker.
+            rows_finished |= !original.is_empty();
+            let Some(pass) = line.strip_prefix("FrontEnd: TODO241 PASS ") else {
+                continue;
+            };
             let (label, count) = pass
                 .rsplit_once(" installed=")
                 .ok_or("missing diagnostic count")?;
@@ -459,6 +467,10 @@ mod tests {
             snapshot_log(&[(MAP, true), (&format!("{{{MAP}}}"), false)]),
             valid.replace("FrontEnd: TODO241 PASS ", "unrelated "),
             format!("{valid}{}", snapshot_log(&[(TREES, true)])),
+            format!(
+                "FrontEnd: TODO241 ORIGINAL {MAP}=true\nFrontEnd: diagnostic aborted\n{}",
+                snapshot_log(&[(GROWTH, false)]).replace("installed=1", "installed=2")
+            ),
             format!("{valid}FrontEnd: TODO241 PASS disable-failure-restores-all installed=3\n"),
         ] {
             assert!(
