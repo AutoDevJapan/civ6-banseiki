@@ -4,6 +4,38 @@ use civ6_autotest_rs::{Error, ErrorKind};
 use serde_json::json;
 use support_driver::{FakeBackend, Harness};
 
+#[test]
+fn pause_releases_connection_and_next_lua_reconnects() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    h.events.lock().unwrap().clear();
+    h.runner
+        .run_step(&json!({"action":"pause","seconds":1}))
+        .unwrap();
+    assert_eq!(h.events(), ["disconnect"]);
+    assert_eq!(h.clock.at(), 1.0);
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    assert_eq!(
+        h.events(),
+        ["disconnect", "connect", "states", "connect", "lua:InGame"]
+    );
+}
+
+#[test]
+fn pause_fails_when_sleep_overshoots_step_deadline() {
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.lua("InGame", "return true", 60.0).unwrap();
+    h.events.lock().unwrap().clear();
+    h.clock.set_min_sleep(3.0);
+    let err = h
+        .runner
+        .run_step(&json!({"action":"pause","seconds":1,"timeout":2}))
+        .unwrap_err();
+    assert!(err.to_string().contains("deadline expired"));
+    assert_eq!(h.events(), ["disconnect"]);
+    assert_eq!(h.clock.at(), 3.0);
+}
+
 fn timeout_backend(failures: usize, error: Error, reply: &str) -> FakeBackend {
     let mut remaining = failures;
     let reply = reply.to_owned();
@@ -129,4 +161,222 @@ fn test_state_changing_lua_is_not_replayed() {
         ErrorKind::LuaResponseUnknown
     );
     assert_eq!(h.calls().len(), 1);
+}
+
+#[test]
+fn options_state_lookup_recovers_after_both_socket_attempts_fail() {
+    let mut attempts = 0;
+    let fake = FakeBackend::new().states(move || {
+        attempts += 1;
+        if attempts <= 2 {
+            Err(Error::tuner("No reply to LSQ from FireTuner"))
+        } else {
+            Ok(vec!["InGame".into()])
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    assert!(!h.runner.close_options_menu(60.0).unwrap());
+    assert_eq!(h.events().iter().filter(|e| *e == "states").count(), 3);
+    assert_eq!(h.clock.at(), 0.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn recovered_options_state_is_closed_once_and_verified_hidden() {
+    let mut attempts = 0;
+    let fake = FakeBackend::new()
+        .states(move || {
+            attempts += 1;
+            if attempts <= 2 {
+                Err(Error::tuner("No reply to LSQ from FireTuner"))
+            } else {
+                Ok(vec!["InGameTopOptionsMenu".into()])
+            }
+        })
+        .lua(|_, _| Ok("true".into()));
+    let mut h = Harness::new(json!({}), fake);
+    assert!(h.runner.close_options_menu(60.0).unwrap());
+    let calls = h.calls();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0].0, "InGameTopOptionsMenu");
+    assert!(calls[0].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(calls[1].0, "InGameTopOptionsMenu");
+    assert_eq!(calls[1].1, "return ContextPtr:IsHidden()");
+    assert_eq!(h.clock.at(), 0.5);
+}
+
+#[test]
+fn options_state_lookup_respects_shorter_step_deadline() {
+    let fake = FakeBackend::new().states(|| Err(Error::tuner("no LSQ reply")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(3.0).unwrap_err().kind,
+        ErrorKind::Tuner
+    );
+    assert_eq!(h.clock.at(), 1.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn options_state_lookup_is_bounded_even_in_a_three_hour_step() {
+    let fake = FakeBackend::new().states(|| Err(Error::tuner("no LSQ reply")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(10800.0).unwrap_err().kind,
+        ErrorKind::Tuner
+    );
+    assert_eq!(h.clock.at(), 27.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn options_close_with_lost_acknowledgement_is_not_replayed() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGameTopOptionsMenu".into()]))
+        .lua(|_, _| Err(Error::unknown("OnReturn acknowledgement lost")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(60.0).unwrap_err().kind,
+        ErrorKind::LuaResponseUnknown
+    );
+    assert_eq!(h.calls().len(), 1);
+    assert!(h.calls()[0].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(h.clock.at(), 0.0);
+}
+
+fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::{Clock, SystemClock},
+        tuner::{recv_frame, send_frame, TunerClient, COMMAND, HANDSHAKE},
+        Result,
+    };
+    use std::{
+        io,
+        net::TcpListener,
+        sync::Arc,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    struct SocketBackend(Option<TunerClient>);
+    impl Backend for SocketBackend {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
+            if self.0.is_none() {
+                self.0 = Some(TunerClient::connect(port, timeout)?);
+            }
+            Ok(())
+        }
+        fn disconnect(&mut self) {
+            if let Some(mut client) = self.0.take() {
+                client.close();
+            }
+        }
+        fn list_states(&mut self, timeout: f64) -> Result<Vec<String>> {
+            self.0.as_mut().unwrap().list_states(timeout)
+        }
+        fn run_lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
+            self.0
+                .as_mut()
+                .unwrap()
+                .run_lua(state, code, timeout)
+                .map(|r| r.value)
+        }
+    }
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let mut queries = 0;
+        let mut commands = Vec::new();
+        let limit = Instant::now() + Duration::from_secs(12);
+        for connection_index in 0..2 {
+            let (mut connection, _) = loop {
+                match listener.accept() {
+                    Ok(pair) => break pair,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < limit, "missing retry connection");
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(e) => panic!("accept failed: {e}"),
+                }
+            };
+            connection.set_nonblocking(false).unwrap();
+            while let Ok(frame) = recv_frame(
+                &mut connection,
+                Some(civ6_autotest_rs::time::monotonic() + 10.0),
+            ) {
+                match frame.payload.as_str() {
+                    "APP:" => send_frame(&mut connection, HANDSHAKE, "Civilization VI").unwrap(),
+                    "LSQ:" => {
+                        queries += 1;
+                        if queries == fail_query {
+                            break; // Disconnect before any command bytes are received.
+                        }
+                        send_frame(&mut connection, HANDSHAKE, "0\nInGameTopOptionsMenu").unwrap();
+                    }
+                    _ => {
+                        assert_eq!(frame.tag, COMMAND);
+                        let start = frame.payload.find("JAC_AUTOTEST_").unwrap();
+                        let token = &frame.payload[start..start + "JAC_AUTOTEST_".len() + 32];
+                        let ack = format!("{token}|OK|true");
+                        commands.push(frame.payload);
+                        if lose_ack {
+                            break;
+                        }
+                        send_frame(&mut connection, COMMAND, &ack).unwrap();
+                    }
+                }
+            }
+            if connection_index == 1 {
+                break;
+            }
+        }
+        commands
+    });
+    let root = tempfile::tempdir().unwrap();
+    let clock = Arc::new(SystemClock);
+    let mut runner = Runner::with_backend(
+        json!({}),
+        root.path().into(),
+        root.path().into(),
+        root.path().into(),
+        port,
+        Box::new(SocketBackend(None)),
+        clock.clone(),
+    );
+    let result = runner.close_options_menu(clock.now() + 10.0);
+    runner.disconnect();
+    let commands = server.join().unwrap();
+    assert_eq!(
+        commands.iter().filter(|c| c.contains("OnReturn()")).count(),
+        1
+    );
+    if lose_ack {
+        assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+        assert_eq!(commands.len(), 1);
+    } else {
+        assert!(result.unwrap());
+        assert_eq!(commands.len(), 2);
+        assert!(commands[1].contains("return ContextPtr:IsHidden()"));
+    }
+}
+
+#[test]
+fn options_close_recovers_when_runner_pre_send_state_query_disconnects() {
+    close_options_over_socket(3, false);
+}
+
+#[test]
+fn options_close_recovers_when_tuner_state_index_query_disconnects() {
+    close_options_over_socket(4, false);
+}
+
+#[test]
+fn options_close_after_state_index_recovery_never_replays_lost_ack() {
+    close_options_over_socket(4, true);
 }
