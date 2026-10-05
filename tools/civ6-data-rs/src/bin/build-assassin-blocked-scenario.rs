@@ -155,7 +155,7 @@ local function SafePlot(p)
   end
 end
 -- Reject unsafe initial conditions before altering even the first plot.
-for _,p in ipairs(plots) do SafePlot(p) end
+for _,p in ipairs(plots) do if not p:IsWater() then SafePlot(p) end end
 t={Actor=owner,City=cityID,X=cityX,Y=cityY,Plots=rows,
   CenterTerrain=center:GetTerrainType(),CenterFeature=center:GetFeatureType(),
   Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner),AllBefore=UnitIDs(owner)}
@@ -170,7 +170,7 @@ local function Occupy(p)
   print('[JAC_ASN_BLOCKED] terrain-blocker xy='..row.X..','..row.Y..' original='..row.Terrain..' barrier='..row.Barrier)
   rows[#rows+1]=row; occupied[row.X..','..row.Y]=row
 end
-for _,p in ipairs(plots) do Occupy(p) end
+for _,p in ipairs(plots) do if not p:IsWater() then Occupy(p) end end
 -- The native API can search past the first ring. Discover its real placement
 -- candidates instead of treating the fifth argument as a maximum radius.
 local blocked=false; local kind=R.UnitForPlayer(owner)
@@ -202,7 +202,13 @@ for attempt=1,128 do
   local existing=occupied[row.X..','..row.Y]
   assert(not existing,'native placement selected an impassable terrain barrier')
   local plot=Map.GetPlot(row.X,row.Y)
-  assert(plot and not plot:IsWater() and not plot:IsImpassable(),'native probe selected an invalid land plot')
+  assert(plot,'native probe selected an invalid plot')
+  if plot:IsWater() then
+    RestoreTerrain()
+    assert(Same(UnitIDs(owner),t.AllBefore),'water probe changed existing inventory')
+    error('native placement uses unchanged water; no blocked condition was created')
+  end
+  assert(not plot:IsImpassable(),'native probe selected an invalid land plot')
   Occupy(plot)
 end
 assert(blocked,'native placement did not become blocked within 128 probes')
@@ -374,7 +380,8 @@ local function Plot(x,y)
     GetTerrainType=function() return terrain[key] or 1 end,
     GetFeatureType=function() return features[key] or -1 end,
     IsCity=function() return (x==0 and y==0) or (PROBE_MODE=='other_city' and x==1) end,
-    IsWater=function() return PROBE_MODE=='water' and x==2 end,IsImpassable=function() return terrain[key]==9 end}
+    IsWater=function() return (PROBE_MODE=='water' or PROBE_MODE=='water_candidate') and x==2 end,
+    IsImpassable=function() return terrain[key]==9 end}
 end
 TerrainBuilder={SetTerrainType=function(p,t)
   terrain[p:GetX()..','..p:GetY()]=t
@@ -408,6 +415,7 @@ UnitManager.InitUnitValidAdjacentHex=function(owner,kind,x,y,arg)
   NATIVE_CALLS=NATIVE_CALLS+1
   if PROBE_MODE=='unbounded' then GRANT(owner,0,6+NATIVE_CALLS,0)
   elseif PROBE_MODE=='stacked' then GRANT(owner,0,0,0)
+  elseif PROBE_MODE=='water_candidate' then GRANT(owner,0,2,0)
   elseif NATIVE_CALLS==1 then GRANT(owner,PROBE_MODE=='wrong_type' and 4 or 0,7,0)
   elseif PROBE_MODE=='unplaced' then GRANT(owner,0,-9999,-9999) end
 end
@@ -418,10 +426,13 @@ UnitManager.Kill=function(u)
 end
 function CheckFootprint()
   local t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')
-  assert(NATIVE_CALLS==2 and #t.Plots==7)
+  assert(NATIVE_CALLS==2 and #t.Plots==(PROBE_MODE=='water' and 6 or 7))
   assert(Players[0]:GetUnits():GetCount()==2 and Players[0]:GetUnits():FindID(unrelated))
   assert(Players[0]:GetUnits():FindID(garrison))
   for _,p in ipairs(t.Plots) do assert(Map.GetPlot(p.X,p.Y):IsImpassable()) end
+  if PROBE_MODE=='water' then
+    assert(Map.GetPlot(2,0):GetTerrainType()==4 and Map.GetPlot(2,0):GetFeatureType()==-1)
+  end
   for _,u in Players[0]:GetUnits():Members() do assert(u:GetType()~=0 and u:GetType()~=5) end
 end
 function CheckRestored()
@@ -473,13 +484,14 @@ end
             "foreign_occupied",
             "foreign_territory",
             "water",
+            "water_candidate",
         ] {
             let lua = Lua::new();
             lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
                 .exec()?;
             lua.load(format!("PROBE_MODE='{mode}'\n{fixture}")).exec()?;
             let result = lua.load(setup).exec();
-            let safe = matches!(mode, "fallback" | "unplaced");
+            let safe = matches!(mode, "fallback" | "unplaced" | "water");
             assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
             if mode == "other_city" {
                 assert!(result
@@ -513,21 +525,21 @@ end
                     .contains("fixture would modify foreign territory"));
                 lua.load("CheckPreflightUnchanged()").exec()?;
             }
-            if mode == "water" {
+            if mode == "water_candidate" {
                 assert!(result
                     .as_ref()
                     .unwrap_err()
                     .to_string()
-                    .contains("fixture would modify a water plot"));
-                lua.load("CheckPreflightUnchanged()").exec()?;
+                    .contains("native placement uses unchanged water"));
+                lua.load("CheckCenterFallbackUnchanged()").exec()?;
             }
             if safe {
                 lua.load("CheckFootprint()").exec()?;
                 lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
                 lua.load("CheckRestored()").exec()?;
                 for mutation in [
-                    "TerrainBuilder.SetTerrainType(Map.GetPlot(2,0),1)",
-                    "TerrainBuilder.SetFeatureType(Map.GetPlot(2,0),99)",
+                    "TerrainBuilder.SetTerrainType(Map.GetPlot(1,0),4)",
+                    "TerrainBuilder.SetFeatureType(Map.GetPlot(1,0),99)",
                     "DATA[0].Cities[10]=nil",
                 ] {
                     lua.load(format!("{PREFIX} RestoreTerrain()")).exec()?;
