@@ -4,13 +4,14 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 14] = [
+pub const ACTIONS: [&str; 15] = [
     "restart_game",
     "enable_mods",
     "configure",
     "start_game",
     "autoplay",
     "end_turn",
+    "choose_dedication",
     "ui_lua",
     "screenshot",
     "save",
@@ -206,6 +207,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     {
                         return Err(fail(format!("{key} must be positive")));
                     }
+                }
+            }
+            "choose_dedication" => {
+                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
+                    return Err(fail(
+                        "choose_dedication human must be an integer in [0, 63]".into(),
+                    ));
                 }
             }
             "ui_lua" => {
