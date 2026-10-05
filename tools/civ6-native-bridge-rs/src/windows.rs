@@ -44,6 +44,7 @@ pub const ASHINA_ADMISSION_KEY_ID: u32 = 853_304;
 pub const PRODUCTION_MANIFEST_BASE: u32 = 900_000;
 pub const PRODUCTION_ALLOW_BASE: u32 = 901_000;
 pub const PRODUCTION_RESET_KEY: u32 = 902_000;
+pub const PRODUCTION_RESET_LAST_KEY: u32 = PRODUCTION_RESET_KEY + PRODUCTION_OWNER_LIMIT as u32 - 1;
 pub const PRODUCTION_CLOSE_BASE: u32 = 903_000;
 pub const PRODUCTION_INDEX_LIMIT: usize = 256;
 pub const PRODUCTION_OWNER_LIMIT: usize = 64;
@@ -754,6 +755,12 @@ static PRODUCT_SESSION: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_NEXT_TICKET: AtomicU32 = AtomicU32::new(0);
 static PRODUCT_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PRODUCT_EXHAUSTED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static PRODUCT_TEST_RESET_RELEASE: AtomicBool = AtomicBool::new(false);
 
 fn product_cell(owner: usize, index: usize, manifest: bool) -> &'static AtomicJoinedWord {
     let offset = owner * PRODUCTION_INDEX_LIMIT + index;
@@ -868,6 +875,12 @@ fn product_close_index(key: u32) -> Option<usize> {
         .then(|| (key - PRODUCTION_CLOSE_BASE) as usize)
 }
 
+fn product_reset_owner(key: u32) -> Option<usize> {
+    (PRODUCTION_RESET_KEY..=PRODUCTION_RESET_LAST_KEY)
+        .contains(&key)
+        .then(|| (key - PRODUCTION_RESET_KEY) as usize)
+}
+
 fn product_publish_word(
     cell: &AtomicJoinedWord,
     receiver: u64,
@@ -896,46 +909,65 @@ fn product_publish_word(
 }
 
 fn product_property_begin(receiver: u64, key: u32) -> u64 {
-    if (product_key(key).is_none()
-        && product_close_index(key).is_none()
-        && key != PRODUCTION_RESET_KEY)
+    let reset_owner = product_reset_owner(key);
+    if (product_key(key).is_none() && product_close_index(key).is_none() && reset_owner.is_none())
         || receiver == 0
+        || receiver & 7 != 0
         || !PRODUCT_ACTIVE.load(Ordering::Acquire)
         || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
     {
         return 0;
     }
     let session = PRODUCT_SESSION.load(Ordering::Acquire);
-    let mut found = None;
-    for (owner, binding) in PRODUCT_OWNERS.iter().enumerate() {
-        let current = binding.load();
-        if joined_session(current) == session && joined_receiver(current) == receiver {
-            if found.is_some() {
-                return 0;
+    let owner = if let Some(owner) = reset_owner {
+        owner
+    } else {
+        let mut found = None;
+        for (owner, binding) in PRODUCT_OWNERS.iter().enumerate() {
+            let current = binding.load();
+            if joined_session(current) == session && joined_receiver(current) == receiver {
+                if found.is_some() {
+                    return 0;
+                }
+                found = Some(owner);
             }
-            found = Some(owner);
         }
-    }
-    let Some(owner) = found else {
-        return 0;
+        let Some(owner) = found else {
+            return 0;
+        };
+        owner
     };
     let Some(ticket) = product_next_ticket() else {
         return 0;
     };
+    if reset_owner.is_some() {
+        // The synchronized producer reads only its own owner key. Binding and
+        // closing at getter entry also work when Gameplay has no CanEver API.
+        // Invalidate the previous permission before clearing duplicate owners:
+        // a concurrent CanEver cannot observe the old word in that interval.
+        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
+        #[cfg(test)]
+        if PRODUCT_TEST_RESET_PAUSE.load(Ordering::Acquire) {
+            PRODUCT_TEST_RESET_PAUSED.store(true, Ordering::Release);
+            while !PRODUCT_TEST_RESET_RELEASE.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+        }
+        product_bind(owner, receiver, session, ticket);
+    }
     let binding = PRODUCT_OWNERS[owner].load();
     if !PRODUCT_ACTIVE.load(Ordering::Acquire)
         || PRODUCT_EXHAUSTED.load(Ordering::Acquire)
         || PRODUCT_SESSION.load(Ordering::Acquire) != session
         || joined_session(binding) != session
         || joined_receiver(binding) != receiver
-        || joined_ticket(binding) >= ticket
+        || (reset_owner.is_some() && joined_ticket(binding) != ticket)
+        || (reset_owner.is_none() && joined_ticket(binding) >= ticket)
     {
         return 0;
     }
     // Closure happens at entry, independent of the getter's stale/raw return.
-    if key == PRODUCTION_RESET_KEY {
-        product_publish_word(&PRODUCT_OWNERS[owner], receiver, session, ticket, false);
-    } else if let Some(index) = product_close_index(key) {
+    if let Some(index) = product_close_index(key) {
         product_publish_word(
             &PRODUCT_CLOSURE[owner * PRODUCTION_INDEX_LIMIT + index],
             receiver,
@@ -957,7 +989,10 @@ fn product_observe_property(
     flags: u32,
 ) {
     let cell_key = product_key(key);
-    if cell_key.is_none() && product_close_index(key).is_none() && key != PRODUCTION_RESET_KEY {
+    if cell_key.is_none()
+        && product_close_index(key).is_none()
+        && product_reset_owner(key).is_none()
+    {
         return;
     }
     if token == 0
@@ -982,25 +1017,9 @@ fn product_observe_property(
     if product_close_index(key).is_some() {
         return;
     }
-    if key == PRODUCTION_RESET_KEY {
-        // The reset is a closure even if its raw value is malformed/missing.
-        // It advances the binding threshold rather than clearing 512 cells.
-        let owner_word = &PRODUCT_OWNERS[owner];
-        loop {
-            let current = owner_word.load();
-            if joined_session(current) != session
-                || joined_receiver(current) != receiver
-                || joined_ticket(current) >= ticket
-            {
-                return;
-            }
-            if owner_word
-                .compare_exchange(current, joined_word(receiver, session, ticket, false))
-                .is_ok()
-            {
-                return;
-            }
-        }
+    if product_reset_owner(key).is_some() {
+        // The binding threshold was advanced at entry, before the raw read.
+        return;
     }
     let (index, manifest) = cell_key.expect("validated production property key");
     let offset = owner * PRODUCTION_INDEX_LIMIT + index;
@@ -1583,7 +1602,7 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         || (trace.scope == BridgeMode::ProductionAdmission as u32
             && product_key(key_id).is_none()
             && product_close_index(key_id).is_none()
-            && key_id != PRODUCTION_RESET_KEY)
+            && product_reset_owner(key_id).is_none())
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
         return;
@@ -3056,6 +3075,83 @@ mod tests {
     }
 
     #[test]
+    fn production_owner_reset_binds_from_its_natural_property_read() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        let receiver = 0x1000;
+        let reset = product_property_begin(receiver, PRODUCTION_RESET_KEY + 2);
+        assert_ne!(
+            reset, 0,
+            "owner reset must bind without a Gameplay CanEver call"
+        );
+        product_observe_property(receiver, PRODUCTION_RESET_KEY + 2, reset, 1, 1, 1, 0);
+        open_product(receiver, 77);
+        assert_eq!(product_permission(2, 77, receiver, session), Some(true));
+        assert_ne!(product_permission(1, 77, receiver, session), Some(true));
+        let stale = product_property_begin(receiver, PRODUCTION_ALLOW_BASE + 77);
+        let replacement = 0x2000;
+        assert_ne!(
+            product_property_begin(replacement, PRODUCTION_RESET_KEY + 2),
+            0
+        );
+        product_observe_property(receiver, PRODUCTION_ALLOW_BASE + 77, stale, 1, 1, 1, 0);
+        assert_ne!(product_permission(2, 77, receiver, session), Some(true));
+        assert_eq!(product_permission(2, 77, replacement, session), Some(false));
+        open_product(replacement, 77);
+        assert_eq!(product_permission(2, 77, replacement, session), Some(true));
+        assert_ne!(
+            product_property_begin(replacement, PRODUCTION_RESET_KEY + 3),
+            0
+        );
+        assert_ne!(product_permission(2, 77, replacement, session), Some(true));
+        assert_eq!(product_permission(3, 77, replacement, session), Some(false));
+        product_bind(2, replacement, session, product_next_ticket().unwrap());
+        assert_eq!(product_permission(2, 77, replacement, session), Some(false));
+        assert_ne!(product_permission(3, 77, replacement, session), Some(true));
+        assert_eq!(
+            product_property_begin(replacement, PRODUCTION_RESET_LAST_KEY + 1),
+            0
+        );
+        product_deactivate();
+    }
+
+    #[test]
+    fn production_reset_closes_before_a_concurrent_appointment_read() {
+        let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
+        product_deactivate();
+        assert!(product_activate());
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        let receiver = 0x1000;
+        product_bind(2, receiver, session, product_next_ticket().unwrap());
+        open_product(receiver, 77);
+        assert_eq!(product_permission(2, 77, receiver, session), Some(true));
+        PRODUCT_TEST_RESET_PAUSED.store(false, Ordering::Release);
+        PRODUCT_TEST_RESET_RELEASE.store(false, Ordering::Release);
+        PRODUCT_TEST_RESET_PAUSE.store(true, Ordering::Release);
+        let reset =
+            std::thread::spawn(move || product_property_begin(receiver, PRODUCTION_RESET_KEY + 2));
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !PRODUCT_TEST_RESET_PAUSED.load(Ordering::Acquire) && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        let paused = PRODUCT_TEST_RESET_PAUSED.load(Ordering::Acquire);
+        let observed = product_permission(2, 77, receiver, session);
+        PRODUCT_TEST_RESET_RELEASE.store(true, Ordering::Release);
+        let token = reset.join().unwrap();
+        PRODUCT_TEST_RESET_PAUSE.store(false, Ordering::Release);
+        product_deactivate();
+        assert!(paused, "reset did not reach the controlled boundary");
+        assert_ne!(token, 0);
+        assert_ne!(
+            observed,
+            Some(true),
+            "a reset in progress returned old permission"
+        );
+    }
+
+    #[test]
     fn production_cache_keys_owner_and_gameinfo_index_and_rejects_old_reads() {
         let _exclusive = HOOK_TEST_LOCK.lock().unwrap();
         product_deactivate();
@@ -3084,7 +3180,7 @@ mod tests {
         product_observe_property(0x1000, 901077, bad, 1, 2, 1, 0);
         assert_eq!(product_permission(1, 77, 0x1000, session), Some(false));
         let stale = product_property_begin(0x1000, 901078);
-        let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY);
+        let reset = product_property_begin(0x1000, PRODUCTION_RESET_KEY + 1);
         assert_ne!(reset, 0);
         assert_eq!(product_permission(1, 78, 0x1000, session), Some(false));
         product_observe_property(0x1000, 901078, stale, 1, 1, 1, 0);
@@ -3239,12 +3335,18 @@ mod tests {
         }
         .unwrap();
         assert!(product_activate());
-        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
         let publish = |key, payload| {
             value[8] = payload;
             assert_eq!(property(receiver, key), value.as_ptr() as usize);
         };
         let mut publish = publish;
+        publish(PRODUCTION_RESET_KEY + 2, 1);
+        assert_eq!(
+            joined_receiver(PRODUCT_OWNERS[2].load()),
+            receiver as u64,
+            "Win64 property gateway binds owner before any CanEver call"
+        );
+        assert_eq!(can(gov.as_ptr() as usize, 77), 1, "unknown keeps original");
         publish(PRODUCTION_CLOSE_BASE + 77, 1);
         publish(PRODUCTION_ALLOW_BASE + 77, 0);
         publish(PRODUCTION_MANIFEST_BASE + 77, 1);

@@ -99,6 +99,8 @@ end
 -- The separate native consumer accepts only the two reserved key ranges.
 local ADMISSION_MANIFEST = 900000;
 local ADMISSION_ALLOW = 901000;
+-- The owner is encoded in the reset key, so its natural property read can
+-- bind the Core receiver without a Gameplay CanEverAppointGovernor binding.
 local ADMISSION_RESET = 902000;
 local ADMISSION_LIMIT = 256;
 local ADMISSION_SCHEMA = "JAC_PERSONA_ADMISSION_SCHEMA_V1";
@@ -254,9 +256,11 @@ local ADMISSION_CLOSE = 903000;
 local admissionSnapshots = {};
 local admissionRowsFingerprint;
 local function CloseAdmissionOwner(p)
-    p:SetProperty(ADMISSION_RESET, true);
-    local closed = p:GetProperty(ADMISSION_RESET) == true;
-    admissionSnapshots[p:GetID()] = nil;
+    local owner = p:GetID();
+    if type(owner) ~= "number" or owner % 1 ~= 0 or owner < 0 or owner >= 64 then return false; end
+    p:SetProperty(ADMISSION_RESET + owner, true);
+    local closed = p:GetProperty(ADMISSION_RESET + owner) == true;
+    admissionSnapshots[owner] = nil;
     return closed;
 end
 
@@ -265,7 +269,7 @@ local function CloseAllAdmissionOwners()
     for owner=0,63 do
         local p = Player(owner, false);
         if p then
-            local ok, value = pcall(p.GetProperty, p, ADMISSION_RESET);
+            local ok, value = pcall(p.GetProperty, p, ADMISSION_RESET + owner);
             if not ok or value ~= true then confirmed = false; end
         end
     end
@@ -273,12 +277,28 @@ local function CloseAllAdmissionOwners()
     return confirmed;
 end
 
+local function AdmissionOwnerIDsValid(ids)
+    if type(ids) ~= "table" then return false; end
+    local count, seen = 0, {};
+    for slot, owner in pairs(ids) do
+        if type(slot) ~= "number" or slot % 1 ~= 0 or slot < 1 or
+           type(owner) ~= "number" or owner % 1 ~= 0 or owner < 0 or owner >= 64 or
+           seen[owner] then return false; end
+        seen[owner] = true;
+        count = count + 1;
+        if count > 64 then return false; end
+    end
+    if count == 0 then return false; end
+    for slot=1,count do if ids[slot] == nil then return false; end end
+    return true;
+end
+
 local function SyncProductionAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     local ids = PlayerManager.GetAliveMajorIDs();
-    if type(ids) ~= "table" then CloseAllAdmissionOwners(); return; end
+    if not AdmissionOwnerIDsValid(ids) then CloseAllAdmissionOwners(); return; end
     local schema = Game:GetProperty(ADMISSION_SCHEMA);
-    if (schema ~= nil and schema ~= 1 and schema ~= 2) or not rows then
+    if (schema ~= nil and schema ~= 1 and schema ~= 2 and schema ~= 3) or not rows then
         -- Even an invalid table/schema after reload must invalidate the old
         -- native generation. A reset read closes it without owning the value.
         CloseAllAdmissionOwners();
@@ -298,6 +318,19 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         Game:SetProperty(ADMISSION_SCHEMA, 2);
         schema = 2;
     end
+    if schema == 2 then
+        -- Version 2 owned only key 902000 on each player. Claim the new
+        -- owner-specific reset keys only when no saved foreign value occupies
+        -- one; the old key on owners 1..63 is left untouched.
+        for owner=1,63 do
+            local p = Player(owner, false);
+            if p and p:GetProperty(ADMISSION_RESET + owner) ~= nil then
+                CloseAllAdmissionOwners(); return;
+            end
+        end
+        Game:SetProperty(ADMISSION_SCHEMA, 3);
+        schema = 3;
+    end
     local fingerprint = "JAC:";
     for _,entry in ipairs(rows) do
         fingerprint = fingerprint .. entry.row.LeaderType .. ":" .. tostring(entry.index) .. ";";
@@ -310,14 +343,14 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         -- Check every reserved namespace before taking it, including close.
         for _,owner in ipairs(ids) do
             local p = Player(owner, true);
-            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET) ~= nil then CloseAllAdmissionOwners(); return; end
+            if not p or owner >= 64 or p:GetProperty(ADMISSION_RESET + owner) ~= nil then CloseAllAdmissionOwners(); return; end
             for _,entry in ipairs(rows) do
                 for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
                     if p:GetProperty(base + entry.index) ~= nil then CloseAllAdmissionOwners(); return; end
                 end
             end
         end
-        Game:SetProperty(ADMISSION_SCHEMA, 2);
+        Game:SetProperty(ADMISSION_SCHEMA, 3);
     end
     local alive = {};
     for _,owner in ipairs(ids) do alive[owner] = true; end
@@ -332,12 +365,8 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         local snapshot = admissionSnapshots[owner];
         if not p or owner >= 64 then initialized = false;
         elseif not snapshot or snapshot.player ~= p then
-            local governors = p:GetGovernors();
-            local def = GameInfo.Governors[rows[1].row.GovernorType];
-            local ok = governors and type(governors.CanEverAppointGovernor) == "function" and
-                pcall(governors.CanEverAppointGovernor, governors, def.Hash);
             local resetOK, closed = pcall(CloseAdmissionOwner, p);
-            if not ok or not resetOK or not closed then initialized = false;
+            if not resetOK or not closed then initialized = false;
             else admissionSnapshots[owner] = {player=p, values={}}; end
         end
     end
