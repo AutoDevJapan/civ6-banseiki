@@ -32,10 +32,10 @@ const ARM: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREA
 local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID));assert(u:GetID()==e.UnitID and u:GetOwner()==e.From,'fixture identity mismatch')
 assert(u:GetSpreadCharges()==3 and u:GetReligionType()==e.Religion,'fixture native state mismatch')
 JAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),Requests=0,Events={}}
-local function charges(owner,id)
+local function charges(owner,id,newCharges,oldCharges)
  if owner==e.From and id==e.UnitID then
   local unit=Players[owner]:GetUnits():FindID(id)
-  JAC192_SPREAD.Events[#JAC192_SPREAD.Events+1]={Turn=Game.GetCurrentGameTurn(),Charges=unit and unit:GetSpreadCharges() or -1}
+  JAC192_SPREAD.Events[#JAC192_SPREAD.Events+1]={Turn=Game.GetCurrentGameTurn(),Charges=unit and unit:GetSpreadCharges() or -1,Old=oldCharges,New=newCharges,Requests=JAC192_SPREAD.Requests}
  end
 end
 Events.UnitChargesChanged.Add(charges)
@@ -43,6 +43,9 @@ local function send(owner)
  if owner~=e.From or JAC192_SPREAD.Requests~=0 then return end
  Events.PlayerTurnActivated.Remove(send)
  local unit=assert(Players[owner]:GetUnits():FindID(e.UnitID));assert(unit:GetID()==e.UnitID,'AI unit identity reused')
+ assert(Players[owner]:IsTurnActive(),'donor AI turn not active')
+ JAC192_SPREAD.ChargesAtRequest=unit:GetSpreadCharges()
+ assert(JAC192_SPREAD.ChargesAtRequest==3 and #JAC192_SPREAD.Events==0,'donor spent charges before official request')
  local op=assert(UnitOperationTypes.SPREAD_RELIGION,'official spread operation absent')
  local ok,reasons=UnitManager.CanStartOperation(unit,op,nil,false,true)
  JAC192_SPREAD.CanStart=ok;JAC192_SPREAD.Active=Players[owner]:IsTurnActive();JAC192_SPREAD.Turn=Game.GetCurrentGameTurn()
@@ -51,18 +54,24 @@ local function send(owner)
  JAC192_SPREAD.Requests=1
  local accepted,result=pcall(UnitManager.RequestOperation,unit,op)
  JAC192_SPREAD.CallOK=accepted;JAC192_SPREAD.Result=tostring(result)
+ JAC192_SPREAD.ReturnedFalse=result==false
  print('[JAC_SPENT_SPREAD_192] official_request='..tostring(accepted)..' result='..tostring(result))
 end
 Events.PlayerTurnActivated.Add(send)
+JAC192_STOP=function() Events.PlayerTurnActivated.Remove(send);Events.UnitChargesChanged.Remove(charges) end
 return 'one official spread request armed for donor AI turn'"#;
 
 const VERIFY: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'));local o=assert(JAC192_SPREAD)
+if JAC192_STOP then JAC192_STOP();JAC192_STOP=nil end
 local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID),'spent donor disappeared')
 assert(u:GetID()==e.UnitID and u:GetOwner()==e.From and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index,'donor identity changed')
 local n=u:GetSpreadCharges()
 print('[JAC_SPENT_SPREAD_192] observed before='..o.Before..' after='..n..' requests='..o.Requests..' can='..tostring(o.CanStart)..' call='..tostring(o.CallOK)..' result='..tostring(o.Result))
-assert(o.Requests==1 and o.CanStart and o.CallOK,'official AI request not sent')
-assert(n>0 and n<o.Before,'official AI spread did not consume native charge')
+assert(o.Requests==1 and o.CanStart and o.CallOK and not o.ReturnedFalse and o.Active==true and o.ChargesAtRequest==3,'official active AI request not sent')
+assert(n==2,'official AI spread did not consume native charge exactly once')
+assert(#o.Events==1,'expected one native charge change event')
+local changed=o.Events[1]
+assert(changed.Requests==1 and changed.Old==3 and changed.New==2 and changed.Charges==2 and changed.Turn==o.Turn,'native charge event not associated with request')
 return ExposedMembers.JAC_Absorption.Canonical({Fixture=e,Observation=o,Charges=n,Owner=u:GetOwner(),ID=u:GetID(),Religion=u:GetReligionType()})"#;
 
 const APPLY: &str = r#"local A=assert(JAC_AbsorptionGameplay);local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'))
@@ -141,7 +150,9 @@ fn full(mut probe: Value) -> Value {
     steps.push(json!({"action":"load","name":"jac-spent-spread-blocked-192","timeout":600}));
     steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":"return Game.GetLocalPlayer()==1 and Players[1]:IsTurnActive() and ExposedMembers.JAC_Absorption~=nil and ExposedMembers.JAC_HeroReadAPI~=nil"}}));
     steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":BLOCKED,"equals_capture":"SPENT_SPREAD_BLOCKED"}));
-    probe["name"] = json!("Spent AI missionary absorption must block and preserve donors, including saved reload");
+    probe["name"] = json!(
+        "Spent AI missionary absorption must block and preserve donors, including saved reload"
+    );
     probe
 }
 
@@ -151,11 +162,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scenario = generate(base);
     civ6_autotest_rs::scenario::validate_scenario(&scenario)?;
     let output = root.join("absorption-spent-spread-192.json");
-    fs::write(&output, format!("{}\n", serde_json::to_string_pretty(&scenario)?))?;
+    fs::write(
+        &output,
+        format!("{}\n", serde_json::to_string_pretty(&scenario)?),
+    )?;
     println!("{}", output.display());
     let verification = full(scenario);
     civ6_autotest_rs::scenario::validate_scenario(&verification)?;
-    fs::write(root.join("absorption-spent-spread-block-192.json"), format!("{}\n", serde_json::to_string_pretty(&verification)?))?;
+    fs::write(
+        root.join("absorption-spent-spread-block-192.json"),
+        format!("{}\n", serde_json::to_string_pretty(&verification)?),
+    )?;
     Ok(())
 }
 
@@ -181,13 +198,21 @@ mod tests {
             Game={GetProperty=function() return {From=3,UnitID=42} end}
             Players={[3]={GetUnits=function() return {FindID=function() return u end} end}}
             GameInfo={Units={UNIT_MISSIONARY={Index=7}}}
-            JAC192_SPREAD={Requests=1,CanStart=true,CallOK=true,Before=3}
+            JAC192_SPREAD={Requests=1,CanStart=true,CallOK=true,Before=3,Active=true,ChargesAtRequest=3,Turn=1,Events={}}
             ExposedMembers={JAC_Absorption={Canonical=function() return 'verified' end}}
         "#).exec().unwrap();
         let error = lua.load(VERIFY).eval::<String>().unwrap_err();
         assert!(error.to_string().contains("did not consume native charge"));
         lua.globals().set("CHARGES", 2).unwrap();
+        assert!(lua.load(VERIFY).eval::<String>().is_err());
+        lua.load("JAC192_SPREAD.Events={{Requests=1,Old=3,New=2,Charges=2,Turn=1}}")
+            .exec()
+            .unwrap();
         assert_eq!(lua.load(VERIFY).eval::<String>().unwrap(), "verified");
+        lua.load("JAC192_SPREAD.Events[1].Requests=0")
+            .exec()
+            .unwrap();
+        assert!(lua.load(VERIFY).eval::<String>().is_err());
         lua.globals().set("CHARGES", 0).unwrap();
         assert!(lua.load(VERIFY).eval::<String>().is_err());
     }
