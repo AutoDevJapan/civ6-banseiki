@@ -56,7 +56,7 @@ mod platform {
     use std::sync::mpsc::{self, Receiver};
     use std::time::Duration;
     use windows_sys::Win32::Foundation::{
-        CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0,
+        CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, MODULEENTRY32W, TH32CS_SNAPMODULE,
@@ -835,6 +835,18 @@ mod platform {
     impl Session {
         pub fn process_identity(&self) -> (u32, u64) {
             (self.pid, self.created)
+        }
+        pub fn verify_current_process(&self, pid: u32, started: f64) -> Result<(u32, u64)> {
+            let (created, target) = pinned_created(pid, started)?;
+            if self.finished
+                || (pid, created) != (self.pid, self.created)
+                || unsafe { WaitForSingleObject(target.0, 0) } != WAIT_TIMEOUT
+            {
+                return Err(Error::input(
+                    "UI process differs from the active native observation",
+                ));
+            }
+            Ok((pid, created))
         }
         pub fn start(
             pid: u32,
@@ -1894,6 +1906,9 @@ impl Session {
     }
     pub fn process_identity(&self) -> (u32, u64) {
         (0, 0)
+    }
+    pub fn verify_current_process(&self, _: u32, _: f64) -> Result<(u32, u64)> {
+        Err(Error::input("native bridge requires Windows x64"))
     }
     pub fn start(
         _pid: u32,

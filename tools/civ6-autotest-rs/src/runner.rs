@@ -126,6 +126,9 @@ pub trait Backend: Send {
     fn native_bridge_identity(&self) -> Option<(u32, u64)> {
         None
     }
+    fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+        Ok(None)
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -738,6 +741,20 @@ impl Backend for SystemBackend {
         self.native_bridge
             .as_ref()
             .map(|session| session.process_identity())
+    }
+    fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+        if self.native_bridge.is_none() {
+            return Ok(None);
+        }
+        self.require_single_process()?;
+        let (pid, started) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("observed game is absent"))?;
+        self.native_bridge
+            .as_ref()
+            .unwrap()
+            .verify_current_process(pid, started)
+            .map(Some)
     }
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         match self.native_bridge.as_mut() {
@@ -2433,6 +2450,7 @@ impl Runner {
                 Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
             }
             "ui_lua" => {
+                let native_before = self.backend.validate_native_bridge_target()?;
                 let mut attempts = 0;
                 let lua_timeout = step["lua_timeout"].as_f64().unwrap_or(5.0);
                 let value = loop {
@@ -2464,6 +2482,12 @@ impl Runner {
                         Err(e) => return Err(e),
                     }
                 };
+                let native_after = self.backend.validate_native_bridge_target()?;
+                if native_before != native_after {
+                    return Err(Error::input(
+                        "native observation changed during UI execution",
+                    ));
+                }
                 if let Some(key) = step["equals_capture"].as_str() {
                     if self.lua_captures.get(key) != Some(&value) {
                         return Err(Error::scenario(format!(
@@ -2475,8 +2499,19 @@ impl Runner {
                 if let Some(key) = step["capture_as"].as_str() {
                     self.lua_captures.insert(key.into(), value.clone());
                 }
+                let process_receipt = if value.starts_with(crate::persona_payment::MARKER) {
+                    let (pid, created) = native_after.ok_or_else(|| {
+                        Error::input("payment UI read requires a pinned native observation")
+                    })?;
+                    format!(
+                        "; native_process={}",
+                        json!({"pid":pid,"created_filetime":created})
+                    )
+                } else {
+                    String::new()
+                };
                 Ok(format!(
-                    "ran Lua in {}; return={value}",
+                    "ran Lua in {}; return={value}{process_receipt}",
                     text(step, "state_name")
                 ))
             }
