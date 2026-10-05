@@ -38,7 +38,7 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     local ids = PlayerManager.GetAliveMajorIDs();
     if not enabled then
         if schema ~= nil and not close() then return; end
-        SyncAppointmentAdmission(forceClosed, onlyOwner);
+        if SyncAppointmentAdmission(forceClosed, onlyOwner) ~= true then close(); end
         return;
     end
     -- Close before reading definitions, including reload and rejected schema.
@@ -105,7 +105,7 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
         local p = Player(owner, true);
         if not p or not write(p, 907000+owner, true) then close(); return; end
     end
-    SyncAppointmentAdmission(forceClosed, nil);
+    if SyncAppointmentAdmission(forceClosed, nil) ~= true then close(); return; end
     for _,owner in ipairs(ids) do
         local p = Player(owner, true);
         if not p then close(); return; end

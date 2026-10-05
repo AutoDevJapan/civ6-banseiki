@@ -246,3 +246,58 @@ fn synchronized_projection_is_opt_in_and_cannot_finalize_or_spend_titles() {
         assert(Players[0]:GetProperty(904999)==true)
     "#);
 }
+
+#[test]
+fn nonthrowing_appointment_rejection_revokes_both_native_permissions() {
+    for failure in ["schema", "collision", "readback"] {
+        run(&format!(
+            r#"
+            Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true)
+            local appointment,paid={{}},{{}}
+            local injected=false
+            for owner=0,2 do
+                appointment[owner]={{}}; paid[owner]={{}}
+                local p=Players[owner]; local getter=p.GetProperty
+                p.GetProperty=function(self,key)
+                    if key==902000+owner then appointment[owner]={{}} end
+                    if key==907000+owner then paid[owner]={{}} end
+                    local value=getter(self,key)
+                    if injected and '{failure}'=='readback' and owner==1 and key==900021 then return false end
+                    if type(key)=='number' and key>=901000 and key<901256 then appointment[owner][key-901000]=value==true end
+                    if type(key)=='number' and key>=905000 and key<905256 then paid[owner][key-905000]=value==true end
+                    return value
+                end
+            end
+            assert(loadstring(GAMEPLAY_SOURCE))()
+            local api=ExposedMembers.JAC_LeaderPersona
+            assert(api.Join(0,2)=='JOINED'); Players[0].points=1
+            assert(api.PrepareEvolution(0,ASHINA)=='EVOLVING')
+            UI.RequestPlayerOperation(0,PlayerOperations.APPOINT_GOVERNOR,{{[PlayerOperations.PARAM_GOVERNOR_TYPE]=4}})
+            DRAIN(); assert(api.CompleteEvolution(0,ASHINA)=='EVOLVED')
+            assert(api.Join(1,0)=='JOINED'); Players[1].points=3
+            assert(api.PrepareEvolution(1,'LEADER_JAC_ODA_NOBUHIDE')=='EVOLVING')
+            api.Reconcile()
+            assert(appointment[0][4] and paid[0][4] and appointment[1][21],'precondition must prove both permissions open')
+            local spent=Players[0].spent
+            if '{failure}'=='schema' then Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',99) end
+            if '{failure}'=='collision' then
+                Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',nil)
+                Players[1]:SetProperty(902001,'foreign')
+            end
+            injected=true; api.Reconcile()
+            for owner=0,2 do
+                for _,values in ipairs({{appointment[owner],paid[owner]}}) do
+                    for _,allowed in pairs(values) do assert(not allowed,'nonthrowing rejection reopened or stranded native permission: {failure}') end
+                end
+            end
+            assert(Players[0].spent==spent,'rejection changed official payment')
+            injected=false
+            Game:SetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1',3)
+            Players[1]:SetProperty(902001,true)
+            api.Reconcile()
+            assert(appointment[0][4] and paid[0][4] and appointment[1][21],'fresh successful projection did not recover both permissions')
+            assert(Players[0].spent==spent,'recovery replayed payment')
+        "#
+        ));
+    }
+}

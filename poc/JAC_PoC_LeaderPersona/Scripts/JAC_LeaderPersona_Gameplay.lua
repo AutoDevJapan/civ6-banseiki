@@ -676,16 +676,21 @@ local function AdmissionOwnerIDsValid(ids)
     return true;
 end
 
+-- BEGIN RUST GENERATED APPOINTMENT GLUE
+local function ReadAppointmentProperty(p, key)
+    if PersonaEvents then return PersonaEvents.ReadAdmissionProperty(p, key); end
+    return p:GetProperty(key);
+end
 local function SyncAppointmentAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     local ids = PlayerManager.GetAliveMajorIDs();
-    if not AdmissionOwnerIDsValid(ids) then CloseAllAdmissionOwners(); return; end
+    if not AdmissionOwnerIDsValid(ids) then CloseAllAdmissionOwners(); return false; end
     local schema = Game:GetProperty(ADMISSION_SCHEMA);
     if (schema ~= nil and schema ~= 1 and schema ~= 2 and schema ~= 3) or not rows then
         -- Even an invalid table/schema after reload must invalidate the old
         -- native generation. A reset read closes it without owning the value.
         CloseAllAdmissionOwners();
-        return;
+        return false;
     end
     if schema == 1 then
         for owner=0,63 do
@@ -693,7 +698,7 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
             if p then
                 for _,entry in ipairs(rows) do
                     if not AdmissionKeyVacant(p, ADMISSION_CLOSE + entry.index) then
-                        CloseAllAdmissionOwners(); return;
+                        CloseAllAdmissionOwners(); return false;
                     end
                 end
             end
@@ -708,7 +713,7 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
         for owner=1,63 do
             local p = Player(owner, false);
             if p and not AdmissionKeyVacant(p, ADMISSION_RESET + owner) then
-                CloseAllAdmissionOwners(); return;
+                CloseAllAdmissionOwners(); return false;
             end
         end
         Game:SetProperty(ADMISSION_SCHEMA, 3);
@@ -727,17 +732,17 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
         -- namespace. Dead major players can later return to the alive list,
         -- so their saved properties must be checked too.
         for _,owner in ipairs(ids) do
-            if not Player(owner, true) then CloseAllAdmissionOwners(); return; end
+            if not Player(owner, true) then CloseAllAdmissionOwners(); return false; end
         end
         -- Check every existing major, including the dead, before taking the
         -- reset, manifest, admission and close ranges for this saved game.
         for owner=0,63 do
             local p = Player(owner, false);
             if p then
-                if not AdmissionKeyVacant(p, ADMISSION_RESET + owner) then CloseAllAdmissionOwners(); return; end
+                if not AdmissionKeyVacant(p, ADMISSION_RESET + owner) then CloseAllAdmissionOwners(); return false; end
                 for _,entry in ipairs(rows) do
                     for _,base in ipairs({ADMISSION_MANIFEST, ADMISSION_ALLOW, ADMISSION_CLOSE}) do
-                        if not AdmissionKeyVacant(p, base + entry.index) then CloseAllAdmissionOwners(); return; end
+                        if not AdmissionKeyVacant(p, base + entry.index) then CloseAllAdmissionOwners(); return false; end
                     end
                 end
             end
@@ -762,7 +767,7 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
             else admissionSnapshots[owner] = {player=p, values={}}; end
         end
     end
-    if not initialized then CloseAllAdmissionOwners(); return; end
+    if not initialized then CloseAllAdmissionOwners(); return false; end
     for _,owner in ipairs(ids) do
         local p = Player(owner, true);
         local snapshot = admissionSnapshots[owner];
@@ -780,25 +785,27 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
             for _,change in ipairs(changes) do
                 local index = change.entry.index;
                 p:SetProperty(ADMISSION_CLOSE + index, true);
-                if PersonaEvents.ReadAdmissionProperty(p, ADMISSION_CLOSE + index) ~= true then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_CLOSE + index) ~= true then valid = false; break; end
                 p:SetProperty(ADMISSION_ALLOW + index, false);
-                if PersonaEvents.ReadAdmissionProperty(p, ADMISSION_ALLOW + index) ~= false then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_ALLOW + index) ~= false then valid = false; break; end
             end
-            if not valid then CloseAdmissionOwner(p); return; end
+            if not valid then CloseAllAdmissionOwners(); return false; end
             for _,change in ipairs(changes) do
                 local index = change.entry.index;
                 p:SetProperty(ADMISSION_MANIFEST + index, true);
-                if PersonaEvents.ReadAdmissionProperty(p, ADMISSION_MANIFEST + index) ~= true then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_MANIFEST + index) ~= true then valid = false; break; end
                 if change.desired then
                     p:SetProperty(ADMISSION_ALLOW + index, true);
-                    if PersonaEvents.ReadAdmissionProperty(p, ADMISSION_ALLOW + index) ~= true then valid = false; break; end
+                    if ReadAppointmentProperty(p, ADMISSION_ALLOW + index) ~= true then valid = false; break; end
                 end
                 snapshot.values[index] = change.desired;
             end
-            if not valid then CloseAdmissionOwner(p); return; end
+            if not valid then CloseAllAdmissionOwners(); return false; end
         end
     end
+    return true;
 end
+-- END RUST GENERATED APPOINTMENT GLUE
 -- BEGIN RUST PERSONA EVENTS REPUBLISH
 -- Generated by civ6-persona-events-rs; edit its Rust source.
 do
@@ -898,7 +905,7 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     local ids = PlayerManager.GetAliveMajorIDs();
     if not enabled then
         if schema ~= nil and not close() then return; end
-        SyncAppointmentAdmission(forceClosed, onlyOwner);
+        if SyncAppointmentAdmission(forceClosed, onlyOwner) ~= true then close(); end
         return;
     end
     -- Close before reading definitions, including reload and rejected schema.
@@ -965,7 +972,7 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
         local p = Player(owner, true);
         if not p or not write(p, 907000+owner, true) then close(); return; end
     end
-    SyncAppointmentAdmission(forceClosed, nil);
+    if SyncAppointmentAdmission(forceClosed, nil) ~= true then close(); return; end
     for _,owner in ipairs(ids) do
         local p = Player(owner, true);
         if not p then close(); return; end
