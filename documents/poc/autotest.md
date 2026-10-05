@@ -235,4 +235,6 @@ Rust から Windows のメモリ API を呼ぶ。列は [Microsoftの構造体�
 
 再生成は `cargo run --locked --manifest-path tools/Cargo.toml -p civ6-autotest-rs --example mod_selection_rollback > tools/civ6-autotest/scenarios/mod-selection-rollback.json`。生成物と本体処理の一致を例のテストで検査する。共有Civ6への実行は `live_chain.exe <公開済みブランチ名>:mod-selection-rollback.json --stop-on-failure` を使う。
 
-2026-10-05、既存の選択切替14件と、診断のLua 5.1テスト2件が成功した。診断は5MODの初期選択32通りを照合し、依存を勝手に有効にするAPIの変異も検出した。実機の結果は取得後に記録する。
+選択を変える前に、本体APIの差し替えと復元が可能か検査する。差し替えを戻せない場合でも、保存した本体APIで最初の選択を戻す処理を試し、エラーにする。
+
+2026-10-05、既存の選択切替14件と、診断のLua 5.1テスト5件が成功した。診断は5MODの初期選択32通りを照合し、依存を勝手に有効にするAPIの変異も検出した。APIの代入拒否で選択を変えないこと、復元代入が拒否されても選択の後始末を試すこと、生成JSONが現在の本体処理と一致することも検査した。実機の結果は取得後に記録する。

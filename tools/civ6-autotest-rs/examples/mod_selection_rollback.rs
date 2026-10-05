@@ -54,6 +54,33 @@ const HARNESS: &str = r#"
 if not UI.IsInFrontEnd() then error('main menu required') end
 JAC_MOD_ROLLBACK_241 = nil
 local nativeEnable, nativeDisable = Modding.EnableMod, Modding.DisableMod
+local function resetApis()
+  local errors = {}
+  local a, ae = pcall(function()
+    Modding.EnableMod = nativeEnable
+    if Modding.EnableMod ~= nativeEnable then error('enable API restore did not take effect') end
+  end)
+  local b, be = pcall(function()
+    Modding.DisableMod = nativeDisable
+    if Modding.DisableMod ~= nativeDisable then error('disable API restore did not take effect') end
+  end)
+  if not a then table.insert(errors, tostring(ae)) end
+  if not b then table.insert(errors, tostring(be)) end
+  return a and b, table.concat(errors, ';')
+end
+-- Probe both assignments before the first selection mutation.
+local canWrap, wrapError = pcall(function()
+  local enable = function(...) return nativeEnable(...) end
+  local disable = function(...) return nativeDisable(...) end
+  Modding.EnableMod, Modding.DisableMod = enable, disable
+  if Modding.EnableMod ~= enable or Modding.DisableMod ~= disable then
+    error('API assignment did not take effect')
+  end
+end)
+local reset, resetError = resetApis()
+if not canWrap or not reset then
+  error('API assignment preflight failed: ' .. tostring(wrapError) .. ';' .. tostring(resetError))
+end
 local handles, ids, children, ordered = {}, {}, {}, {}
 for _, mod in ipairs(Modding.GetInstalledMods()) do
   local id = string.lower(Modding.GetModInfo(mod.Handle).Id)
@@ -142,7 +169,8 @@ local function force(id, value, dependencies)
 end
 local function expectFailure(fn, marker, expected)
   local ok, err = pcall(fn)
-  Modding.EnableMod, Modding.DisableMod = nativeEnable, nativeDisable
+  local reset, resetError = resetApis()
+  if not reset then error('API restore failed: ' .. resetError) end
   if ok or not string.find(tostring(err), marker, 1, true) then
     error('expected injected failure missing: ' .. tostring(err))
   end
@@ -213,19 +241,21 @@ local ok, failure = pcall(function()
     return nativeEnable(handle, dependencies)
   end
   local accepted, err = pcall(disableCase)
-  Modding.EnableMod, Modding.DisableMod = nativeEnable, nativeDisable
+  local reset, resetError = resetApis()
   local rejected = not accepted and injected
     and string.find(tostring(err), 'restoration failed:', 1, true)
     and string.find(tostring(err), 'selection differs from original', 1, true)
     and not enabled(LEAF)
   restore(baseline)
+  if not reset then error('API restore failed: ' .. resetError) end
   if not rejected then error('incomplete rollback was not reported: ' .. tostring(err)) end
   mark('incomplete-restoration-is-error')
 end)
-Modding.EnableMod, Modding.DisableMod = nativeEnable, nativeDisable
+local reset, resetError = resetApis()
 local cleaned, cleanupError = pcall(restore, original)
 print('TODO241 FINAL ' .. serialize(snapshot()))
 if not cleaned then error(tostring(failure) .. '; cleanup failed: ' .. tostring(cleanupError)) end
+if not reset then error(tostring(failure) .. '; API restore failed: ' .. resetError) end
 if not ok then error(failure) end
 if #passed ~= 5 then error('incomplete diagnostic coverage') end
 JAC_MOD_ROLLBACK_241 = {passed=true, selection=serialize(snapshot())}
@@ -300,5 +330,42 @@ mod tests {
             .exec().unwrap();
         let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
         assert!(failure.contains("EnableMod(false) enabled disabled intermediate"));
+    }
+
+    #[test]
+    fn read_only_api_is_rejected_before_mod_selection_changes() {
+        let lua = fixture(0);
+        lua.load("local api = Modding; Modding = setmetatable({}, {__index=api, __newindex=function() error('read only API') end})")
+            .exec().unwrap();
+        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+        assert!(failure.contains("API assignment preflight failed"));
+        let changes: Table = lua.globals().get("ENABLED").unwrap();
+        assert_eq!(changes.raw_len(), 0);
+        let changes: Table = lua.globals().get("DISABLED").unwrap();
+        assert_eq!(changes.raw_len(), 0);
+    }
+
+    #[test]
+    fn failed_api_restoration_still_attempts_native_selection_cleanup() {
+        let lua = fixture(0);
+        lua.load(
+            r#"
+          local api, writes = Modding, 0
+          Modding = setmetatable({}, {__index=api, __newindex=function(_, key, value)
+            writes = writes + 1
+            if writes >= 6 then error('restore assignment refused') end
+            api[key] = value
+          end})
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+        assert!(failure.contains("API restore failed"));
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        for id in [MAP, MIDDLE, LEAF, TREES, GROWTH] {
+            let info: Table = mods.get(id).unwrap();
+            assert!(!info.get::<bool>("Enabled").unwrap());
+        }
     }
 }
