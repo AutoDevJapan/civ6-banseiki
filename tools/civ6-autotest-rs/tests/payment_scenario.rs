@@ -211,6 +211,7 @@ fn partial_save_keeps_the_appointed_person_and_does_not_replay_appointment() {
             .unwrap();
         assert!(stop < save && save < load);
         assert_eq!(steps[save]["checkpoint"], true);
+        assert_eq!(steps[load]["checkpoint"], true);
         assert_eq!(steps[save]["name"], steps[load]["name"]);
         assert!(steps[load..].iter().all(|s| !s["code"]
             .as_str()
@@ -221,6 +222,50 @@ fn partial_save_keeps_the_appointed_person_and_does_not_replay_appointment() {
             payment_scenario::snapshot_code(payment_scenario::person(cost).unwrap(), 1, false);
         assert_eq!(steps[save - 2]["code"], read);
         assert_eq!(steps[load + 2]["code"], read);
+    }
+}
+
+#[test]
+fn resume_uses_the_saved_physical_name_and_never_replays_join_or_appointment() {
+    let template = scenario("leader-persona-15km.json");
+    for cost in [2, 3] {
+        let save = "JAC-Payment-actual-session-0000000000000001";
+        let resumed = payment_scenario::resume_partial(&template, cost, save).unwrap();
+        let steps = resumed["steps"].as_array().unwrap();
+        assert_eq!(steps[0]["action"], "enable_mods");
+        assert_eq!(steps[1]["action"], "restart_game");
+        assert_eq!(steps[2]["action"], "load");
+        assert_eq!(steps[2]["name"], save);
+        assert_eq!(steps[2]["exact_name"], true);
+        assert!(steps[2].get("checkpoint").is_none());
+        assert_eq!(
+            steps[4]["code"],
+            payment_scenario::snapshot_code(payment_scenario::person(cost).unwrap(), 1, false)
+        );
+        let mut promotions = 0;
+        for step in steps {
+            assert!(!matches!(
+                step["action"].as_str(),
+                Some("configure" | "start_game" | "start_native_production_admission")
+            ));
+            if let Some(code) = step["code"].as_str() {
+                compile_lua(&Lua::new(), code);
+                for forbidden in [
+                    "JAC_LeaderPersonaJoin'",
+                    "JAC_LeaderPersonaEvolve'",
+                    "PlayerOperations.APPOINT_GOVERNOR,",
+                    "SetCulturalProgress",
+                    "SetGovernorPoints",
+                ] {
+                    assert!(!code.contains(forbidden), "replayed {forbidden}");
+                }
+                promotions += usize::from(code.contains("PlayerOperations.PROMOTE_GOVERNOR,"));
+            }
+        }
+        assert_eq!(promotions, cost as usize - 1);
+    }
+    for bad in ["", "../save", "C:/save", "save.Civ6Save", "name\n", "name "] {
+        assert!(payment_scenario::resume_partial(&template, 2, bad).is_err());
     }
 }
 

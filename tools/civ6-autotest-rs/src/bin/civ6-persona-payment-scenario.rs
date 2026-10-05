@@ -9,12 +9,18 @@ struct Args {
     cost: u8,
     #[arg(long)]
     output: PathBuf,
+    /// Physical save stem recorded by a completed partial-save step.
+    #[arg(long)]
+    resume_partial: Option<String>,
 }
 fn run(args: Args) -> Result<()> {
     let template: serde_json::Value = serde_json::from_slice(&fs::read(
         repo_root().join("tools/civ6-autotest/scenarios/leader-persona-15km.json"),
     )?)?;
-    let result = payment_scenario::build(&template, args.cost)?;
+    let result = match args.resume_partial {
+        Some(save) => payment_scenario::resume_partial(&template, args.cost, &save)?,
+        None => payment_scenario::build(&template, args.cost)?,
+    };
     // A previously reviewed/run scenario must not be silently overwritten.
     let mut out = fs::OpenOptions::new()
         .write(true)

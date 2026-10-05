@@ -230,7 +230,9 @@ return 'normal owner-bound admission; 483 other pairs closed'
     let save = format!("JAC-PR86-Payment1720-Cost{cost}-Partial");
     steps.push(json!({"action":"save","name":save,"exact_name":true,"checkpoint":true}));
     steps.push(json!({"action":"exit_to_menu"}));
-    steps.push(json!({"action":"load","name":save,"exact_name":true,"timeout":300}));
+    steps.push(
+        json!({"action":"load","name":save,"exact_name":true,"checkpoint":true,"timeout":300}),
+    );
     steps.push(wait("return Players[0] and Players[0]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages()"));
     steps.push(ui(snapshot_code(p, 1, false)));
     for title in 1..cost {
@@ -260,6 +262,37 @@ return 'one official payment promotion {title} requested'
     steps.push(ui("return 'PAYMENT1720 UI payment/reload diagnostic with raw Core trace; independent payment verifier required. AI, unpaid placement refusal, MP and native neutralization remain separate conditions'"));
     steps.push(json!({"action":"exit_to_menu"}));
     let result = json!({"name":format!("Normal cost-{cost} person: official payment, partial save/reload, and independent Core observation"),"judge_profile":"generic","strict_lua_errors":true,"steps":steps});
+    validate_scenario(&result)?;
+    Ok(result)
+}
+
+/// Continue the verified partial save without replaying Join, Evolve or APPOINT.
+/// Bind to the physical name from the successful save receipt, not a mutable
+/// latest-checkpoint pointer. The first snapshot verifies owner/person/payment.
+pub fn resume_partial(template: &Value, cost: u8, physical_save: &str) -> Result<Value> {
+    if physical_save.is_empty()
+        || physical_save.len() > 128
+        || !physical_save
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(Error::input(
+            "partial resume requires an exact physical save stem",
+        ));
+    }
+    let mut result = build(template, cost)?;
+    let original = result["steps"].as_array().unwrap();
+    let load = original
+        .iter()
+        .position(|step| step["action"] == "load")
+        .ok_or_else(|| Error::input("partial checkpoint load missing"))?;
+    let mut steps = original[..2].to_vec();
+    steps.push(json!({"action":"load","name":physical_save,"exact_name":true,"timeout":300}));
+    steps.extend_from_slice(&original[load + 1..]);
+    result["steps"] = steps.into();
+    result["name"] =
+        format!("Resume cost-{cost} from verified partial save without replaying appointment")
+            .into();
     validate_scenario(&result)?;
     Ok(result)
 }
