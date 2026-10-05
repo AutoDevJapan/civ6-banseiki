@@ -42,13 +42,15 @@ assert(gs:GetGovernorPointsSpent()=={paid} and s.spent=={paid},'official Spent d
 assert(gov:HasPromotion(base.Hash) and gov:HasPromotion(title.Hash)==({paid}==2),'independent official comparison differs')
 assert(s.acquired.appointed.name=='GovernorAppointed' and s.acquired.appointed.arity==2)
 assert(s.acquired.base.name=='GovernorPromoted' and s.acquired.base.arity==3 and s.acquired.base.promotion==base.Index)
-assert(s.acquired.appointed.spent==1 and s.acquired.base.spent==1,'BASE/Appointed callback Spent differs')
+assert(s.settlement.afterSpent=={paid} and not s.settlement.pending,'synchronized Gameplay Spent not settled')
+assert(s.settlement.appointedSequence==s.acquired.appointed.sequence and s.settlement.baseSequence==s.acquired.base.sequence,'settlement lacks actual callbacks')
 assert(s.acquired.appointed.owner==0 and s.acquired.base.owner==0 and s.acquired.base.leader==leader)
 if {paid}==2 then
- assert(s.acquired.title.name=='GovernorPromoted' and s.acquired.title.promotion==title.Index and s.acquired.title.spent==2,'TITLE callback Index/Spent mismatch')
+ assert(s.acquired.title.name=='GovernorPromoted' and s.acquired.title.promotion==title.Index,'TITLE callback Index mismatch')
+ assert(s.settlement.titleSequence==s.acquired.title.sequence,'settlement lacks TITLE callback')
 end
 {}
-return serial({{acquired=s.acquired,definition=s.definition,paid=s.paid,spent=s.spent}})
+return serial({{acquired=s.acquired,definition=s.definition,paid=s.paid,spent=s.spent,afterSpent=s.settlement.afterSpent}})
 "#,
         head(),
         SERIAL

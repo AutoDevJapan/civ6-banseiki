@@ -145,6 +145,106 @@ assert(playerProps[0][901001]==true and uiReads==0 and operations==0 and used[0]
 }
 
 #[test]
+fn callback_spent_can_lag_base_and_title_until_the_gameplay_query_settles() {
+    for reverse in [false, true] {
+        let lua = context();
+        run(&lua, "start(); join(); used[0]=0");
+        run(
+            &lua,
+            if reverse {
+                "emit(Events,'GovernorAppointed',0,1); emit(Events,'GovernorPromoted',0,1,83)"
+            } else {
+                "emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1)"
+            },
+        );
+        run(
+            &lua,
+            r#"
+local before=status()
+assert(before.acquired.base and before.acquired.appointed,'callbackSpent zero must retain actual callback proof')
+assert(before.acquired.base.spent==0 and before.acquired.appointed.spent==0)
+assert(before.acquired.base.callbackPayment=='pending' and before.paid==nil)
+assert(before.settlement.afterSpent==0 and before.settlement.pending==true)
+used[0]=1
+local base=status()
+assert(base.paid==1 and base.settlement.afterSpent==1 and not base.settlement.pending)
+assert(base.acquired.base.sequence==before.acquired.base.sequence and base.acquired.base.spent==0)
+emit(Events,'GovernorPromoted',0,1,84)
+local title=status()
+assert(title.acquired.title and title.acquired.title.spent==1 and title.acquired.title.callbackPayment=='pending')
+assert(title.paid==1 and title.settlement.pending and title.settlement.afterSpent==1)
+used[0]=2
+local done=status()
+assert(done.paid==2 and done.settlement.afterSpent==2 and not done.settlement.pending)
+assert(done.acquired.title.spent==1 and done.acquired.title.sequence==title.acquired.title.sequence)
+assert(done.settlement.baseSequence==before.acquired.base.sequence and done.settlement.titleSequence==title.acquired.title.sequence)
+emit(GameEvents,'JAC_LeaderPersonaFinalize',0,{Leader=leader})
+assert(properties[prefix..'STATE']=='GOVERNOR' and operations==0 and uiReads==0)
+"#,
+        );
+    }
+}
+
+#[test]
+fn unavailable_callback_spent_is_preserved_and_query_is_read_only() {
+    let lua = context();
+    run(
+        &lua,
+        r#"
+start(); join()
+local gs=Players[0]:GetGovernors(); local savedRead=gs.GetGovernorPointsSpent
+gs.GetGovernorPointsSpent=function() return nil end
+emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1)
+local pending=status()
+assert(pending.acquired.base.spent==nil and pending.acquired.base.callbackPayment=='unknown')
+assert(pending.paid==nil and pending.settlement.reason=='official-spent-unavailable')
+gs.GetGovernorPointsSpent=savedRead; used[0]=1
+local beforeWrites=0; local savedSet=Game.SetProperty
+Game.SetProperty=function(...) beforeWrites=beforeWrites+1; return savedSet(...) end
+local settled=status(); assert(settled.paid==1 and settled.settlement.afterSpent==1)
+assert(beforeWrites==0 and settled.acquired.base.spent==nil and settled.acquired.base.callbackPayment=='unknown')
+"#,
+    );
+}
+
+#[test]
+fn emitted_diagnostic_snapshots_compare_after_spent_without_rejecting_lag() {
+    let lua = context();
+    run(
+        &lua,
+        r#"
+start(); join(); emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1)
+Players[0]:GetGovernors().GetGovernor=function(_,hash)
+ assert(hash==101)
+ return {HasPromotion=function(_,promotion) return promotion==183 or (promotion==184 and used[0]>=2) end}
+end
+used[0]=1
+"#,
+    );
+    run(&lua, &civ6_persona_events_rs::scenario::snapshot(1));
+    run(&lua, "emit(Events,'GovernorPromoted',0,1,84); used[0]=2");
+    run(&lua, &civ6_persona_events_rs::scenario::snapshot(2));
+}
+
+#[test]
+fn spent_after_ready_cannot_create_missing_or_rejected_callback_proof() {
+    let lua = context();
+    run(
+        &lua,
+        r#"
+start(); join(); used[0]=2
+assert(status().paid==nil and next(status().acquired)==nil)
+emit(Events,'GovernorPromoted',1,1,83); emit(Events,'GovernorPromoted',0,1,'83')
+emit(Events,'GovernorAppointed',0,2)
+assert(status().paid==nil and next(status().acquired)==nil)
+used[0]=0; emit(Events,'GovernorPromoted',0,1,83)
+used[0]=2
+assert(status().paid==nil and not status().acquired.appointed and not status().acquired.title)
+"#,
+    );
+}
+
+#[test]
 fn partial_and_late_notifications_preserve_the_set_without_inventing_proof() {
     let lua = context();
     run(
@@ -224,43 +324,48 @@ fn foreign_saved_proof_and_definition_changes_cannot_be_authority() {
 
 #[test]
 fn save_restores_into_a_new_lua_context_without_payment_replay() {
-    let a = context();
-    run(
-        &a,
-        "start(); join(); pay(false); used[0]=2; emit(Events,'GovernorPromoted',0,1,84)",
-    );
-    // Transfer only serialized Game properties, engine units and spent count,
-    // never functions, the subscription bus or the old lexical module.
-    let saved: mlua::Table = a.globals().get("properties").unwrap();
-    let b = Lua::new();
-    b.load(FIXTURE).exec().unwrap();
-    fn transfer(lua: &Lua, t: mlua::Table) -> mlua::Table {
-        let result = lua.create_table().unwrap();
-        for item in t.pairs::<mlua::Value, mlua::Value>() {
-            let (k, v) = item.unwrap();
-            fn value(lua: &Lua, v: mlua::Value) -> mlua::Value {
-                match v {
-                    mlua::Value::String(s) => {
-                        mlua::Value::String(lua.create_string(s.as_bytes()).unwrap())
+    for lagging in [false, true] {
+        let a = context();
+        run(
+            &a,
+            if lagging {
+                "start(); join(); used[0]=0; emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1); used[0]=1; emit(Events,'GovernorPromoted',0,1,84); assert(status().paid==1 and status().settlement.pending)"
+            } else {
+                "start(); join(); pay(false); used[0]=2; emit(Events,'GovernorPromoted',0,1,84)"
+            },
+        );
+        // Transfer only serialized Game properties, engine units and spent count,
+        // never functions, the subscription bus or the old lexical module.
+        let saved: mlua::Table = a.globals().get("properties").unwrap();
+        let b = Lua::new();
+        b.load(FIXTURE).exec().unwrap();
+        fn transfer(lua: &Lua, t: mlua::Table) -> mlua::Table {
+            let result = lua.create_table().unwrap();
+            for item in t.pairs::<mlua::Value, mlua::Value>() {
+                let (k, v) = item.unwrap();
+                fn value(lua: &Lua, v: mlua::Value) -> mlua::Value {
+                    match v {
+                        mlua::Value::String(s) => {
+                            mlua::Value::String(lua.create_string(s.as_bytes()).unwrap())
+                        }
+                        mlua::Value::Table(t) => mlua::Value::Table(transfer(lua, t)),
+                        x => x,
                     }
-                    mlua::Value::Table(t) => mlua::Value::Table(transfer(lua, t)),
-                    x => x,
                 }
+                result.set(value(lua, k), value(lua, v)).unwrap();
             }
-            result.set(value(lua, k), value(lua, v)).unwrap();
+            result
         }
-        result
-    }
-    b.globals().set("properties", transfer(&b, saved)).unwrap();
-    run(
-        &b,
-        "used[0]=2; Game.GetGreatPeople():GrantPerson(201,7,8,0,0)",
-    );
-    // Gameplay initialization is repeated in the new context on load.
-    load(&b, &fs::read_to_string(root().join(GAMEPLAY)).unwrap());
-    run(
-        &b,
-        r#"
+        b.globals().set("properties", transfer(&b, saved)).unwrap();
+        run(
+            &b,
+            "used[0]=2; Game.GetGreatPeople():GrantPerson(201,7,8,0,0)",
+        );
+        // Gameplay initialization is repeated in the new context on load.
+        load(&b, &fs::read_to_string(root().join(GAMEPLAY)).unwrap());
+        run(
+            &b,
+            r#"
 assert(status().paid==2 and status().sequence==3 and status().acquired.title.sequence==3)
 local sequence=status().acquired.base.sequence
 emit(Events,'GovernorPromoted',0,1,83); emit(Events,'GovernorAppointed',0,1)
@@ -268,7 +373,11 @@ assert(status().paid==2 and status().acquired.base.sequence==sequence and used[0
 emit(GameEvents,'JAC_LeaderPersonaFinalize',0,{Leader=leader})
 assert(properties[prefix..'STATE']=='GOVERNOR' and uiReads==0)
 "#,
-    );
+        );
+        if lagging {
+            run(&b,"assert(status().acquired.base.spent==0 and status().acquired.title.spent==1 and status().settlement.afterSpent==2)");
+        }
+    }
 }
 
 #[test]

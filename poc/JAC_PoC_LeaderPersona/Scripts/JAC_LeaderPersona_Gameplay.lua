@@ -244,7 +244,7 @@ local function validProof(p,s,kind)
         p.governor==s.definition.governor and p.promotion==(isApp and -1 or promo) and
         p.name==(isApp and 'GovernorAppointed' or 'GovernorPromoted') and
         p.arity==(isApp and 2 or 3) and integer(p.sequence) and p.sequence>0 and p.sequence<=s.sequence and
-        integer(p.turn) and p.turn<=Game.GetCurrentGameTurn() and integer(p.spent) and p.spent>=s.baseline+(kind=='title' and 2 or 1)
+        integer(p.turn) and p.turn<=Game.GetCurrentGameTurn() and (p.spent==nil or integer(p.spent))
 end
 local function state()
     if Game:GetProperty(FLAG)~=1 then return nil,'disabled' end
@@ -281,10 +281,27 @@ local function joined(s)
 end
 function E.Paid(owner,row,cost)
     local s=E.Scope(owner,row)
-    if not s or cost~=2 or not joined(s) or not s.acquired.appointed or not s.acquired.base then return nil,false end
-    local paid=s.acquired.title and 2 or 1
-    local n=spent(owner); if not n or n<s.baseline+paid then return nil,true end
-    return paid,true
+    if not s or cost~=2 or not joined(s) then return nil,false end
+    -- Callback proof is immutable and contains the observed callback-time Spent,
+    -- including zero/unavailable. This later lexical Gameplay query reads official
+    -- Spent afresh; it never creates a missing callback or rewrites its timing.
+    local n=spent(owner)
+    local check={source=SOURCE,context='Gameplay',sequence=s.sequence,turn=Game.GetCurrentGameTurn(),
+        afterSpent=n,baseline=s.baseline,pending=true,
+        appointedSequence=s.acquired.appointed and s.acquired.appointed.sequence,
+        baseSequence=s.acquired.base and s.acquired.base.sequence,
+        titleSequence=s.acquired.title and s.acquired.title.sequence}
+    if not s.acquired.appointed or not s.acquired.base then
+        check.reason='callback-proof-missing'; return nil,false,check
+    end
+    check.observed=s.acquired.title and 2 or 1
+    if n==nil then check.reason='official-spent-unavailable'; return nil,true,check end
+    if n<s.baseline+1 then check.reason='official-spent-pending'; return nil,true,check end
+    local paid=1
+    if s.acquired.title and n>=s.baseline+2 then paid=2 end
+    check.paid=paid; check.pending=paid<check.observed
+    check.reason=check.pending and 'official-spent-pending' or 'settled'
+    return paid,true,check
 end
 function E.Native(owner,row)
     local paid=E.Paid(owner,row,2)
@@ -358,14 +375,12 @@ local function receive(name,...)
            (app or (p and p.Index==args[3] and p.GovernorPromotionType==(key=='base' and s.definition.baseType or s.definition.titleType))) then
             r.reason='not-joined'
             if joined(s) then
-                r.reason='official-spent'
-                if integer(r.spent) and r.spent>=s.baseline+(key=='title' and 2 or 1) then
-                    r.accepted=true; r.reason=s.acquired[key] and 'duplicate' or 'acquired'
-                    if not s.acquired[key] then s.acquired[key]=copy(r) end
-                elseif s.acquired[key] then
-                    -- A late BASE/Appointed duplicate may arrive after TITLE.
-                    r.accepted=true; r.reason='duplicate'
-                end
+                -- Official success notification establishes acquisition identity,
+                -- not callback-time debit ordering. Keep unknown/lagging Spent.
+                r.callbackPayment=r.spent==nil and 'unknown' or
+                    (r.spent>=s.baseline+(key=='title' and 2 or 1) and 'observed' or 'pending')
+                r.accepted=true; r.reason=s.acquired[key] and 'duplicate' or 'acquired'
+                if not s.acquired[key] then s.acquired[key]=copy(r) end
             end
         end
     end
@@ -393,7 +408,7 @@ function E.Status(owner,leader)
     if s and row and s.owner==owner and s.leader==leader then
         result.definition=copy(s.definition); result.sequence=s.sequence
         result.acquired=copy(s.acquired); result.receipts=copy(s.receipts)
-        result.paid,result.readable=E.Paid(owner,row,row.EvolutionCost)
+        result.paid,result.readable,result.settlement=E.Paid(owner,row,row.EvolutionCost)
         result.native=E.Native(owner,row)
     end
     return result
