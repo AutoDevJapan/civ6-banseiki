@@ -387,6 +387,7 @@ pub(super) fn state_for_test(owner: usize) -> u128 {
     STATE[owner].load()
 }
 
+#[cfg(test)]
 pub(super) fn state_for_authority(owner: usize) -> u128 {
     STATE[owner].load()
 }

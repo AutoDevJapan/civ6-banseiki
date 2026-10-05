@@ -127,6 +127,7 @@ pub(super) fn observe(
     }
 }
 
+#[cfg(test)]
 pub(super) fn commit_word(owner: usize) -> u128 {
     if runtime::owned() {
         runtime::state_for_authority(owner)
