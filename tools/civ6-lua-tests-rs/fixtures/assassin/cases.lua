@@ -688,6 +688,7 @@
               IsHidden=function(self) return self.Hidden end,RegisterCallback=function(self,event,f) self.Callback=f end,
               CalculateSize=function() end,CalculateInternalSize=function() end}
           end
+          ContextPtr=Control(); ContextPtr:SetHide(true)
           Controls={}; for _,name in ipairs({'OpenButton','CloseButton','Panel','Rows','Status','Result','Scroll'}) do
             Controls[name]=Control()
           end
