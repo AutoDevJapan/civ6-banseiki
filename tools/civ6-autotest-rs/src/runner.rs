@@ -113,6 +113,9 @@ pub trait Backend: Send {
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
+    fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+        None
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -597,6 +600,11 @@ impl Backend for SystemBackend {
             Box::new(crate::native_bridge::close_pinned_game),
         )?);
         Ok(())
+    }
+    fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+        self.native_bridge
+            .as_ref()
+            .map(|session| session.process_identity())
     }
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         match self.native_bridge.as_mut() {
@@ -2059,11 +2067,21 @@ impl Runner {
                     step["max_seconds"].as_u64().unwrap(),
                     mode,
                 )?;
+                let process = self
+                    .backend
+                    .native_bridge_identity()
+                    .map(|(pid, created)| {
+                        format!(
+                            "; process={}",
+                            json!({"pid":pid,"created_filetime":created})
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {
                     format!(
-                        "native {mode} original-return telemetry ready; artifact {}.jsonl",
+                        "native {mode} original-return telemetry ready; artifact {}.jsonl{process}",
                         text(step, "name")
                     )
                 })

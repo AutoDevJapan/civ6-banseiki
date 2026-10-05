@@ -8,6 +8,7 @@ pub mod live_lease;
 pub mod metrics;
 pub mod native_bridge;
 pub mod native_trace;
+pub mod persona_payment;
 pub mod restart;
 pub mod runner;
 pub mod scenario;
