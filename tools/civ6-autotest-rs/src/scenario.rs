@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 34] = [
+pub const ACTIONS: [&str; 36] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -35,6 +35,8 @@ pub const ACTIONS: [&str; 34] = [
     "stop_native_joined_admission",
     "start_native_production_admission",
     "stop_native_production_admission",
+    "start_native_paid_runtime",
+    "stop_native_paid_runtime_observation",
     "start_native_property_trace",
     "stop_native_property_trace",
     "start_native_promotion_call_trace",
@@ -116,6 +118,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut joined_open = false;
     let mut production_open = false;
     let mut promotion_open = false;
+    let mut runtime_open = false;
+    let mut runtime_used = false;
     let mut property_used = false;
     let mut promotion_used = false;
     let mut assignment_used = false;
@@ -175,6 +179,29 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             property_used = false;
             promotion_used = false;
             assignment_used = false;
+            runtime_used = false;
+        }
+        if runtime_used && matches!(action, "load" | "start_game" | "exit_to_menu") {
+            return Err(fail(
+                "resident runtime load-generation hook is not verified; restart_game first".into(),
+            ));
+        }
+        if runtime_used
+            && matches!(
+                action,
+                "start_native_can_ever_trace"
+                    | "start_native_can_ever_calibration"
+                    | "start_native_assign_calibration"
+                    | "start_native_joined_admission"
+                    | "start_native_production_admission"
+                    | "start_native_promotion_call_trace"
+                    | "start_native_property_trace"
+                    | "start_native_governor_trace"
+            )
+        {
+            return Err(fail(
+                "resident runtime owns native entries until restart_game".into(),
+            ));
         }
         match action {
             "start_native_can_ever_trace"
@@ -182,9 +209,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "start_native_assign_calibration"
             | "start_native_joined_admission"
             | "start_native_production_admission"
+            | "start_native_paid_runtime"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
-                if bridge_open || trace_open {
+                if bridge_open
+                    || trace_open
+                    || (action == "start_native_paid_runtime"
+                        && (runtime_used || property_used || assignment_used || promotion_used))
+                {
                     return Err(fail("native observation already active".into()));
                 }
                 let uses_property = matches!(
@@ -192,6 +224,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     "start_native_property_trace"
                         | "start_native_joined_admission"
                         | "start_native_production_admission"
+                        | "start_native_paid_runtime"
                 );
                 if (uses_property && property_used)
                     || (action == "start_native_promotion_call_trace" && promotion_used)
@@ -234,6 +267,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 assignment_open = action == "start_native_assign_calibration";
                 joined_open = action == "start_native_joined_admission";
                 production_open = action == "start_native_production_admission";
+                runtime_open = action == "start_native_paid_runtime";
+                runtime_used |= runtime_open;
                 promotion_open = action == "start_native_promotion_call_trace";
                 property_used |= uses_property;
                 promotion_used |= promotion_open;
@@ -244,6 +279,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
             | "stop_native_production_admission"
+            | "stop_native_paid_runtime_observation"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 if !bridge_open
@@ -252,6 +288,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     || assignment_open != (action == "stop_native_assign_calibration")
                     || joined_open != (action == "stop_native_joined_admission")
                     || production_open != (action == "stop_native_production_admission")
+                    || runtime_open != (action == "stop_native_paid_runtime_observation")
                     || promotion_open != (action == "stop_native_promotion_call_trace")
                     || step
                         .as_object()
@@ -267,6 +304,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 assignment_open = false;
                 joined_open = false;
                 production_open = false;
+                runtime_open = false;
                 promotion_open = false;
             }
             "start_native_governor_trace" => {

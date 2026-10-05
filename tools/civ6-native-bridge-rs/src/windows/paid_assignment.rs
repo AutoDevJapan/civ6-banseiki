@@ -226,7 +226,7 @@ impl PaidAssignmentConsumer {
     /// true result, and is not permission to call the assignment setter.
     pub fn permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
         if composite::ENABLED.load(Ordering::Acquire) {
-            let Some(catalog) = composite::catalog(owner, receiver, session) else {
+            let Some(catalog) = composite::ready_catalog(owner, receiver, session) else {
                 return Some(false);
             };
             if !catalog
@@ -336,7 +336,7 @@ impl PaidAssignmentConsumer {
         };
         let session = PRODUCT_SESSION.load(Ordering::Acquire);
         let definition = if composite::ENABLED.load(Ordering::Acquire) {
-            let Some(catalog) = composite::catalog(owner, receiver, session) else {
+            let Some(catalog) = composite::ready_catalog(owner, receiver, session) else {
                 return original & !0xff;
             };
             match catalog
@@ -367,7 +367,7 @@ impl PaidAssignmentConsumer {
         }
         if let Some(definition) = definition {
             if person.diagnostic_paid(owner as u32, definition) != Ok(definition.cost)
-                || !composite::catalog(owner, receiver, session)
+                || !composite::ready_catalog(owner, receiver, session)
                     .is_some_and(|catalog| catalog.into_iter().any(|current| current == definition))
             {
                 return original & !0xff;

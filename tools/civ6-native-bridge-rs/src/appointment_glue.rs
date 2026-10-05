@@ -4,6 +4,10 @@ pub fn source() -> &'static str {
 }
 
 const TEMPLATE: &str = r#"-- BEGIN RUST GENERATED APPOINTMENT GLUE
+local function ReadAppointmentProperty(p, key)
+    if PersonaEvents then return PersonaEvents.ReadAdmissionProperty(p, key); end
+    return p:GetProperty(key);
+end
 local function SyncAppointmentAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     local ids = PlayerManager.GetAliveMajorIDs();
@@ -108,18 +112,18 @@ local function SyncAppointmentAdmission(forceClosed, onlyOwner)
             for _,change in ipairs(changes) do
                 local index = change.entry.index;
                 p:SetProperty(ADMISSION_CLOSE + index, true);
-                if p:GetProperty(ADMISSION_CLOSE + index) ~= true then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_CLOSE + index) ~= true then valid = false; break; end
                 p:SetProperty(ADMISSION_ALLOW + index, false);
-                if p:GetProperty(ADMISSION_ALLOW + index) ~= false then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_ALLOW + index) ~= false then valid = false; break; end
             end
             if not valid then CloseAllAdmissionOwners(); return false; end
             for _,change in ipairs(changes) do
                 local index = change.entry.index;
                 p:SetProperty(ADMISSION_MANIFEST + index, true);
-                if p:GetProperty(ADMISSION_MANIFEST + index) ~= true then valid = false; break; end
+                if ReadAppointmentProperty(p, ADMISSION_MANIFEST + index) ~= true then valid = false; break; end
                 if change.desired then
                     p:SetProperty(ADMISSION_ALLOW + index, true);
-                    if p:GetProperty(ADMISSION_ALLOW + index) ~= true then valid = false; break; end
+                    if ReadAppointmentProperty(p, ADMISSION_ALLOW + index) ~= true then valid = false; break; end
                 end
                 snapshot.values[index] = change.desired;
             end

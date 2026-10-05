@@ -1,8 +1,4 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::env::args_os().nth(1).ok_or("pass repository root")?;
-    let path = std::path::Path::new(&root)
-        .join("poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua");
-    let text = std::fs::read_to_string(&path)?.replace("\r\n", "\n");
+fn render(text: &str) -> Result<String, Box<dyn std::error::Error>> {
     let begin = "-- BEGIN RUST GENERATED PAID ASSIGNMENT GLUE";
     let end = "-- END RUST GENERATED PAID ASSIGNMENT GLUE\n";
     let generated = civ6_native_bridge_rs::paid_glue::source();
@@ -40,7 +36,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         start
             + output[start..]
-                .find(begin)
+                .find("-- BEGIN RUST PERSONA EVENTS REPUBLISH")
+                .or_else(|| output[start..].find(begin))
                 .ok_or("paid block boundary missing")?
     };
     let output = format!(
@@ -49,6 +46,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         civ6_native_bridge_rs::appointment_glue::source(),
         &output[finish..]
     );
-    std::fs::write(path, output)?;
+    Ok(output)
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::env::args_os().nth(1).ok_or("pass repository root")?;
+    let path = std::path::Path::new(&root)
+        .join("poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua");
+    let text = std::fs::read_to_string(&path)?.replace("\r\n", "\n");
+    std::fs::write(path, render(&text)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn markerless_parent_preserves_the_event_republication_block() {
+        let legacy = format!("local function SyncAppointmentAdmission(forceClosed, onlyOwner)\n return;\nend\n{}{}",
+            "-- BEGIN RUST PERSONA EVENTS REPUBLISH\nlocal function keep_synced_receipts() return 1474 end\n-- END RUST PERSONA EVENTS REPUBLISH\n",
+            civ6_native_bridge_rs::paid_glue::source());
+        let result = render(&legacy).unwrap();
+        assert!(result.contains("local function keep_synced_receipts() return 1474 end"));
+        assert_eq!(
+            result
+                .matches("-- BEGIN RUST PERSONA EVENTS REPUBLISH")
+                .count(),
+            1
+        );
+        assert!(
+            result
+                .find("-- END RUST GENERATED APPOINTMENT GLUE")
+                .unwrap()
+                < result
+                    .find("-- BEGIN RUST PERSONA EVENTS REPUBLISH")
+                    .unwrap()
+        );
+        assert_eq!(render(&result).unwrap(), result);
+    }
 }
