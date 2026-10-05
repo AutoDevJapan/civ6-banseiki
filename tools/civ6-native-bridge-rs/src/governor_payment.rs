@@ -42,6 +42,7 @@ pub struct PaymentDefinition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaymentFailure {
     Definition,
+    DifferentOwner,
     DifferentPerson,
     UnknownPromotion,
     OutOfOrder,
@@ -53,9 +54,18 @@ impl PromotionSnapshot {
             .then(|| self.owned[index as usize / 64] & (1 << (index % 64)) != 0)
     }
 
-    /// Interpret only this person's base and ordered official payment flags.
-    /// Aggregate Spent and another person's promotions are never consulted.
-    pub fn paid(&self, definition: PaymentDefinition) -> Result<u8, PaymentFailure> {
+    /// Diagnostic interpretation of caller-supplied GameInfo indices, not an
+    /// authenticated definition or a payment permit. Production must first
+    /// validate metadata against that game's synchronized GameInfo catalog.
+    /// Aggregate Spent and another owner's/person's flags are never consulted.
+    pub fn diagnostic_paid(
+        &self,
+        owner: u32,
+        definition: PaymentDefinition,
+    ) -> Result<u8, PaymentFailure> {
+        if owner >= 64 || self.owner != owner {
+            return Err(PaymentFailure::DifferentOwner);
+        }
         if !(1..=3).contains(&definition.cost)
             || definition.governor_index >= GOVERNOR_LIMIT as u32
             || definition.titles[0].is_some() != (definition.cost >= 2)
@@ -387,46 +397,69 @@ mod tests {
             titles: [Some(63), Some(64)],
         };
         let snapshot = read_current(&m, 0x1000, 0x3800).unwrap();
-        assert_eq!(snapshot.paid(definition), Ok(1));
+        assert_eq!(snapshot.diagnostic_paid(7, definition), Ok(1));
         m.bytes[0x4000 + 63] = 1;
         assert_eq!(
-            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            read_current(&m, 0x1000, 0x3800)
+                .unwrap()
+                .diagnostic_paid(7, definition),
             Ok(2)
         );
         m.bytes[0x4000 + 64] = 1;
         let snapshot = read_current(&m, 0x1000, 0x3800).unwrap();
-        assert_eq!(snapshot.paid(definition), Ok(3));
+        assert_eq!(snapshot.diagnostic_paid(7, definition), Ok(3));
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                governor_index: 23,
-                ..definition
-            }),
+            snapshot.diagnostic_paid(13, definition),
+            Err(PaymentFailure::DifferentOwner)
+        );
+        assert_eq!(
+            snapshot.diagnostic_paid(64, definition),
+            Err(PaymentFailure::DifferentOwner)
+        );
+        assert_eq!(
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    governor_index: 23,
+                    ..definition
+                }
+            ),
             Err(PaymentFailure::DifferentPerson)
         );
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                cost: 2,
-                titles: [Some(63), None],
-                ..definition
-            }),
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    cost: 2,
+                    titles: [Some(63), None],
+                    ..definition
+                }
+            ),
             Ok(2)
         );
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                cost: 1,
-                titles: [None, None],
-                ..definition
-            }),
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    cost: 1,
+                    titles: [None, None],
+                    ..definition
+                }
+            ),
             Ok(1)
         );
         m.bytes[0x4000 + 63] = 0;
         assert_eq!(
-            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            read_current(&m, 0x1000, 0x3800)
+                .unwrap()
+                .diagnostic_paid(7, definition),
             Err(PaymentFailure::OutOfOrder)
         );
         m.bytes[0x4000] = 0;
         assert_eq!(
-            read_current(&m, 0x1000, 0x3800).unwrap().paid(definition),
+            read_current(&m, 0x1000, 0x3800)
+                .unwrap()
+                .diagnostic_paid(7, definition),
             Err(PaymentFailure::OutOfOrder)
         );
     }
@@ -447,32 +480,44 @@ mod tests {
             [Some(63), Some(63)],
         ] {
             assert_eq!(
-                snapshot.paid(PaymentDefinition {
-                    titles,
-                    ..definition
-                }),
+                snapshot.diagnostic_paid(
+                    7,
+                    PaymentDefinition {
+                        titles,
+                        ..definition
+                    }
+                ),
                 Err(PaymentFailure::Definition)
             );
         }
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                cost: 0,
-                ..definition
-            }),
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    cost: 0,
+                    ..definition
+                }
+            ),
             Err(PaymentFailure::Definition)
         );
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                base: 4096,
-                ..definition
-            }),
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    base: 4096,
+                    ..definition
+                }
+            ),
             Err(PaymentFailure::UnknownPromotion)
         );
         assert_eq!(
-            snapshot.paid(PaymentDefinition {
-                titles: [Some(63), Some(4096)],
-                ..definition
-            }),
+            snapshot.diagnostic_paid(
+                7,
+                PaymentDefinition {
+                    titles: [Some(63), Some(4096)],
+                    ..definition
+                }
+            ),
             Err(PaymentFailure::UnknownPromotion)
         );
     }

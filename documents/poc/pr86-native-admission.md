@@ -423,3 +423,5 @@ Rustの `governor_payment` は現在のCanAssignの二つの引数だけを使�
 mode7のtrace版2は `promotion_snapshot_status`、本人所有者とIndex、昇進数、取得済みPromotion Indexを追加する。status 0だけが読取完了、1は読取不能、2は構造不正、3は本人不一致、4は本体リストの非所属、5は読取中の変化、6は不正なbyte、7は未観測である。失敗時は本人値を未知、件数0、取得一覧を空にする。検証器は型・順序・重複・本人一致を検査する。全行の `payment_authority` はfalseであり、原ALとRAXは従来どおり保持する。
 
 この観測を費用1の実Governorと正式基礎昇進へ照合し、その後費用2・3のTITLE_1/2の実Index、公式PROMOTE前後の本人昇進とSpentを照合する。実機で未証明の段階ではPaidAssignmentの904–907名前空間を公開しない。通常22人、正式な本人支払い、未払い配置拒否B、保存・複数端末、人物化通し、中和成功と回復のMustは継続する。
+
+支払数を読む純Rust関数は `diagnostic_paid` とし、要求された所有者とsnapshot本人が違えば拒否する。費用と基礎・TITLEのIndexの形や順序は検査するが、呼出側が渡すIndexの出所までは証明しない。そのためこれは診断用の解釈に限定し、製品からは呼ばず、snapshotと同様に支払権限へ使わない。製品接続では、そのゲームの同期GameInfoに対応する本人・所有者・各Promotion Indexを照合する生成元を先に完成する。この確認項目を、名前だけの検証済み定義で済ませない。
