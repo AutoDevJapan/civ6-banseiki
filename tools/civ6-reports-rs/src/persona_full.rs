@@ -1,7 +1,7 @@
 //! Independently verify the original persona scenario's recorded execution.
 //! This proves scenario completion only, not product startup, AI payment or MP.
 use crate::Result;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,6 +42,31 @@ fn require(condition: bool, message: impl Into<String>) -> Result<()> {
 
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeReceipt {
+    pid: u32,
+    created_filetime: u64,
+}
+
+fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
+    let raw = detail
+        .strip_prefix(&format!("ran Lua in {state}; return="))
+        .ok_or("Lua result has no raw return value")?;
+    // Runtime observations append this receipt AFTER capture comparison. It is
+    // not part of the Lua value and may be absent after the observer stops.
+    if let Some((value, receipt)) = raw.rsplit_once("; native_process=") {
+        let receipt: NativeReceipt = serde_json::from_str(receipt)?;
+        require(
+            receipt.pid > 0 && receipt.created_filetime > 0,
+            "invalid native process receipt",
+        )?;
+        Ok(value)
+    } else {
+        Ok(raw)
+    }
 }
 
 /// Read each input from one artifact directory, never from combined runs.
@@ -172,9 +197,7 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
                 require(pending, "step completion without start")?;
                 if step_action == "ui_lua" {
                     let state = step["state_name"].as_str().ok_or("Lua state absent")?;
-                    let value = detail
-                        .strip_prefix(&format!("ran Lua in {state}; return="))
-                        .ok_or("Lua result has no raw return value")?;
+                    let value = lua_return(detail, state)?;
                     if let Some(key) = step["capture_as"].as_str() {
                         require(!value.is_empty(), "empty save snapshot")?;
                         require(
