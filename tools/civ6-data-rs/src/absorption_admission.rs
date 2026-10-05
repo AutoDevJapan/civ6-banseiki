@@ -116,7 +116,8 @@ pub fn envoy_probe_scenario(repo: &Repository) -> Result<String> {
     configure["map_size"] = json!("MAPSIZE_DUEL");
     configure["city_states"] = json!(1);
     configure["players"] = json!(&configure["players"].as_array().unwrap()[..2]);
-    configure["build_setup"] = json!(false);
+    // The normal setup applies Banseiki's start-turn/calendar override.
+    configure["build_setup"] = json!(true);
     let mut setup = base["steps"][2].clone();
     setup["code"] = json!(format!(
         "MapConfiguration.SetValue('MAP_SCRIPT','Continents.lua');assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official map script not selected');{}",

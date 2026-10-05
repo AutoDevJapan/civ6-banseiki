@@ -20,7 +20,7 @@
     {
       "action": "configure",
       "ruleset": "RULESET_JAC_BANSEIKI",
-      "build_setup": false,
+      "build_setup": true,
       "map_size": "MAPSIZE_DUEL",
       "speed": "GAMESPEED_STANDARD",
       "seed": 620981,
