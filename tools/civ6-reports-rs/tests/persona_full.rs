@@ -194,6 +194,8 @@ fn stopped_observer_receipt_is_separate_from_unchanged_lua_snapshots() {
 #[test]
 fn incomplete_or_invalid_appended_receipt_is_not_silently_discarded() {
     for receipt in [
+        "[139848,134357136841343557]",
+        "{\"pid\":139848,\"pid\":139849,\"created_filetime\":134357136841343557}",
         "{}",
         "{\"pid\":139848}",
         "{\"pid\":0,\"created_filetime\":1}",
