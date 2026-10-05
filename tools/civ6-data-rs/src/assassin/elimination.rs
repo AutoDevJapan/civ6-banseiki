@@ -114,6 +114,36 @@ end
 "#;
 
 const SETUP: &str = r#"
+local function PlaceForMission(owner,u,city)
+  assert(Game:GetProperty(R.TEST)==1,'mission placement requires test mode')
+  local id=u:GetID(); local occupied={}
+  for _,p in ipairs(PlayerManager.GetAlive()) do
+    for _,other in p:GetUnits():Members() do
+      if other:GetOwner()~=owner or other:GetID()~=id then
+        occupied[other:GetX()..','..other:GetY()]=true
+      end
+    end
+  end
+  local cx,cy=city:GetX(),city:GetY()
+  for radius=1,6 do
+    for y=cy-radius,cy+radius do for x=cx-radius,cx+radius do
+      local plot=Map.GetPlot(x,y)
+      if plot and not occupied[x..','..y] and not plot:IsWater() and not plot:IsImpassable()
+        and not plot:IsCity() and Map.GetPlotDistance(x,y,cx,cy)<=radius then
+        -- Official AustraliaScenario.lua:854. Keep the native unit ID and
+        -- create at its own city first; remote foreign-country spawning fails.
+        UnitManager.PlaceUnit(u,x,y)
+        if u:GetX()==x and u:GetY()==y then
+          assert(u:GetOwner()==owner and u:GetID()==id,'placement replaced the actor')
+          FixtureReveal(owner,x,y)
+          print('[JAC_ASN_ELIM_PLACE] actor='..owner..' unit='..id..' xy='..x..','..y)
+          return
+        end
+      end
+    end end
+  end
+  error('fixture mission placement failed: owner='..owner..' unit='..id)
+end
 Game:SetProperty(R.TEST,1)
 local houses={}
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
@@ -128,7 +158,8 @@ local names={'CIVILIZATION_JAC_DATE','CIVILIZATION_JAC_ASHINA','CIVILIZATION_JAC
 for i,name in ipairs(names) do
   local a=assert(houses[name],'actor absent: '..name); assert(not Players[a]:IsHuman(),'actor must be AI')
   local city=assert(Players[a]:GetCities():GetCapitalCity(),'actor capital absent')
-  local u=Grant(a,R.UnitForPlayer(a),targetCity)
+  local u=Grant(a,R.UnitForPlayer(a),city)
+  PlaceForMission(a,u,targetCity)
   FixtureReveal(a,targetCity:GetX(),targetCity:GetY())
   Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=i>2 and 1 or 0,Detected=i%2==0 and 1 or 0,Branch='FREE_STATE'})
   assert(R.StartAttempt(a,u:GetID(),t.Target,'LEADER'))
@@ -273,6 +304,17 @@ mod tests {
             PlayersVisibility[id]={IsRevealed=function() return true end,IsVisible=function() return true end}
           end
           rebuild()
+          Map.GetPlot=function(x,y)
+            if x<0 or y<0 then return nil end
+            return {IsWater=function() return false end,IsImpassable=function() return false end,
+              IsCity=function() return CityManager.GetCityAt(x,y)~=nil end}
+          end
+          local spawn=UnitManager.InitUnitValidAdjacentHex
+          UnitManager.InitUnitValidAdjacentHex=function(id,kind,x,y,radius)
+            local city=DATA[id].Cities[DATA[id].Capital]
+            assert(city and city.X==x and city.Y==y,'fixture spawn must use an owned anchor')
+            spawn(id,kind,x,y,radius)
+          end
           include=function() end
         "#).exec()?;
         reload(&lua, repo)?;
