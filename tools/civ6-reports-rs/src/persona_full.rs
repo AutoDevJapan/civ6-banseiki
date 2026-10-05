@@ -58,6 +58,12 @@ fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
     // Runtime observations append this receipt AFTER capture comparison. It is
     // not part of the Lua value and may be absent after the observer stops.
     if let Some((value, receipt)) = raw.rsplit_once("; native_process=") {
+        // Keep the typed parse so duplicate fields fail. Struct sequences are
+        // not the JSON object produced by the runner's wire protocol.
+        require(
+            receipt.trim_start().starts_with('{'),
+            "native process receipt must be a JSON object",
+        )?;
         let receipt: NativeReceipt = serde_json::from_str(receipt)?;
         require(
             receipt.pid > 0 && receipt.created_filetime > 0,
