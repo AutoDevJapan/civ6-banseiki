@@ -1,6 +1,20 @@
 -- Test-only read/validation rules. No native or persona state is written here.
 JAC_PersonaBoundaryRules = {};
 local R = JAC_PersonaBoundaryRules;
+-- EXECUTE_SCRIPT converts an empty string to numeric zero in live 146.
+-- Prefix text so empty and numeric-looking names retain their exact identity.
+local TEXT_PREFIX = "JAC_TEXT_V1:";
+function R.EncodeText(value)
+    if value == nil then return nil; end
+    assert(type(value) == "string", "native observation text unavailable");
+    return TEXT_PREFIX .. value;
+end
+function R.DecodeText(value)
+    if value == nil then return nil; end
+    assert(type(value) == "string" and string.sub(value, 1, #TEXT_PREFIX) == TEXT_PREFIX,
+        "native observation text encoding differs");
+    return string.sub(value, #TEXT_PREFIX + 1);
+end
 -- Resolve a saved identity inside the calling Lua context. FindID alone may
 -- return a different native unit; do not expose it to reads or operations.
 function R.FindSpy(owner, id)

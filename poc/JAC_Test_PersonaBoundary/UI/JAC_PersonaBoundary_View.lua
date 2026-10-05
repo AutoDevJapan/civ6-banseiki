@@ -2514,7 +2514,7 @@ local function RetryObserved(d)
         CompletionTurn=d.mission.turn,Spent=d.spent,Total=d.total,
         GovernorType=d.governorType,Capacity=d.capacity,Occupied=d.occupied,
         CaptiveCaptor=d.captive and d.captive.captor,
-        CaptiveName=d.captive and d.captive.name,
+        CaptiveName=R.EncodeText(d.captive and d.captive.name),
         CaptiveNameIndex=d.captive and d.captive.nameIndex,
         CaptiveLevel=d.captive and d.captive.level,
         BindingType=d.binding and d.binding.source,
@@ -2525,14 +2525,14 @@ local function RetryObserved(d)
         MapX=d.mode=="CAPACITY_MAP" and d.roster.map[1].x or nil,
         MapY=d.mode=="CAPACITY_MAP" and d.roster.map[1].y or nil,
         MapLevel=d.mode=="CAPACITY_MAP" and d.roster.map[1].level or nil,
-        MapName=d.mode=="CAPACITY_MAP" and d.roster.map[1].name or nil,
+        MapName=R.EncodeText(d.mode=="CAPACITY_MAP" and d.roster.map[1].name or nil),
         MapCount=d.mode=="CAPACITY_MAP" and #d.roster.map or nil,
         CapturedCount=d.mode=="CAPACITY_MAP" and #d.roster.captured or nil,
         OffMapCount=d.mode=="CAPACITY_MAP" and #d.roster.offMap or nil,
         ActiveOffMapCount=d.mode=="CAPACITY_MAP" and #d.roster.activeOffMap or nil,
         PlaceholderIndex=d.mode=="CAPACITY_MAP" and
             d.roster.capturedPlaceholder.offMapIndex or nil,
-        ReturnName=d.returnName,ReturnLevel=d.returnLevel,
+        ReturnName=R.EncodeText(d.returnName),ReturnLevel=d.returnLevel,
         ReturnTurn=d.returnTurn,ReturnX=d.returnX,ReturnY=d.returnY};
 end
 local function EnemySyncRequest(action,observed)
@@ -3116,7 +3116,7 @@ local function Submit(command)
     elseif action == "SAVE_TRAVEL" then
         local receipt=assert(travelReference,"accepted travel receipt missing");
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
-            {OnStart="JAC_BoundarySaveSpyTravel",OldID=receipt.oldID,Name=receipt.name,
+            {OnStart="JAC_BoundarySaveSpyTravel",OldID=receipt.oldID,Name=R.EncodeText(receipt.name),
                 Level=receipt.level,TargetOwner=receipt.targetOwner,TargetID=receipt.targetID});
     elseif action == "LOSE_CITY" or action == "SPAWN_SPY" or action == "PROGRESS_SPY" or action == "BIND_SPY" then
         if action == "LOSE_CITY" then B.Check("SETTLED"); end

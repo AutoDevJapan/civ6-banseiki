@@ -1509,6 +1509,46 @@ fn capacity_spawn_binds_only_the_new_native_spy_and_keeps_failed_history() {
 }
 
 #[test]
+fn retry_names_survive_execute_script_empty_and_numeric_string_coercion() {
+    for name in ["", "0", "123", "JAC_TEXT_V1:", "Spy 15"] {
+        let h = Enemy::new();
+        h.captured_with_capacity_spy();
+        h.run(&format!(
+            "local name={}; CAPTURED[1][1].Name=name; OFF_MAP[1].Name=name; \
+             Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL').name=name; \
+             UNITS[0][1].name=name; \
+             UI.RequestPlayerOperation=function(owner,op,params) \
+                 local wire={{}}; for k,v in pairs(params) do \
+                     if type(v)=='string' and (v=='' or tonumber(v)) then \
+                         wire[k]=tonumber(v) or 0; else wire[k]=v end \
+                 end; REQUESTS[#REQUESTS+1]={{owner=owner,op=op,params=wire}} \
+             end",
+            serde_json::to_string(name).unwrap()
+        ));
+        h.sync("BEGIN_SPY_RETRY", "JAC_BoundaryBeginEnemySpyRetry");
+        h.run(&format!(
+            "local r=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')); \
+             assert(r.archive.captiveName=={} and r.uiRoster.mapName=={} and \
+             r.spyID==786440 and r.archive.eventID==0 and #CAPTURED[1]==1)",
+            serde_json::to_string(name).unwrap(),
+            serde_json::to_string(name).unwrap()
+        ));
+    }
+}
+
+#[test]
+fn retry_rejects_unencoded_captive_name_before_archiving() {
+    let h = Enemy::new();
+    h.captured_with_capacity_spy();
+    h.run("ExposedMembers.JAC_PersonaBoundary.Queue('BEGIN_SPY_RETRY'); FRAME(); RETRY_PARAMS=REQUESTS[#REQUESTS].params; RETRY_PARAMS.CaptiveName=0");
+    h.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryBeginEnemySpyRetry',RETRY_PARAMS)",
+        "native observation text encoding differs",
+    );
+    h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING')==nil and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id==0 and Game:GetProperty('JAC_BOUNDARY_SPY').id==655368 and #CAPTURED[1]==1)");
+}
+
+#[test]
 fn capacity_retry_attests_ui_roster_when_core_getter_pairs_are_absent() {
     let h = Enemy::new();
     h.captured_with_capacity_spy();

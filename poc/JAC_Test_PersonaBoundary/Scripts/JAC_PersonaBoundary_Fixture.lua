@@ -347,14 +347,15 @@ end);
 
 GameEvents.JAC_BoundarySaveSpyTravel.Add(function(owner,params)
     Config(owner);
+    local name=R.DecodeText(params.Name);
     local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"native spy reference missing");
     assert(spy.owner==owner and type(params)=="table" and params.OldID==spy.id and
-        type(params.Name)=="string" and type(params.Level)=="number" and
+        type(name)=="string" and type(params.Level)=="number" and
         type(params.TargetOwner)=="number" and type(params.TargetID)=="number" and
         not Game:GetProperty("JAC_BOUNDARY_SPY_TRAVEL"),"invalid or repeated travel receipt");
     local city=assert(CityManager.GetCity(params.TargetOwner,params.TargetID),"travel target missing");
     assert(city:GetOwner()~=owner,"travel target is not foreign");
-    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",{oldID=spy.id,name=params.Name,level=params.Level,
+    Game:SetProperty("JAC_BOUNDARY_SPY_TRAVEL",{oldID=spy.id,name=name,level=params.Level,
         targetOwner=params.TargetOwner,targetID=params.TargetID,x=city:GetX(),y=city:GetY()});
 end);
 
@@ -600,6 +601,9 @@ local CAPACITY_RETRY_FIELDS={"Mode","Outcome","SpyID","CurrentID","EventID",
     "OffMapCount","ActiveOffMapCount","PlaceholderIndex"};
 local function HandleEnemySpyRetry(controller,params,final)
     EnemyReceipt(controller,params,final and "FINALIZE_SPY_RETRY" or "BEGIN_SPY_RETRY");
+    local captiveName=R.DecodeText(params.CaptiveName);
+    local returnName=R.DecodeText(params.ReturnName);
+    local mapName=R.DecodeText(params.MapName);
     local pending=Game:GetProperty(RETRY_PENDING);
     local barrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
     if final then
@@ -700,7 +704,7 @@ local function HandleEnemySpyRetry(controller,params,final)
                 local held=assert(captorDiplomacy:GetNthCapturedSpy(rosterCaptorID,0),
                     "native PRODUCE captive record missing");
                 assert(held.OwningPlayer==controller and
-                    held.Name==params.CaptiveName and
+                    held.Name==captiveName and
                     held.NameIndex==params.CaptiveNameIndex and
                     held.Level==params.CaptiveLevel,
                     "native PRODUCE captive roster changed");
@@ -716,9 +720,9 @@ local function HandleEnemySpyRetry(controller,params,final)
                 local placeholder=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
                     "native PRODUCE captive placeholder missing");
                 local defaultName=GameInfo.Units["UNIT_SPY"].Name;
-                local sameName=placeholder.Name==params.CaptiveName or
-                    (placeholder.Name=="" and params.CaptiveName==defaultName) or
-                    (params.CaptiveName=="" and placeholder.Name==defaultName);
+                local sameName=placeholder.Name==captiveName or
+                    (placeholder.Name=="" and captiveName==defaultName) or
+                    (captiveName=="" and placeholder.Name==defaultName);
                 assert(sameName and placeholder.Level==params.CaptiveLevel,
                     "native PRODUCE captive placeholder identity changed");
                 assert(placeholder.ReturnTurn==-1 and
@@ -767,20 +771,20 @@ local function HandleEnemySpyRetry(controller,params,final)
             mapCount=mapCount,captor=params.CaptiveCaptor,expectedCaptor=c.owner,
             map=params.MapCount,captured=params.CapturedCount,offMap=params.OffMapCount,
             moving=params.ActiveOffMapCount,placeholder=params.PlaceholderIndex,
-            captiveName=params.CaptiveName,captiveNameIndex=params.CaptiveNameIndex,
+            captiveName=captiveName,captiveNameIndex=params.CaptiveNameIndex,
             captiveLevel=params.CaptiveLevel,travelName=travel.name,travelLevel=travel.level,
             defaultName=GameInfo.Units["UNIT_SPY"].Name,
-            mapX=params.MapX,mapY=params.MapY,mapLevel=params.MapLevel,mapName=params.MapName}));
+            mapX=params.MapX,mapY=params.MapY,mapLevel=params.MapLevel,mapName=mapName}));
         assert(params.CaptiveCaptor==c.owner and mapCount==1 and
             params.MapCount==1 and params.CapturedCount==1 and
             params.OffMapCount==1 and params.ActiveOffMapCount==0 and
             params.PlaceholderIndex==1 and
             params.CaptiveLevel==travel.level and
-            (params.CaptiveName==travel.name or
-             (params.CaptiveName=="" and params.CaptiveNameIndex==-1 and
+            (captiveName==travel.name or
+             (captiveName=="" and params.CaptiveNameIndex==-1 and
               travel.name==GameInfo.Units["UNIT_SPY"].Name)) and
             type(params.MapX)=="number" and type(params.MapY)=="number" and
-            type(params.MapLevel)=="number" and type(params.MapName)=="string" and
+            type(params.MapLevel)=="number" and type(mapName)=="string" and
             params.MapLevel>=0,
             "capacity retry needs exactly one native map spy and one old captive");
         local captive;
@@ -789,7 +793,7 @@ local function HandleEnemySpyRetry(controller,params,final)
             captive=assert(captorDiplomacy:GetNthCapturedSpy(c.owner,0),
                 "original native captive unavailable in Gameplay");
             assert(captive.OwningPlayer==controller and
-                captive.Name==params.CaptiveName and
+                captive.Name==captiveName and
                 captive.NameIndex==params.CaptiveNameIndex and
                 captive.Level==params.CaptiveLevel and captive.Level==travel.level,
                 "original native captive differs in Gameplay");
@@ -800,9 +804,9 @@ local function HandleEnemySpyRetry(controller,params,final)
             local placeholder=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
                 "original captive placeholder unavailable in Gameplay");
             local defaultName=GameInfo.Units["UNIT_SPY"].Name;
-            local sameName=placeholder.Name==params.CaptiveName or
-                (placeholder.Name=="" and params.CaptiveName==defaultName) or
-                (params.CaptiveName=="" and placeholder.Name==defaultName);
+            local sameName=placeholder.Name==captiveName or
+                (placeholder.Name=="" and captiveName==defaultName) or
+                (captiveName=="" and placeholder.Name==defaultName);
             assert(sameName and placeholder.Level==params.CaptiveLevel and
                 placeholder.ReturnTurn==-1 and placeholder.XLocation==-9999 and
                 placeholder.YLocation==-9999,
@@ -833,7 +837,7 @@ local function HandleEnemySpyRetry(controller,params,final)
                 "native RETURN off-map record API unavailable");
             local returning=assert(attackerDiplomacy:GetNthOffMapSpy(controller,0),
                 "native RETURN off-map record missing");
-            assert(returning.Name==params.ReturnName and
+            assert(returning.Name==returnName and
                 returning.Level==params.ReturnLevel and
                 returning.ReturnTurn==params.ReturnTurn and
                 returning.XLocation==params.ReturnX and
@@ -876,13 +880,13 @@ local function HandleEnemySpyRetry(controller,params,final)
         governorType=params.GovernorType,governorNeutralized=native.neutralized,
         governorCityID=native.cityID,spent=params.Spent,total=params.Total,
         merit=R.Property(c.leader,"MERIT") or 0,rosterOutcome=params.Outcome,
-        captiveCaptor=params.CaptiveCaptor,captiveName=params.CaptiveName,
+        captiveCaptor=params.CaptiveCaptor,captiveName=captiveName,
         captiveNameIndex=params.CaptiveNameIndex,captiveLevel=params.CaptiveLevel,
         capacity=params.Capacity,occupied=params.Occupied,archivedTurn=Game.GetCurrentGameTurn()};
     local retry={current=2,mode=params.Mode,archive=archive,
         spyID=spy.id,
         coreRoster=coreRoster,
-        returnName=params.ReturnName,returnLevel=params.ReturnLevel,
+        returnName=returnName,returnLevel=params.ReturnLevel,
         returnTurn=params.ReturnTurn,returnX=params.ReturnX,returnY=params.ReturnY};
     if final then
         retry.attestation={initialToken=pending.token,finalToken=params.Token,
@@ -895,7 +899,7 @@ local function HandleEnemySpyRetry(controller,params,final)
             activeOffMap=params.ActiveOffMapCount,
             placeholderIndex=params.PlaceholderIndex,
             capacity=params.Capacity,mapX=params.MapX,mapY=params.MapY,
-            mapLevel=params.MapLevel,mapName=params.MapName};
+            mapLevel=params.MapLevel,mapName=mapName};
     end
     if params.Mode=="PRODUCE" then retry.spyID=nil; end
     if params.Mode=="MAP" or params.Mode=="CAPACITY_MAP" then
