@@ -136,6 +136,16 @@ fn dedication_step_calls_the_existing_sender_and_visible_closer() {
     );
     assert_eq!(count(&h, "UI.RequestPlayerOperation"), 1);
     assert_eq!(count(&h, "OnClose()"), 1);
+    let events = h.events();
+    let send = events
+        .iter()
+        .position(|v| v.contains("UI.RequestPlayerOperation"))
+        .unwrap();
+    let close = events.iter().position(|v| v.contains("OnClose()")).unwrap();
+    assert!(
+        send < close,
+        "dedication must submit before closing its visible screen"
+    );
     assert_eq!(keys(&h), 0);
 }
 

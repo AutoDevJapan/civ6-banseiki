@@ -1320,7 +1320,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     }
     // Includes the four main-branch carrier/religion/spent-spread scenes,
     // alongside the isolated promotion-call and assignment calibration games.
-    assert_eq!(count, 139);
+    assert_eq!(count, 141);
 }
 
 #[test]
