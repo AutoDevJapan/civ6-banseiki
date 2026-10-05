@@ -1012,11 +1012,21 @@ end
 -- A diagnostic projection is a synchronized script operation. It never
 -- reconciles persons, finalizes evolution or sends a native title operation.
 GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
-    if Game:GetProperty("JAC_TEST853_PAID_ASSIGNMENT_V1") ~= true or not Player(owner, true) or
+    local flag=Game:GetProperty("JAC_TEST853_PAID_ASSIGNMENT_V1");
+    local paidSchema=Game:GetProperty("JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA");
+    local appointmentSchema=Game:GetProperty(ADMISSION_SCHEMA);
+    print('JAC_PERSONA_PROJECT received owner='..tostring(owner)..' paramsType='..type(params)..
+        ' flagType='..type(flag)..' flag='..tostring(flag)..' paidSchema='..tostring(paidSchema)..
+        ' appointmentSchema='..tostring(appointmentSchema));
+    if flag ~= true or not Player(owner, true) or
        type(params) ~= 'table' or type(params.ProjectionSerial) ~= 'number' or
        params.ProjectionSerial % 1 ~= 0 or params.ProjectionSerial < 1 or
-       params.ProjectionSerial >= 9007199254740992 then return; end
+       params.ProjectionSerial >= 9007199254740992 then
+        print('JAC_PERSONA_PROJECT rejected'); return;
+    end
+    print('JAC_PERSONA_PROJECT begin owner='..owner..' serial='..params.ProjectionSerial);
     SyncProductionAdmission(false, nil);
+    print('JAC_PERSONA_PROJECT end owner='..owner..' serial='..params.ProjectionSerial);
     Player(owner, true):SetProperty('JAC_PERSONA_PROJECT_RECEIPT', params.ProjectionSerial);
 end);
 -- END RUST GENERATED PAID ASSIGNMENT GLUE

@@ -84,10 +84,34 @@ fn finite_diagnostic_has_one_payment_sender_and_only_its_new_save() {
     assert_eq!(
         after
             .iter()
-            .filter(|s| s["equals_capture"] == "TODO324_EVENTS_PAID")
+            .filter(|s| s["equals_capture"] == "TODO324_EVENTS_SETTLED")
             .count(),
         2
     );
+    let capture = steps
+        .iter()
+        .position(|s| s["capture_as"] == "TODO324_EVENTS_SETTLED")
+        .unwrap();
+    let finalized = steps
+        .iter()
+        .position(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("OnStart='JAC_LeaderPersonaFinalize'"))
+        })
+        .unwrap();
+    let saved = steps.iter().position(|s| s["action"] == "save").unwrap();
+    assert!(finalized < capture && capture < saved);
+    let body = steps[capture]["code"].as_str().unwrap();
+    for field in [
+        "sequence=s.sequence",
+        "receipts=s.receipts",
+        "'_MERIT'",
+        "meritPresent=merit~=nil",
+        "meritType=type(merit)",
+    ] {
+        assert!(body.contains(field), "{field}");
+    }
     assert!(!serde_json::to_string(after)
         .unwrap()
         .contains("RequestPlayerOperation"));
