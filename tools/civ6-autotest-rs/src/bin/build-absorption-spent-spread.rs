@@ -25,12 +25,19 @@ local priest
 for _,u in p:GetUnits():Members() do if not before[u:GetID()] then assert(not priest,'ambiguous new unit');priest=u end end
 assert(priest and GameInfo.Units[priest:GetType()].UnitType=='UNIT_MISSIONARY','missionary creation failed')
 priest:GetReligion():SetReligionType(r.ReligionType)
-print('[JAC_SPENT_SPREAD_192] created xy='..priest:GetX()..','..priest:GetY()..' target='..target:GetX()..','..target:GetY())
+print('[JAC_SPENT_SPREAD_192] created xy='..priest:GetX()..','..priest:GetY()..' target='..target:GetX()..','..target:GetY()..' core_religion='..priest:GetReligion():GetReligionType()..' expected_religion='..r.Index)
 assert(priest:GetX()>=0 and priest:GetY()>=0 and Map.GetPlotDistance(priest:GetX(),priest:GetY(),target:GetX(),target:GetY())<=1,'missionary not on a valid target-adjacent plot')
 local e={From=from,To=to,UnitID=priest:GetID(),Religion=r.Index,TargetOwner=target:GetOwner(),TargetID=target:GetID(),X=target:GetX(),Y=target:GetY(),StartTurn=Game.GetCurrentGameTurn()}
 Game:SetProperty('JAC_ABSORPTION_SPENT_SPREAD_192',e)
 print('[JAC_SPENT_SPREAD_192] fixture owner='..from..' unit='..e.UnitID..' gameplay_request='..type(UnitManager.RequestOperation)..' gameplay_can='..type(UnitManager.CanStartOperation))
 return 'AI missionary fixture created without changing spread charges'"#;
+
+const FIXTURE_READY: &str = r#"local e=Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192');if not e then return false end
+local u=Players[e.From]:GetUnits():FindID(e.UnitID)
+local observed='owner='..e.From..' expected_id='..e.UnitID..' expected_religion='..e.Religion
+if u then observed=observed..' id='..u:GetID()..' religion='..u:GetReligionType()..' charges='..u:GetSpreadCharges()..' xy='..u:GetX()..','..u:GetY() else observed=observed..' unit=missing' end
+if JAC192_READY_LAST~=observed then print('[JAC_SPENT_SPREAD_192] UI fixture '..observed);JAC192_READY_LAST=observed end
+return u and u:GetID()==e.UnitID and u:GetReligionType()==e.Religion and u:GetSpreadCharges()==3"#;
 
 const ARM: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'))
 local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID));assert(u:GetID()==e.UnitID and u:GetOwner()==e.From,'fixture identity mismatch')
@@ -131,7 +138,7 @@ return true"#;
 fn generate(mut base: Value) -> Value {
     let mut steps: Vec<Value> = base["steps"].as_array().unwrap()[..5].to_vec();
     steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":SETUP}));
-    steps.push(json!({"action":"wait_for","timeout":45,"condition":{"type":"lua","state_name":"InGame","code":"local e=Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192');if not e then return false end;local u=Players[e.From]:GetUnits():FindID(e.UnitID);return u and u:GetID()==e.UnitID and u:GetReligionType()==e.Religion and u:GetSpreadCharges()==3"}}));
+    steps.push(json!({"action":"wait_for","timeout":45,"condition":{"type":"lua","state_name":"InGame","code":FIXTURE_READY}}));
     steps.push(json!({"action":"ui_lua","state_name":"InGame","code":ARM}));
     steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
     steps.push(json!({"action":"ui_lua","state_name":"InGame","code":VERIFY}));
@@ -186,9 +193,20 @@ mod tests {
     #[test]
     fn all_embedded_commands_compile_as_lua51() {
         let lua = mlua::Lua::new();
-        for code in [SETUP, ARM, VERIFY, APPLY, RESUME, BLOCKED, READY] {
+        for code in [SETUP, FIXTURE_READY, ARM, VERIFY, APPLY, RESUME, BLOCKED, READY] {
             lua.load(code).into_function().unwrap();
         }
+    }
+
+    #[test]
+    fn shipped_scenarios_match_the_generator() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../civ6-autotest/scenarios");
+        let read = |name: &str| -> Value {
+            serde_json::from_slice(&fs::read(root.join(name)).unwrap()).unwrap()
+        };
+        let probe = generate(read("absorption-priest-diagnostic.json"));
+        assert_eq!(probe, read("absorption-spent-spread-192.json"));
+        assert_eq!(full(probe), read("absorption-spent-spread-block-192.json"));
     }
 
     #[test]
