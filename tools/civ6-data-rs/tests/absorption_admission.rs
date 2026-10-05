@@ -395,6 +395,46 @@ fn ineligible_influence_recipient_waits_even_with_a_nonzero_existing_envoy_count
 }
 
 #[test]
+fn reader_cancellation_is_not_overwritten_by_the_outer_ready_decision() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      N.Register('reentrant-cancel',function()
+        N.Request('reentrant-cancel','offer',1,2)
+        N.Cancel('reentrant-cancel','offer')
+        return {From=1,To=2,Turn=7,Mode='MERGER',AreaKm2=10000,RelationsResolved=true,
+          Requirements={{ID='ready',Met=true}}}
+      end)
+      local receipt=N.Request('reentrant-cancel','offer',1,2)
+      assert(receipt.Status=='CANCELLED' and not receipt.Plan and BEGIN_COUNT==0)
+      N.Tick();assert(BEGIN_COUNT==0)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn relationship_review_changed_inside_a_requirement_reader_is_rechecked_next_turn(
+) -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      GOLD=100;RELEASE=true;REVOKE=true
+      OFFER.Requirements[#OFFER.Requirements+1]={ID='review-change',Kind='REVOKE_REVIEW'}
+      N.RegisterRequirement('REVOKE_REVIEW',function()
+        if REVOKE then OFFER.RelationsReviewed=false;N.DefineOffer(OFFER);REVOKE=false end
+        return true
+      end)
+      N.DefineOffer(OFFER);N.Tick();assert(BEGIN_COUNT==0)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING')
+      N.Tick();assert(BEGIN_COUNT==0)
+      OFFER.RelationsReviewed=true;N.DefineOffer(OFFER);N.Tick();assert(BEGIN_COUNT==1)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
 fn permanent_preflight_failure_can_be_cancelled_but_an_inflight_retry_cannot() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(
@@ -468,6 +508,7 @@ fn legacy_waiting_save_is_read_without_writing_and_lifecycle_updates_upgrade_its
       local save=Game.SetProperty
       Game.SetProperty=function() error('legacy read must not save') end
       assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING')
+      N.Tick()
       Game.SetProperty=save
       assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1').Version==1)
       N.CancelOffer(OFFER.ID)

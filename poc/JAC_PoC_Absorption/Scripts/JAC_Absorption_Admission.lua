@@ -2,7 +2,7 @@
 -- Gameplay-only callbacks re-read the normal admission decision, never UI flags.
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 local R = A.Rules
-local N, providers, readers, starting = {}, {}, {}, {}
+local N, providers, readers, starting, reading = {}, {}, {}, {}, {}
 local KEY = 'JAC_ABSORPTION_ADMISSION_V1'
 local function State()
   local s = R.Copy(Game:GetProperty(KEY) or {Version=2, Requests={}, Offers={}})
@@ -97,6 +97,7 @@ function N.Check(source, id)
   local s, key = State(), Key(source, id)
   local request = assert(s.Requests[key], 'normal admission request missing')
   if request.Status == 'STARTED' or request.Status == 'CANCELLED' then return R.Copy(request) end
+  if reading[request.FlowID] then return R.Copy(request) end
   -- Once F.Begin has journalled P1, retry its frozen plan even if the country
   -- has already been transferred. F owns the saved rolls and asset inventory.
   local existing = FlowRequest(request.FlowID)
@@ -109,12 +110,27 @@ function N.Check(source, id)
     local read = providers[source]
     if not read then return R.Copy(request) end -- another module may load later
     if not Players[request.From]:IsAlive() or not Players[request.To]:IsAlive() then
-      request.Status = 'UNAVAILABLE'; Save(s); return R.Copy(request)
+      if request.Status ~= 'UNAVAILABLE' then request.Status = 'UNAVAILABLE'; Save(s) end
+      return R.Copy(request)
     end
     assert(not Players[request.From]:IsHuman(), 'existing flow absorbs AI sources only')
-    local decision = R.Copy(read(id, request.From, request.To))
+    local offerBefore = source == 'leader-offer' and R.Copy(s.Offers[id]) or nil
+    reading[request.FlowID] = true
+    local ok, value = pcall(read, id, request.From, request.To)
+    reading[request.FlowID] = nil
+    if not ok then error(value) end
+    local latest = State()
+    local current = assert(latest.Requests[key], 'normal admission request disappeared')
+    if not R.Equal(current,request) or source == 'leader-offer' and not R.Equal(latest.Offers[id],offerBefore) then
+      return R.Copy(current)
+    end
+    s, request = latest, current
+    local decision = R.Copy(value)
     if not Ready(request, decision) then
-      request.Status = 'WAITING'; Save(s); return R.Copy(request)
+      if request.Status ~= 'WAITING' or request.LastError ~= nil then
+        request.Status, request.LastError = 'WAITING', nil; Save(s)
+      end
+      return R.Copy(request)
     end
     local plan = R.Copy(decision.Plan or {})
     -- These fields are authoritative gate output, not values from the caller.
