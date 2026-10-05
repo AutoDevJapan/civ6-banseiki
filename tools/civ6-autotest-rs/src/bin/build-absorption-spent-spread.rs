@@ -54,31 +54,44 @@ return u and u:GetID()==e.UnitID and u:GetReligionType()==e.Religion and u:GetSp
 const ARM: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'))
 local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID));assert(u:GetID()==e.UnitID and u:GetOwner()==e.From,'fixture identity mismatch')
 assert(u:GetSpreadCharges()==3 and u:GetReligionType()==e.Religion,'fixture native state mismatch')
-JAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),Operations={},Events={}}
+JAC192_SPREAD={Owner=e.From,ID=e.UnitID,Before=u:GetSpreadCharges(),Turns={},Operations={},Events={}}
 local function charges(owner,id,newCharges,oldCharges)
  if owner==e.From and id==e.UnitID then
   local unit=Players[owner]:GetUnits():FindID(id)
   JAC192_SPREAD.Events[#JAC192_SPREAD.Events+1]={Turn=Game.GetCurrentGameTurn(),Charges=unit and unit:GetSpreadCharges() or -1,Old=oldCharges,New=newCharges}
+  print('[JAC_SPENT_SPREAD_192] charge turn='..Game.GetCurrentGameTurn()..' old='..tostring(oldCharges)..' new='..tostring(newCharges)..' getter='..tostring(unit and unit:GetSpreadCharges()))
  end
 end
 local function operation(owner,id,kind)
- if owner==e.From and id==e.UnitID and kind==UnitOperationTypes.SPREAD_RELIGION then
+ if owner~=e.From or id~=e.UnitID then return end
+ print('[JAC_SPENT_SPREAD_192] operation kind='..tostring(kind)..' expected='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' turn='..Game.GetCurrentGameTurn())
+ if kind==UnitOperationTypes.SPREAD_RELIGION then
   JAC192_SPREAD.Operations[#JAC192_SPREAD.Operations+1]={Turn=Game.GetCurrentGameTurn(),Kind=kind,Active=Players[owner]:IsTurnActive()}
   print('[JAC_SPENT_SPREAD_192] native spread owner='..owner..' unit='..id..' turn='..Game.GetCurrentGameTurn())
  end
 end
+local function command(owner,id,kind)
+ if owner==e.From and id==e.UnitID then print('[JAC_SPENT_SPREAD_192] command kind='..tostring(kind)..' expected='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' turn='..Game.GetCurrentGameTurn()) end
+end
 local function activated(owner)
  if owner~=e.From then return end
+ local turn=Game.GetCurrentGameTurn()
+ if JAC192_SPREAD.Turns[turn] then return end
  local unit=assert(Players[owner]:GetUnits():FindID(e.UnitID),'donor absent at AI turn start')
- JAC192_SPREAD.AITurn=Game.GetCurrentGameTurn();JAC192_SPREAD.BeginCharges=unit:GetSpreadCharges()
- assert(JAC192_SPREAD.BeginCharges==3 and #JAC192_SPREAD.Events==0,'donor spent charges before AI turn')
+ local record={Before=unit:GetSpreadCharges(),EventCount=#JAC192_SPREAD.Events}
+ JAC192_SPREAD.Turns[turn]=record
+ if JAC192_SPREAD.FirstTurn==nil then
+  assert(record.Before==3 and record.EventCount==0,'donor spent charges before AI turn')
+  JAC192_SPREAD.FirstTurn=turn
+ end
  local called,can,reasons=pcall(UnitManager.CanStartOperation,unit,UnitOperationTypes.SPREAD_RELIGION,nil,false,true)
- print('[JAC_SPENT_SPREAD_192] AI turn='..JAC192_SPREAD.AITurn..' charges='..JAC192_SPREAD.BeginCharges..' xy='..unit:GetX()..','..unit:GetY()..' can_call='..tostring(called)..' can='..tostring(can)..' reasons='..tostring(reasons))
+ print('[JAC_SPENT_SPREAD_192] AI turn='..turn..' charges='..record.Before..' xy='..unit:GetX()..','..unit:GetY()..' opcode='..tostring(UnitOperationTypes.SPREAD_RELIGION)..' can_call='..tostring(called)..' can='..tostring(can)..' reasons='..tostring(reasons))
 end
 Events.PlayerTurnActivated.Add(activated)
 Events.UnitChargesChanged.Add(charges)
 Events.UnitOperationStarted.Add(operation)
-JAC192_STOP=function() Events.PlayerTurnActivated.Remove(activated);Events.UnitChargesChanged.Remove(charges);Events.UnitOperationStarted.Remove(operation) end
+if Events.UnitCommandStarted then Events.UnitCommandStarted.Add(command) end
+JAC192_STOP=function() Events.PlayerTurnActivated.Remove(activated);Events.UnitChargesChanged.Remove(charges);Events.UnitOperationStarted.Remove(operation);if Events.UnitCommandStarted then Events.UnitCommandStarted.Remove(command) end end
 return 'observing donor AI native spread operation and charge consumption'"#;
 const VERIFY: &str = r#"local e=assert(Game:GetProperty('JAC_ABSORPTION_SPENT_SPREAD_192'));local o=assert(JAC192_SPREAD)
 if JAC192_STOP then JAC192_STOP();JAC192_STOP=nil end
@@ -86,11 +99,13 @@ local u=assert(Players[e.From]:GetUnits():FindID(e.UnitID),'spent donor disappea
 assert(u:GetID()==e.UnitID and u:GetOwner()==e.From and u:GetType()==GameInfo.Units.UNIT_MISSIONARY.Index,'donor identity changed')
 local n=u:GetSpreadCharges()
 print('[JAC_SPENT_SPREAD_192] observed before='..o.Before..' after='..n..' operations='..#o.Operations..' events='..#o.Events)
-assert(o.Before==3 and o.BeginCharges==3 and o.AITurn~=nil,'native donor AI turn not observed')
+local first=o.FirstTurn and o.Turns[o.FirstTurn]
+assert(o.Before==3 and first and first.Before==3 and first.EventCount==0,'native donor AI turn not observed')
 assert(n==2,'native AI spread did not consume native charge exactly once')
 assert(#o.Operations==1,'expected one official native spread operation')
 local op=o.Operations[1]
-assert(op.Kind==UnitOperationTypes.SPREAD_RELIGION and op.Active==true and op.Turn==o.AITurn,'native operation not on donor AI turn')
+local turn=o.Turns[op.Turn]
+assert(op.Kind==UnitOperationTypes.SPREAD_RELIGION and op.Active==true and turn and turn.Before==3 and turn.EventCount==0,'native operation not on donor AI turn')
 assert(#o.Events==1,'expected one native charge change event')
 local changed=o.Events[1]
 assert(changed.Old==3 and changed.New==2 and changed.Charges==2 and changed.Turn==op.Turn,'native charge event not associated with spread operation')
@@ -241,7 +256,7 @@ mod tests {
             Players={[3]={GetUnits=function() return {FindID=function() return u end} end}}
             GameInfo={Units={UNIT_MISSIONARY={Index=7}}}
             UnitOperationTypes={SPREAD_RELIGION=99}
-            JAC192_SPREAD={Before=3,BeginCharges=3,AITurn=1,Operations={},Events={}}
+            JAC192_SPREAD={Before=3,FirstTurn=1,Turns={[1]={Before=3,EventCount=0}},Operations={},Events={}}
             ExposedMembers={JAC_Absorption={Canonical=function() return 'verified' end}}
         "#,
         )
@@ -270,7 +285,8 @@ mod tests {
     #[test]
     fn native_event_handlers_use_official_arguments_and_filter_identity() {
         for (events, expected) in [
-            ("CHARGES=2;H.charges(4,42,2,3);H.charges(3,43,2,3);H.operation(4,42,99);H.operation(3,43,99);H.operation(3,42,98);H.charges(3,42,2,3);H.operation(3,42,99)", None),
+            ("CHARGES=2;H.charges(4,42,2,3);H.charges(3,43,2,3);H.operation(4,42,99);H.operation(3,43,99);H.operation(3,42,98);H.charges(3,42,2,3);H.operation(3,42,99);TURN=2;H.activated(3)", None),
+            ("TURN=2;H.activated(3);CHARGES=2;H.charges(3,42,2,3);H.operation(3,42,99)", None),
             ("CHARGES=2;H.operation(3,42,99)", Some("expected one native charge change event")),
             ("CHARGES=2;H.charges(3,42,2,3);H.operation(3,42,98)", Some("expected one official native spread operation")),
             ("CHARGES=2;TURN=2;H.charges(3,42,2,3);H.operation(3,42,99)", Some("native operation not on donor AI turn")),
