@@ -166,6 +166,15 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
             artifact_path = Some(std::path::PathBuf::from(name));
             closed = true;
         } else if action.ends_with(" exit_to_menu") {
+            // A partial-payment save/reload can return to the menu before
+            // observation starts. It cannot satisfy the final restored exit.
+            if !opened {
+                require(
+                    detail == "main menu reached",
+                    "preparation did not reach the main menu",
+                )?;
+                continue;
+            }
             require(
                 closed && !exited && detail == "main menu reached",
                 "scenario did not finish after restoration",
@@ -177,8 +186,13 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
                 "judge preceded complete payment observation",
             )?;
             judged = true;
-        } else if opened && !closed && action.ends_with(" restart_game") {
-            return Err(Error::input("game restarted inside payment observation"));
+        } else if opened
+            && !closed
+            && [" restart_game", " load", " save"]
+                .iter()
+                .any(|suffix| action.ends_with(suffix))
+        {
+            return Err(Error::input("game changed inside payment observation"));
         }
     }
     require(judged, "completed scenario judge missing")?;

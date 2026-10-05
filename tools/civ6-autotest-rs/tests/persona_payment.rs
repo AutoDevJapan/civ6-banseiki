@@ -184,6 +184,47 @@ fn receipt_requires_a_complete_same_process_observation() {
     assert!(persona_payment::evidence_from_steps(&trace(&different_ui)).is_err());
 }
 #[test]
+fn preparation_reload_is_separate_from_the_restored_final_exit() {
+    let (_, r) = fixture(3);
+    let mut steps = completed_steps(&r);
+    let preparation = vec![
+        json!({"action":"20/40 save","status":"OK","detail":"verified partial save"}),
+        json!({"action":"21/40 exit_to_menu","status":"OK","detail":"main menu reached"}),
+        json!({"action":"22/40 load","status":"OK","detail":"verified partial reload"}),
+    ];
+    steps.splice(0..0, preparation);
+    assert_eq!(
+        persona_payment::evidence_from_steps(&trace(&steps))
+            .unwrap()
+            .receipt
+            .paid,
+        3
+    );
+    let mut missing_final_exit = steps.clone();
+    missing_final_exit.remove(6);
+    assert!(persona_payment::evidence_from_steps(&trace(&missing_final_exit)).is_err());
+    let mut unknown_preparation = steps.clone();
+    unknown_preparation[1]["detail"] = json!("unknown menu state");
+    assert!(persona_payment::evidence_from_steps(&trace(&unknown_preparation)).is_err());
+    for action in [
+        "27/40 exit_to_menu",
+        "27/40 load",
+        "27/40 save",
+        "27/40 restart_game",
+    ] {
+        let mut interrupted = completed_steps(&r);
+        interrupted.insert(
+            2,
+            json!({"action":action,"status":"OK","detail":"main menu reached"}),
+        );
+        assert!(
+            persona_payment::evidence_from_steps(&trace(&interrupted)).is_err(),
+            "{action}"
+        );
+    }
+}
+
+#[test]
 fn sentinel_failure_cannot_hide_between_healthy_ui_and_core_rows() {
     let (mut rows, r) = fixture(1);
     let mut bad = rows[3].clone();

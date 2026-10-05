@@ -62,7 +62,7 @@ fn test_mod_selection_waits_for_rebuild_without_replaying_an_unknown_mutation() 
 }
 
 #[test]
-fn test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline() {
+fn test_lua_timeout_is_explicit_bounded_and_defaults_to_the_step_deadline() {
     let step = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"return true","lua_timeout":30});
     scenario::validate_scenario(&json!({"name":"slow native mutation","steps":[step]})).unwrap();
     for value in [
@@ -79,7 +79,9 @@ fn test_lua_timeout_is_explicit_bounded_and_clamped_to_step_deadline() {
         assert!(err.message.contains("lua_timeout"), "{err}");
     }
     for (lua_timeout, step_timeout, expected) in [
-        (None, None, 5.0),
+        (None, None, 120.0),
+        (None, Some(2.0), 2.0),
+        (None, Some(90.0), 90.0),
         (Some(30.0), None, 30.0),
         (Some(30.0), Some(17.0), 17.0),
         (Some(0.25), None, 0.25),
