@@ -20,8 +20,12 @@ fn run(code: &str) {
 
 const FREEZE: &str = r#"
 settled()
-local drain=JAC_PersonaMeritQueue.Drain
-JAC_PersonaMeritQueue.Drain=function() end
+local queue=assert(ExposedMembers.JAC_LeaderPersona.MeritQueue)
+-- FireTuner does not share this script's global environment. The diagnostic
+-- must use the exact table held by the production callback's lexical scope.
+JAC_PersonaMeritQueue=nil
+local drain=queue.Drain
+queue.Drain=function() end
 "#;
 
 #[test]

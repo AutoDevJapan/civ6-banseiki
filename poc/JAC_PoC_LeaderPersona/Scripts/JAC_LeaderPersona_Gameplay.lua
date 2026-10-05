@@ -1097,7 +1097,7 @@ ExposedMembers.JAC_LeaderPersona = {
     Join = Join, PrepareEvolution = PrepareEvolution, CompleteEvolution = CompleteEvolution,
     Reconcile = Reconcile, EvolutionCost = EvolutionCost,
     CoreAdmissionCapabilities = CoreAdmissionCapabilities,
-    OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects
+    OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects, MeritQueue = MeritQueue
 };
 print("JAC_LeaderPersona_Gameplay: ready");
 SyncProductionAdmission(true);

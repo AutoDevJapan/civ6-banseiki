@@ -39,7 +39,7 @@ assert(cfg.leader==leader and cfg.owner==owner,'wrong saved native persona')
 local city=assert(CityManager.GetCity(owner,cfg.cityID))
 assert(city:GetProperty('JAC_PERSONA_SETTLED_'..leader)==1,'qualified event needs synchronized settlement')
 local api=assert(ExposedMembers.JAC_LeaderPersona)
-local queue=assert(JAC_PersonaMeritQueue)
+local queue=assert(api.MeritQueue,'production gameplay queue context unavailable')
 local function notify(freeze)
  local savedDrain=queue.Drain; local oldLast,oldAI=prop('GOVERN_LAST_TURN'),prop('AI_LAST_TURN')
  if freeze then queue.Drain=function() end end

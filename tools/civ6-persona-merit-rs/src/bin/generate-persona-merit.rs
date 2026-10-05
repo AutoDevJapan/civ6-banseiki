@@ -12,12 +12,20 @@ fn main() {
     let begin = "-- BEGIN RUST PERSONA MERIT ADAPTER\n";
     let end = "-- END RUST PERSONA MERIT ADAPTER\n";
     let block = format!("{begin}{}{end}", civ6_persona_merit_rs::adapter());
-    let content = if let Some(start) = original.find(begin) {
+    let mut content = if let Some(start) = original.find(begin) {
         let finish = original[start..].find(end).unwrap() + start + end.len();
         format!("{}{}{}", &original[..start], block, &original[finish..])
     } else {
         format!("{block}{original}")
     };
+    // FireTuner has its own globals. Export the exact lexical table used by
+    // gameplay callbacks, as the existing cross-context API already does.
+    let export = "OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects";
+    let exposed = format!("{export}, MeritQueue = MeritQueue");
+    if !content.contains(&exposed) {
+        assert_eq!(content.matches(export).count(), 1);
+        content = content.replace(export, &exposed);
+    }
     if args.is_empty() {
         fs::write(path, content).unwrap();
     } else {

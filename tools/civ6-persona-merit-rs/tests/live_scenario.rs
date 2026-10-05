@@ -65,5 +65,6 @@ fn production_adapter_is_exactly_the_rust_generated_source() {
         .unwrap()
         .0;
     assert_eq!(emitted, civ6_persona_merit_rs::adapter());
+    assert_eq!(source.matches("MeritQueue = MeritQueue").count(), 1);
     mlua::Lua::new().load(source).into_function().unwrap();
 }
