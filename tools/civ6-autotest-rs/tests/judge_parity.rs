@@ -554,6 +554,9 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-native-type-run-artifact-return.json",
                 "absorption-native-type-run-artifact-scatter.json",
                 "absorption-return-boundary.json",
+                "assassin-actor-eliminated-save-load.json",
+                "assassin-target-eliminated-save-load.json",
+                "hotseat-bridge-live-hold.json",
                 "multiplayer-hotseat-growth.json",
                 "mod-selection-rollback.json",
             ]
@@ -567,6 +570,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         declared.len(),
         "duplicate scenario registration"
     );
+    assert_eq!(expected.len(), 123);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

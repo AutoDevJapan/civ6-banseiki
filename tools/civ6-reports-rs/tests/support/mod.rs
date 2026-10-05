@@ -16,9 +16,7 @@ pub fn root() -> PathBuf {
 }
 
 pub fn tempdir() -> TempDir {
-    let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/build/runtime");
-    fs::create_dir_all(&folder).unwrap();
-    tempfile::tempdir_in(folder).unwrap()
+    tempfile::tempdir().unwrap()
 }
 
 pub fn repo_text(path: &str) -> String {

@@ -1629,6 +1629,27 @@ impl Runner {
                     }
                 ))
             }
+            "choose_dedication" => {
+                let human = step["human"]
+                    .as_i64()
+                    .ok_or_else(|| Error::scenario("Missing dedication human"))?;
+                let local = parse_integer(&self.lua(
+                    "InGame",
+                    "return Game.GetLocalPlayer()",
+                    self.budget(deadline, 5.0)?,
+                )?)?;
+                if local != human {
+                    return Err(Error::scenario(format!(
+                        "Dedication human {human} is not the local player {local}"
+                    )));
+                }
+                let selected = self.choose_dedication(human, deadline)?.ok_or_else(|| {
+                    Error::scenario("No pending dedication; nothing was submitted")
+                })?;
+                Ok(format!(
+                    "human={human} chose commemoration indices={selected}"
+                ))
+            }
             "start_game" => {
                 let session = scenario::SessionType::from_scenario(&self.scenario)?;
                 if self.owner_start && session == scenario::SessionType::Hotseat {
