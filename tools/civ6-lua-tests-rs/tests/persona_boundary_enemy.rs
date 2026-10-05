@@ -838,6 +838,21 @@ fn actual_captured_outcome_allows_civic_preflight_and_unknown_or_success_does_no
 }
 
 #[test]
+fn unknown_or_pending_first_native_history_prevents_a_civic_request() {
+    for (initial, escape) in [(99, -1), (2, -1), (1, 2)] {
+        let h = Enemy::new();
+        h.third_civic_state();
+        h.run("EspionageResultTypes.SUCCESS_UNDETECTED=5; EspionageResultTypes.SUCCESS_MUST_ESCAPE=4; EspionageResultTypes.FAIL_UNDETECTED=3; EspionageResultTypes.FAIL_MUST_ESCAPE=2; EspionageResultTypes.CAPTURED=1; EspionageResultTypes.KILLED=0; EspionageResultTypes.NO_RESULT=-1; HISTORY[0][1].InitialResult=1; HISTORY[0][1].EscapeResult=-1; BASE_REQUESTS=#REQUESTS");
+        h.run(&format!("HISTORY[0][0].InitialResult={initial}; HISTORY[0][0].EscapeResult={escape}; local a=Game:GetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY').archive; a.initial={initial}; a.escape={escape}"));
+        h.reject(
+            "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC_INTENT')",
+            "two failed native attempts",
+        );
+        h.run("assert(#REQUESTS==BASE_REQUESTS and Game:GetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT')==nil)");
+    }
+}
+
+#[test]
 fn third_spy_research_rejects_missing_native_grant_and_wrong_failure_history() {
     let missing = Enemy::new();
     missing.third_civic_state();

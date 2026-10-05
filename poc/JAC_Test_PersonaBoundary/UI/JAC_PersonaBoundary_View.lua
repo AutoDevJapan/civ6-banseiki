@@ -2313,6 +2313,7 @@ function B.ThirdSpyCivicStatus()
     local roster=assert(s.spyRoster,"native spy roster unavailable");
     assert(c.attacker==0 and c.owner==1 and retry.current==2 and
         retry.archive.eventID==0 and retry.archive.eventTurn==23 and
+        R.CompletedNativeFailure(retry.archive.initial,retry.archive.escape) and
         event.attacker==0 and event.id==1 and event.turn==45 and
         latest and R.CompletedNativeFailure(latest.initial,latest.escape) and
         s.spy and s.spy.id==851976 and not s.spy.present and
