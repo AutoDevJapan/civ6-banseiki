@@ -1444,7 +1444,7 @@ impl Runner {
                         &strings(&step["disable_ids"]),
                         step["exclusive_user_mods"] == true,
                     ),
-                    self.budget(deadline, 5.0)?,
+                    self.remaining(deadline)?,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
@@ -1631,7 +1631,7 @@ impl Runner {
                     match self.lua(
                         text(step, "state_name"),
                         text(step, "code"),
-                        self.budget(deadline, 5.0)?,
+                        self.remaining(deadline)?,
                     ) {
                         Ok(v) => break v,
                         Err(e)
