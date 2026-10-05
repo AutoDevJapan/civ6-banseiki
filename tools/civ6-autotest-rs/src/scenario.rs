@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 15] = [
+pub const ACTIONS: [&str; 16] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -13,6 +13,7 @@ pub const ACTIONS: [&str; 15] = [
     "end_turn",
     "ui_lua",
     "carrier_checkpoint",
+    "carrier_exchange",
     "screenshot",
     "save",
     "exit_to_menu",
@@ -210,7 +211,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
-            "carrier_checkpoint" => {
+            "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
                 let token = step["token"]
                     .as_str()
@@ -219,11 +220,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     .as_str()
                     .ok_or_else(|| fail("carrier checkpoint needs candidate".into()))?;
                 crate::carrier_sync::query(token, candidate).map_err(|e| fail(e.to_string()))?;
-                safe_relative_path(
-                    step["path"]
-                        .as_str()
-                        .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
-                )?;
+                if action == "carrier_checkpoint" {
+                    safe_relative_path(
+                        step["path"]
+                            .as_str()
+                            .ok_or_else(|| fail("carrier checkpoint needs path".into()))?,
+                    )?;
+                }
                 for key in ["capture_as", "equals_capture"] {
                     if step.get(key).is_some_and(|v| !type_id(v)) {
                         return Err(fail(format!("invalid {key}")));

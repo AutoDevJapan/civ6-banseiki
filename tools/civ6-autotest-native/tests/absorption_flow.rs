@@ -1702,16 +1702,28 @@ fn failed_recovered_heroes_keep_claim_and_candidate_and_retry_after_reload() -> 
 }
 
 #[test]
-fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event() -> mlua::Result<()>
-{
+fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua::Result<()> {
     let manifest = fs::read_to_string(repo_path(
         "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
     ))
     .map_err(mlua::Error::external)?;
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
+    // The absorption entry owns its private modules. The independent carrier
+    // boundary receiver has its own context and must also load exactly once.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 2);
+    for id in ["JAC_Absorption_Gameplay", "JAC_CarrierBoundary"] {
+        assert_eq!(
+            manifest
+                .matches(&format!(
+                    "<AddGameplayScripts id=\"{id}\" criteria=\"JAC_Absorption_Banseiki\">"
+                ))
+                .count(),
+            1,
+        );
+    }
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
+    assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
