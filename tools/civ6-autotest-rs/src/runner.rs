@@ -1630,7 +1630,11 @@ impl Runner {
                 if seconds > self.remaining(deadline)? {
                     return Err(Error::scenario("Step deadline would expire during pause"));
                 }
+                // Release our socket while an independent native UI probe
+                // inspects the game held by the same live_chain owner.
+                self.disconnect();
                 self.clock.sleep(seconds);
+                self.remaining(deadline)?;
                 Ok(format!("paused {seconds}s for UI animation"))
             }
             _ => Err(Error::scenario(format!("Unknown action: {action}"))),
