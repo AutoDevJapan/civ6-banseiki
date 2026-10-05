@@ -4,6 +4,7 @@ local R = JAC_PersonaBoundaryRules;
 local B = {};
 ExposedMembers.JAC_PersonaBoundary = B;
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
+local RETRY_PENDING = "JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING";
 local function Config() return assert(Game:GetProperty("JAC_BOUNDARY_CONFIG"), "fixture not prepared"); end
 local function EnemyConfig()
     local c=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG"),"enemy fixture not prepared");
@@ -2043,6 +2044,7 @@ function B.QueueEnemy(action)
         "unknown enemy native operation");
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "another boundary frame request is pending");
+    assert(not Game:GetProperty(RETRY_PENDING),"capacity retry attestation pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(),"enemy request needs the human turn");
     EnemyConfig();
     local attempts=Game:GetProperty("JAC_BOUNDARY_ENEMY_ATTEMPTS") or {};
@@ -2277,6 +2279,7 @@ ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead=B.ReadCapacityQueue;
 function B.Queue(action, params)
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "a boundary frame request is already pending");
+    assert(not Game:GetProperty(RETRY_PENDING),"capacity retry attestation pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
     assert(action == "PREPARE" or action == "PREPARE_ENEMY" or action == "EVOLVE_ENEMY" or
         action == "CONFIRM_ENEMY" or action == "BEGIN_SPY_RETRY" or
@@ -2497,6 +2500,41 @@ function B.Queue(action, params)
     end
     pending = {action=action, params=params or {}}; B.lastAction="QUEUED_"..action;
 end
+local CAPACITY_RETRY_FIELDS={"Mode","Outcome","SpyID","CurrentID","EventID",
+    "EventTurn","Operation","Plot","Initial","Escape","CompletionTurn",
+    "Spent","Total","GovernorType","Capacity","Occupied","CaptiveCaptor",
+    "CaptiveName","CaptiveNameIndex","CaptiveLevel","BindingType",
+    "BindingCityID","BindingIndex","BindingToken","BindingTurn",
+    "MapX","MapY","MapLevel","MapName","MapCount","CapturedCount",
+    "OffMapCount","ActiveOffMapCount","PlaceholderIndex"};
+local function RetryObserved(d)
+    return {Mode=d.mode,Outcome=d.outcome,SpyID=d.spyID,CurrentID=d.currentID,
+        EventID=d.eventID,EventTurn=d.eventTurn,Operation=d.mission.operation,
+        Plot=d.mission.plot,Initial=d.mission.initial,Escape=d.mission.escape,
+        CompletionTurn=d.mission.turn,Spent=d.spent,Total=d.total,
+        GovernorType=d.governorType,Capacity=d.capacity,Occupied=d.occupied,
+        CaptiveCaptor=d.captive and d.captive.captor,
+        CaptiveName=d.captive and d.captive.name,
+        CaptiveNameIndex=d.captive and d.captive.nameIndex,
+        CaptiveLevel=d.captive and d.captive.level,
+        BindingType=d.binding and d.binding.source,
+        BindingCityID=d.binding and d.binding.cityID,
+        BindingIndex=d.binding and d.binding.buildingIndex,
+        BindingToken=d.binding and d.binding.token,
+        BindingTurn=d.binding and d.binding.turn,
+        MapX=d.mode=="CAPACITY_MAP" and d.roster.map[1].x or nil,
+        MapY=d.mode=="CAPACITY_MAP" and d.roster.map[1].y or nil,
+        MapLevel=d.mode=="CAPACITY_MAP" and d.roster.map[1].level or nil,
+        MapName=d.mode=="CAPACITY_MAP" and d.roster.map[1].name or nil,
+        MapCount=d.mode=="CAPACITY_MAP" and #d.roster.map or nil,
+        CapturedCount=d.mode=="CAPACITY_MAP" and #d.roster.captured or nil,
+        OffMapCount=d.mode=="CAPACITY_MAP" and #d.roster.offMap or nil,
+        ActiveOffMapCount=d.mode=="CAPACITY_MAP" and #d.roster.activeOffMap or nil,
+        PlaceholderIndex=d.mode=="CAPACITY_MAP" and
+            d.roster.capturedPlaceholder.offMapIndex or nil,
+        ReturnName=d.returnName,ReturnLevel=d.returnLevel,
+        ReturnTurn=d.returnTurn,ReturnX=d.returnX,ReturnY=d.returnY};
+end
 local function EnemySyncRequest(action,observed)
     local capacity,government,classify;
     if action=="PREPARE_DISTRICT_CIVIC" or
@@ -2546,6 +2584,15 @@ local function EnemySyncRequest(action,observed)
         classify={barrierSerial=priorBarrier and priorBarrier.serial or 0,
             read=action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION"};
     end
+    if action=="BEGIN_SPY_RETRY" or action=="FINALIZE_SPY_RETRY" then
+        local barrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
+        barrierToken=math.max(barrierToken,barrier and barrier.token or 0);
+    end
+    if action=="FINALIZE_SPY_RETRY" then
+        local attested=assert(Game:GetProperty(RETRY_PENDING),
+            "capacity retry Core attestation missing");
+        barrierToken=math.max(barrierToken,attested.token);
+    end
     barrierToken=barrierToken+1;
     local payload={Attacker=Game.GetLocalPlayer(),Defender=1,Source=2,
         Leader="LEADER_JAC_ASHINA_MORIKIYO",Action=action,
@@ -2567,6 +2614,7 @@ local function EnemySyncRequest(action,observed)
         CONFIRM_ENEMY="JAC_BoundaryConfirmEnemy",
         CAPTURE_ENEMY="JAC_BoundaryCaptureEnemyRecovery",
         BEGIN_SPY_RETRY="JAC_BoundaryBeginEnemySpyRetry",
+        FINALIZE_SPY_RETRY="JAC_BoundaryFinalizeEnemySpyRetry",
         MARK_CAPTIVE_EXCHANGE="JAC_BoundaryMarkCaptiveExchange",
         PREPARE_DISTRICT_CIVIC="JAC_BoundaryPrepareCapacityCivic",
         RESUME_CAPACITY_CIVIC_READ="JAC_BoundaryReadCapacityCivic",
@@ -3025,23 +3073,7 @@ local function Submit(command)
         assert(d.mode=="PRODUCE" or d.mode=="RETURN" or d.mode=="MAP" or
             d.mode=="CAPACITY_MAP",
             "native retry route unavailable: "..d.mode);
-        return EnemySyncRequest(action,{Mode=d.mode,Outcome=d.outcome,
-            SpyID=d.spyID,CurrentID=d.currentID,EventID=d.eventID,EventTurn=d.eventTurn,
-            Operation=d.mission.operation,Plot=d.mission.plot,
-            Initial=d.mission.initial,Escape=d.mission.escape,
-            CompletionTurn=d.mission.turn,Spent=d.spent,Total=d.total,
-            GovernorType=d.governorType,Capacity=d.capacity,Occupied=d.occupied,
-            CaptiveCaptor=d.captive and d.captive.captor,
-            CaptiveName=d.captive and d.captive.name,
-            CaptiveNameIndex=d.captive and d.captive.nameIndex,
-            CaptiveLevel=d.captive and d.captive.level,
-            BindingType=d.binding and d.binding.source,
-            BindingCityID=d.binding and d.binding.cityID,
-            BindingIndex=d.binding and d.binding.buildingIndex,
-            BindingToken=d.binding and d.binding.token,
-            BindingTurn=d.binding and d.binding.turn,
-            ReturnName=d.returnName,ReturnLevel=d.returnLevel,
-            ReturnTurn=d.returnTurn,ReturnX=d.returnX,ReturnY=d.returnY});
+        return EnemySyncRequest(action,RetryObserved(d));
     elseif action == "PREPARE_ENEMY" then
         local observed=B.EnemyPreflight();
         return EnemySyncRequest(action,{GovernorIndex=observed.governorIndex,
@@ -3483,6 +3515,43 @@ ContextPtr:SetUpdate(function()
                 return;
             end
             if not request.published then return; end
+            if request.action=="BEGIN_SPY_RETRY" and
+                request.payload.Mode=="CAPACITY_MAP" then
+                local attested=Game:GetProperty(RETRY_PENDING);
+                local barrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
+                local ok,fresh=pcall(function()
+                    return RetryObserved(B.EnemyRetryDiagnosis());
+                end);
+                local stable=ok and attested and attested.token==request.token and
+                    attested.turn==request.turn and attested.coreRoster and
+                    attested.coreRoster.map==1 and
+                    barrier and barrier.action=="BEGIN_SPY_RETRY" and
+                    barrier.token==request.token and barrier.turn==request.turn and
+                    barrier.attacker==request.payload.Attacker and
+                    Game:GetProperty(RETRY)==nil and
+                    Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")~=nil;
+                if stable then
+                    for _,field in ipairs(CAPACITY_RETRY_FIELDS) do
+                        if fresh[field]~=request.payload[field] or
+                            fresh[field]~=attested.observed[field] then
+                            stable=false; break;
+                        end
+                    end
+                end
+                if not stable then
+                    B.lastAction="REJECTED_BEGIN_SPY_RETRY";
+                    Log("ENEMY_SPY_RETRY_REOBSERVATION_REJECTED",
+                        {error=not ok and tostring(fresh) or "changed native observation",
+                            token=request.token,attested=attested});
+                    verification=nil;
+                    return;
+                end
+                fresh.OriginalToken=request.token;
+                verification=EnemySyncRequest("FINALIZE_SPY_RETRY",fresh);
+                verification.publicAction="BEGIN_SPY_RETRY";
+                B.lastAction="ATTESTED_BEGIN_SPY_RETRY";
+                return;
+            end
             if request.classify then
                 if not request.classify.read then
                     local intent=Game:GetProperty("JAC_BOUNDARY_GOV_CLASSIFY_INTENT");
@@ -3602,12 +3671,20 @@ ContextPtr:SetUpdate(function()
             elseif request.action=="CAPTURE_ENEMY" then
                 local baseline=Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY");
                 accepted=baseline and c and baseline.remaining==request.payload.Neutralized;
-            elseif request.action=="BEGIN_SPY_RETRY" then
+            elseif request.action=="BEGIN_SPY_RETRY" or
+                request.action=="FINALIZE_SPY_RETRY" then
                 local retry=Game:GetProperty(RETRY);
+                local marker=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
                 accepted=retry and retry.current==2 and retry.mode==request.payload.Mode and
                     retry.archive and retry.archive.spyID==request.payload.SpyID and
                     retry.archive.eventID==request.payload.EventID and
-                    Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")==nil;
+                    Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION")==nil and
+                    (request.action~="FINALIZE_SPY_RETRY" or
+                        (marker and marker.action=="FINALIZE_SPY_RETRY" and
+                         marker.token==request.token and marker.turn==request.turn and
+                         not Game:GetProperty(RETRY_PENDING) and retry.attestation and
+                         retry.attestation.finalToken==request.token and
+                         retry.attestation.initialToken==request.payload.OriginalToken));
             elseif request.action=="PROGRESS_CAPACITY" then
                 local progress=Game:GetProperty("JAC_BOUNDARY_CAPACITY_PROGRESS");
                 local step=progress and progress.steps and
@@ -3636,7 +3713,8 @@ ContextPtr:SetUpdate(function()
                     marker.districtID==request.payload.DistrictID and
                     marker.memberKey==request.payload.MemberKey;
             end
-            B.lastAction=(accepted and "ACCEPTED_" or "REJECTED_")..request.action;
+            B.lastAction=(accepted and "ACCEPTED_" or "REJECTED_")..
+                (request.publicAction or request.action);
             Log("ENEMY_SYNC_ACCEPTANCE",{action=request.action,accepted=accepted,
                 token=request.token,turn=request.turn,frame=request.payload.Frame,
                 publishEpoch=request.payload.PublishEpoch});
