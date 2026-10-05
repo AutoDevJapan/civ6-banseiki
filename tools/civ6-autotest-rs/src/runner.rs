@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
+pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
     fn startup_cancel_check(&mut self) -> Result<()> {
@@ -1418,21 +1418,16 @@ impl Runner {
             scenario::SessionType::Hotseat.guard_code(),
             self.budget(deadline, 5.0)?,
         )?;
-        self.lua(
-            "PlayerChange",
-            &format!(
-                "JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG = {}\n{}return true",
-                require_dialog,
-                if require_dialog {
-                    "JAC_AUTOTEST_HOTSEAT_CONFIRMATION = nil\n"
-                } else {
-                    ""
-                }
-            ),
-            self.budget(deadline, 5.0)?,
-        )?;
+        if require_dialog {
+            self.lua(
+                "PlayerChange",
+                "JAC_AUTOTEST_HOTSEAT_CONFIRMATION = nil\nreturn true",
+                self.budget(deadline, 5.0)?,
+            )?;
+        }
+        let code = format!("local requireDialog = {require_dialog}\n{HOTSEAT_START_TURN_CODE}");
         self.wait(
-            &json!({"type":"lua","state_name":"PlayerChange","code":HOTSEAT_START_TURN_CODE}),
+            &json!({"type":"lua","state_name":"PlayerChange","code":code}),
             self.remaining(deadline)?,
             false,
         )

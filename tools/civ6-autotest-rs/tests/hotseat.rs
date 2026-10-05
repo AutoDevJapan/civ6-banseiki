@@ -185,6 +185,8 @@ fn configure_routes_the_explicit_session_mode() {
 #[test]
 fn start_turn_requires_an_active_human_and_an_unpaused_game() {
     use civ6_autotest_rs::runner::HOTSEAT_START_TURN_CODE;
+    let relaxed = format!("local requireDialog = false\n{HOTSEAT_START_TURN_CODE}");
+    let strict = format!("local requireDialog = true\n{HOTSEAT_START_TURN_CODE}");
     let lua = Lua::new();
     lua.load(
         r#"
@@ -200,32 +202,34 @@ fn start_turn_requires_an_active_human_and_an_unpaused_game() {
     .exec()
     .unwrap();
     assert!(
-        !lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap(),
+        !lua.load(&relaxed).eval::<bool>().unwrap(),
         "hidden paused screen must not pass"
     );
     for state in ["paused=false; active=false", "active=true; human=false"] {
         lua.load(state).exec().unwrap();
-        assert!(!lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+        assert!(!lua.load(&relaxed).eval::<bool>().unwrap());
     }
     lua.load("human=true; active=true; paused=true; hidden=false; password='secret'")
         .exec()
         .unwrap();
-    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().is_err());
+    assert!(lua.load(&relaxed).eval::<bool>().is_err());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 0);
     lua.load("password=''").exec().unwrap();
-    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert!(lua.load(&relaxed).eval::<bool>().unwrap());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
-    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert!(lua.load(&relaxed).eval::<bool>().unwrap());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 1);
-    lua.load("JAC_AUTOTEST_HOTSEAT_REQUIRE_DIALOG=true; JAC_AUTOTEST_HOTSEAT_CONFIRMATION=nil; hidden=true; paused=false").exec().unwrap();
+    lua.load("JAC_AUTOTEST_HOTSEAT_CONFIRMATION=nil; hidden=true; paused=false")
+        .exec()
+        .unwrap();
     assert!(
-        !lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap(),
+        !lua.load(&strict).eval::<bool>().unwrap(),
         "unobserved hidden dialog must not pass after load"
     );
     lua.load("hidden=false; paused=true").exec().unwrap();
-    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert!(lua.load(&strict).eval::<bool>().unwrap());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 2);
-    assert!(lua.load(HOTSEAT_START_TURN_CODE).eval::<bool>().unwrap());
+    assert!(lua.load(&strict).eval::<bool>().unwrap());
     assert_eq!(lua.globals().get::<i64>("presses").unwrap(), 2);
 }
 
