@@ -130,3 +130,60 @@ fn test_state_changing_lua_is_not_replayed() {
     );
     assert_eq!(h.calls().len(), 1);
 }
+
+#[test]
+fn options_state_lookup_recovers_after_both_socket_attempts_fail() {
+    let mut attempts = 0;
+    let fake = FakeBackend::new().states(move || {
+        attempts += 1;
+        if attempts <= 2 {
+            Err(Error::tuner("No reply to LSQ from FireTuner"))
+        } else {
+            Ok(vec!["InGame".into()])
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    assert!(!h.runner.close_options_menu(60.0).unwrap());
+    assert_eq!(h.events().iter().filter(|e| *e == "states").count(), 3);
+    assert_eq!(h.clock.at(), 0.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn options_state_lookup_respects_shorter_step_deadline() {
+    let fake = FakeBackend::new().states(|| Err(Error::tuner("no LSQ reply")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(3.0).unwrap_err().kind,
+        ErrorKind::Tuner
+    );
+    assert_eq!(h.clock.at(), 1.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn options_state_lookup_is_bounded_even_in_a_three_hour_step() {
+    let fake = FakeBackend::new().states(|| Err(Error::tuner("no LSQ reply")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(10800.0).unwrap_err().kind,
+        ErrorKind::Tuner
+    );
+    assert_eq!(h.clock.at(), 27.5);
+    assert!(h.calls().is_empty());
+}
+
+#[test]
+fn options_close_with_lost_acknowledgement_is_not_replayed() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGameTopOptionsMenu".into()]))
+        .lua(|_, _| Err(Error::unknown("OnReturn acknowledgement lost")));
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.close_options_menu(60.0).unwrap_err().kind,
+        ErrorKind::LuaResponseUnknown
+    );
+    assert_eq!(h.calls().len(), 1);
+    assert!(h.calls()[0].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(h.clock.at(), 0.0);
+}

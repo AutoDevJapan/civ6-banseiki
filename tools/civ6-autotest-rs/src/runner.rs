@@ -654,9 +654,12 @@ impl Runner {
         Ok(!closed.is_empty())
     }
     pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
-        let budget = self.budget(deadline, 5.0)?;
-        if !self
-            .states(budget)?
+        // A busy AI turn can outlive one five-second state lookup. Retry only
+        // this read; never replay OnReturn after an unacknowledged Lua call.
+        let query_deadline = deadline.min(self.clock.now() + 30.0);
+        let states =
+            self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
+        if !states
             .iter()
             .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
         {
