@@ -1,5 +1,5 @@
 diff --git a/src/chain.rs b/src/chain.rs
-index 71024c31..01c48dea 100644
+index 71024c31..c682b2b4 100644
 --- a/src/chain.rs
 +++ b/src/chain.rs
 @@ -7,7 +7,7 @@ use serde_json::json;
@@ -11,20 +11,19 @@ index 71024c31..01c48dea 100644
      sync::atomic::{AtomicU64, Ordering},
      time::{SystemTime, UNIX_EPOCH},
  };
-@@ -724,6 +724,71 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+@@ -724,6 +724,106 @@ pub fn main(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
      main_owned(r, p, a, None)
  }
  
-+fn prepare_amd_trial(p: &Paths) -> Result<(PathBuf, Vec<u8>, Vec<u8>), String> {
++fn prepare_amd_trial(p: &Paths) -> Result<(PathBuf, Vec<u8>, Vec<u8>, PathBuf), String> {
 +    let options = p
 +        .profile
 +        .join("AppData/Local/Firaxis Games/Sid Meier's Civilization VI/AppOptions.txt");
 +    let original = fs::read(&options).map_err(|e| format!("read AppOptions: {e}"))?;
 +    let modified = replace_nvidia_with_amd(&original)?;
-+    let backup = PathBuf::from(format!(
-+        "D:/CC/Work/civ6-todo974-igpu/AppOptions.before-{}",
-+        std::process::id()
-+    ));
++    let backup_dir = p.here.join("startup-pr86-amd");
++    fs::create_dir_all(&backup_dir).map_err(|e| format!("create backup directory: {e}"))?;
++    let backup = backup_dir.join(format!("AppOptions.before-{}.bin", std::process::id()));
 +    let mut file = OpenOptions::new()
 +        .create_new(true)
 +        .write(true)
@@ -34,7 +33,7 @@ index 71024c31..01c48dea 100644
 +        .map_err(|e| format!("write AppOptions backup: {e}"))?;
 +    file.sync_all()
 +        .map_err(|e| format!("flush AppOptions backup: {e}"))?;
-+    Ok((options, original, modified))
++    Ok((options, original, modified, backup))
 +}
 +
 +fn replace_nvidia_with_amd(original: &[u8]) -> Result<Vec<u8>, String> {
@@ -61,7 +60,12 @@ index 71024c31..01c48dea 100644
 +
 +#[cfg(test)]
 +mod adapter_trial_tests {
-+    use super::replace_nvidia_with_amd;
++    use super::{prepare_amd_trial, replace_nvidia_with_amd};
++    use crate::Paths;
++    use std::{
++        fs,
++        time::{SystemTime, UNIX_EPOCH},
++    };
 +
 +    #[test]
 +    fn changes_only_the_exact_line_and_keeps_line_endings() {
@@ -78,12 +82,43 @@ index 71024c31..01c48dea 100644
 +        assert!(replace_nvidia_with_amd(b"DeviceID 5056\n").is_err());
 +        assert!(replace_nvidia_with_amd(b"DeviceID 11141\nDeviceID 11141\n").is_err());
 +    }
++
++    #[test]
++    fn backs_up_actual_bytes_inside_the_tool_directory_before_mutation() {
++        let nonce = SystemTime::now()
++            .duration_since(UNIX_EPOCH)
++            .unwrap()
++            .as_nanos();
++        let root = std::env::temp_dir().join(format!("todo974-amd-{nonce}"));
++        let mut paths = Paths::default();
++        paths.here = root.join("tool");
++        paths.profile = root.join("user");
++        let options = paths
++            .profile
++            .join("AppData/Local/Firaxis Games/Sid Meier's Civilization VI/AppOptions.txt");
++        fs::create_dir_all(options.parent().unwrap()).unwrap();
++        let source = b"Version 10\r\nDeviceID 11141\r\nFullScreen 0\r\n";
++        fs::write(&options, source).unwrap();
++        let (selected, original, modified, backup) = prepare_amd_trial(&paths).unwrap();
++        assert_eq!(selected, options);
++        assert_eq!(original.as_slice(), source);
++        assert_eq!(fs::read(&backup).unwrap().as_slice(), source);
++        assert_eq!(
++            backup.parent().unwrap(),
++            paths.here.join("startup-pr86-amd")
++        );
++        assert!(modified
++            .windows(b"DeviceID 5056".len())
++            .any(|w| w == b"DeviceID 5056"));
++        assert_eq!(fs::read(&options).unwrap(), source);
++        fs::remove_dir_all(root).unwrap();
++    }
 +}
 +
  fn main_owned(
      r: &mut impl Runner,
      p: &Paths,
-@@ -739,6 +804,48 @@ fn main_owned(
+@@ -739,6 +839,48 @@ fn main_owned(
          if let Some(token) = token {
              yield_if_expired(r, p, token)?;
          }
@@ -132,7 +167,7 @@ index 71024c31..01c48dea 100644
          let (name, scenario) = item.split_once(':').ok_or("expected name:scenario.json")?;
          let command = Call::new(args(&[
              &path(p.here.join("ship.exe")),
-@@ -889,6 +996,21 @@ pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<b
+@@ -889,6 +1031,21 @@ pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<b
      Ok(true)
  }
  pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> {
@@ -154,7 +189,7 @@ index 71024c31..01c48dea 100644
      let mut owner = std::env::var("CODEX_JOB_ID")
          .ok()
          .filter(|s| !s.is_empty())
-@@ -905,14 +1027,23 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+@@ -905,14 +1062,23 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
          &owner,
          6.0 * 3600.0,
          is_long(
@@ -171,8 +206,8 @@ index 71024c31..01c48dea 100644
 -        main_owned(r, p, a, Some(&token))
 +        if amd_trial == 1 {
 +            close_civ6(r)?;
-+            let (options, original, modified) = prepare_amd_trial(p)?;
-+            original_options = Some((options.clone(), original));
++            let (options, original, modified, backup) = prepare_amd_trial(p)?;
++            original_options = Some((options.clone(), original, backup));
 +            fs::write(&options, modified).map_err(|e| format!("select AMD device: {e}"))?;
 +            r.print("AMD adapter trial: AppOptions DeviceID 5056 under Civ6 lock")?;
 +        }
@@ -180,12 +215,12 @@ index 71024c31..01c48dea 100644
      }))
      .unwrap_or_else(|_| Err("live chain panicked".into()));
      process::clear_interrupt_for_cleanup();
-@@ -946,8 +1077,30 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
+@@ -946,8 +1112,36 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String>
          };
          let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6(r)))
              .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
 -        let released = delete_owned_handle(file, &path, r, &token);
-+        let restored: Result<(), String> = if let Some((options, original)) =
++        let restored: Result<(), String> = if let Some((options, original, backup)) =
 +            original_options.as_ref()
 +        {
 +            if closed.is_err() {
@@ -196,6 +231,12 @@ index 71024c31..01c48dea 100644
 +                    Err("AppOptions was not restored byte for byte".into())
 +                } else {
 +                    r.print("AMD adapter trial: original AppOptions restored byte for byte")?;
++                    if let Err(e) = fs::remove_file(backup) {
++                        r.print(&format!(
++                            "AMD adapter trial backup retained at {}: {e}",
++                            backup.display()
++                        ))?;
++                    }
 +                    Ok(())
 +                }
 +            }
@@ -212,3 +253,42 @@ index 71024c31..01c48dea 100644
          released
      })();
      process::finish_cleanup();
+diff --git a/Cargo.toml b/Cargo.toml
+index 60fc43b0..3cf1c5bb 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -13,6 +13,10 @@ windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Sys
+ name = "live_chain"
+ path = "src/bin/live_chain.rs"
+ 
++[[bin]]
++name = "live_chain_pr86_amd"
++path = "src/bin/live_chain_pr86_amd.rs"
++
+ [[bin]]
+ name = "ship"
+ path = "src/bin/ship.rs"
+diff --git a/src/bin/live_chain_pr86_amd.rs b/src/bin/live_chain_pr86_amd.rs
+new file mode 100644
+index 00000000..912d0dce
+--- /dev/null
++++ b/src/bin/live_chain_pr86_amd.rs
+@@ -0,0 +1,18 @@
++fn main() {
++    cc_live::process::install_interrupt_handler();
++    let mut args = vec!["--adapter-trial-amd".to_owned()];
++    args.extend(std::env::args().skip(1));
++    let result = cc_live::chain::cli(
++        &mut cc_live::process::RealRunner,
++        &cc_live::Paths::default(),
++        &args,
++    );
++    match result {
++        Ok(code) => std::process::exit(cc_live::chain::python_cli_exit(code)),
++        Err(e) => {
++            use std::io::Write;
++            let _ = writeln!(std::io::stderr().lock(), "{e}");
++            std::process::exit(1);
++        }
++    }
++}
