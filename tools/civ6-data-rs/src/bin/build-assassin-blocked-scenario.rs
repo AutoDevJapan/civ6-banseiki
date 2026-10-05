@@ -548,6 +548,42 @@ end
         Ok(())
     }
     #[test]
+    fn recovery_accepts_native_positions_beyond_first_ring_and_rejects_off_map_rows() -> Result<()>
+    {
+        let data = build(&Repository::checked_in())?;
+        let recovery = data["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|step| step["code"].as_str())
+            .find(|code| code.contains("recovery did not create exactly one placed assassin"))
+            .unwrap();
+        for x in [5, 999999] {
+            let lua = Lua::new();
+            lua.load(format!(r#"
+local unit={{GetID=function() return 90 end,GetOwner=function() return 0 end,GetType=function() return 0 end,
+  GetX=function() return {x} end,GetY=function() return 0 end,GetDamage=function() return 0 end}}
+local s={{LastProducedUnit=90,LastCompletion=2,ProductionUnlock=12}}
+local t={{Actor=0,City=10,X=0,Y=0,CenterTerrain=1,CenterFeature=3,Plots={{}},Before={{}},AllReleased={{}},Released=1}}
+Game={{GetProperty=function() return t end,SetProperty=function() end,GetCurrentGameTurn=function() return 2 end}}
+Players={{[0]={{GetCities=function() return {{FindID=function() return {{GetX=function() return 0 end,GetY=function() return 0 end}} end}} end,
+  GetUnits=function() return {{Members=function() local once=false; return function()
+    if not once then once=true; return 90,unit end end end}} end}}}}
+Map={{GetPlot=function(px) if px==999999 then return nil end
+  return {{GetTerrainType=function() return 1 end,GetFeatureType=function() return 3 end}} end,
+  GetPlotDistance=function() return {x} end}}
+GameInfo={{Units={{ASSASSIN={{Index=0}}}}}}
+ExposedMembers={{JAC_Assassin={{State=function() return s end,IsAssassin=function() return true end,
+  UnitForPlayer=function() return 'ASSASSIN' end,Turn=function() return 2 end,PRODUCTION_LOCK=10,
+  Scale=function(v) return v end,StartProduction=function(actor,city)
+    assert(actor==0 and city==10); return false,'PRODUCTION_LOCK' end}}}}
+"#)).exec()?;
+            let result = lua.load(recovery).exec();
+            assert_eq!(result.is_ok(), x == 5, "{x}: {result:?}");
+        }
+        Ok(())
+    }
+    #[test]
     fn pending_check_rejects_premature_completion_and_leaked_units() -> Result<()> {
         let setup = r#"
 local s={Production={City=4,Start=1,Due=2}}
