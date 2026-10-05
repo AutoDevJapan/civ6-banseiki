@@ -1,0 +1,323 @@
+{
+  "name": "Assassin: real blocked spawn, pending save/load, native recovery and independent unit coordinates",
+  "judge_profile": "japan_map",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "7696e937-2044-4f3c-8e13-4e27632e2710",
+        "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7",
+        "403be889-1455-4de7-967b-ad54c0ff3431",
+        "fbb5219d-d7b9-4b31-884f-057f623476a0"
+      ],
+      "disable_ids": [
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "4785cfe4-8d9a-4deb-89ea-d2d566551fec",
+        "57a3af09-fb38-41da-b367-818de11a995c"
+      ]
+    },
+    {
+      "action": "configure",
+      "build_setup": true,
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "map_file": "{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map",
+      "map_size": "MAPSIZE_HUGE",
+      "speed": "GAMESPEED_STANDARD",
+      "seed": 620995,
+      "city_states": 0,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_DATE_TANEMUNE",
+          "civ": "CIVILIZATION_JAC_DATE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHINA_MORIKIYO",
+          "civ": "CIVILIZATION_JAC_ASHINA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HOJO_UJITSUNA",
+          "civ": "CIVILIZATION_JAC_HOJO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA",
+          "civ": "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_TAKEDA_NOBUTORA",
+          "civ": "CIVILIZATION_JAC_TAKEDA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_NAGAO_TAMEKAGE",
+          "civ": "CIVILIZATION_JAC_NAGAO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_IMAGAWA_UJITERU",
+          "civ": "CIVILIZATION_JAC_IMAGAWA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MATSUDAIRA_KIYOYASU",
+          "civ": "CIVILIZATION_JAC_MATSUDAIRA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASAKURA_TAKAKAGE",
+          "civ": "CIVILIZATION_JAC_ASAKURA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ASHIKAGA_YOSHIHARU",
+          "civ": "CIVILIZATION_JAC_ASHIKAGA",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MIYOSHI_NAGAYOSHI",
+          "civ": "CIVILIZATION_JAC_MIYOSHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_ROKKAKU_SADAYORI",
+          "civ": "CIVILIZATION_JAC_ROKKAKU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_HONGANJI_SHONYO",
+          "civ": "CIVILIZATION_JAC_HONGANJI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OUCHI_YOSHITAKA",
+          "civ": "CIVILIZATION_JAC_OUCHI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AMAGO_TSUNEHISA",
+          "civ": "CIVILIZATION_JAC_AMAGO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_MORI_MOTONARI",
+          "civ": "CIVILIZATION_JAC_MORI",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_CHOSOKABE_KUNICHIKA",
+          "civ": "CIVILIZATION_JAC_CHOSOKABE",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_OTOMO_YOSHIAKI",
+          "civ": "CIVILIZATION_JAC_OTOMO",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_SHIMAZU_TAKAHISA",
+          "civ": "CIVILIZATION_JAC_SHIMAZU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_RYUKYU_SHO_SEI",
+          "civ": "CIVILIZATION_JAC_RYUKYU",
+          "human": false
+        },
+        {
+          "leader": "LEADER_JAC_AINU_TARIKONA",
+          "civ": "CIVILIZATION_JAC_AINU",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "start_game",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nGame:SetProperty(R.TEST,1)\nlocal owner=Game.GetLocalPlayer(); assert(Players[owner]:IsHuman(),'human required')\nlocal city=Players[owner]:GetCities():GetCapitalCity(); assert(city,'capital missing')\nlocal plots={Map.GetPlot(city:GetX(),city:GetY())}\nfor _,p in ipairs(Map.GetAdjacentPlots(city:GetX(),city:GetY())) do plots[#plots+1]=p end\nassert(#plots==7,'complete radius-one footprint required')\nlocal rows={}\nfor _,p in ipairs(plots) do\n  local row={X=p:GetX(),Y=p:GetY()}\n  if not p:IsWater() and not p:IsImpassable() then\n    local blocker\n    for _,u in Players[owner]:GetUnits():Members() do\n      if u:GetX()==row.X and u:GetY()==row.Y and GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT' then\n        assert(not blocker,'stacked combat blockers'); blocker=u\n      end\n    end\n    if not blocker then\n      local had={}; for _,u in Players[owner]:GetUnits():Members() do had[u:GetID()]=true end\n      UnitManager.InitUnit(owner,'UNIT_WARRIOR',row.X,row.Y)\n      for _,u in Players[owner]:GetUnits():Members() do if not had[u:GetID()] then\n        assert(not blocker and u:GetType()==GameInfo.Units.UNIT_WARRIOR.Index,'ambiguous blocker creation'); blocker=u\n      end end\n    end\n    assert(blocker and blocker:GetX()==row.X and blocker:GetY()==row.Y,'blocker not on requested plot')\n    row.ID=blocker:GetID(); Trace('blocker',Row(blocker))\n  end\n  rows[#rows+1]=row\nend\nt={Actor=owner,City=city:GetID(),X=city:GetX(),Y=city:GetY(),Plots=rows,\n  Start=R.Turn(),Initial=R.State(owner),Before=Assassins(owner)}\nassert(next(t.Before)==nil,'fresh game already contains assassins')\nGame:SetProperty('JAC_ASN_BLOCKED_TEST',t); Blockers()\nreturn 'real combat units occupy every passable radius-one spawn plot'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_AssassinPanel",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\nassert(JAC_AssassinProduce(t.City),'training request not sent'); return 'training requested through UI'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 30,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n return R.State(t.Actor).Production~=nil"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nlocal s=R.State(t.Actor); assert(s.Production.City==t.City and s.Production.Start==t.Start,'wrong training')\nassert(s.Production.Turns>=20,'natural training below minimum')\nlocal ok,due=R.TestAdvanceDeadlines(t.Actor,{Training=true}); assert(ok,'deadline hook refused')\nt.Due=due; Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)\nreturn 'only the test deadline is shortened; native spawn and tick are unchanged'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\nt.Pending=Pending(); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t); return 'blocked spawn leaves training pending and lock unchanged'"
+    },
+    {
+      "action": "save",
+      "name": "JAC_ASSASSIN_BLOCKED_PENDING",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC_ASSASSIN_BLOCKED_PENDING",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\nassert(Same(Pending(),t.Pending),'pending state changed on load'); return 'saved pending training and real blockers survive load'"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nPending()\nfor _,p in ipairs(t.Plots) do if p.ID then\n  local u=Players[t.Actor]:GetUnits():FindID(p.ID); assert(u and u:GetID()==p.ID,'blocker identity changed')\n  UnitManager.Kill(u)\nend end\nt.Released=R.Turn(); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)\nreturn 'second blocked real tick verified; fixture blockers removed without touching training'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nlocal s=R.State(t.Actor); local count=0; local row\nfor _,u in Players[t.Actor]:GetUnits():Members() do if R.IsAssassin(u) then\n  count=count+1; row=Row(u); assert(not t.Before[tostring(row.ID)],'reused production id')\nend end\nassert(count==1 and row.ID==s.LastProducedUnit and row.X>=0 and row.Y>=0,'recovery did not create exactly one placed assassin')\nassert(Map.GetPlotDistance(t.X,t.Y,row.X,row.Y)<=1,'spawn beyond native radius one')\nassert(s.Production==nil and s.LastCompletion==R.Turn() and R.Turn()==t.Released+1,'wrong actual completion turn')\nassert(s.ProductionUnlock==s.LastCompletion+R.Scale(R.PRODUCTION_LOCK),'lock did not start at actual completion')\nt.Complete=s; t.Unit=row; Trace('gameplay-before-save',row); Game:SetProperty('JAC_ASN_BLOCKED_TEST',t)\nlocal ok,why=R.StartProduction(t.Actor,t.City); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')\nreturn 'one native placed assassin; full lock starts only at actual recovery'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nlocal u=Players[t.Actor]:GetUnits():FindID(t.Unit.ID); local row=Row(u)\nassert(Same(row,t.Unit),'independent UI coordinates differ from gameplay')\nTrace('ui-before-save',row); return 'native UI independently matches production id, type, position and damage'\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC_ASSASSIN_BLOCKED_RECOVERED",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 60
+    },
+    {
+      "action": "load",
+      "name": "JAC_ASSASSIN_BLOCKED_RECOVERED",
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nassert(Same(R.State(t.Actor),t.Complete),'completion state changed after load')\nlocal row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'gameplay unit changed after load')\nTrace('gameplay-after-load',row); return 'completed state and same native unit restored unchanged'\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nlocal row=Row(Players[t.Actor]:GetUnits():FindID(t.Unit.ID)); assert(Same(row,t.Unit),'independent UI unit changed after load')\nTrace('ui-after-load',row); return 'independent UI restores the same id, owner, type, coordinates and damage'\n"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Players[Game.GetLocalPlayer()]\n        if not p or not p:IsTurnActive() then return false end\n        if not JAC_ASN_TRACE then\n          JAC_ASN_TRACE=true\n          Events.UnitDamageChanged.Add(function(owner,id,damage)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] damage turn='..Game.GetCurrentGameTurn()..' id='..id..' damage='..damage) end\n          end)\n          Events.UnitRemovedFromMap.Add(function(owner,id)\n            local t=Game:GetProperty('JAC_ASN_LIVE_TEST')\n            if t and owner==t.Actor then print('[JAC_ASN_TRACE] removed turn='..Game.GetCurrentGameTurn()..' id='..id) end\n          end)\n        end\n        return true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')\nlocal t=Game:GetProperty('JAC_ASN_BLOCKED_TEST')\nlocal function Same(a,b)\n  if type(a)~=type(b) then return false end\n  if type(a)~='table' then return a==b end\n  for k,v in pairs(a) do if not Same(v,b[k]) then return false end end\n  for k,v in pairs(b) do if not Same(v,a[k]) then return false end end\n  return true\nend\nlocal function Row(u)\n  assert(u and u:GetID()>=0,'unit missing')\n  return {ID=u:GetID(),Owner=u:GetOwner(),Type=u:GetType(),X=u:GetX(),Y=u:GetY(),Damage=u:GetDamage()}\nend\nlocal function Trace(label,row)\n  print('[JAC_ASN_BLOCKED] '..label..' turn='..Game.GetCurrentGameTurn()..\n    ' id='..row.ID..' owner='..row.Owner..' type='..row.Type..' xy='..row.X..','..row.Y..' damage='..row.Damage)\nend\nlocal function Assassins(owner)\n  local ids={}; for _,u in Players[owner]:GetUnits():Members() do\n    if R.IsAssassin(u) then ids[tostring(u:GetID())]=Row(u) end\n  end; return ids\nend\nlocal function Blockers()\n  for _,p in ipairs(t.Plots) do\n    local plot=Map.GetPlot(p.X,p.Y); assert(plot,'fixture plot missing')\n    if p.ID then\n      local u=Players[t.Actor]:GetUnits():FindID(p.ID)\n      assert(u and u:GetID()==p.ID and u:GetOwner()==t.Actor and u:GetX()==p.X and u:GetY()==p.Y,\n        'blocking unit moved or disappeared')\n      assert(GameInfo.Units[u:GetType()].FormationClass=='FORMATION_CLASS_LAND_COMBAT','wrong blocker formation')\n    else assert(plot:IsWater() or plot:IsImpassable(),'spawnable plot left unblocked') end\n  end\nend\nlocal function Pending()\n  Blockers()\n  local s=R.State(t.Actor)\n  assert(R.Turn()>=t.Due and Game:GetProperty('JAC_ASN_TICK')==R.Turn(),'completion tick not reached')\n  assert(s.Production and s.Production.City==t.City and s.Production.Start==t.Start and s.Production.Due<=R.Turn(),\n    'blocked training disappeared or restarted')\n  assert(s.LastCompletion==t.Initial.LastCompletion and s.ProductionUnlock==t.Initial.ProductionUnlock and\n    s.LastProducedUnit==t.Initial.LastProducedUnit,'blocked spawn started completion or lock')\n  assert(Same(Assassins(t.Actor),t.Before),'blocked spawn leaked an assassin')\n  print('[JAC_ASN_BLOCKED] pending turn='..R.Turn()..' due='..s.Production.Due..' completion='..\n    tostring(s.LastCompletion)..' unlock='..tostring(s.ProductionUnlock))\n  return s\nend\n\n\nassert(Same(R.State(t.Actor),t.Complete),'next turn duplicated completion or extended lock')\nlocal ids=Assassins(t.Actor); local count=0; for id in pairs(ids) do count=count+1; assert(tonumber(id)==t.Unit.ID,'duplicate assassin') end\nassert(count==1,'recovered assassin lost'); Trace('next-turn',ids[tostring(t.Unit.ID)])\nGame:SetProperty(R.TEST,nil)\nlocal ok,why=R.TestAdvanceDeadlines(t.Actor); assert(not ok and why=='TEST_MODE_OFF','test hook remains active')\nreturn 'next real turn preserves one completion and original lock; test hook disabled'\n"
+    }
+  ]
+}
