@@ -1450,7 +1450,11 @@ impl Runner {
                 let ids = strings(&step["ids"]);
                 let disabled = self.lua(
                     "FrontEnd",
-                    &scenario::enable_mods_code(&ids, &strings(&step["disable_ids"])),
+                    &scenario::enable_mods_code_with_scope(
+                        &ids,
+                        &strings(&step["disable_ids"]),
+                        step["exclusive_user_mods"] == true,
+                    ),
                     self.budget(deadline, 5.0)?,
                 )?;
                 Ok(format!(
