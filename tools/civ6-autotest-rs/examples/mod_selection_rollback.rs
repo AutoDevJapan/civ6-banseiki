@@ -54,6 +54,10 @@ const HARNESS: &str = r#"
 if not UI.IsInFrontEnd() then error('main menu required') end
 JAC_MOD_ROLLBACK_241 = nil
 local nativeEnable, nativeDisable = Modding.EnableMod, Modding.DisableMod
+if type(nativeEnable) ~= 'function' or type(nativeDisable) ~= 'function'
+  or type(GameConfiguration.UpdateEnabledMods) ~= 'function' then
+  error('required native MOD API missing before selection changes')
+end
 local function resetApis()
   local errors = {}
   local a, ae = pcall(function()
@@ -343,6 +347,24 @@ mod tests {
         assert_eq!(changes.raw_len(), 0);
         let changes: Table = lua.globals().get("DISABLED").unwrap();
         assert_eq!(changes.raw_len(), 0);
+    }
+
+    #[test]
+    fn missing_native_api_is_rejected_before_mod_selection_changes() {
+        for removed in [
+            "Modding.EnableMod = nil",
+            "Modding.DisableMod = nil",
+            "GameConfiguration.UpdateEnabledMods = nil",
+        ] {
+            let lua = fixture(0);
+            lua.load(removed).exec().unwrap();
+            let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+            assert!(failure.contains("required native MOD API missing"));
+            let changes: Table = lua.globals().get("ENABLED").unwrap();
+            assert_eq!(changes.raw_len(), 0);
+            let changes: Table = lua.globals().get("DISABLED").unwrap();
+            assert_eq!(changes.raw_len(), 0);
+        }
     }
 
     #[test]
