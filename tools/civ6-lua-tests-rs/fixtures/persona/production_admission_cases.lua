@@ -63,7 +63,9 @@ function PRODUCTION_ADMISSION_CASES.official_payments_and_core_only_final_state(
         {[PlayerOperations.PARAM_GOVERNOR_TYPE]=22})
     DRAIN()
     ExposedMembers.JAC_LeaderPersona.Reconcile()
-    expect(false, gate(2, 22), 'one of two official titles is not full payment')
+    expect(true, gate(2, 22), 'native appointment leaves one affordable title reserved')
+    expect('EVOLVING',Game:GetProperty('JAC_PERSONA_'..leader..'_STATE'),
+        'partial payment is not finalization or paid assignment')
     local row = GameInfo.JAC_LeaderPersonas[leader]
     local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. '_TITLE_1']
     UI.RequestPlayerOperation(2, PlayerOperations.PROMOTE_GOVERNOR,
@@ -107,6 +109,66 @@ function PRODUCTION_ADMISSION_CASES.cost_three_needs_two_ordered_official_promot
     FIRE('JAC_LeaderPersonaFinalize', 1, {Leader=row.LeaderType})
     expect('EVOLVED', Players[1]:GetProperty('JAC_PERSONA_RESULT'), 'cost-three Finalize')
     expect(true, gate(1, 21), 'Core confirms both ordered promotions')
+end
+
+function PRODUCTION_ADMISSION_CASES.partial_native_payment_reserves_only_each_persons_unpaid_titles()
+    local leader='LEADER_JAC_ODA_NOBUHIDE'
+    GameInfo.JAC_LeaderPersonas[leader].EvolutionCost=3
+    FIRE('JAC_LeaderPersonaJoin',1,{Source=0})
+    FIRE('JAC_LeaderPersonaJoin',1,{Source=2})
+    Players[1].points=4
+    FIRE('JAC_LeaderPersonaEvolve',1,{Leader=leader})
+    FIRE('JAC_LeaderPersonaEvolve',1,{Leader=ASHINA})
+    UI.RequestPlayerOperation(1,PlayerOperations.APPOINT_GOVERNOR,
+        {[PlayerOperations.PARAM_GOVERNOR_TYPE]=21})
+    DRAIN()
+    local row=GameInfo.JAC_LeaderPersonas[leader]
+    local first=GameInfo.GovernorPromotions[row.BasePromotionType..'_TITLE_1']
+    UI.RequestPlayerOperation(1,PlayerOperations.PROMOTE_GOVERNOR,
+        {[PlayerOperations.PARAM_GOVERNOR_TYPE]=21,
+         [PlayerOperations.PARAM_GOVERNOR_PROMOTION_TYPE]=first.Index})
+    DRAIN()
+    expect(2,Players[1].spent,'appointment and first native promotion paid')
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(true,gate(1,4),'two remaining titles fund both remaining reservations')
+    expect(true,gate(1,21),'partially paid person keeps its remaining reservation')
+    Players[1].spent=1
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false,gate(1,4),'native person payments cannot exceed official spending')
+    Players[1].spent=3
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false,gate(1,4),'unattributed spend cannot replace the other persons payment')
+    Players[1].spent=2
+    local core=Players[1].GetGovernors
+    local ui=ExposedMembers.JAC_LeaderPersonaNativeRead
+    local observed={[leader]=ui(1,leader),[ASHINA]=ui(1,ASHINA)}
+    ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,person)
+        if owner==1 and observed[person] then return observed[person] end
+        return ui(owner,person)
+    end
+    Players[1].GetGovernors=function()
+        local g=core(); g.GetGovernor=nil; return g
+    end
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false,gate(1,4),'missing Core identity cannot credit partial payment')
+    Players[1].GetGovernors=core
+    ExposedMembers.JAC_LeaderPersonaNativeRead=ui
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(true,gate(1,4),'fresh native proof restores the remaining reservation')
+    local governor=core():GetGovernor(GameInfo.Governors[row.GovernorType].Hash)
+    local promotionRead=governor.HasPromotion
+    local second=GameInfo.GovernorPromotions[row.BasePromotionType..'_TITLE_2']
+    governor.HasPromotion=function(self,hash)
+        if hash==first.Hash then return false end
+        if hash==second.Hash then return true end
+        return promotionRead(self,hash)
+    end
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(false,gate(1,4),'out-of-order native payments cannot reduce a reservation')
+    governor.HasPromotion=promotionRead
+    assert(loadstring(GAMEPLAY_SOURCE))()
+    ExposedMembers.JAC_LeaderPersona.Reconcile()
+    expect(true,gate(1,4),'reload recomputes payments for both people from native state')
 end
 
 function PRODUCTION_ADMISSION_CASES.unchanged_turns_do_not_republish_numeric_keys()

@@ -59,6 +59,11 @@ fn cost_three_needs_two_ordered_official_promotions() {
 }
 
 #[test]
+fn partial_native_payment_reserves_only_each_persons_unpaid_titles() {
+    run_case("partial_native_payment_reserves_only_each_persons_unpaid_titles");
+}
+
+#[test]
 fn unchanged_turns_do_not_republish_numeric_keys() {
     run_case("unchanged_turns_do_not_republish_numeric_keys");
 }

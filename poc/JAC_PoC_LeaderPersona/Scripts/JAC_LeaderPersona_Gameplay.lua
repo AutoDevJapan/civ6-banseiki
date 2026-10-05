@@ -133,43 +133,60 @@ local function OfficialTitleBalance(owner)
     return earned - spent, spent;
 end
 
-local function ReservedFullCost(owner, rows)
-    local total = 0;
+local function CorePaymentRead(owner, row, cost)
+    -- Read per-person native payment; aggregate spending is never attribution.
+    -- The second result distinguishes absent bindings from invalid native data.
+    local p = Player(owner, true);
+    local governors = p and p:GetGovernors();
+    local def = GameInfo.Governors[row.GovernorType];
+    local base = GameInfo.GovernorPromotions[row.BasePromotionType];
+    if not governors or not def or not base or
+       type(governors.HasGovernor) ~= "function" or
+       type(governors.GetGovernor) ~= "function" then return nil, false; end
+    local ok, governor = pcall(governors.GetGovernor, governors, def.Hash);
+    local present, has = pcall(governors.HasGovernor, governors, def.Hash);
+    if not ok or not present or type(has) ~= "boolean" then return nil, true; end
+    if not has then
+        if governor ~= nil then return nil, true; end
+        return 0, true;
+    end
+    if not governor or type(governor.HasPromotion) ~= "function" then return nil, true; end
+    local baseOK, baseOwned = pcall(governor.HasPromotion, governor, base.Hash);
+    if not baseOK or baseOwned ~= true then return nil, true; end
+    local paid, missing = 1, false;
+    for step = 1, cost - 1 do
+        local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
+        if not payment then return nil, true; end
+        local paymentOK, owned = pcall(governor.HasPromotion, governor, payment.Hash);
+        if not paymentOK or type(owned) ~= "boolean" or (missing and owned) then return nil, true; end
+        if owned then paid = paid + 1; else missing = true; end
+    end
+    return paid, true;
+end
+
+local function ReservedOutstandingCost(owner, rows, spent)
+    local total, attributed = 0, 0;
     for _,entry in ipairs(rows) do
         local row = entry.row;
         if Get(row.LeaderType, "OWNER") == owner and Get(row.LeaderType, "STATE") == "EVOLVING" then
             local cost = Get(row.LeaderType, "EVOLUTION_COST");
             if type(cost) ~= "number" or cost % 1 ~= 0 or cost < 1 or cost > 3 or
                cost ~= row.EvolutionCost then return nil; end
-            total = total + cost;
+            local paid, readable = CorePaymentRead(owner, row, cost);
+            if readable and paid == nil then return nil; end
+            -- Without native identity proof, retain the whole reservation.
+            paid = paid or 0;
+            total = total + cost - paid;
+            attributed = attributed + paid;
         end
     end
+    if spent < attributed then return nil; end
     return total;
 end
 
 local function CorePaymentComplete(owner, row, cost, spent)
-    -- GameCore availability differs from UI. If its official Governor getter
-    -- is absent, a finalized record cannot manufacture an authorization.
-    local p = Player(owner, true);
-    local governors = p and p:GetGovernors();
-    local def = GameInfo.Governors[row.GovernorType];
-    local base = GameInfo.GovernorPromotions[row.BasePromotionType];
-    if not governors or not def or not base or spent < cost or
-       type(governors.HasGovernor) ~= "function" or
-       type(governors.GetGovernor) ~= "function" then return false; end
-    local ok, governor = pcall(governors.GetGovernor, governors, def.Hash);
-    local present, has = pcall(governors.HasGovernor, governors, def.Hash);
-    if not ok or not present or has ~= true or not governor or
-       type(governor.HasPromotion) ~= "function" then return false; end
-    local baseOK, baseOwned = pcall(governor.HasPromotion, governor, base.Hash);
-    if not baseOK or baseOwned ~= true then return false; end
-    for step = 1, cost - 1 do
-        local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
-        if not payment then return false; end
-        local paymentOK, paid = pcall(governor.HasPromotion, governor, payment.Hash);
-        if not paymentOK or paid ~= true then return false; end
-    end
-    return true;
+    local paid = CorePaymentRead(owner, row, cost);
+    return spent >= cost and paid == cost;
 end
 
 -- Read-only diagnostic for the parent's bounded Gameplay probe. API presence
@@ -218,7 +235,7 @@ local function AdmissionAllowed(owner, row, rows, forceClosed)
     local person, ready, count = FindPerson(owner, row);
     local state = Get(row.LeaderType, "STATE");
     if state == "EVOLVING" then
-        local reserved = ReservedFullCost(owner, rows);
+        local reserved = ReservedOutstandingCost(owner, rows, spent);
         return ready and person ~= nil and count == 1 and
             Get(row.LeaderType, "UNIT") == person:GetID() and
             reserved ~= nil and available >= reserved;
