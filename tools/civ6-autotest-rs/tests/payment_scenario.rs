@@ -4,6 +4,107 @@ use mlua::Lua;
 use serde_json::Value;
 use support_fixture::{compile_lua, scenario};
 
+fn closed_catalog() -> Lua {
+    let lua = Lua::new();
+    lua.load(
+        r#"
+FAULT=''; READS=0; PERMITTED={}; PROPS={JAC_PERSONA_ADMISSION_SCHEMA_V1=3}
+Game={GetProperty=function(_,key) return PROPS[key] end}
+local rows,defs,ids={},{},{}
+for n=1,22 do
+ rows[n]={LeaderType='L'..n,GovernorType='G'..n}; defs['G'..n]={Index=n+9}; ids[n]=n-1
+end
+ROWS=rows; DEFS=defs; IDS=ids
+GameInfo={Governors=defs,JAC_LeaderPersonas=function()
+ local n=0; return function() n=n+1; return rows[n] end
+end}
+PlayerManager={GetAliveMajorIDs=function() return ids end}
+Players={}
+for id=0,21 do
+ local owner=id; local reset=false; local closed,acked={},{}
+ Players[id]={GetProperty=function(_,key)
+  READS=READS+1
+  if key==902000+owner then
+   assert(not reset); reset=true
+   if FAULT=='reset' then return nil end
+   return true
+  end
+  assert(reset,'natural Core receiver was not bound')
+  if key>=903010 and key<=903031 then closed[key-903000]=true; return true end
+  if key>=901010 and key<=901031 then
+   assert(closed[key-901000],'close was not read before ACK'); acked[key-901000]=true
+   return FAULT=='allow' and true or false
+  end
+  if key>=900010 and key<=900031 then
+   assert(acked[key-900000],'typed false was not read before manifest')
+   if FAULT=='manifest' then return nil end
+   PERMITTED[owner..':'..(key-900000)]=false
+   return true
+  end
+  error('unexpected property')
+ end,SetProperty=function() error('diagnostic must not publish any property') end}
+end
+"#,
+    )
+    .exec()
+    .unwrap();
+    lua
+}
+
+#[test]
+fn initial_core_catalog_is_observed_closed_before_the_first_native_query() {
+    let lua = closed_catalog();
+    let result: String = lua
+        .load(payment_scenario::READ_CLOSED_ADMISSION)
+        .eval()
+        .unwrap();
+    assert!(result.contains("484 existing closed Core qualifications"));
+    assert_eq!(lua.globals().get::<usize>("READS").unwrap(), 1474);
+    lua.load("local n=0; for _,allowed in pairs(PERMITTED) do assert(allowed==false); n=n+1 end; assert(n==484)").exec().unwrap();
+    for cost in [2, 3] {
+        let data = payment_scenario::build(&scenario("leader-persona-15km.json"), cost).unwrap();
+        let steps = data["steps"].as_array().unwrap();
+        let installed = steps
+            .iter()
+            .position(|s| s["action"] == "start_native_production_admission")
+            .unwrap();
+        assert_eq!(steps[installed + 1]["state_name"], "GameCore_Tuner");
+        assert_eq!(
+            steps[installed + 1]["code"],
+            payment_scenario::READ_CLOSED_ADMISSION
+        );
+        assert!(steps[installed + 2]["code"]
+            .as_str()
+            .unwrap()
+            .contains("CanEverAppointGovernor"));
+    }
+}
+
+#[test]
+fn catalog_bootstrap_rejects_stale_permissions_missing_owners_and_untyped_records() {
+    for invalid in [
+        "FAULT='reset'",
+        "FAULT='allow'",
+        "FAULT='manifest'",
+        "Players[21]=nil",
+        "IDS[22]=nil",
+        "IDS[22]=IDS[21]",
+        "DEFS.G22.Index=DEFS.G21.Index",
+        "ROWS[22]=nil",
+        "PROPS.JAC_PERSONA_ADMISSION_SCHEMA_V1=2",
+        "PROPS.JAC_PERSONA_L1_OWNER=0",
+    ] {
+        let lua = closed_catalog();
+        lua.load(invalid).exec().unwrap();
+        assert!(
+            lua.load(payment_scenario::READ_CLOSED_ADMISSION)
+                .eval::<String>()
+                .is_err(),
+            "{invalid}"
+        );
+    }
+}
+
 fn model(p: Person, paid: u8, finalized: bool) -> Lua {
     let lua = Lua::new();
     lua.load(format!(r#"

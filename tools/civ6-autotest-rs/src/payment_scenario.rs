@@ -6,6 +6,42 @@ use serde_json::{json, Value};
 
 pub const BASELINE: &str = "JAC_TEST1720_PAYMENT_BASELINE";
 
+/// The diagnostic installs its observer after Gameplay's initialization. Replay
+/// only existing closed properties through natural Core reads, before querying
+/// CanEver. Unchanged values are not republished by the normal reconciliation.
+/// This never writes a property or grants a permission.
+pub const READ_CLOSED_ADMISSION: &str = r#"
+assert(Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')==3,'closed admission schema missing')
+local rows,seen={},{}
+for row in GameInfo.JAC_LeaderPersonas() do
+ assert(type(row.LeaderType)=='string' and Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')==nil,'bootstrap requires unjoined people')
+ local def=assert(GameInfo.Governors[row.GovernorType]); local index=def.Index
+ assert(type(index)=='number' and index%1==0 and index>=0 and index<256 and not seen[index],'invalid persona catalog')
+ seen[index]=true; rows[#rows+1]=index
+end
+assert(#rows==22,'incomplete persona catalog'); table.sort(rows)
+local ids=PlayerManager.GetAliveMajorIDs(); local owners,slots={},0
+for position,owner in pairs(ids) do
+ assert(type(position)=='number' and position%1==0 and position>=1 and position<=22,'invalid owner list')
+ assert(type(owner)=='number' and owner%1==0 and owner>=0 and owner<64 and not owners[owner],'invalid owner identity')
+ owners[owner]=true; slots=slots+1
+end
+assert(slots==22,'incomplete owner list')
+local count=0
+for position=1,22 do
+ local owner=assert(ids[position]); local p=assert(Players[owner],'owner missing')
+ assert(p:GetProperty(902000+owner)==true,'owner reset missing')
+ for _,index in ipairs(rows) do
+  assert(p:GetProperty(903000+index)==true,'closed admission marker missing')
+  assert(p:GetProperty(901000+index)==false,'initial admission is not closed')
+  assert(p:GetProperty(900000+index)==true,'persona manifest missing')
+  count=count+1
+ end
+end
+assert(count==484)
+return 'PAYMENT880 observed 484 existing closed Core qualifications after observer installation'
+"#;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Person {
     pub leader: &'static str,
@@ -163,6 +199,9 @@ pub fn build(template: &Value, cost: u8) -> Result<Value> {
     steps.extend_from_slice(&prefix[1..4]);
     steps.push(json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":prepare_code(p)}));
     steps.push(json!({"action":"start_native_production_admission","name":format!("normal-cost{cost}"),"max_seconds":180,"timeout":30}));
+    steps.push(
+        json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":READ_CLOSED_ADMISSION}),
+    );
     steps.push(ui("local n=0; for _,id in ipairs(PlayerManager.GetAliveMajorIDs()) do local gs=Players[id]:GetGovernors(); for row in GameInfo.JAC_LeaderPersonas() do local def=assert(GameInfo.Governors[row.GovernorType]); assert(gs:CanEverAppointGovernor(def.Hash)==false and not gs:HasGovernor(def.Hash),'unjoined person admitted'); n=n+1 end end; assert(n==484); return 'all 484 unjoined owner/person pairs closed'"));
     steps.push(ui(format!("assert(PlayerConfigurations[{}]:GetLeaderTypeName()=='{}'); UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{{OnStart='JAC_LeaderPersonaJoin',Source={}}}); return 'one normal Join requested'",p.source,p.leader,p.source)));
     steps.push(wait(format!("return Game:GetProperty('JAC_PERSONA_{}_OWNER')==0 and Game:GetProperty('JAC_PERSONA_{}_STATE')=='GREAT_PERSON'",p.leader,p.leader)));
