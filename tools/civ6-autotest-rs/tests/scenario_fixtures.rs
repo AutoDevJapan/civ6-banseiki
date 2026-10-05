@@ -220,6 +220,69 @@ fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() 
 }
 
 #[test]
+fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it() {
+    let request = scenario("leader-persona-spy-third-civic-request.json");
+    let tick = scenario("leader-persona-spy-third-civic-tick.json");
+    validate_scenario(&request).unwrap();
+    validate_scenario(&tick).unwrap();
+    let request_steps = steps(&request);
+    let tick_steps = steps(&tick);
+    assert_eq!(
+        request_steps[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert!(request_steps[0].get("checkpoint").is_none());
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC')"))
+            .count(),
+        1
+    );
+    assert!(request_steps.iter().all(|step| !action(step, "end_turn")));
+    let request_index = request_steps
+        .iter()
+        .position(|step| action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC')"))
+        .unwrap();
+    let request_save = request_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(request_index < request_save);
+    assert_eq!(request_steps[request_save]["checkpoint"], true);
+    assert_eq!(tick_steps[0]["checkpoint"], true);
+    assert_eq!(
+        tick_steps
+            .iter()
+            .filter(|step| action(step, "end_turn"))
+            .count(),
+        1
+    );
+    let turn = tick_steps
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    let save = tick_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(turn < save && save < tick_steps.len() - 2);
+    assert_eq!(tick_steps[turn]["turns"], 1);
+    for data in [&request, &tick] {
+        assert_eq!(data["strict_lua_errors"], true);
+        assert!(steps(data)
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "start_game")));
+        let lua = Lua::new();
+        for step in steps(data) {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+    }
+}
+
+#[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
     let mut checkpoint_count = 0;

@@ -40,6 +40,7 @@ end
 local ReadSpyRoster, InTargetCity;
 local captiveExchange;
 local emptyRosterObservation;
+local thirdCivicRequested=false;
 
 local function Missions(c)
     local result, success = {}, false;
@@ -2292,6 +2293,57 @@ function B.ReadCapacityQueue(owner,cityID)
     return result;
 end
 ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead=B.ReadCapacityQueue;
+
+-- The extra grant exists only in the opt-in 15km test MOD. Read the native
+-- research queue and capacity; the fixture never sets either value.
+function B.ThirdSpyCivicStatus()
+    local c=EnemyConfig();
+    local s=B.ReadEnemy();
+    local retry=assert(s.retry,"first failed mission archive missing");
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "second failed mission event missing");
+    local latest=s.missions[c.attacker.."/"..event.id];
+    local roster=assert(s.spyRoster,"native spy roster unavailable");
+    assert(c.attacker==0 and c.owner==1 and retry.current==2 and
+        retry.archive.eventID==0 and retry.archive.eventTurn==23 and
+        event.attacker==0 and event.id==1 and event.turn==45 and
+        latest and latest.initial==EspionageResultTypes.FAIL_UNDETECTED and
+        s.spy and s.spy.id==851976 and not s.spy.present and
+        s.native.cityOwner==c.owner and s.native.cityID==c.cityID and
+        s.native.neutralized==0 and s.native.established and
+        #roster.map==0 and #roster.captured==2 and #roster.offMap==2 and
+        #roster.activeOffMap==0 and roster.physicalCount==2,
+        "two failed native attempts or captive roster changed");
+    local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_NANBAN_ENVOYS"],
+        "test-only native spy grant Civic missing");
+    local prereq=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS"],
+        "Nanban Civic prerequisite missing");
+    local grants=0;
+    for row in GameInfo.CivicModifiers() do
+        if row.CivicType==civic.CivicType and row.ModifierId=="CIVIC_GRANT_SPY" then
+            grants=grants+1;
+        end
+    end
+    assert(grants==1,"test-only native spy capacity grant was not loaded exactly once");
+    local player=Players[c.attacker];
+    local culture=player:GetCulture();
+    assert(type(culture.GetProgressingCivic)=="function",
+        "native UI Civic research getter unavailable");
+    local owned=culture:HasCivic(civic.Index);
+    local progressing=culture:GetProgressingCivic();
+    local capacity=player:GetDiplomacy():GetSpyCapacity();
+    assert((capacity==2 or capacity==3) and type(owned)=="boolean" and
+        type(progressing)=="number","native spy capacity or Civic observation unavailable");
+    local stage=owned and (capacity==3 and "CAPACITY_READY" or "EFFECT_PENDING") or
+        progressing==civic.Index and "RESEARCHING" or "NOT_REQUESTED";
+    local result={stage=stage,turn=s.turn,civic=civic.CivicType,
+        civicIndex=civic.Index,civicHash=civic.Hash,
+        prerequisiteOwned=culture:HasCivic(prereq.Index),owned=owned,
+        progressing=progressing,capacity=capacity,captured=#roster.captured};
+    Log("THIRD_SPY_CIVIC",result);
+    return result;
+end
+
 function B.Queue(action, params)
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "a boundary frame request is already pending");
@@ -2315,7 +2367,15 @@ function B.Queue(action, params)
         action == "BUILD_CAPACITY" or action == "PROGRESS_CAPACITY" or
         action == "BUILD_CAPACITY_DISTRICT" or action == "PROGRESS_CAPACITY_DISTRICT" or
         action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
-        action == "SPY_MISSION" or action == "RETRY_ADOPT", "unknown boundary action");
+        action == "SPY_MISSION" or action == "RETRY_ADOPT" or
+        action == "THIRD_SPY_CIVIC", "unknown boundary action");
+    if action=="THIRD_SPY_CIVIC" then
+        local state=B.ThirdSpyCivicStatus();
+        assert(not thirdCivicRequested and state.stage=="NOT_REQUESTED" and
+            state.prerequisiteOwned and state.capacity==2,
+            "native third spy Civic is not eligible for a single research request");
+        thirdCivicRequested=true;
+    end
     local retry=Game:GetProperty(RETRY);
     if retry and action=="SPY_MISSION" then
         local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"retry spy missing");
@@ -2924,6 +2984,21 @@ local function Submit(command)
     local action, params = command.action, command.params;
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
+    elseif action == "THIRD_SPY_CIVIC" then
+        local state=B.ThirdSpyCivicStatus();
+        assert(state.stage=="NOT_REQUESTED" and state.prerequisiteOwned and
+            type(state.civicHash)=="number" and
+            type(PlayerOperations.PROGRESS_CIVIC)=="number" and
+            type(PlayerOperations.VALUE_EXCLUSIVE)=="number",
+            "official Nanban Civic research request is unavailable");
+        local started=UI.GetElapsedTime();
+        UI.RequestPlayerOperation(owner,PlayerOperations.PROGRESS_CIVIC,
+            {[PlayerOperations.PARAM_CIVIC_TYPE]=state.civicHash,
+             [PlayerOperations.PARAM_INSERT_MODE]=PlayerOperations.VALUE_EXCLUSIVE});
+        Log("THIRD_SPY_CIVIC_REQUEST",{owner=owner,turn=state.turn,
+            civic=state.civic,hash=state.civicHash});
+        return {kind="THIRD_CIVIC",action=action,target=state.civicIndex,
+            turn=state.turn,started=started};
     elseif action == "MARK_CAPTIVE_EXCHANGE" then
         local x=assert(captiveExchange,"native captive exchange session missing");
         assert(not x.proposed and CaptiveExchangeSession(),
@@ -3409,6 +3484,24 @@ ContextPtr:SetUpdate(function()
     end
     if verification then
         local request=verification;
+        if request.kind=="THIRD_CIVIC" then
+            local ok,state=pcall(B.ThirdSpyCivicStatus);
+            if not ok then
+                B.lastAction="UNKNOWN_"..request.action;
+                Log("THIRD_SPY_CIVIC_READ_UNAVAILABLE",tostring(state));
+                verification=nil;
+            elseif state.owned or state.progressing==request.target then
+                B.lastAction="ACCEPTED_"..request.action;
+                Log("THIRD_SPY_CIVIC_ACCEPTANCE",state);
+                verification=nil;
+            elseif Game.GetCurrentGameTurn()~=request.turn or
+                UI.GetElapsedTime()-request.started>=10 then
+                B.lastAction="UNKNOWN_"..request.action;
+                Log("THIRD_SPY_CIVIC_ACCEPTANCE_UNOBSERVED",state);
+                verification=nil;
+            end
+            return;
+        end
         if request.kind=="GOV_CHANGE" then
             if request.stage=="WAIT_REAL_TURN" then
                 if Game.GetCurrentGameTurn()>request.turn+1 then

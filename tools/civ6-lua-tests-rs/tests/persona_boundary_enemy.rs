@@ -107,6 +107,55 @@ impl Enemy {
         self.run("UNITS[0]={}; TURN=23; local event=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'); event.turn=23; local mission=HISTORY[0][0]; mission.CompletionTurn=23; mission.Operation=59; mission.PlotIndex=8511; mission.EscapeResult=-1; GameInfo.UnitOperations[59]=GameInfo.UnitOperations[0]; PLOTS[FOREIGN.x..'/'..FOREIGN.y].GetIndex=function() return 8511 end; Game:GetProperty('JAC_BOUNDARY_SPY').id=655368; Game:GetProperty('JAC_BOUNDARY_SPY_BARRIER').spyID=655368; local travel=Game:GetProperty('JAC_BOUNDARY_SPY_TRAVEL'); travel.name=GameInfo.Units['UNIT_SPY'].Name; travel.level=1; CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1}}; OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; SPY_CAPACITY=2; GOV_SPIES_BUILT=true; Game:SetProperty('JAC_BOUNDARY_CAPACITY_PROGRESS',{steps={BUILDING_GOV_SPIES={token=8,cityID=10,buildingIndex=79,turn=22}},latest={buildingType='BUILDING_GOV_SPIES',cityID=10,buildingIndex=79,token=8,turn=22}}); local new=makeSpy(0,786440); new.x=CONTROL.x; new.y=CONTROL.y");
     }
 
+    fn third_civic_state(&self) {
+        self.failed();
+        self.run(
+            r#"
+            TURN=45; UNITS[0]={}; SPY_CAPACITY=2;
+            local old=HISTORY[0][0]; old.CompletionTurn=23;
+            local event=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION');
+            event.id=1; event.turn=45;
+            HISTORY[0][1]={Operation=old.Operation,PlotIndex=old.PlotIndex,
+                CompletionTurn=45,InitialResult=EspionageResultTypes.FAIL_UNDETECTED,
+                EscapeResult=EspionageResultTypes.NO_RESULT};
+            Game:SetProperty('JAC_BOUNDARY_ENEMY_SPY_RETRY',{
+                current=2,spyID=851976,archive={spyID=655368,eventID=0,eventTurn=23,
+                targetOwner=1,targetID=20,governorNeutralized=0,
+                operation=old.Operation,plot=old.PlotIndex,
+                completionTurn=old.CompletionTurn,initial=old.InitialResult,
+                escape=old.EscapeResult}});
+            Game:GetProperty('JAC_BOUNDARY_SPY').id=851976;
+            CAPTURED[1]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1},
+                         {OwningPlayer=0,Name='',Level=1,NameIndex=-1}};
+            OFF_MAP={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999},
+                     {Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}};
+            GameInfo.Civics.CIVIC_JAC_SENGOKU_NANBAN_ENVOYS={
+                CivicType='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS',Index=20,Hash=2020};
+            GameInfo.CivicModifiers=function()
+                local rows={{CivicType='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS',
+                    ModifierId='CIVIC_GRANT_SPY'}};
+                local i=0; return function() i=i+1; return rows[i] end
+            end;
+            THIRD_CIVIC_PROGRESS=-1; THIRD_CIVIC_OWNED=false;
+            local originalCulture=Players[0].GetCulture;
+            Players[0].GetCulture=function()
+                local culture=originalCulture(); local has=culture.HasCivic;
+                culture.HasCivic=function(self,index)
+                    if index==20 then return THIRD_CIVIC_OWNED end
+                    return has(self,index)
+                end;
+                culture.GetProgressingCivic=function() return THIRD_CIVIC_PROGRESS end;
+                return culture
+            end;
+            PlayerOperations.PROGRESS_CIVIC=4;
+            PlayerOperations.PARAM_CIVIC_TYPE='civic';
+            PlayerOperations.PARAM_INSERT_MODE='insert';
+            PlayerOperations.VALUE_EXCLUSIVE=8;
+            assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='NOT_REQUESTED');
+            "#,
+        );
+    }
+
     fn captured_district(&self) {
         self.failed();
         self.run("UNITS[0]={}; CAPTURED[1]={{OwningPlayer=0,Name='Spy 15',Level=1,NameIndex=7}}; OFF_MAP={{Name='Spy 15',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}}; GOV_CIVIC_COMPLETED=true");
@@ -734,6 +783,54 @@ fn native_reassignment_before_human_request_uses_a_recorded_unassigned_baseline(
     h.capture();
     h.run("assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY').unassignedAtCapture==1); ENEMY_CASES.neutralize(0); ENEMY_CASES.reassign(0); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='ESTABLISHING')");
     h.run("ENEMY_CASES.reassign(5); assert(ExposedMembers.JAC_PersonaBoundary.EnemyProgress()=='SETTLED')");
+}
+
+#[test]
+fn official_third_spy_civic_request_requires_native_research_progress() {
+    let h = Enemy::new();
+    h.third_civic_state();
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; BASE_REQUESTS=#REQUESTS; b.Queue('THIRD_SPY_CIVIC'); FRAME(); local r=REQUESTS[#REQUESTS]; assert(#REQUESTS==BASE_REQUESTS+1 and r.owner==0 and r.op==PlayerOperations.PROGRESS_CIVIC and r.params.civic==2020 and r.params.insert==PlayerOperations.VALUE_EXCLUSIVE and b.lastAction=='DISPATCHED_THIRD_SPY_CIVIC')");
+    h.run("THIRD_CIVIC_PROGRESS=20; FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.lastAction=='ACCEPTED_THIRD_SPY_CIVIC' and ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='RESEARCHING'); THIRD_CIVIC_OWNED=true; SPY_CAPACITY=3; assert(ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus().stage=='CAPACITY_READY')");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "native third spy Civic is not eligible",
+    );
+    h.run("assert(#REQUESTS==BASE_REQUESTS+1 and HISTORY[0][0].CompletionTurn==23 and HISTORY[0][1].CompletionTurn==45 and #CAPTURED[1]==2)");
+}
+
+#[test]
+fn third_spy_research_rejects_missing_native_grant_and_wrong_failure_history() {
+    let missing = Enemy::new();
+    missing.third_civic_state();
+    missing.run(
+        "GameInfo.CivicModifiers=function() return function() end end; BASE_REQUESTS=#REQUESTS",
+    );
+    missing.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "native spy capacity grant was not loaded exactly once",
+    );
+    missing.run("assert(#REQUESTS==BASE_REQUESTS)");
+
+    let changed = Enemy::new();
+    changed.third_civic_state();
+    changed.run("Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION').id=2; BASE_REQUESTS=#REQUESTS");
+    changed.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "two failed native attempts or captive roster changed",
+    );
+    changed.run("assert(#REQUESTS==BASE_REQUESTS)");
+}
+
+#[test]
+fn unknown_third_spy_research_response_never_sends_a_second_request() {
+    let h = Enemy::new();
+    h.third_civic_state();
+    h.run("local b=ExposedMembers.JAC_PersonaBoundary; BASE_REQUESTS=#REQUESTS; b.Queue('THIRD_SPY_CIVIC'); FRAME(); ELAPSED=11; FRAME(); assert(b.lastAction=='UNKNOWN_THIRD_SPY_CIVIC' and #REQUESTS==BASE_REQUESTS+1)");
+    h.reject(
+        "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC')",
+        "native third spy Civic is not eligible",
+    );
+    h.run("assert(#REQUESTS==BASE_REQUESTS+1)");
 }
 
 #[test]

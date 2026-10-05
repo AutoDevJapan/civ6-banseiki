@@ -1,0 +1,51 @@
+{
+  "name": "Research the test-only native third-spy Civic once from the preserved second failure",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008",
+      "exact_name": true,
+      "timeout": 300
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local s=b.ThirdSpyCivicStatus(); assert(s.stage=='NOT_REQUESTED' and s.prerequisiteOwned and s.capacity==2,'third native spy research preconditions missing'); return s.stage"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "ExposedMembers.JAC_PersonaBoundary.Queue('THIRD_SPY_CIVIC'); return 'one official Civic research request queued'"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "local b=ExposedMembers.JAC_PersonaBoundary; local a=b.lastAction; if a=='ERROR_THIRD_SPY_CIVIC' or a=='UNKNOWN_THIRD_SPY_CIVIC' then error(a) end; assert(a=='ACCEPTED_THIRD_SPY_CIVIC','native Civic research request not observed'); local s=b.ThirdSpyCivicStatus(); assert(s.stage=='RESEARCHING' or s.stage=='CAPACITY_READY','native Civic did not start'); return s.stage"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}
