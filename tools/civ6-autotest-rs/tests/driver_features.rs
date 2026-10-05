@@ -274,6 +274,35 @@ fn diagnostic_observation_is_bounded_and_never_acceptance() {
 }
 
 #[test]
+fn completed_diagnostic_run_has_nonzero_exit_and_false_acceptance() {
+    let data = json!({"name":"observation only","diagnostic_only":true,"steps":[
+        {"action":"ui_lua","state_name":"InGame","code":"return true"},
+        {"action":"observe_for","seconds":120,"timeout":135},
+        {"action":"ui_lua","state_name":"GameCore_Tuner","code":"return 'state after stall'"}
+    ]});
+    let mut h = Harness::new(data, FakeBackend::new());
+    h.runner.output = h.root.path().join("complete-diagnostic");
+    h.runner.auto_restart = false;
+    assert_eq!(h.runner.run().unwrap(), 3);
+    let result: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(h.runner.output.join("result.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(result["completed_steps"], 3);
+    assert_eq!(result["observation_completed"], true);
+    assert_eq!(result["passed"], false);
+    assert_eq!(result["acceptance_passed"], false);
+    assert!(h
+        .calls()
+        .iter()
+        .any(|(_, code)| code == "return 'state after stall'"));
+    assert!(h
+        .calls()
+        .iter()
+        .all(|(_, code)| !code.contains("ACTION_ENDTURN")));
+}
+
+#[test]
 fn test_end_turn_rejects_invalid_counts() {
     for value in [json!(0), json!(-1), json!(true), json!(1.5), json!("2")] {
         for key in ["turns", "test_turns"] {

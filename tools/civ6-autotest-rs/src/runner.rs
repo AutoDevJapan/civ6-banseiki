@@ -2412,6 +2412,14 @@ impl Runner {
         self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
         let mut interruption = None;
         let code = match self.run_inner() {
+            Ok(0) if self.scenario["diagnostic_only"] == true => {
+                self.log(
+                    "diagnostic",
+                    "OBSERVED",
+                    "observation complete; acceptance not evaluated; exit 3",
+                )?;
+                3
+            }
             Ok(v) => v,
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
