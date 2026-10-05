@@ -86,10 +86,12 @@ local function Resolved()
         for _,candidate in Players[job.Actor]:GetUnits():Members() do
           if candidate:GetProperty(R.TOKEN)==want.ActorIdentity then sameIdentity=candidate end
         end
-        if u and u:GetProperty(R.TOKEN)~=want.ActorIdentity then
+        local observedIdentity
+        if u then observedIdentity=u:GetProperty(R.TOKEN) end
+        if u and observedIdentity~=want.ActorIdentity then
           print('[JAC_ASN_ELIM] unit_id_identity_mismatch actor='..job.Actor..' unit='..job.Unit..
             ' expected_identity='..tostring(want.ActorIdentity)..
-            ' observed_identity='..tostring(u:GetProperty(R.TOKEN))..
+            ' observed_identity='..tostring(observedIdentity)..
             ' original_identity_present='..tostring(sameIdentity~=nil))
         end
         assert(not sameIdentity,'failed assassin identity remains')
@@ -301,6 +303,18 @@ mod tests {
         lua.load(repo.read("tools/civ6-lua-tests-rs/fixtures/assassin/stubs.lua")?)
             .exec()?;
         lua.load(r#"
+          local originalMakeUnit=makeUnit
+          makeUnit=function(data)
+            local unit=originalMakeUnit(data)
+            if data.NoValueOnMissingProperty then
+              unit.GetProperty=function(_,key)
+                local value=data.Properties[key]
+                if value==nil then return end
+                return clone(value)
+              end
+            end
+            return unit
+          end
           MAX_MAJOR=5
           local names={[0]='CIVILIZATION_JAC_ODA',[1]='CIVILIZATION_JAC_DATE',
             [2]='CIVILIZATION_JAC_ASHINA',[3]='CIVILIZATION_JAC_HOJO',
@@ -369,7 +383,7 @@ mod tests {
                                     ID=job.Unit,Owner=job.Actor,
                                     Type=GameInfo.Units[JAC_ASN.UnitForPlayer(job.Actor)].Index,
                                     X=job.Actor,Y=1,
-                                    Properties={[JAC_ASN.TOKEN]='replacement:'..job.Actor}
+                                    Properties={},NoValueOnMissingProperty=true
                                   }
                                 end
                               end
@@ -393,8 +407,7 @@ mod tests {
                   assert(job,'target scenario lacks a failed mission')
                   local units=DATA[job.Actor].Units
                   local data=assert(units[job.Unit])
-                  local replacement='replacement:'..job.Actor
-                  assert(data.Properties[JAC_ASN.TOKEN]==replacement,'UnitID reuse fixture missing')
+                  assert(data.Properties[JAC_ASN.TOKEN]==nil,'UnitID reuse fixture should have no assassin identity')
                   data.Properties[JAC_ASN.TOKEN]=job.Pending.Mission.ActorIdentity
                 "#,
                 )
@@ -443,7 +456,7 @@ mod tests {
                   local units=DATA[job.Actor].Units
                   local data=assert(units[NEXT_UNIT-1])
                   units[NEXT_UNIT-1]=nil; data.ID=job.Unit; units[job.Unit]=data
-                  data.Properties[JAC_ASN.TOKEN]='replacement:'..job.Actor
+                  data.Properties[JAC_ASN.TOKEN]=nil
                 "#,
                 )
                 .exec()?;
