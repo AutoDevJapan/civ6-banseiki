@@ -81,7 +81,9 @@ for id=0,21 do
    local value=allowed(hash); UI_EVER_CALLS[#UI_EVER_CALLS+1]={owner=id,hash=hash,value=value}; return value
   end
   g.CanAppointGovernor=function(_,hash) return allowed(hash) end
-  if CORE_CONTEXT then g.CanEverAppointGovernor=nil; g.CanAppointGovernor=nil end
+  if CORE_CONTEXT then
+   g.CanEverAppointGovernor=nil; g.CanAppointGovernor=nil; g.HasGovernor=nil
+  end
   return g
  end
  local write=player.SetProperty

@@ -55,7 +55,7 @@ for source=0,21 do
  local city=assert(p:GetCities():GetCapitalCity(),'every owner requires a real capital')
  assert(city:GetOwner()==source and integer(city:GetID()),'capital owner differs')
  local g=assert(p:GetGovernors(),'Governor collection unavailable')
- for _,method in ipairs({'HasGovernor','GetGovernorPoints','GetGovernorPointsSpent'}) do
+ for _,method in ipairs({'GetGovernorPoints','GetGovernorPointsSpent'}) do
   assert(type(g[method])=='function','real getter unavailable: '..method)
  end
  local total,spent=g:GetGovernorPoints(),g:GetGovernorPointsSpent()
@@ -127,7 +127,12 @@ local function qualification(entry,joined,evolving)
    if expected then positives=positives+1 else negatives=negatives+1 end
    bits[#bits+1]=allowed and '1' or '0'
   else bits[#bits+1]='?' end
-  assert(g:HasGovernor(entry.def.Hash)==false,'unexpected appointment')
+  -- Gameplay has no verified HasGovernor binding. Only the actual UI getter
+  -- can assert absence of a native appointment; the Core ledger stays separate.
+  if not core then
+   assert(type(g.HasGovernor)=='function','UI appointment getter unavailable')
+   assert(g:HasGovernor(entry.def.Hash)==false,'unexpected appointment')
+  end
  end
  if core or fullMatrix then
   assert(measured==22 and positives==(evolving and 1 or 0) and negatives==(evolving and 21 or 22),'qualification coverage differs')
