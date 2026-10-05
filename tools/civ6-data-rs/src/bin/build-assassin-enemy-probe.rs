@@ -103,6 +103,10 @@ local ok,why=xpcall(function()
     local created=NewUnits(enemy,old,fixtures)
     print('[JAC_ASN_OCCUPANCY] create count='..#created..' owner='..enemy..' type='..kind..
       ' origin='..enemyX..','..enemyY..' target='..p:GetX()..','..p:GetY())
+    for _,row in ipairs(created) do
+      print('[JAC_ASN_OCCUPANCY] created id='..row.ID..' owner='..row.Owner..' type='..row.Type..
+        ' xy='..row.X..','..row.Y..' damage='..row.Damage)
+    end
     assert(#created==1 and created[1].Owner==enemy and created[1].Type==definition.Index,
       'hostile fixture not created exactly once')
     local u=Players[enemy]:GetUnits():FindID(created[1].ID)
