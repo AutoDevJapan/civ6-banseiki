@@ -1018,7 +1018,8 @@ fn test_end_turn_closes_successive_ai_statements_without_repeating_action() {
     let state_for_lua = state.clone();
     backend.on_lua = Box::new(move |name, code, _| {
         if code == "return Game.GetCurrentGameTurn()" {
-            return Ok("7".into());
+            let (sent, closed) = *state_for_lua.lock().unwrap();
+            return Ok(if sent && closed == 2 { "8" } else { "7" }.into());
         }
         if code.contains("ACTION_ENDTURN") {
             state_for_lua.lock().unwrap().0 = true;
