@@ -1370,13 +1370,14 @@ mod tests {
         let first = super::outputs(&repo)?;
         let second = super::outputs(&repo)?;
         assert_eq!(first, second);
-        assert_eq!(first.len(), 4);
+        assert_eq!(first.len(), 5);
         assert_eq!(
             first.keys().cloned().collect::<Vec<_>>(),
             vec![
                 PathBuf::from(MOD).join("Data/JAC_Assassin_Icons.xml"),
                 PathBuf::from(MOD).join("JAC_PoC_Assassin.modinfo"),
                 PathBuf::from(MOD).join("Text/JAC_Assassin_Text.xml"),
+                PathBuf::from(MOD).join("UI/JAC_AssassinPanel.lua"),
                 PathBuf::from(SCENARIO),
             ]
         );
