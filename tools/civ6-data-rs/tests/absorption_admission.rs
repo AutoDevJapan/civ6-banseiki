@@ -40,8 +40,7 @@ fn world() -> mlua::Result<Lua> {
         GameEvents={JAC_Absorption_AdmissionRequested=event(),JAC_Absorption_LeaderOffer=event(),
           OnGameTurnStarted=event()}
         FLOWS={}
-        JAC_AbsorptionFlowGameplay={GetRequest=function(id) return FLOWS[id] and copy(FLOWS[id].Request) end,
-          Begin=function(plan)
+        JAC_AbsorptionFlowGameplay={Begin=function(plan)
             BEGIN_COUNT=BEGIN_COUNT+1
             FLOWS[plan.ID]=FLOWS[plan.ID] or {ID=plan.ID, Request=copy(plan)}
             Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
@@ -164,8 +163,10 @@ fn unreviewed_relationships_wait_even_when_no_known_requirement_exists() -> mlua
       OFFER.RelationRequirements={}; OFFER.RelationsReviewed=false
       GOLD=100; RELEASE=true; N.DefineOffer(OFFER); N.Tick()
       assert(BEGIN_COUNT==0 and N.Get('leader-offer',OFFER.ID).Status=='WAITING')
-      OFFER.ID='reviewed-terms'; OFFER.RelationsReviewed=true
+      OFFER.RelationsReviewed=true
       N.DefineOffer(OFFER); N.Tick(); assert(BEGIN_COUNT==1)
+      OFFER.RelationsReviewed=false; assert(not pcall(N.DefineOffer,OFFER))
+      assert(BEGIN_COUNT==1)
     "#,
     )
     .exec()

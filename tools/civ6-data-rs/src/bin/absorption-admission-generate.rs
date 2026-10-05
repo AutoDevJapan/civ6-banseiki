@@ -21,10 +21,19 @@ fn main() -> anyhow::Result<()> {
     let repo = Repository::checked_in();
     apply_outputs(&repo, absorption_admission::generate(&repo)?, check)?;
     if let Some(path) = scenario_path {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+        let scenario = absorption_admission::live_scenario(&repo)?;
+        if check {
+            anyhow::ensure!(
+                std::fs::read_to_string(&path)? == scenario,
+                "stale generated scenario: {}",
+                path.display()
+            );
+        } else {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(path, scenario)?;
         }
-        std::fs::write(path, absorption_admission::live_scenario(&repo)?)?;
     }
     Ok(())
 }

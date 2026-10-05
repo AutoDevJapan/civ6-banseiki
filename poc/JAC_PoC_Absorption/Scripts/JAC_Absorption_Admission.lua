@@ -180,7 +180,18 @@ function N.DefineOffer(offer)
   assert(#offer.Requirements > 0, 'explicit leader demands required')
   local s = State()
   if s.Offers[offer.ID] then
-    assert(R.Equal(s.Offers[offer.ID], offer), 'leader offer ID reused with changed demands')
+    local previous = s.Offers[offer.ID]
+    if previous.RelationsReviewed ~= offer.RelationsReviewed then
+      local request = s.Requests[Key('leader-offer', offer.ID)]
+      assert(not request or request.Status == 'WAITING' or request.Status == 'UNAVAILABLE',
+        'cannot change relation review after admission starts')
+      local comparable = R.Copy(previous)
+      comparable.RelationsReviewed = offer.RelationsReviewed
+      assert(R.Equal(comparable, offer), 'leader offer ID reused with changed demands')
+      s.Offers[offer.ID] = offer; Save(s)
+    else
+      assert(R.Equal(previous, offer), 'leader offer ID reused with changed demands')
+    end
   else s.Offers[offer.ID] = offer; Save(s) end
 end
 local function EvaluateDemands(list, from, to)
