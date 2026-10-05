@@ -620,6 +620,7 @@ mod assassin_lua_tests {
     fn load_panel(h: &Harness) {
         h.run(&case_segments("helper_panel_setup")[0]);
         h.run(&read_repo("poc/JAC_PoC_Assassin/UI/JAC_AssassinPanel.lua"));
+        h.run("assert(not ContextPtr:IsHidden(), 'InGame add-in context remains hidden')");
     }
 
     #[test]
