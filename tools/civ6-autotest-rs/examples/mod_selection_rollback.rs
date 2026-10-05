@@ -30,17 +30,36 @@ fn code() -> String {
 }
 
 fn scenario() -> serde_json::Value {
+    let mut steps = vec![
+        json!({"action": "restart_game", "timeout": 420}),
+        json!({"action": "ui_lua", "state_name": "FrontEnd", "code": code(), "timeout": 90}),
+        json!({"action": "ui_lua", "state_name": "FrontEnd", "code": "if not JAC_MOD_ROLLBACK_241 or not JAC_MOD_ROLLBACK_241.passed then error('rollback diagnostic incomplete') end\nreturn #JAC_MOD_ROLLBACK_241.rows", "capture_as": "MOD_COUNT", "timeout": 10}),
+    ];
+    for batch in 0..16 {
+        let start = batch * 32 + 1;
+        let end = (batch + 1) * 32;
+        steps.push(json!({"action":"ui_lua", "state_name":"FrontEnd", "timeout":10,
+            "capture_as":format!("MOD_SELECTION_{batch:02}"),
+            "code":format!("local rows = JAC_MOD_ROLLBACK_241.rows\nlocal out = {{}}\nfor i = {start}, math.min({end}, #rows) do table.insert(out, rows[i]) end\nreturn table.concat(out, ',')")}));
+    }
+    steps.push(json!({"action":"restart_game", "timeout":420}));
+    let read_rows = "local rows = {}\nfor _, mod in ipairs(Modding.GetInstalledMods()) do local info = Modding.GetModInfo(mod.Handle); table.insert(rows, string.lower(info.Id) .. '=' .. tostring(info.Enabled)) end\ntable.sort(rows)\n";
+    steps.push(
+        json!({"action":"ui_lua", "state_name":"FrontEnd", "timeout":10,
+        "equals_capture":"MOD_COUNT", "code":format!("{read_rows}return #rows")}),
+    );
+    for batch in 0..16 {
+        let start = batch * 32 + 1;
+        let end = (batch + 1) * 32;
+        steps.push(json!({"action":"ui_lua", "state_name":"FrontEnd", "timeout":10,
+            "equals_capture":format!("MOD_SELECTION_{batch:02}"),
+            "code":format!("{read_rows}local out = {{}}\nfor i = {start}, math.min({end}, #rows) do table.insert(out, rows[i]) end\nreturn table.concat(out, ',')")}));
+    }
     let scenario = json!({
         "name": "MOD切替の途中失敗と全選択の復元（ToDo241）",
         "judge_profile": "generic",
         "strict_lua_errors": true,
-        "steps": [
-            {"action": "restart_game", "timeout": 420},
-            {"action": "ui_lua", "state_name": "FrontEnd", "code": code(), "timeout": 90},
-            {"action": "ui_lua", "state_name": "FrontEnd", "code": "if not JAC_MOD_ROLLBACK_241 or not JAC_MOD_ROLLBACK_241.passed then error('rollback diagnostic incomplete') end\nreturn JAC_MOD_ROLLBACK_241.selection", "capture_as": "RESTORED_SELECTION", "timeout": 10},
-            {"action": "restart_game", "timeout": 420},
-            {"action": "ui_lua", "state_name": "FrontEnd", "code": "local rows = {}\nfor _, mod in ipairs(Modding.GetInstalledMods()) do local info = Modding.GetModInfo(mod.Handle); table.insert(rows, string.lower(info.Id) .. '=' .. tostring(info.Enabled)) end\ntable.sort(rows)\nreturn table.concat(rows, ',')", "equals_capture": "RESTORED_SELECTION", "timeout": 10}
-        ]
+        "steps": steps
     });
     validate_scenario(&scenario).expect("valid diagnostic");
     scenario
@@ -97,6 +116,7 @@ for _, mod in ipairs(Modding.GetInstalledMods()) do
   end
 end
 table.sort(ids)
+if #ids > 512 then error('diagnostic supports at most 512 installed MODs') end
 for _, id in ipairs({MAP, MIDDLE, LEAF, TREES, GROWTH}) do
   if not handles[id] then error('diagnostic MOD missing: ' .. id) end
 end
@@ -116,12 +136,16 @@ local function snapshot()
   for _, id in ipairs(ids) do state[id] = enabled(id) end
   return state
 end
-local function serialize(state)
+local function rows(state)
   local values = {}
   for _, id in ipairs(ids) do
     table.insert(values, id .. '=' .. tostring(state[id]))
+    if #values[#values] > 48 then error('MOD snapshot row exceeds transport budget') end
   end
-  return table.concat(values, ',')
+  return values
+end
+local function audit(label, state)
+  for _, value in ipairs(rows(state)) do print('TODO241 ' .. label .. ' ' .. value) end
 end
 local function compare(expected, label)
   local mismatch = {}
@@ -152,6 +176,12 @@ local function restore(expected)
     local id = ordered[i]
     if expected[id] and not enabled(id) then
       local ok, err = pcall(nativeEnable, handles[id], false)
+      -- Keep cleanup effective even if the engine rejects false. Only use
+      -- dependency expansion after the engine confirms every prerequisite is
+      -- already enabled, so an originally disabled prerequisite stays off.
+      if not enabled(id) and nativeModding.CanEnableMod(handles[id], false) == 'OK' then
+        ok, err = pcall(nativeEnable, handles[id], true)
+      end
       if not ok then table.insert(failures, tostring(err)) end
     end
   end
@@ -161,7 +191,7 @@ local function restore(expected)
   if #failures > 0 then error(table.concat(failures, ';')) end
 end
 local original = snapshot()
-print('TODO241 ORIGINAL ' .. serialize(original))
+audit('ORIGINAL', original)
 local passed = {}
 local function mark(label)
   table.insert(passed, label)
@@ -169,7 +199,10 @@ local function mark(label)
 end
 local function force(id, value, dependencies)
   if value then nativeEnable(handles[id], dependencies) else nativeDisable(handles[id]) end
-  if enabled(id) ~= value then error('native preparation failed: ' .. id) end
+  if enabled(id) ~= value then
+    local reason = value and nativeModding.CanEnableMod(handles[id], dependencies) or nativeModding.CanDisableMod(handles[id])
+    error('native preparation failed: ' .. id .. ' requested=' .. tostring(value) .. ' actual=' .. tostring(enabled(id)) .. ' reason=' .. tostring(reason))
+  end
 end
 local function expectFailure(fn, marker, expected)
   local ok, err = pcall(fn)
@@ -186,9 +219,26 @@ local ok, failure = pcall(function()
   force(MAP, true, true)
   force(LEAF, false)
   force(MIDDLE, false)
-  force(LEAF, true, false)
+  local probe = snapshot()
+  local reason = nativeModding.CanEnableMod(handles[LEAF], false)
+  nativeEnable(handles[LEAF], false)
   if enabled(MIDDLE) then error('EnableMod(false) enabled disabled intermediate') end
+  if enabled(LEAF) then
+    probe[LEAF] = true
+  elseif reason ~= 'MissingDependencies' then
+    error('native false refusal has unexpected reason: ' .. tostring(reason))
+  end
+  compare(probe, 'native false probe changed unrelated selection')
+  print('TODO241 FALSE_PROBE leaf=' .. tostring(enabled(LEAF)) .. ' middle=' .. tostring(enabled(MIDDLE)) .. ' reason=' .. tostring(reason))
   mark('native-false-preserves-disabled-intermediate')
+
+  -- The engine may refuse a child with a disabled prerequisite. Prepare a
+  -- valid selection, then prove false can re-enable a child when ready.
+  force(LEAF, false)
+  force(MIDDLE, true, true)
+  print('TODO241 FALSE_READY_PRECHECK reason=' .. tostring(nativeModding.CanEnableMod(handles[LEAF], false)) .. ' middle=' .. tostring(enabled(MIDDLE)))
+  force(LEAF, true, false)
+  print('TODO241 FALSE_READY leaf=' .. tostring(enabled(LEAF)) .. ' middle=' .. tostring(enabled(MIDDLE)))
 
   local baseline = snapshot()
   local injected = false
@@ -201,8 +251,7 @@ local ok, failure = pcall(function()
   end
   expectFailure(disableCase, 'TODO241_DISABLE_AFTER_NATIVE', baseline)
   if not injected then error('disable injection not reached') end
-  if enabled(MIDDLE) then error('rollback enabled disabled intermediate') end
-  mark('disable-failure-restores-all-with-disabled-intermediate')
+  mark('disable-failure-restores-all')
 
   for _, mixed in ipairs({false, true}) do
     force(GROWTH, true, true)
@@ -230,7 +279,7 @@ local ok, failure = pcall(function()
   -- A refused rollback must be reported instead of returning success.
   force(LEAF, false)
   force(MIDDLE, false)
-  force(LEAF, true, false)
+  force(LEAF, true, true)
   baseline = snapshot()
   injected = false
   Modding.DisableMod = function(handle)
@@ -257,7 +306,7 @@ local ok, failure = pcall(function()
 end)
 local reset, resetError = resetApis()
 local cleaned, cleanupError = pcall(restore, original)
-print('TODO241 FINAL ' .. serialize(snapshot()))
+audit('FINAL', snapshot())
 if nativeModding.EnableMod ~= nativeEnable or nativeModding.DisableMod ~= nativeDisable then
   error('native MOD API changed during diagnostic')
 end
@@ -266,7 +315,7 @@ if not cleaned then error(tostring(failure) .. '; cleanup failed: ' .. tostring(
 if not reset then error(tostring(failure) .. '; API restore failed: ' .. resetError) end
 if not ok then error(failure) end
 if #passed ~= 5 then error('incomplete diagnostic coverage') end
-JAC_MOD_ROLLBACK_241 = {passed=true, selection=serialize(snapshot())}
+JAC_MOD_ROLLBACK_241 = {passed=true, rows=rows(snapshot())}
 return 'TODO241 PASS 5/5 all-selection-restored installed=' .. #ids
 "#;
 
@@ -338,6 +387,149 @@ mod tests {
             .exec().unwrap();
         let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
         assert!(failure.contains("EnableMod(false) enabled disabled intermediate"));
+    }
+
+    #[test]
+    fn native_false_dependency_refusal_is_observed_and_valid_rollback_cases_continue() {
+        let lua = fixture(0);
+        lua.load(
+            r#"
+          local can, enable = Modding.CanEnableMod, Modding.EnableMod
+          Modding.CanEnableMod = function(handle, dependencies)
+            if dependencies == false then
+              for _, id in ipairs(MODS[handle].Dependencies) do
+                if not MODS[id].Enabled then return 'MissingDependencies' end
+              end
+            end
+            return can(handle, dependencies)
+          end
+          Modding.EnableMod = function(handle, dependencies)
+            if Modding.CanEnableMod(handle, dependencies) ~= 'OK' then return end
+            return enable(handle, dependencies)
+          end
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let result = lua.load(code()).eval::<String>().unwrap();
+        assert!(result.starts_with("TODO241 PASS 5/5"));
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        for id in [MAP, MIDDLE, LEAF, TREES, GROWTH] {
+            let info: Table = mods.get(id).unwrap();
+            assert!(!info.get::<bool>("Enabled").unwrap());
+        }
+    }
+
+    #[test]
+    fn restart_selection_is_compared_in_bounded_complete_chunks() {
+        let data = scenario();
+        let steps = data["steps"].as_array().unwrap();
+        assert_eq!(steps.len(), 37);
+        assert_eq!(steps[2]["capture_as"], "MOD_COUNT");
+        assert_eq!(steps[20]["equals_capture"], "MOD_COUNT");
+        for batch in 0..16 {
+            assert_eq!(
+                steps[3 + batch]["capture_as"],
+                steps[21 + batch]["equals_capture"]
+            );
+        }
+        for mask in 0..32 {
+            let lua = fixture(mask);
+            lua.load(code()).eval::<String>().unwrap();
+            let expected: String = lua.load(steps[3]["code"].as_str().unwrap()).eval().unwrap();
+            let actual: String = lua
+                .load(steps[21]["code"].as_str().unwrap())
+                .eval()
+                .unwrap();
+            assert_eq!(actual, expected);
+            assert!(actual.len() < 1600);
+            for batch in 1..16 {
+                let empty: String = lua
+                    .load(steps[3 + batch]["code"].as_str().unwrap())
+                    .eval()
+                    .unwrap();
+                assert_eq!(empty, "");
+            }
+        }
+    }
+
+    #[test]
+    fn restart_chunks_preserve_every_id_and_flag_across_multiple_nonempty_batches() {
+        let lua = fixture(31);
+        lua.load(
+            r#"
+          for i = 1, 67 do
+            local id = string.format('deaddead-eeee-4ddd-aeee-%012x', i)
+            local row = {Id=id, Handle=id, Enabled=(i % 2 == 0), Dependencies={}}
+            MODS[id] = row
+            INSTALLED[#INSTALLED + 1] = row
+          end
+        "#,
+        )
+        .exec()
+        .unwrap();
+        lua.load(code()).eval::<String>().unwrap();
+        let data = scenario();
+        let steps = data["steps"].as_array().unwrap();
+        let mut all = Vec::new();
+        for batch in 0..16 {
+            let before: String = lua
+                .load(steps[3 + batch]["code"].as_str().unwrap())
+                .eval()
+                .unwrap();
+            let after: String = lua
+                .load(steps[21 + batch]["code"].as_str().unwrap())
+                .eval()
+                .unwrap();
+            assert_eq!(before, after);
+            assert!(before.len() < 1600);
+            if !before.is_empty() {
+                all.extend(before.split(',').map(str::to_owned));
+            }
+        }
+        assert_eq!(all.len(), 72);
+        let expected = lua.load("local out = {}; for _, row in ipairs(INSTALLED) do table.insert(out, row.Id .. '=' .. tostring(row.Enabled)) end; table.sort(out); return table.concat(out, ',')").eval::<String>().unwrap();
+        assert_eq!(all.join(","), expected);
+        lua.load("MODS['deaddead-eeee-4ddd-aeee-000000000043'].Enabled = true")
+            .exec()
+            .unwrap();
+        let changed: String = lua
+            .load(steps[23]["code"].as_str().unwrap())
+            .eval()
+            .unwrap();
+        let saved: String = lua.load(steps[5]["code"].as_str().unwrap()).eval().unwrap();
+        assert_ne!(changed, saved);
+    }
+
+    #[test]
+    fn false_activation_refusal_stops_calibration_and_cleanup_preserves_the_original() {
+        let lua = fixture(31);
+        lua.load(
+            r#"
+          local can, enable = Modding.CanEnableMod, Modding.EnableMod
+          Modding.CanEnableMod = function(handle, dependencies)
+            if dependencies == false then
+              for _, id in ipairs(MODS[handle].Dependencies) do
+                if not MODS[id].Enabled then return 'MissingDependencies' end
+              end
+            end
+            return can(handle, dependencies)
+          end
+          Modding.EnableMod = function(handle, dependencies)
+            if dependencies == false then return end
+            return enable(handle, dependencies)
+          end
+        "#,
+        )
+        .exec()
+        .unwrap();
+        let failure = lua.load(code()).eval::<String>().unwrap_err().to_string();
+        assert!(failure.contains(&format!("native preparation failed: {LEAF}")));
+        let mods: Table = lua.globals().get("MODS").unwrap();
+        for id in [MAP, MIDDLE, LEAF, TREES, GROWTH] {
+            let info: Table = mods.get(id).unwrap();
+            assert!(info.get::<bool>("Enabled").unwrap());
+        }
     }
 
     #[test]
