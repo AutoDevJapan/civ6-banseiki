@@ -6,6 +6,7 @@ use std::{fs, path::PathBuf};
 
 const OLD_NAME: &str = "JAC-SengokuAges-02-ages-owner-l-05-543484304b0c";
 const PRE_NAME: &str = "JAC-SengokuAges-01-ages-owner-l-05-543484304b0c";
+const CATALOGUE: &str = "local count=0; for _ in GameInfo.JAC_SengokuOaths() do count=count+1 end; if count~=66 then error('live oath catalogue must contain 66 rows, got '..count) end";
 const LEGACY: &str = r#"
 local l=Game:GetProperty('JAC_AGES_LEDGER')
 if type(l)~='table' or l.reign~=1 then error('actual legacy reign1 required') end
@@ -88,6 +89,9 @@ local function ser(v)
 end
 if ser(l.history)~=Game:GetProperty('JAC_TODO134_OLD_HISTORY') then error('migration changed legacy history') end
 local out={ser(h.oaths),tostring(h.oathReign),tostring(h.oathChosen),tostring(h.oathDue),ser(h.oathKnowledge)}
+local catalogueCount=0
+for _ in GameInfo.JAC_SengokuOaths() do catalogueCount=catalogueCount+1 end
+if catalogueCount~=66 then error('live oath catalogue must contain 66 rows, got '..catalogueCount) end
 local cities=0
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
  local owner=l.houses['p'..p:GetID()]
@@ -131,8 +135,8 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     let enabled = base["steps"][0].clone();
     let load = |name| json!({"action":"load","name":name,"exact_name":true,"timeout":600});
     let active = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0]:IsTurnActive()"}});
-    let probe = json!({"name":"誓約導入前の実保存：現在の台帳とAPIを読み取る","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",CAPABILITIES)]});
-    let migration = json!({"name":"誓約導入前の実保存：自然な次手番で人間とAIを移行し、旧履歴と保存復元を照合する","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",SNAPSHOT),active.clone(),json!({"action":"end_turn","timeout":900}),lua("GameCore_Tuner",MIGRATED),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==l.reign"}}),lua("GameCore_Tuner",OATH_SNAPSHOT),json!({"action":"save","name":"JAC-Todo134-Migrated","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Migrated","timeout":600}),lua("GameCore_Tuner",OATH_SNAPSHOT)]});
+    let probe = json!({"name":"誓約導入前の実保存：現在の台帳とAPIを読み取る","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",&format!("{CATALOGUE}\n{CAPABILITIES}"))]});
+    let migration = json!({"name":"誓約導入前の実保存：自然な次手番で人間とAIを移行し、旧履歴と保存復元を照合する","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",SNAPSHOT),active.clone(),json!({"action":"end_turn","timeout":900}),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathReign==1 and Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68"}}),lua("GameCore_Tuner",MIGRATED),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==l.reign"}}),lua("GameCore_Tuner",OATH_SNAPSHOT),json!({"action":"save","name":"JAC-Todo134-Migrated","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Migrated","timeout":600}),lua("GameCore_Tuner",OATH_SNAPSHOT)]});
     let pre = json!({"name":"誓約導入前の天文保存：改元前には候補と効果を持たない","judge_profile":"generic","steps":[enabled,load(PRE_NAME),lua("GameCore_Tuner",r#"local l=Game:GetProperty('JAC_AGES_LEDGER'); if not l or l.reign~=0 then error('actual pre-reign legacy save required') end; local t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if t~=34 then error('unexpected legacy Tenbun turn '..t) end; for _,h in pairs(l.houses) do if h.oathChosen~=nil or next(h.oaths or {})~=nil then error('oath before first reign') end end; return 'legacy Tenbun turn34 has no oath'"#),active,json!({"action":"end_turn","timeout":900}),lua("GameCore_Tuner",r#"local l=Game:GetProperty('JAC_AGES_LEDGER'); local t=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if t~=35 or l.reign~=0 then error('pre-reign migration advanced unexpectedly') end; local n=0; for _,p in ipairs(PlayerManager.GetAliveMajors()) do local h=l.houses['p'..p:GetID()]; if h.oathChosen~=nil or next(h.oaths or {})~=nil or (h.parts.oath or 0)~=0 then error('pre-reign oath/reward') end; for _,c in p:GetCities():Members() do n=n+1; local plot=Map.GetPlot(c:GetX(),c:GetY()); for r in GameInfo.JAC_SengokuOaths() do if plot:GetProperty(r.OathType..'_ON')~=0 then error('pre-reign strong effect') end end end end; if n==0 then error('no cities checked') end; return 'LEGACY_TENBUN_PASSED turn35 flags=0 cities='..n"#)]});
     Ok(vec![
         ("legacy-capabilities.json", probe),
@@ -166,6 +170,17 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn live_catalogue_rejects_missing_and_extra_rows() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load("rows=66; GameInfo={JAC_SengokuOaths=function()local n=0; return function()n=n+1; if n<=rows then return {} end end end}").exec()?;
+        vm.load(CATALOGUE).exec()?;
+        for count in [0, 65, 67] {
+            vm.globals().set("rows", count)?;
+            assert!(vm.load(CATALOGUE).exec().is_err());
+        }
+        Ok(())
+    }
     #[test]
     fn every_emitted_lua_chunk_compiles_on_lua51() -> Result<()> {
         let vm = mlua::Lua::new();

@@ -33,7 +33,7 @@ if h.oathChosen~=1 or not h.oaths.JAC_OATH_OUCHI_CERTIFIED_ROUTES then error('re
 if l.keys['friend:0:1:1'] or l.friends['0-1']~='none' then error('friendship already scored') end
 local a,b=Players[0]:GetDiplomacy(),Players[1]:GetDiplomacy()
 if a:HasDeclaredFriendship(1) or b:HasDeclaredFriendship(0) then error('friendship unexpectedly formed before fixture') end
-Game:SetProperty('JAC_TODO134_FRIEND_BASE',{a=h.parts.ally or 0,b=l.houses.p1.parts.ally or 0,oath=h.parts.oath or 0})
+Game:SetProperty('JAC_TODO134_FRIEND_BASE',{a=h.parts.ally or 0,b=l.houses.p1.parts.ally or 0,oath=h.parts.oath or 0,turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1})
 a:SetHasMet(1) b:SetHasMet(0)
 a:SetHasDeclaredFriendship(1,true) b:SetHasDeclaredFriendship(0,true)
 if a:HasDeclaredFriendship(1)~=true or b:HasDeclaredFriendship(0)~=true then error('engine did not establish bilateral friendship') end
@@ -51,6 +51,16 @@ if da~=1 or db~=1 or dq~=1 then error('friendship deltas must be base1/base1/oat
 if Players[0]:GetDiplomacy():HasDeclaredFriendship(1)~=true or Players[0]:GetDiplomacy():HasAllied(1) then error('engine friendship changed') end
 return 'FRIENDSHIP_POINTS_PASSED base0=1 base1=1 oath0=1 key=once'
 "#;
+
+const SETUP: &str = "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~='CIVILIZATION_JAC_OUCHI' or PlayerConfigurations[1]:GetCivilizationTypeName()~='CIVILIZATION_JAC_TAKEDA' then error('setup changed Ouchi/Takeda slots') end; HideGameSetup(); return 'Ouchi setup built'";
+
+fn judge_after(delta: u32) -> Value {
+    lua("GameCore_Tuner", &format!("local base=Game:GetProperty('JAC_TODO134_FRIEND_BASE'); local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if not base or turn~=base.turn+{delta} then error('unexpected friendship turn '..turn) end\n{JUDGE}"))
+}
+
+fn after_load() -> Value {
+    lua("GameCore_Tuner", &format!("local saved=Game:GetProperty('JAC_TODO134_FRIEND_SAVE_TURN'); local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if saved==nil or turn~=saved then error('friendship load advanced the turn') end\n{JUDGE}"))
+}
 
 fn lua(state: &str, code: &str) -> Value {
     json!({"action":"ui_lua","state_name":state,"code":code,"timeout":60})
@@ -70,9 +80,16 @@ fn scenario(repo: &Repository) -> Result<Value> {
     if players[1]["civ"] != "CIVILIZATION_JAC_TAKEDA" {
         bail!("peer1 must be Takeda");
     }
+    let start = base["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["action"] == "start_game")
+        .ok_or_else(|| anyhow::anyhow!("template has no start_game"))?
+        .clone();
     let active = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0]:IsTurnActive()"}});
     Ok(
-        json!({"name":"新しい友好宣言：実成立後の台帳1点と誓約1点、保存復元と次手番の重複防止（年齢だけ試験設定）","judge_profile":"generic","steps":[base["steps"][0].clone(),configure,base["steps"][2].clone(),json!({"action":"autoplay","turns":1,"timeout":900}),lua("GameCore_Tuner",FIXTURE),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==1"}}),lua("GameCore_Tuner",ESTABLISH),json!({"action":"end_turn","timeout":900}),lua("GameCore_Tuner",JUDGE),json!({"action":"save","name":"JAC-Todo134-Friendship","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Friendship","timeout":600}),lua("GameCore_Tuner",JUDGE),active,json!({"action":"end_turn","timeout":900}),lua("GameCore_Tuner",JUDGE)]}),
+        json!({"name":"新しい友好宣言：実成立後の台帳1点と誓約1点、保存復元と次手番の重複防止（年齢だけ試験設定）","judge_profile":"generic","steps":[base["steps"][0].clone(),configure,lua("HostGame",SETUP),start,json!({"action":"autoplay","turns":1,"timeout":900}),lua("GameCore_Tuner",FIXTURE),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==1"}}),lua("GameCore_Tuner",ESTABLISH),json!({"action":"end_turn","timeout":900}),judge_after(1),lua("GameCore_Tuner","local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; Game:SetProperty('JAC_TODO134_FRIEND_SAVE_TURN',turn); return 'friendship save turn='..turn"),json!({"action":"save","name":"JAC-Todo134-Friendship","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Friendship","timeout":600}),after_load(),active,json!({"action":"end_turn","timeout":900}),judge_after(2)]}),
     )
 }
 fn main() -> Result<()> {
@@ -98,6 +115,31 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn game_is_started_before_any_gameplay_or_turn_action() -> Result<()> {
+        let scene = scenario(&Repository::checked_in())?;
+        let steps = scene["steps"].as_array().unwrap();
+        let mut started = false;
+        for step in steps {
+            if step["action"] == "start_game" {
+                assert!(!started);
+                started = true;
+            }
+            if step["action"] == "autoplay"
+                || step["action"] == "end_turn"
+                || step["state_name"] == "GameCore_Tuner"
+            {
+                assert!(started, "gameplay before start_game");
+            }
+        }
+        assert!(started);
+        let vm = mlua::Lua::new();
+        vm.load("BuildHeadlessGameSetup=function()end; HideGameSetup=function()end; g_GameParameters={FullRefresh=function()end}; civ0='CIVILIZATION_JAC_OUCHI'; PlayerConfigurations={[0]={GetCivilizationTypeName=function()return civ0 end},[1]={GetCivilizationTypeName=function()return 'CIVILIZATION_JAC_TAKEDA' end}}").exec()?;
+        let _: String = vm.load(SETUP).eval()?;
+        vm.load("civ0='CIVILIZATION_JAC_ODA'").exec()?;
+        assert!(vm.load(SETUP).eval::<String>().is_err());
+        Ok(())
+    }
     #[test]
     fn generated_lua_compiles_on_lua51() -> Result<()> {
         let vm = mlua::Lua::new();
@@ -129,6 +171,22 @@ mod tests {
         vm.load("ledger.houses.p0.parts.oath=6; ledger.houses.p1.parts.ally=9")
             .exec()?;
         assert!(vm.load(JUDGE).eval::<String>().is_err());
+        Ok(())
+    }
+    #[test]
+    fn turn_judges_reject_an_advanced_load_and_skipped_next_turn() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load(r#"turn=42; ledger={reign=1,friends={['0-1']='on'},keys={['friend:0:1:1']=true},houses={p0={parts={ally=4,oath=6}},p1={parts={ally=8}}}}; base={a=3,b=7,oath=5,turn=41}; savedTurn=42; Game={GetCurrentGameTurn=function()return turn end,GetProperty=function(_,key)if key=='JAC_AGES_LEDGER' then return ledger elseif key=='JAC_TODO134_FRIEND_SAVE_TURN' then return savedTurn else return base end end}; GameConfiguration={GetStartTurn=function()return 1 end}; Players={[0]={GetDiplomacy=function()return {HasDeclaredFriendship=function()return true end,HasAllied=function()return false end}end}}"#).exec()?;
+        let load = after_load();
+        let load_code = load["code"].as_str().unwrap();
+        let _: String = vm.load(load_code).eval()?;
+        vm.load("turn=43").exec()?;
+        assert!(vm.load(load_code).eval::<String>().is_err());
+        let next = judge_after(2);
+        let next_code = next["code"].as_str().unwrap();
+        let _: String = vm.load(next_code).eval()?;
+        vm.load("turn=44").exec()?;
+        assert!(vm.load(next_code).eval::<String>().is_err());
         Ok(())
     }
 }
