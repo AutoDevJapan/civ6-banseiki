@@ -91,6 +91,11 @@ fn reopen_reads_new_targets_and_training_after_300_hidden_notifications() {
 #[test]
 fn hidden_launcher_tracks_missing_and_dead_local_player_without_building_rows() {
     let world = PanelWorld::new(&read_repo(PANEL), 1000);
+    let context: Table = world.lua.globals().get("ContextPtr").unwrap();
+    assert!(
+        !context.get::<bool>("Hidden").unwrap(),
+        "launcher parent remains hidden"
+    );
     let controls: Table = world.lua.globals().get("Controls").unwrap();
     let launcher: Table = controls.get("OpenButton").unwrap();
     assert!(!launcher.get::<bool>("Hidden").unwrap());

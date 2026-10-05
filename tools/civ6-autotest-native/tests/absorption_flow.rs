@@ -275,6 +275,188 @@ fn fixture_runs_the_actual_lua_transfer_with_no_spawn_return_value() -> mlua::Re
     .exec()
 }
 
+// The full absorption engine runs here. RP's Export boundary returns a detached
+// saved ledger; the RP suite separately exercises its real normalization/revival.
+fn joint_adapter_world() -> mlua::Result<Lua> {
+    let lua = world()?;
+    lua.load(r#"
+      local A=TEST_ABSORPTION
+      local native=UNIT(1,13,'UNIT_HERO_JAC_WARLORD_A',4)
+      native.lifespan=17;native.charges=2
+      HERO_CLAIMS[0]=1;HERO_ORIGINS[0]={player=1,id=CITIES[4].id}
+      HERO_DISCOVERED['1:0']=true
+      local record={ID='joint-native',Kind='HERO',Owner=1,Unit={Owner=1,ID=13},Contract='PROTECT'}
+      native:SetProperty(A.Rules.PERSON_KEY,record)
+      local roster=A.GetRoster(1);roster['joint-native']=record
+      Players[1]:SetProperty(A.Rules.ROSTER_KEY,roster)
+      PLAN.Units['1:13']='PROTECT';PLAN.Assets['joint-native']='PROTECT'
+      Game:SetProperty('JAC_RP_STATE_V1',{schema=1,revision=7,
+        heroes={['1']={religion='sect',unit=13,heroClass=0,heroUnit='UNIT_HERO_JAC_WARLORD_A',verification='APPLIED',rewardFaith=30}},
+        artifacts={},religiousAlliances={},religions={
+          sect={id='sect',founder=1,founderDefeated=false,engineReligion=5,followers=9,
+            communities={origin={holder='PLAYER_1',followers=9,publicFacilities=1}},
+            assets={book={kind='SCRIPTURE',owner=1,holder='CAVE'},third={kind='RECORD',owner=3,holder='PLAYER_3'}},
+            discoveries={},revivals={},materialUses={},outcomeUses={},retiredAssets={}}
+        }})
+      JAC_ReligionPersistenceGameplay={Export=function() return A.Rules.Copy(Game:GetProperty('JAC_RP_STATE_V1')) end}
+    "#).exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_ReligionPersistence/Scripts/JAC_RP_AbsorptionAdapter.lua",
+    )?;
+    lua.load("TEST_ABSORPTION.RegisterAdapter('religion-persistence',JAC_RP_AbsorptionAdapter)")
+        .exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn religion_adapter_runs_in_actual_absorption_and_reregisters_after_reload() -> mlua::Result<()> {
+    let lua = joint_adapter_world()?;
+    lua.load(r#"
+      local A=TEST_ABSORPTION
+      local tx=A.Apply(PLAN)
+      assert(tx.Status=='COMPLETE' and tx.Adapters['religion-persistence'])
+      local state=Game:GetProperty('JAC_RP_STATE_V1')
+      local r=state.religions.sect
+      assert(r.founder==1 and r.founderDefeated and r.engineReligion==5 and r.followers==9)
+      assert(r.communities.origin.holder=='PLAYER_2' and r.assets.book.owner==2 and r.assets.book.holder=='CAVE')
+      assert(r.assets.third.owner==3 and r.assets.third.holder=='PLAYER_3')
+      assert(state.heroes['1']==nil and state.heroes['2'].unit==tx.UnitMap['1:13'].ID)
+      local unit=A.FindUnit(2,'test-absorption:unit:13')
+      assert(unit:IsHero() and unit:GetID()==state.heroes['2'].unit)
+      JOINT_RP_SAVED=A.Canonical(state)
+      A.Apply(PLAN)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==JOINT_RP_SAVED)
+      Game.props=A.Rules.Copy(Game.props)
+    "#).exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+    )?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_ReligionPersistence/Scripts/JAC_RP_AbsorptionAdapter.lua",
+    )?;
+    lua.load(
+        r#"
+      local A=TEST_ABSORPTION
+      A.RegisterAdapter('religion-persistence',JAC_RP_AbsorptionAdapter)
+      assert(A.Verify(PLAN.ID,true))
+      A.Apply(PLAN)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==JOINT_RP_SAVED)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn religion_adapter_collision_rejects_before_native_absorption_mutation() -> mlua::Result<()> {
+    let lua = joint_adapter_world()?;
+    lua.load(
+        r#"
+      local A=TEST_ABSORPTION
+      local state=Game:GetProperty('JAC_RP_STATE_V1')
+      state.heroes['2']={unit=50,verification='APPLIED'}
+      local before=A.Canonical(state)
+      local ok,err=pcall(A.Apply,PLAN)
+      assert(not ok and tostring(err):find('slot occupied',1,true))
+      assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0,'late collision refusal damaged native assets')
+      assert(Players[1].units[13] and CITIES[4]:GetOwner()==1)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==before)
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation()
+-> mlua::Result<()> {
+    let lua = joint_adapter_world()?;
+    lua.load(r#"
+      local A=TEST_ABSORPTION
+      local state=Game:GetProperty('JAC_RP_STATE_V1')
+      state.heroes['1'].heroClass=99
+      local before=A.Canonical(state)
+      local ok,err=pcall(A.Apply,PLAN)
+      assert(not ok and tostring(err):find('identity mismatch',1,true))
+      assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0,'stale reference refusal damaged native assets')
+      assert(Players[1].units[13] and CITIES[4]:GetOwner()==1)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==before)
+    "#).exec()
+}
+
+#[test]
+fn religion_adapter_corrupt_metadata_rejects_before_native_absorption_mutation() -> mlua::Result<()>
+{
+    for change in [
+        "state.revision='broken'",
+        "state.revision=1.5",
+        "state.revision=0/0",
+        "state.absorptionReceipts=false",
+    ] {
+        let lua = joint_adapter_world()?;
+        lua.load(format!(r#"
+          local A=TEST_ABSORPTION
+          local state=Game:GetProperty('JAC_RP_STATE_V1')
+          {change}
+          local ok=pcall(A.Apply,PLAN)
+          assert(not ok,'corrupt metadata was accepted')
+          assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0,'metadata failure occurred after native assets moved')
+          assert(Players[1].units[13] and CITIES[4]:GetOwner()==1)
+        "#)).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment()
+-> mlua::Result<()> {
+    for revision in [2147483646i64, 2147483647] {
+        let lua = joint_adapter_world()?;
+        lua.globals().set("REVISION", revision)?;
+        lua.load(
+            r#"
+      local A=TEST_ABSORPTION
+      Game:GetProperty('JAC_RP_STATE_V1').revision=REVISION
+      local tx=A.Apply(PLAN)
+      assert(tx.Status=='COMPLETE' and Game:GetProperty('JAC_RP_STATE_V1').revision==2147483647)
+      assert(A.Verify(PLAN.ID,true))
+      local saved=A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))
+      local spawns,kills,transfers=SPAWNS,KILLS,TRANSFERS
+      A.Apply(PLAN)
+      assert(A.Canonical(Game:GetProperty('JAC_RP_STATE_V1'))==saved)
+      assert(SPAWNS==spawns and KILLS==kills and TRANSFERS==transfers)
+    "#,
+        )
+        .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn religion_adapter_failed_property_write_resumes_without_second_native_transfer()
+-> mlua::Result<()> {
+    let lua = joint_adapter_world()?;
+    lua.load(r#"
+      local A=TEST_ABSORPTION
+      local set=Game.SetProperty;local fail=true
+      Game.SetProperty=function(self,key,value)
+        if key=='JAC_RP_STATE_V1' and fail then fail=false;error('joint RP write refused') end
+        return set(self,key,value)
+      end
+      local ok,err=pcall(A.Apply,PLAN)
+      assert(not ok and tostring(err):find('joint RP write refused',1,true))
+      local state=Game:GetProperty('JAC_RP_STATE_V1')
+      assert(state.heroes['1'].unit==13 and state.absorptionReceipts==nil)
+      local spawns,kills,transfers=SPAWNS,KILLS,TRANSFERS
+      assert(A.Resume(PLAN.ID).Status=='COMPLETE')
+      assert(SPAWNS==spawns and KILLS==kills and TRANSFERS==transfers,'retry duplicated native transfer')
+      state=Game:GetProperty('JAC_RP_STATE_V1')
+      assert(state.heroes['1']==nil and state.heroes['2'] and state.revision==8)
+      assert(state.absorptionReceipts[PLAN.ID] and A.Verify(PLAN.ID,true))
+    "#).exec()
+}
+
 #[test]
 fn actual_flow_journals_sorted_phase_one_rolls_and_reloads_without_reroll() -> mlua::Result<()> {
     let lua = flow_world()?;
@@ -1823,16 +2005,28 @@ fn failed_recovered_heroes_keep_claim_and_candidate_and_retry_after_reload() -> 
 }
 
 #[test]
-fn single_gameplay_entry_includes_private_modules_and_tuner_uses_sp_only_event() -> mlua::Result<()>
-{
+fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua::Result<()> {
     let manifest = fs::read_to_string(repo_path(
         "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
     ))
     .map_err(mlua::Error::external)?;
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
+    // The absorption entry owns its private modules. The independent carrier
+    // boundary receiver has its own context and must also load exactly once.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 2);
+    for id in ["JAC_Absorption_Gameplay", "JAC_CarrierBoundary"] {
+        assert_eq!(
+            manifest
+                .matches(&format!(
+                    "<AddGameplayScripts id=\"{id}\" criteria=\"JAC_Absorption_Banseiki\">"
+                ))
+                .count(),
+            1,
+        );
+    }
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
+    assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
