@@ -74,6 +74,7 @@ runnerは開始と停止の対、名前、`lifecycle`の20秒上限、観測中�
 - Windowsの専用Rust子プロセスで、標準モードの入口・戻り値、新thread、正常stop、期限切れ、guard失敗、記録上限到達時の例外処理を検査した。各停止後に子プロセスが実行を続け、debug registerがattach前と同値であることを確かめた。`SetThreadContext`拒否時の再試行と、永続拒否時にcontrollerが同じ子プロセスを閉じる経路も区別した。実際のWindowsハードウェアbreakpointで、テスト用`CONTEXT.Dr6`を0にした所有例外、RIP不一致とcontext取得失敗の保留、別の`SINGLE_STEP`の子側handlerへの引き渡し、期限後のready拒否を検査した。propertyモードでも所有・未所有・曖昧な例外、終了済みthreadと生存threadの後始末を検査する。いずれも修正後の実Civ6成功を示さない。
 - runnerのRust検査で開始・停止のdispatch、名前と時間の上限、未対の開始・停止と観測中の再起動の拒否を確認した。試験用子プロセスでは作成時刻の不一致、誤ったprocess identityでの終了拒否、ready期限前後の重大エラー、期限より遅い通知、厳密な終端JSON、`stop`とDropの共通期限、一度だけの終了要求を確認した。実機53のreadyは記録されたが、正常detachと30分leaseの完走は未確認。
 - `NtQueryInformationThread`の開始位置、停止中RIP、NTDLLのディスク・PE情報、重大終了コード、終端版の照合を加えた全ワークスペース`--all-targets`は、このworktree専用の`tools/target-native-integrate`で103試験群・1534件成功、失敗0・省略0だった。Lua 5.1とWindows実子プロセスの検査を含む。7手順シナリオは`--check`に合格した。実ゲームの起動・attachはこの変更後に行っていない。実機53・82のRIP・DR6は不明のままであり、修正後の実Civ6成功も示さない。
+- 2026-10-05にattachのRIPを`DbgBreakPoint+1`へ限定し、3つの子プロセス試験で終了イベントを処理してから対象の終了を待つ順序へ直した。変更後の観測器crateでは専用Rust子プロセスを含む全42件を直列実行し、失敗0・省略0だった。前項の全ワークスペース1534件はこれらの変更前の結果である。
 - `tools/civ6-pe-rs`はこのworktreeにある。観測器は既知の6停止位置のファイルオフセットを固定してバイト比較し、PE parserを複製しない。別ビルドやRVA追加に対応する段階で、既存PE parserの必要部分を共通libraryに移す。
 - 静的gateの実機43では484組が偽、21AIは称号各3・使用0・任命0、正式Join後の公式APPOINT1回も同期barrier後に本体任命なし・使用0だった。この観測器はその原因を切り分ける測定器であり、本体の動的資格機能は未実装のまま。
 
