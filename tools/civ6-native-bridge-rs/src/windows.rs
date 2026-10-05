@@ -25,6 +25,8 @@ use windows_sys::Win32::System::Threading::{
 
 #[path = "windows/assignment.rs"]
 mod assignment;
+#[path = "windows/composite.rs"]
+mod composite;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
 use assignment::{
@@ -85,6 +87,7 @@ pub const PROMOTION_TRACE_CAPACITY: usize = 2048;
 pub const GAME_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
 pub const GAMECORE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll";
 const CONFIG_VERSION: u32 = 1;
+pub const EXPERIMENTAL_PAID_CONFIG_VERSION: u32 = 0x0853_0001;
 use crate::MAX_ACTIVE_SECONDS;
 
 /// AMD64 APM 3.11 permits an asynchronous single atomic store to a code
@@ -1067,6 +1070,17 @@ fn product_index_known(index: usize, session: u32) -> bool {
 // None means a non-persona governor: preserve GameCore's own result.
 // Some(false) means a manifested persona with no current positive permission.
 fn product_permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
+    if composite::ENABLED.load(Ordering::Acquire) {
+        let Some(catalog) = composite::catalog(owner, receiver, session) else {
+            return Some(false);
+        };
+        if !catalog
+            .iter()
+            .any(|definition| definition.governor_index as usize == index)
+        {
+            return None;
+        }
+    }
     if index >= PRODUCTION_INDEX_LIMIT || !PRODUCT_ACTIVE.load(Ordering::Acquire) {
         return None;
     }
@@ -1163,6 +1177,9 @@ fn joined_bind(receiver: u64, session: u32, ticket: u32) {
 // Returns a session/ticket token only for the one numeric Core property and
 // the currently bound receiver. This runs before the original getter once.
 unsafe extern "system" fn joined_property_begin(property: u64, key: u32) -> u64 {
+    if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key) {
+        return composite::begin(property, key);
+    }
     if PRODUCT_ACTIVE.load(Ordering::Acquire) {
         return product_property_begin(property, key);
     }
@@ -1607,7 +1624,8 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         || (trace.scope == BridgeMode::ProductionAdmission as u32
             && product_key(key_id).is_none()
             && product_close_index(key_id).is_none()
-            && product_reset_owner(key_id).is_none())
+            && product_reset_owner(key_id).is_none()
+            && !(composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id)))
     {
         trace.filtered.fetch_add(1, Ordering::Relaxed);
         return;
@@ -1634,7 +1652,11 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
     };
     if trace.scope == BridgeMode::ProductionAdmission as u32 {
-        product_observe_property(property, key_id, token, state, tag, payload, flags);
+        if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
+            composite::observe(property, key_id, token, state, tag, payload, flags);
+        } else {
+            product_observe_property(property, key_id, token, state, tag, payload, flags);
+        }
     }
     #[cfg(test)]
     if returned != 0 && returned == PROPERTY_TEST_RAW_MUTATE_RETURNED.load(Ordering::Acquire) {
@@ -2391,7 +2413,13 @@ unsafe fn install_hook(
     if target.is_null() || trace.is_null() || !(target as usize).is_multiple_of(8) {
         return Err("unaligned or missing hook input");
     }
-    let mut guard = HOOK.lock().map_err(|_| "bridge lock poisoned")?;
+    let hook_slot =
+        if mode == BridgeMode::AssignCalibration && composite::ENABLED.load(Ordering::Acquire) {
+            &composite::ASSIGNMENT_HOOK
+        } else {
+            &HOOK
+        };
+    let mut guard = hook_slot.lock().map_err(|_| "bridge lock poisoned")?;
     if guard.is_some() {
         return Err("bridge already installed");
     }
@@ -2579,9 +2607,10 @@ unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
     product_deactivate();
     let promotion = unsafe { restore_promotion_call() }?;
+    let assignment = restore_one(&composite::ASSIGNMENT_HOOK)?;
     let main = restore_one(&HOOK)?;
     let property = restore_one(&JOINED_PROPERTY_HOOK)?;
-    if !main && !property && !promotion {
+    if !main && !property && !promotion && !assignment {
         return Err("bridge not installed");
     }
     Ok(())
@@ -2781,7 +2810,9 @@ fn pe_file_offset(file: &mut File, rva: u32) -> Option<u64> {
 }
 
 fn guarded_install(config: BridgeConfig) -> BridgeStatus {
-    if config.version != CONFIG_VERSION
+    let composite_requested = config.version == EXPERIMENTAL_PAID_CONFIG_VERSION
+        && config.mode == BridgeMode::ProductionAdmission as u32;
+    if (config.version != CONFIG_VERSION && !composite_requested)
         || config.size as usize != std::mem::size_of::<BridgeConfig>()
         || config.game_pid == 0
         || config.created_filetime == 0
@@ -2947,6 +2978,35 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
             }
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
+            if composite_requested {
+                if ASSIGN_USED
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    return BridgeStatus::HookFailure;
+                }
+                let Some(assign_bytes) =
+                    pinned_gamecore(Path::new(GAMECORE), BridgeMode::AssignCalibration)
+                else {
+                    return BridgeStatus::GameCoreIdentity;
+                };
+                let assign = unsafe { (module as *mut u8).add(PINNED_CAN_ASSIGN_RVA) };
+                return match unsafe {
+                    composite::install(
+                        entry,
+                        property,
+                        assign,
+                        trace,
+                        disk_bytes,
+                        property_bytes,
+                        assign_bytes,
+                    )
+                } {
+                    Ok(()) => BridgeStatus::Ok,
+                    Err(reason) if reason.starts_with("critical:") => BridgeStatus::Critical,
+                    Err(_) => BridgeStatus::HookFailure,
+                };
+            }
             let property_result = unsafe {
                 install_property_at(
                     property,

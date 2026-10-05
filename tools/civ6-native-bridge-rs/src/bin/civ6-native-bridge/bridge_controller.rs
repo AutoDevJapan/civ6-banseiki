@@ -197,6 +197,7 @@ struct Args {
     duration: u32,
     out: PathBuf,
     mode: BridgeMode,
+    paid_experiment: bool,
 }
 
 fn args(raw: &[String]) -> Result<Args, String> {
@@ -242,7 +243,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
         "assign-calibration" => BridgeMode::AssignCalibration,
         "joined-admission" => BridgeMode::JoinedAdmission,
-        "production-admission" => BridgeMode::ProductionAdmission,
+        "production-admission" | "paid-assignment-experimental" => BridgeMode::ProductionAdmission,
         "promotion-call" => BridgeMode::PromotionCall,
         _ => return Err("invalid bridge mode".into()),
     };
@@ -262,6 +263,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         duration,
         out,
         mode,
+        paid_experiment: fields.get("--mode") == Some(&"paid-assignment-experimental"),
     })
 }
 
@@ -943,7 +945,8 @@ pub fn run() -> Result<(), String> {
                 BridgeMode::PromotionCall => "promotion-call"},
             "entry_rva":parsed.mode.rva(),
             "entry_bytes":format!("{:02x?}",original),"bridge_sha256":bridge_sha,
-            "duration_limit_seconds":parsed.duration});
+            "duration_limit_seconds":parsed.duration,
+            "paid_assignment_experimental":parsed.paid_experiment});
     if matches!(
         parsed.mode,
         BridgeMode::CanEver
@@ -1037,6 +1040,9 @@ pub fn run() -> Result<(), String> {
             }
         };
         config.max_seconds = parsed.duration;
+        if parsed.paid_experiment {
+            config.version = civ6_native_bridge_rs::EXPERIMENTAL_PAID_CONFIG_VERSION;
+        }
         let config_bytes = unsafe {
             std::slice::from_raw_parts(
                 (&config as *const BridgeConfig).cast::<u8>(),

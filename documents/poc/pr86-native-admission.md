@@ -1,5 +1,15 @@
 # PR86: 加入人物の本体任命資格（共有ToDo 853）
 
+## ToDo853: B1と本人読取を同じ試験用leaseへ接続
+
+費用1のCore受入は親1595の待ち列、費用2/3は親880、中和は548が所有する。この接続の実機成功はまだない。通常のmode6と観測mode7を変更せず、controllerの明示的な `--mode paid-assignment-experimental` と同期Gameplayの `JAC_TEST853_PAID_ASSIGNMENT_V1=true` を両方使う場合だけ試せる。通常シナリオへ追加しない。内部設定version `0x08530001` はmode6だけに適用され、CanEver・自然property・CanAssignを一つのbounded controller leaseで設置、失敗時および終了時に復元する。ロードしただけでは設置しない。
+
+Rustの `paid_glue::source()` がGameplay接続を生成する。生成器は `cargo run --locked --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --bin generate-paid-glue -- <repository-root>`。既存の同期台帳、実偉人の照合、GameInfoの22定義を束縛し、費用・Governor Index・BASE/TITLE_1/TITLE_2 Indexを転送する。UIの読取結果や総Spentを配置資格へ使わない。配置時には現在のGovernor引数を再読し、所属リスト・owner・Index・本人昇進配列とこの定義を照合する。予約中の任命資格trueだけでは配置を許可しない。
+
+schemaはGame property `JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA=1`。904000..904255がmanifest、905000..905255が支払照合要求、906000..906255が閉鎖、907000..907063がowner reset。追加領域905256..905999と906256..906523は22件×46bitの定義転送、904999は全定義のcommit。数値型のnative表現を推測せず、転送にも検証済みのtyped boolを使う。1定義はIndex8bit、費用2bit、BASEとTITLE各12bit。未使用TITLE欄は0。全22件のIndex・昇進が一意で、全bitが同owner/receiver/sessionのreset後かつcommit前のticketを持つまで全資格を閉じる。任意のbitの再公開は古いcommitを無効化する。支払照合要求trueはcommit後に必要で、現在の本人が費用分の正式昇進を持つ場合のみ原ALを維持する。原falseはtrueへ変えない。
+
+初回は全予約領域の既存値を照合し、衝突時は既存値を上書きしない。再読込は保存済みtrueを使わずowner reset、22件のfalse ACK、定義commitをやり直す。現在は試験専用で全定義を再同期するため、通常有効化前に本体受入と所要時間の計測が必要。合成検査と実機の結果は区別して記録する。
+
 ## ToDo1433再開：配置資格の独立受信処理B1
 
 **配置の共通経路は親の実機144で確認済み。今回のB1は独立した支払済み資格の受信処理と合成拒否試験であり、製品の未払い配置拒否B全体は未完成である。** 元の観測Aの差分b848fba5を保持した担当用作業場所を、親のc21b145fと通常資格修正51cb6b42まで早送りした。親・実機担当の作業場所と本体メモリには接続しない。

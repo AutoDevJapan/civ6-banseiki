@@ -293,6 +293,11 @@ unsafe extern "system" fn assign_calibration_end(
     };
     #[cfg(not(test))]
     let result = original;
+    let result = if composite::ENABLED.load(Ordering::Acquire) {
+        PaidAssignmentConsumer::restrict_current(original, _governors, _governor)
+    } else {
+        result
+    };
     if let Some(trace) = unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() } {
         if token > 0 && token <= ASSIGN_CAPACITY as u64 {
             let row = &trace.rows[token as usize - 1];

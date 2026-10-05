@@ -44,6 +44,10 @@ fn key(value: u32) -> Option<Key> {
         .then(|| Key::Reset((value - PAID_RESET_BASE) as usize))
 }
 
+pub(super) fn is_key(value: u32) -> bool {
+    key(value).is_some()
+}
+
 fn live(session: u32) -> bool {
     PRODUCT_ACTIVE.load(Ordering::Acquire)
         && !PRODUCT_EXHAUSTED.load(Ordering::Acquire)
@@ -75,6 +79,16 @@ pub struct PaidAssignmentRead {
     token: u64,
 }
 
+impl PaidAssignmentRead {
+    pub(super) fn from_token(receiver: u64, property_key: u32, token: u64) -> Self {
+        Self {
+            receiver,
+            property_key,
+            token,
+        }
+    }
+}
+
 struct InvocationMemory;
 impl crate::governor_payment::CurrentMemory for InvocationMemory {
     fn copy<const N: usize>(&self, address: u64) -> Option<[u8; N]> {
@@ -95,7 +109,7 @@ impl PaidAssignmentConsumer {
         })
     }
 
-    fn begin_token(receiver: u64, property_key: u32) -> u64 {
+    pub(super) fn begin_token(receiver: u64, property_key: u32) -> u64 {
         let Some(kind) = key(property_key) else {
             return 0;
         };
@@ -211,9 +225,24 @@ impl PaidAssignmentConsumer {
     /// Some(false) closes a known persona; Some(true) only limits an original
     /// true result, and is not permission to call the assignment setter.
     pub fn permission(owner: usize, index: usize, receiver: u64, session: u32) -> Option<bool> {
+        if composite::ENABLED.load(Ordering::Acquire) {
+            let Some(catalog) = composite::catalog(owner, receiver, session) else {
+                return Some(false);
+            };
+            if !catalog
+                .iter()
+                .any(|definition| definition.governor_index as usize == index)
+            {
+                return None;
+            }
+        }
         let current_session = PRODUCT_SESSION.load(Ordering::Acquire);
         if !known(index, current_session) {
-            return None;
+            return if composite::ENABLED.load(Ordering::Acquire) {
+                Some(false)
+            } else {
+                None
+            };
         }
         if !live(session) || owner >= PRODUCTION_OWNER_LIMIT || receiver == 0 {
             return Some(false);
@@ -240,6 +269,8 @@ impl PaidAssignmentConsumer {
             .iter()
             .all(|word| joined_session(*word) == session && joined_receiver(*word) == receiver);
         let allowed = identity
+            && (!composite::ENABLED.load(Ordering::Acquire)
+                || composite::payment_after_catalog(owner, joined_ticket(payment)))
             && joined_ticket(closure) > joined_ticket(binding)
             && joined_ticket(ack) > joined_ticket(closure)
             && joined_ticket(manifest) > joined_ticket(ack)
@@ -298,6 +329,20 @@ impl PaidAssignmentConsumer {
             return original & !0xff;
         };
         let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        let definition = if composite::ENABLED.load(Ordering::Acquire) {
+            let Some(catalog) = composite::catalog(owner, receiver, session) else {
+                return original & !0xff;
+            };
+            match catalog
+                .into_iter()
+                .find(|definition| definition.governor_index as usize == index)
+            {
+                None => return original,
+                Some(definition) => Some(definition),
+            }
+        } else {
+            None
+        };
         match Self::permission(owner, index, receiver, session) {
             // The composite gate first completes the persona catalog. A
             // classified ordinary Governor need not have a persona-compatible
@@ -313,6 +358,14 @@ impl PaidAssignmentConsumer {
         };
         if person.owner as usize != owner || person.governor_index as usize != index {
             return original & !0xff;
+        }
+        if let Some(definition) = definition {
+            if person.diagnostic_paid(owner as u32, definition) != Ok(definition.cost)
+                || !composite::catalog(owner, receiver, session)
+                    .is_some_and(|catalog| catalog.into_iter().any(|current| current == definition))
+            {
+                return original & !0xff;
+            }
         }
         Self::restrict(original, owner, index, receiver, session)
     }
