@@ -17,7 +17,7 @@ fn meter_outputs() -> Outputs {
         "-- Diagnostic only: attach explicitly, activate by owned city plot properties.\n",
     );
     for kind in ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"] {
-        for (mode, amount, modifier_type, property) in [
+        let mut definitions = vec![
             (
                 "BASE",
                 6,
@@ -30,7 +30,28 @@ fn meter_outputs() -> Outputs {
                 "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER",
                 "JAC_TODO134_CAL_ON".into(),
             ),
-        ] {
+            (
+                "FINE",
+                1,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER",
+                "JAC_TODO134_FINE_ON".into(),
+            ),
+            (
+                "SHIFT",
+                1,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
+                "JAC_TODO134_SHIFT_ON".into(),
+            ),
+        ];
+        if kind == "PRODUCTION" {
+            definitions.push((
+                "SHIFT_TWO",
+                1,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
+                "JAC_TODO134_SHIFT_TWO_ON".into(),
+            ));
+        }
+        for (mode, amount, modifier_type, property) in definitions {
             let id = format!("JAC_TODO134_{mode}_{kind}");
             sql.push_str(&format!("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('{id}_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('{id}_REQ','PropertyName','{property}'),('{id}_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('{id}_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('{id}_SET','{id}_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('{id}','{modifier_type}','{id}_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('{id}','YieldType','YIELD_{kind}'),('{id}','Amount','{amount}');\n"));
         }
@@ -172,6 +193,23 @@ local function jstr(v)
   if c=='"' then return '\\"' elseif c=='\\' then return '\\\\' else return string.format('\\u%04x',string.byte(c)) end
  end)..'"'
 end
+-- Infer a conservative common reporting step from controlled perturbations.
+-- Differences remove a fixed offset. Reject values that cannot be canonically
+-- represented; do not mistake binary floating-point noise for extra precision.
+local function reported_step(values)
+ if #values<3 or not finite(values[1]) then return nil end
+ local origin=values[1]; local divisor=0
+ local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end
+ for i=2,#values do
+  if not finite(values[i]) then return nil end
+  local difference=values[i]-origin
+  local ticks=math.floor(difference*10000+0.5)
+  if math.abs(difference-ticks/10000)>0.00001 then return nil end
+  divisor=gcd(divisor,math.abs(ticks))
+ end
+ if divisor==0 then return nil end
+ return divisor/10000+0.00002
+end
 "#;
 
 fn ui(state: &str, code: String) -> Value {
@@ -241,13 +279,14 @@ assert(not Game:GetProperty('JAC_TODO134_METER_ATTACHED'),'reference modifiers a
 local p=assert(Players[0]); assert(p:IsHuman(),'reference requires human player 0')
 assert(type(p.AttachModifierByID)=='function','official player modifier attachment unavailable')
 for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
- p:AttachModifierByID('JAC_TODO134_BASE_'..kind)
- p:AttachModifierByID('JAC_TODO134_CAL_'..kind)
+ for _,mode in ipairs({'BASE','CAL','FINE','SHIFT'}) do p:AttachModifierByID('JAC_TODO134_'..mode..'_'..kind) end
  for _,city in p:GetCities():Members() do
   local plot=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(plot:GetOwner()==0,'reference city owner changed')
   plot:SetProperty('JAC_TODO134_BASE_'..kind,1); plot:SetProperty('JAC_TODO134_CAL_ON',0)
+  plot:SetProperty('JAC_TODO134_FINE_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)
  end
 end
+p:AttachModifierByID('JAC_TODO134_SHIFT_TWO_PRODUCTION')
 Game:SetProperty('JAC_TODO134_METER_ATTACHED',true)
 return 'diagnostic base input +6; explicit native 100-percent reference attached but off; no natural balance claim'
 "#;
@@ -257,6 +296,7 @@ assert(Game:GetProperty('JAC_TODO134_METER_ATTACHED'),'reference not attached')
 for _,city in Players[0]:GetCities():Members() do
  local plot=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(city:GetOwner()==0 and plot:GetOwner()==0,'reference owner changed')
  plot:SetProperty('JAC_TODO134_CAL_ON',__CAL__)
+ plot:SetProperty('JAC_TODO134_FINE_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)
  for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
   plot:SetProperty('JAC_TODO134_BASE_'..kind,(__BASE__==1 or (__KEEP_PRODUCTION__==1 and kind=='PRODUCTION')) and 1 or 0)
  end
@@ -272,6 +312,10 @@ fn meter_toggle(cal: u8, base: u8, keep_production: u8) -> Value {
             .replace("__BASE__", &base.to_string())
             .replace("__KEEP_PRODUCTION__", &keep_production.to_string()),
     )
+}
+
+fn precision_toggle(fine: u8, shift: u8, second: u8) -> Value {
+    ui("GameCore_Tuner", format!("for _,city in Players[0]:GetCities():Members() do local p=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(city:GetOwner()==0 and p:GetOwner()==0,'precision probe owner changed'); p:SetProperty('JAC_TODO134_FINE_ON',{fine}); p:SetProperty('JAC_TODO134_SHIFT_ON',{shift}); p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',{second}); end; return 'controlled reporting precision probe updated'"))
 }
 
 const CAPABILITY: &str = r#"
@@ -453,6 +497,9 @@ if all.reference or all.reference_off then
  assert(all.reference and all.reference_off,'reference on/off evidence missing')
  for _,phase in ipairs({'reference','reference_off'}) do assert(#all[phase].own==#base.own and #all[phase].foreign==#base.foreign,'reference city inventory incomplete') end
 end
+if all.precision_one or all.precision_two or all.precision_off then
+ for _,phase in ipairs({'precision_one','precision_two','precision_off'}) do assert(all[phase] and #all[phase].own==#base.own and #all[phase].foreign==#base.foreign,'precision probe inventory incomplete') end
+end
 local function close(a,b) return finite(a) and finite(b) and math.abs(a-b)<=0.00002 end
 local function metric(r,kind) if kind=='growth' then return r.growth else return r.y[kind] end end
 local reports={}; local proven={}; local quantities=true
@@ -473,7 +520,7 @@ for i,a in ipairs(base.own) do
    local av,bv,cv,dv=metric(a,e.kind),metric(b,e.kind),metric(c,e.kind),metric(d,e.kind)
    local observed=bv-av
    assert(close(cv,av) and close(dv,bv),'off/on/off restoration failed for '..e.kind..' city '..a.id)
-   local expected=nil; local quantity=false; local reason='raw_yield_basis_not_documented'
+   local expected=nil; local quantity=false; local reporting_step=nil; local reason='raw_yield_basis_not_documented'
    if e.kind=='growth' then
     assert(close(b.other-a.other,e.amount/100) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
     assert(close(a.housing,b.housing) and close(a.housing,c.housing) and close(a.housing,d.housing),'housing changed during growth isolation')
@@ -495,8 +542,18 @@ for i,a in ipairs(base.own) do
      assert(close(metric(ref_off,e.kind),av),'reference did not turn off to original yield')
      local hundred=metric(ref,e.kind)-av
      assert(finite(hundred) and hundred>0.03,'no measurable actual 100-percent reference')
-     local tolerance=0.02*(1+e.amount/100)+0.00002
-     if tolerance<hundred*0.005 then
+     local p1=all.precision_one and all.precision_one.own[i]
+     local p2=all.precision_two and all.precision_two.own[i]
+     local p0=all.precision_off and all.precision_off.own[i]
+     local step=nil
+     if p1 and p2 and p0 then
+      for _,p in ipairs({p1,p2,p0}) do assert(p.id==a.id and p.plot==a.plot and p.owner==a.owner,'precision probe city changed') end
+      assert(close(metric(p0,e.kind),av),'precision probe did not restore')
+      step=reported_step({av,metric(ref,e.kind),metric(p1,e.kind),metric(p2,e.kind)})
+     end
+     reporting_step=step
+     local tolerance=step and 2*step*(1+e.amount/100)+0.00004
+     if tolerance and tolerance<hundred*0.005 then
       expected=hundred*e.amount/100
       assert(math.abs(observed-expected)<=tolerance,'oath yield differs from independently measured 100-percent reference')
       quantity=true; reason='native_100_percent_reference_delta'
@@ -512,7 +569,7 @@ for i,a in ipairs(base.own) do
      elseif av>0.03 then error('selected yield did not actually increase') end
     end
    end
-   reports[#reports+1]=string.format('{"city":%d,"kind":"%s","off":%.9f,"on":%.9f,"off_again":%.9f,"restored":%.9f,"expected_percent":%d,"expected_delta":%s,"observed_delta":%.9f,"quantity_verified":%s,"reason":"%s"}',a.id,e.kind,av,bv,cv,dv,e.amount,expected and string.format('%.9f',expected) or 'null',observed,tostring(quantity),reason)
+   reports[#reports+1]=string.format('{"city":%d,"kind":"%s","off":%.9f,"on":%.9f,"off_again":%.9f,"restored":%.9f,"expected_percent":%d,"expected_delta":%s,"observed_delta":%.9f,"quantity_verified":%s,"reported_step_upper_bound":%s,"reason":"%s"}',a.id,e.kind,av,bv,cv,dv,e.amount,expected and string.format('%.9f',expected) or 'null',observed,tostring(quantity),reporting_step and string.format('%.9f',reporting_step) or 'null',reason)
   end
  end
  for _,kind in ipairs({'production','gold','science','culture','faith','food','growth'}) do
@@ -537,7 +594,7 @@ for i,a in ipairs(base.foreign) do
  for _,kind in ipairs({'production','gold','science','culture','faith','food','growth'}) do
   assert(close(metric(a,kind),metric(b,kind)) and close(metric(b,kind),metric(c,kind)) and close(metric(c,kind),metric(d,kind)),'foreign city changed while testing '..oath..'/'..kind)
  end
- for _,phase in ipairs({'reference','reference_off'}) do
+ for _,phase in ipairs({'reference','reference_off','precision_one','precision_two','precision_off'}) do
   local sample=all[phase] and all[phase].foreign[i]
   if sample then
    assert(sample.id==a.id and sample.owner==a.owner and sample.plot==a.plot,'reference foreign city changed')
@@ -569,6 +626,7 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do for _,city in p:GetCities()
   assert((plot:GetProperty(row.OathType..'_ON') or 0)==expected,'diagnostic oath flags not restored')
  end
  assert((plot:GetProperty('JAC_TODO134_CAL_ON') or 0)==0,'100-percent diagnostic reference not disabled')
+ for _,key in ipairs({'JAC_TODO134_FINE_ON','JAC_TODO134_SHIFT_ON','JAC_TODO134_SHIFT_TWO_ON'}) do assert((plot:GetProperty(key) or 0)==0,'precision probe not disabled') end
  for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do assert((plot:GetProperty('JAC_TODO134_BASE_'..kind) or 0)==0,'diagnostic base input not disabled') end
 end end
 assert(count==56,'original city inventory changed during production diagnostics')
@@ -600,6 +658,21 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     steps.push(ui(
         "InGame",
         substitute(MEASURE, case, &[("__PHASE__", "\"baseline\"")]),
+    ));
+    steps.push(precision_toggle(1, 0, 0));
+    steps.push(ui(
+        "InGame",
+        substitute(MEASURE, case, &[("__PHASE__", "\"precision_one\"")]),
+    ));
+    steps.push(precision_toggle(1, 1, 0));
+    steps.push(ui(
+        "InGame",
+        substitute(MEASURE, case, &[("__PHASE__", "\"precision_two\"")]),
+    ));
+    steps.push(precision_toggle(0, 0, 0));
+    steps.push(ui(
+        "InGame",
+        substitute(MEASURE, case, &[("__PHASE__", "\"precision_off\"")]),
     ));
     steps.push(meter_toggle(1, 1, 0));
     steps.push(ui(
@@ -781,7 +854,13 @@ Game:SetProperty('JAC_AGES_LEDGER',l)
 for _,city in Players[0]:GetCities():Members() do
  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
  assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')
- plot:SetProperty(oath..'_ON',value)
+plot:SetProperty(oath..'_ON',value)
+end
+for _,city in Players[0]:GetCities():Members() do
+ local p=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ p:SetProperty('JAC_TODO134_FINE_ON',__PROBE_FINE__)
+ p:SetProperty('JAC_TODO134_SHIFT_ON',__PROBE_SHIFT__)
+ p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',__PROBE_SECOND__)
 end
 return 'production turn '..__PHASE__..' oath flag='..value
 "#;
@@ -849,13 +928,14 @@ local target=__TARGET__; local amount=__AMOUNT__
 local t=assert(assert(JAC_OATH_AUDIT).current)
 assert(t.Target==target,'production target changed')
 local rows=assert(assert(JAC_OATH_AUDIT).production[target])
-local previous=nil; local cost=nil; local city=nil; local plot=nil; local stable=true
+local previous=nil; local cost=nil; local city=nil; local plot=nil; local stable=true; local readings={}
 local function summarize(name)
  local samples=assert(assert(rows[name]).samples,'phase samples missing')
  assert(#samples==__SAMPLES_PER_PHASE__,'phase needs every finite turn sample')
  local delta,yield=0,0
  for _,r in ipairs(samples) do
   number(r.before,'sample before'); number(r.after,'sample after'); number(r.delta,'sample delta')
+  readings[#readings+1]=r.before; readings[#readings+1]=r.after
   number(r.city_yield,'sample production before'); number(r.city_yield_after,'sample production after')
   assert(r.delta>0 and r.city_yield>0 and math.abs(r.after-r.before-r.delta)<0.00002,'invalid actual progress sample')
   if previous then assert(r.turn==previous.turn+1 and math.abs(r.before-previous.after)<0.00002,'production samples are not continuous consecutive turns') end
@@ -869,8 +949,8 @@ end
 local first=summarize('off_first'); local active=summarize('on'); local last=summarize('off_last')
 local off1=first.delta/first.city_yield; local on=active.delta/active.city_yield; local off2=last.delta/last.city_yield
 number(off1,'off first production rate'); number(on,'on production rate'); number(off2,'off last production rate')
--- Progress is exposed in hundredths; the bound covers both endpoint roundings.
-local tolerance=0.02/math.min(first.city_yield,active.city_yield,last.city_yield)+0.00002
+local step=reported_step(readings)
+local tolerance=step and 2*step/math.min(first.city_yield,active.city_yield,last.city_yield)+0.00004 or math.huge
 -- An interval must be narrower than half a one-percentage-point step. Otherwise
 -- neighbouring integer amounts cannot be distinguished and quantity stays false.
 local precise=tolerance<0.005
@@ -897,7 +977,7 @@ all.production_quantities_verified=all.production_quantities_verified~=false and
 rows.quantity_verified=quantity
 rows.expected_percent=amount
 rows.sample_count=3*__SAMPLES_PER_PHASE__
-return string.format('{"target":"%s","path":"actual_queue_diagnostic_after_ui_selection","city":%d,"expected_percent":%d,"off_first":%.9f,"on":%.9f,"off_last":%.9f,"expected_on":%s,"observed_delta":%.9f,"tolerance":%.9f,"integer_percentage_resolved":%s,"city_production_stable_inside_turns":%s,"unmodified_off_basis_observed":%s,"quantity_verified":%s,"restored":true}',target,t.City,amount,off1,on,off2,expected and string.format('%.9f',expected) or 'null',on-baseline,tolerance,tostring(precise),tostring(stable),tostring(unit_basis),tostring(quantity))
+return string.format('{"target":"%s","path":"actual_queue_diagnostic_after_ui_selection","city":%d,"expected_percent":%d,"off_first":%.9f,"on":%.9f,"off_last":%.9f,"expected_on":%s,"observed_delta":%.9f,"tolerance":%s,"reported_step_upper_bound":%s,"integer_percentage_resolved":%s,"city_production_stable_inside_turns":%s,"unmodified_off_basis_observed":%s,"quantity_verified":%s,"restored":true}',target,t.City,amount,off1,on,off2,expected and string.format('%.9f',expected) or 'null',on-baseline,finite(tolerance) and string.format('%.9f',tolerance) or 'null',step and string.format('%.9f',step) or 'null',tostring(precise),tostring(stable),tostring(unit_basis),tostring(quantity))
 "#;
 
 fn production_code(
@@ -946,7 +1026,16 @@ fn production_steps(
     for (phase, flag) in [("off_first", 0), ("on", 1), ("off_last", 0)] {
         steps.push(ui(
             "GameCore_Tuner",
-            production_code(PRODUCTION_TOGGLE, case, effect, target, phase, flag),
+            production_code(PRODUCTION_TOGGLE, case, effect, target, phase, flag)
+                .replace("__PROBE_FINE__", "1")
+                .replace(
+                    "__PROBE_SHIFT__",
+                    if phase == "off_first" { "0" } else { "1" },
+                )
+                .replace(
+                    "__PROBE_SECOND__",
+                    if phase == "off_last" { "1" } else { "0" },
+                ),
         ));
         for sample in 1..=PRODUCTION_SAMPLES {
             for template in [PRODUCTION_BEFORE, PRODUCTION_END_TURN] {
@@ -970,7 +1059,10 @@ fn production_steps(
     ));
     steps.push(ui(
         "GameCore_Tuner",
-        production_code(PRODUCTION_TOGGLE, case, effect, target, "restore", 1),
+        production_code(PRODUCTION_TOGGLE, case, effect, target, "restore", 1)
+            .replace("__PROBE_FINE__", "0")
+            .replace("__PROBE_SHIFT__", "0")
+            .replace("__PROBE_SECOND__", "0"),
     ));
 }
 

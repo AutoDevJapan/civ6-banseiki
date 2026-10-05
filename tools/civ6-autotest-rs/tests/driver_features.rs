@@ -169,6 +169,38 @@ fn end_turn_uses_gameplay_when_ui_turn_is_ahead_and_does_not_resend() {
 }
 
 #[test]
+fn end_turn_waits_for_human_control_after_gameplay_advances_without_resending() {
+    let turn = Arc::new(Mutex::new(66));
+    let observed = Arc::new(Mutex::new(0));
+    let game = turn.clone();
+    let polls = observed.clone();
+    let fake = FakeBackend::new().lua(move |state, code| {
+        if code.trim() == "return Game.GetCurrentGameTurn()" {
+            return Ok(game.lock().unwrap().to_string());
+        }
+        if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+            *game.lock().unwrap() = 67;
+        }
+        if state == "InGame" && code.contains("Players[p]:IsTurnActive()") {
+            let mut n = polls.lock().unwrap();
+            *n += 1;
+            return Ok((*n >= 3).to_string());
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner.run_step(&json!({"action":"end_turn"})).unwrap(),
+        "human turn 66->67"
+    );
+    assert_eq!(*observed.lock().unwrap(), 3);
+    assert_eq!(
+        h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
+        1
+    );
+}
+
+#[test]
 fn test_end_turn_rejects_invalid_counts() {
     for value in [json!(0), json!(-1), json!(true), json!(1.5), json!("2")] {
         for key in ["turns", "test_turns"] {

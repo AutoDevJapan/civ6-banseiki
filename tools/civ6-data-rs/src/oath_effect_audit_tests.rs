@@ -44,7 +44,7 @@ function audit_rows(off,on,last,first_yield,on_yield,last_yield)
  local first=phase(off,first_yield); local active=phase(on,on_yield); local final=phase(last,last_yield)
  return {off_first=first,on=active,off_last=final}
 end
-JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10,13.8,10,10,12,10)
+JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10.01,13.9035,11.02,10.01,12.09,11.02)
 "#;
 
 #[test]
@@ -61,7 +61,7 @@ fn actual_progress_verifies_fifteen_percent_separately_from_city_yield() -> Resu
     for delta in [12.0, 12.12, 13.2, 13.68, 15.0] {
         lua.load(PRODUCTION_OBSERVATIONS).exec()?;
         lua.load(format!(
-            "JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10,{delta},10,10,12,10)"
+            "JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10.01,{delta},11.02,10.01,12.09,11.02)"
         ))
         .exec()?;
         assert!(
@@ -99,10 +99,12 @@ fn non_target_builds_wrong_city_and_nonconsecutive_turns_are_rejected() -> Resul
     let control = generated_code(&case, "local target=\"UNIT_BUILDER\"; local amount=0")?;
     let lua = Lua::new();
     lua.load(PRODUCTION_OBSERVATIONS).exec()?;
-    lua.load("JAC_OATH_AUDIT.current.Target='UNIT_BUILDER'; JAC_OATH_AUDIT.production.UNIT_BUILDER=audit_rows(10,12,10,10,12,10)").exec()?;
+    lua.load("JAC_OATH_AUDIT.current.Target='UNIT_BUILDER'; JAC_OATH_AUDIT.production.UNIT_BUILDER=audit_rows(10.01,12.09,11.02,10.01,12.09,11.02)").exec()?;
     assert_eq!(decode(&lua, &control)?["quantity_verified"], true);
-    lua.load("JAC_OATH_AUDIT.production.UNIT_BUILDER=audit_rows(10,13.8,10,10,12,10)")
-        .exec()?;
+    lua.load(
+        "JAC_OATH_AUDIT.production.UNIT_BUILDER=audit_rows(10.01,13.9035,11.02,10.01,12.09,11.02)",
+    )
+    .exec()?;
     assert!(
         decode(&lua, &control).is_err(),
         "specialty leaked to a builder"
@@ -169,16 +171,16 @@ fn single_turn_samples_distinguish_adjacent_percentages_and_reject_low_resolutio
     )?;
     let lua = Lua::new();
     for (target, code, correct, adjacent) in [
-        ("UNIT_SPEARMAN", military, 5.75, 5.7),
-        ("BUILDING_WALLS", wall, 6.0, 5.95),
+        ("UNIT_SPEARMAN", military, 7.038, 6.9768),
+        ("BUILDING_WALLS", wall, 7.344, 7.2828),
     ] {
         lua.load(PRODUCTION_OBSERVATIONS).exec()?;
-        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(5,{correct},5,5,5,5)")).exec()?;
+        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(5.01,{correct},7.03,5.01,6.12,7.03)")).exec()?;
         let result = decode(&lua, &code)?;
         assert_eq!(result["quantity_verified"], true);
         assert_eq!(result["integer_percentage_resolved"], true);
         lua.load(format!(
-            "JAC_OATH_AUDIT.production['{target}']=audit_rows(5,{adjacent},5,5,5,5)"
+            "JAC_OATH_AUDIT.production['{target}']=audit_rows(5.01,{adjacent},7.03,5.01,6.12,7.03)"
         ))
         .exec()?;
         assert!(
@@ -186,8 +188,7 @@ fn single_turn_samples_distinguish_adjacent_percentages_and_reject_low_resolutio
             "accepted adjacent amount for {target}"
         );
         lua.load(format!(
-            "JAC_OATH_AUDIT.production['{target}']=audit_rows(2,{},2,2,2,2)",
-            correct * 2.0 / 5.0
+            "JAC_OATH_AUDIT.production['{target}']=audit_rows(20,23,20,20,20,20)"
         ))
         .exec()?;
         let unresolved = decode(&lua, &code)?;
@@ -286,6 +287,8 @@ local a=JAC_OATH_AUDIT
 a.selected.own[1].y.science=2.4; a.restored.own[1].y.science=2.4
 a.reference=copy(a.baseline); a.reference_off=copy(a.baseline)
 a.reference.own[1].y.science=a.baseline.own[1].y.science+8
+a.precision_one=copy(a.baseline); a.precision_two=copy(a.baseline); a.precision_off=copy(a.baseline)
+a.precision_one.own[1].y.science=a.baseline.own[1].y.science+0.08; a.precision_two.own[1].y.science=a.baseline.own[1].y.science+1.09
 "#;
     lua.load(CITY_OBSERVATIONS).exec()?;
     lua.load(reference).exec()?;
@@ -329,9 +332,14 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_twelve_valid_modifier_defin
     db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
     db.execute_batch(sql)?;
     let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
-    assert_eq!(count, 12);
+    assert_eq!(count, 25);
     for kind in ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"] {
-        for (mode, amount, suffix) in [("BASE", "6", "CHANGE"), ("CAL", "100", "MODIFIER")] {
+        for (mode, amount, suffix) in [
+            ("BASE", "6", "CHANGE"),
+            ("CAL", "100", "MODIFIER"),
+            ("FINE", "1", "MODIFIER"),
+            ("SHIFT", "1", "CHANGE"),
+        ] {
             let id = format!("JAC_TODO134_{mode}_{kind}");
             let modifier: String = db.query_row(
                 "SELECT ModifierType FROM Modifiers WHERE ModifierId=?",

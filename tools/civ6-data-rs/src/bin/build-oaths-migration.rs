@@ -185,6 +185,24 @@ fn oath_snapshot(verify_saved: bool) -> Value {
     ))
 }
 
+const TURN_DIAGNOSTIC: &str = r#"
+local out={'raw='..Game.GetCurrentGameTurn(),'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)}
+local function probe(object,label,name)
+ local ok,fn=pcall(function() return object[name] end)
+ if not ok or type(fn)~='function' then out[#out+1]=label..'.'..name..'=unavailable'; return end
+ local success,value=pcall(fn,object)
+ out[#out+1]=label..'.'..name..'='..(success and tostring(value) or ('error:'..tostring(value)))
+end
+if type(Game.GetLocalPlayer)=='function' then local ok,p=pcall(Game.GetLocalPlayer); out[#out+1]='local='..tostring(ok and p or 'unavailable') end
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+ local label='p'..p:GetID()
+ for _,name in ipairs({'IsAlive','IsHuman','IsTurnActive','IsAITurnActive','GetTeam'}) do probe(p,label,name) end
+end
+local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0
+if h then for _,k in ipairs({'age','oathReign','oathChosen','oathDue'}) do out[#out+1]='human.'..k..'='..tostring(h[k]) end end
+return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
+"#;
+
 fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     let base = repo.json("tools/civ6-autotest/scenarios/sengoku-oaths-oda.json")?;
     let enabled = base["steps"][0].clone();
@@ -192,11 +210,13 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
     let active = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0]:IsTurnActive()"}});
     let probe = json!({"name":"誓約導入前の実保存：現在の台帳とAPIを読み取る","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),catalogue_lua(CAPABILITIES)]});
     let migration = json!({"name":"誓約導入前の実保存：自然な次手番で人間とAIを移行し、旧履歴と保存復元を照合する","judge_profile":"generic","steps":[enabled.clone(),load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",SNAPSHOT),active.clone(),json!({"action":"end_turn","timeout":900}),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathReign==1 and Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68"}}),lua("GameCore_Tuner",MIGRATED),active.clone(),lua("DedicationPopup",CHOOSE),json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); return l and l.houses.p0.oathChosen==l.reign"}}),oath_snapshot(false),json!({"action":"save","name":"JAC-Todo134-Migrated","timeout":180}),json!({"action":"exit_to_menu","timeout":180}),json!({"action":"load","name":"JAC-Todo134-Migrated","timeout":600}),oath_snapshot(true)]});
-    let pre = json!({"name":"誓約導入前の天文保存：改元前には候補と効果を持たない","judge_profile":"generic","steps":[enabled,load(PRE_NAME),lua("GameCore_Tuner",TENBUN_BEFORE),active,json!({"action":"end_turn","timeout":900}),catalogue_lua(TENBUN_AFTER)]});
+    let pre = json!({"name":"誓約導入前の天文保存：改元前には候補と効果を持たない","judge_profile":"generic","steps":[enabled.clone(),load(PRE_NAME),lua("GameCore_Tuner",TENBUN_BEFORE),active.clone(),json!({"action":"end_turn","timeout":900}),catalogue_lua(TENBUN_AFTER)]});
+    let diagnostic = json!({"name":"旧保存：自然な1手番後の人間とAIの操作状態を読み取る（受入合格に数えない）","judge_profile":"generic","steps":[enabled,load(OLD_NAME),lua("GameCore_Tuner",LEGACY),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),active,lua("InGame","UI.RequestAction(ActionTypes.ACTION_ENDTURN); return 'single native human turn requested for read-only diagnosis'"),json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1; if turn>68 then error('diagnostic advanced too far') end; return turn==68"}}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC),json!({"action":"pause","seconds":10}),lua("GameCore_Tuner",TURN_DIAGNOSTIC),lua("InGame",TURN_DIAGNOSTIC)]});
     Ok(vec![
         ("legacy-capabilities.json", probe),
         ("legacy-migration.json", migration),
         ("legacy-tenbun.json", pre),
+        ("legacy-control-diagnostic.json", diagnostic),
     ])
 }
 
