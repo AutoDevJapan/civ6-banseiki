@@ -102,11 +102,11 @@ local function snapshot()
       append(result, record.LastXPTurn)
     end
   end
-  return fields(result)
+  return fields(result), shown, ready
 end
 
 local function observe()
-  local ok, observed = pcall(snapshot)
+  local ok, observed, shown, ready = pcall(snapshot)
   if not ok then
     if observed ~= lastError then emit("WITNESS_ERROR", 0, tostring(observed)); lastError = observed end
     return
@@ -116,7 +116,6 @@ local function observe()
     booted = true
     emit("BOOT", 0, observed)
   end
-  local shown, ready = dialog()
   if shown and not ready and (lastShown ~= true or lastReady == true) then
     emit("DIALOG_WAIT", 0, observed)
   end
