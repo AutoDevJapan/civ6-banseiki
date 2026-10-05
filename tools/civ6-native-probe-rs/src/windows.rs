@@ -2957,37 +2957,48 @@ mod tests {
 
     #[test]
     fn fixture_unresponsive_pipe_has_a_deadline_and_releases_its_owned_child() {
-        let pid = Arc::new(std::sync::atomic::AtomicU32::new(0));
-        let captured = Arc::clone(&pid);
-        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut child = Fixture::start();
-            captured.store(child.child.id(), Ordering::SeqCst);
+        let child = Fixture::start();
+        assert_ne!(child.child.id(), 0);
+        let game = process(child.child.id(), false).unwrap();
+        assert!(alive(&game).unwrap());
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let mut child = child;
             writeln!(child.input, "H").unwrap();
             child.input.flush().unwrap();
             let _ = child.response_with_budget("NEVER:", Duration::from_millis(100));
         }));
-        assert!(failed.is_err());
+        let failure = failed.expect_err("the unresponsive child must reach the read deadline");
+        assert_eq!(
+            failure.downcast_ref::<String>().map(String::as_str),
+            Some(
+                format!(
+                    "fixture response NEVER: timed out or closed: {}",
+                    mpsc::RecvTimeoutError::Timeout
+                )
+                .as_str()
+            )
+        );
         let lane = DEBUG_FIXTURE_LANE
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        assert!(process(pid.load(Ordering::SeqCst), false)
-            .map(|game| !alive(&game).unwrap())
-            .unwrap_or(true));
+        assert!(!alive(&game).unwrap());
         drop(lane);
     }
 
     #[test]
     fn panic_before_critical_close_ack_collects_observer_child_and_fixture_lane() {
-        let pid = Arc::new(std::sync::atomic::AtomicU32::new(0));
-        let captured = Arc::clone(&pid);
+        let child = Fixture::start();
+        let child_pid = child.child.id();
+        assert_ne!(child_pid, 0);
+        let game = process(child_pid, false).unwrap();
+        assert!(alive(&game).unwrap());
         let path =
             std::env::temp_dir().join(format!("pr86-fixture-panic-{}.jsonl", std::process::id()));
         let _ = fs::remove_file(&path);
-        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut child = Fixture::start();
-            let child_pid = child.child.id();
-            captured.store(child_pid, Ordering::SeqCst);
-            let output = Jsonl::new(&path).unwrap();
+        let output = Jsonl::new(&path).unwrap();
+        let read_path = path.clone();
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let mut child = child;
             let base = child.entry - CAN_EVER_RVA;
             let signal = Arc::new(AtomicBool::new(false));
             let observed = Arc::clone(&signal);
@@ -3003,7 +3014,9 @@ mod tests {
                 debugger.run(stop_rx, Duration::from_secs(10), || Ok(()))
             });
             let start = Instant::now();
-            while !fs::read_to_string(&path).is_ok_and(|text| text.contains("\"type\":\"ready\"")) {
+            while !fs::read_to_string(&read_path)
+                .is_ok_and(|text| text.contains("\"type\":\"ready\""))
+            {
                 assert!(start.elapsed() < Duration::from_secs(5));
                 thread::sleep(Duration::from_millis(10));
             }
@@ -3015,13 +3028,15 @@ mod tests {
             }
             panic!("injected panic before controller close_ack");
         }));
-        assert!(failed.is_err());
+        let failure = failed.expect_err("the fixture must reach the injected close-ack panic");
+        assert_eq!(
+            failure.downcast_ref::<&str>().copied(),
+            Some("injected panic before controller close_ack")
+        );
         let lane = DEBUG_FIXTURE_LANE
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        assert!(process(pid.load(Ordering::SeqCst), false)
-            .map(|game| !alive(&game).unwrap())
-            .unwrap_or(true));
+        assert!(!alive(&game).unwrap());
         let rows = fs::read_to_string(&path).unwrap();
         assert!(rows.contains("ambiguous debug exception") || rows.contains("critical_cleanup"));
         drop(lane);
