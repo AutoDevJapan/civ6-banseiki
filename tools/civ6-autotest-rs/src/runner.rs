@@ -428,6 +428,35 @@ mod native_trace_step_tests {
     }
 
     #[test]
+    fn runtime_dispatch_stops_observation_without_reporting_entry_restoration() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-runtime-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        runner
+            .run_step(
+                &json!({"action":"start_native_paid_runtime","name":"runtime","max_seconds":25}),
+            )
+            .unwrap();
+        let detail = runner
+            .run_step(&json!({"action":"stop_native_paid_runtime_observation"}))
+            .unwrap();
+        assert!(detail.contains("native decisions retained until game exit"));
+        assert!(!detail.contains("restored"));
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:runtime:25:paid-assignment-runtime", "stop"]
+        );
+    }
+
+    #[test]
     fn runner_dispatches_four_argument_assignment_observer() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let output = std::env::temp_dir().join("pr86-assignment1433-dispatch");
@@ -2224,6 +2253,7 @@ impl Runner {
             | "start_native_assign_calibration"
             | "start_native_joined_admission"
             | "start_native_production_admission"
+            | "start_native_paid_runtime"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 self.remaining(deadline)?;
@@ -2233,6 +2263,7 @@ impl Runner {
                     ("start_native_assign_calibration", None) => "assign-calibration",
                     ("start_native_joined_admission", None) => "joined-admission",
                     ("start_native_production_admission", None) => "production-admission",
+                    ("start_native_paid_runtime", None) => "paid-assignment-runtime",
                     ("start_native_promotion_call_trace", None) => "promotion-call",
                     ("start_native_property_trace", None) => "property",
                     ("start_native_property_trace", Some(scope))
@@ -2290,7 +2321,9 @@ impl Runner {
                         )
                     })
                     .unwrap_or_default();
-                Ok(if mode == "promotion-call" {
+                Ok(if mode == "paid-assignment-runtime" {
+                    format!("game-owned three-entry native runtime installed; observation bounded; artifact {}.jsonl{process}", text(step, "name"))
+                } else if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {
                     format!(
@@ -2304,6 +2337,7 @@ impl Runner {
             | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
             | "stop_native_production_admission"
+            | "stop_native_paid_runtime_observation"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
@@ -2311,7 +2345,9 @@ impl Runner {
                     .backend
                     .stop_native_bridge()?
                     .ok_or_else(|| Error::scenario("native bridge was not active"))?;
-                if action == "stop_native_property_trace" {
+                if action == "stop_native_paid_runtime_observation" {
+                    Ok(format!("runtime observation stopped; native decisions retained until game exit; artifact {}", artifact.display()))
+                } else if action == "stop_native_property_trace" {
                     Ok(format!(
                         "native property entry restored; prefix retained until game exit; raw rows collected, key and value mapping unverified; artifact {}",
                         artifact.display()

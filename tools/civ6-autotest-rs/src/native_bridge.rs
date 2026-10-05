@@ -3,6 +3,49 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+/// Installation/observation receipt only. It does not establish appointment,
+/// payment, load safety or any successful gameplay decision.
+pub fn validate_runtime_receipt(text: &str, pid: u32, created: u64) -> Result<()> {
+    let rows: Vec<serde_json::Value> = text
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<std::result::Result<_, _>>()?;
+    if rows.len() != 3
+        || rows[0]["kind"] != "identity"
+        || rows[0]["mode"] != "paid-assignment-runtime"
+        || rows[0]["pid"] != pid
+        || rows[0]["created_filetime"] != created
+        || rows[0]["gamecore_sha256"] != civ6_native_bridge_rs::PINNED_GAMECORE_SHA256
+        || rows[0]["runtime_lifetime"] != "process_exit"
+        || rows[0]["reload_hook_observed"] != false
+        || rows[0]["official_ai_payment_observed"] != false
+        || !rows[0]["observation_limit_seconds"]
+            .as_u64()
+            .is_some_and(|n| (1..=300).contains(&n))
+        || !rows[0]["bridge_sha256"]
+            .as_str()
+            .is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        || rows[1]["kind"] != "runtime_install"
+        || rows[1]["status"] != 0
+        || rows[1]["three_entries_published"] != true
+        || !rows[1]["trace_address"]
+            .as_u64()
+            .is_some_and(|p| p != 0 && p & 7 == 0)
+        || rows[1]["trace_owner"] != "game_process"
+        || rows[1]["bounded_uninstall_allowed"] != false
+        || rows[2]["kind"] != "observation_stop"
+        || rows[2]["status"] != 0
+        || rows[2]["runtime_retained"] != true
+        || rows[2]["three_entries_published"] != true
+        || rows[2]["trace_retained"] != true
+    {
+        return Err(Error::input(
+            "resident runtime receipt is incomplete or differs",
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AssignmentSubject {
     pub owner: u32,
@@ -853,6 +896,7 @@ mod platform {
         finished: bool,
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
+        resident_runtime: bool,
     }
 
     impl Session {
@@ -880,6 +924,7 @@ mod platform {
             mode: &str,
             mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
+            let resident_runtime = mode == "paid-assignment-runtime";
             let mode = match mode {
                 "can-ever" => BridgeMode::CanEver,
                 "property" => BridgeMode::Property,
@@ -887,7 +932,9 @@ mod platform {
                 "can-ever-calibration" => BridgeMode::CanEverCalibration,
                 "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
                 "joined-admission" => BridgeMode::JoinedAdmission,
-                "production-admission" => BridgeMode::ProductionAdmission,
+                "production-admission" | "paid-assignment-runtime" => {
+                    BridgeMode::ProductionAdmission
+                }
                 "promotion-call" => BridgeMode::PromotionCall,
                 "assign-calibration" => BridgeMode::AssignCalibration,
                 _ => return Err(Error::scenario("unknown native bridge mode")),
@@ -927,6 +974,9 @@ mod platform {
                         BridgeMode::CanEverCalibration => "can-ever-calibration",
                         BridgeMode::PropertyAdmissionScoped => "property-admission-scoped",
                         BridgeMode::JoinedAdmission => "joined-admission",
+                        BridgeMode::ProductionAdmission if resident_runtime => {
+                            "paid-assignment-runtime"
+                        }
                         BridgeMode::ProductionAdmission => "production-admission",
                         BridgeMode::PromotionCall => "promotion-call",
                         BridgeMode::AssignCalibration => "assign-calibration",
@@ -986,6 +1036,7 @@ mod platform {
                 finished: false,
                 mode,
                 assignment_subject: None,
+                resident_runtime,
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -1019,8 +1070,13 @@ mod platform {
 
         fn stop_inner(&mut self) -> Result<PathBuf> {
             if let Some(mut input) = self.input.take() {
-                input.write_all(b"stop\n")?;
-                input.flush()?;
+                let sent = input.write_all(b"stop\n").and_then(|_| input.flush());
+                // A resident observer may have completed at its deadline.
+                // EOF also stops this observer; its verified terminal receipt
+                // and the child's exit still decide whether stop succeeded.
+                if !self.resident_runtime {
+                    sent?;
+                }
             }
             let waited =
                 unsafe { WaitForSingleObject(self.child.as_raw_handle() as HANDLE, 12_000) };
@@ -1038,13 +1094,28 @@ mod platform {
                     stderr.trim()
                 )));
             }
-            terminal_artifact_for_subject(
-                &self.artifact,
-                self.pid,
-                self.created,
-                self.mode,
-                self.assignment_subject,
-            )?;
+            if self.resident_runtime {
+                validate_runtime_receipt(
+                    &std::fs::read_to_string(&self.artifact)?,
+                    self.pid,
+                    self.created,
+                )?;
+                // Observation ended; authority and memory still belong to the
+                // exact process. Do not report restored entries or close it.
+                if unsafe { WaitForSingleObject(self.target.0, 0) } != WAIT_TIMEOUT {
+                    return Err(Error::input(
+                        "resident runtime game exited before observation stop",
+                    ));
+                }
+            } else {
+                terminal_artifact_for_subject(
+                    &self.artifact,
+                    self.pid,
+                    self.created,
+                    self.mode,
+                    self.assignment_subject,
+                )?;
+            }
             Ok(self.artifact.clone())
         }
 
@@ -1143,6 +1214,65 @@ mod platform {
             let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, child.id()) };
             assert!(!handle.is_null());
             PinnedTarget(handle)
+        }
+
+        #[test]
+        fn expired_runtime_observer_stop_accepts_receipt_and_keeps_target_alive() {
+            let mut target = sleeping_child();
+            let pinned = test_target(&target);
+            let mut controller = Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", "exit 0"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap();
+            let input = controller.stdin.take();
+            controller.wait().unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let artifact = dir.path().join("runtime.jsonl");
+            let rows = [
+                json!({"kind":"identity","mode":"paid-assignment-runtime","pid":7,"created_filetime":123,
+                    "gamecore_sha256":civ6_native_bridge_rs::PINNED_GAMECORE_SHA256,"bridge_sha256":"a".repeat(64),
+                    "observation_limit_seconds":1,"runtime_lifetime":"process_exit",
+                    "reload_hook_observed":false,"official_ai_payment_observed":false}),
+                json!({"kind":"runtime_install","status":0,"three_entries_published":true,
+                    "trace_address":4096,"trace_owner":"game_process","bounded_uninstall_allowed":false}),
+                json!({"kind":"observation_stop","status":0,"runtime_retained":true,
+                    "three_entries_published":true,"trace_retained":true}),
+            ];
+            std::fs::write(
+                &artifact,
+                rows.iter()
+                    .map(Value::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+            .unwrap();
+            let (_, lines) = mpsc::channel();
+            let mut session = Session {
+                child: controller,
+                input,
+                lines,
+                artifact: artifact.clone(),
+                pid: 7,
+                created: 123,
+                started: 0.0,
+                target: pinned,
+                close_game: Box::new(|_, _| Err(Error::input("must not close fixture target"))),
+                finished: false,
+                mode: BridgeMode::ProductionAdmission,
+                assignment_subject: None,
+                resident_runtime: true,
+            };
+            let outcome = session.stop_inner();
+            session.finished = true;
+            let alive = target.try_wait().unwrap().is_none();
+            target.kill().unwrap();
+            target.wait().unwrap();
+            assert!(alive);
+            assert_eq!(outcome.unwrap(), artifact);
         }
 
         #[test]
