@@ -1,5 +1,5 @@
 //! SYNTHETIC UNIT MODELS ONLY. No fixture is an actual capture or product pass.
-use civ6_autotest_rs::{catalog_check, catalog_scenario};
+use civ6_autotest_rs::catalog_check;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -11,63 +11,16 @@ fn lines(rows: &[Value]) -> String {
         + "\n"
 }
 fn model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
-    let normal: Value = serde_json::from_str(catalog_scenario::NORMAL).unwrap();
-    let scenario = catalog_scenario::build(&normal).unwrap();
+    // Immutable 4cd contract captured before these checker fixes. Do not call
+    // the production generator: unintended changes must fail the tests.
+    let scenario: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/source-contract.json")).unwrap();
     let steps = scenario["steps"].as_array().unwrap();
-    let players = normal["steps"][1]["players"].as_array().unwrap();
-    // Deliberately irregular indices: never use an implicit repository offset.
+    let receipts: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/runtime-receipts.json")).unwrap();
+    // Raw model uses a separate fixed table, not the checker or Lua generator.
     let index = |s: usize| 17 + s * 7;
-    let id = |s: usize| {
-        format!(
-            "{}:{}:{}:{}:{}",
-            s,
-            (s + 1) % 22,
-            index(s),
-            players[s]["leader"].as_str().unwrap(),
-            s % 3 + 1
-        )
-    };
-    let ledger = |s: usize, phase: &str| {
-        format!(
-            "{}:{}:{}:{}:3:0",
-            id(s),
-            match phase {
-                "closed" => "nil",
-                "JOIN" => "GREAT_PERSON",
-                _ => "EVOLVING",
-            },
-            if phase == "closed" {
-                "nil".into()
-            } else {
-                (100 + s).to_string()
-            },
-            if phase == "closed" || phase == "JOIN" {
-                "nil".into()
-            } else {
-                (s % 3).to_string()
-            }
-        )
-    };
-    let stable = format!(
-        "CATALOG880 STABLE turn=1 catalog={} titles={}",
-        (0..22)
-            .map(|s| format!(
-                "{}:{}:{}:{}:{}:{}:{}",
-                s,
-                players[s]["leader"].as_str().unwrap(),
-                players[s]["civ"].as_str().unwrap(),
-                index(s),
-                1000 + s,
-                s % 3 + 1,
-                200 + s
-            ))
-            .collect::<Vec<_>>()
-            .join(";"),
-        (0..22)
-            .map(|s| format!("{s}:3:0"))
-            .collect::<Vec<_>>()
-            .join(";")
-    );
+    let stable = receipts["stable"].as_str().unwrap().to_owned();
     let record = |action: String, status: &str, detail: String| json!({"at":"2026-10-06T00:00:00Z","action":action,"status":status,"detail":detail});
     let mut log = vec![record(
         "start".into(),
@@ -85,19 +38,12 @@ fn model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
                 let key=step["capture_as"].as_str().or_else(||step["equals_capture"].as_str());
                 let value=match key {
                     Some("CATALOG880_STABLE")=>stable.clone(),
-                    Some("CATALOG880_CLOSED")=>format!("CATALOG880 MATRIX identities=22 {}",(0..22).map(|s|ledger(s,"closed")).collect::<Vec<_>>().join(";")),
-                    Some("CATALOG880_FINAL")=>format!("CATALOG880 MATRIX identities=22 {}",(0..22).map(|s|ledger(s,"EVOLVE")).collect::<Vec<_>>().join(";")),
-                    Some(key)=> {
-                        let (s,phase)=key.strip_prefix("CATALOG880_").unwrap().split_once('_').unwrap();
-                        let s:usize=s.parse().unwrap();
-                        format!("CATALOG880 {} {}",if phase=="JOIN" {"JOINED"} else {"EVOLVING"},(s..(s+4).min(22)).map(|s|ledger(s,phase)).collect::<Vec<_>>().join(";"))
-                    }
+                    Some("CATALOG880_CLOSED")=>receipts["closed"].as_str().unwrap().into(),
+                    Some("CATALOG880_FINAL")=>receipts["final"].as_str().unwrap().into(),
+                    Some(key)=>receipts["batches"][key].as_str().unwrap().into(),
                     None if i==5=>"CATALOG880 official civics only; UI automatic submission paused; no game turn requested".into(),
                     None if i==9=>"PAYMENT880 observed 484 existing closed Core qualifications after observer installation".into(),
-                    None=> {
-                        let marker=if step["state_name"]=="InGame" {"UI_NATIVE_QUALIFICATION"} else {"GAMEPLAY_PROJECTION"};
-                        format!("positive=22 negative=462 {}",(0..22).map(|s|format!("CATALOG880 {marker} {} positive=1 negative=21 raw={}",id(s),(0..22).map(|o|if o==(s+1)%22 {'1'}else{'0'}).collect::<String>())).collect::<Vec<_>>().join(";"))
-                    }
+                    None=>receipts[if step["state_name"]=="InGame" {"ui"}else{"core"}].as_str().unwrap().into(),
                 };
                 format!("ran Lua in {}; return={value}",step["state_name"].as_str().unwrap())
             }
@@ -128,7 +74,9 @@ fn model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
             (901000 + index(s), 1),
         ] {
             sequence += 1;
-            trace.push(json!({"kind":"property_get","sequence":sequence,"property":format!("0x{receiver:016x}"),"key_id":key,"returned":"0x0000000000800000","thread_id":12,"read_state":1,"tag":1,"payload8":format!("0x{payload:016x}"),"flags14":0}));
+            let cell = (900000..=900255).contains(&key) || (901000..=901255).contains(&key);
+            trace.push(json!({"kind":"property_get","sequence":sequence,"property":format!("0x{receiver:016x}"),"key_id":key,"returned":"0x0000000000800000","thread_id":12,"read_state":1,"tag":1,"payload8":format!("0x{payload:016x}"),"flags14":0,
+                "denial_owner":if cell {owner}else{0},"denial_index":if cell {index(s)}else{0},"denial_checked":false}));
         }
     }
     trace.push(json!({"kind":"stop","rows":132,"observed_calls":132,"dropped":0,"filtered_calls":10,"getter_calls_seen":142,"counter_scope":"bounded_prefix_samples_not_complete_call_history","calibration_sample_limit":1024,"property_sample_limit":4096,"in_flight":0,"snapshot_stable":true,"quiescence_proven":false,"classification":"production_admission","prefix_retained_until_exit":true,"result":"ok"}));
@@ -318,14 +266,7 @@ fn different_artifact_directory_or_stop_path_is_rejected() {
 }
 #[test]
 fn trailing_transport_newlines_and_typed_optional_denial_fields() {
-    let (mut trace, mut steps) = model(Path::new("unit-model"));
-    for row in &mut trace {
-        if row["kind"] == "property_get" {
-            row["denial_owner"] = json!(0);
-            row["denial_index"] = json!(0);
-            row["denial_checked"] = json!(false);
-        }
-    }
+    let (trace, mut steps) = model(Path::new("unit-model"));
     for row in &mut steps {
         if row["status"] == "OK" && row["detail"].as_str().unwrap().starts_with("ran Lua in ") {
             row["detail"] = json!(format!("{}\r\n", row["detail"].as_str().unwrap()));
@@ -515,4 +456,99 @@ fn duplicate_runtime_index_and_source_catalog_receipts_are_rejected() {
         }
         rejected(&trace, &bad);
     }
+}
+
+#[test]
+fn false_denial_flag_still_requires_matching_owner_and_index() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    for checked in [false, true] {
+        for row in [27, 28, 29] {
+            for (field, value) in [("denial_owner", json!(2)), ("denial_index", json!(18))] {
+                let mut bad = trace.clone();
+                bad[row]["denial_checked"] = json!(checked);
+                bad[row][field] = value;
+                assert!(
+                    check(&bad, &steps).is_err(),
+                    "{row} {field} checked={checked}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn absent_or_zero_sentinel_metadata_never_supplies_positive_property_evidence() {
+    let (trace, steps) = model(Path::new("unit-model"));
+    for row in [27, 28, 29] {
+        for absent in [false, true] {
+            let mut unknown = trace.clone();
+            if absent {
+                for field in ["denial_owner", "denial_index", "denial_checked"] {
+                    unknown[row].as_object_mut().unwrap().remove(field);
+                }
+            } else {
+                unknown[row]["denial_owner"] = json!(0);
+                unknown[row]["denial_index"] = json!(0);
+                unknown[row]["denial_checked"] = json!(false);
+            }
+            let r = check(&unknown, &steps).unwrap();
+            assert!(r.capture_valid);
+            assert!(!r.qualification_positive22);
+            assert_eq!(r.missing_positive_sources, vec![0]);
+            assert_eq!(r.property_subject_unknown_rows, 1);
+        }
+    }
+}
+
+#[test]
+fn auxiliary_startup_failure_returns_json_exit_one_without_panic() {
+    for operation in ["launch", "auto_restart"] {
+        let dir = tempfile::tempdir().unwrap();
+        let (trace, mut steps) = model(dir.path());
+        steps.truncate(1);
+        for status in ["START", "FAIL"] {
+            steps.push(json!({"at":"2026-10-06T00:00:00Z","action":operation,"status":status,"detail":"synthetic startup failure"}));
+        }
+        let t = dir.path().join("normal-catalog22.jsonl");
+        let s = dir.path().join("steps.jsonl");
+        std::fs::write(&t, lines(&trace)).unwrap();
+        std::fs::write(&s, lines(&steps)).unwrap();
+        let result = std::panic::catch_unwind(|| catalog_check::check_files(&t, &s));
+        let error = result.expect("startup failure must not panic").unwrap_err();
+        assert!(error.to_string().contains("startup failed"));
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-catalog-check"))
+            .args(["check"])
+            .arg(&t)
+            .arg(&s)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        let report: Value = serde_json::from_slice(&output.stdout).expect("CLI must emit JSON");
+        assert_eq!(report["capture_valid"], false);
+        assert_eq!(report["qualification_positive22"], false);
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("panicked"));
+    }
+}
+
+#[test]
+fn immutable_contract_and_receipts_have_independent_pinned_hashes() {
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(include_bytes!(
+                "fixtures/catalog-check/source-contract.json"
+            ))
+        ),
+        "2ce6c4df27af3f82a9fd4f9f8d4bce52ddfba604241b4e17a1258d8d80d0f3f2"
+    );
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(include_bytes!(
+                "fixtures/catalog-check/runtime-receipts.json"
+            ))
+        ),
+        "b3ab6a0fcda4ebcd1c0d241c7c6abbad6d560fa31abc0b86035b9183d70de7d0"
+    );
 }

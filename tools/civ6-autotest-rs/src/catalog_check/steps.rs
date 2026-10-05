@@ -301,7 +301,8 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                     )?;
                     auxiliary = None;
                 }
-                _ => unreachable!(),
+                "FAIL" => return Err(Error::input(format!("startup failed: {action}: {detail}"))),
+                _ => return Err(Error::input("unknown startup status")),
             }
             continue;
         }

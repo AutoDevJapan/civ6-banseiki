@@ -147,6 +147,8 @@ pub struct Report {
     pub pairs: Vec<PairCount>,
     pub calibration_rows: usize,
     pub property_rows: usize,
+    pub property_subject_unknown_rows: usize,
+    pub property_subject_metadata_scope: &'static str,
     pub unrelated_calibration_rows: usize,
     pub observed_calls: u64,
     pub dropped: u64,
@@ -272,7 +274,10 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         baseline_unmeasured: vec!["initial UI closed484", "per-join UI negatives", "complete native call history", "AI-initiated payment", "startup/load", "unpaid placement", "multiplayer", "113-step suite", "neutralization and recovery"],
         process: evidence.process.clone(), gamecore_sha256: PINNED_GAMECORE_SHA256,
         trace_sha256: digest(trace), steps_sha256: evidence.steps_sha256.clone(), scenario_contract_sha256: evidence.scenario_contract_sha256.clone(),
-        catalog: evidence.catalog.clone(), pairs: Vec::new(), calibration_rows: 0, property_rows: 0, unrelated_calibration_rows: 0,
+        catalog: evidence.catalog.clone(), pairs: Vec::new(), calibration_rows: 0, property_rows: 0,
+        property_subject_unknown_rows:0,
+        property_subject_metadata_scope:"controller packed owner/index on cell keys; denial_checked is a denial result, not a validity flag; absent/all-zero false metadata is unknown and cannot prove positivity",
+        unrelated_calibration_rows: 0,
         observed_calls: 0, dropped: 0, filtered_calls: 0, getter_calls_seen: 0,
         calibration_sample_limit: CALIBRATION_LIMIT, property_sample_limit: TRACE_CAPACITY,
         full_history_authority: false, cross_ring_chronology_measured: false, gameplay_closed484: evidence.gameplay_closed484,
@@ -421,6 +426,11 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                     "flags14",
                 ];
                 let has_denial = row.get("denial_checked").is_some();
+                // Controller windows.rs stores owner/index for token != 0 on
+                // manifest/allow keys even when denial_checked is false. With
+                // no token (or on reset/close), the untouched packed high bits
+                // decode as all-zero false. That sentinel never proves permit.
+                let mut subject = None;
                 if has_denial {
                     fields.extend(["denial_owner", "denial_index", "denial_checked"]);
                 }
@@ -434,6 +444,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                 let receiver = pointer(row, "property")?;
                 let thread = number(row, "thread_id")?;
                 let key = number(row, "key_id")?;
+                let is_cell = (900000..=900255).contains(&key) || (901000..=901255).contains(&key);
                 let payload = pointer(row, "payload8")?;
                 require(
                     receiver > 0
@@ -453,19 +464,25 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                             && number(row, "denial_index")? < 256,
                         "invalid optional denial metadata",
                     )?;
-                    if row["denial_checked"] == true {
+                    let metadata_owner = number(row, "denial_owner")?;
+                    let metadata_index = number(row, "denial_index")?;
+                    let sentinel = row["denial_checked"] == false
+                        && metadata_owner == 0
+                        && metadata_index == 0;
+                    if !sentinel {
+                        require(is_cell, "denial metadata on non-cell key")?;
                         require(
-                            (900000..=900255).contains(&key) || (901000..=901255).contains(&key),
-                            "denial metadata on non-cell key",
-                        )?;
-                        require(
-                            number(row, "denial_index")? == key % 1000
+                            metadata_index == key % 1000
                                 && receivers
                                     .get(&receiver)
-                                    .is_none_or(|o| *o == number(row, "denial_owner").unwrap()),
+                                    .is_none_or(|o| *o == metadata_owner),
                             "denial metadata subject mismatch",
                         )?;
+                        subject = Some(metadata_owner);
                     }
+                }
+                if is_cell && subject.is_none() {
+                    report.property_subject_unknown_rows += 1;
                 }
                 require(
                     (900000..=900255).contains(&key)
@@ -480,6 +497,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                     key,
                     payload == 1,
                     row["denial_checked"] == true,
+                    subject,
                 ));
             }
             _ => {
@@ -545,7 +563,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
     // supplies a bool receipt. A UI matrix cannot fill a missing raw row.
     let mut bound = BTreeMap::new(); // receiver -> (owner, Core thread)
     let mut cells = BTreeMap::new(); // (receiver,index) -> (close read, false ack, manifest)
-    for (receiver, thread, key, value, denied) in properties {
+    for (receiver, thread, key, value, denied, subject) in properties {
         if (902000..=902063).contains(&key) {
             let owner = key - 902000;
             require(owner < COUNT as u64 && value, "invalid owner reset")?;
@@ -561,6 +579,12 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
         let Some(&(owner, core_thread)) = bound.get(&receiver) else {
             continue;
         };
+        if let Some(metadata_owner) = subject {
+            require(
+                metadata_owner == owner,
+                "property metadata differs from reset-bound owner",
+            )?;
+        }
         require(
             core_thread == thread,
             "Core getter thread differs from reset thread",
@@ -575,11 +599,11 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                 *cell = (true, false, false);
             }
             901000 if !value => {
-                cell.1 = cell.0;
+                cell.1 = cell.0 && subject == Some(owner);
                 cell.2 = false;
             }
             900000 => {
-                cell.2 = value && cell.1;
+                cell.2 = value && cell.1 && subject == Some(owner);
             }
             901000 if value => {
                 if let Some(e) = evidence
@@ -597,6 +621,7 @@ pub fn verify(trace: &str, evidence: &Evidence) -> Result<Report> {
                         && cell.1
                         && cell.2
                         && !denied
+                        && subject == Some(owner)
                         && receivers.get(&receiver) == Some(&owner)
                     {
                         let p = &mut report.pairs[e.source as usize * COUNT + owner as usize];
