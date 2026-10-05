@@ -73,6 +73,8 @@ pub trait Backend: Send {
     fn list_states(&mut self, _timeout: f64) -> Result<Vec<String>> {
         Err(Error::tuner("backend has no FireTuner"))
     }
+    // Tuner errors guarantee that no Lua command bytes were sent. Once a
+    // write is attempted, an uncertain outcome must be LuaResponseUnknown.
     fn run_lua(&mut self, _state: &str, _code: &str, _timeout: f64) -> Result<String> {
         Err(Error::tuner("backend has no FireTuner"))
     }
@@ -612,12 +614,22 @@ impl Runner {
     pub fn retry_idempotent<T>(
         &mut self,
         deadline: f64,
+        action: impl FnMut(&mut Self) -> Result<T>,
+    ) -> Result<T> {
+        self.retry_when(deadline, action, |e| {
+            retryable(e) && e.kind != ErrorKind::LuaExecution
+        })
+    }
+    fn retry_when<T>(
+        &mut self,
+        deadline: f64,
         mut action: impl FnMut(&mut Self) -> Result<T>,
+        retry: impl Fn(&Error) -> bool,
     ) -> Result<T> {
         let mut delay = 0.5;
         loop {
             match action(self) {
-                Err(e) if retryable(&e) && e.kind != ErrorKind::LuaExecution => {
+                Err(e) if retry(&e) => {
                     if self.clock.now() + delay >= deadline {
                         return Err(e);
                     }
@@ -654,15 +666,26 @@ impl Runner {
         Ok(!closed.is_empty())
     }
     pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
-        let budget = self.budget(deadline, 5.0)?;
-        if !self
-            .states(budget)?
+        // A busy AI turn can outlive one five-second state lookup. Keep all
+        // pre-send lookups in one budget; never replay an uncertain OnReturn.
+        let query_deadline = deadline.min(self.clock.now() + 30.0);
+        let states =
+            self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
+        if !states
             .iter()
             .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
         {
             return Ok(false);
         }
-        let closed=self.lua("InGameTopOptionsMenu","if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",self.budget(deadline,5.0)?)?=="true";
+        let closed = self.retry_when(
+            query_deadline,
+            |r| r.lua(
+                "InGameTopOptionsMenu",
+                "if not ContextPtr:IsHidden() then OnReturn(); CloseImmediately(); return true end\nreturn false",
+                r.budget(query_deadline, 5.0)?,
+            ),
+            |e| e.kind == ErrorKind::Tuner,
+        )? == "true";
         if closed {
             self.wait(&json!({"type":"lua","state_name":"InGameTopOptionsMenu","code":"return ContextPtr:IsHidden()"}),self.budget(deadline,5.0)?,false)?;
             println!("Closed in-game options menu");
