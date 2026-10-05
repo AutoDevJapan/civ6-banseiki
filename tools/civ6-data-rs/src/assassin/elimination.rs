@@ -126,8 +126,7 @@ local function Resolved()
 end
 "#;
 
-const SETUP: &str = r#"
-local function PlaceForMission(owner,u,city)
+const PLACE_FOR_MISSION: &str = r#"local function PlaceForMission(owner,u,city)
   assert(Game:GetProperty(R.TEST)==1,'mission placement requires test mode')
   local id=u:GetID(); local occupied={}
   for _,p in ipairs(PlayerManager.GetAlive()) do
@@ -157,6 +156,9 @@ local function PlaceForMission(owner,u,city)
   end
   error('fixture mission placement failed: owner='..owner..' unit='..id)
 end
+"#;
+
+const SETUP: &str = r#"
 Game:SetProperty(R.TEST,1)
 local houses={}
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
@@ -212,6 +214,79 @@ Pending()
 return 'four fixed result combinations pending after native '..MODE..' elimination'
 "#;
 
+const ACTOR_INIT: &str = r#"
+Game:SetProperty(R.TEST,1)
+local houses={}
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+  houses[PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()]=p:GetID()
+end
+t={Mode='actor',Jobs={},Assets={},PendingTurn=R.Turn()}
+t.Target=assert(houses.CIVILIZATION_JAC_MATSUDAIRA,'target absent')
+t.Nations=Game:GetProperty(R.NATIONS)
+t.Nation=Players[t.Target]:GetProperty(R.NATION)
+t.Ledger=Players[t.Target]:GetProperty('JAC_ASN_DIPLOMACY_V1')
+Game:SetProperty('JAC_ASN_ELIM_TEST',t)
+return 'actor elimination fixture initialized'
+"#;
+
+const ACTOR_PREPARE: &str = r#"
+t=assert(Game:GetProperty('JAC_ASN_ELIM_TEST'),'actor fixture state absent')
+local name='@CIV@'; local index=@INDEX@
+local owner
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+  if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()==name then owner=p:GetID() end
+end
+local a=assert(owner,'actor absent: '..name)
+assert(not Players[a]:IsHuman(),'actor must be AI')
+local city=assert(Players[a]:GetCities():GetCapitalCity(),'actor capital absent')
+local targetCity=assert(Players[t.Target]:GetCities():GetCapitalCity(),'target capital absent')
+local u=Grant(a,R.UnitForPlayer(a),city)
+PlaceForMission(a,u,targetCity)
+FixtureReveal(a,targetCity:GetX(),targetCity:GetY())
+Players[a]:SetProperty('JAC_ASN_FORCE_NEXT',{Success=index>2 and 1 or 0,Detected=index%2==0 and 1 or 0,Branch='FREE_STATE'})
+assert(R.StartAttempt(a,u:GetID(),t.Target,'LEADER'))
+assert(R.StartProduction(a,city:GetID()))
+assert(R.TestAdvanceDeadlines(a,{Mission=true}))
+local state=R.State(a)
+assert(state.Mission.Success==(index>2),'forced success combination not applied')
+assert(state.Mission.Detected==(index%2==0),'forced detection combination not applied')
+assert(Players[a]:GetProperty('JAC_ASN_FORCE_NEXT')==nil,'forced result not consumed')
+assert(state.Mission.Due==R.Turn()+1,'mission hook did not shorten deadline')
+t.Jobs[index]={Actor=a,Unit=u:GetID(),Pending=state,ParkX=city:GetX(),ParkY=city:GetY()}
+Game:SetProperty('JAC_ASN_ELIM_TEST',t)
+return 'prepared actor '..tostring(a)
+"#;
+
+const ACTOR_ELIMINATE: &str = r#"
+t=assert(Game:GetProperty('JAC_ASN_ELIM_TEST'),'actor fixture state absent')
+local job=assert(t.Jobs[@INDEX@],'prepared actor absent')
+local id=job.Actor
+local unitIDs={}; for _,u in Players[id]:GetUnits():Members() do unitIDs[#unitIDs+1]=u:GetID() end
+for _,uid in ipairs(unitIDs) do UnitManager.Kill(assert(Players[id]:GetUnits():FindID(uid))) end
+local cityIDs={}; for _,c in Players[id]:GetCities():Members() do cityIDs[#cityIDs+1]=c:GetID() end
+assert(#cityIDs>0,'elimination requires actual cities')
+for _,cid in ipairs(cityIDs) do
+  local c=assert(Players[id]:GetCities():FindID(cid)); local x,y=c:GetX(),c:GetY()
+  CityManager.TransferCityToFreeCities(c)
+  t.Assets[#t.Assets+1]={X=x,Y=y,Owner=PlayerManager.GetFreeCitiesPlayerID()}
+end
+NativeDead(id)
+t.Dead=t.Dead or {}; t.Dead[#t.Dead+1]=id
+Game:SetProperty('JAC_ASN_ELIM_TEST',t)
+return 'native actor eliminated '..tostring(id)
+"#;
+
+const ACTOR_FINALIZE: &str = r#"
+t=assert(Game:GetProperty('JAC_ASN_ELIM_TEST'),'actor fixture state absent')
+for _,c in Players[t.Target]:GetCities():Members() do
+  t.Assets[#t.Assets+1]={X=c:GetX(),Y=c:GetY(),Owner=t.Target}
+end
+t.BeforeDenouncements=Denouncements()
+Game:SetProperty('JAC_ASN_ELIM_TEST',t)
+Pending()
+return 'four actor eliminations remain pending with fixed work saved'
+"#;
+
 fn check(steps: &mut Vec<Value>, code: &str) {
     steps.push(super::ui(&format!("{PREFIX}\n{code}"), "GameCore_Tuner"));
 }
@@ -225,10 +300,40 @@ pub fn build_scenario(repo: &Repository, actor: bool) -> Result<Value> {
     let source = base["steps"].as_array().context("base steps absent")?;
     let mode = if actor { "actor" } else { "target" };
     let mut steps = source[..4].to_vec();
-    check(
-        &mut steps,
-        &format!("{}\nlocal MODE='{mode}'\n{SETUP}", super::GRANT),
-    );
+    if actor {
+        check(&mut steps, ACTOR_INIT);
+        let actors = [
+            "CIVILIZATION_JAC_DATE",
+            "CIVILIZATION_JAC_ASHINA",
+            "CIVILIZATION_JAC_HOJO",
+            "CIVILIZATION_JAC_YAMANOUCHI_UESUGI",
+        ];
+        for (index, civilization) in actors.iter().enumerate() {
+            let code = ACTOR_PREPARE
+                .replace("@INDEX@", &(index + 1).to_string())
+                .replace("@CIV@", civilization);
+            check(
+                &mut steps,
+                &format!("{}\n{}\n{code}", super::GRANT, PLACE_FOR_MISSION),
+            );
+        }
+        for index in 1..=actors.len() {
+            check(
+                &mut steps,
+                &ACTOR_ELIMINATE.replace("@INDEX@", &index.to_string()),
+            );
+        }
+        check(&mut steps, ACTOR_FINALIZE);
+    } else {
+        check(
+            &mut steps,
+            &format!(
+                "{}\n{}\nlocal MODE='target'\n{SETUP}",
+                super::GRANT,
+                PLACE_FOR_MISSION
+            ),
+        );
+    }
     round_trip(&mut steps, &format!("JAC-Assassin-{mode}-Pending"));
     check(&mut steps, "Pending(); R.Tick(); Pending(); return 'pending eliminated-country properties survive same-turn reload'");
     super::advance(&mut steps, 1);
@@ -292,8 +397,12 @@ mod tests {
                     chunks += 1;
                 }
             }
-            assert_eq!(chunks, 12);
-            assert_eq!(scenario["steps"].as_array().unwrap().len(), 26);
+            let actor = path.to_string_lossy().contains("assassin-actor-");
+            assert_eq!(chunks, if actor { 21 } else { 12 });
+            assert_eq!(
+                scenario["steps"].as_array().unwrap().len(),
+                if actor { 35 } else { 26 }
+            );
         }
         Ok(())
     }
