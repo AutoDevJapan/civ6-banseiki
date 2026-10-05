@@ -30,3 +30,7 @@ path = "src/bin/research_report.rs"
 [[bin]]
 name = "civ6-build-arbitration-ai-scenario"
 path = "src/bin/build_arbitration_ai_scenario.rs"
+
+[[bin]]
+name = "civ6-build-persona-ai-scenario"
+path = "src/bin/build_persona_ai_scenario.rs"

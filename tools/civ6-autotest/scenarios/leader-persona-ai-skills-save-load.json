@@ -1,0 +1,188 @@
+{
+  "name": "ToDo158: actual AI merit, skill purchases and immutable choices after save/load (cost-one fixture only)",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008",
+      "exact_name": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_LeaderPersona_Tree",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsHuman() and p:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersonaNativeRead)=='function' and type(JAC_PersonaTreeRules)=='table'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nfunction JAC158_Read()\n local leader='LEADER_JAC_ASHINA_MORIKIYO'; local owner=1; local key='JAC_PERSONA_'..leader..'_';\n local function get(field) return Game:GetProperty(key..field) end;\n local p=assert(Players[owner],'AI owner absent'); assert(not p:IsHuman(),'owner became human');\n assert(get('OWNER')==owner and get('STATE')=='GOVERNOR','committed AI Governor absent');\n local row=assert(GameInfo.JAC_LeaderPersonas[leader]); local gs=p:GetGovernors();\n local g=assert(gs:GetGovernor(GameInfo.Governors[row.GovernorType].Hash),'native Governor absent');\n assert(gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and\n  g:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash),'native Governor/base absent');\n local city=assert(g:GetAssignedCity(),'native assigned city absent');\n assert(city:GetOwner()==owner and g:IsEstablished() and g:GetNeutralizedTurns()==0,'AI Governor not active and established');\n assert(city:GetProperty('JAC_PERSONA_SETTLED_'..leader)==1,'native settlement marker absent');\n local s={turn=Game.GetCurrentGameTurn(),owner=owner,leader=leader,city=city:GetID(),\n  merit=get('MERIT') or 0,category=get('CATEGORY'),branches={},nodes={},spent=gs:GetGovernorPointsSpent(),\n  total=gs:GetGovernorPoints(),ai=get('AI_LAST_TURN'),govern=get('GOVERN_LAST_TURN'),\n  deed=get('DEED_GOVERN_TURN_'..tostring(get('AI_LAST_TURN'))),count=get('GOVERN_TURN_COUNT'),\n  countTurn=get('GOVERN_TURN_COUNT_TURN')};\n assert(s.category=='ADMIN','expected existing ADMIN commitment');\n for route in GameInfo.JAC_PersonaRouteTemplates() do\n  local field='BRANCH_'..route.CategoryType..'_'..route.ExclusiveGroup;\n  if get(field) then s.branches[field]=get(field) end;\n end;\n assert(s.branches.BRANCH_ADMIN_FOUNDATION=='STORES','existing STORES commitment absent');\n local count=0;\n for n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then\n  count=count+1; local value=get('NODE_'..n.NodeType);\n  assert(value==nil or value==1,'invalid owned node value');\n  if value==1 then\n   assert(n.CategoryType==s.category,'owned node violates category');\n   if n.ExclusiveGroup then assert(s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup]==n.RouteType,'owned node violates branch') end;\n   if n.PrereqNode then assert(get('NODE_'..n.PrereqNode)==1,'owned node lacks prerequisite') end;\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='OWNED','owned status mismatch'); s.nodes[n.NodeType]=n.Cost;\n  elseif n.CategoryType~=s.category then\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='CATEGORY_LOCKED','other category opened');\n  elseif n.ExclusiveGroup and s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup] and\n   s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup]~=n.RouteType then\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='BRANCH_LOCKED','sibling branch opened');\n  end;\n end end;\n assert(count>0 and next(s.nodes),'non-vacuous person tree required');\n return s;\nend;\nfunction JAC158_Encode(s)\n local a={}; for _,field in ipairs({'turn','owner','leader','city','merit','category','spent','total','ai','govern','deed','count','countTurn'}) do a[#a+1]=field..'='..tostring(s[field]) end;\n local b={}; for field,value in pairs(s.branches) do b[#b+1]=field..'='..value end; table.sort(b); for _,v in ipairs(b) do a[#a+1]=v end;\n local n={}; for node,cost in pairs(s.nodes) do n[#n+1]=node..'='..cost end; table.sort(n); for _,v in ipairs(n) do a[#a+1]=v end;\n return table.concat(a,'|');\nend;\n\nJAC158_previous=JAC158_Read(); JAC158_purchases=0; assert(JAC158_previous.turn==45,'wrong preserved input turn'); return 'AI_BASELINE|'..JAC158_Encode(JAC158_previous)"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "assert(JAC158_purchases>0,'no newly observed AI skill purchase'); return JAC158_Encode(JAC158_Read())",
+      "capture_as": "AI_PERSONA_BEFORE_SAVE"
+    },
+    {
+      "action": "save",
+      "name": "JAC-ToDo158-AI-Skills",
+      "checkpoint": true,
+      "timeout": 120
+    },
+    {
+      "action": "exit_to_menu"
+    },
+    {
+      "action": "load",
+      "name": "JAC-ToDo158-AI-Skills",
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "wait_for",
+      "timeout": 60,
+      "condition": {
+        "type": "lua",
+        "state_name": "JAC_LeaderPersona_Tree",
+        "code": "local p=Players[Game.GetLocalPlayer()]; return p and p:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersonaNativeRead)=='function' and type(JAC_PersonaTreeRules)=='table'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nfunction JAC158_Read()\n local leader='LEADER_JAC_ASHINA_MORIKIYO'; local owner=1; local key='JAC_PERSONA_'..leader..'_';\n local function get(field) return Game:GetProperty(key..field) end;\n local p=assert(Players[owner],'AI owner absent'); assert(not p:IsHuman(),'owner became human');\n assert(get('OWNER')==owner and get('STATE')=='GOVERNOR','committed AI Governor absent');\n local row=assert(GameInfo.JAC_LeaderPersonas[leader]); local gs=p:GetGovernors();\n local g=assert(gs:GetGovernor(GameInfo.Governors[row.GovernorType].Hash),'native Governor absent');\n assert(gs:HasGovernor(GameInfo.Governors[row.GovernorType].Hash) and\n  g:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash),'native Governor/base absent');\n local city=assert(g:GetAssignedCity(),'native assigned city absent');\n assert(city:GetOwner()==owner and g:IsEstablished() and g:GetNeutralizedTurns()==0,'AI Governor not active and established');\n assert(city:GetProperty('JAC_PERSONA_SETTLED_'..leader)==1,'native settlement marker absent');\n local s={turn=Game.GetCurrentGameTurn(),owner=owner,leader=leader,city=city:GetID(),\n  merit=get('MERIT') or 0,category=get('CATEGORY'),branches={},nodes={},spent=gs:GetGovernorPointsSpent(),\n  total=gs:GetGovernorPoints(),ai=get('AI_LAST_TURN'),govern=get('GOVERN_LAST_TURN'),\n  deed=get('DEED_GOVERN_TURN_'..tostring(get('AI_LAST_TURN'))),count=get('GOVERN_TURN_COUNT'),\n  countTurn=get('GOVERN_TURN_COUNT_TURN')};\n assert(s.category=='ADMIN','expected existing ADMIN commitment');\n for route in GameInfo.JAC_PersonaRouteTemplates() do\n  local field='BRANCH_'..route.CategoryType..'_'..route.ExclusiveGroup;\n  if get(field) then s.branches[field]=get(field) end;\n end;\n assert(s.branches.BRANCH_ADMIN_FOUNDATION=='STORES','existing STORES commitment absent');\n local count=0;\n for n in GameInfo.JAC_PersonaTreeNodes() do if n.LeaderType==leader then\n  count=count+1; local value=get('NODE_'..n.NodeType);\n  assert(value==nil or value==1,'invalid owned node value');\n  if value==1 then\n   assert(n.CategoryType==s.category,'owned node violates category');\n   if n.ExclusiveGroup then assert(s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup]==n.RouteType,'owned node violates branch') end;\n   if n.PrereqNode then assert(get('NODE_'..n.PrereqNode)==1,'owned node lacks prerequisite') end;\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='OWNED','owned status mismatch'); s.nodes[n.NodeType]=n.Cost;\n  elseif n.CategoryType~=s.category then\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='CATEGORY_LOCKED','other category opened');\n  elseif n.ExclusiveGroup and s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup] and\n   s.branches['BRANCH_'..n.CategoryType..'_'..n.ExclusiveGroup]~=n.RouteType then\n   assert(JAC_PersonaTreeRules.Status(owner,leader,n.NodeType)=='BRANCH_LOCKED','sibling branch opened');\n  end;\n end end;\n assert(count>0 and next(s.nodes),'non-vacuous person tree required');\n return s;\nend;\nfunction JAC158_Encode(s)\n local a={}; for _,field in ipairs({'turn','owner','leader','city','merit','category','spent','total','ai','govern','deed','count','countTurn'}) do a[#a+1]=field..'='..tostring(s[field]) end;\n local b={}; for field,value in pairs(s.branches) do b[#b+1]=field..'='..value end; table.sort(b); for _,v in ipairs(b) do a[#a+1]=v end;\n local n={}; for node,cost in pairs(s.nodes) do n[#n+1]=node..'='..cost end; table.sort(n); for _,v in ipairs(n) do a[#a+1]=v end;\n return table.concat(a,'|');\nend;\n\nreturn JAC158_Encode(JAC158_Read())",
+      "equals_capture": "AI_PERSONA_BEFORE_SAVE"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "JAC158_previous=JAC158_Read(); JAC158_purchases=0; return 'post-load actual AI turn initialized'"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 300
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "JAC_LeaderPersona_Tree",
+      "code": "\nlocal old=assert(JAC158_previous,'AI turn observation not initialized'); local s=JAC158_Read();\nassert(s.turn==old.turn+1,'not exactly one actual game turn');\nassert(s.city==old.city and s.spent==old.spent,'fixture assignment or title spending changed');\nassert(type(old.ai)=='number' and s.ai==old.ai+1 and (s.ai==s.turn or s.ai==s.turn-1) and s.govern==s.ai,'native AI turn did not run persona callback');\nassert(s.deed==s.ai and s.countTurn==s.ai and s.count==1,'governance deed not credited exactly once');\nassert(s.category==old.category,'AI changed category');\nfor field,value in pairs(old.branches) do assert(s.branches[field]==value,'AI changed irreversible route') end;\nfor node,cost in pairs(old.nodes) do assert(s.nodes[node]==cost,'AI lost an owned node') end;\nlocal purchases=0; local cost=0;\nfor node,price in pairs(s.nodes) do if not old.nodes[node] then\n purchases=purchases+1; cost=cost+price;\n local n=assert(GameInfo.JAC_PersonaTreeNodes[node]);\n assert(not n.PrereqNode or old.nodes[n.PrereqNode],'AI bought a node before its prerequisite');\nend end;\nassert(purchases<=GameInfo.JAC_PersonaTreeParameters['AI_PURCHASES_PER_TURN'].Value,'AI exceeded purchase budget');\nlocal earned=s.merit+cost-old.merit;\nlocal profile=GameInfo.JAC_PersonaTreePeople[s.leader].MeritProfile;\nassert(earned>=GameInfo.JAC_PersonaMeritRules[profile].GOVERN_TURN,'merit conservation/earning failed');\nJAC158_purchases=(JAC158_purchases or 0)+purchases; JAC158_previous=s;\nreturn 'AI_REAL_TURN purchases='..purchases..' cost='..cost..' earned='..earned..'|'..JAC158_Encode(s);\n"
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}
