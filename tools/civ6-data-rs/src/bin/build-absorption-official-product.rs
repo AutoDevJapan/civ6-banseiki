@@ -45,7 +45,13 @@
 //! MainMenu.lua:182-189 uses normal default single-player setup; stock
 //! SetupParameters.lua:538-566 permits local Human and non-Human auxiliary
 //! writes, while rejecting a nonlocal Human outside hotseat. This motivates a
-//! comparison, not a diagnosis of Actual35's pre-Core host timeout.
+//! comparison, not a diagnosis of Actual35's pre-Core host timeout. Before
+//! Host, local ID may still be -1: permission results are observations only.
+//! JoiningRoom.lua:60,129,146,328-333, StagingRoom.lua:3335-3337 and
+//! MainMenu.lua:1694,1788 demonstrate the session/content notifications.
+//! JoiningRoom.lua:164 uses Modding.GetLastModErrorString on failure;
+//! SetupParameters.lua:26 uses GetTickCount. Missing notifications are not
+//! evidence of success/failure when the FrontEnd context is disposed.
 
 use anyhow::{bail, ensure, Context, Result};
 use civ6_data_rs::{absorption_admission, Repository};
@@ -1341,13 +1347,84 @@ fn configured_frontend(configure: &Value) -> Result<String> {
 }
 
 const LOCAL_HUMAN_PERMISSIONS: &str = r#"
-assert(Network.GetLocalPlayerID()==0,'local-human probe did not obtain local slot zero')
-assert(not GameConfiguration.IsAnyMultiplayer() and not GameConfiguration.IsHotseat(),'local-human probe is not ordinary single player')
-for actor=0,1 do
-  local parameters=assert(GetPlayerParameters(actor),'local-human probe player parameters missing')
-  local parameter=assert(parameters.Parameters.PlayerLeader,'local-human probe leader parameter missing')
-  assert(parameters:Config_CanWriteParameter(parameter)==true,'ordinary helper cannot write local Human/nonlocal AI at actor '..actor)
+local function ObservePermission(label,fn)
+  local ok,value=pcall(fn)
+  print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
 end
+ObservePermission('probe-local-player-id',function() return Network.GetLocalPlayerID() end)
+ObservePermission('probe-multiplayer',function() return GameConfiguration.IsAnyMultiplayer() end)
+ObservePermission('probe-hotseat',function() return GameConfiguration.IsHotseat() end)
+for actor=0,1 do
+  ObservePermission('probe-actor-'..actor..'-can-write',function()
+    local parameters=GetPlayerParameters(actor)
+    local parameter=parameters and parameters.Parameters and parameters.Parameters.PlayerLeader
+    return parameter and parameters:Config_CanWriteParameter(parameter)
+  end)
+end
+"#;
+
+const LOCAL_HUMAN_SESSION_EVENTS: &str = r#"
+-- Only our observer callbacks are retained/replaced. A disposed FrontEnd
+-- context can stop delivering events without proving a launch result.
+local function Observe(label,fn)
+  local ok,value=pcall(fn)
+  print('[JAC_OFFICIAL_SESSION_OBSERVER] '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
+end
+local function Identity(label)
+  Observe(label..'-timestamp-ticks',function() return GetTickCount() end)
+  Observe(label..'-local-player-id',function() return Network.GetLocalPlayerID() end)
+  Observe(label..'-participating-ids',function() return table.concat(GameConfiguration.GetParticipatingPlayerIDs(),',') end)
+  Observe(label..'-human-ids',function() return table.concat(GameConfiguration.GetHumanPlayerIDs(),',') end)
+  Observe(label..'-in-session',function() return Network.IsInSession() end)
+end
+local previous=JAC_OfficialProductSessionWatcher
+if previous then Observe('replace-own-observer',function() return previous.Stop() end) end
+local owned={}
+local function Stop()
+  for _,subscription in ipairs(owned) do
+    Observe('remove-own-'..subscription.Name,function() return subscription.Event.Remove(subscription.Callback) end)
+  end
+  owned={}
+end
+JAC_OfficialProductSessionWatcher={Stop=Stop}
+for _,spec in ipairs({
+  {Name='MultiplayerJoinRoomFailed',Failure=true,Argument='extended-error'},
+  {Name='MultiplayerGameAbandoned',Failure=true,Argument='abandoned-reason'},
+  {Name='MultiplayerGameLaunchFailed',Failure=true},
+  {Name='LeaveGameComplete'},
+  {Name='FinishedGameplayContentConfigure',Content=true},
+  {Name='MultiplayerJoinRoomComplete'},
+  {Name='MultiplayerJoinGameComplete'},
+  {Name='MultiplayerGameLaunched'}}) do
+  local name=spec.Name
+  local failureEvent,content,argument=spec.Failure==true,spec.Content==true,spec.Argument
+  local callback=function(...)
+    local count,args=select('#',...),{...}
+    Observe(name..'-callback',function()
+      print('[JAC_OFFICIAL_SESSION_EVENT] name='..name..' argc='..count)
+      Identity(name)
+      for index=1,count do
+        Observe(name..'-arg-'..index,function() return args[index] end)
+      end
+      if argument then Observe(name..'-'..argument,function() return args[1] end) end
+      local failure=failureEvent
+      if content then
+        Observe(name..'-Success',function() return args[1].Success end)
+        Observe(name..'-ConfigurationChanged',function() return args[1].ConfigurationChanged end)
+        local ok,success=pcall(function() return args[1].Success end)
+        failure=ok and success==false
+      end
+      if failure then Observe(name..'-mod-last-error',function() return Modding.GetLastModErrorString() end) end
+      -- Raw notifications never stamp ready/success or alter any actor.
+    end)
+  end
+  Observe('register-'..name,function()
+    local event=Events[name]
+    event.Add(callback)
+    owned[#owned+1]={Name=name,Event=event,Callback=callback}
+  end)
+end
+Identity('installed')
 "#;
 
 const LOCAL_HUMAN_METADATA: &str = r#"
@@ -1421,7 +1498,7 @@ fn local_human_probe(repo: &Repository) -> Result<Value> {
         "local-human probe requires Oda Human at slot zero"
     );
     let allocate = configured_frontend(&steps[1])?;
-    // Check permissions while the ordinary helper's parameters still exist,
+    // Observe permissions while the ordinary helper's parameters still exist,
     // after independently printing their values and before releasing them.
     ensure!(
         allocate.matches("ReleasePlayerParameters()").count() == 1,
@@ -1437,7 +1514,7 @@ fn local_human_probe(repo: &Repository) -> Result<Value> {
         .rsplit_once("return ")
         .context("official setup return")?;
     steps[2]["code"] = json!(format!(
-        "local function Prepare()\n{setup}\n{FRONTEND_FILTER}\n{allocate}\nend\nlocal ok,why=pcall(Prepare)\nprint('[Metadata_Boot_PreSnapshot] preparation-ok='..tostring(ok)..' reason='..tostring(why))\nlocal function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\nassert(ok,why)\n{FRONTEND_BOOTSTRAP}"
+        "{LOCAL_HUMAN_SESSION_EVENTS}\nlocal function Prepare()\n{setup}\n{FRONTEND_FILTER}\n{allocate}\nend\nlocal ok,why=pcall(Prepare)\nprint('[Metadata_Boot_PreSnapshot] preparation-ok='..tostring(ok)..' reason='..tostring(why))\nlocal function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\nassert(ok,why)\n{FRONTEND_BOOTSTRAP}"
     ));
     // All metadata is independently guarded. Host/deadline/state observation
     // belongs to the runner's single inherited start_game action.
@@ -1747,6 +1824,9 @@ SIZE={MinPlayers=2,MaxPlayers=4,MinCityStates=0,MaxCityStates=6}
 VALUES={CITY_STATE_COUNT=1};BOUNDS={MinMajor=2,MaxMajor=2,MinMinor=0,MaxMinor=0};CALLS={}
 SlotStatus={SS_COMPUTER=1,SS_TAKEN=2}
 local majors={{Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Slot=1},{Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Slot=2}}
+if LOCAL_SWAP then majors[1],majors[2]=majors[2],majors[1] end
+Network={GetLocalPlayerID=function() return -1 end}
+GetPlayerParameters=function(actor) return {Parameters={PlayerLeader={}},Config_CanWriteParameter=function() return false end} end
 include=function(name) assert(name=='PlayerSetupLogic') end
 BuildHeadlessGameSetup=function() g_GameParameters={FullRefresh=function() end} end
 CreatePlayerParameters=function(index,headless) assert(index==0 or index==1);assert(headless==true) end
@@ -1770,6 +1850,7 @@ GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAny
   assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==2 and VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
   assert(LEADER_VALUES and LEADER_VALUES:find('LEADER_SIMON_BOLIVAR',1,true),'mods refreshed before dependency helper values');CALLS[#CALLS+1]='mods'
   if CHANGE_MAJOR then majors[1].Leader='wrong-leader' end
+  if CHANGE_CONTROLLER then majors[1].Slot=1 end
   if DROP_FILTER then VALUES.EXCLUDE_CITY_STATES={} end
  end,
  SetParticipatingPlayerCount=function(n)
@@ -1778,6 +1859,7 @@ GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAny
   CALLS[#CALLS+1]='participating'
  end}
 MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return 'Continents.lua' end,
+ SetValue=function(key,value) assert(key=='MAP_SCRIPT' and value=='Continents.lua') end,
  SetScript=function(value) assert(value=='Continents.lua') end,
  GetMapSize=function() return 'MAPSIZE_DUEL' end,
  SetMinMajorPlayers=function(n) BOUNDS.MinMajor=n end,SetMaxMajorPlayers=function(n) BOUNDS.MaxMajor=n end,
@@ -1847,6 +1929,38 @@ end}
                 );
             } else {
                 lua.load("assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA' and PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS');assert(CALLS[1]=='mods' and CALLS[2]=='participating');assert(BOUNDS.MaxMinor==6)").exec()?;
+            }
+        }
+        let probe = local_human_probe(&Repository::checked_in())?;
+        let code = probe["steps"][2]["code"].as_str().unwrap();
+        for (mutation, reason) in [
+            ("", None),
+            (
+                "CHANGE_MAJOR=true",
+                Some("standard setup changed an actual major civilization, leader or controller"),
+            ),
+            (
+                "CHANGE_CONTROLLER=true",
+                Some("standard setup changed an actual major civilization, leader or controller"),
+            ),
+            (
+                "NO_DEPENDENCY=true",
+                Some("normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency"),
+            ),
+        ] {
+            let lua = Lua::new();
+            lua.load(format!("LOCAL_SWAP=true\n{SETUP}\n{mutation}"))
+                .exec()?;
+            let result = lua.load(code).exec();
+            if let Some(reason) = reason {
+                assert!(
+                    result.expect_err(mutation).to_string().contains(reason),
+                    "{mutation}"
+                );
+            } else {
+                result?;
+                assert_eq!(probe["steps"][4]["action"], "start_game");
+                lua.load("assert(Network.GetLocalPlayerID()==-1);assert(GetPlayerParameters(0):Config_CanWriteParameter()==false);assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA')").exec()?;
             }
         }
         Ok(())
@@ -3102,15 +3216,14 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             "JAC_ALL_POOLS",
             "EXCLUDE_CITY_STATES",
             "RefreshPlayerParameters()",
-            "ordinary helper cannot write",
+            "probe-actor-",
             "LEADER_SIMON_BOLIVAR",
             "LEADER_LADY_SIX_SKY",
         ] {
             assert!(setup.contains(required), "missing {required}");
         }
         assert!(
-            setup.find("ordinary helper cannot write").unwrap()
-                < setup.find("ReleasePlayerParameters()").unwrap()
+            setup.find("probe-actor-").unwrap() < setup.find("ReleasePlayerParameters()").unwrap()
         );
         let old = normal["steps"][2]["code"].as_str().unwrap();
         assert!(old.contains("Slot=SlotStatus.SS_COMPUTER},\n  {Civ='CIVILIZATION_JAC_ODA'"));
@@ -3225,11 +3338,9 @@ JAC_AbsorptionProductGameplay.Country=function(actor) assert(actor==2);return co
 
     #[test]
     fn local_human_permissions_and_metadata_keep_real_independent_getter_results() -> Result<()> {
-        for (mutation, ok) in [
-            ("", true),
-            ("LOCAL=1", false),
-            ("MULTI=true", false),
-            ("CANWRITE[1]=false", false),
+        for mutation in [
+            "", "LOCAL=-1", "LOCAL=1", "CANWRITE[0]=false;CANWRITE[1]=false",
+            "GetPlayerParameters=function(actor) if actor==0 then error('getter unavailable') end;return {Parameters={PlayerLeader={}},Config_CanWriteParameter=function() return false end} end",
         ] {
             let lua = Lua::new();
             lua.load(r#"
@@ -3238,11 +3349,7 @@ GameConfiguration={IsAnyMultiplayer=function() return MULTI==true end,IsHotseat=
 GetPlayerParameters=function(actor) return {Parameters={PlayerLeader={}},Config_CanWriteParameter=function() return CANWRITE[actor] end} end
 "#).exec()?;
             lua.load(mutation).exec()?;
-            assert_eq!(
-                lua.load(LOCAL_HUMAN_PERMISSIONS).exec().is_ok(),
-                ok,
-                "{mutation}"
-            );
+            lua.load(LOCAL_HUMAN_PERMISSIONS).exec()?;
         }
         let lua = Lua::new();
         lua.load(r#"
@@ -3253,6 +3360,76 @@ PlayerConfigurations={[0]={GetReady=function() return false end}}
 "#).exec()?;
         lua.load(LOCAL_HUMAN_METADATA).exec()?;
         lua.load("local s=table.concat(MESSAGES,'\\n');assert(s:find('local-player-id ok=true type=number value=0',1,true));assert(s:find('net-session-host ok=false type=error',1,true));assert(s:find('local-ready ok=true type=boolean value=false',1,true));assert(s:find('human-ids ok=true type=string value=0',1,true))").exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn session_observer_records_official_payloads_without_replacing_handlers_or_deciding_results(
+    ) -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+MESSAGES={};print=function(s) MESSAGES[#MESSAGES+1]=s end
+NATIVE_WRITES=0;MOD_READS=0
+Network={GetLocalPlayerID=function() return -1 end,IsInSession=function() return false end,
+ HostGame=function() NATIVE_WRITES=NATIVE_WRITES+1 end,LeaveGame=function() NATIVE_WRITES=NATIVE_WRITES+1 end}
+GetTickCount=function() return 321 end
+GameConfiguration={GetParticipatingPlayerIDs=function() return {0,1} end,GetHumanPlayerIDs=function() return {0} end}
+Modding={GetLastModErrorString=function() MOD_READS=MOD_READS+1;return 'actual-mod-error' end}
+Events={};ORIGINAL={}
+for _,name in ipairs({'MultiplayerJoinRoomFailed','MultiplayerGameAbandoned','MultiplayerGameLaunchFailed','LeaveGameComplete',
+ 'FinishedGameplayContentConfigure','MultiplayerJoinRoomComplete','MultiplayerJoinGameComplete','MultiplayerGameLaunched'}) do
+ local original=function() NATIVE_WRITES=NATIVE_WRITES+10 end
+ ORIGINAL[name]=original
+ local handlers={original}
+ Events[name]={Handlers=handlers,Add=function(fn) handlers[#handlers+1]=fn end,
+ Remove=function(fn) assert(fn~=original,'original handler removed');for i=#handlers,1,-1 do if handlers[i]==fn then table.remove(handlers,i) end end end}
+end
+function EmitObserver(name,...)
+ local handlers=Events[name].Handlers
+ assert(#handlers==2 and handlers[1]==ORIGINAL[name]);handlers[2](...)
+end
+function HasMessage(part) for _,s in ipairs(MESSAGES) do if s:find(part,1,true) then return true end end;return false end
+"#).exec()?;
+        lua.load(LOCAL_HUMAN_SESSION_EVENTS).exec()?;
+        lua.load(r#"
+assert(NATIVE_WRITES==0 and MOD_READS==0) -- no event is not a success/failure
+EmitObserver('MultiplayerJoinRoomFailed',17)
+EmitObserver('MultiplayerGameAbandoned',23)
+EmitObserver('MultiplayerGameLaunchFailed')
+EmitObserver('FinishedGameplayContentConfigure',{Success=false,ConfigurationChanged=true})
+assert(MOD_READS==4)
+EmitObserver('FinishedGameplayContentConfigure',{Success=true,ConfigurationChanged=false})
+EmitObserver('LeaveGameComplete')
+EmitObserver('MultiplayerJoinRoomComplete')
+EmitObserver('MultiplayerJoinGameComplete')
+EmitObserver('MultiplayerGameLaunched')
+assert(MOD_READS==4 and NATIVE_WRITES==0)
+assert(HasMessage('MultiplayerJoinRoomFailed-extended-error ok=true type=number value=17'))
+assert(HasMessage('MultiplayerGameAbandoned-abandoned-reason ok=true type=number value=23'))
+assert(HasMessage('FinishedGameplayContentConfigure-Success ok=true type=boolean value=false'))
+assert(HasMessage('FinishedGameplayContentConfigure-ConfigurationChanged ok=true type=boolean value=true'))
+assert(HasMessage('MultiplayerGameAbandoned-mod-last-error ok=true type=string value=actual-mod-error'))
+assert(HasMessage('MultiplayerJoinRoomFailed-timestamp-ticks ok=true type=number value=321'))
+assert(HasMessage('MultiplayerJoinRoomFailed-local-player-id ok=true type=number value=-1'))
+"#).exec()?;
+        lua.load(LOCAL_HUMAN_SESSION_EVENTS).exec()?;
+        lua.load("for name,event in pairs(Events) do assert(#event.Handlers==2 and event.Handlers[1]==ORIGINAL[name]) end;JAC_OfficialProductSessionWatcher.Stop();for name,event in pairs(Events) do assert(#event.Handlers==1 and event.Handlers[1]==ORIGINAL[name]) end;assert(NATIVE_WRITES==0 and MOD_READS==4)").exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn session_observer_isolates_missing_events_clock_ids_and_mod_error_getters() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+MESSAGES={};print=function(s) MESSAGES[#MESSAGES+1]=s end
+Events={FinishedGameplayContentConfigure={Add=function(fn) CONTENT=fn end},MultiplayerJoinGameComplete={Add=function(fn) JOINED=fn end}}
+GetTickCount=function() error('clock unavailable') end
+Network={GetLocalPlayerID=function() return -1 end,IsInSession=function() return false end}
+GameConfiguration={GetParticipatingPlayerIDs=function() return {0,1} end,GetHumanPlayerIDs=function() return {0} end}
+Modding={GetLastModErrorString=function() error('mod error getter unavailable') end}
+"#).exec()?;
+        lua.load(LOCAL_HUMAN_SESSION_EVENTS).exec()?;
+        lua.load("assert(CONTENT and JOINED);CONTENT({Success=false,ConfigurationChanged=false});JOINED();local s=table.concat(MESSAGES,'\\n');assert(s:find('register-MultiplayerJoinRoomFailed ok=false type=error',1,true));assert(s:find('FinishedGameplayContentConfigure-timestamp-ticks ok=false type=error',1,true));assert(s:find('FinishedGameplayContentConfigure-local-player-id ok=true type=number value=-1',1,true));assert(s:find('FinishedGameplayContentConfigure-mod-last-error ok=false type=error',1,true));assert(s:find('MultiplayerJoinGameComplete-callback ok=true type=nil',1,true))").exec()?;
         Ok(())
     }
 
