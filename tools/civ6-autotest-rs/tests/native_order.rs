@@ -181,3 +181,61 @@ fn actual_completed_helper_is_not_reported_as_a_live_observer() {
         .message
         .contains("parent ended"));
 }
+
+#[test]
+fn missing_log_line_does_not_hide_observer_exit_until_the_step_deadline() {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::Clock,
+        Error, Result,
+    };
+    use std::sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    };
+    struct Ticks(Arc<AtomicU64>);
+    impl Clock for Ticks {
+        fn now(&self) -> f64 {
+            self.0.load(Ordering::Relaxed) as f64 / 1000.0
+        }
+        fn sleep(&self, seconds: f64) {
+            self.0
+                .fetch_add((seconds * 1000.0) as u64, Ordering::Relaxed);
+        }
+    }
+    struct Exits(Arc<AtomicU64>);
+    impl Backend for Exits {
+        fn check_native_order(&self) -> Result<()> {
+            if self.0.load(Ordering::Relaxed) >= 500 {
+                Err(Error::input("observer ended after first poll"))
+            } else {
+                Ok(())
+            }
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::write(temp.path().join("Lua.log"), "").unwrap();
+    let ticks = Arc::new(AtomicU64::new(0));
+    let mut runner = Runner::with_backend(
+        json!({"name":"log wait","steps":[]}),
+        temp.path().into(),
+        temp.path().into(),
+        temp.path().into(),
+        4318,
+        Box::new(Exits(ticks.clone())),
+        Arc::new(Ticks(ticks.clone())),
+    );
+    let error = runner
+        .wait(
+            &json!({"type":"log_line","log":"Lua.log","contains":"never emitted"}),
+            240.0,
+            false,
+        )
+        .unwrap_err();
+    assert!(
+        error.message.contains("observer ended after first poll"),
+        "{}",
+        error.message
+    );
+    assert_eq!(ticks.load(Ordering::Relaxed), 500);
+}

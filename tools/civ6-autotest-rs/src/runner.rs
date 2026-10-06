@@ -1439,6 +1439,7 @@ impl Runner {
             None
         };
         while self.clock.now() < end {
+            self.remaining(end)?;
             if close_diplomacy {
                 let closed = self.close_diplomacy(end)?;
                 if !closed.is_empty() {
