@@ -137,6 +137,9 @@ pub trait Backend: Send {
     fn start_native_order(&mut self, _: &Path, _: &Value) -> Result<()> {
         Err(Error::input("backend cannot observe native startup order"))
     }
+    fn check_native_order(&self) -> Result<()> {
+        Ok(())
+    }
     fn native_order_phase(&mut self, _: &str) -> Result<()> {
         Err(Error::input("native order capture is not active"))
     }
@@ -902,6 +905,11 @@ impl Backend for SystemBackend {
             .ok_or_else(|| Error::input("native order capture is not active"))?
             .phase(phase)
     }
+    fn check_native_order(&self) -> Result<()> {
+        self.native_order
+            .as_ref()
+            .map_or(Ok(()), |session| session.check_active())
+    }
     fn stop_native_order(&mut self) -> Result<Option<PathBuf>> {
         self.native_order
             .take()
@@ -1141,6 +1149,7 @@ impl Runner {
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
         crate::time::check_interrupt()?;
+        self.backend.check_native_order()?;
         let lease = self.backend.live_lease_budget()?;
         let v = deadline - self.clock.now();
         if v <= 0.0 {

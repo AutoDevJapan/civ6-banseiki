@@ -142,15 +142,17 @@ mod platform {
     use std::{
         fs::{self, File},
         io::{BufRead, BufReader, Write},
-        os::windows::{fs::OpenOptionsExt, process::CommandExt},
+        os::windows::{fs::OpenOptionsExt, io::AsRawHandle, process::CommandExt},
         process::{Child, ChildStdin, Command, Stdio},
         sync::mpsc::{self, Receiver},
         thread::JoinHandle,
         time::{Duration, Instant},
     };
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME},
-        System::Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+        Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+        },
     };
 
     fn created(pid: u32) -> Result<u64> {
@@ -173,6 +175,14 @@ mod platform {
         }
         Ok((u64::from(a.dwHighDateTime) << 32) | u64::from(a.dwLowDateTime))
     }
+    pub fn check_parent_active(child: &Child) -> Result<()> {
+        if unsafe { WaitForSingleObject(child.as_raw_handle().cast(), 0) } != WAIT_TIMEOUT {
+            return Err(Error::input(
+                "native order observer parent ended during the scenario",
+            ));
+        }
+        Ok(())
+    }
 
     pub struct Session {
         child: Child,
@@ -190,6 +200,12 @@ mod platform {
         _helper_image: File,
     }
     impl Session {
+        pub fn check_active(&self) -> Result<()> {
+            if self.finished {
+                return Err(Error::input("native order capture has already stopped"));
+            }
+            check_parent_active(&self.child)
+        }
         pub fn start(pid: u32, started: f64, output: &Path, step: &Value) -> Result<Self> {
             validate_options(step)?;
             let created = created(pid)?;
@@ -450,12 +466,15 @@ mod platform {
     }
 }
 #[cfg(all(windows, target_arch = "x86_64"))]
-pub use platform::Session;
+pub use platform::{check_parent_active, Session};
 
 #[cfg(not(all(windows, target_arch = "x86_64")))]
 pub struct Session;
 #[cfg(not(all(windows, target_arch = "x86_64")))]
 impl Session {
+    pub fn check_active(&self) -> Result<()> {
+        Err(Error::input("order capture requires Windows x64"))
+    }
     pub fn start(_: u32, _: f64, _: &Path, _: &Value) -> Result<Self> {
         Err(Error::input("order capture requires Windows x64"))
     }
