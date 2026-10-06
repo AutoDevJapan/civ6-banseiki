@@ -693,6 +693,50 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
 }
 
 #[test]
+fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(r#"
+      REGISTER();READY();TURN=TURN+1;UI_TURN=TURN-1
+      local function event() local handlers={} return {Add=function(f) handlers[#handlers+1]=f end,
+        Call=function() for _,f in ipairs(handlers) do f() end end} end
+      UI_ENV=setmetatable({Game={GetCurrentGameTurn=function() return UI_TURN end,GetLocalPlayer=function() return 2 end},
+        Events={GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event(),LoadScreenClose=event()},
+        PlayerOperations={EXECUTE_SCRIPT=1},UI={RequestPlayerOperation=function(actor,kind,params)
+          assert(actor==2 and kind==1 and params.OnStart=='JAC_AbsorptionProduct_Operation')
+          PUBLICATION_SENDS=PUBLICATION_SENDS+1;GameEvents.JAC_AbsorptionProduct_Operation.Call(actor,params)
+        end}}, {__index=_G})
+      PUBLICATION_SENDS=0
+    "#).exec()?;
+    lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
+        .set_environment(lua.globals().get("UI_ENV")?)
+        .exec()?;
+    lua.load(r#"
+      GameEvents.OnGameTurnStarted.Call();assert(STARTS==0 and CHARGES==0)
+      assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,2,TURN-1))
+      assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,1,TURN))
+      assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').PublicationTurns['2']==nil)
+      UI_TURN=TURN;UI_ENV.Events.GameCoreEventPublishComplete.Call()
+      assert(STARTS==1 and CHARGES==1 and VIEW().Status=='STARTED' and PUBLICATION_SENDS==1)
+      SNAPSHOT=CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))
+      for i=1,5 do UI_ENV.Events.GameCoreEventPublishComplete.Call();UI_ENV.Events.LocalPlayerTurnBegin.Call() end
+      assert(PUBLICATION_SENDS==1 and STARTS==1 and CHARGES==1 and CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==SNAPSHOT)
+    "#).exec()?;
+    load(&lua, 10000.)?;
+    lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
+        .set_environment(lua.globals().get("UI_ENV")?)
+        .exec()?;
+    lua.load(
+        r#"
+      UI_ENV.Events.LoadScreenClose.Call()
+      assert(PUBLICATION_SENDS==2 and STARTS==1 and CHARGES==1)
+      assert(CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==SNAPSHOT)
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
 fn product_ui_uses_native_actor_identity_when_gameplay_properties_are_unpublished(
 ) -> anyhow::Result<()> {
     let repo = Repository::checked_in();
