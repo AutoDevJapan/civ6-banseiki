@@ -69,8 +69,13 @@ fn normal_context(setup: &str) -> Lua {
 fn public_all_22_owners_and_people_sparse_indices_costs_123() {
     // Every owned pair except self-Join; real definitions use a sparse Index,
     // which must never be confused with slot order, player ID or Hash.
-    for owner in 0..22 {
-        for source in 0..22 {
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
+    let mut checked = std::collections::BTreeSet::new();
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..parallelism).map(|lane| scope.spawn(move || {
+            let mut pairs = Vec::new();
+            for owner in (lane..22).step_by(parallelism) {
+                for source in 0..22 {
             if owner == source { continue; }
             let lua = normal_context("");
             run(&lua, &format!(r#"
@@ -103,8 +108,21 @@ assert(properties['JAC_PERSONA_'..l..'_STATE']=='GOVERNOR' and playerProps[owner
 assert(properties['JAC_PERSONA_'..l..'_MERIT']==merit)
 assert(uiReads==0 and operations==0 and used[owner]==row.EvolutionCost+extra)
 "#));
+                    pairs.push((owner, source));
+                }
+            }
+            pairs
+        })).collect();
+        for worker in workers {
+            for pair in worker.join().expect("independent Lua matrix worker failed") {
+                assert!(checked.insert(pair), "duplicate matrix pair {pair:?}");
+            }
         }
-    }
+    });
+    let expected: std::collections::BTreeSet<_> = (0..22)
+        .flat_map(|owner| (0..22).filter(move |&source| owner != source).map(move |source| (owner, source)))
+        .collect();
+    assert_eq!(checked, expected, "the complete 462-pair matrix must run");
 }
 
 #[test]
