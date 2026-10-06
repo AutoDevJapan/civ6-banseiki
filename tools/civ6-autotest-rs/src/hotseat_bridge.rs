@@ -90,15 +90,15 @@ pub fn check_scenario(data: &Value) -> Result<()> {
     Ok(())
 }
 
-pub fn nonce_valid(nonce: &str) -> bool {
-    nonce.len() == 32 && nonce.bytes().all(|c| c.is_ascii_hexdigit())
+pub fn nonce_valid(run_id: &str) -> bool {
+    run_id.len() == 32 && run_id.bytes().all(|c| c.is_ascii_hexdigit())
 }
 
-fn plan(data: &Value, nonce: &str) -> String {
+fn plan(data: &Value, run_id: &str) -> String {
     let mut lua = format!("JAC_HOTSEAT_PLAN = {{nonce={}, queries={{}}, query_keys={{}}, action_keys={{[133]='end_turn',[134]='save',[135]='exit_to_menu'}}, action_steps={{end_turn={{['0:0']=6,['0:1']=13,['1:0']=16}}, save={{['0:1']=9,['1:1']=18}}, exit_to_menu={{['0:1']=10,['1:1']=19}}}}, save_names={{[9]={},[18]={}}}}}\n",
-        scenario::lua_string(nonce),
-        scenario::lua_string(&format!("JAC-Hotseat-Mid-Round-{nonce}")),
-        scenario::lua_string(&format!("JAC-Hotseat-Next-Player-{nonce}")));
+        scenario::lua_string(run_id),
+        scenario::lua_string(&format!("JAC-Hotseat-Mid-Round-{run_id}")),
+        scenario::lua_string(&format!("JAC-Hotseat-Next-Player-{run_id}")));
     for (i, step) in QUERY_STEPS.iter().enumerate() {
         let key = 0x7c + i; // F13..F21
         let code = data["steps"][step - 1]["code"].as_str().unwrap();
@@ -115,11 +115,11 @@ pub struct Bundle {
     pub scenario: String,
 }
 
-fn manifest_text(mod_id: &str, nonce: &str) -> String {
+fn manifest_text(mod_id: &str, run_id: &str) -> String {
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <Mod id="{mod_id}" version="1">
-  <Properties><Name>JAC Hotseat Test Witness {nonce}</Name><Description>Test-only log witness</Description><Teaser>Hotseat test only</Teaser><Authors>JAC</Authors></Properties>
+  <Properties><Name>JAC Hotseat Test Witness {run_id}</Name><Description>Test-only log witness</Description><Teaser>Hotseat test only</Teaser><Authors>JAC</Authors></Properties>
   <InGameActions>
     <AddUserInterfaces id="JAC_HotseatWitness_UI"><Properties><Context>InGame</Context></Properties><File>UI/JAC_HotseatWitness.xml</File></AddUserInterfaces>
     <ImportFiles id="JAC_HotseatWitness_Files"><File>UI/JAC_HotseatWitness.xml</File><File>UI/JAC_HotseatWitness.lua</File><File>UI/JAC_HotseatPlan.lua</File></ImportFiles>
@@ -131,9 +131,9 @@ fn manifest_text(mod_id: &str, nonce: &str) -> String {
 }
 
 /// Build an installable, per-run MOD beside a scenario copy; never touch the user's Mods folder.
-pub fn prepare(data: &Value, output: &Path, nonce: &str, mod_id: &str) -> Result<Bundle> {
+pub fn prepare(data: &Value, output: &Path, run_id: &str, mod_id: &str) -> Result<Bundle> {
     check_scenario(data)?;
-    if !nonce_valid(nonce) || uuid::Uuid::parse_str(mod_id).is_err() {
+    if !nonce_valid(run_id) || uuid::Uuid::parse_str(mod_id).is_err() {
         return Err(Error::scenario("invalid hotseat nonce or MOD UUID"));
     }
     if output.exists() && output.read_dir()?.next().is_some() {
@@ -145,22 +145,25 @@ pub fn prepare(data: &Value, output: &Path, nonce: &str, mod_id: &str) -> Result
     fs::create_dir_all(mod_folder.join("UI"))?;
     fs::write(
         mod_folder.join("JAC_Test_HotseatBridge.modinfo"),
-        manifest_text(mod_id, nonce),
+        manifest_text(mod_id, run_id),
     )?;
     fs::write(mod_folder.join("UI/JAC_HotseatWitness.xml"), XML)?;
     fs::write(mod_folder.join("UI/JAC_HotseatWitness.lua"), WITNESS)?;
-    fs::write(mod_folder.join("UI/JAC_HotseatPlan.lua"), plan(data, nonce))?;
+    fs::write(
+        mod_folder.join("UI/JAC_HotseatPlan.lua"),
+        plan(data, run_id),
+    )?;
     let mut scenario = data.clone();
     scenario["steps"][0]["ids"]
         .as_array_mut()
         .unwrap()
         .push(mod_id.into());
-    scenario["hotseat_bridge_nonce"] = nonce.into();
+    scenario["hotseat_bridge_nonce"] = run_id.into();
     scenario::validate_scenario(&scenario)?;
     let scenario_path = output.join("multiplayer-hotseat-growth.bridge.json");
     fs::write(&scenario_path, serde_json::to_vec_pretty(&scenario)?)?;
     let bundle = Bundle {
-        nonce: nonce.into(),
+        nonce: run_id.into(),
         mod_id: mod_id.into(),
         mod_folder: mod_folder.display().to_string(),
         scenario: scenario_path.display().to_string(),
@@ -282,18 +285,18 @@ fn parse_chunk(line: &str) -> Result<Option<Chunk>> {
 }
 
 /// Reject interleaved, missing, duplicate, and out-of-order chunks. A stale nonce is an error.
-pub fn parse_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
-    parse_frames_inner(log, nonce, false)
+pub fn parse_frames(log: &str, run_id: &str) -> Result<Vec<Frame>> {
+    parse_frames_inner(log, run_id, false)
 }
 
 /// Log writes are not atomic as a whole frame. Polling may observe the final
 /// line or frame before the witness has finished printing its remaining parts.
-pub fn parse_available_frames(log: &str, nonce: &str) -> Result<Vec<Frame>> {
-    parse_frames_inner(log, nonce, true)
+pub fn parse_available_frames(log: &str, run_id: &str) -> Result<Vec<Frame>> {
+    parse_frames_inner(log, run_id, true)
 }
 
-fn parse_frames_inner(log: &str, nonce: &str, allow_incomplete_tail: bool) -> Result<Vec<Frame>> {
-    if !nonce_valid(nonce) {
+fn parse_frames_inner(log: &str, run_id: &str, allow_incomplete_tail: bool) -> Result<Vec<Frame>> {
+    if !nonce_valid(run_id) {
         return Err(Error::scenario("invalid expected nonce"));
     }
     let mut frames = Vec::new();
@@ -312,7 +315,7 @@ fn parse_frames_inner(log: &str, nonce: &str, allow_incomplete_tail: bool) -> Re
         let Some(chunk) = chunk else {
             continue;
         };
-        if chunk.nonce != nonce {
+        if chunk.nonce != run_id {
             return Err(Error::scenario("hotseat nonce mismatch"));
         }
         if let Some(first) = &current {
@@ -369,7 +372,7 @@ fn parse_frames_inner(log: &str, nonce: &str, allow_incomplete_tail: bool) -> Re
 }
 
 /// Unlike the generic judge, rotation is an error: old bytes cannot prove a new ACK.
-pub fn fresh_frames(log_dir: &Path, baseline: &Value, nonce: &str) -> Result<Vec<Frame>> {
+pub fn fresh_frames(log_dir: &Path, baseline: &Value, run_id: &str) -> Result<Vec<Frame>> {
     let path = log_dir.join("Lua.log");
     let (bytes, inode) = judge::read_log_file(&path)?;
     let marker = &baseline["files"]["Lua.log"];
@@ -378,7 +381,7 @@ pub fn fresh_frames(log_dir: &Path, baseline: &Value, nonce: &str) -> Result<Vec
             "Lua.log generation changed after hotseat baseline",
         ));
     }
-    parse_available_frames(&judge::slice_log_bytes(&bytes, marker, inode), nonce)
+    parse_available_frames(&judge::slice_log_bytes(&bytes, marker, inode), run_id)
 }
 
 /// The witness's fixed-length values preserve nil, types, and all four complete growth records.
@@ -546,7 +549,7 @@ pub struct WindowOwner {
 pub trait TransportIo {
     fn owner(&mut self) -> Result<WindowOwner>;
     fn baseline(&mut self) -> Result<Value>;
-    fn frames(&mut self, baseline: &Value, nonce: &str) -> Result<Vec<Frame>>;
+    fn frames(&mut self, baseline: &Value, run_id: &str) -> Result<Vec<Frame>>;
     fn key(&mut self, vk: u16, deadline: f64) -> Result<()>;
     fn now(&mut self) -> f64;
     fn sleep(&mut self, seconds: f64);
@@ -566,8 +569,8 @@ impl TransportIo for SystemTransport<'_> {
     fn baseline(&mut self) -> Result<Value> {
         judge::snapshot_logs(self.logs)
     }
-    fn frames(&mut self, baseline: &Value, nonce: &str) -> Result<Vec<Frame>> {
-        fresh_frames(self.logs, baseline, nonce)
+    fn frames(&mut self, baseline: &Value, run_id: &str) -> Result<Vec<Frame>> {
+        fresh_frames(self.logs, baseline, run_id)
     }
     fn key(&mut self, vk: u16, deadline: f64) -> Result<()> {
         crate::click::press_key(vk, Some(deadline))
@@ -601,15 +604,15 @@ pub struct Controller<I> {
 }
 
 impl<I: TransportIo> Controller<I> {
-    pub fn new(mut io: I, nonce: &str, boot: &Frame) -> Result<Self> {
-        if !nonce_valid(nonce) || boot.nonce != nonce || boot.step != 0 || boot.kind != "BOOT" {
+    pub fn new(mut io: I, run_id: &str, boot: &Frame) -> Result<Self> {
+        if !nonce_valid(run_id) || boot.nonce != run_id || boot.step != 0 || boot.kind != "BOOT" {
             return Err(Error::scenario("fresh hotseat BOOT required"));
         }
         WitnessSnapshot::parse(&boot.body)?;
         let owner = io.owner()?;
         Ok(Self {
             io,
-            nonce: nonce.into(),
+            nonce: run_id.into(),
             scene: boot.scene.clone(),
             owner,
             sent: BTreeSet::new(),
