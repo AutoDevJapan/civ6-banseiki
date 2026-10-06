@@ -10,6 +10,7 @@ PROPERTIES={}; CONTEXT='UI'; TURN=62; TIME=10; REQUESTS={}; WRITES={};
 CAPTURED=2; MAP_COUNT=1; ACTIVE_COUNT=0; UNIT_ID=700; UNIT_X=140; UNIT_Y=40;
 UNIT_OPERATION=-1; UNIT_END=-1; SOURCE_TURNS=0; NEW_MISSION=0;
 BAD_FIND=false; CORE_SOURCE_ABI='missing'; CAN_TRAVEL=true; CAN_SOURCES=true;
+FAIL_REQUEST=false; CORE_MISSION_ERROR=false;
 local function h(id,turn)
  return {id=id,turn=turn,operation=59,plot=8511,initial=1,escape=-1}
 end
@@ -25,6 +26,23 @@ PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62={stage='RETURNED',turn=62,nonce='excha
  finalIntent={sessionID=7},before=before,
  returnEvidence={stage='RETURNED_MAP',sessionID=7,before=before,after=after,
   returned={id=700,owner=0,unitType=18,x=140,y=40,turn=62}}};
+local function serialize(v)
+ if type(v)~='table' then return type(v)..':'..tostring(v) end
+ local keys={}; for k in pairs(v) do keys[#keys+1]=k end
+ table.sort(keys,function(a,b) return tostring(a)<tostring(b) end);
+ local out={}; for _,k in ipairs(keys) do
+  out[#out+1]=serialize(k)..'='..serialize(v[k])
+ end
+ return '{'..table.concat(out,',')..'}'
+end
+function PROTECTED_SNAPSHOT()
+ return serialize({exchange=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62,
+  archive=PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE,
+  state=PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE,
+  ack=PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK,
+  event=PROPERTIES.JAC_BOUNDARY_ENEMY_MISSION})
+end
+BASELINE_PROTECTED=PROTECTED_SNAPSHOT();
 Game={}; function Game:GetProperty(k) return PROPERTIES[k] end
 function Game:SetProperty(k,v)
  assert(CONTEXT=='CORE','UI attempted Game:SetProperty');
@@ -43,7 +61,8 @@ function UI.SetInterfaceMode(mode) MODE=mode end
 function UI.GetInterfaceMode() return MODE end
 InterfaceModeTypes={SPY_TRAVEL_TO_CITY=1,SPY_CHOOSE_MISSION=2,SELECTION=3};
 ActivityTypes={ACTIVITY_AWAKE=4};
-EspionageResultTypes={SUCCESS_UNDETECTED=0,SUCCESS_MUST_ESCAPE=2};
+EspionageResultTypes={SUCCESS_UNDETECTED=0,SUCCESS_MUST_ESCAPE=2,
+ FAIL_UNDETECTED=1,FAIL_MUST_ESCAPE=3,KILLED=4,CAPTURED=5};
 UnitOperationTypes={SPY_TRAVEL_NEW_CITY=100,PARAM_X=101,PARAM_Y=102};
 local unit={};
 function unit:GetID() return BAD_FIND and UNIT_ID+1 or UNIT_ID end
@@ -57,7 +76,7 @@ function unit:GetExperience() return {} end
 function unit:IsReadyToMove() return true end
 local units={};
 function units:FindID(id)
- if id==UNIT_ID or BAD_FIND then return unit end
+ if MAP_COUNT==1 and (id==UNIT_ID or BAD_FIND) then return unit end
  return nil
 end
 function units:Members()
@@ -77,7 +96,10 @@ function d:GetSourceTurnsRemaining(city)
  assert(city:GetID()==20); return SOURCE_TURNS
 end
 local coreDip={};
-function coreDip:GetMission(owner,id) return d:GetMission(owner,id) end
+function coreDip:GetMission(owner,id)
+ if CORE_MISSION_ERROR then error('Core mission getter ABI failure') end
+ return d:GetMission(owner,id)
+end
 function coreDip:GetSourceTurnsRemaining(city)
  if CORE_SOURCE_ABI=='error' then error('unknown core ABI') end
  return d:GetSourceTurnsRemaining(city)
@@ -154,6 +176,7 @@ function UnitManager.RequestOperation(u,op,args)
   MAP_COUNT=0; ACTIVE_COUNT=1; UNIT_OPERATION=op; UNIT_END=TURN+2
  elseif op==600 then UNIT_OPERATION=op; UNIT_END=TURN+7
  else error('unowned native request') end
+ if FAIL_REQUEST then error('native request result unknown after dispatch') end
 end
 ExposedMembers={JAC_PersonaBoundary={ReadEnemy=function()
  local map,active,captured={},{},{};
@@ -173,10 +196,11 @@ function ARRIVE(newID)
  TURN=TURN+2; MAP_COUNT=1; ACTIVE_COUNT=0;
  UNIT_ID=newID; UNIT_X=145; UNIT_Y=40; UNIT_OPERATION=-1; UNIT_END=-1
 end
-function COMPLETE_SOURCES(operation,plot)
- TURN=TURN+7; UNIT_OPERATION=-1; UNIT_END=-1; SOURCE_TURNS=6;
+function COMPLETE_SOURCES(operation,plot,initial,sourceTurns)
+ TURN=TURN+7; UNIT_OPERATION=-1; UNIT_END=-1;
+ SOURCE_TURNS=sourceTurns==nil and 6 or sourceTurns;
  NEW_MISSION={Operation=operation or 60,PlotIndex=plot or 8511,
-  CompletionTurn=TURN,InitialResult=0,EscapeResult=-1}
+  CompletionTurn=TURN,InitialResult=initial or 0,EscapeResult=-1}
 end
 "#;
 
@@ -210,6 +234,17 @@ impl Case {
             .exec()
             .unwrap_or_else(|e| panic!("Core script: {e}"));
         self.run("CONTEXT='UI'");
+    }
+
+    fn reload(&self) -> String {
+        self.run(
+            "JAC_ReturnedPreparation548=nil; ExposedMembers.JAC_ReturnedPreparation548Witness=nil",
+        );
+        self.lua.load(preparation::UI_SETUP).exec().unwrap();
+        self.lua
+            .load(preparation::UI_RESUME_IF_SAVED)
+            .eval::<String>()
+            .unwrap()
     }
 
     fn travel_intent(&self) {
@@ -247,7 +282,7 @@ fn returned_travel_sources_and_native_receipt() {
     c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==true)");
     c.run("local r=JAC_ReturnedPreparation548.SourceResult(); assert(r.event.id==3 and r.event.spyID==701 and r.after.sourceTurns==6 and r.comparison.before==0.4 and r.comparison.after==0.6 and r.comparison.delta>0)");
     c.core(preparation::SOURCES_RECEIPT_CORE);
-    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='SOURCES_RECEIPT' and #WRITES==4 and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[1]==H[1] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[2]==H[2] and PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK.observed.mission==H[3] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE.missionPost.histories=='UI' and PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.stage=='RETURNED')");
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='SOURCES_RECEIPT' and #WRITES==4 and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
 }
 
 #[test]
@@ -328,10 +363,10 @@ fn sources_event_never_claims_neutralization_or_wrong_target() {
     c.travel_intent();
     c.arrive(700);
     c.sources_intent();
-    c.run(
-        "JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(); NEW_MISSION.InitialResult=1",
-    );
-    c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==false)");
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(60,8511,1,0)");
+    c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==true and JAC_ReturnedPreparation548.SourceResult().stage=='SOURCES_FAILED')");
+    c.core(preparation::SOURCES_RECEIPT_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.outcome=='SOURCES_FAILED')");
 
     let c = Case::new();
     c.travel_intent();
@@ -339,7 +374,21 @@ fn sources_event_never_claims_neutralization_or_wrong_target() {
     c.sources_intent();
     c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(); SOURCE_TURNS=0");
     c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==true)");
-    c.fail("JAC_ReturnedPreparation548.SourceResult()");
+    c.run("assert(JAC_ReturnedPreparation548.SourceResult().stage=='SOURCES_UNKNOWN')");
+    c.core(preparation::SOURCES_RECEIPT_CORE);
+}
+
+#[test]
+fn unknown_native_result_is_owned_but_never_counted_as_success() {
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(60,8511,99,0)");
+    c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==true)");
+    c.run("local result=JAC_ReturnedPreparation548.SourceResult(); assert(result.stage=='SOURCES_UNKNOWN' and result.event.initial==99 and result.event.raw.InitialResult==99 and result.effectState=='ZERO' and result.comparison==nil)");
+    c.core(preparation::SOURCES_RECEIPT_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.outcome=='SOURCES_UNKNOWN' and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
 }
 
 #[test]
@@ -349,6 +398,11 @@ fn destination_drift_and_unsaved_sources_send_refuse() {
     c.run("JAC_ReturnedPreparation548.TravelOnce(); ACTIVE_COUNT=1; MAP_COUNT=0; local old=ExposedMembers.JAC_PersonaBoundary.ReadEnemy; ExposedMembers.JAC_PersonaBoundary.ReadEnemy=function() local s=old(); s.spyRoster.activeOffMap[1].x=140; return s end");
     c.fail("JAC_ReturnedPreparation548.Observe()");
     c.run("assert(#REQUESTS==1)");
+
+    let c = Case::new();
+    c.travel_intent();
+    c.run("JAC_ReturnedPreparation548.TravelOnce(); JAC_ReturnedPreparation548.Observe(); MAP_COUNT=1; ACTIVE_COUNT=0; UNIT_X=145; UNIT_Y=40; UNIT_OPERATION=-1; UNIT_END=-1");
+    c.fail("JAC_ReturnedPreparation548.Observe()");
 
     let c = Case::new();
     c.travel_intent();
@@ -392,4 +446,146 @@ fn core_unknown_getter_is_recorded_without_mocking_it() {
     c.run("JAC_ReturnedPreparation548.ReadySources(); CONTEXT='CORE'");
     c.lua.load(preparation::SOURCES_INTENT_CORE).exec().unwrap();
     c.run("CONTEXT='UI'; assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.sourcesCore.sourceTurnsCall.ok==false and string.find(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.sourcesCore.sourceTurnsCall.value,'unknown core ABI',1,true))");
+}
+
+#[test]
+fn transit_checkpoint_and_resumed_first_sources_send() {
+    let c = Case::new();
+    c.travel_intent();
+    c.run("JAC_ReturnedPreparation548.TravelOnce(); assert(JAC_ReturnedPreparation548.Observe().stage=='IN_TRANSIT')");
+    c.core(preparation::TRAVEL_CHECKPOINT_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.transit.x==145 and #REQUESTS==1)");
+    assert_eq!(c.reload(), "IN_TRANSIT");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    c.run("ARRIVE(701); assert(JAC_ReturnedPreparation548.Observe().stage=='ARRIVED')");
+    c.core(preparation::TRAVEL_RECEIPT_CORE);
+    assert_eq!(c.reload(), "TRAVEL_RECEIPT");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("assert(JAC_ReturnedPreparation548.ReadySources().spy.id==701)");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.core(preparation::SOURCES_INTENT_CORE);
+    c.run("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES'); assert(JAC_ReturnedPreparation548.SourcesOnce()=='SOURCES_SENT')");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("assert(#REQUESTS==2 and REQUESTS[2].id==701)");
+    assert_eq!(c.reload(), "SOURCES_OBSERVED");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("COMPLETE_SOURCES(60,8511,1,0); CAPTURED=3; MAP_COUNT=0");
+    c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==true)");
+    c.run("local result=JAC_ReturnedPreparation548.SourceResult(); assert(result.stage=='SOURCES_FAILED' and result.after.spy==nil and result.event.spyID==701)");
+    c.core(preparation::SOURCES_RECEIPT_CORE);
+    assert_eq!(c.reload(), "SOURCES_RECEIPT");
+    c.run("assert(#REQUESTS==2 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.outcome=='SOURCES_FAILED' and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
+}
+
+#[test]
+fn intents_alone_never_rearm_after_reload() {
+    let c = Case::new();
+    c.travel_intent();
+    assert_eq!(c.reload(), "TRAVEL_UNCONFIRMED");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    c.run("assert(#REQUESTS==0)");
+
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    assert_eq!(c.reload(), "SOURCES_UNCONFIRMED");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)==false and #REQUESTS==1)");
+}
+
+#[test]
+fn early_gate_owns_failed_sources_only_and_preserves_unknown_raw() {
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(60,8511,1,0)");
+    c.run("OLD_HANDLER={}");
+    c.run(&format!(
+        "function ON_MISSION(attacker,missionID) {} OLD_HANDLER[#OLD_HANDLER+1]={{attacker=attacker,id=missionID}} end",
+        preparation::UI_EARLY_EVENT_GATE
+    ));
+    c.run("ON_MISSION(0,0); ON_MISSION(0,1); ON_MISSION(1,3); ON_MISSION(0,2); assert(#OLD_HANDLER==4)");
+    c.run("ON_MISSION(0,3); assert(#OLD_HANDLER==4 and JAC_ReturnedPreparation548.SourceResult().stage=='SOURCES_FAILED')");
+    c.core(preparation::SOURCES_RECEIPT_CORE);
+    c.run("JAC_ReturnedPreparation548.CaptureUnknown('POST_SAVE',{message='native ABI unclear',rawCode=17})");
+    c.core(preparation::UNKNOWN_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].raw.rawCode==17 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.outcome=='SOURCES_FAILED' and #OLD_HANDLER==4)");
+}
+
+#[test]
+fn resumed_event_gate_checks_native_history_and_actual_id() {
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("JAC_ReturnedPreparation548=nil");
+    c.lua.load(preparation::UI_SETUP).exec().unwrap();
+    c.run("COMPLETE_SOURCES(60,8511,1,0); CAPTURED=3; MAP_COUNT=0; OLD_HANDLER={}");
+    c.run(&format!(
+        "function ON_MISSION(attacker,missionID) {} OLD_HANDLER[#OLD_HANDLER+1]=missionID end",
+        preparation::UI_EARLY_EVENT_GATE
+    ));
+    c.run("ON_MISSION(0,3); assert(#OLD_HANDLER==0 and JAC_ReturnedPreparation548.HasState())");
+
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.run("BAD_FIND=true");
+    c.run("JAC_ReturnedPreparation548=nil");
+    c.lua.load(preparation::UI_SETUP).exec().unwrap();
+    c.fail("JAC_ReturnedPreparation548.Resume()");
+
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(); BAD_FIND=true; JAC_ReturnedPreparation548=nil");
+    c.lua.load(preparation::UI_SETUP).exec().unwrap();
+    c.fail("JAC_ReturnedPreparation548.Resume()");
+    c.run("assert(#REQUESTS==2)");
+}
+
+#[test]
+fn ambiguous_native_dispatch_is_saved_unknown_and_never_retried() {
+    let c = Case::new();
+    c.travel_intent();
+    c.run("FAIL_REQUEST=true");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    c.run("JAC_ReturnedPreparation548.CaptureUnknown('TRAVEL_SEND',{error='native request result unknown after dispatch',operation=100})");
+    c.core(preparation::UNKNOWN_CORE);
+    c.run("assert(#REQUESTS==1 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].raw.operation==100)");
+    assert_eq!(c.reload(), "IN_TRANSIT");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    c.run("assert(#REQUESTS==1)");
+
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("FAIL_REQUEST=true");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("JAC_ReturnedPreparation548.CaptureUnknown('SOURCES_SEND',{error='native request result unknown after dispatch',operation=600})");
+    c.core(preparation::UNKNOWN_CORE);
+    assert_eq!(c.reload(), "SOURCES_OBSERVED");
+    c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+    c.run("assert(#REQUESTS==2 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].raw.operation==600)");
+}
+
+#[test]
+fn core_observation_error_keeps_raw_and_saved_intent() {
+    let c = Case::new();
+    c.travel_intent();
+    c.run("JAC_ReturnedPreparation548.TravelOnce(); JAC_ReturnedPreparation548.Observe(); ARRIVE(701); JAC_ReturnedPreparation548.Observe(); CORE_MISSION_ERROR=true; CONTEXT='CORE'");
+    assert!(c.lua.load(preparation::TRAVEL_RECEIPT_CORE).exec().is_err());
+    c.run("CONTEXT='UI'; JAC_ReturnedPreparation548.CaptureUnknown('TRAVEL_CORE_RECEIPT',{error='Core mission getter ABI failure',spyID=701})");
+    c.core(preparation::UNKNOWN_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='TRAVEL_INTENT' and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].raw.spyID==701 and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[1]==H[1] and PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK.observed.mission==H[3])");
 }

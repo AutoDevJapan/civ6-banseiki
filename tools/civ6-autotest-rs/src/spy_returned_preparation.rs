@@ -149,6 +149,153 @@ function P.Setup()
   returnedID=n.id,returned=n};
  return 'RETURNED_READY'
 end
+function P.HasState() return x~=nil end
+-- Observation only. A saved intent is never permission to send again. The
+-- returned stages describe native evidence, not a reconstructed dispatch.
+function P.Resume()
+ assert(not x,'returned preparation UI state already installed');
+ local p=assert(Game:GetProperty(KEY),'saved preparation missing');
+ local e=exchange(); local r=e.returnEvidence;
+ assert(type(p.nonce)=='string' and p.nonce~='' and
+  p.exchangeNonce==e.nonce and p.returnedID==r.returned.id and
+  p.returnEvidence and p.returnEvidence.stage=='RETURNED_MAP' and
+  p.returnEvidence.returned and
+  p.returnEvidence.returned.id==r.returned.id and
+  p.returnEvidence.returned.owner==r.returned.owner and
+  p.returnEvidence.returned.unitType==r.returned.unitType and
+  p.returnEvidence.returned.x==r.returned.x and
+  p.returnEvidence.returned.y==r.returned.y and
+  p.oldHistories and #p.oldHistories==3,
+  'saved preparation is not for the proven return');
+ local h=lineage(e);
+ for i=1,3 do assert(sameHistory(h[i],p.oldHistories[i]),
+  'saved original mission history changed') end
+ local t=assert(p.travel and p.travel.target,'saved destination missing');
+ local before=assert(p.travel.before,'saved returned snapshot missing');
+ local u=assert(before.unit,'saved returned unit missing');
+ assert(t.owner==1 and integer(t.city,0) and integer(t.plot,0) and
+  u.id==p.returnedID and u.owner==0 and
+  u.unitType==r.returned.unitType and u.x==r.returned.x and
+  u.y==r.returned.y and u.operation==-1,
+  'saved travel identity changed');
+ local city,plot=target(t.owner,t.city);
+ assert(city:GetX()==t.x and city:GetY()==t.y and plot:GetIndex()==t.plot,
+  'saved travel destination changed');
+ local candidate={resumed=true,nonce=p.nonce,exchangeNonce=e.nonce,
+  returnedID=p.returnedID,returned=scalar(u),travelBefore=scalar(u),
+  targetOwner=t.owner,targetCity=t.city,targetPlot=t.plot,
+  targetX=t.x,targetY=t.y,
+  travelArguments={[UnitOperationTypes.PARAM_X]=t.x,[UnitOperationTypes.PARAM_Y]=t.y},
+  unknown=p.unknowns and #p.unknowns>0 or false};
+ if p.transit then
+  assert(p.transit.returnTurn and p.transit.turn and
+   p.transit.returnTurn>=p.transit.turn and
+   ((p.transit.x==t.x and p.transit.y==t.y) or
+    (p.transit.x==-9999 and p.transit.y==-9999)),
+   'saved off-map transit differs');
+  candidate.sawTransit=true; candidate.transit=scalar(p.transit)
+ end
+ if p.stage=='TRAVEL_INTENT' then
+  x=candidate;
+  local s=B.ReadEnemy(); local rosterNow=assert(s.spyRoster);
+  if #rosterNow.activeOffMap==1 and #rosterNow.map==0 then
+   x.travelSent=true;
+   local observation=P.Observe();
+   assert(observation.stage=='IN_TRANSIT','native off-map travel not observed');
+   publish('RESUMED',{stage='IN_TRANSIT',native=observation});
+   return 'IN_TRANSIT'
+  end
+  if #rosterNow.map==1 and #rosterNow.activeOffMap==0 and
+   candidate.sawTransit then
+   x.travelSent=true;
+   local observation=P.Observe();
+   if observation.stage=='ARRIVED' then
+    publish('RESUMED',{stage='ARRIVED',native=observation});
+    return 'ARRIVED'
+   end
+  end
+  publish('RESUMED',{stage='TRAVEL_UNCONFIRMED',native=scalar(rosterNow)});
+  return 'TRAVEL_UNCONFIRMED'
+ end
+ local arrival=assert(p.arrival,'saved native arrival missing');
+ assert(arrival.unit,'saved native arrival unit missing');
+ assert(arrival.stage=='ARRIVED' and arrival.roster and
+  arrival.roster.physical==3 and #arrival.roster.captured==2 and
+  #arrival.roster.map==1 and #arrival.roster.activeOffMap==0 and
+  arrival.roster.map[1].id==arrival.unit.id and
+  arrival.unit.owner==0 and arrival.unit.unitType==u.unitType and
+  arrival.unit.x==t.x and arrival.unit.y==t.y,
+  'saved arrival receipt differs');
+ candidate.travelSent=true; candidate.arrivedID=arrival.unit.id;
+ candidate.receiptedArrival=true;
+ if arrival.transit then
+  candidate.sawTransit=true; candidate.transit=scalar(arrival.transit)
+ end
+ x=candidate;
+ if p.stage=='TRAVEL_RECEIPT' then
+  local observation=P.Observe();
+  assert(observation.stage=='ARRIVED' and observation.unit.id==arrival.unit.id,
+   'native arrived spy changed on resume');
+  publish('RESUMED',{stage='TRAVEL_RECEIPT',native=observation});
+  return 'TRAVEL_RECEIPT'
+ end
+ assert(p.stage=='SOURCES_INTENT' or p.stage=='SOURCES_RECEIPT',
+  'unknown saved preparation stage');
+ local q=assert(p.sources,'saved sources preparation missing');
+ assert(q.spy and q.target and q.gainOperation,
+  'saved sources identity missing');
+ local op=assert(GameInfo.UnitOperations['UNITOPERATION_SPY_GAIN_SOURCES']);
+ assert(q.spy.id==arrival.unit.id and q.spy.owner==0 and
+  q.spy.unitType==arrival.unit.unitType and q.target.owner==1 and
+  q.target.city==t.city and q.target.plot==t.plot and
+  q.gainOperation.index==op.Index and q.gainOperation.hash==op.Hash and
+  q.sourceTurns==0 and q.canStart==true,
+  'saved sources identity or native operation changed');
+ x.ready=scalar(q); x.sourcesSentTurn=q.turn;
+ local native=Players[0]:GetDiplomacy():GetMission(0,3);
+ local found=Players[0]:GetUnits():FindID(arrival.unit.id);
+ if found then
+  assert(found:GetID()==arrival.unit.id and found:GetOwner()==0 and
+   found:GetType()==arrival.unit.unitType,
+   'native FindID reused a different spy');
+ end
+ if type(native)=='table' and
+  (native.Operation==op.Index or native.Operation==op.Hash) and
+  native.PlotIndex==t.plot and integer(native.CompletionTurn,q.turn) and
+  native.CompletionTurn<=Game.GetCurrentGameTurn() then
+  x.sourcesSent=true; x.sourcesNative='HISTORY'
+ else
+  if found and
+   found:GetX()==t.x and found:GetY()==t.y then
+   local current=found:GetSpyOperation();
+   local endTurn=found:GetSpyOperationEndTurn();
+   if (current==op.Index or current==op.Hash) and
+    integer(endTurn,Game.GetCurrentGameTurn()) then
+    x.sourcesSent=true; x.sourcesNative='ACTIVE_OPERATION';
+    x.sourcesEndTurn=endTurn
+   end
+  end
+ end
+ if p.stage=='SOURCES_RECEIPT' then
+  assert(p.sourcesReceipt and p.sourcesReceipt.event and
+   p.sourcesReceipt.event.id==3 and x.sourcesSent,
+   'saved sources receipt has no native completion');
+  assert(type(native)=='table' and
+   native.Operation==p.sourcesReceipt.event.operation and
+   native.PlotIndex==p.sourcesReceipt.event.plot and
+   native.CompletionTurn==p.sourcesReceipt.event.turn and
+   native.InitialResult==p.sourcesReceipt.event.initial and
+   native.EscapeResult==p.sourcesReceipt.event.escape,
+   'saved sources result differs from native mission history');
+  x.ownedEvent=scalar(p.sourcesReceipt.event);
+  publish('RESUMED',{stage='SOURCES_RECEIPT',native=scalar(native)});
+  return 'SOURCES_RECEIPT'
+ end
+ local stage=x.sourcesSent and 'SOURCES_OBSERVED' or 'SOURCES_UNCONFIRMED';
+ publish('RESUMED',{stage=stage,native=scalar(native),
+  operation=x.sourcesNative,endTurn=x.sourcesEndTurn});
+ return stage
+end
 function P.Observe()
  local e,p=stillOwned(); local r,turn=roster(e);
  local out={turn=turn,roster={map=scalar(r.map),activeOffMap=scalar(r.activeOffMap),
@@ -174,13 +321,16 @@ function P.Observe()
    'native returned spy/map row differs');
   out.unit=n;
   if atTarget(u) and n.operation==-1 and
-   (id==x.returnedID or x.sawTransit) then
+   (x.sawTransit or x.receiptedArrival) then
    -- A changed ID is adopted only after one observed off-map trip and a
    -- single native map candidate. No anonymous captive is assigned an ID.
    if x.arrivedID then assert(x.arrivedID==id,'arrival spy ID changed') end
-   if id~=x.returnedID then
-    assert(x.transit and turn>=x.transit.returnTurn,
-     'changed ID arrived before observed off-map return')
+   if x.transit then
+    assert(turn>=x.transit.returnTurn,
+     'native spy arrived before observed off-map return')
+   else
+    assert(id==x.returnedID,
+     'changed ID has no observed off-map return')
    end
    x.arrivedID=id; out.stage='ARRIVED'; out.adopted=id~=x.returnedID;
    out.transit=scalar(x.transit);
@@ -198,7 +348,7 @@ function P.Observe()
  return scalar(out)
 end
 function P.PrepareTravel(owner,cityID)
- role(); local e,p=stillOwned(); assert(not p and not x.targetCity,
+ role(); local e,p=stillOwned(); assert(not x.unknown and not p and not x.targetCity,
   'travel already prepared');
  local before=P.Observe(); local u=unit(x.returnedID);
  assert(before.stage=='RETURNED' and u:IsReadyToMove() and
@@ -224,13 +374,16 @@ end
 function P.ArmAfterSave(action)
  role(); local _,p=stillOwned();
  if action=='TRAVEL' then
-  assert(x.targetCity and not x.travelArmed and not x.travelSent and
+ assert(not x.resumed and not x.unknown and x.targetCity and
+  not x.travelArmed and not x.travelSent and
    p and p.stage=='TRAVEL_INTENT' and p.travel and
    p.travel.target.plot==x.targetPlot and p.travel.before.unit.id==x.returnedID,
    'saved travel intent missing');
   x.travelArmed=true; return 'TRAVEL_ARMED'
  end
- assert(action=='SOURCES' and x.ready and not x.sourcesArmed and
+ assert(action=='SOURCES' and not x.unknown and
+  x.ready and x.freshSourcesPrepared and
+  not x.sourcesArmed and
   not x.sourcesSent and p and p.stage=='SOURCES_INTENT' and p.sources and
   p.sources.spy.id==x.arrivedID and p.sources.target.plot==x.targetPlot,
   'saved sources intent missing');
@@ -238,7 +391,9 @@ function P.ArmAfterSave(action)
 end
 function P.TravelOnce()
  role(); local _,p=stillOwned();
- assert(x.travelArmed and not x.travelSent and p.stage=='TRAVEL_INTENT',
+ assert(not x.resumed and not x.unknown and
+  x.travelArmed and not x.travelSent and
+  p.stage=='TRAVEL_INTENT',
   'travel is not saved or already sent');
  local u=unit(x.returnedID); local r=roster(exchange());
  assert(#r.map==1 and r.map[1].id==u:GetID() and #r.activeOffMap==0 and
@@ -309,7 +464,8 @@ local function sourceProbe()
 end
 function P.ReadySources()
  role(); local _,p=stillOwned();
- assert(p and p.stage=='TRAVEL_RECEIPT' and not x.ready and not x.sourcesSent,
+ assert(p and p.stage=='TRAVEL_RECEIPT' and not x.unknown and
+  not x.ready and not x.sourcesSent,
   'saved native arrival missing');
  local travel=P.Observe(); assert(travel.stage=='ARRIVED' and
   travel.unit.id==p.arrival.unit.id,'native arrival changed');
@@ -320,12 +476,14 @@ function P.ReadySources()
  local nextMission=Players[0]:GetDiplomacy():GetMission(0,3);
  assert(nextMission==nil or nextMission==0,
   'native mission ID 3 used before sources intent');
- x.ready=scalar(q); publish('SOURCES_READY',q);
+ x.ready=scalar(q); x.freshSourcesPrepared=true;
+ publish('SOURCES_READY',q);
  return scalar(q)
 end
 function P.SourcesOnce()
  role(); local _,p=stillOwned();
- assert(x.sourcesArmed and not x.sourcesSent and p.stage=='SOURCES_INTENT',
+ assert(not x.unknown and x.sourcesArmed and x.freshSourcesPrepared and
+  not x.sourcesSent and p.stage=='SOURCES_INTENT',
   'sources intent is not saved or was sent already');
  local q=sourceProbe();
  local nextMission=Players[0]:GetDiplomacy():GetMission(0,3);
@@ -352,15 +510,27 @@ end
 -- Host calls this before the existing SpyMissionCompleted handler. Return true
 -- only for the one owned Gain Sources event; false passes all others through.
 function P.OwnedAuxiliaryEvent(attacker,missionID)
- if not x or not x.sourcesSent then return false end
+ if attacker~=0 or missionID~=3 then return false end
  local p=Game:GetProperty(KEY);
  if not p or (p.stage~='SOURCES_INTENT' and
-  p.stage~='SOURCES_RECEIPT') or p.nonce~=x.nonce or
-  attacker~=0 or missionID~=3 then return false end
+  p.stage~='SOURCES_RECEIPT') then return false end
+ if not x then P.Resume() end
+ if p.nonce~=x.nonce then return false end
  if p.stage=='SOURCES_RECEIPT' and not x.ownedEvent then return false end
- local e=exchange(); roster(e);
+ exchange();
  local n=Players[0]:GetDiplomacy():GetMission(0,missionID);
  if type(n)~='table' then return false end
+ local op=x.ready.gainOperation;
+ if (n.Operation~=op.index and n.Operation~=op.hash) or
+  n.PlotIndex~=x.targetPlot or not integer(n.CompletionTurn,x.ready.turn) or
+  n.CompletionTurn~=Game.GetCurrentGameTurn() then return false end
+ local c,plot=target(x.targetOwner,x.targetCity);
+ if c:GetOwner()~=1 or plot:GetIndex()~=n.PlotIndex then return false end
+ if x.resumed and not x.sourcesSent then
+  x.sourcesSent=true; x.sourcesNative='HISTORY';
+  x.sourcesSentTurn=x.ready.turn
+ end
+ if not x.sourcesSent then return false end
  if x.ownedEvent then
   return n.Operation==x.ownedEvent.operation and
    n.PlotIndex==x.ownedEvent.plot and
@@ -368,23 +538,16 @@ function P.OwnedAuxiliaryEvent(attacker,missionID)
    n.InitialResult==x.ownedEvent.initial and
    n.EscapeResult==x.ownedEvent.escape
  end
- local op=x.ready.gainOperation;
- if (n.Operation~=op.index and n.Operation~=op.hash) or
-  n.PlotIndex~=x.targetPlot or not integer(n.CompletionTurn,x.sourcesSentTurn) or
-  n.CompletionTurn~=Game.GetCurrentGameTurn() then return false end
- assert(EspionageResultTypes and
-  type(EspionageResultTypes.SUCCESS_UNDETECTED)=='number' and
-  type(EspionageResultTypes.SUCCESS_MUST_ESCAPE)=='number',
-  'native espionage result enums missing');
- if n.InitialResult~=EspionageResultTypes.SUCCESS_UNDETECTED and
-  n.InitialResult~=EspionageResultTypes.SUCCESS_MUST_ESCAPE then return false end
- local c,plot=target(x.targetOwner,x.targetCity);
- if c:GetOwner()~=1 or plot:GetIndex()~=n.PlotIndex then return false end
  x.ownedEvent={attacker=attacker,id=missionID,operation=n.Operation,
   plot=n.PlotIndex,turn=n.CompletionTurn,initial=n.InitialResult,
   escape=n.EscapeResult,spyID=x.arrivedID,targetOwner=1,targetCity=x.targetCity,
-  successEnums={undetected=EspionageResultTypes.SUCCESS_UNDETECTED,
-   mustEscape=EspionageResultTypes.SUCCESS_MUST_ESCAPE}};
+  raw=scalar(n),successEnums={
+   undetected=EspionageResultTypes and EspionageResultTypes.SUCCESS_UNDETECTED or nil,
+   mustEscape=EspionageResultTypes and EspionageResultTypes.SUCCESS_MUST_ESCAPE or nil,
+   failUndetected=EspionageResultTypes and EspionageResultTypes.FAIL_UNDETECTED or nil,
+   failEscape=EspionageResultTypes and EspionageResultTypes.FAIL_MUST_ESCAPE or nil,
+   killed=EspionageResultTypes and EspionageResultTypes.KILLED or nil,
+   captured=EspionageResultTypes and EspionageResultTypes.CAPTURED or nil}};
  publish('SOURCES_EVENT',x.ownedEvent);
  return true
 end
@@ -392,30 +555,169 @@ function P.SourceResult()
  local e,p=stillOwned();
  assert(x.sourcesSent and x.ownedEvent and p and p.stage=='SOURCES_INTENT',
   'owned native sources event missing');
- local r=roster(e); assert(#r.map==1 and #r.activeOffMap==0 and
-  r.map[1].id==x.arrivedID,'native spy absent after sources event');
- local u=unit(x.arrivedID); assert(atTarget(u),'native spy left target city');
+ lineage(e);
  local n=Players[0]:GetDiplomacy():GetMission(0,x.ownedEvent.id);
  assert(type(n)=='table' and n.Operation==x.ownedEvent.operation and
   n.PlotIndex==x.ownedEvent.plot and n.CompletionTurn==x.ownedEvent.turn and
   n.InitialResult==x.ownedEvent.initial and n.EscapeResult==x.ownedEvent.escape,
   'native Gain Sources mission changed after event');
- local q=sourceProbe();
- assert(q.sourceTurns>0 and q.target.plot==x.targetPlot and
-  q.spy.id==x.arrivedID and q.sourceTurns>x.ready.sourceTurns,
-  'native source bonus absent after mission');
- local result={stage='SOURCES_COMPLETE',event=scalar(x.ownedEvent),
-  before=scalar(x.ready),after=q,
+ local c,plot=target(x.targetOwner,x.targetCity);
+ local after={turn=Game.GetCurrentGameTurn(),target={owner=1,
+  city=x.targetCity,x=c:GetX(),y=c:GetY(),plot=plot:GetIndex()}};
+ local d=Players[0]:GetDiplomacy();
+ local ok,value=pcall(d.GetSourceTurnsRemaining,d,c);
+ after.sourceTurnsRead={ok=ok,raw=scalar(value)};
+ if ok and integer(value,0) then after.sourceTurns=value end
+ local rosterOK,read=pcall(B.ReadEnemy);
+ after.rosterRead={ok=rosterOK,raw=scalar(read)};
+ if rosterOK and type(read)=='table' and read.spyRoster then
+  after.roster=scalar(read.spyRoster)
+ end
+ local uOK,u=pcall(unit,x.arrivedID);
+ after.spyRead={ok=uOK,raw=uOK and 'native-unit' or scalar(u)};
+ if uOK then
+  after.spy=nativeUnit(u);
+  local inCity=atTarget(u);
+  after.spyInTarget=inCity==true;
+  if inCity then
+   local neutral=assert(GameInfo.UnitOperations['UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR']);
+   local probabilityOK,prob=pcall(probability,neutral,u,plot,true);
+   after.comparisonRead={ok=probabilityOK,raw=scalar(prob)};
+   if probabilityOK then after.comparisonProbability=prob end
+  end
+ end
+ local enums=x.ownedEvent.successEnums;
+ local success=type(enums.undetected)=='number' and
+  type(enums.mustEscape)=='number' and
+  (n.InitialResult==enums.undetected or n.InitialResult==enums.mustEscape);
+ local failure=(type(enums.failUndetected)=='number' and
+   n.InitialResult==enums.failUndetected) or
+  (type(enums.failEscape)=='number' and n.InitialResult==enums.failEscape) or
+  (type(enums.killed)=='number' and n.InitialResult==enums.killed) or
+  (type(enums.captured)=='number' and n.InitialResult==enums.captured);
+ local stage='SOURCES_UNKNOWN'; local comparison=nil;
+ if success and after.sourceTurns and after.sourceTurns>0 and
+  after.comparisonProbability and after.comparisonProbability.available and
+  after.spy and after.spyInTarget then
   comparison={before=x.ready.comparisonProbability.success,
-   after=q.comparisonProbability.success,
-   delta=q.comparisonProbability.success-x.ready.comparisonProbability.success},
-  sourceTurnsDelta=q.sourceTurns-x.ready.sourceTurns};
+   after=after.comparisonProbability.success};
+  comparison.delta=comparison.after-comparison.before;
+  stage='SOURCES_COMPLETE'
+ elseif failure and (not after.sourceTurns or after.sourceTurns==0) then
+  stage='SOURCES_FAILED'
+ end
+ local effectState=after.sourceTurns==nil and 'UNKNOWN' or
+  (after.sourceTurns==0 and 'ZERO' or 'POSITIVE');
+ local result={stage=stage,event=scalar(x.ownedEvent),before=scalar(x.ready),
+  after=after,effectState=effectState,comparison=comparison,
+  sourceTurnsDelta=after.sourceTurns and
+   after.sourceTurns-x.ready.sourceTurns or nil};
  publish('SOURCES_RESULT',result); return scalar(result)
+end
+function P.CaptureUnknown(step,raw)
+ local p=assert(Game:GetProperty(KEY),'saved preparation missing for unknown record');
+ local e=assert(Game:GetProperty(EXCHANGE),'exchange evidence missing');
+ assert(type(step)=='string' and step~='' and p.exchangeNonce==e.nonce,
+  'unknown observation is not for this return');
+ if x then assert(x.nonce==p.nonce,'unknown observation nonce differs'); x.unknown=true end
+ ExposedMembers[WKEY]=scalar({phase='UNKNOWN',nonce=p.nonce,
+  exchangeNonce=e.nonce,observation={step=step,raw=scalar(raw),
+  turn=Game.GetCurrentGameTurn()}});
+ return 'UNKNOWN_RECORDED_UI'
 end
 function P.Evidence()
  return scalar({ui=x,core=Game:GetProperty(KEY),witness=ExposedMembers[WKEY]})
 end
 return 'RETURNED_PREPARATION_UI_READY'
+"#;
+
+/// Insert as the FIRST statements of View's existing SpyMissionCompleted
+/// callback, before the neutralization retry/mission ownership assertions.
+/// UI_SETUP must already have installed JAC_ReturnedPreparation548 in that
+/// View instance. A false or failed match falls through to the old handler.
+pub const UI_EARLY_EVENT_GATE: &str = r#"
+if attacker==0 and missionID==3 and
+ Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION') then
+ local preparation=rawget(_G,'JAC_ReturnedPreparation548');
+ if preparation then
+  local ok,owned=pcall(preparation.OwnedAuxiliaryEvent,attacker,missionID);
+  if ok and owned then return end
+  if not ok then pcall(preparation.CaptureUnknown,'EVENT_GATE',
+   {attacker=attacker,missionID=missionID,error=tostring(owned)}) end
+ end
+end
+"#;
+
+/// Call on LoadScreenClose after UI_SETUP, or let UI_EARLY_EVENT_GATE call
+/// Resume through OwnedAuxiliaryEvent when the first post-load event arrives.
+pub const UI_RESUME_IF_SAVED: &str = r#"
+local p=Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION');
+local preparation=assert(rawget(_G,'JAC_ReturnedPreparation548'),
+ 'returned preparation UI module missing');
+if p and not preparation.HasState() then return preparation.Resume() end
+return p and 'ALREADY_OBSERVING' or 'NO_SAVED_PREPARATION'
+"#;
+
+/// Save one independently observed active off-map trip for later ID adoption.
+pub const TRAVEL_CHECKPOINT_CORE: &str = r#"
+local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
+local p=assert(Game:GetProperty(KEY),'saved travel intent missing');
+local e=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62'));
+local w=assert(ExposedMembers.JAC_ReturnedPreparation548Witness,
+ 'UI transit witness missing');
+local q=assert(w.observation); local o=assert(q.offMap);
+assert(p.stage=='TRAVEL_INTENT' and not p.transit and
+ e.stage=='RETURNED' and e.nonce==p.exchangeNonce and
+ w.phase=='TRAVEL_OBSERVATION' and w.nonce==p.nonce and
+ w.targetOwner==1 and w.targetCity==p.travel.target.city and
+ w.targetPlot==p.travel.target.plot and q.stage=='IN_TRANSIT' and
+ q.roster.physical==3 and #q.roster.captured==2 and
+ #q.roster.map==0 and #q.roster.activeOffMap==1 and
+ q.roster.activeOffMap[1].returnTurn==o.returnTurn and
+ q.roster.activeOffMap[1].x==o.x and
+ q.roster.activeOffMap[1].y==o.y and
+ type(q.turn)=='number' and type(o.returnTurn)=='number' and
+ o.returnTurn>=q.turn and
+ ((o.x==p.travel.target.x and o.y==p.travel.target.y) or
+  (o.x==-9999 and o.y==-9999)),
+ 'native off-map travel checkpoint differs');
+local archive=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'));
+local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
+for i=1,3 do
+ local h=i<=2 and archive.histories[i] or ack.observed.mission;
+ local old=p.oldHistories[i];
+ assert(h and h.id==old.id and h.turn==old.turn and
+  h.operation==old.operation and h.plot==old.plot and
+  h.initial==old.initial and h.escape==old.escape,
+  'old mission history changed during transit')
+end
+local next={}; for k,v in pairs(p) do next[k]=v end
+next.transit={turn=q.turn,returnTurn=o.returnTurn,x=o.x,y=o.y,
+ name=o.name,level=o.level};
+Game:SetProperty(KEY,next); return 'TRAVEL_CHECKPOINT'
+"#;
+
+/// Host calls only after a caught UI/native/Core read or send exception.
+/// Unknown raw data remains under this diagnostic key; it never authorizes a
+/// retry or converts a missing receipt into success.
+pub const UNKNOWN_CORE: &str = r#"
+local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
+local p=assert(Game:GetProperty(KEY),'saved preparation missing');
+local e=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62'));
+local w=assert(ExposedMembers.JAC_ReturnedPreparation548Witness,
+ 'UI unknown witness missing');
+assert(p.exchangeNonce==e.nonce and
+ w.phase=='UNKNOWN' and w.nonce==p.nonce and
+ w.exchangeNonce==p.exchangeNonce and w.observation and
+ type(w.observation.step)=='string' and
+ w.observation.turn==Game.GetCurrentGameTurn(),
+ 'unknown observation does not belong to saved return');
+local previous=p.unknowns or {};
+assert(#previous<16,'finite unknown observation bound exceeded');
+local next={}; for k,v in pairs(p) do next[k]=v end
+next.unknowns={}; for i,v in ipairs(previous) do next.unknowns[i]=v end
+next.unknowns[#next.unknowns+1]=w.observation;
+Game:SetProperty(KEY,next); return 'UNKNOWN_RECORDED_CORE'
 "#;
 
 pub const TRAVEL_INTENT_CORE: &str = r#"
@@ -537,6 +839,11 @@ if n.id~=p.returnedID then
   type(a.transit.returnTurn)=='number' and a.turn>=a.transit.returnTurn,
   'changed native ID lacks observed off-map travel')
 end
+if p.transit then
+ assert(a.transit and a.transit.returnTurn==p.transit.returnTurn and
+  a.transit.x==p.transit.x and a.transit.y==p.transit.y and
+  p.transit.turn<=a.turn,'saved transit checkpoint changed before arrival')
+end
 local city=assert(CityManager.GetCity(1,w.targetCity));
 local plot=assert(Map.GetPlot(n.x,n.y));
 assert(city:GetOwner()==1 and city:GetID()==w.targetCity and
@@ -576,8 +883,9 @@ if units and type(units.FindID)=='function' then
   assert(u:GetSpyOperationEndTurn()==n.endTurn,'Core arrived end turn differs')
  end
 end
-p.stage='TRAVEL_RECEIPT'; p.arrival=a; p.arrivalSources=source;
-Game:SetProperty(KEY,p); return 'TRAVEL_RECEIPT'
+local next={}; for k,v in pairs(p) do next[k]=v end
+next.stage='TRAVEL_RECEIPT'; next.arrival=a; next.arrivalSources=source;
+Game:SetProperty(KEY,next); return 'TRAVEL_RECEIPT'
 "#;
 
 pub const SOURCES_INTENT_CORE: &str = r#"
@@ -654,8 +962,9 @@ if type(d.GetSourceTurnsRemaining)=='function' then
  source.sourceTurnsCall={ok=ok,value=ok and value or tostring(value)};
  if ok then assert(value==q.sourceTurns,'Core source turns differ') end
 end
-p.stage='SOURCES_INTENT'; p.sources=q; p.sourcesCore=source;
-Game:SetProperty(KEY,p); return 'SOURCES_INTENT'
+local next={}; for k,v in pairs(p) do next[k]=v end
+next.stage='SOURCES_INTENT'; next.sources=q; next.sourcesCore=source;
+Game:SetProperty(KEY,next); return 'SOURCES_INTENT'
 "#;
 
 pub const SOURCES_RECEIPT_CORE: &str = r#"
@@ -666,33 +975,61 @@ local w=assert(ExposedMembers.JAC_ReturnedPreparation548Witness,'sources result 
 local q=assert(w.observation); local event=assert(q.event); local after=assert(q.after);
 assert(p.stage=='SOURCES_INTENT' and e.stage=='RETURNED' and
  e.nonce==p.exchangeNonce and w.nonce==p.nonce and
- w.phase=='SOURCES_RESULT' and q.stage=='SOURCES_COMPLETE' and
+ w.phase=='SOURCES_RESULT' and
+ (q.stage=='SOURCES_COMPLETE' or q.stage=='SOURCES_FAILED' or
+  q.stage=='SOURCES_UNKNOWN') and
  event.attacker==0 and event.id==3 and event.spyID==p.sources.spy.id and
  event.targetOwner==1 and event.targetCity==p.sources.target.city and
  event.plot==p.sources.target.plot and
  (event.operation==p.sources.gainOperation.index or
   event.operation==p.sources.gainOperation.hash) and
- event.turn>=p.sources.turn and
+ type(event.turn)=='number' and event.turn>=p.sources.turn and
  after.target.plot==event.plot and after.target.owner==1 and
  after.target.city==event.targetCity and
- after.spy.id==event.spyID and after.spy.owner==0 and
- after.spy.unitType==p.sources.spy.unitType and
- after.sourceTurns>0 and p.sources.sourceTurns==0 and
+ p.sources.sourceTurns==0 and
  q.before and q.before.spy and q.before.spy.id==p.sources.spy.id and
  q.before.target and q.before.target.plot==p.sources.target.plot and
- event.successEnums and
- (event.initial==event.successEnums.undetected or
-  event.initial==event.successEnums.mustEscape) and
- q.sourceTurnsDelta==after.sourceTurns and
- q.comparison.before==p.sources.comparisonProbability.success and
- q.comparison.after==after.comparisonProbability.success and
- q.comparison.delta==q.comparison.after-q.comparison.before,
- 'native sources receipt or comparison differs');
+ event.successEnums and event.raw and
+ event.raw.Operation==event.operation and
+ event.raw.PlotIndex==event.plot and
+ event.raw.CompletionTurn==event.turn and
+ event.raw.InitialResult==event.initial and
+ event.raw.EscapeResult==event.escape and
+ q.effectState==(after.sourceTurns==nil and 'UNKNOWN' or
+  (after.sourceTurns==0 and 'ZERO' or 'POSITIVE')),
+ 'native sources receipt ownership differs');
 local city=assert(CityManager.GetCity(1,event.targetCity));
-local plot=assert(Map.GetPlot(after.spy.x,after.spy.y));
+local plot=assert(Map.GetPlot(city:GetX(),city:GetY()));
 assert(city:GetOwner()==1 and city:GetID()==event.targetCity and
- city:GetX()==after.spy.x and city:GetY()==after.spy.y and
  plot:GetIndex()==event.plot,'native sources target changed');
+local enums=event.successEnums;
+local success=type(enums.undetected)=='number' and
+ type(enums.mustEscape)=='number' and
+ (event.initial==enums.undetected or event.initial==enums.mustEscape);
+local failed=(type(enums.failUndetected)=='number' and
+ event.initial==enums.failUndetected) or
+ (type(enums.failEscape)=='number' and event.initial==enums.failEscape) or
+ (type(enums.killed)=='number' and event.initial==enums.killed) or
+ (type(enums.captured)=='number' and event.initial==enums.captured);
+if q.stage=='SOURCES_COMPLETE' then
+ assert(success and type(after.sourceTurns)=='number' and
+  after.sourceTurns>0 and after.spy and after.spy.id==event.spyID and
+  after.spy.owner==0 and after.spy.unitType==p.sources.spy.unitType and
+  after.spy.x==city:GetX() and after.spy.y==city:GetY() and
+  after.spyInTarget==true and after.comparisonProbability and
+  after.comparisonProbability.available==true and
+  q.comparison and
+  q.comparison.before==p.sources.comparisonProbability.success and
+  q.comparison.after==after.comparisonProbability.success and
+  q.comparison.delta==q.comparison.after-q.comparison.before and
+  q.sourceTurnsDelta==after.sourceTurns,
+  'native sources success lacks effect/comparison evidence')
+elseif q.stage=='SOURCES_FAILED' then
+ assert(failed and (after.sourceTurns==nil or after.sourceTurns==0) and
+  q.comparison==nil,'native sources failure outcome differs')
+else
+ assert(q.comparison==nil,'unknown sources outcome claims comparison success')
+end
 local archive=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'));
 local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
 local d=Players[0]:GetDiplomacy();
@@ -720,10 +1057,12 @@ end
 if type(d.GetSourceTurnsRemaining)=='function' then
  local ok,value=pcall(d.GetSourceTurnsRemaining,d,city);
  source.sourceTurnsCall={ok=ok,value=ok and value or tostring(value)};
- if ok then assert(value==after.sourceTurns,'Core source turns differ') end
+ if ok and after.sourceTurns~=nil then
+  assert(value==after.sourceTurns,'Core source turns differ')
+ end
 end
 local units=Players[0]:GetUnits(); source.findID=units and type(units.FindID) or 'nil';
-if units and type(units.FindID)=='function' then
+if after.spy and units and type(units.FindID)=='function' then
  local u=assert(units:FindID(event.spyID),'Core sources spy absent');
  assert(u:GetID()==event.spyID and u:GetOwner()==0 and
   u:GetType()==after.spy.unitType,'Core sources spy ID differs');
@@ -741,6 +1080,8 @@ if units and type(units.FindID)=='function' then
   assert(u:GetSpyOperationEndTurn()==after.spy.endTurn,'Core sources end turn differs')
  end
 end
-p.stage='SOURCES_RECEIPT'; p.sourcesReceipt=q; p.receiptCore=source;
-Game:SetProperty(KEY,p); return 'SOURCES_RECEIPT'
+local next={}; for k,v in pairs(p) do next[k]=v end
+next.stage='SOURCES_RECEIPT'; next.outcome=q.stage;
+next.sourcesReceipt=q; next.receiptCore=source;
+Game:SetProperty(KEY,next); return 'SOURCES_RECEIPT'
 "#;
