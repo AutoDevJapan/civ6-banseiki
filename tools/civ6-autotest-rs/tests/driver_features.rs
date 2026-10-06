@@ -495,15 +495,18 @@ fn test_allow_elimination_observes_target_and_records_turn() {
         "2|true|false|1|-1",
         "3|false|true|0|-1",
     ])));
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            return Ok(statuses.lock().unwrap().pop_front().unwrap().into());
+            let status = statuses.lock().unwrap().pop_front().unwrap();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status.into());
         }
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
         }
         if code.contains("IsAlive()") {
-            return Ok("false".into());
+            return Ok(format!("{observed_turn}|false"));
         }
         Ok("true".into())
     });
@@ -600,21 +603,27 @@ fn test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event() {
     let clock = Arc::new(ManualClock::default());
     let clock_for_lua = clock.clone();
     let mut status_calls = 0;
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
             status_calls += 1;
             if status_calls == 2 {
                 clock_for_lua.advance(6.0);
             }
-            return Ok(statuses
+            let status = statuses
                 .lock()
                 .unwrap()
                 .pop_front()
                 .unwrap_or("4|false|true|0|0")
-                .into());
+                .to_string();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status);
         }
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
+        }
+        if code.contains("IsAlive()") {
+            return Ok(format!("{observed_turn}|true"));
         }
         Ok("true".into())
     });
