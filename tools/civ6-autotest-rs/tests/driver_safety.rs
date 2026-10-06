@@ -5,6 +5,7 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     let valid = [
         serde_json::json!({"action":"ui_lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":true}),
         serde_json::json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":false}}),
+        serde_json::json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":true}),
     ];
     for step in valid {
         validate_scenario(&json!({"name":"preserved session","steps":[step]})).unwrap();
@@ -14,6 +15,7 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
         json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":1}}),
         json!({"action":"wait_for","preserve_diplomacy_session":true,"condition":{"type":"lua","state_name":"InGame","code":"return true"}}),
         json!({"action":"pause","seconds":1,"preserve_diplomacy_session":true}),
+        json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":"true"}),
         json!({"action":"wait_for","condition":{"type":"state","name":"InGame","preserve_diplomacy_session":true}}),
     ];
     for step in invalid {
@@ -24,6 +26,63 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
                 .contains("preserve_diplomacy_session")
         );
     }
+}
+
+#[test]
+fn a_save_callback_retry_keeps_owned_diplomacy_and_never_resends_the_save() {
+    let f = Fixture::new();
+    let target = f.saves.join("OwnedDiplomacySave.Civ6Save");
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "InGame".into(),
+            "DiplomacyActionView".into(),
+            "DiplomacyDealView".into(),
+        ])
+    });
+    let mut polls = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("Network.SaveGame") {
+            fs::write(&target, b"owned save bytes").unwrap();
+        }
+        if code.contains("JAC_AUTOTEST_SAVE_DONE == true") {
+            polls += 1;
+            if polls == 1 {
+                return Err(Error::new(
+                    ErrorKind::LuaResponseUnknown,
+                    "callback response may have arrived",
+                ));
+            }
+        }
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok("false".into());
+        }
+        Ok("true".into())
+    });
+    let mut r = f.runner(json!({"name":"preserved save","steps":[]}), backend);
+    r.run_step(&json!({"action":"save","name":"OwnedDiplomacySave","exact_name":true,"preserve_diplomacy_session":true})).unwrap();
+    let trace = f.trace();
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("Network.SaveGame"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("JAC_AUTOTEST_SAVE_DONE == true"))
+            .count(),
+        2
+    );
+    assert!(
+        trace.lua.iter().all(|(state, _, _)| state == "InGame"),
+        "{:?}",
+        trace.lua
+    );
 }
 
 use civ6_autotest_rs::{

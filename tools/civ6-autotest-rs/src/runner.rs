@@ -3366,7 +3366,7 @@ impl Runner {
         };
         let started = self.clock.now();
         self.lua("InGame", &code, self.budget(deadline, 30.0)?)?;
-        self.wait(&json!({"type":"lua","state_name":"InGame","code":"return JAC_AUTOTEST_SAVE_DONE == true"}),self.remaining(deadline)?,false)?;
+        self.wait(&json!({"type":"lua","state_name":"InGame","code":"return JAC_AUTOTEST_SAVE_DONE == true","preserve_diplomacy_session":step["preserve_diplomacy_session"]==true}),self.remaining(deadline)?,false)?;
         self.lua("InGame","Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER)\nJAC_AUTOTEST_SAVE_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?)?;
         let until = deadline.min(self.clock.now() + 5.0);
         while !target.is_file() && self.clock.now() < until {

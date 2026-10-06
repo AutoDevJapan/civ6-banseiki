@@ -170,9 +170,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         if let Some(flag) = step.get("preserve_diplomacy_session") {
-            if action != "ui_lua" || !flag.is_boolean() {
+            if !matches!(action, "ui_lua" | "save") || !flag.is_boolean() {
                 return Err(fail(
-                    "preserve_diplomacy_session needs a boolean ui_lua flag".into(),
+                    "preserve_diplomacy_session needs a boolean ui_lua or save flag".into(),
                 ));
             }
         }

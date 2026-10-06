@@ -40,7 +40,7 @@ fn observed_send(method: &str, phase: &str, conditional: bool) -> Value {
     ))
 }
 fn save() -> Value {
-    json!({"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true})
+    json!({"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true,"preserve_diplomacy_session":true})
 }
 fn wait(code: &str) -> Value {
     json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true}})
@@ -136,6 +136,7 @@ fn owned_native_diplomacy_is_preserved_by_every_ui_read_and_poll() {
             "wait_for" if step["condition"]["state_name"] == "InGame" => {
                 assert_eq!(step["condition"]["preserve_diplomacy_session"], true);
             }
+            "save" => assert_eq!(step["preserve_diplomacy_session"], true),
             _ => {}
         }
     }
