@@ -158,6 +158,19 @@ GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
         print('JAC_PERSONA_PROJECT rejected'); return;
     end
     print('JAC_PERSONA_PROJECT begin owner='..owner..' serial='..params.ProjectionSerial);
+    if params.InspectOnly == true then
+        local p=Player(owner,true);
+        local g=p:GetGovernors();
+        local samples={};
+        for _,key in ipairs({900021,901021,904021,905021,904999}) do
+            local value=p:GetProperty(key);
+            samples[#samples+1]=tostring(key)..'='..type(value)..':'..tostring(value);
+        end
+        print('JAC_PERSONA_PROJECT inspect '..table.concat(samples,';')..
+            ' HasGovernor='..type(g.HasGovernor)..' GetGovernor='..type(g.GetGovernor));
+        p:SetProperty('JAC_PERSONA_PROJECT_INSPECT_RECEIPT',params.ProjectionSerial);
+        print('JAC_PERSONA_PROJECT inspect-done'); return;
+    end
     SyncProductionAdmission(false, nil);
     print('JAC_PERSONA_PROJECT end owner='..owner..' serial='..params.ProjectionSerial);
     Player(owner, true):SetProperty('JAC_PERSONA_PROJECT_RECEIPT', params.ProjectionSerial);
