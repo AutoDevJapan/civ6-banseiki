@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = json!({"name":format!("Resident runtime retains native cost3 {}/3 decision after observation stop",paid),
     "judge_profile":"generic","strict_lua_errors":true,"steps":[
         {"action":"load","name":name,"exact_name":true,"timeout":300},
-        {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0] and Players[0]:IsTurnActive() and type(ExposedMembers.JAC_LeaderPersona)=='table'"}},
+        {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0] and Players[0]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages() and type(ExposedMembers.JAC_LeaderPersona)=='table'"}},
         ui_check(paid,true),
         {"action":"ui_lua","state_name":"GameCore_Tuner","code":"Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true); return 'diagnostic projection flag only'"},
         request(1),receipt(1),

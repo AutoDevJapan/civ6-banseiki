@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 pub mod assassin_panel;
 pub mod official;
+pub mod persona_engine;
 pub mod strict;
 
 pub fn repo_root() -> PathBuf {

@@ -14,9 +14,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scenario = civ6_persona_events_rs::scenario::build(&template)?;
             fs::write(&args[2], serde_json::to_string_pretty(&scenario)?)?;
         }
+        Some("generate-sp-runtime") if args.len() == 3 => {
+            let template = serde_json::from_slice(&fs::read(&args[1])?)?;
+            let scenario = civ6_persona_events_rs::sp_runtime::build(&template)?;
+            fs::write(&args[2], serde_json::to_string_pretty(&scenario)?)?;
+        }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json".into(),
             )
         }
     }

@@ -4,6 +4,9 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+mod bootstrap;
+mod bootstrap_audit;
+
 #[derive(Clone, Copy)]
 struct Section {
     name: [u8; 8],
@@ -256,6 +259,31 @@ fn main() {
         eprintln!("usage: civ6-pe <read-only DLL path> <hex RVA>... | civ6-pe --ascii-xrefs <read-only DLL path> <ASCII text>");
         std::process::exit(2);
     };
+    if path == "--bootstrap-audit" {
+        let values: Vec<_> = args.collect();
+        if values.len() != 2 {
+            eprintln!("usage: civ6-pe --bootstrap-audit <CivilizationVI.exe> <GameCore_XP2_FinalRelease.dll>");
+            std::process::exit(2);
+        }
+        if let Err(error) = bootstrap_audit::audit(Path::new(&values[0]), Path::new(&values[1])) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if path == "--bootstrap" {
+        let values: Vec<_> = args.collect();
+        if values.len() != 2 {
+            eprintln!("usage: civ6-pe --bootstrap <read-only PE path> <ASCII name or 0xRVA>");
+            std::process::exit(2);
+        }
+        if let Err(error) = bootstrap::inspect(Path::new(&values[0]), &values[1].to_string_lossy())
+        {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if path == "--ascii-xrefs" {
         let Some(dll) = args.next() else {
             eprintln!("a DLL path is required");

@@ -50,7 +50,9 @@ if {paid}==2 then
  assert(s.settlement.titleSequence==s.acquired.title.sequence,'settlement lacks TITLE callback')
 end
 {}
-return serial({{acquired=s.acquired,definition=s.definition,paid=s.paid,spent=s.spent,afterSpent=s.settlement.afterSpent}})
+local merit=Game:GetProperty('JAC_PERSONA_'..leader..'_MERIT')
+return serial({{acquired=s.acquired,definition=s.definition,paid=s.paid,spent=s.spent,afterSpent=s.settlement.afterSpent,
+ sequence=s.sequence,receipts=s.receipts,merit=merit or 0,meritPresent=merit~=nil,meritType=type(merit)}})
 "#,
         head(),
         SERIAL
@@ -162,6 +164,9 @@ return 'one official TITLE_1 PROMOTE sent'
     steps.push(capture);
     steps.push(ui(format!("UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{{OnStart='JAC_LeaderPersonaFinalize',Leader='{LEADER}'}}); return 'normal Finalize via Gameplay event set requested'")));
     steps.push(wait(format!("return Game:GetProperty('JAC_PERSONA_{LEADER}_STATE')=='GOVERNOR' and Game:GetProperty('JAC_PERSONA_{LEADER}_UNIT')==nil")));
+    let mut settled = ui(snapshot(2));
+    settled["capture_as"] = "TODO324_EVENTS_SETTLED".into();
+    steps.push(settled);
     steps.push(json!({"action":"stop_native_production_admission","timeout":30}));
     steps.push(json!({"action":"save","name":SAVE,"exact_name":true,"checkpoint":true}));
     steps.push(json!({"action":"exit_to_menu"}));
@@ -174,12 +179,12 @@ return 'one official TITLE_1 PROMOTE sent'
         head(),
         snapshot(2)
     ));
-    restored["equals_capture"] = "TODO324_EVENTS_PAID".into();
+    restored["equals_capture"] = "TODO324_EVENTS_SETTLED".into();
     steps.push(restored);
     // Repeat only read-only Status/snapshot queries after load. No projection,
     // synchronized operation or payment is requested for saved-proof inspection.
     let mut stable = ui(format!("{}\nlocal first=s\n{}\nassert(s.paid==first.paid and s.sequence==first.sequence, 'repeated Status read changed saved proof')\n{}",head(),head(),snapshot(2)));
-    stable["equals_capture"] = "TODO324_EVENTS_PAID".into();
+    stable["equals_capture"] = "TODO324_EVENTS_SETTLED".into();
     steps.push(stable);
     steps.push(ui("return 'EVENTS324 finite opt-in Gameplay callback/payment/save diagnostic only; normal rollout, AI, native placement and old partial-save recovery remain unproved'"));
     steps.push(json!({"action":"exit_to_menu"}));

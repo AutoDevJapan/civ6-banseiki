@@ -116,7 +116,9 @@ fn initialize(lua: &Lua) -> mlua::Result<()> {
         let mapped = Table::from_results(collection.call::<MultiValue>((table, *key))?)?;
         game_info.set(*name, mapped)?;
     }
-    load_contexts(lua)
+    civ6_lua_tests_rs::persona_engine::prepare(lua)?;
+    load_contexts(lua)?;
+    civ6_lua_tests_rs::persona_engine::finish_startup(lua)
 }
 
 fn scenario(lua: &Lua) -> mlua::Result<()> {
@@ -145,6 +147,7 @@ fn scenario(lua: &Lua) -> mlua::Result<()> {
 fn run_case(name: &str) {
     let lua = new_lua();
     let globals = lua.globals();
+    globals.set("NORMAL_PERSONA_TEST_CASE", name).unwrap();
     globals
         .set(
             "RESET_TEST",
@@ -184,6 +187,7 @@ fn run_case(name: &str) {
         .set_name("persona/cases.lua")
         .exec()
         .unwrap();
+    civ6_lua_tests_rs::persona_engine::update_cases(&lua).unwrap();
     let cases: Table = globals.strict_get("CASES").unwrap();
     let test: Function = cases
         .strict_get(name)
