@@ -72,7 +72,7 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
             if phase == "travel-tick" {
                 steps.push(ui("local o=P.Observe(); assert(o.stage=='IN_TRANSIT' or o.stage=='WAIT_TRAVEL','already arrived or unknown; use observation only'); return o.stage"));
                 steps.push(json!({"action":"end_turn","timeout":180}));
-                steps.push(save());
+                checkpoint(&mut steps);
             }
             observe_travel(&mut steps);
         }
@@ -96,7 +96,7 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
             if phase == "sources-tick" {
                 steps.push(ui("assert(not P.OwnedAuxiliaryEvent(0,3),'completion already present; use observation only'); return 'WAIT_SOURCES'"));
                 steps.push(json!({"action":"end_turn","timeout":180}));
-                steps.push(save());
+                checkpoint(&mut steps);
             }
             steps.push(ui_observe(&format!("if Game:GetProperty('{KEY}').stage=='SOURCES_RECEIPT' then return 'ALREADY_RECORDED' end; if P.OwnedAuxiliaryEvent(0,3) then return P.SourceResult().stage end; return 'WAIT_SOURCES'"),"SOURCES_RESULT"));
             checkpoint(&mut steps);

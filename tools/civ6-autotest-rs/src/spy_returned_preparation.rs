@@ -625,6 +625,24 @@ function P.CaptureUnknown(step,raw)
   turn=Game.GetCurrentGameTurn()}});
  return 'UNKNOWN_RECORDED_UI'
 end
+function P.InvalidateOnLoad()
+ x=nil;
+ ExposedMembers[WKEY]=nil;
+ ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil;
+ return 'UI_STATE_INVALIDATED'
+end
+-- Routing ownership is separate from native outcome verification. An
+-- expected event with an unreadable outcome belongs to this diagnostic's
+-- unknown record, never to the old neutralization receiver.
+function P.RouteEvent(attacker,missionID)
+ local p=Game:GetProperty(KEY);
+ if attacker~=0 or missionID~=3 or not p or not p.sources or
+  (p.stage~='SOURCES_INTENT' and p.stage~='SOURCES_RECEIPT') then return 'UNOWNED' end
+ local ok,owned=pcall(P.OwnedAuxiliaryEvent,attacker,missionID);
+ if ok then return owned and 'OWNED' or 'UNOWNED' end
+ P.CaptureUnknown('EVENT_GATE',{attacker=attacker,missionID=missionID,error=tostring(owned)});
+ return 'OWNED_UNKNOWN'
+end
 function P.Evidence()
  return scalar({ui=x,core=Game:GetProperty(KEY),witness=ExposedMembers[WKEY]})
 end
@@ -634,18 +652,10 @@ return 'RETURNED_PREPARATION_UI_READY'
 /// Insert as the FIRST statements of View's existing SpyMissionCompleted
 /// callback, before the neutralization retry/mission ownership assertions.
 /// UI_SETUP must already have installed JAC_ReturnedPreparation548 in that
-/// View instance. A false or failed match falls through to the old handler.
+/// View instance. Only a known unrelated event falls through to the old handler.
 pub const UI_EARLY_EVENT_GATE: &str = r#"
-if attacker==0 and missionID==3 and
- Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION') then
- local preparation=rawget(_G,'JAC_ReturnedPreparation548');
- if preparation then
-  local ok,owned=pcall(preparation.OwnedAuxiliaryEvent,attacker,missionID);
-  if ok and owned then return end
-  if not ok then pcall(preparation.CaptureUnknown,'EVENT_GATE',
-   {attacker=attacker,missionID=missionID,error=tostring(owned)}) end
- end
-end
+local preparation=rawget(_G,'JAC_ReturnedPreparation548');
+if preparation and preparation.RouteEvent(attacker,missionID)~='UNOWNED' then return end
 "#;
 
 /// Call on LoadScreenClose after UI_SETUP, or let UI_EARLY_EVENT_GATE call

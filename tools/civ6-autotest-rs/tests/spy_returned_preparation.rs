@@ -586,6 +586,29 @@ fn early_gate_owns_failed_sources_only_and_preserves_unknown_raw() {
 }
 
 #[test]
+fn same_context_load_invalidates_arms_and_unreadable_owned_event_never_reaches_old_handler() {
+    let c = Case::new();
+    c.travel_intent();
+    c.run("JAC_ReturnedPreparation548.TravelOnce(); JAC_ReturnedPreparation548.Observe()");
+    c.core(preparation::TRAVEL_CHECKPOINT_CORE);
+    c.run("local p=JAC_ReturnedPreparation548; p.InvalidateOnLoad(); assert(not p.HasState()); assert(p.Resume()=='IN_TRANSIT')");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+    c.run("ARRIVE(701); JAC_ReturnedPreparation548.Observe()");
+    c.core(preparation::TRAVEL_RECEIPT_CORE);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); JAC_ReturnedPreparation548.InvalidateOnLoad(); assert(JAC_ReturnedPreparation548.Resume()=='SOURCES_OBSERVED')");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+    c.run("COMPLETE_SOURCES(); local d=Players[0]:GetDiplomacy(); d.GetMission=function() error('native history unreadable') end; OLD_HANDLER=0");
+    c.run(&format!(
+        "function ON_MISSION(attacker,missionID) {} OLD_HANDLER=OLD_HANDLER+1 end",
+        preparation::UI_EARLY_EVENT_GATE
+    ));
+    c.run("ON_MISSION(0,3); assert(OLD_HANDLER==0 and ExposedMembers.JAC_ReturnedPreparation548Witness.phase=='UNKNOWN')");
+    c.core(preparation::UNKNOWN_CORE);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].step=='EVENT_GATE'); assert(#REQUESTS==2 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.outcome==nil)");
+}
+
+#[test]
 fn resumed_event_gate_checks_native_history_and_actual_id() {
     let c = Case::new();
     c.travel_intent();
