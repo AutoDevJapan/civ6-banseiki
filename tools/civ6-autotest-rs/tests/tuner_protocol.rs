@@ -32,6 +32,11 @@ impl FakeTuner {
         let log = Arc::clone(&received);
         let server = thread::spawn(move || {
             let (mut connection, _) = listener.accept().expect("accept fake tuner");
+            // Deliberately fragmented frames must not depend on the platform's
+            // Nagle/delayed-ACK timers to reach the client within its deadline.
+            connection
+                .set_nodelay(true)
+                .expect("disable fake tuner Nagle");
             while let Ok(frame) = recv_frame(&mut connection, None) {
                 let payload = frame.payload.clone();
                 log.lock().unwrap().push(frame);

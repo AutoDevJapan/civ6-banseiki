@@ -60,6 +60,12 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(normalized))
 }
 pub fn validate_scenario(data: &Value) -> Result<()> {
+    if data
+        .get("loadscreen_input")
+        .is_some_and(|v| v != "lua" && v != "escape")
+    {
+        return Err(Error::scenario("loadscreen_input must be lua or escape"));
+    }
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
     }

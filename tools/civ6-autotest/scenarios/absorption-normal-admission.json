@@ -1,6 +1,7 @@
 {
   "name": "ToDo995 normal merger admission: unmet offer, natural turn, save/load, single P1",
   "judge_profile": "generic",
+  "loadscreen_input": "escape",
   "steps": [
     {
       "action": "enable_mods",

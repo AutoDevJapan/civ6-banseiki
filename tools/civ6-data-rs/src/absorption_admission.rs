@@ -132,7 +132,7 @@ return 'real save/load preserved choice and all first-stage rolls; duplicate req
         "{}\n",
         serde_json::to_string_pretty(&json!({
             "name":"ToDo995 normal merger admission: unmet offer, natural turn, save/load, single P1",
-            "judge_profile":"generic", "steps":steps
+            "judge_profile":"generic", "loadscreen_input":"escape", "steps":steps
         }))?
     ))
 }

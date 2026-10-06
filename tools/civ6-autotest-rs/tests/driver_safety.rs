@@ -130,6 +130,49 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
 }
 
 #[test]
+fn escape_activation_uses_native_input_once_and_waits_for_readiness() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |state, code, _| {
+        assert_ne!(state, "LoadScreen", "activation must use native input");
+        if code.contains("Game.GetLocalPlayer") {
+            reads += 1;
+            return Ok(if reads == 1 { "false" } else { "true" }.into());
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"escape"}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(
+        f.trace().presses,
+        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
+    );
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    let rows = transition_observations(&f);
+    let last = rows.last().unwrap();
+    assert_eq!(last["phase"], "ingame_ready");
+    assert_eq!(
+        last["observation"]["begin_game_response"]["status"],
+        "input_sent"
+    );
+}
+
+#[test]
+fn loadscreen_input_rejects_unknown_methods() {
+    for input in [json!("escpae"), json!(true), json!(null)] {
+        assert!(validate_scenario(
+            &json!({"loadscreen_input":input,"steps":[{"action":"end_turn"}]})
+        )
+        .is_err());
+    }
+}
+
+#[test]
 fn unknown_begin_game_reply_waits_for_readiness_without_resending_activation() {
     let f = Fixture::new();
     let mut backend = f.backend();

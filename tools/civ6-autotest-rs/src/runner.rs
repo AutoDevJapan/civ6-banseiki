@@ -1517,7 +1517,9 @@ impl Runner {
                 if self.clock.now() >= end {
                     break;
                 }
-                if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
+                if states.iter().any(|s| state_name_eq(s, "LoadScreen"))
+                    && self.scenario["loadscreen_input"] != "escape"
+                {
                     let response = self.lua(
                         "LoadScreen",
                         "OnActivateButtonClicked()\nreturn true",
@@ -1544,6 +1546,8 @@ impl Runner {
                 } else {
                     self.remaining(end)?;
                     self.backend.press_key(crate::click::VK_ESCAPE, end)?;
+                    snapshot["begin_game_response"] =
+                        json!({"status":"input_sent","method":"escape"});
                     last = "Esc sent on loading screen".into();
                 }
                 sent = true;
