@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
+const BASELINE: &str =
+    include_str!("../../civ6-autotest/scenarios/leader-persona-baseline-15km.json");
 const CHECKS: [&str; 6] = [
     "Generic: JAC Modding.log errors",
     "Generic: JAC Database.log errors",
@@ -20,7 +22,12 @@ const CHECKS: [&str; 6] = [
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub scenario_completed: bool,
+    pub baseline_ready: bool,
+    /// Number of original operations; the preparation restart is separate.
     pub completed_steps: usize,
+    pub recorded_steps: usize,
+    pub preparation_restart: bool,
+    pub save_namespace: Option<String>,
     pub matched_save_load_snapshots: usize,
     pub early_ai_check: bool,
     pub final_ai_check: bool,
@@ -77,22 +84,185 @@ fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
 
 /// Read each input from one artifact directory, never from combined runs.
 pub fn verify_directory(directory: &Path) -> Result<Report> {
+    verify_artifact(directory, false)
+}
+
+pub fn verify_baseline_directory(directory: &Path) -> Result<Report> {
+    verify_artifact(directory, true)
+}
+
+fn verify_artifact(directory: &Path, baseline: bool) -> Result<Report> {
     let steps = std::fs::read_to_string(directory.join("steps.jsonl"))?;
     let result = std::fs::read_to_string(directory.join("result.json"))?;
     // Require the original log slices, even when empty: absent is not error-free.
     let lua = std::fs::read_to_string(directory.join("Lua.log"))?;
-    std::fs::read(directory.join("Database.log"))?;
-    std::fs::read(directory.join("Modding.log"))?;
-    verify(&steps, &result, &lua)
+    let logs = BTreeMap::from([
+        ("Lua.log".to_owned(), lua.clone()),
+        (
+            "Database.log".to_owned(),
+            std::fs::read_to_string(directory.join("Database.log"))?,
+        ),
+        (
+            "Modding.log".to_owned(),
+            std::fs::read_to_string(directory.join("Modding.log"))?,
+        ),
+    ]);
+    // Use the runner's actual pure judge, including its generated own-MOD
+    // catalogue and multi-line source association, rather than a second regex.
+    let checks = civ6_autotest_rs::judge::judge(&logs, "generic", None, !baseline);
+    for check in checks {
+        require(
+            check.passed,
+            format!("raw log check failed: {} ({})", check.name, check.detail),
+        )?;
+    }
+    let run_id = directory.file_name().and_then(|n| n.to_str());
+    verify_impl(&steps, &result, &lua, run_id, baseline)
 }
 
+/// Verify an untouched transcript and Lua text, for recorded/synthetic inputs.
+/// This does not inspect Database/Modding logs or bind a live run namespace.
+/// Live artifact acceptance must use `verify_directory` (as the CLI does).
 pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> {
-    let expected: Value = serde_json::from_str(ORIGINAL)?;
+    verify_impl(steps_text, result_text, lua, None, false)
+}
+
+/// Reproduce only ship::live's deterministic preparation. Never copy the
+/// executed code, player configuration, timeout or capture keys into a contract.
+fn prepared_contract(
+    source: &str,
+    steps_text: &str,
+    count: u64,
+    run_id: Option<&str>,
+) -> Result<(Value, bool, bool)> {
+    let mut expected: Value = serde_json::from_str(source)?;
+    let steps = expected["steps"]
+        .as_array_mut()
+        .ok_or("missing original steps")?;
+    let restart = count == steps.len() as u64 + 1;
+    require(
+        count == steps.len() as u64 || (restart && run_id.is_some()),
+        "incomplete run",
+    )?;
+    let mut namespaced = false;
+    if let Some(run_id) = run_id {
+        // Choose between the untouched contract and exactly one allowed naming
+        // transform; every later START still has to match the entire contract.
+        if let Some((index, first_save)) = steps
+            .iter()
+            .enumerate()
+            .find(|(_, s)| s["action"] == "save" && s["exact_name"] != true)
+        {
+            let action = format!("{}/{} save", index + 1 + usize::from(restart), count);
+            for line in steps_text.lines() {
+                let row: Value = serde_json::from_str(line)?;
+                if row["action"] == action && row["status"] == "START" {
+                    let executed: Value = serde_json::from_str(
+                        row["detail"].as_str().ok_or("save START has no detail")?,
+                    )?;
+                    namespaced = executed["name"] != first_save["name"];
+                    break;
+                }
+            }
+        }
+        if namespaced || restart {
+            require(
+                !run_id.is_empty()
+                    && run_id.len() <= 240
+                    && run_id
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_')),
+                "invalid artifact run ID",
+            )?;
+        }
+        if namespaced {
+            for step in steps.iter_mut() {
+                if matches!(step["action"].as_str(), Some("save" | "load"))
+                    && step["exact_name"] != true
+                {
+                    let name = step["name"].as_str().ok_or("save/load name missing")?;
+                    step["name"] = Value::String(format!("{name}-{run_id}"));
+                }
+            }
+        }
+    }
+    if restart {
+        steps.insert(
+            0,
+            serde_json::json!({"action":"restart_game","timeout":420}),
+        );
+    }
+    Ok((expected, restart, namespaced))
+}
+
+fn verify_impl(
+    steps_text: &str,
+    result_text: &str,
+    lua: &str,
+    run_id: Option<&str>,
+    baseline: bool,
+) -> Result<Report> {
+    let source_text = if baseline { BASELINE } else { ORIGINAL };
+    let source: Value = serde_json::from_str(source_text)?;
+    let original_count = if baseline { 5 } else { 113 };
+    require(
+        source["steps"]
+            .as_array()
+            .is_some_and(|s| s.len() == original_count),
+        "original scenario contract changed",
+    )?;
+    if baseline {
+        // The comparison must use the full run's actual map, seed and player
+        // order. Only the Persona MOD moves from enabled to disabled.
+        let full: Value = serde_json::from_str(ORIGINAL)?;
+        require(
+            source["steps"][1] == full["steps"][1],
+            "baseline configuration differs from full run",
+        )?;
+        let sets = |value: &Value| -> Result<BTreeSet<String>> {
+            value
+                .as_array()
+                .ok_or("MOD IDs absent")?
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| "MOD ID is not a string".into())
+                })
+                .collect()
+        };
+        let base_enabled = sets(&source["steps"][0]["ids"])?;
+        let full_enabled = sets(&full["steps"][0]["ids"])?;
+        let base_disabled = sets(&source["steps"][0]["disable_ids"])?;
+        let full_disabled = sets(&full["steps"][0]["disable_ids"])?;
+        let persona = BTreeSet::from(["91cf7b65-54bb-4f69-a452-19a65527cde2".to_owned()]);
+        require(
+            base_enabled.is_disjoint(&base_disabled)
+                && full_enabled.is_disjoint(&full_disabled)
+                && full_enabled
+                    .difference(&base_enabled)
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+                    == persona
+                && base_enabled.difference(&full_enabled).next().is_none()
+                && base_disabled
+                    .difference(&full_disabled)
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+                    == persona
+                && full_disabled.difference(&base_disabled).next().is_none(),
+            "baseline MOD isolation differs from full run",
+        )?;
+    }
+    let result: Value = serde_json::from_str(result_text)?;
+    let count = result["completed_steps"]
+        .as_u64()
+        .ok_or("missing completed steps")?;
+    let (expected, preparation_restart, namespaced) =
+        prepared_contract(source_text, steps_text, count, run_id)?;
     let steps = expected["steps"]
         .as_array()
         .ok_or("missing original steps")?;
-    require(steps.len() == 113, "original 113-step contract changed")?;
-    let result: Value = serde_json::from_str(result_text)?;
     require(
         result["scenario"] == expected["name"],
         "wrong scenario name",
@@ -103,7 +273,7 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
         "run contains a failure or lacks its final failure field",
     )?;
     require(
-        result["completed_steps"].as_u64() == Some(113),
+        result["completed_steps"].as_u64() == Some(steps.len() as u64),
         "incomplete run",
     )?;
     // The original scenario contains real end_turn operations, not clock jumps.
@@ -119,7 +289,11 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
         require(names.insert(name), "duplicate judge check")?;
     }
     require(
-        names == CHECKS.into_iter().collect(),
+        names
+            == CHECKS[..if baseline { 5 } else { 6 }]
+                .iter()
+                .copied()
+                .collect(),
         "judge checks differ from strict generic profile",
     )?;
     require(
@@ -167,9 +341,14 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
             require(
                 !judged
                     && !pending
-                    && completed == 113
+                    && completed == steps.len()
                     && status == "OK"
-                    && detail == "6/6 checks passed",
+                    && detail
+                        == if baseline {
+                            "5/5 checks passed"
+                        } else {
+                            "6/6 checks passed"
+                        },
                 "judge absent, early, repeated or incomplete",
             )?;
             judged = true;
@@ -186,7 +365,7 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
         let step = &steps[completed];
         let step_action = step["action"].as_str().ok_or("original action absent")?;
         require(
-            action == format!("{}/113 {step_action}", completed + 1),
+            action == format!("{}/{} {step_action}", completed + 1, steps.len()),
             format!("wrong order or action at step {}", completed + 1),
         )?;
         match status {
@@ -218,16 +397,22 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
                         )?;
                         require(restored.insert(key.to_owned()), "snapshot restored twice")?;
                     }
-                    if completed == 38 {
+                    if !baseline && completed == 38 + usize::from(preparation_restart) {
                         require(
                             value == "native AI appointment gate verified after first turn",
                             "early AI result differs",
                         )?;
                     }
-                    if completed == 112 {
+                    if !baseline && completed == 112 + usize::from(preparation_restart) {
                         require(
                             value == "no unjoined AI governors or persona Great People",
                             "final AI result differs",
+                        )?;
+                    }
+                    if baseline {
+                        require(
+                            value == "baseline has 22 factions and idle game core",
+                            "baseline readiness result differs",
                         )?;
                     }
                 }
@@ -238,24 +423,37 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
         }
     }
     require(
-        judged && !pending && completed == 113,
+        judged && !pending && completed == steps.len(),
         "run never completed all steps and judge",
     )?;
     require(
-        captures.len() == 6 && restored.len() == 6,
-        "six save/load snapshots required",
+        captures.len() == if baseline { 0 } else { 6 }
+            && restored.len() == if baseline { 0 } else { 6 },
+        "save/load snapshot count differs",
     )?;
     Ok(Report {
-        scenario_completed: true,
-        completed_steps: completed,
+        scenario_completed: !baseline,
+        baseline_ready: baseline,
+        completed_steps: completed - usize::from(preparation_restart),
+        recorded_steps: completed,
+        preparation_restart,
+        save_namespace: if namespaced {
+            run_id.map(str::to_owned)
+        } else {
+            None
+        },
         matched_save_load_snapshots: restored.len(),
-        early_ai_check: true,
-        final_ai_check: true,
+        early_ai_check: !baseline,
+        final_ai_check: !baseline,
         official_lua_errors: 0,
-        scenario_sha256: sha(ORIGINAL.as_bytes()),
+        scenario_sha256: sha(source_text.as_bytes()),
         steps_sha256: sha(steps_text.as_bytes()),
         result_sha256: sha(result_text.as_bytes()),
         product_acceptance: false,
-        scope: "original113 recorded scenario only; product runtime, AI payment, MP and neutralization require separate evidence",
+        scope: if baseline {
+            "baseline startup only; no persona, AI, turns, payment or save acceptance"
+        } else {
+            "original113 recorded scenario only; product runtime, AI payment, MP and neutralization require separate evidence"
+        },
     })
 }
