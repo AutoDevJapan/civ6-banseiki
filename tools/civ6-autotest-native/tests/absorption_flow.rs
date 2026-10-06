@@ -228,6 +228,7 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
       GameEvents.JAC_AbsorptionProduct_Operation=event()
       PlayerConfigurations[1].GetCivilizationTypeName=function() return PRODUCT_SMALL and 'CIVILIZATION_JAC_ROKKAKU' or 'CIVILIZATION_JAC_TAKEDA' end
       PlayerConfigurations[1].GetLeaderTypeName=function() return PRODUCT_SMALL and 'LEADER_JAC_ROKKAKU_SADAYORI' or 'LEADER_JAC_TAKEDA_NOBUTORA' end
+      PlayerConfigurations[1].GetLeaderName=function() return PRODUCT_SMALL and 'LOC_LEADER_JAC_ROKKAKU_SADAYORI_NAME' or 'LOC_LEADER_JAC_TAKEDA_NOBUTORA_NAME' end
       PlayerConfigurations[2].GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_ODA' end
       PlayerConfigurations[2].GetLeaderTypeName=function() return 'LEADER_JAC_ODA_NOBUHIDE' end
       Players[2].IsHuman=function() return PRODUCT_HUMAN end
@@ -350,14 +351,20 @@ fn panel_languages(lua: &Lua) -> mlua::Result<()> {
         }
     }
     lua.globals().set("PANEL_LANGUAGES", languages)?;
-    lua.load(r#"
+    lua.load(
+        r#"
       LANGUAGE='en_US'
       Locale.Lookup=function(key,...)
         local value=PANEL_LANGUAGES[LANGUAGE][key] or key
-        for i,arg in ipairs({...}) do value=value:gsub('{'..i..'}',function() return tostring(arg) end) end
+        for i,arg in ipairs({...}) do
+          local replacement=function() return tostring(arg) end
+          value=value:gsub('{'..i..'}',replacement):gsub('{'..i..'_[%w_]+}',replacement)
+        end
         return value
       end
-    "#).exec()
+    "#,
+    )
+    .exec()
 }
 
 #[test]
@@ -467,7 +474,8 @@ fn actual_panel_shared_lookup_covers_all_saved_person_types_and_legacy_ids_witho
             lua.load(r#"
               local view=JAC_AbsorptionFlow_UI.GetView();assert(view.phase=='RESULT' and #view.rows==8 and view.deposit==nil)
               for i,row in ipairs(view.rows) do local case=PANEL_CASES[i]
-                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_PERSONALITY_'..case[2]),1,true))
+                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_PERSONALITY_'..case[2]),1,true),
+                  LANGUAGE..'/'..ALIAS..'/'..row.id..': '..row.abilities..' expected '..Locale.Lookup('LOC_JAC_ADMISSION_PERSONALITY_'..case[2]))
                 assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_TRAIT_'..case[4]),1,true))
                 assert(row.abilities:find(Locale.Lookup('LOC_JAC_ABS_FLOW_VALUE_ADMINISTRATION'),1,true))
                 assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_GOLD'),1,true))
