@@ -642,17 +642,18 @@ local function ObserveDebit(before,s,id)
   return proof
 end
 local function FlowProgress(old,flow,label)
-  assert(R.Equal(old.Request,flow.Request) and old.ID==flow.ID and old.From==flow.From and old.To==flow.To
-    and old.Mode==flow.Mode and old.Turn==flow.Turn,'saved flow identity/request changed: '..label)
-  assert(R.Equal(old.Inventory,flow.Inventory) and R.Equal(old.RosterAtBegin,flow.RosterAtBegin),'saved asset inventory/roster changed: '..label)
+  assert(R.Equal(InventoryEvidence(old),InventoryEvidence(flow)),'saved initial inventory evidence changed: '..label)
   if old.Phase1Complete then assert(R.Equal(P1Evidence(old),P1Evidence(flow)),'saved first-stage evidence changed: '..label) end
   local entries={};for _,entry in ipairs(flow.Entries or {}) do
     assert(not entries[tostring(entry.ID)],'duplicate resumed asset');entries[tostring(entry.ID)]=entry
   end
   for _,entry in ipairs(old.Entries or {}) do
     local current=assert(entries[tostring(entry.ID)],'saved asset disappeared')
-    assert(entry.Kind==current.Kind and R.Equal(entry.Source,current.Source) and R.Equal(entry.NativeWork,current.NativeWork)
-      and entry.UnitID==current.UnitID and entry.UnitType==current.UnitType,'saved asset identity changed')
+    -- A partial first-stage journal may acquire its remaining results, but
+    -- already persisted chance/outcome values and every old roll are fixed.
+    for _,field in ipairs({'P1Chance','EscapeOutcome'}) do
+      if entry[field]~=nil then assert(R.Equal(entry[field],current[field]),'saved first-stage result changed: '..field) end
+    end
     for stage,roll in pairs(entry.Rolls or {}) do assert(R.Equal((current.Rolls or {})[stage],roll),'saved random roll changed: '..stage) end
     entries[tostring(entry.ID)]=nil
   end
@@ -703,6 +704,18 @@ local function VerifyConsumption(escrow,flow)
   for _,currency in ipairs({'Gold','Faith'}) do
     local paid=assert(escrow['Collect'..currency]);assert(paid.Done and paid.Before-paid.After==escrow[currency],'consumed actual collection leg changed')
   end
+end
+local function LegStageProgress(prior,leg,label)
+  assert(type(prior)=='table' and type(leg)=='table',label..': actual native collection intent disappeared')
+  for _,field in ipairs({'Issued','Done'}) do
+    local before,after=prior[field],leg[field]
+    assert((before==nil or type(before)=='boolean') and (after==nil or type(after)=='boolean'),
+      label..': invalid native collection stage: '..field)
+    assert(before~=true or after==true,label..': native collection stage regressed: '..field)
+  end
+  local a,b=R.Copy(prior),R.Copy(leg)
+  a.Issued=nil;b.Issued=nil;a.Done=nil;b.Done=nil
+  assert(R.Equal(a,b),label..': actual native collection intent changed')
 end
 local function SavedProgress(expected,label)
   local now=Snapshot()
@@ -757,9 +770,7 @@ local function SavedProgress(expected,label)
     for _,currency in ipairs({'Gold','Faith'}) do
       local leg=escrow['Collect'..currency];local prior=old and old['Collect'..currency]
       if prior then
-        local a,b=R.Copy(prior),R.Copy(leg);assert(b,label..': actual native collection intent disappeared')
-        a.Done=nil;b.Done=nil
-        assert(R.Equal(a,b) and (not prior.Done or leg.Done),label..': actual native collection intent changed')
+        LegStageProgress(prior,leg,label)
       end
       if escrow.To==t.To and leg and leg.Done and not (prior and prior.Done) then
         assert(leg.Before-leg.After==escrow[currency],label..': resumed native collection amount changed')
@@ -2421,6 +2432,202 @@ function CompleteNative(consume)
  Gold=100,Faith=20,LegacyRefunded={Gold=0,Faith=0},Policy='CONSUME_ON_VERIFIED_RESULT_V2'} end
 end
 "#;
+
+    #[test]
+    fn incomplete_phase_one_preserves_shared_inventory_across_saved_checkpoints() -> Result<()> {
+        for complete in [false, true] {
+            for mutation in [
+                "f.ID='other-flow'",
+                "f.From=1",
+                "f.To=1",
+                "f.Mode='MERGER'",
+                "f.Turn=6",
+                "f.Request.EntryConditionsMet=false",
+                "f.RosterAtBegin={}",
+                "f.Inventory={}",
+                "e.ID='other-asset'",
+                "e.Kind='ITEM'",
+                "e.Name=nil",
+                "e.Portrait=nil",
+                "e.Source.Owner=1",
+                "e.UnitID=5",
+                "e.UnitType=8",
+                "e.AllowedActions={}",
+                "e.Abilities={}",
+                "e.Leader=nil",
+                "e.NativeWork=nil",
+                "e.DormantClass=nil",
+                "f.Entries={}",
+            ] {
+                for checkpoint in ["saved", "frozen"] {
+                    let lua = Lua::new();
+                    lua.load(WORLD).exec()?;
+                    lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';local e=f.Entries[1];e.Name='original-name';e.Portrait='original-portrait';e.Abilities={{'original-ability'}};e.Leader=true;e.NativeWork={{Index=9,Owner=2}};e.DormantClass=3")).exec()?;
+                    lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+                    lua.load(format!("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];local e=f.Entries[1];f.Phase1Complete={complete};{mutation}")).exec()?;
+                    let check = if checkpoint == "saved" {
+                        "SavedProgress(t.PendingSnapshot,'initial inventory')"
+                    } else {
+                        "PreservePending(REQUEST)"
+                    };
+                    let error = lua
+                        .load(format!("{P1}\n{CORE}\n{check}"))
+                        .exec()
+                        .expect_err(mutation)
+                        .to_string();
+                    // The frozen request boundary may catch identity/request
+                    // mutations first; all remaining metadata uses one projection.
+                    assert!(
+                        error.contains("saved initial inventory evidence changed")
+                            || error.contains("native Flow Request does not bind"),
+                        "complete={complete}/{checkpoint}/{mutation}: {error}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn partial_phase_one_accepts_completion_but_preserves_saved_results_and_all_rolls() -> Result<()>
+    {
+        for (mutation, reason) in [
+            ("f.Phase1Complete=true;e.Rolls.P1_BRANCH={Raw=17,Used=17,Label='new-branch'};e.Rolls.P3_RETRY_ESCAPE={Raw=22,Used=22,Label='new-retry'}", None),
+            ("e.P1Chance=0", Some("saved first-stage result changed: P1Chance")),
+            ("e.P1Chance=nil", Some("saved first-stage result changed: P1Chance")),
+            ("e.EscapeOutcome='RETURN'", Some("saved first-stage result changed: EscapeOutcome")),
+            ("e.EscapeOutcome=nil", Some("saved first-stage result changed: EscapeOutcome")),
+            ("e.Rolls.P1_ESCAPE.Used=1", Some("saved random roll changed: P1_ESCAPE")),
+            ("e.Rolls.P3_SUCCESS=nil", Some("saved random roll changed: P3_SUCCESS")),
+            ("e.Rolls.P3_RETRY_BRANCH.Raw=0", Some("saved random roll changed: P3_RETRY_BRANCH")),
+        ] {
+            let lua = Lua::new();
+            lua.load(WORLD).exec()?;
+            lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';local e=f.Entries[1];e.EscapeOutcome='ESCAPE';e.Rolls.P3_RETRY_BRANCH={{Raw=44,Used=44,Label='old-retry'}}")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];local e=f.Entries[1];{mutation}")).exec()?;
+            let result = lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'partial first-stage');PreservePending(REQUEST)")).exec();
+            if let Some(reason) = reason {
+                let error = result.expect_err(mutation).to_string();
+                assert!(error.contains(reason), "{mutation}: {error}");
+            } else {
+                result?;
+                lua.load("local old=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.PendingSnapshot.Flow.Flows['normal-flow'];assert(old.Phase1Complete==false);assert(old.Entries[1].Rolls.P1_BRANCH==nil)").exec()?;
+            }
+        }
+        // Previously absent results can first appear during normal completion.
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';f.Entries[1].P1Chance=nil;f.Entries[1].EscapeOutcome=nil")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=true;f.Entries[1].P1Chance=5000;f.Entries[1].EscapeOutcome='ESCAPE'").exec()?;
+        lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'new first-stage results');PreservePending(REQUEST)")).exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn saved_collection_accepts_issue_and_done_progress_with_actual_balances() -> Result<()> {
+        for advance in [
+            "ESCROW.CollectGold.Issued=true;ESCROW.CollectFaith.Issued=true",
+            "ESCROW.CollectGold.Issued=true;ESCROW.CollectGold.Done=true;GOLD=10000",
+            "ESCROW.CollectGold.Issued=true;ESCROW.CollectGold.Done=true;ESCROW.CollectFaith.Issued=true;ESCROW.CollectFaith.Done=true;ESCROW.Status='HELD';GOLD=10000;FAITH=9980",
+        ] {
+            let lua = Lua::new();
+            lua.load(WORLD).exec()?;
+            lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(advance).exec()?;
+            lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'collection progression')")).exec()?;
+            lua.load("local original=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.PendingSnapshot;assert(original.Product.Escrows[OFFER.ID].CollectGold.Issued==nil);assert(original.Gold==10100);assert(original.Faith==10000)").exec()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn saved_collection_rejects_stage_regression_intent_changes_and_omitted_debits() -> Result<()> {
+        for (initial, mutation, reason) in [
+            (
+                "ESCROW.CollectGold.Issued=true",
+                "ESCROW.CollectGold.Issued=nil",
+                "stage regressed: Issued",
+            ),
+            (
+                "ESCROW.CollectFaith.Issued=true",
+                "ESCROW.CollectFaith.Issued=false",
+                "stage regressed: Issued",
+            ),
+            (
+                "ESCROW.CollectGold.Issued=true;ESCROW.CollectGold.Done=true;GOLD=10000",
+                "ESCROW.CollectGold.Done=nil",
+                "stage regressed: Done",
+            ),
+            (
+                "",
+                "ESCROW.CollectGold.Issued='true'",
+                "invalid native collection stage: Issued",
+            ),
+            (
+                "",
+                "ESCROW.CollectFaith.Done=1",
+                "invalid native collection stage: Done",
+            ),
+            (
+                "",
+                "ESCROW.CollectGold=nil",
+                "actual native collection intent disappeared",
+            ),
+            (
+                "",
+                "ESCROW.CollectGold.Before=10101",
+                "actual native collection intent changed",
+            ),
+            (
+                "",
+                "ESCROW.CollectFaith.After=9981",
+                "actual native collection intent changed",
+            ),
+            (
+                "",
+                "ESCROW.CollectGold.Payer=1",
+                "actual native collection intent changed",
+            ),
+            ("", "ESCROW.To=1", "escrow identity changed"),
+            ("", "ESCROW.Gold=99", "escrow identity changed"),
+            (
+                "",
+                "ESCROW.CollectGold.Issued=true;ESCROW.CollectGold.Done=true",
+                "payer changed beyond newly observed native collection",
+            ),
+            (
+                "",
+                "ESCROW.CollectFaith.Issued=true;ESCROW.CollectFaith.Done=true",
+                "payer changed beyond newly observed native collection",
+            ),
+            (
+                "",
+                "GOLD=GOLD-1",
+                "payer changed beyond newly observed native collection",
+            ),
+        ] {
+            let lua = Lua::new();
+            lua.load(WORLD).exec()?;
+            lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000\n{initial}")).exec()?;
+            lua.load(format!(
+                "{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)"
+            ))
+            .exec()?;
+            lua.load(mutation).exec()?;
+            let error = lua
+                .load(format!(
+                    "{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'collection progression')"
+                ))
+                .exec()
+                .expect_err(mutation)
+                .to_string();
+            assert!(error.contains(reason), "{mutation}: {error}");
+        }
+        Ok(())
+    }
 
     #[test]
     fn qualified_reload_accepts_legal_apply_completion_and_consumption_without_repayment(
