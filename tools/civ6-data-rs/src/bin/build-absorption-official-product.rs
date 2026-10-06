@@ -18,6 +18,9 @@
 //!   supply LEADER_VALUES. GranColombia_Maya.modinfo:15-18,56-65 gates Vatican
 //!   gameplay data behind LeaderPlayable or a standard ruleset; frontend
 //!   CityStates availability alone is not proof that its gameplay row exists.
+//!   SetupParameters.lua:714-728 permits a nil auxiliary list when Values is
+//!   absent; dependency proof requires at least one matching computed list,
+//!   rather than a nonempty serialized list on every selected actor.
 //! - Actual26 established that standard automatic allocation works with two
 //!   majors/one minor. Do not replace it with manual actor creation. The content
 //!   precheck verifies selectable DLC dependency values; actual gameplay
@@ -109,11 +112,17 @@ RefreshPlayerParameters()
 local dlcPlayable=false
 for actor=0,1 do
   local values=PlayerConfigurations[actor]:GetValue('LEADER_VALUES')
-  assert(type(values)=='string' and values~='','official selectable leader values missing')
-  for value in values:gmatch('[^,]+') do
-    if value=='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or value=='Players:Expansion2_Players::LEADER_LADY_SIX_SKY' then dlcPlayable=true end
+  print('[Metadata_Boot_PreSnapshot] leader-values-'..actor..' type='..type(values)..' value='..tostring(values))
+  -- SetupParameters:Config_WriteAuxParameterValues (714-728) writes nil
+  -- when this parameter has no Values table. An actual selected leader can
+  -- remain valid without a serialized selectable list in every actor slot.
+  -- LeaderPlayable is an OR content dependency; a helper-generated matching
+  -- list on either actual major is sufficient. No auxiliary value is invented.
+  assert(values==nil or type(values)=='string','official selectable leader values have unexpected type at actor '..actor)
+  if type(values)=='string' then for value in values:gmatch('[^,]+') do
+      if value=='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or value=='Players:Expansion2_Players::LEADER_LADY_SIX_SKY' then dlcPlayable=true end
+    end
   end
-  print('[Metadata_Boot_PreSnapshot] leader-values-'..actor..'='..values)
 end
 assert(dlcPlayable,'normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency')
 HideGameSetup()
@@ -182,7 +191,7 @@ Read('gameplay-vatican',function() local row=GameInfo.Civilizations['CIVILIZATIO
 Read('gameplay-vatican-leader',function() return GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']~=nil end)
 for actor=0,63 do local p=PlayerConfigurations[actor];if p then
   Read('slot-'..actor,function() return tostring(p:GetSlotStatus())..'|'..tostring(p:GetCivilizationTypeName())..'|'..
-    tostring(p:GetLeaderTypeName())..'|'..tostring(p:GetCivilizationLevelTypeID())..'|leader-values='..tostring(p:GetValue('LEADER_VALUES')) end)
+    tostring(p:GetLeaderTypeName())..'|'..tostring(p:GetCivilizationLevelTypeID())..'|leader-values-type='..type(p:GetValue('LEADER_VALUES'))..'|leader-values='..tostring(p:GetValue('LEADER_VALUES')) end)
 end end
 return 'readonly native frontend metadata captured; no host, no actor creation, no acceptance claim'
 "#;
@@ -1390,7 +1399,10 @@ ReleasePlayerParameters=function() end
 PlayerConfigurations={}
 for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizationTypeName=function() return row.Civ end,
  GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end,
- GetValue=function(_,key) assert(key=='LEADER_VALUES');return LEADER_VALUES end} end
+ GetValue=function(_,key) assert(key=='LEADER_VALUES')
+  if NIL_LIST_BOTH or NIL_LIST_SLOT==index-1 then return nil end
+  if BAD_LIST_SLOT==index-1 then return {} end
+  return LEADER_VALUES end} end
 GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAnyMultiplayer=function() return false end,
  GetValue=function(key) return VALUES[key] end,SetValue=function(key,value) VALUES[key]=value end,
  GetHiddenPlayerCount=function() return 2 end,UpdateEnabledMods=function()
@@ -1423,14 +1435,42 @@ DB={MakeHash=function() return 99 end,ConfigurationQuery=function(sql)
  assert(sql=="SELECT CivilizationType FROM CityStates WHERE Domain = 'Expansion2CityStates' ORDER BY CivilizationType");return ROWS
 end}
 "#;
-        for mutation in [
-            "",
-            "CHANGE_MAJOR=true",
-            "DROP_FILTER=true",
-            "DROP_BOUNDS=true",
-            "SIZE.MaxCityStates=0",
-            "NO_POOL=true",
-            "NO_DEPENDENCY=true",
+        for (mutation, error) in [
+            ("", None),
+            ("NIL_LIST_SLOT=1", None),
+            ("NIL_LIST_SLOT=0", None),
+            (
+                "CHANGE_MAJOR=true",
+                Some("standard setup changed an actual major civilization, leader or controller"),
+            ),
+            (
+                "DROP_FILTER=true",
+                Some("final pool includes another official country"),
+            ),
+            (
+                "DROP_BOUNDS=true",
+                Some("participating setup preceded native bounds/count"),
+            ),
+            (
+                "SIZE.MaxCityStates=0",
+                Some("official DUEL cannot support two majors and one minor"),
+            ),
+            (
+                "NO_POOL=true",
+                Some("existing stock-inclusive pool option unavailable"),
+            ),
+            (
+                "NO_DEPENDENCY=true",
+                Some("normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency"),
+            ),
+            (
+                "NIL_LIST_BOTH=true",
+                Some("normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency"),
+            ),
+            (
+                "BAD_LIST_SLOT=1",
+                Some("official selectable leader values have unexpected type at actor 1"),
+            ),
         ] {
             let lua = Lua::new();
             lua.load(SETUP).exec()?;
@@ -1438,13 +1478,14 @@ end}
             let result = lua
                 .load(format!("{FRONTEND_FILTER}\n{FRONTEND_ALLOCATE}"))
                 .exec();
-            assert_eq!(
-                result.is_ok(),
-                mutation.is_empty(),
-                "{mutation}: {result:?}"
-            );
-            if result.is_ok() {
-                lua.load("assert(CALLS[1]=='mods' and CALLS[2]=='participating');assert(BOUNDS.MaxMinor==6)").exec()?;
+            assert_eq!(result.is_ok(), error.is_none(), "{mutation}: {result:?}");
+            if let Some(expected) = error {
+                assert!(
+                    result.unwrap_err().to_string().contains(expected),
+                    "wrong failure for {mutation}: expected {expected}"
+                );
+            } else {
+                lua.load("assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA' and PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS');assert(CALLS[1]=='mods' and CALLS[2]=='participating');assert(BOUNDS.MaxMinor==6)").exec()?;
             }
         }
         Ok(())
