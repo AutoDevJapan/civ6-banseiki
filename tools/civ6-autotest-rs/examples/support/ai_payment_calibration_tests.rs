@@ -2,6 +2,38 @@ use super::calibration::{Plan, DATE, UESUGI};
 use mlua::Lua;
 use serde_json::Value;
 
+#[test]
+fn resident_readonly_case_uses_common_actions_one_turn_and_actual_subject_preflight() {
+    for (cost,paid,index,title) in [(2,1,0,1),(3,1,1,4),(3,2,1,5)] {
+        let request=serde_json::json!({"action":"start_native_ai_observation","owner":2,"generation":4,
+            "index":index,"cost":cost,"paid":paid,"spent":paid,"title":title});
+        let case=super::read_only::scenario(request.clone()).unwrap();
+        let steps=case["steps"].as_array().unwrap();
+        assert_eq!(steps.iter().map(|s|s["action"].as_str().unwrap()).collect::<Vec<_>>(),
+            ["start_native_paid_runtime","ui_lua","start_native_ai_observation","end_turn","stop_native_ai_observation","stop_native_paid_runtime_observation"]);
+        assert_eq!(steps[3]["turns"],1);
+        let lua=fixture(cost,paid,false);
+        let raw=lua.load(steps[1]["code"].as_str().unwrap()).eval::<String>().unwrap();
+        assert!(raw.starts_with("AI1466_SNAPSHOT "));
+        for key in ["index","spent","title"] {
+            let mut wrong=request.clone();wrong[key]=serde_json::json!(request[key].as_u64().unwrap()+1);
+            let case=super::read_only::scenario(wrong).unwrap();
+            assert!(fixture(cost,paid,false).load(case["steps"][1]["code"].as_str().unwrap()).eval::<String>().is_err(),"{key}");
+        }
+    }
+}
+
+#[test]
+fn resident_readonly_case_rejects_appointment_unknown_generation_and_operation_switch() {
+    let request=serde_json::json!({"action":"start_native_ai_observation","owner":2,"generation":4,
+        "index":0,"cost":2,"paid":1,"spent":1,"title":1});
+    for (key,value) in [("paid",serde_json::json!(0)),("generation",serde_json::json!(0)),
+        ("execution_mode",serde_json::json!(1)),("action",serde_json::json!("stop_native_ai_observation"))] {
+        let mut wrong=request.clone();wrong[key]=value;
+        assert!(super::read_only::scenario(wrong).is_err());
+    }
+}
+
 // Explicit Lua shape fixtures test diagnostics, never the native dispatcher or
 // actual game acceptance. Independent flags/Spent can deliberately disagree.
 fn fixture(cost: u8, paid: u8, unjoined: bool) -> Lua {

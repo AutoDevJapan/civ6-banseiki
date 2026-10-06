@@ -130,7 +130,51 @@ pub fn validate_matched_receipt(value: &Value, command: Command) -> Result<(), S
             "AI subject receipt mismatched; raw capture retained: {value}"
         ));
     }
+    if command.stop && !has_completed_callback(value, command.subject) {
+        return Err("AI sampling stopped but natural callback evidence is missing/dropped; inconclusive, no resend".into());
+    }
     Ok(())
+}
+
+fn has_completed_callback(v: &Value, s: Subject) -> bool {
+    let Some(return_address) = v["gamecore_base"]
+        .as_u64()
+        .filter(|b| *b != 0)
+        .and_then(|b| b.checked_add(0x401537))
+    else {
+        return false;
+    };
+    if v["callbacks"].as_u64().is_none_or(|n| n == 0) || v["dropped"].as_u64() != Some(0) {
+        return false;
+    }
+    let Some(rows) = v["raw_rows"].as_array() else {
+        return false;
+    };
+    let belongs = |r: &Value| {
+        r["site"] == 0
+            && r["accepted"] == true
+            && r["capture_entry"] == true
+            && r["owner"].as_u64() == Some(u64::from(s.owner))
+            && r["generation"].as_u64() == Some(u64::from(s.generation))
+            && r["return_address"].as_u64() == Some(return_address)
+            && r["sequence"]
+                .as_u64()
+                .is_some_and(|n| n > 0 && n <= u64::from(u32::MAX))
+            && r["thread"]
+                .as_u64()
+                .is_some_and(|n| n > 0 && n <= u64::from(u32::MAX))
+    };
+    rows.iter().enumerate().any(|(i, before)| {
+        belongs(before)
+            && before["after"] == false
+            && before["rdx"] == 2
+            && rows[i + 1..].iter().any(|after| {
+                belongs(after)
+                    && after["after"] == true
+                    && after["sequence"] == before["sequence"]
+                    && after["thread"] == before["thread"]
+            })
+    })
 }
 
 #[cfg(test)]
@@ -224,5 +268,35 @@ mod tests {
             changed[key] = serde_json::json!(true);
             assert!(validate_receipt(&changed, command).is_err(), "{key}");
         }
+    }
+    #[test]
+    fn readonly_stop_needs_real_paired_callback_shape_not_a_counter_or_empty_registration() {
+        let s = Command::parse(&request(), 1, 2).unwrap().subject;
+        let entry = serde_json::json!({"site":0,"accepted":true,"capture_entry":true,"owner":2,"generation":4,
+            "return_address":0x180401537u64,"sequence":9,"thread":10,"after":false,"rdx":2});
+        let mut after = entry.clone();
+        after["after"] = true.into();
+        let evidence = serde_json::json!({"gamecore_base":0x180000000u64,"callbacks":1,"dropped":0,"raw_rows":[entry,after]});
+        assert!(has_completed_callback(&evidence, s));
+        let mut empty = evidence.clone();
+        empty["raw_rows"] = serde_json::json!([]);
+        assert!(!has_completed_callback(&empty, s));
+        for (key, bad) in [
+            ("generation", 5),
+            ("owner", 3),
+            ("thread", 11),
+            ("sequence", 8),
+            ("return_address", 0),
+        ] {
+            let mut wrong = evidence.clone();
+            wrong["raw_rows"][1][key] = bad.into();
+            assert!(!has_completed_callback(&wrong, s), "{key}");
+        }
+        let mut dropped = evidence.clone();
+        dropped["dropped"] = 1.into();
+        assert!(!has_completed_callback(&dropped, s));
+        let mut reversed = evidence.clone();
+        reversed["raw_rows"].as_array_mut().unwrap().reverse();
+        assert!(!has_completed_callback(&reversed, s));
     }
 }

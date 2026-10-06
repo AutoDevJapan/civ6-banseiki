@@ -910,6 +910,38 @@ fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {
 }
 
 #[test]
+fn resident_sampling_stop_tailcalls_all_originals_with_exact_abi_and_no_context_reads() {
+    if !child("ai_operation::gateway::tests::resident_sampling_stop_tailcalls_all_originals_with_exact_abi_and_no_context_reads",
+        "JAC_AI_RESIDENT_STOP_CHILD") {return;}
+    let (memory,_receiver)=accepted_fixture();
+    stop_observation();
+    drop(memory); // The old Player is no longer a readable owned context.
+    let sequence=NEXT.load(Ordering::Acquire);
+    for target in &AI_GATE_TARGETS {target.store(ai_fixture_target as *const () as u64,Ordering::Release);}
+    let mut baseline=[0u8;0x160];
+    unsafe {ai_fixture_driver(baseline.as_mut_ptr(),ai_fixture_target as *const () as usize)};
+    for gateway in gateways().into_iter().take(4) {
+        let mut actual=[0u8;0x160];
+        unsafe {ai_fixture_driver(actual.as_mut_ptr(),gateway)};
+        assert_eq!(actual,baseline,"stopped original ABI");
+        assert_eq!(u64::from_le_bytes(actual[88..96].try_into().unwrap()),1);
+    }
+    assert_eq!(NEXT.load(Ordering::Acquire),sequence,"Rust observer must not be entered");
+    assert!(observations().0.is_empty());
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire),0);
+    assert_eq!(THREAD_FLIGHTS.with(Cell::get),0);
+    assert!(INVOCATION.with(Cell::get).is_none());
+    assert_eq!(close_registered(),Err(Failure::CallerNotQuiescent));
+    // With the resident gateway tail-called away, the engine's original SEH
+    // unwinds directly to its real caller, without touching an old lease.
+    AI_GATE_TARGETS[0].store(original_unwinds as *const () as u64,Ordering::Release);
+    let mut state=[0u64;2];
+    assert_eq!(unsafe {ai_unwind_driver(state.as_mut_ptr(),gateways()[0])},1);
+    assert_eq!(UNWOUND.load(Ordering::Acquire),0);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire),0);
+}
+
+#[test]
 fn ai_diagnostic_sampling_stop_during_original_preserves_once_and_does_not_certify_drain() {
     if !child("ai_operation::gateway::tests::ai_diagnostic_sampling_stop_during_original_preserves_once_and_does_not_certify_drain",
         "JAC_AI_SAMPLE_STOP_CHILD") {return;}

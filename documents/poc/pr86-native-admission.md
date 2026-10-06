@@ -769,3 +769,29 @@ controllerは既に読み込んだ同じbridge DLLの `BridgeRuntimeAiObserve` �
 DLL/controllerの限定buildは `cargo_gate.exe build --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --lib --bin civ6-native-bridge --features ai-observation-candidate`。生成DLLのCOFF exportで `BridgeRuntimeAiObserve / Query / Capture / StopObservation` の4入口を確認する。ビルド成果はworker専用target内に置き、共有DLLへ配置しない。通常のbuild指定にfeatureを追加しない。
 
 Solの最終限定再レビューは上記controller終了状態のMust解消・新Must0（`D:/CC/Work/todo880/ai-diagnostic-cleanup-review.txt`）。これは静的差分レビューであり、native同期入口・初回設置・実producer停止/Wait/退出の未証明を解消した判定ではない。
+
+## 常駐codeを保持した採取停止と読取専用1ケース
+
+親のresident方針に合わせ、採取停止後の新しい4sites呼出しは観測用Rustへ入らず、保存済みレジスタ・RFLAGS・XMMと真のcaller stackを復元し、不変の原関数へ直接tail-callする。callbackは原一回であり、新しいlease/Player参照や非同期queueを作らない。停止前から原call内にいるものは従来の同期frame内で復帰/SEH処理を続ける。元のtask/job-setはnative engine所有のままである。採取停止はINSTALL直列化と行公開の停止だけを行い、RX領域の保護変更、detour解除、relay/DLL解放を行わない。
+
+| 対象 | 常駐保持で不要になる条件 | 引き続き証明が必要なこと |
+|---|---|---|
+| gateway/relay/原targetのコード | 採取を止める際のunpatch・RX復元・解放前の全callback待機 | 元targetとbridge moduleを所有process終了まで保持する。稼働中の再利用・別DLLへの差替えは不可 |
+| 閉じた観測登録 | 次のcallbackを捕捉するための上流hook増設 | 登録budgetは再開せず0のまま。コピー済み診断行を実行contextとして使わない |
+| 同期操作中のPlayer/world | codeを解放しないための待機 | 同一world世代・native同期owner・実Wait・発行停止・破棄順序はcode寿命から導出できない |
+| controllerのremote入力buffer | 観測終了直後のVirtualFreeEx | 応答不明のcalleeが触り得る領域は保持し、所有ゲームのOS終了確認後にOSが回収する。controller内のコピーはgame pointerの所有権ではない |
+
+常駐停止後は原関数内の寿命をこちらのflight counterで数えないため、`drain()` は成功を返さない。`close_registered()` も停止済みresident bindingが残る間は解除前に拒否する。INSTALL取得後にも再確認し、採取停止との競合で解除へ進まない。これは正常な `BridgeRuntimeAiStopObservation` の失敗ではなく、別契約であるunhook/世界Closeへ採取停止を流用させないための区別である。通常runtimeのClose/Rebuildを完了扱いする変更は加えていない。初回AI前Install・同job-set実Wait・同期callback退出のexecution blockerは維持する。
+
+実行用caseの生成は既存Rust exampleの `observe <actual-request.json> <new-case.json>`。actual-requestは共通action `start_native_ai_observation` と、実際に取得した `owner/generation/index/cost/paid/spent/title` を持つJSONである。PIDやmachine addressは指定しない。生成器は0や未取得の世代を埋めず、親の実receiptの値を使う。出力は共通driverへ直接渡せる6stepで、別のrequirements manifestではない。
+
+1. 既存resident controllerを開始（採取上限300秒）。既に同じcontrollerが稼働する親scenarioへ統合する場合は、この開始/最後の終了を重複させない。
+2. 既存の読取LuaをRustから生成し、実AI・全22人物・本人source費用/surcharge・既払bits・残額予約を照合。要求Index/次TITLE/SPENTとの不一致は登録前に失敗する。
+3. 読取専用AI登録を一回だけ送る。
+4. 共通 `end_turn` で自然ターンを一回だけ進める（上限120秒）。新規game・APPOINT/PROMOTE送信・property setterは生成しない。
+5. AI採取を止める。自然stage2の同owner/世代/thread/sequenceに対応する入口と出口、正しい固定caller復帰先、drop0が無ければinconclusiveとして手順を失敗させる。空の登録成功を校正合格にしない。一callbackの復帰記録を、全同期callerの退出やjob-set排出の証明に読み替えない。
+6. 通常runtimeの観測を終了。codeとmoduleは所有ゲーム内に常駐する。
+
+生成用コマンドは `cargo_gate.exe run --locked --offline --manifest-path tools/Cargo.toml -p civ6-autotest-rs --example persona_ai_payment_calibration -- observe <actual-request.json> <new-case.json>`。対象ゲームでは親が実世代・加入予約を確認し、`ai-observation-candidate` を明示したDLL/controllerを選ぶ。生成とschema/Lua fixture検査は実ゲームでこの開始条件を満たした証明ではない。実値が無いところを架空のowner/世代で埋めた実行ファイルは配布しない。支払い受入はこのread-only caseと別判定のまま維持する。
+
+今回の限定検査はgateway 13成功（filtered114）、receipt 4成功（filtered123）、生成器8成功（filtered0）、全て失敗ignored0・警告0。最初のgateway検査は直接通過を既存の未読frame用経路へそのまま流したため、unhook拒否がCriticalRestoreへ変わる2失敗を検出した。常駐停止専用の分岐を設け、原ABIの復元だけを共有し、停止済みbindingの解除は別途明示拒否する設計へ直した。最後のINSTALL再確認・drain拒否を含めて上記13件を実施した。logは `D:/CC/Work/todo880/ai-resident-{gateway,receipt,case}-tests.log`。Solの限定静的レビューは新Must0（`ai-resident-review.txt`）。実機0・通常AI支払い0・新hook0・独自queue0・public push0を維持する。

@@ -147,7 +147,7 @@ thread_local! {static THREAD_FLIGHTS:Cell<u32>=const{Cell::new(0)};}
 /// Call only after restoring the registration, before releasing owner objects.
 /// A tail-forwarded unreadable frame prevents a quiescence claim permanently.
 pub fn drain() -> bool {
-    if THREAD_FLIGHTS.with(Cell::get) != 0 {
+    if SAMPLING_STOPPED.load(Ordering::Acquire) || THREAD_FLIGHTS.with(Cell::get) != 0 {
         return false;
     }
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -157,7 +157,7 @@ pub fn drain() -> bool {
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    !AI_GATE_UNTRACKED.load(Ordering::Acquire)
+    !AI_GATE_UNTRACKED.load(Ordering::Acquire) && !SAMPLING_STOPPED.load(Ordering::Acquire)
 }
 thread_local! {static INVOCATION:Cell<Option<Invocation>>=const {Cell::new(None)};}
 thread_local! {static DEPTH:Cell<u32>=const {Cell::new(0)};}
@@ -483,6 +483,10 @@ macro_rules! gateway {
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
         "lea rax,[rsp+0x1b8]\nmov [rsp+0x100],rax\nmov rax,[rax]\nmov [rsp+0x108],rax\nmov qword ptr [rsp+0x110],",$site,"\n",
         ".if ",$site," >= 4\nmov rax,[rip+AI_ROOT_PRODUCER]\nmov [rsp+0x118],rax\n.endif\n",
+        // Closed sampling budget: restore the true entry ABI and tail-jump.
+        // No lease/Player/capture access and no new retained caller context.
+        // Code and immutable original targets stay pinned through process exit.
+        ".if ",$site," < 4\ncmp byte ptr [rip+{sample_stop}],0\njne 6f\n.endif\n",
         "lea rcx,[rsp+0x60]\nxor edx,edx\ncall {record}\nlea rcx,[rsp+0x60]\nxor edx,edx\ncall {action}\n",
         ".if ",$site," >= 4\ncmp qword ptr [rsp+0x118],0\nje 9f\n.endif\n",
         ".if ",$site," == 0\nbt qword ptr [rsp+0x118],62\njc 9f\n.endif\n",
@@ -502,10 +506,10 @@ macro_rules! gateway {
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\n",
         "lock dec qword ptr [rip+AI_GATE_FLIGHTS]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\nret\n",
         // Failed frame read: restore and tail-jump with the real original stack.
-        "8:\nmov byte ptr [rip+AI_GATE_UNTRACKED],1\nlock dec qword ptr [rip+AI_GATE_FLIGHTS]\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
+        "8:\nmov byte ptr [rip+AI_GATE_UNTRACKED],1\n6:\nlock dec qword ptr [rip+AI_GATE_FLIGHTS]\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\njmp qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n",
         "9:\nlea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\nmov qword ptr [rsp+0x80],0\njmp 7b\n.seh_endproc\n"
-    ),record=sym $record,action=sym native_action,unwind=sym $handler);};
+    ),record=sym $record,action=sym native_action,unwind=sym $handler,sample_stop=sym SAMPLING_STOPPED);};
 }
 gateway!("ai_callback_gateway", "0", "0");
 gateway!("ai_checker_gateway", "1", "8");
@@ -595,8 +599,17 @@ pub fn recover_failed_registration() -> Result<(), Failure> {
 /// Close both a published registration and an install failure retained only by
 /// recovery. Absence of a public handle does not prove that no patch is live.
 pub fn close_registered() -> Result<(), Failure> {
+    // Resident stopped gateways intentionally tail-call without counting the
+    // original's lifetime. Never turn that zero into detach/drain permission,
+    // even when the experimental producer counter has also reached zero.
+    if SAMPLING_STOPPED.load(Ordering::Acquire) && BINDING.get().is_some() {
+        return Err(Failure::CallerNotQuiescent);
+    }
     close_producer()?;
     let guard = INSTALL.lock().map_err(|_| Failure::Patch)?;
+    if SAMPLING_STOPPED.load(Ordering::Acquire) && BINDING.get().is_some() {
+        return Err(Failure::CallerNotQuiescent);
+    }
     ACTIVE.store(false, Ordering::Release);
     if let Some(registration) = RECOVERY.get()? {
         registration.close_locked(&guard, &SystemApi)?;
@@ -846,6 +859,7 @@ pub fn observation_module_base() -> Option<u64> {
 /// Stops collection only. Code and bindings remain pinned; this is NOT a
 /// producer-stop, callback-drain, uninstall, or world-destruction receipt.
 pub fn stop_observation() {
+    let _guard = INSTALL.lock().unwrap_or_else(|e|e.into_inner());
     SAMPLING_STOPPED.store(true, Ordering::Release);
     ACTIVE.store(false, Ordering::Release);
     // Serialize only the bounded row publication, not original callbacks.

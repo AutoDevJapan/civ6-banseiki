@@ -2,10 +2,20 @@
 //! game, installs the candidate, sends an AI operation, or fabricates a receipt.
 #[path = "support/ai_payment_calibration.rs"]
 mod calibration;
+#[path = "support/ai_readonly_case.rs"]
+mod read_only;
 use std::{fs::OpenOptions, io::Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.len()==3 && args[0]=="observe" {
+        let request=serde_json::from_slice(&std::fs::read(&args[1])?)?;
+        let scenario=read_only::scenario(request)?;
+        let mut file=OpenOptions::new().write(true).create_new(true).open(&args[2])?;
+        writeln!(file,"{}",serde_json::to_string_pretty(&scenario)?)?;
+        println!("one common-driver read-only case written; requires actual joined subject/generation and candidate DLL; no game opened; no payment authority");
+        return Ok(());
+    }
     if args.len() == 3 && args[0] == "bundle" {
         let owner = args[1].parse()?;
         let plans = calibration::bundle(owner)?;
@@ -47,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if args.len() != 5 {
-        return Err("usage: persona_ai_payment_calibration <step|hold|reload|unjoined> <AI owner> <cost 2|3> <paid before> <new output.json>".into());
+        return Err("usage: persona_ai_payment_calibration observe <actual-request.json> <new-case.json>; or <step|hold|reload|unjoined> <AI owner> <cost 2|3> <paid before> <new output.json>".into());
     }
     let plan = calibration::Plan::new(
         &args[0],
