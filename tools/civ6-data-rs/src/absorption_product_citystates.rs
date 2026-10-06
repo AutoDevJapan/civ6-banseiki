@@ -10,6 +10,7 @@ local current=-1
 local baseView=ViewCityState
 local baseList=ViewList
 local baseQuests=GetQuests
+local baseRefresh=Refresh
 local function IsProductMajor(view)
   local p=view and Players[view.From]
   return p and p:IsMajor() and view.Envoys and view.Envoys.Route=='PRODUCT'
@@ -135,6 +136,14 @@ function ViewList()
   end end
   if count>0 then Controls.NoneMet:SetHide(true) end
   Controls.CityStateStack:CalculateSize()
+end
+function Refresh()
+  local view=current>=0 and U.Get(current)
+  if view and view.Status~='UNAVAILABLE' and IsProductMajor(view) then
+    -- Native influence events refresh the base screen's private mode, which
+    -- remains Overview for a major. Retain our selected country instead.
+    ViewCityState(current)
+  else baseRefresh() end
 end
 -- The same existing entry event can open both official minors and major
 -- actors classified as small countries by their geographic reference area.

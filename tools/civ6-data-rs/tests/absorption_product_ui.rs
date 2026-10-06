@@ -1,7 +1,12 @@
 use civ6_data_rs::{absorption_product, Repository};
 use mlua::Lua;
 const SCREEN: &str = r#"
-local function event() return {Add=function(fn) end} end
+local function event()
+  local handlers={}
+  return {Add=function(fn) handlers[#handlers+1]=fn end,
+    Remove=function(fn) for i=#handlers,1,-1 do if handlers[i]==fn then table.remove(handlers,i) end end end,
+    Call=function() local snapshot={};for i,fn in ipairs(handlers) do snapshot[i]=fn end;for _,fn in ipairs(snapshot) do fn() end end}
+end
 local function control(name)
   return {Name=name,Text='',Hidden=false,Disabled=false,Callback=nil,
     SetText=function(s,t) s.Text=t end,SetString=function(s,t) s.Text=t end,
@@ -31,7 +36,7 @@ InstanceManager={new=function(_,template,root,parent)
   end}
 end}
 Mouse={eLClick=1};PlayerOperations={EXECUTE_SCRIPT=13}
-REQUESTS={};BASE_LIST,BASE_VIEW,BASE_NAME,BASE_SELECT=0,0,0,0
+REQUESTS={};BASE_LIST,BASE_VIEW,BASE_NAME,BASE_SELECT,BASE_REFRESH=0,0,0,0,0
 VIEW={From=1,To=2,Status='AVAILABLE',Mode='SMALL_STATE',Country={Name='六角',Profile={Personality='慎重',Trait='武人',CivilizationType='CIVILIZATION_JAC_ROKKAKU'}},
   Envoys={Route='PRODUCT',Envoys=0,Required=2},Deposit={Gold=115,Faith=23},Rows={{ID='combat',Label='戦闘部隊',Kind='PRODUCT_METRIC',Current=1,Minimum=3,Met=false},
     {ID='deposit',Label='保証金',Kind='PRODUCT_DEPOSIT',Gold=115,Faith=23,Met=false},{ID='relations',Label='関係',Met=false,Reviewed=false}}}
@@ -53,6 +58,8 @@ function JAC_InstallCivNameOverride(name) BASE_NAME=BASE_NAME+1 end
 function include(name)
   if name=='CityStates_Expansion2' then
     function ViewList() BASE_LIST=BASE_LIST+1 end
+    function Refresh() BASE_REFRESH=BASE_REFRESH+1;ViewList() end
+    function OnInfluenceChanged() Refresh() end
     function ViewCityState()
       BASE_VIEW=BASE_VIEW+1
       Controls.LevyMilitaryButton:SetText('native levy');Controls.LevyMilitaryButton:SetDisabled(false)
@@ -103,6 +110,70 @@ fn screen(repo: &Repository) -> anyhow::Result<Lua> {
       end
     "#).exec()?;
     Ok(lua)
+}
+
+#[test]
+fn native_influence_refresh_keeps_the_product_country_and_its_next_envoy_action(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    lua.load(repo.read(absorption_product::UI)?).exec()?;
+    lua.load(repo.read(absorption_product::CITY_STATES)?)
+        .exec()?;
+    lua.load(r#"
+      ViewCityState(1);assert(JAC_AbsorptionCityStatesAction(1,'SEND_ENVOY'))
+      VIEW.Envoys.Envoys=1;OnInfluenceChanged()
+      assert(Controls.EnvoysSentValue.Text=='1','native refresh lost the selected product country')
+      assert(JAC_AbsorptionCityStatesAction(1,'SEND_ENVOY'),'second visible envoy action lost its country')
+      assert(#REQUESTS==2 and REQUESTS[1].ExpectedEnvoys==0 and REQUESTS[2].ExpectedEnvoys==1)
+      OFFICIAL=true;OnInfluenceChanged();assert(BASE_REFRESH==1 and BASE_LIST==1,'official minor refresh changed')
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn human_envoy_scenario_waits_for_the_previous_assignment_before_sending_again(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let scenario: serde_json::Value =
+        serde_json::from_str(&absorption_product::acceptance_scenario(&repo, true, true)?)?;
+    let code = scenario["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|step| {
+            step["code"]
+                .as_str()
+                .filter(|code| code.contains("JAC_PRODUCT_ENVOYS_FINISHED=false"))
+        })
+        .unwrap();
+    let lua = screen(&repo)?;
+    lua.load(repo.read(absorption_product::UI)?).exec()?;
+    lua.load(repo.read(absorption_product::CITY_STATES)?)
+        .exec()?;
+    lua.load(
+        r#"
+      Game.GetProperty=function() return {From=1,To=2} end
+      ContextPtr.IsHidden=function() return false end
+      ViewCityState(1)
+    "#,
+    )
+    .exec()?;
+    lua.load(code).exec()?;
+    lua.load(
+        r#"
+      assert(#REQUESTS==1)
+      for i=1,5 do Events.GameCoreEventPublishComplete.Call() end
+      assert(#REQUESTS==1,'unconfirmed publications resubmitted the same action')
+      VIEW.Envoys.Envoys=1;OnInfluenceChanged();Events.GameCoreEventPublishComplete.Call()
+      assert(#REQUESTS==2 and REQUESTS[2].ExpectedEnvoys==1)
+      VIEW.Envoys.Envoys=2;Events.GameCoreEventPublishComplete.Call()
+      assert(JAC_PRODUCT_ENVOYS_FINISHED and #REQUESTS==2)
+      Events.GameCoreEventPublishComplete.Call();assert(#REQUESTS==2)
+    "#,
+    )
+    .exec()?;
+    Ok(())
 }
 
 #[test]

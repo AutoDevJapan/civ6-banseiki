@@ -232,7 +232,7 @@
     {
       "action": "ui_lua",
       "state_name": "CityStates",
-      "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal send\nsend=function()\n  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))\n  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\n  if view.Envoys.Envoys>=view.Envoys.Required then\n    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return\n  end\n  assert(JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY'),'visible envoy action unavailable')\nend\nJAC_PRODUCT_ENVOYS_FINISHED=false\nEvents.GameCoreEventPublishComplete.Add(send);send()\nreturn 'existing screen envoy action advances after each real game-core publication'\n"
+      "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal send;local lastSent=-1\nsend=function()\n  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))\n  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\n  if view.Envoys.Envoys>=view.Envoys.Required then\n    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return\n  end\n  -- Publications can arrive before this operation's assignment is visible.\n  -- Send the next one only after the actual count confirms the previous one.\n  if view.Envoys.Envoys<=lastSent or not Players[t.To]:IsTurnActive() then return end\n  lastSent=view.Envoys.Envoys\n  if not JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY') then\n    Events.GameCoreEventPublishComplete.Remove(send)\n    JAC_PRODUCT_ENVOYS_ERROR='visible envoy action unavailable at received='..lastSent\n  end\nend\nJAC_PRODUCT_ENVOYS_FINISHED=false;JAC_PRODUCT_ENVOYS_ERROR=nil\nEvents.GameCoreEventPublishComplete.Add(send);send()\nreturn 'existing screen envoy action advances after each real game-core publication'\n"
     },
     {
       "action": "wait_for",
@@ -240,7 +240,7 @@
       "condition": {
         "type": "lua",
         "state_name": "CityStates",
-        "code": "return JAC_PRODUCT_ENVOYS_FINISHED==true"
+        "code": "assert(not JAC_PRODUCT_ENVOYS_ERROR,JAC_PRODUCT_ENVOYS_ERROR);return JAC_PRODUCT_ENVOYS_FINISHED==true"
       }
     },
     {

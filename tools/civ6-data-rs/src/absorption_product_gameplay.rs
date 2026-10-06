@@ -10,6 +10,8 @@ local function State()
   local s=R.Copy(Game:GetProperty(KEY) or {Version=2,Pairs={},Escrows={},Envoys={},Operations={}})
   assert((s.Version==1 or s.Version==2) and type(s.Pairs)=='table' and type(s.Escrows)=='table'
     and type(s.Envoys)=='table' and type(s.Operations)=='table','unsupported product save')
+  s.AiEnvoyTurns=s.AiEnvoyTurns or {}
+  assert(type(s.AiEnvoyTurns)=='table','unsupported AI envoy turn journal')
   -- Preserve every old payment/refund intent. New settlement enums always
   -- save as v2, which the v1 writer rejects before any currency operation.
   local sourceVersion=s.Version
@@ -204,6 +206,10 @@ local function PendingEnvoy(to,except)
       and not op.Done and not (op.EnvoyReceipt and op.EnvoyReceipt.Done) then return true end
   end
   return false
+end
+local function AiEnvoyUsed(to,except)
+  local used=State().AiEnvoyTurns[tostring(to)]
+  return used and used.Turn==Game.GetCurrentGameTurn() and used.Operation~=except
 end
 local function Input(from,to)
   local country=assert(P.Country(from),'country/leader is not registered')
@@ -513,6 +519,13 @@ local function SendEnvoy(from,to,opkey,expected)
   local receipt=operation.EnvoyReceipt
   if receipt and receipt.Done then return end
   assert(not PendingEnvoy(to,opkey),'another envoy assignment is unsettled')
+  if not Players[to]:IsHuman() then
+    assert(not AiEnvoyUsed(to,opkey),'AI already assigned an envoy this turn')
+    local turn=Game.GetCurrentGameTurn();assert(Integer(turn),'actual envoy turn unavailable')
+    -- Claim before either native mutation. An interrupted charge/grant and
+    -- its recovery use the same recipient budget, including after reload.
+    s.AiEnvoyTurns[tostring(to)]={Turn=turn,Operation=opkey}
+  end
   local pool=Players[to]:GetInfluence();local count=pool:GetTokensToGive()
   assert(Integer(count),'official envoy pool unavailable')
   if not receipt then
@@ -522,8 +535,9 @@ local function SendEnvoy(from,to,opkey,expected)
     local legacy=s.Envoys[Pair(from,to)]
     if legacy then for _,old in pairs(legacy.Receipts or {}) do assert(old.Done,'legacy envoy assignment is unsettled') end end
     receipt={Before=count,After=count-1,ReceivedBefore=expected,ReceivedAfter=expected+1}
-    operation.EnvoyReceipt=receipt;Save(s)
+    operation.EnvoyReceipt=receipt
   end
+  Save(s)
   if not receipt.ChargeDone then
     -- Observe even a mutate-then-throw call before returning its error. If
     -- that observation was not saved, an altered pool on replay is ambiguous.
@@ -592,6 +606,7 @@ function P.Command(actor,params)
       local envoys=Envoys(from,actor)
       assert((envoys.Route=='PRODUCT' or not Players[actor]:IsHuman()) and params.ExpectedEnvoys==envoys.Envoys,'stale or unofficial envoy assignment')
       assert(not PendingEnvoy(actor),'another envoy assignment is unsettled')
+      assert(Players[actor]:IsHuman() or not AiEnvoyUsed(actor),'AI already assigned an envoy this turn')
       assert(Players[actor]:GetInfluence():GetTokensToGive()>=1,'no unassigned envoys')
     end
     s.Operations[opkey]={Identity=identity,Nonce=params.Nonce,EnvoyIdentity=envoyIdentity};Save(s)
@@ -679,7 +694,7 @@ function P.Tick()
   end
   -- AI uses the same operations, token pool, demands, settlement, and N gate.
   -- It only registers offers whose non-deposit conditions already hold.
-  for _,to in ipairs(Actors(true)) do if not Players[to]:IsHuman() and not Occupied(to) then
+  for _,to in ipairs(Actors(true)) do if not Players[to]:IsHuman() and not Occupied(to) and not AiEnvoyUsed(to) then
     for _,from in ipairs(Actors()) do if from~=to and not Players[from]:IsHuman() and not Occupied(from) then
       local ok,acted=pcall(function()
         local view=P.Get(from,to)
@@ -698,7 +713,7 @@ function P.Tick()
       end)
       -- Concentrate on one eligible country per recipient each turn. A token
       -- is never spent on every unrelated country while this one is pending.
-      if ok and acted then break end
+      if ok and acted or AiEnvoyUsed(to) or PendingEnvoy(to) then break end
     end end
   end end
   busy=false

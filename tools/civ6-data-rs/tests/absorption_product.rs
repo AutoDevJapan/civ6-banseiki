@@ -311,7 +311,7 @@ fn human_and_ai_recipients_use_identical_demands_envoy_cost_and_deposit() -> any
         .load("REGISTER();READY();ENVOY(0);ENVOY(1);GameEvents.OnGameTurnStarted.Call()")
         .exec()?;
     ai.load(
-        "HUMAN[2]=false;REGISTER();READY();ENVOY(0);ENVOY(1);GameEvents.OnGameTurnStarted.Call()",
+        "HUMAN[2]=false;REGISTER();READY();ENVOY(0);TURN=TURN+1;ENVOY(1);GameEvents.OnGameTurnStarted.Call()",
     )
     .exec()?;
     for name in ["POOL", "GOLD", "FAITH", "CHARGES", "STARTS"] {
@@ -633,6 +633,7 @@ fn official_minor_ai_uses_real_pool_real_received_getter_and_all_admission_deman
       Game:SetProperty('JAC_COUNTRY_RELATIONS_V1',{Version=1,Countries={VATICAN_CITY={Reviewed=true}},Relations={}})
       GameEvents.OnGameTurnStarted.Call()
       assert(POOL==9 and SENDS==1 and GRANTS==1 and VIEW().Envoys.Envoys==1 and CHARGES==0 and STARTS==0)
+      TURN=TURN+1
       GameEvents.OnGameTurnStarted.Call()
       assert(POOL==8 and SENDS==2 and GRANTS==2 and VIEW().Envoys.Envoys==2 and STARTS==0)
       assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Envoys['1:2']==nil,'OFFICIAL must not use a counterfeit count')
@@ -662,6 +663,70 @@ fn official_envoy_mutate_then_throw_reloads_without_second_debit_or_grant() -> a
           assert(op.EnvoyIdentity.From==1 and op.EnvoyIdentity.To==2 and op.EnvoyIdentity.Route=='OFFICIAL')
         "#).exec()?;
     }
+    Ok(())
+}
+
+#[test]
+fn ai_envoy_budget_survives_exceptions_repeated_ticks_and_reload() -> anyhow::Result<()> {
+    for failure in ["none", "charge", "grant", "saved-grant"] {
+        let lua = world(9999.)?;
+        lua.globals().set("FAILURE", failure)?;
+        lua.load(r#"
+          OFFICIAL_SOURCE();HUMAN[2]=false;ALIVE[3]=true
+          Players[3]=JAC_AbsorptionGameplay.Rules.Copy(Players[1])
+          PlayerConfigurations[3]={GetCivilizationTypeName=function() return 'CIVILIZATION_SINGAPORE' end,
+            GetLeaderTypeName=function() return 'LEADER_MINOR_CIV_SINGAPORE' end}
+          Game:SetProperty('JAC_COUNTRY_RELATIONS_V1',{Version=1,
+            Countries={VATICAN_CITY={Reviewed=true},SINGAPORE={Reviewed=true}},Relations={}})
+          RECEIVED={[1]=0,[3]=0}
+          for _,actor in ipairs({1,3}) do local id=actor
+            Players[id].GetInfluence=function() return {CanReceiveInfluence=function() return true end,
+              GetTokensReceived=function(_,sender) assert(sender==2);return RECEIVED[id] end} end
+          end
+          Players[2].GetInfluence=function() return {GetTokensToGive=function() return POOL end,
+            ChangeTokensToGive=function(_,n) POOL=POOL+n;SENDS=SENDS+1
+              if FAILURE=='charge' then FAILURE='none';error('charge changed then threw') end end,
+            GiveFreeTokenToPlayer=function(_,recipient) RECEIVED[recipient]=RECEIVED[recipient]+1;GRANTS=GRANTS+1
+              if FAILURE=='grant' then FAILURE='none';error('grant changed then threw') end end} end
+          if FAILURE=='saved-grant' then local write=Game.SetProperty;local once=true
+            Game.SetProperty=function(self,key,value)
+              write(self,key,value)
+              if once and key=='JAC_ABSORPTION_PRODUCT_V1' then
+                for _,op in pairs(value.Operations) do if op.EnvoyReceipt and op.EnvoyReceipt.Done then
+                  once=false;error('grant receipt saved then threw') end end
+              end
+            end
+          end
+          READY();JAC_AbsorptionProductGameplay.Tick()
+          assert(SENDS==1 and POOL==9 and RECEIVED[3]==0,'AI spent a second token after an interrupted first country')
+          JAC_AbsorptionProductGameplay.Tick();JAC_AbsorptionProductGameplay.Tick()
+          assert(SENDS==1 and GRANTS==1 and RECEIVED[1]==1 and RECEIVED[3]==0,'same turn replay spent another envoy')
+        "#).exec()?;
+        load(&lua, 9999.)?;
+        lua.load(r#"
+          JAC_AbsorptionProductGameplay.Tick()
+          assert(SENDS==1 and GRANTS==1 and POOL==9 and RECEIVED[3]==0,'reload forgot the current turn budget')
+          TURN=TURN+1;JAC_AbsorptionProductGameplay.Tick()
+          assert(SENDS==2 and GRANTS==2 and POOL==8,'next actual turn did not release the budget')
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn delayed_ai_envoy_completion_uses_the_recovery_turn_budget() -> anyhow::Result<()> {
+    let lua = world(9999.)?;
+    lua.load(
+        r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false;FAIL_ENVOY=true
+      assert(not pcall(ENVOY,0));assert(SENDS==1 and GRANTS==0)
+      TURN=TURN+1;READY();JAC_AbsorptionProductGameplay.Tick()
+      assert(SENDS==1 and GRANTS==1 and OFFICIAL_ENVOYS==1 and POOL==9)
+      assert(not pcall(ENVOY,1),'recovery and another grant happened in the same turn')
+      TURN=TURN+1;ENVOY(1);assert(SENDS==2 and GRANTS==2 and POOL==8)
+    "#,
+    )
+    .exec()?;
     Ok(())
 }
 

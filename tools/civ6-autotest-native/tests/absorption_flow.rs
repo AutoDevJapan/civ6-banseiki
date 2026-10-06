@@ -272,7 +272,7 @@ fn actual_product_consumes_faith_through_the_existing_ui_balance_bridge() -> mlu
       ExposedMembers.JAC_HeroReadAPI={ReadPlayer=function(owner,method)
         assert(method=='FAITH_BALANCE');return FAITH[owner] end}
       local required=P.Get(1,2).Envoys.Required
-      for i=1,required+2 do GameEvents.OnGameTurnStarted.Emit() end
+      for i=1,required+2 do CURRENT_TURN=CURRENT_TURN+1;GameEvents.OnGameTurnStarted.Emit() end
       local view=P.Get(1,2);local request=assert(N.Get('leader-offer',view.OfferID))
       local flow=assert(TEST_FLOW.Get(request.FlowID));assert(flow.Phase=='RESULT' or flow.Phase=='DONE',flow.Error)
       local escrow=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Escrows[view.OfferID]
@@ -356,7 +356,7 @@ fn actual_official_minor_ai_spends_pool_reads_native_recipient_and_enters_verifi
         Players[id].GetReligion=function() local result=religion();result.GetFaithYield=function() return id==1 and 1 or 100 end;return result end
       end
       local required=P.Get(1,2).Envoys.Required;assert(required<=ENVOY_POOL)
-      for i=1,required+2 do GameEvents.OnGameTurnStarted.Emit() end
+      for i=1,required+2 do CURRENT_TURN=CURRENT_TURN+1;GameEvents.OnGameTurnStarted.Emit() end
       local view=P.Get(1,2);local request=assert(N.Get('leader-offer',view.OfferID))
       assert(request.Status=='STARTED',request.LastError or view.Error)
       local flow=assert(TEST_FLOW.Get(request.FlowID));assert(flow.Phase=='RESULT' or flow.Phase=='DONE',flow.Error)
@@ -558,6 +558,7 @@ fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_
         if PRODUCT_SMALL then
           local envoys=P.Get(1,2).Envoys
           for i=0,envoys.Required-1 do
+            if not PRODUCT_HUMAN and i>0 then CURRENT_TURN=CURRENT_TURN+1 end
             P.Command(2,{Command='SEND_ENVOY',From=1,Nonce='accept-envoy:'..i,ExpectedEnvoys=i})
           end
         end

@@ -525,21 +525,28 @@ return 'real troops, currencies and official unassigned envoys prepared for ordi
         steps.push(
             json!({"action":"ui_lua","state_name":"CityStates","code":r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
-local send
+local send;local lastSent=-1
 send=function()
   local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))
   assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())
   if view.Envoys.Envoys>=view.Envoys.Required then
     Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return
   end
-  assert(JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY'),'visible envoy action unavailable')
+  -- Publications can arrive before this operation's assignment is visible.
+  -- Send the next one only after the actual count confirms the previous one.
+  if view.Envoys.Envoys<=lastSent or not Players[t.To]:IsTurnActive() then return end
+  lastSent=view.Envoys.Envoys
+  if not JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY') then
+    Events.GameCoreEventPublishComplete.Remove(send)
+    JAC_PRODUCT_ENVOYS_ERROR='visible envoy action unavailable at received='..lastSent
+  end
 end
-JAC_PRODUCT_ENVOYS_FINISHED=false
+JAC_PRODUCT_ENVOYS_FINISHED=false;JAC_PRODUCT_ENVOYS_ERROR=nil
 Events.GameCoreEventPublishComplete.Add(send);send()
 return 'existing screen envoy action advances after each real game-core publication'
 "#}),
         );
-        steps.push(json!({"action":"wait_for","timeout":180,"condition":{"type":"lua","state_name":"CityStates","code":"return JAC_PRODUCT_ENVOYS_FINISHED==true"}}));
+        steps.push(json!({"action":"wait_for","timeout":180,"condition":{"type":"lua","state_name":"CityStates","code":"assert(not JAC_PRODUCT_ENVOYS_ERROR,JAC_PRODUCT_ENVOYS_ERROR);return JAC_PRODUCT_ENVOYS_FINISHED==true"}}));
         steps.push(json!({"action":"ui_lua","state_name":"CityStates","code":"OnClose();return 'completed envoy screen closed'"}));
     }
     // AI sends at most one envoy to a given country per normal turn. These
