@@ -250,15 +250,59 @@ pub(crate) fn scene() -> serde_json::Value {
      {"action":"exit_to_menu"}
     ]})
 }
+pub(crate) fn segmented_scene() -> serde_json::Value {
+    let mut scene = scene();
+    scene["name"] =
+        json!("T62 capacity sources then independent city preflights; no gameplay requests");
+    let guard = READ.split_once("local e=").unwrap().0;
+    let encoder = &READ[READ.find("local function quoted(s)").unwrap()..];
+    let source_start = READ.find("e.capacitySources={").unwrap();
+    let source_end = READ.find("local function quoted(s)").unwrap();
+    let sources = &READ[source_start..source_end];
+    let steps = scene["steps"].as_array_mut().unwrap();
+    steps.truncate(2);
+    for state in ["InGame", "GameCore_Tuner"] {
+        let code = format!("{guard}\nlocal e={{turn=62,saved=p}}\n{sources}\n{encoder}");
+        steps.push(json!({"action":"ui_lua","state_name":state,"code":code,"preserve_diplomacy_session":true}));
+    }
+    // Every native query gets its own acknowledged boundary. A hang cannot
+    // erase source rows or the results from the preceding city/API queries.
+    for city in [65536, 131073, 196610] {
+        for query in ["table", "hash", "listed"] {
+            let expr = match query {
+                "hash" => "q:CanProduce(spy.Hash,false,true)",
+                "listed" => "q:CanProduce({UnitType=spy.Hash,MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION},true,true)",
+                _ => "q:CanProduce({UnitType=spy.Hash,MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION},false,true)",
+            };
+            let code = format!("{guard}\nlocal e={{turn=62,city={city},query='{query}'}}\ne.result=safe(function()local city=assert(CityManager.GetCity(0,{city}));assert(city:GetOwner()==0 and city:GetID()=={city});local q=city:GetBuildQueue();local spy=assert(GameInfo.Units['UNIT_SPY']);local allowed,reasons={expr};return {{allowed=allowed,reasons=reasons,reasonsKind=type(reasons)}} end)\n{encoder}");
+            steps.push(json!({"action":"ui_lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true}));
+        }
+    }
+    // Match the previously exercised Boundary UI preflight: selected own city,
+    // REPLACE_AT destination zero. This is eligibility only, never RequestOperation.
+    for city in [65536, 131073, 196610] {
+        let select = format!("{guard}\nlocal city=assert(CityManager.GetCity(0,{city}));assert(city:GetOwner()==0);UI.DeselectAllCities();UI.SelectCity(city);local s=assert(UI.GetHeadSelectedCity());assert(s:GetOwner()==0 and s:GetID()=={city});return 'selected-own-city-{city}'");
+        steps.push(json!({"action":"ui_lua","state_name":"InGame","code":select,"preserve_diplomacy_session":true}));
+        let code = format!("{guard}\nlocal e={{turn=62,city={city},query='can-start-selected'}}\ne.result=safe(function()local city=assert(UI.GetHeadSelectedCity());assert(city:GetOwner()==0 and city:GetID()=={city});local spy=assert(GameInfo.Units['UNIT_SPY']);local args={{[CityOperationTypes.PARAM_UNIT_TYPE]=spy.Hash,[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0}};local allowed,reasons=CityManager.CanStartOperation(city,CityOperationTypes.BUILD,args,true);return {{allowed=allowed,reasons=reasons,reasonsKind=type(reasons),arguments=args}} end)\n{encoder}");
+        steps.push(json!({"action":"ui_lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true}));
+    }
+    steps.push(json!({"action":"exit_to_menu"}));
+    scene
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let a: Vec<_> = std::env::args_os().skip(1).collect();
+    let mut a: Vec<_> = std::env::args_os().skip(1).collect();
+    let segmented = a.first().is_some_and(|v| v == "--segmented");
+    if segmented {
+        a.remove(0);
+    }
     if a.len() != 2 {
-        return Err("usage: read-group-refusal-62 ACTUAL_LATEST_SAVE OUTPUT".into());
+        return Err("usage: read-group-refusal-62 [--segmented] ACTUAL_LATEST_SAVE OUTPUT".into());
     }
     if format!("{:x}", Sha256::digest(std::fs::read(&a[0])?)) != SHA {
         return Err("latest refusal save hash differs".into());
     }
-    let s = scene();
+    // The combined native-query blob timed out in live 09. Never emit it again.
+    let s = segmented_scene();
     civ6_autotest_rs::scenario::validate_scenario(&s)?;
     std::fs::write(&a[1], serde_json::to_vec_pretty(&s)?)?;
     Ok(())
@@ -512,5 +556,69 @@ GameInfo.BuildingModifiers=rows({{{{BuildingType='VALID16',ModifierId='P16'}},{{
             "VALID16"
         );
         assert!(src["bindings"]["BuildingModifiers"]["rows"]["2"].is_null());
+    }
+}
+
+#[test]
+fn segmented_scene_acknowledges_sources_before_each_native_query() {
+    let s = segmented_scene();
+    civ6_autotest_rs::scenario::validate_scenario(&s).unwrap();
+    let steps = s["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 20);
+    assert_eq!(steps[0]["save_sha256"], SHA);
+    for step in &steps[2..4] {
+        let code = step["code"].as_str().unwrap();
+        assert!(!code.contains("CanProduce(") && !code.contains("CanStartOperation("));
+        assert!(code.contains("e.capacitySources="));
+    }
+    for step in &steps[4..13] {
+        let code = step["code"].as_str().unwrap();
+        assert_eq!(code.matches("CanProduce(").count(), 1);
+        assert!(!code.contains("CanStartOperation("));
+    }
+    for step in &steps[2..19] {
+        assert_eq!(step["preserve_diplomacy_session"], true);
+        let code = step["code"].as_str().unwrap();
+        for forbidden in [
+            "RequestOperation(",
+            "SendWorkingDeal(",
+            "SetProperty(",
+            "AddProgress(",
+            "Network.EndTurn",
+        ] {
+            assert!(!code.contains(forbidden), "{forbidden}");
+        }
+        // Compile every actual generated chunk with the shipped Lua 5.1 parser.
+        mlua::Lua::new().load(code).into_function().unwrap();
+    }
+}
+
+#[test]
+fn segmented_selected_city_preflight_uses_proven_destination_without_build_send() {
+    let s = segmented_scene();
+    for (offset, city) in [(14, 65536), (16, 131073), (18, 196610)] {
+        let lua = mlua::Lua::new();
+        lua.load(format!(r#"
+Game={{GetCurrentGameTurn=function()return 62 end,GetProperty=function()return {{stage='QUOTED_UNKNOWN',nonce='53.430954889496:62',quote={{acceptable=false,stage='AI_REFUSED',raw={{reply={{DealAction=10,RespondingToDealAction=6}}}}}}}} end}}
+local c={{GetOwner=function()return 0 end,GetID=function()return {city} end}}
+UI={{GetHeadSelectedCity=function()return c end}}
+GameInfo={{Units={{UNIT_SPY={{Hash=118}}}}}}
+CityOperationTypes={{PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,PARAM_QUEUE_DESTINATION_LOCATION=3,VALUE_REPLACE_AT=4,BUILD=5}}
+CityManager={{CanStartOperation=function(actual,op,args,details)
+ assert(actual==c and op==5 and args[1]==118 and args[2]==4 and args[3]==0 and details==true)
+ return false,{{[-7]={{'capacity exhausted'}}}}
+end,RequestOperation=function()error('send forbidden')end}}
+"#)).exec().unwrap();
+        let output: String = lua
+            .load(s["steps"][offset]["code"].as_str().unwrap())
+            .eval()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(v["result"]["status"], "OK");
+        assert_eq!(v["result"]["value"]["allowed"], false);
+        assert_eq!(
+            v["result"]["value"]["reasons"]["-7"]["1"],
+            "capacity exhausted"
+        );
     }
 }
