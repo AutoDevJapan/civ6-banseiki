@@ -1,5 +1,5 @@
 use super::*;
-use std::sync::{atomic::AtomicUsize, Barrier};
+use std::sync::{Barrier, atomic::AtomicUsize};
 
 struct Page(usize);
 impl Page {
@@ -105,6 +105,34 @@ fn original_bytes_with_failed_protection_are_not_complete_and_retry_preserves_rx
 }
 
 #[test]
+fn close_registered_restores_install_failure_without_public_registration_handle() {
+    if !super::super::tests::child(
+        "ai_operation::gateway::patch_state::tests::close_registered_restores_install_failure_without_public_registration_handle",
+        "JAC_AI_RECOVERY_ONLY_CLOSE_CHILD",
+    ) {
+        return;
+    }
+    let guard = INSTALL.lock().unwrap();
+    let page = Page::new();
+    let registration = Registration::prepare_locked(vec![page.patch(16)], &guard).unwrap();
+    assert!(RECOVERY.set(registration.clone()).is_ok());
+    // The operand changed, but restoring RX failed during installation.
+    assert_eq!(
+        registration.install_locked(&guard, &Faults::new(2, 0)),
+        Err(Failure::Patch)
+    );
+    assert_eq!(u64_at(page.0 as u64 + 16), Some(0x5678));
+    assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READWRITE));
+    drop(registration); // only recovery retains it, as in failed register().
+    drop(guard);
+    close_registered().unwrap();
+    assert_eq!(u64_at(page.0 as u64 + 16), Some(0x1234));
+    assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READ));
+    assert_eq!(page.execute(), 17);
+    close_registered().unwrap();
+}
+
+#[test]
 fn original_bytes_with_failed_cache_flush_retry_flush_before_success() {
     let guard = INSTALL.lock().unwrap();
     let page = Page::new();
@@ -128,12 +156,13 @@ fn failed_make_writable_and_combined_cleanup_failure_remain_retryable() {
         let r = installed(&page, &guard);
         let failures = Faults::new(protect, flush);
         assert_eq!(r.close_locked(&guard, &failures), Err(Failure::Patch));
-        assert!(r
-            .states
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|s| s.phase != Phase::Restored));
+        assert!(
+            r.states
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|s| s.phase != Phase::Restored)
+        );
         r.close_locked(&guard, &SystemApi).unwrap();
         assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READ));
         assert_eq!(page.execute(), 17);
@@ -154,12 +183,13 @@ fn install_failure_cleans_all_sites_sharing_rx_page_without_recursive_lock() {
         for offset in [16, 24] {
             assert_eq!(u64_at((page.0 + offset) as u64), Some(0x1234));
         }
-        assert!(r
-            .states
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|s| s.original_protection == PAGE_EXECUTE_READ && s.phase == Phase::Restored));
+        assert!(
+            r.states
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|s| s.original_protection == PAGE_EXECUTE_READ && s.phase == Phase::Restored)
+        );
         assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READ));
     }
 }
@@ -183,7 +213,12 @@ impl PatchApi for Pause {
 
 #[test]
 fn concurrent_close_and_recovery_cannot_restore_rx_before_other_cas() {
-    if !super::super::tests::child("ai_operation::gateway::patch_state::tests::concurrent_close_and_recovery_cannot_restore_rx_before_other_cas","CIV6_CLOSE_RACE_CHILD"){return}
+    if !super::super::tests::child(
+        "ai_operation::gateway::patch_state::tests::concurrent_close_and_recovery_cannot_restore_rx_before_other_cas",
+        "CIV6_CLOSE_RACE_CHILD",
+    ) {
+        return;
+    }
     let page = Page::new();
     let r = {
         let guard = INSTALL.lock().unwrap();
@@ -213,9 +248,10 @@ fn concurrent_close_and_recovery_cannot_restore_rx_before_other_cas() {
             result
         });
         barrier.wait();
-        assert!(recv
-            .recv_timeout(std::time::Duration::from_millis(30))
-            .is_err());
+        assert!(
+            recv.recv_timeout(std::time::Duration::from_millis(30))
+                .is_err()
+        );
         assert_eq!(protection(page.0, 8), Some(PAGE_EXECUTE_READWRITE));
         pause.release.wait();
         first.join().unwrap().unwrap();

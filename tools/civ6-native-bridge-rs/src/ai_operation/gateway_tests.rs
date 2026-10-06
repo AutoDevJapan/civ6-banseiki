@@ -1,6 +1,6 @@
 use super::*;
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    RtlLookupFunctionEntry, CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY,
+    CONTEXT, EXCEPTION_RECORD, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlLookupFunctionEntry,
 };
 // Exact Windows SDK signatures; local declarations avoid touching the shared
 // crate feature list owned by the runtime integration writer. Optional output
@@ -265,6 +265,9 @@ fn seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return() {
     let result = unsafe { ai_unwind_driver(state.as_mut_ptr(), gateways()[0]) };
     assert_eq!(result, 1);
     assert_eq!(UNWOUND.load(Ordering::Acquire), 1);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(THREAD_FLIGHTS.with(Cell::get), 0);
+    assert!(drain());
     assert_eq!(DEPTH.with(Cell::get), 0);
     assert!(INVOCATION.with(Cell::get).is_none());
     assert!(CAPTURE.with(|c| c.borrow().is_none()));
@@ -411,6 +414,55 @@ fn true_caller_span_is_bounded_and_unreadable_frame_has_no_copy() {
 }
 
 struct Reject;
+static ORIGINAL_ENTERED: AtomicBool = AtomicBool::new(false);
+static ORIGINAL_RELEASE: AtomicBool = AtomicBool::new(false);
+static ORIGINAL_CALL_COUNT: AtomicU32 = AtomicU32::new(0);
+static ORIGINAL_SELF_DRAIN: AtomicBool = AtomicBool::new(true);
+unsafe extern "system" fn original_waits(_: u64, _: u64, _: u64, _: u64) -> u64 {
+    ORIGINAL_CALL_COUNT.fetch_add(1, Ordering::AcqRel);
+    ORIGINAL_SELF_DRAIN.store(drain(), Ordering::Release);
+    ORIGINAL_ENTERED.store(true, Ordering::Release);
+    while !ORIGINAL_RELEASE.load(Ordering::Acquire) {
+        std::thread::yield_now();
+    }
+    0x1234
+}
+
+#[test]
+fn close_drain_waits_for_entire_original_callback_not_only_added_action() {
+    if !child(
+        "ai_operation::gateway::tests::close_drain_waits_for_entire_original_callback_not_only_added_action",
+        "JAC_AI_WHOLE_CALLBACK_CHILD",
+    ) {
+        return;
+    }
+    AI_GATE_TARGETS[0].store(original_waits as *const () as u64, Ordering::Release);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(|| {
+        let mut output = [0u8; 0x160];
+        unsafe {
+            ai_fixture_driver(output.as_mut_ptr(), gateways()[0]);
+        }
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while !ORIGINAL_ENTERED.load(Ordering::Acquire) {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 1);
+    assert!(!ORIGINAL_SELF_DRAIN.load(Ordering::Acquire));
+    let closer = std::thread::spawn(move || tx.send(drain()).unwrap());
+    assert!(
+        rx.recv_timeout(std::time::Duration::from_millis(30))
+            .is_err()
+    );
+    ORIGINAL_RELEASE.store(true, Ordering::Release);
+    worker.join().unwrap();
+    closer.join().unwrap();
+    assert!(rx.recv().unwrap());
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(ORIGINAL_CALL_COUNT.load(Ordering::Acquire), 1);
+}
 
 core::arch::global_asm!(
     ".globl accepted_stage_driver",
@@ -480,7 +532,12 @@ unsafe extern "system" fn accepted_original(receiver: u64, phase: u32) -> u64 {
 
 #[test]
 fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() {
-    if !child("ai_operation::gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection","CIV6_ACCEPTED_GATEWAY_CHILD"){return}
+    if !child(
+        "ai_operation::gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection",
+        "CIV6_ACCEPTED_GATEWAY_CHILD",
+    ) {
+        return;
+    }
     let mut memory = vec![0u8; 0x600];
     let receiver = memory.as_ptr() as u64;
     let player = receiver + 0x300;
@@ -514,24 +571,26 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     // Explicit in-process layout fixture. This is NOT a parent RuntimeLease implementation.
     let return_address = accepted_stage_return as *const () as u64;
     let base = return_address - 0x401537;
-    assert!(BINDING
-        .set(Binding {
-            base,
-            callback_return: return_address,
-            receiver,
-            player,
-            owner: 3,
-            definition: PaymentDefinition {
-                governor_index: 8,
-                cost: 2,
-                base: 3,
-                titles: [Some(4), None]
-            },
-            lease,
-            installed: stamp,
-            promotion: 4
-        })
-        .is_ok());
+    assert!(
+        BINDING
+            .set(Binding {
+                base,
+                callback_return: return_address,
+                receiver,
+                player,
+                owner: 3,
+                definition: PaymentDefinition {
+                    governor_index: 8,
+                    cost: 2,
+                    base: 3,
+                    titles: [Some(4), None]
+                },
+                lease,
+                installed: stamp,
+                promotion: 4
+            })
+            .is_ok()
+    );
     ROWS.lock().unwrap().reserve_exact(CAPACITY);
     ACTIVE.store(true, Ordering::Release);
     AI_GATE_TARGETS[0].store(accepted_original as *const () as u64, Ordering::Release);
@@ -543,9 +602,10 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     assert_eq!(FIXTURE_ARMED.load(Ordering::SeqCst), 1);
     let rows = observations().0;
     assert_eq!(rows.len(), 2);
-    assert!(rows
-        .iter()
-        .all(|r| r.accepted && r.capture_entry && r.owner == Some(3)));
+    assert!(
+        rows.iter()
+            .all(|r| r.accepted && r.capture_entry && r.owner == Some(3))
+    );
     // Correct owner/thread/ARM and original generation, but wrong native phase.
     // Enter through the same machine-code caller so only phase differs.
     let calls_before = FIXTURE_CALLS.load(Ordering::SeqCst);
@@ -565,9 +625,11 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
         0,
         "wrong phase produces no accepted receipt"
     );
-    assert!(rejected
-        .iter()
-        .all(|r| !r.capture_entry && r.owner.is_none()));
+    assert!(
+        rejected
+            .iter()
+            .all(|r| !r.capture_entry && r.owner.is_none())
+    );
     assert_eq!(
         rejected[0].raw.rdx, 1,
         "the actual original argument is phase 1"
@@ -585,9 +647,11 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     assert_eq!(FIXTURE_ARMED.load(Ordering::SeqCst), armed_before + 1);
     let rows = observations().0;
     assert_eq!(rows.len(), 6);
-    assert!(rows[4..6]
-        .iter()
-        .all(|r| r.accepted && r.capture_entry && r.owner == Some(3)));
+    assert!(
+        rows[4..6]
+            .iter()
+            .all(|r| r.accepted && r.capture_entry && r.owner == Some(3))
+    );
     assert_eq!(DEPTH.with(Cell::get), 0);
     assert!(INVOCATION.with(Cell::get).is_none());
     assert!(CAPTURE.with(|c| c.borrow().is_none()));

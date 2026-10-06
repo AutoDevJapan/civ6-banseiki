@@ -7,14 +7,14 @@ use super::{
     protocol::Epoch,
 };
 use civ6_native_bridge_rs::governor_payment::{
-    read_current, CurrentMemory, PaymentDefinition, PromotionSnapshot,
+    CurrentMemory, PaymentDefinition, PromotionSnapshot, read_current,
 };
 use std::{
     cell::Cell,
     ptr,
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
         Mutex, OnceLock,
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
 };
 use windows_sys::Win32::{
@@ -22,13 +22,13 @@ use windows_sys::Win32::{
     System::{
         Diagnostics::Debug::{FlushInstructionCache, ReadProcessMemory},
         LibraryLoader::{
-            GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            GET_MODULE_HANDLE_EX_FLAG_PIN,
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
+            GetModuleHandleExW,
         },
         Memory::{
-            VirtualAlloc, VirtualFree, VirtualProtect, VirtualQuery, MEMORY_BASIC_INFORMATION,
-            MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-            PAGE_GUARD, PAGE_NOACCESS, PAGE_READWRITE,
+            MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
+            PAGE_EXECUTE_READWRITE, PAGE_GUARD, PAGE_NOACCESS, PAGE_READWRITE, VirtualAlloc,
+            VirtualFree, VirtualProtect, VirtualQuery,
         },
         Threading::{GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetProcessTimes},
     },
@@ -107,6 +107,27 @@ static DROPPED: AtomicU32 = AtomicU32::new(0);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 static BINDING: OnceLock<Binding> = OnceLock::new();
 static UNWOUND: AtomicU32 = AtomicU32::new(0);
+#[unsafe(no_mangle)]
+static AI_GATE_FLIGHTS: AtomicU64 = AtomicU64::new(0);
+#[unsafe(no_mangle)]
+static AI_GATE_UNTRACKED: AtomicBool = AtomicBool::new(false);
+thread_local! {static THREAD_FLIGHTS:Cell<u32>=const{Cell::new(0)};}
+
+/// Call only after restoring the registration, before releasing owner objects.
+/// A tail-forwarded unreadable frame prevents a quiescence claim permanently.
+pub fn drain() -> bool {
+    if THREAD_FLIGHTS.with(Cell::get) != 0 {
+        return false;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while AI_GATE_FLIGHTS.load(Ordering::Acquire) != 0 {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    !AI_GATE_UNTRACKED.load(Ordering::Acquire)
+}
 thread_local! {static INVOCATION:Cell<Option<Invocation>>=const {Cell::new(None)};}
 thread_local! {static DEPTH:Cell<u32>=const {Cell::new(0)};}
 thread_local! {static CAPTURE:std::cell::RefCell<Option<Capture>>=const {std::cell::RefCell::new(None)};}
@@ -183,6 +204,8 @@ unsafe extern "system" fn unwind_observer(
     _dispatcher: *mut std::ffi::c_void,
 ) -> i32 {
     if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
+        AI_GATE_FLIGHTS.fetch_sub(1, Ordering::AcqRel);
+        let _ = THREAD_FLIGHTS.try_with(|c| c.set(c.get().saturating_sub(1)));
         if let Some(binding) = BINDING.get() {
             binding.lease.on_unwind();
         }
@@ -203,6 +226,11 @@ unsafe extern "system" fn unwind_observer(
 extern "system" fn observe(raw: *mut Registers, after: u32) {
     let _ = std::panic::catch_unwind(|| {
         let raw = unsafe { &mut *raw };
+        if after == 0 && AI_GATE_FLIGHTS.load(Ordering::Acquire) != 0 {
+            THREAD_FLIGHTS.with(|c| c.set(c.get().saturating_add(1)))
+        } else {
+            THREAD_FLIGHTS.with(|c| c.set(c.get().saturating_sub(1)))
+        }
         if after == 0 {
             raw.ticket = 0;
             // Bounded readable source is the actual caller home/argument span.
@@ -406,7 +434,7 @@ static AI_GATE_TARGETS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
 macro_rules! gateway {
     ($name:literal,$site:literal,$offset:literal)=>{core::arch::global_asm!(concat!(
         ".globl ",$name,"\n.seh_proc ",$name,"\n",$name,":\n",
-        "pushfq\n.seh_stackalloc 8\nsub rsp,0x1b0\n.seh_stackalloc 0x1b0\n.seh_handler {unwind}, @unwind\n.seh_endprologue\n",
+        "pushfq\n.seh_stackalloc 8\nsub rsp,0x1b0\n.seh_stackalloc 0x1b0\n.seh_handler {unwind}, @unwind\n.seh_endprologue\nlock inc qword ptr [rip+AI_GATE_FLIGHTS]\n",
         "mov [rsp+0x60],rcx\nmov [rsp+0x68],rdx\nmov [rsp+0x70],r8\nmov [rsp+0x78],r9\nmov [rsp+0x80],rax\nmov [rsp+0x88],r10\nmov [rsp+0x90],r11\n",
         "mov rax,[rsp+0x1b0]\nmov [rsp+0x98],rax\n",
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
@@ -426,9 +454,9 @@ macro_rules! gateway {
         "lea rcx,[rsp+0x60]\nmov edx,1\ncall {action}\nlea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\n",
         "movdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\n",
-        "push qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\nret\n",
+        "lock dec qword ptr [rip+AI_GATE_FLIGHTS]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\nret\n",
         // Failed frame read: restore and tail-jump with the real original stack.
-        "8:\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
+        "8:\nmov byte ptr [rip+AI_GATE_UNTRACKED],1\nlock dec qword ptr [rip+AI_GATE_FLIGHTS]\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\njmp qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n.seh_endproc\n"
     ),record=sym observe,action=sym native_action,unwind=sym unwind_observer);};
 }
@@ -485,7 +513,22 @@ pub use patch_state::Registration;
 pub fn recover_failed_registration() -> Result<(), Failure> {
     patch_state::recover_failed_registration()
 }
-use patch_state::{SystemApi, INSTALL, RECOVERY};
+/// Close both a published registration and an install failure retained only by
+/// recovery. Absence of a public handle does not prove that no patch is live.
+pub fn close_registered() -> Result<(), Failure> {
+    let guard = INSTALL.lock().map_err(|_| Failure::Patch)?;
+    ACTIVE.store(false, Ordering::Release);
+    if let Some(registration) = RECOVERY.get() {
+        registration.close_locked(&guard, &SystemApi)?;
+    }
+    drop(guard);
+    if drain() {
+        Ok(())
+    } else {
+        Err(Failure::CriticalRestore)
+    }
+}
+use patch_state::{INSTALL, RECOVERY, SystemApi};
 
 unsafe fn relay(call: usize, gateway: usize) -> Result<usize, Failure> {
     for step in 1..=0x4000usize {
