@@ -77,6 +77,48 @@ fn all_22_civilizations_have_official_name_candidates_without_rebinding_existing
         existing,
         "custom row was replaced"
     );
+    // Native NameIndex indexes the civilization's rowid-ordered collection,
+    // not the global database rowid. Its existing prefix must remain stable.
+    for (civ, leader) in [
+        ("CIVILIZATION_JAC_AINU", "LEADER_JAC_AINU_TARIKONA"),
+        ("CIVILIZATION_JAC_RYUKYU", "LEADER_JAC_RYUKYU_SHO_SEI"),
+    ] {
+        let identity:(String,String)=db.query_row("SELECT l.LeaderType,c.StartingCivilizationLevelType FROM CivilizationLeaders l JOIN Civilizations c USING(CivilizationType) WHERE c.CivilizationType=?",[civ],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+        assert_eq!(
+            identity,
+            (leader.to_owned(), "CIVILIZATION_LEVEL_FULL_CIV".to_owned())
+        );
+        db.execute(
+            "DELETE FROM CivilizationCitizenNames WHERE CivilizationType=?",
+            [civ],
+        )
+        .unwrap();
+        for (name, female, modern) in [
+            ("LOC_EXISTING_Z", 1, 0),
+            ("LOC_EXISTING_A", 0, 1),
+            ("LOC_EXISTING_M", 1, 1),
+        ] {
+            db.execute("INSERT INTO CivilizationCitizenNames(CivilizationType,CitizenName,Female,Modern) VALUES(?,?,?,?)",rusqlite::params![civ,name,female,modern]).unwrap();
+        }
+        let native_rows = || -> Vec<(i64, String, i64, i64)> {
+            db.prepare("SELECT rowid,CitizenName,Female,Modern FROM CivilizationCitizenNames WHERE CivilizationType=? ORDER BY rowid").unwrap()
+                .query_map([civ],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).unwrap()
+                .collect::<rusqlite::Result<_>>().unwrap()
+        };
+        let prior = native_rows();
+        assert_eq!(
+            prior.iter().map(|r| r.1.as_str()).collect::<Vec<_>>(),
+            ["LOC_EXISTING_Z", "LOC_EXISTING_A", "LOC_EXISTING_M"]
+        );
+        db.execute_batch(&cc::citizen_names_sql()).unwrap();
+        let after = native_rows();
+        assert_eq!(
+            &after[..prior.len()],
+            prior.as_slice(),
+            "existing native indices were rebound for {civ}"
+        );
+        assert_eq!(after.len(), 43);
+    }
 }
 #[test]
 fn city_name_romanization_and_generated_files() {
