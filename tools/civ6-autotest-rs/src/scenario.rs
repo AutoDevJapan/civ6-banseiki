@@ -483,7 +483,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("seed must be a signed 32-bit integer".into()));
                 }
                 if step.get("map_file").is_some_and(|v| {
-                    !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
+                    !matches!(v.as_str(), Some("Continents.lua" | "Pangaea.lua"))
+                        && !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
                 }) {
                     return Err(fail("invalid map_file".into()));
                 }
@@ -852,6 +853,7 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
             lua_string(file)
         ));
+        lines.push(map_readback_code(file, "configured"));
     }
     lines.extend([format!("MapConfiguration.SetMapSize({})",lua_string(step["map_size"].as_str().unwrap())),format!("GameConfiguration.SetGameSpeedType({})",lua_string(step["speed"].as_str().unwrap())),format!("MapConfiguration.SetValue('RANDOM_SEED', {})",step["seed"]),format!("GameConfiguration.SetValue('GAME_SYNC_RANDOM_SEED', {})",step["seed"]),format!("MapConfiguration.SetMaxMajorPlayers({})",players.len()),format!("GameConfiguration.SetParticipatingPlayerCount({} + GameConfiguration.GetHiddenPlayerCount())",players.len())]);
     if let Some(count) = step.get("city_states") {
@@ -887,6 +889,9 @@ pub fn build_setup_code(step: &Value) -> String {
         "GameConfiguration.SetParticipatingPlayerCount(participatingCount)".into(),
         "if GameConfiguration.GetParticipatingPlayerCount() ~= participatingCount then error('setup changed participating player count') end".into(),
     ];
+    if let Some(file) = step["map_file"].as_str() {
+        lines.push(map_readback_code(file, "setup-refreshed"));
+    }
     if let Some(count) = step.get("city_states") {
         lines.extend([
             format!("GameConfiguration.SetValue('CITY_STATE_COUNT', {count})"),
@@ -906,6 +911,9 @@ pub fn build_setup_code(step: &Value) -> String {
         "return 'setup built; configured players survived'".into(),
     ]);
     lines.join("\n")
+}
+fn map_readback_code(file: &str, phase: &str) -> String {
+    format!("do local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')\nprint('JAC_MAP_READBACK phase={phase} type='..type(actualMap)..' value='..tostring(actualMap))\nassert(type(actualMap)=='string' and actualMap=={}, 'configured MAP_SCRIPT differs after {phase}') end",lua_string(file))
 }
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
     enable_mods_code_with_scope(ids, disabled, false)

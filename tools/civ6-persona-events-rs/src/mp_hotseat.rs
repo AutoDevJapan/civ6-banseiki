@@ -323,7 +323,9 @@ pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, Strin
         .as_array_mut()
         .ok_or("players absent")?
         .truncate(12);
-    config.as_object_mut().unwrap().remove("map_file");
+    // Official SetupParameters.xml uses Pangaea.lua as the MP default; never
+    // infer the SP default Continents.lua after SetToDefaults(HOTSEAT).
+    config["map_file"] = "Continents.lua".into();
     let roster = config["players"].as_array().unwrap();
     let mut expected = String::from("local expected={\n");
     for p in roster {
@@ -338,7 +340,9 @@ pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, Strin
         r#"{expected}
 assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat FrontEnd required')
 assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI')
-assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','ordinary generated Continents map required')
+local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')
+print('MP_SETUP12 MAP_SCRIPT type='..type(actualMap)..' value='..tostring(actualMap))
+assert(type(actualMap)=='string' and actualMap=='Continents.lua','ordinary generated Continents map required')
 assert(MapConfiguration.GetMaxMajorPlayers()==12,'map maximum differs from stock staging limit')
 assert(GameConfiguration.GetParticipatingPlayerCount()==12+GameConfiguration.GetHiddenPlayerCount())
 assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==0)
@@ -353,7 +357,9 @@ return 'MP_SETUP12 PREFLIGHT map=Continents.lua max=12 majors=12 humans=0,1 ai=2
         r#"{expected}
 assert(GameConfiguration.IsHotseat() and Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive())
 assert(Game.GetCurrentGameTurn()==GameConfiguration.GetStartTurn(),'unexpected starting turn')
-assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua')
+local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')
+print('MP_SETUP12 STARTED MAP_SCRIPT type='..type(actualMap)..' value='..tostring(actualMap))
+assert(type(actualMap)=='string' and actualMap=='Continents.lua')
 local ids=PlayerManager.GetAliveMajorIDs();assert(#ids==12,'actual major count differs');local seen={{}}
 for _,id in ipairs(ids)do assert(type(id)=='number' and id>=0 and id<12 and not seen[id]);seen[id]=true
  local p=assert(Players[id]);local cfg=assert(PlayerConfigurations[id]);local e=expected[id+1]

@@ -310,7 +310,7 @@ fn setup_probe_is_one_bounded_start_without_persona_runtime_or_payment() {
             .count(),
         2
     );
-    assert!(steps[2].get("map_file").is_none());
+    assert_eq!(steps[2]["map_file"], "Continents.lua");
     assert_eq!(steps[0], scene()["steps"][0]);
     assert_eq!(
         steps.iter().filter(|s| s["action"] == "start_game").count(),
