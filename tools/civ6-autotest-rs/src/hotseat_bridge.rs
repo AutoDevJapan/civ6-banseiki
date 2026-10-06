@@ -41,12 +41,14 @@ const WITNESS: &str = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_H
 const XML: &str = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_HotseatWitness.xml");
 const ORIGINAL_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json");
+const BANSEIKI_SCENARIO: &str =
+    include_str!("../../civ6-autotest/scenarios/multiplayer-banseiki-hotseat-growth.json");
 
 pub fn check_scenario(data: &Value) -> Result<()> {
     scenario::validate_scenario(data)?;
     if data["session_type"] != "hotseat" || data["steps"].as_array().map(Vec::len) != Some(21) {
         return Err(Error::scenario(
-            "hotseat bridge requires the original 21-step hotseat scenario",
+            "hotseat bridge requires a registered 21-step hotseat scenario",
         ));
     }
     for (index, action) in ACTIONS.iter().enumerate() {
@@ -65,30 +67,32 @@ pub fn check_scenario(data: &Value) -> Result<()> {
     {
         return Err(Error::scenario("hotseat save/load pairs changed"));
     }
-    let mut original: Value = serde_json::from_str(ORIGINAL_SCENARIO)?;
-    if let Some(nonce) = data.get("hotseat_bridge_nonce").and_then(Value::as_str) {
-        let ids = data["steps"][0]["ids"]
-            .as_array()
-            .ok_or_else(|| Error::scenario("hotseat MOD IDs missing"))?;
-        let extra = ids
-            .last()
-            .filter(|id| {
-                id.as_str()
-                    .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
-            })
-            .ok_or_else(|| Error::scenario("prepared hotseat MOD ID missing"))?;
-        original["steps"][0]["ids"]
-            .as_array_mut()
-            .unwrap()
-            .push(extra.clone());
-        original["hotseat_bridge_nonce"] = nonce.into();
+    for source in [ORIGINAL_SCENARIO, BANSEIKI_SCENARIO] {
+        let mut expected: Value = serde_json::from_str(source)?;
+        if let Some(nonce) = data.get("hotseat_bridge_nonce").and_then(Value::as_str) {
+            let ids = data["steps"][0]["ids"]
+                .as_array()
+                .ok_or_else(|| Error::scenario("hotseat MOD IDs missing"))?;
+            let extra = ids
+                .last()
+                .filter(|id| {
+                    id.as_str()
+                        .is_some_and(|s| uuid::Uuid::parse_str(s).is_ok())
+                })
+                .ok_or_else(|| Error::scenario("prepared hotseat MOD ID missing"))?;
+            expected["steps"][0]["ids"]
+                .as_array_mut()
+                .unwrap()
+                .push(extra.clone());
+            expected["hotseat_bridge_nonce"] = nonce.into();
+        }
+        if data == &expected {
+            return Ok(());
+        }
     }
-    if data != &original {
-        return Err(Error::scenario(
-            "hotseat bridge requires the unchanged original 21-step scenario",
-        ));
-    }
-    Ok(())
+    Err(Error::scenario(
+        "hotseat bridge requires one unchanged registered 21-step scenario",
+    ))
 }
 
 pub fn nonce_valid(run_id: &str) -> bool {
