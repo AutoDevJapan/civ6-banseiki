@@ -431,7 +431,7 @@ end
 do
 local E=PersonaEvents
 local STORE='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
-local SOURCE='civ6-persona-events-rs/v2/normal-Gameplay'
+local SOURCE='civ6-persona-events-rs/v3/normal-Gameplay'
 local registrations={}
 local function subscribed() return registrations.GovernorAppointed==true and registrations.GovernorPromoted==true end
 local function integer(n,limit) return type(n)=='number' and n>=0 and n<(limit or 9007199254740991) and n%1==0 end
@@ -461,6 +461,23 @@ local function catalog()
         indices[p.Index]=p; types[p.GovernorPromotionType]=p
         promotionHashes[p.Hash]=true
     end
+    -- Membership, including BASE, is engine data. Names never imply a Set.
+    if not GameInfo.GovernorPromotionSets then return nil end
+    local membership,baseByGovernor,setBinding={},{},{}
+    for set in GameInfo.GovernorPromotionSets() do
+        local gi=governorTypes[set.GovernorType]; local p=types[set.GovernorPromotion]
+        if gi==nil or not p then return nil end
+        membership[gi]=membership[gi] or {}
+        if membership[gi][p.Index] then return nil end
+        membership[gi][p.Index]=true
+        if p.BaseAbility==true or p.BaseAbility==1 then
+            if baseByGovernor[gi] then return nil end
+            baseByGovernor[gi]=p.Index
+        end
+        local g=GameInfo.Governors[set.GovernorType]
+        setBinding[#setBinding+1]=table.concat({g.GovernorType,gi,g.Hash,p.GovernorPromotionType,p.Index,p.Hash,
+            (p.BaseAbility==true or p.BaseAbility==1) and 1 or 0},'/')
+    end
     for row in GameInfo.JAC_LeaderPersonas() do
         local l=row.LeaderType; local g=GameInfo.Governors[row.GovernorType]
         local person=GameInfo.GreatPersonIndividuals[row.PersonType]
@@ -482,7 +499,8 @@ local function catalog()
             local p=GameInfo.GovernorPromotions[name]
             if not p or p.GovernorPromotionType~=name or not indices[p.Index] or
                indices[p.Index].GovernorPromotionType~=name or types[name].Index~=p.Index or
-               not hash(p.Hash) or promotions[p.Index] then return nil end
+               not hash(p.Hash) or promotions[p.Index] or not membership[g.Index] or
+               not membership[g.Index][p.Index] or (step==0 and baseByGovernor[g.Index]~=p.Index) then return nil end
             promotions[p.Index]=true
             d.promotions[step+1]={index=p.Index,hash=p.Hash,name=name}; d.byIndex[p.Index]=step+1
         end
@@ -492,6 +510,8 @@ local function catalog()
     if #rows~=22 then return nil end
     table.sort(rows,function(a,b) return a.governor<b.governor end)
     local parts={SOURCE}
+    table.sort(setBinding)
+    for _,set in ipairs(setBinding) do parts[#parts+1]=#set..':'..set end
     for _,d in ipairs(rows) do
         for _,v in ipairs({d.leader,d.governorType,d.governor,d.governorHash,d.personType,d.person,d.personHash,d.civilization,d.cost}) do
             local s=tostring(v); parts[#parts+1]=#s..':'..s
@@ -501,7 +521,7 @@ local function catalog()
         end
     end
     return {rows=rows,leaders=leaders,governors=governors,allGovernors=governorIndices,
-        allPromotions=indices,binding=table.concat(parts,'|')}
+        allPromotions=indices,membership=membership,baseByGovernor=baseByGovernor,binding=table.concat(parts,'|')}
 end
 local function joined(owner,d,source)
     local cfg=integer(source,64) and PlayerConfigurations[source]
@@ -532,7 +552,7 @@ local function proof(p,s,owner,d,key,source)
 end
 local function readState(ignoreAdmissionSchema)
     local s=Game:GetProperty(STORE); local c=catalog()
-    if not c or type(s)~='table' or s.version~=2 or s.source~=SOURCE or s.binding~=c.binding or
+    if not c or type(s)~='table' or s.version~=3 or s.source~=SOURCE or s.binding~=c.binding or
        s.baseline~=0 or not integer(s.turn) or s.turn~=0 or not integer(s.sequence) or
        type(s.people)~='table' or type(s.owners)~='table' or #s.owners~=22 or type(s.sources)~='table' or
        type(s.commit)~='table' or s.commit.nativeClosedAll22~=true or s.commit.schema~=3 or
@@ -554,12 +574,24 @@ local function readState(ignoreAdmissionSchema)
             if type(r)~='table' or r.serial~=serial or r.owner~=owner or r.binding~=s.binding or
                r.source~=SOURCE or r.context~='Gameplay' or not integer(r.before) or r.before<prior or
                r.expected~=r.before+1 or not integer(r.sequence) or r.sequence<1 or r.sequence>s.sequence or
-               debitSequences[r.sequence] or c.allGovernors[r.governor]~=r.governorType then return nil,c end
+               debitSequences[r.sequence] or c.allGovernors[r.governor]~=r.governorType or
+               not c.membership[r.governor] or not c.membership[r.governor][r.promotion] or
+               not integer(r.floorSerial) or r.floorSerial>a.floorSerial or
+               (r.invalidated~=false and r.invalidated~=true) then return nil,c end
             local g=GameInfo.Governors[r.governorType]; local p=c.allPromotions[r.promotion]
             if not g or g.Hash~=r.governorHash or not p or p.Hash~=r.promotionHash or
                p.GovernorPromotionType~=r.promotionType then return nil,c end
             local key=r.governor..'/'..r.promotion
             if seen[key] or a.byKey[key]~=serial then return nil,c end
+            local confirmed=r.confirmed
+            if confirmed~=nil then
+                if type(confirmed)~='table' or r.invalidated or confirmed.source~=SOURCE or confirmed.context~='Gameplay' or
+                   confirmed.owner~=owner or confirmed.binding~=s.binding or confirmed.serial~=serial or
+                   confirmed.floorSerial~=r.floorSerial or not integer(confirmed.afterSpent) or
+                   confirmed.afterSpent~=confirmed.expected or confirmed.expected<r.expected or confirmed.expected>a.expected or
+                   not integer(confirmed.sequence) or confirmed.sequence<r.sequence or confirmed.sequence>s.sequence or
+                   not integer(confirmed.turn) or confirmed.turn>Game.GetCurrentGameTurn() then return nil,c end
+            end
             seen[key]=true; debitSequences[r.sequence]=true; prior=r.expected
         end
         for key in pairs(a.byKey) do if not seen[key] then return nil,c end end
@@ -597,7 +629,7 @@ local function readState(ignoreAdmissionSchema)
                 if key~='appointed' then
                     local debit=integer(p.spendingSerial) and a.debits[p.spendingSerial]
                     if not debit or p.spendingSerial<=r.serial or debit.expected<=r.expected or
-                       debit.sequence~=p.sequence or debit.governor~=p.governor or debit.promotion~=p.promotion or
+                       debit.sequence>p.sequence or debit.governor~=p.governor or debit.promotion~=p.promotion or
                        p.expectedSpent~=debit.expected then return nil,c end
                 end
             end
@@ -639,7 +671,7 @@ local function fresh()
     end
     local accounts={}
     for _,owner in ipairs(ids) do accounts[owner]={floor=0,floorSerial=0,expected=0,serial=0,debits={},byKey={},tainted=false} end
-    return {version=2,source=SOURCE,binding=c.binding,baseline=0,turn=0,continuityTainted=false,
+    return {version=3,source=SOURCE,binding=c.binding,baseline=0,turn=0,continuityTainted=false,
         sequence=0,owners=copy(ids),sources=sources,accounts=accounts,people={},receipts={}}
 end
 local freshOK,result=pcall(fresh); if freshOK then candidate=result end
@@ -673,8 +705,25 @@ function E.NormalCommit(ok,forceClosed)
     s.commit={nativeClosedAll22=true,schema=3,binding=s.binding,context='Gameplay',turn=0}
     Game:SetProperty(STORE,s)
 end
+-- Only a live lexical Gameplay getter can create a durable debit confirmation.
+-- Unexpected excess spending cannot settle earlier pending records.
+function E.Confirm(owner)
+    if E.Enabled() then return end
+    local s=state(); local a=s and s.accounts[owner]; local n=spent(owner)
+    if not a or a.tainted or n==nil or n~=a.expected then return end
+    local changed=false
+    for _,r in ipairs(a.debits) do
+        if not r.confirmed and not r.invalidated and r.floorSerial==a.floorSerial then
+            r.confirmed={source=SOURCE,context='Gameplay',owner=owner,binding=s.binding,serial=r.serial,
+                floorSerial=r.floorSerial,afterSpent=n,expected=a.expected,sequence=s.sequence,turn=Game.GetCurrentGameTurn()}
+            changed=true
+        end
+    end
+    if changed then Game:SetProperty(STORE,s) end
+end
 function E.BeforeEvolution(owner,row)
     if E.Enabled() then return true end
+    E.Confirm(owner)
     local s,c=state(); local d=c and row and c.leaders[row.LeaderType]
     local n=spent(owner); local a=s and s.accounts[owner]
     if not s or not d or not a or a.tainted or n==nil or Get(d.leader,'STATE')~='GREAT_PERSON' or
@@ -683,6 +732,9 @@ function E.BeforeEvolution(owner,row)
     if e and (e.tainted or next(e.acquired)) then return false end
     if n>a.expected then
         if a.floorSerial>=9007199254740990 then return false end
+        -- Preserve confirmed history. A new baseline is only for new work;
+        -- every unconfirmed old debit stays unknown, never retroactively paid.
+        for _,pending in ipairs(a.debits) do if not pending.confirmed then pending.invalidated=true end end
         a.floorSerial=a.floorSerial+1
     end
     a.floor=math.max(a.floor,n); a.expected=math.max(a.expected,n)
@@ -699,18 +751,22 @@ local function absence(s,c,owner,d,entry)
     for _,other in ipairs(c.rows) do
         if Get(other.leader,'OWNER')==owner and Get(other.leader,'STATE')=='GOVERNOR' then
             local e=s.people[other.leader]
-            if not e or e.tainted or not e.reservation or e.reservation.floorSerial~=a.floorSerial or
+            if not e or e.tainted or not e.reservation or
                not joined(owner,other,e.sourcePlayer) or not e.acquired.appointed then return false end
-            for step=1,other.cost do if not e.acquired[step] then return false end end
+            for step=1,other.cost do
+                local p=e.acquired[step]; local debit=p and a.debits[p.spendingSerial]
+                if not debit or not debit.confirmed or debit.invalidated then return false end
+            end
         end
     end
     return true
 end
 function E.NormalPaid(owner,row,cost)
     local s,c=state(); local d=c and row and c.leaders[row.LeaderType]
-    if not s or not d or cost~=d.cost or not Player(owner,true) or not s.accounts[owner] or s.accounts[owner].tainted then return nil,true end
+    if not s or not d or cost~=d.cost or not Player(owner,true) or not s.accounts[owner] then return nil,true end
     local entry=s.people[d.leader]
     if not entry then
+        if s.accounts[owner].tainted then return nil,true end
         if Get(d.leader,'OWNER')==nil then return 0,true end
         -- No notifications yet is a full reservation, not a paid receipt.
         if joined(owner,d,Get(d.leader,'SOURCE')) and Get(d.leader,'STATE')=='GREAT_PERSON' then return 0,true end
@@ -719,22 +775,29 @@ function E.NormalPaid(owner,row,cost)
     if entry.tainted or entry.owner~=owner or not joined(owner,d,entry.sourcePlayer) then return nil,true end
     local a=entry.acquired
     if not next(a) then
+        if s.accounts[owner].tainted then return nil,true end
         if Get(d.leader,'STATE')=='GREAT_PERSON' or
            (Get(d.leader,'STATE')=='EVOLVING' and absence(s,c,owner,d,entry)) then return 0,true end
         return nil,true
     end
-    if entry.reservation.floorSerial~=s.accounts[owner].floorSerial then return nil,true end
     if not a.appointed or not a[1] then return nil,true end
-    local paid,missing=0,false
+    local paid,missing,pending=0,false,false
     for step=1,d.cost do
         if not a[step] then missing=true
         elseif missing then return nil,true
-        else paid=paid+1 end
+        else
+            local debit=s.accounts[owner].debits[a[step].spendingSerial]
+            if debit.confirmed and not debit.invalidated and not pending then paid=paid+1 else pending=true end
+        end
     end
     -- Confirm debit visibility for the whole owner's sets. Spending never
     -- allocates a title to a person or supplies a missing success callback.
     local n=spent(owner)
-    if n==nil or n<s.accounts[owner].expected then return nil,true end
+    if paid==0 or n==nil then return nil,true end
+    for step=1,paid do
+        local confirmation=s.accounts[owner].debits[a[step].spendingSerial].confirmed
+        if n<confirmation.afterSpent then return nil,true end
+    end
     return paid,true
 end
 function E.NormalNative(owner,row)
@@ -766,32 +829,16 @@ local function debit(s,c,owner,governor,promotion,sequence)
     if a.serial>=1048576 or a.expected>=9007199254740990 then return nil end
     local r={source=SOURCE,context='Gameplay',owner=owner,binding=s.binding,sequence=sequence,
         serial=a.serial+1,before=a.expected,expected=a.expected+1,governor=governor,governorType=g.GovernorType,
-        governorHash=g.Hash,promotion=promotion,promotionType=p.GovernorPromotionType,promotionHash=p.Hash}
+        governorHash=g.Hash,promotion=promotion,promotionType=p.GovernorPromotionType,promotionHash=p.Hash,
+        floorSerial=a.floorSerial,invalidated=false}
     a.serial=r.serial; a.expected=r.expected; a.debits[r.serial]=r; a.byKey[key]=r.serial
     return r
 end
 local function belongs(c,governor,promotion)
-    local g=GameInfo.Governors[governor]; local p=c.allPromotions[promotion]
-    if not g or not p then return false end
-    if GameInfo.GovernorPromotionSets then
-        for set in GameInfo.GovernorPromotionSets() do
-            if set.GovernorType==g.GovernorType and set.GovernorPromotion==p.GovernorPromotionType then return true end
-        end
-        return false
-    end
-    local d=c.governors[governor]
-    return d and (p.GovernorPromotionType==d.baseType or
-        string.sub(p.GovernorPromotionType,1,#d.baseType+7)==d.baseType..'_TITLE_') or false
+    return c.membership[governor] and c.membership[governor][promotion]==true or false
 end
 local function officialBase(c,governor)
-    local found
-    for index,p in pairs(c.allPromotions) do
-        if (p.BaseAbility==true or p.BaseAbility==1) and belongs(c,governor,index) then
-            if found then return nil end
-            found=index
-        end
-    end
-    return found
+    return c.baseByGovernor[governor]
 end
 local function receive(name,...)
     if E.Enabled() then return end
@@ -810,39 +857,48 @@ local function receive(name,...)
     if arity==(app and 2 or 3) and integer(args[1],64) and integer(args[2],256) and (app or integer(args[3],4096)) then
         local owner=args[1]; local d=c.governors[args[2]]
         local key=d and (app and 'appointed' or d.byIndex[args[3]])
-        r.reason='wrong-person-or-promotion'
+        -- Owner consumption is independent of whether this person is joined,
+        -- correctly owned or in an evolution reservation. Count every resolved
+        -- official success once; contradictory definitions close pending work.
+        local spending
+        if Player(owner,true) and s.accounts[owner] then
+            local promotion=app and officialBase(c,args[2]) or args[3]
+            if c.allGovernors[args[2]] and promotion and belongs(c,args[2],promotion) then
+                spending=debit(s,c,owner,args[2],promotion,r.sequence)
+                if spending then
+                    r.spendingSerial=spending.serial; r.expectedSpent=spending.expected
+                    r.reason='official-other-spending'
+                end
+            else
+                s.accounts[owner].tainted=true; s.accounts[owner].reason='unresolved-official-spending'
+                r.reason='unresolved-official-spending'
+            end
+        end
         if d and key then
             local source=Get(d.leader,'SOURCE'); local e=s.people[d.leader]
             r.reason='not-joined-or-owner'
-            if joined(owner,d,source) and (Get(d.leader,'STATE')=='EVOLVING' or Get(d.leader,'STATE')=='GOVERNOR') and
+            if spending and joined(owner,d,source) and (Get(d.leader,'STATE')=='EVOLVING' or Get(d.leader,'STATE')=='GOVERNOR') and
                e and e.reservation and e.owner==owner and e.sourcePlayer==source and not e.tainted then
                 r.owner=owner; r.leader=d.leader; r.sourcePlayer=source; r.binding=s.binding
                 r.governor=d.governor; r.governorHash=d.governorHash
                 r.promotion=app and -1 or d.promotions[key].index
                 r.promotionHash=app and -1 or d.promotions[key].hash
                 if not app then
-                    local spending=debit(s,c,owner,d.governor,r.promotion,r.sequence)
-                    if not spending then return end
-                    r.spendingSerial=spending.serial; r.expectedSpent=spending.expected
+                    -- The first APPOINT may precede BASE. Both refer to the
+                    -- same already-recorded consumption, without double debit.
+                    if spending.serial<=e.reservation.serial or spending.expected<=e.reservation.expected then
+                        e.tainted=true
+                    end
                 end
-                r.accepted=true; r.reason=e.acquired[key] and 'duplicate' or 'acquired'
-                if not e.acquired[key] then e.acquired[key]=copy(r) end
+                if not e.tainted then
+                    r.accepted=true; r.reason=e.acquired[key] and 'duplicate' or 'acquired'
+                    if not s.accounts[owner].tainted and not e.acquired[key] then e.acquired[key]=copy(r) end
+                end
             elseif Player(owner,true) and Get(d.leader,'OWNER')==nil then
                 -- A real pre-join success contradicts fresh absence; reject it
                 -- as payment and close this person rather than granting Join.
                 s.people[d.leader]={owner=owner,sourcePlayer=owner,acquired={},tainted=true}
             end
-        elseif not d and Player(owner,true) and s.accounts[owner] and c.allGovernors[args[2]] then
-            local promotion=app and officialBase(c,args[2]) or args[3]
-            if promotion and belongs(c,args[2],promotion) then
-                local spending=debit(s,c,owner,args[2],promotion,r.sequence)
-                if spending then r.reason='official-other-spending'; r.spendingSerial=spending.serial; r.expectedSpent=spending.expected end
-            elseif app then
-                s.accounts[owner].tainted=true; s.accounts[owner].reason='unresolved-official-appointment'
-            end
-        elseif d and not app and joined(owner,d,Get(d.leader,'SOURCE')) and belongs(c,args[2],args[3]) then
-            local spending=debit(s,c,owner,args[2],args[3],r.sequence)
-            if spending then r.reason='official-other-spending'; r.spendingSerial=spending.serial; r.expectedSpent=spending.expected end
         end
     end
     s.receipts[#s.receipts+1]=r; if #s.receipts>64 then table.remove(s.receipts,1) end
@@ -877,6 +933,7 @@ end
 
 local function NativeGovernor(owner, row)
     if PersonaEvents.Enabled() then return PersonaEvents.Native(owner, row); end
+    PersonaEvents.Confirm(owner);
     return PersonaEvents.NormalNative(owner, row);
 end
 
@@ -962,6 +1019,7 @@ end
 
 local function CorePaymentRead(owner, row, cost)
     if PersonaEvents.Enabled() then return PersonaEvents.Paid(owner, row, cost); end
+    PersonaEvents.Confirm(owner);
     return PersonaEvents.NormalPaid(owner, row, cost);
 end
 

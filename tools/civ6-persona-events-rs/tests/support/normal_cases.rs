@@ -1,7 +1,7 @@
 // Included by gameplay.rs to exercise exactly the same shipped script loader.
 const NORMAL_FIXTURE: &str = r#"
 Game.GetCurrentGameTurn=function() return 0 end
-local people,governors,promotions={},{},{}
+local people,governors,promotions,sets={},{},{},{}
 local names={'ASHINA_MORIKIYO','DATE_TANEMUNE','YAMANOUCHI_UESUGI_NORIMASA','TAKEDA_NOBUTORA',
  'HOJO_UJITSUNA','NAGAO_TAMEKAGE','IMAGAWA_UJITERU','ODA_NOBUHIDE','MATSUDAIRA_KIYOYASU',
  'ASAKURA_TAKAKAGE','ASHIKAGA_YOSHIHARU','MIYOSHI_NAGAYOSHI','ROKKAKU_SADAYORI',
@@ -23,12 +23,14 @@ for row in GameInfo.JAC_LeaderPersonas() do
  people[#people+1]=row; governors[#governors+1]=g
  for step=0,2 do
   local name=row.BasePromotionType..(step==0 and '' or '_TITLE_'..step)
-  promotions[#promotions+1]={GovernorPromotionType=name,Index=70+i*11+step*2,Hash=500+i*11+step*2}
+  promotions[#promotions+1]={GovernorPromotionType=name,Index=70+i*11+step*2,Hash=500+i*11+step*2,BaseAbility=step==0 and 1 or 0}
+  sets[#sets+1]={GovernorType=row.GovernorType,GovernorPromotion=name}
  end
 end
 GameInfo.JAC_LeaderPersonas=catalog(people,'LeaderType')
 GameInfo.Governors=catalog(governors,'GovernorType')
 GameInfo.GovernorPromotions=catalog(promotions,'GovernorPromotionType')
+GameInfo.GovernorPromotionSets=setmetatable({},{__call=function() local i=0; return function() i=i+1; return sets[i] end end})
 -- No private operation, no UI receipt or Core per-person getter is available.
 ExposedMembers.JAC_LeaderPersonaNativeRead=function() uiReads=uiReads+1; error('public route consulted UI') end
 function normalStatus(owner,l)
@@ -111,6 +113,8 @@ fn public_multiple_reservations_derive_from_each_acquisition_set() {
 local l2,r2=normalJoin(0,1); local l3,r3=normalJoin(0,2)
 -- Allow exactly the two partial reservations, after one base payment each.
 used[0]=2; appointed(0,r2); success(0,r2,0); success(0,r3,0); appointed(0,r3)
+-- Ordinary reconciliation confirms the now-visible debit. Status stays read-only.
+ExposedMembers.JAC_LeaderPersona.Reconcile()
 assert(ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l2).reserved==3)
 Players[0]:GetGovernors().GetGovernorPoints=function() return 5 end
 ExposedMembers.JAC_LeaderPersona.Reconcile()
@@ -218,12 +222,15 @@ Players[0].IsAlive=function() return false end
 success(0,row,0); appointed(0,row)
 Players[0].IsAlive=function() return true end
 assert(next(select(2,normalStatus(0,l)))==nil)
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.accounts[0].tainted)
 success(0,row,0); appointed(0,row); success(0,row,2)
 finalize(0,l); ExposedMembers.JAC_LeaderPersona.Reconcile()
 assert(#unitLists[0]==1 and playerProps[0][901023]==false)
-success(0,row,1); finalize(0,l); assert(#unitLists[0]==0)
+success(0,row,1); finalize(0,l); assert(#unitLists[0]==1)
 assert(uiReads==0 and operations==0)
 "#);
+    let prefix=normal_context("");
+    run(&prefix,"l,row=normalJoin(0,2); used[0]=3; success(0,row,0); appointed(0,row); success(0,row,2); finalize(0,l); assert(#unitLists[0]==1); success(0,row,1); finalize(0,l); assert(#unitLists[0]==0)");
     let early=normal_context("");
     run(&early,r#"
 local l=PlayerConfigurations[2]:GetLeaderTypeName(); local row=GameInfo.JAC_LeaderPersonas[l]
@@ -254,6 +261,7 @@ fn public_freshness_foreign_schema_and_failed_closed_commit_cannot_retry_later()
         "GameInfo.GovernorPromotions[92].Index=70",
         "GameInfo.GreatPersonIndividuals[2].Hash=201",
         "PlayerConfigurations[21].GetLeaderTypeName=PlayerConfigurations[20].GetLeaderTypeName",
+        "GameInfo.GovernorPromotionSets=nil",
     ] {
         let lua=normal_context(setup);
         run(&lua,r#"

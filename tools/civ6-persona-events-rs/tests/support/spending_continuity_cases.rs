@@ -205,16 +205,16 @@ assert(ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,la).paid==nil)
 fn normal_spending_and_subscription_guards_are_red_mutations() {
     let source=fs::read_to_string(root().join(GAMEPLAY)).unwrap();
     for (guard,broken,setup,assertion) in [
-        ("if n==nil or n<s.accounts[owner].expected then return nil,true end",
-         "if n==nil or n<2 then return nil,true end",
-         "used[0]=5; l,row=normalJoin(0,1); success(0,row,0); appointed(0,row); success(0,row,1); finalize(0,l)",
-         "assert(#unitLists[0]==1,'historical spending cannot settle new receipts')"),
+        ("    PersonaEvents.Confirm(owner);",
+         "",
+         "used[0]=5; l,row=normalJoin(0,1); success(0,row,0); appointed(0,row); success(0,row,1); used[0]=7; finalize(0,l)",
+         "assert(#unitLists[0]==0,'normal completion needs a real debit confirmation')"),
         ("if not subscribed() or (s and s.continuityTainted) then return nil,c end",
          "if false then return nil,c end",
          "l=PlayerConfigurations[1]:GetLeaderTypeName()",
          "assert(ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l).paid==nil,'missing subscription must revoke saved absence')"),
     ] {
-        assert_eq!(source.matches(guard).count(),1);
+        assert_eq!(source.matches(guard).count(),if guard.contains("PersonaEvents.Confirm") {2} else {1});
         let lua=Lua::new(); lua.load(FIXTURE).exec().unwrap(); lua.load(NORMAL_FIXTURE).exec().unwrap();
         if guard.starts_with("if not subscribed") {
             let a=normal_context(""); run(&a,"l,row=normalJoin(0,1)");
