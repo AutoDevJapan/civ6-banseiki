@@ -56,19 +56,33 @@ fn meter_outputs() -> Outputs {
             sql.push_str(&format!("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('{id}_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('{id}_REQ','PropertyName','{property}'),('{id}_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('{id}_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('{id}_SET','{id}_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('{id}','{modifier_type}','{id}_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('{id}','YieldType','YIELD_{kind}'),('{id}','Amount','{amount}');\n"));
         }
     }
+    sql.push_str("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('JAC_TODO134_HEADROOM_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_REQ','PropertyName','JAC_TODO134_HEADROOM_ON'),('JAC_TODO134_HEADROOM_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('JAC_TODO134_HEADROOM_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_HEADROOM_SET','JAC_TODO134_HEADROOM_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE','JAC_TODO134_HEADROOM_SET'),('JAC_TODO134_HEADROOM_GROWTH','MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH','JAC_TODO134_HEADROOM_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','YieldType','YIELD_PRODUCTION'),('JAC_TODO134_HEADROOM_PRODUCTION','Amount','4096'),('JAC_TODO134_HEADROOM_GROWTH','Amount','-1000');\n");
+    let headroom_sql = "-- Opt-in diagnostic headroom; not normal costs or economic balance.\nUPDATE Units SET Cost=32768 WHERE UnitType IN ('UNIT_SPEARMAN','UNIT_BUILDER','UNIT_GALLEY');\nUPDATE Buildings SET Cost=32768 WHERE BuildingType IN ('BUILDING_WALLS','BUILDING_CASTLE','BUILDING_STAR_FORT');\n".to_owned();
+    let headroom_config=r#"<?xml version="1.0" encoding="utf-8"?>
+<GameInfo><Parameters><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueHeadroom" Name="LOC_JAC_OATH_QUEUE_HEADROOM" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_HEADROOM" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters></GameInfo>
+"#.to_owned();
     let modinfo = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <Mod id="{METER_ID}" version="1">
   <Properties><Name>JAC diagnostic oath meter</Name><Description>Controlled diagnostic inputs and a 100 percent reference; inactive until explicitly attached and activated.</Description><Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions></Properties>
   <Dependencies><Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="Sengoku Trees"/></Dependencies>
-  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria></ActionCriteria>
-  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase></InGameActions>
-  <Files><File>Data/Meter.sql</File></Files>
+  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria><Criteria id="JAC_OathMeter_Headroom"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_QUEUE_HEADROOM</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria></ActionCriteria>
+  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase><UpdateDatabase id="JAC_OathMeter_Headroom_Data" criteria="JAC_OathMeter_Headroom"><Properties><LoadOrder>400</LoadOrder></Properties><File>Data/Headroom.sql</File></UpdateDatabase></InGameActions>
+  <FrontEndActions><UpdateDatabase id="JAC_OathMeter_Headroom_Config"><File>Config/Headroom.xml</File></UpdateDatabase></FrontEndActions>
+  <Files><File>Data/Meter.sql</File><File>Data/Headroom.sql</File><File>Config/Headroom.xml</File></Files>
 </Mod>
 "#
     );
     [
+        (
+            PathBuf::from(format!("{METER_DIR}/Config/Headroom.xml")),
+            headroom_config,
+        ),
         (PathBuf::from(format!("{METER_DIR}/Data/Meter.sql")), sql),
+        (
+            PathBuf::from(format!("{METER_DIR}/Data/Headroom.sql")),
+            headroom_sql,
+        ),
         (
             PathBuf::from(format!("{METER_DIR}/JAC_PoC_OathMeter.modinfo")),
             modinfo,
@@ -303,6 +317,7 @@ assert(Game:GetProperty('JAC_TODO134_METER_ATTACHED'),'reference not attached')
 for _,city in Players[0]:GetCities():Members() do
  local plot=assert(Map.GetPlot(city:GetX(),city:GetY())); assert(city:GetOwner()==0 and plot:GetOwner()==0,'reference owner changed')
  plot:SetProperty('JAC_TODO134_CAL_ON',__CAL__)
+ if __KEEP_PRODUCTION__==0 then plot:SetProperty('JAC_TODO134_HEADROOM_ON',0) end
  plot:SetProperty('JAC_TODO134_FINE_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_ON',0); plot:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)
  for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
   plot:SetProperty('JAC_TODO134_BASE_'..kind,(__BASE__==1 or (__KEEP_PRODUCTION__==1 and kind=='PRODUCTION')) and 1 or 0)
@@ -633,7 +648,7 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do for _,city in p:GetCities()
   assert((plot:GetProperty(row.OathType..'_ON') or 0)==expected,'diagnostic oath flags not restored')
  end
  assert((plot:GetProperty('JAC_TODO134_CAL_ON') or 0)==0,'100-percent diagnostic reference not disabled')
- for _,key in ipairs({'JAC_TODO134_FINE_ON','JAC_TODO134_SHIFT_ON','JAC_TODO134_SHIFT_TWO_ON'}) do assert((plot:GetProperty(key) or 0)==0,'precision probe not disabled') end
+ for _,key in ipairs({'JAC_TODO134_FINE_ON','JAC_TODO134_SHIFT_ON','JAC_TODO134_SHIFT_TWO_ON','JAC_TODO134_HEADROOM_ON'}) do assert((plot:GetProperty(key) or 0)==0,'precision probe not disabled') end
  for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do assert((plot:GetProperty('JAC_TODO134_BASE_'..kind) or 0)==0,'diagnostic base input not disabled') end
 end end
 assert(count==56,'original city inventory changed during production diagnostics')
@@ -660,6 +675,10 @@ fn effect_lua(case: &Case) -> String {
 
 fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     let mut steps = first_steps(base, &case.civ)?;
+    let setup = steps[2]["code"].as_str().context("audit setup")?.to_owned();
+    steps[2]["code"] = json!(format!(
+        "GameConfiguration.SetValue('JAC_TODO134_QUEUE_HEADROOM',1); {setup}"
+    ));
     steps.push(ui("GameCore_Tuner", METER_ATTACH.into()));
     steps.push(ui("GameCore_Tuner", substitute(FIXTURE, case, &[])));
     steps.push(ui(
@@ -802,6 +821,14 @@ local function unlock(row)
  if row.PrereqCivic then Players[0]:GetCulture():SetCivic(assert(GameInfo.Civics[row.PrereqCivic]).Index,true) end
 end
 unlock(def)
+local optin=GameConfiguration.GetValue('JAC_TODO134_QUEUE_HEADROOM')
+assert(optin==1 or optin==true,'opt-in queue cost fixture missing')
+assert(def.Cost==32768,'queue headroom cost data not loaded')
+if not Game:GetProperty('JAC_TODO134_HEADROOM_ATTACHED') then
+ Players[0]:AttachModifierByID('JAC_TODO134_HEADROOM_PRODUCTION')
+ Players[0]:AttachModifierByID('JAC_TODO134_HEADROOM_GROWTH')
+ Game:SetProperty('JAC_TODO134_HEADROOM_ATTACHED',true)
+end
 local lower={}
 if target=='BUILDING_CASTLE' or target=='BUILDING_STAR_FORT' then lower[#lower+1]=assert(GameInfo.Buildings.BUILDING_WALLS) end
 if target=='BUILDING_STAR_FORT' then lower[#lower+1]=assert(GameInfo.Buildings.BUILDING_CASTLE) end
@@ -865,6 +892,7 @@ plot:SetProperty(oath..'_ON',value)
 end
 for _,city in Players[0]:GetCities():Members() do
  local p=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ p:SetProperty('JAC_TODO134_HEADROOM_ON',1)
  p:SetProperty('JAC_TODO134_FINE_ON',__PROBE_FINE__)
  p:SetProperty('JAC_TODO134_SHIFT_ON',__PROBE_SHIFT__)
  p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',__PROBE_SECOND__)
@@ -885,6 +913,7 @@ assert(Map.GetPlotByIndex(t.Plot):GetProperty(__OATH__..'_ON')==__FLAG__,'city d
 local progress=t.Building and q:GetBuildingProgress(def.Index) or q:GetUnitProgress(def.Index)
 local cost=t.Building and q:GetBuildingCost(def.Index) or q:GetUnitCost(def.Index)
 local production=city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index)
+assert(production>4000 and cost-progress>production*1.5,'queue has insufficient reporting precision or completion headroom')
 assert(type(progress)=='number' and type(cost)=='number' and type(production)=='number' and progress==progress and cost==cost and production==production and cost<math.huge and production<math.huge and cost>progress and production>0,'no finite numeric active production')
 JAC_OATH_AUDIT=assert(JAC_OATH_AUDIT,'UI audit context was lost')
 JAC_OATH_AUDIT.production=JAC_OATH_AUDIT.production or {}
@@ -1165,7 +1194,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 70);
+        assert_eq!(generated.len(), 72);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));

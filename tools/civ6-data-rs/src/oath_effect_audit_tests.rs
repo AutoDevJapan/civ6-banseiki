@@ -356,15 +356,53 @@ a.precision_one.own[1].y.science=a.baseline.own[1].y.science+0.08; a.precision_t
 }
 
 #[test]
-fn reference_mod_has_only_explicit_scoped_inputs_and_twelve_valid_modifier_definitions(
-) -> Result<()> {
+fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definitions() -> Result<()>
+{
     let files = meter_outputs();
     let sql = &files[&PathBuf::from(format!("{METER_DIR}/Data/Meter.sql"))];
     let db = rusqlite::Connection::open_in_memory()?;
     db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
     db.execute_batch(sql)?;
     let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
-    assert_eq!(count, 25);
+    assert_eq!(count, 27);
+    for (id, kind, amount) in [
+        (
+            "JAC_TODO134_HEADROOM_PRODUCTION",
+            "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
+            "4096",
+        ),
+        (
+            "JAC_TODO134_HEADROOM_GROWTH",
+            "MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH",
+            "-1000",
+        ),
+    ] {
+        assert_eq!(
+            db.query_row(
+                "SELECT ModifierType FROM Modifiers WHERE ModifierId=?",
+                [id],
+                |r| r.get::<_, String>(0)
+            )?,
+            kind
+        );
+        assert_eq!(
+            db.query_row(
+                "SELECT Value FROM ModifierArguments WHERE ModifierId=? AND Name='Amount'",
+                [id],
+                |r| r.get::<_, String>(0)
+            )?,
+            amount
+        );
+        assert_eq!(db.query_row("SELECT Value FROM RequirementArguments WHERE RequirementId='JAC_TODO134_HEADROOM_REQ' AND Name='PropertyName'",[],|r|r.get::<_,String>(0))?,"JAC_TODO134_HEADROOM_ON");
+        assert_eq!(
+            db.query_row(
+                "SELECT SubjectRequirementSetId FROM Modifiers WHERE ModifierId=?",
+                [id],
+                |r| r.get::<_, String>(0)
+            )?,
+            "JAC_TODO134_HEADROOM_SET"
+        );
+    }
     for kind in ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"] {
         for (mode, amount, suffix) in [
             ("BASE", "6", "CHANGE"),
@@ -413,6 +451,77 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_twelve_valid_modifier_defin
     assert!(!document
         .descendants()
         .any(|n| n.has_tag_name("AddGameplayScripts")));
+    let criteria = document
+        .descendants()
+        .find(|n| n.has_tag_name("Criteria") && n.attribute("id") == Some("JAC_OathMeter_Headroom"))
+        .context("headroom criteria")?;
+    assert!(criteria
+        .descendants()
+        .any(|n| n.has_tag_name("RuleSetInUse") && n.text() == Some("RULESET_JAC_BANSEIKI")));
+    assert!(criteria.descendants().any(
+        |n| n.has_tag_name("ConfigurationId") && n.text() == Some("JAC_TODO134_QUEUE_HEADROOM")
+    ));
+    let headroom = &files[&PathBuf::from(format!("{METER_DIR}/Data/Headroom.sql"))];
+    let config = &files[&PathBuf::from(format!("{METER_DIR}/Config/Headroom.xml"))];
+    let config = roxmltree::Document::parse(config)?;
+    let row = config
+        .descendants()
+        .find(|n| n.attribute("ConfigurationId") == Some("JAC_TODO134_QUEUE_HEADROOM"))
+        .context("headroom config row")?;
+    assert_eq!(row.attribute("DefaultValue"), Some("0"));
+    assert_eq!(row.attribute("Key2"), Some("RULESET_JAC_BANSEIKI"));
+    assert_eq!(row.attribute("Visible"), Some("0"));
+    for mode in [
+        "SupportsLANMultiplayer",
+        "SupportsInternetMultiplayer",
+        "SupportsHotSeat",
+        "SupportsPlayByCloud",
+    ] {
+        assert_eq!(row.attribute(mode), Some("0"));
+    }
+    db.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY,Cost INTEGER); CREATE TABLE Buildings(BuildingType TEXT PRIMARY KEY,Cost INTEGER); INSERT INTO Units VALUES('UNIT_SPEARMAN',65),('UNIT_BUILDER',50),('UNIT_GALLEY',65),('UNIT_WARRIOR',40); INSERT INTO Buildings VALUES('BUILDING_WALLS',80),('BUILDING_CASTLE',100),('BUILDING_STAR_FORT',300),('BUILDING_MONUMENT',60);")?;
+    db.execute_batch(headroom)?;
+    for unit in ["UNIT_SPEARMAN", "UNIT_BUILDER", "UNIT_GALLEY"] {
+        assert_eq!(
+            db.query_row("SELECT Cost FROM Units WHERE UnitType=?", [unit], |r| r
+                .get::<_, i64>(0))?,
+            32768
+        );
+    }
+    for building in ["BUILDING_WALLS", "BUILDING_CASTLE", "BUILDING_STAR_FORT"] {
+        assert_eq!(
+            db.query_row(
+                "SELECT Cost FROM Buildings WHERE BuildingType=?",
+                [building],
+                |r| r.get::<_, i64>(0)
+            )?,
+            32768
+        );
+    }
+    assert_eq!(
+        db.query_row(
+            "SELECT Cost FROM Units WHERE UnitType='UNIT_SPEARMAN'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        32768
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT Cost FROM Units WHERE UnitType='UNIT_WARRIOR'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        40
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT Cost FROM Buildings WHERE BuildingType='BUILDING_MONUMENT'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        60
+    );
     Ok(())
 }
 
