@@ -4102,6 +4102,7 @@ Events.SaveComplete.Add(function()
 end);
 Events.LoadScreenClose.Add(function()
     if B.ReturnedPreparation then B.ReturnedPreparation.InvalidateOnLoad(); end
+    if B.PreparedMission then B.PreparedMission.InvalidateOnLoad(); end
     emptyRosterObservation=nil;
     thirdCivicArmedToken=nil;
     thirdCivicIntentSaved=false;
@@ -4110,6 +4111,10 @@ Events.LoadScreenClose.Add(function()
 end);
 include("JAC_ReturnedPreparation548");
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
+    if Game:GetProperty("JAC_BOUNDARY_PREPARED_MISSION") then
+        local prepared=assert(B.PreparedMission,"prepared mission UI module missing");
+        if prepared.RouteEvent(attacker,missionID)~='UNOWNED' then return; end
+    end
     if Game:GetProperty("JAC_BOUNDARY_RETURNED_PREPARATION") then
         local preparation=assert(B.ReturnedPreparation,"returned preparation UI module missing");
         if preparation.RouteEvent(attacker,missionID)~='UNOWNED' then return; end

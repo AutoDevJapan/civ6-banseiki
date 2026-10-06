@@ -64,6 +64,8 @@ BASELINE_PROTECTED=PROTECTED_SNAPSHOT();
 Game={};
 function Game:GetProperty(k)
  if k=='JAC_PERSONA_LEADER_TEST_MERIT' then return MERIT end
+ local node=k:match('^JAC_PERSONA_LEADER_TEST_NODE_(.+)$');
+ if node then return NODES[node] end
  if k=='JAC_PERSONA_LEADER_TEST_GOVERN_LAST_TURN' then return LAST_GOVERN_TURN end
  if string.find(k,'JAC_PERSONA_LEADER_TEST_DEED_GOVERN_TURN_',1,true)==1 then
   return DEED end
@@ -416,4 +418,65 @@ fn ui_id_mixup_and_ui_getter_error_become_finite_unknowns() {
     c.run("JAC_PreparedMission548.ArmAfterSave('MISSION'); JAC_PreparedMission548.SendOnce(); COMPLETE(0,6); UI_GETTER_ERROR=true; assert(JAC_PreparedMission548.RouteEvent(0,4)=='OWNED_UNKNOWN')");
     c.core(mission::UNKNOWN_CORE);
     c.run("assert(PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.stage=='UNKNOWN_CORE' and PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.unknown.mission4Read.ok==false and #REQUESTS==1)");
+}
+
+#[test]
+fn regular_merit_before_completion_becomes_the_success_stop_baseline() {
+    let c = Case::new();
+    c.intent();
+    c.run("JAC_PreparedMission548.ArmAfterSave('MISSION'); JAC_PreparedMission548.SendOnce(); MERIT=31; COMPLETE(0,6); assert(JAC_PreparedMission548.RouteEvent(0,4)=='OWNED'); assert(JAC_PreparedMission548.Result()=='SUCCEEDED')");
+    c.core(mission::CORE_COMMIT);
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION; assert(p.before.merit==10 and p.receipt.stopBaseline.merit==31 and p.receipt.stopBaseline.turn==TURN); assert(JAC_PreparedMission548.ObserveRecovery()=='NEUTRALIZED')");
+    c.core(mission::CORE_COMMIT);
+    c.run("TURN=TURN+1; GOV_REMAIN=5; LAST_GOVERN_TURN=TURN; assert(JAC_PreparedMission548.PositiveChallenge()=='CHALLENGE_PROVED')");
+    c.core(mission::CORE_COMMIT);
+    c.run("MERIT=32");
+    c.fails("JAC_PreparedMission548.ObserveRecovery()");
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.receipt.stopBaseline.merit==31 and BASELINE_PROTECTED==PROTECTED_SNAPSHOT())");
+}
+
+#[test]
+fn skill_purchases_before_and_after_success_use_separate_baselines() {
+    let c = Case::new();
+    c.intent();
+    c.run("JAC_PreparedMission548.ArmAfterSave('MISSION'); JAC_PreparedMission548.SendOnce(); MERIT=29; NODES.EXTRA=1; COMPLETE(0,6); JAC_PreparedMission548.RouteEvent(0,4); assert(JAC_PreparedMission548.Result()=='SUCCEEDED')");
+    c.core(mission::CORE_COMMIT);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.receipt.stopBaseline.nodesOwned.EXTRA==1); GameInfo.JAC_PersonaTreeNodes.LATE={LeaderType='LEADER_TEST',Cost=4}; NODES.LATE=1; MERIT=25; assert(JAC_PreparedMission548.ObserveRecovery()=='NEUTRALIZED')");
+    c.core(mission::CORE_COMMIT);
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION; local r=p.recovery.observations[1]; assert(r.meritWithPurchases==29 and r.purchased==4 and p.receipt.stopBaseline.nodesOwned.LATE==nil); NODES.EXTRA=nil");
+    c.fails("JAC_PreparedMission548.ObserveRecovery()");
+}
+
+#[test]
+fn delayed_success_read_is_unknown_instead_of_inventing_completion_merit() {
+    let c = Case::new();
+    c.intent();
+    c.run("JAC_PreparedMission548.ArmAfterSave('MISSION'); JAC_PreparedMission548.SendOnce(); COMPLETE(0,6); JAC_PreparedMission548.RouteEvent(0,4); TURN=TURN+1; assert(JAC_PreparedMission548.Result()=='UNKNOWN_NATIVE')");
+    c.core(mission::CORE_COMMIT);
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.stage=='UNKNOWN_NATIVE' and PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.receipt.stopBaseline==nil)");
+    c.fails("JAC_PreparedMission548.ObserveRecovery()");
+}
+
+#[test]
+fn initial_observation_failure_can_be_saved_without_creating_send_permission() {
+    let c = Case::new();
+    c.run("BAD_FIND=true");
+    c.fails("JAC_PreparedMission548.Prepare()");
+    c.run("assert(JAC_PreparedMission548.CaptureUnknown('PREFLIGHT',{error='FindID alias'})=='UNKNOWN_UI')");
+    c.core(mission::UNKNOWN_CORE);
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION; assert(p.stage=='UNKNOWN_CORE' and p.before==nil and p.unknown.raw.initialRead.ok==true and p.unknown.raw.initialRead.raw.archive.histories[1].turn==23 and #REQUESTS==0 and BASELINE_PROTECTED==PROTECTED_SNAPSHOT()); JAC_PreparedMission548.InvalidateOnLoad(); assert(JAC_PreparedMission548.Resume()=='UNKNOWN_CORE')");
+    c.fails("JAC_PreparedMission548.ArmAfterSave('MISSION')");
+    c.fails("JAC_PreparedMission548.SendOnce()");
+}
+
+#[test]
+fn unknown_preserves_the_last_raw_success_witness_without_rewriting_it() {
+    let c = Case::new();
+    c.intent();
+    c.run("JAC_PreparedMission548.ArmAfterSave('MISSION'); JAC_PreparedMission548.SendOnce(); COMPLETE(0,6); JAC_PreparedMission548.RouteEvent(0,4); assert(JAC_PreparedMission548.Result()=='SUCCEEDED'); JAC_PreparedMission548.CaptureUnknown('CORE_RECEIPT',{error='mismatch'})");
+    c.core(mission::UNKNOWN_CORE);
+    c.run("local raw=PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION.unknown.previousWitness; assert(raw.phase=='RESULT' and raw.observation.event.id==4 and raw.observation.stopBaseline.merit==10 and BASELINE_PROTECTED==PROTECTED_SNAPSHOT())");
+    c.run("JAC_PreparedMission548.CaptureUnknown('SECOND_READ',{error='later failure'})");
+    c.core(mission::UNKNOWN_CORE);
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_PREPARED_MISSION; assert(p.firstUnknown.step=='CORE_RECEIPT' and p.unknown.step=='SECOND_READ' and p.unknown.previousWitness.phase=='RESULT' and p.unknown.previousWitness.observation.stopBaseline.merit==10)");
 }

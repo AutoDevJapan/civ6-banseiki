@@ -370,16 +370,27 @@ function P.ObserveSent()
 end
 function P.CaptureUnknown(step,raw)
  local saved=Game:GetProperty(KEY);
+ local previous=copy(ExposedMembers[WKEY]);
+ if previous and previous.phase=='UNKNOWN' then
+  previous=previous.observation and previous.observation.previousWitness
+ end
  if not x and saved then
   x={nonce=saved.nonce,protected=saved.protected,
    before=saved.before,resumed=true}
+ elseif not x then
+  -- Initial diagnostic failure is evidence, never a mission reservation.
+  role();
+  x={nonce='unknown-preflight:'..tostring(Game.GetCurrentGameTurn())..':'..
+   tostring(UI.GetElapsedTime()),diagnosticOnly=true};
+  local ok,snapshot=pcall(protected);
+  raw={cause=copy(raw),initialRead={ok=ok,raw=copy(snapshot)}}
  end
  assert(type(step)=='string' and step~='' and
   ((saved and x and saved.nonce==x.nonce) or
-   (not saved and x and x.fresh)),
+   (not saved and x and (x.fresh or x.diagnosticOnly))),
   'unknown record has no owned mission');
  x.unknown=true;
- publish('UNKNOWN',{step=step,raw=copy(raw),
+ publish('UNKNOWN',{step=step,raw=copy(raw),previousWitness=previous,
   mission4Read=(function() local ok,n=pcall(mission4); return {ok=ok,raw=copy(n)} end)()});
  return 'UNKNOWN_UI'
 end
@@ -444,9 +455,12 @@ function P.Result()
    gov.type==saved.before.governor.type and
    gov.hash==saved.before.governor.hash and
    gov.targetCity==saved.before.governor.targetCity and
-   s.merit==s.gameplay.merit then
+   s.merit==s.gameplay.merit and s.turn==x.event.turn then
    out.effects=effects(s,false);
    out.merit=s.merit;
+   -- Regular governing merit and purchases before mission completion are
+   -- legitimate. Freeze the stopping interval at the success observation.
+   out.stopBaseline={turn=s.turn,merit=s.merit,nodesOwned=copy(s.nodesOwned)};
    out.outcome='SUCCEEDED'
   end
   publish('RESULT',out); return out.outcome
@@ -463,6 +477,9 @@ local function confirmed()
   saved.stage=='ASSIGN_ESTABLISHED','successful native receipt required');
  assert(saved.receipt and saved.receipt.outcome=='SUCCEEDED' and
   saved.receipt.event and saved.receipt.event.id==4 and
+  saved.receipt.stopBaseline and
+  saved.receipt.stopBaseline.turn==saved.receipt.event.turn and
+  saved.receipt.stopBaseline.merit==saved.receipt.merit and
   sameHistory(history(mission4(),4),saved.receipt.event),
   'successful native mission history changed');
  return saved
@@ -498,9 +515,9 @@ function P.ObserveRecovery()
    g.cityOwner==-1 and g.city==-1,
    'natural recovery or unassigned state not observed')
  end
- local effective,spent=adjustedMerit(s,saved.before);
+ local effective,spent=adjustedMerit(s,saved.receipt.stopBaseline);
  if g.neutralized>0 then
-  assert(effective==saved.before.merit,'merit rose during neutralization');
+  assert(effective==saved.receipt.stopBaseline.merit,'merit rose during neutralization');
   effects(s,false)
  end
  local out={stage=stage,turn=s.turn,governor=g,merit=s.merit,
@@ -516,10 +533,10 @@ function P.PositiveChallenge()
  local prefix='JAC_PERSONA_'..s.leader..'_';
  local last=Game:GetProperty(prefix..'GOVERN_LAST_TURN');
  local deed=Game:GetProperty(prefix..'DEED_GOVERN_TURN_'..tostring(turn));
- local effective,spent=adjustedMerit(s,saved.before);
+ local effective,spent=adjustedMerit(s,saved.receipt.stopBaseline);
  assert(turn>saved.receipt.turn and g.neutralized>0 and
   saved.before.positiveGovernTurn>0 and last==turn and deed==nil and
-  effective==saved.before.merit and s.merit==s.gameplay.merit,
+  effective==saved.receipt.stopBaseline.merit and s.merit==s.gameplay.merit,
   'positive regular turn challenge or merit stop unproved');
  local out={turn=turn,governor=g,governLastTurn=last,
   deed=deed,positiveRule=saved.before.positiveGovernTurn,
@@ -746,8 +763,17 @@ local ok,result=pcall(function()
     q.governorRead.raw.owner==1 and
     q.governorRead.raw.type==before.governor.type and
     q.governorRead.raw.hash==before.governor.hash and
-    q.effects and q.merit==(Game:GetProperty(meritKey) or 0),
+    q.effects and q.merit==(Game:GetProperty(meritKey) or 0) and
+    q.stopBaseline and q.stopBaseline.turn==ev.turn and
+    q.stopBaseline.turn==q.turn and q.turn==Game.GetCurrentGameTurn() and
+    q.stopBaseline.merit==q.merit and type(q.stopBaseline.nodesOwned)=='table',
     'successful mission lacks native Governor/effect evidence');
+   for name,value in pairs(q.stopBaseline.nodesOwned) do
+    local node=assert(GameInfo.JAC_PersonaTreeNodes[name]);
+    assert(value==1 and node.LeaderType==before.governor.leader and
+     Game:GetProperty('JAC_PERSONA_'..before.governor.leader..'_NODE_'..name)==1,
+     'success skill baseline differs from Gameplay')
+   end
    next.stage='SUCCEEDED';
    next.recovery={firstPositive=q.governorRead.raw,observations={}};
   elseif q.outcome=='FAILED' then
@@ -765,7 +791,7 @@ local ok,result=pcall(function()
    q.governor.type==before.governor.type and
    q.governor.hash==before.governor.hash and
    q.governor.owner==1 and q.governor.neutralized>=0 and
-   q.meritWithPurchases==before.merit and
+   q.meritWithPurchases==old.receipt.stopBaseline.merit and
    q.merit==(Game:GetProperty(meritKey) or 0) and q.effects,
    'native recovery/merit observation differs');
   local n,status=checkedMission(d,4);
@@ -788,7 +814,7 @@ local ok,result=pcall(function()
    q.positiveRule==before.positiveGovernTurn and q.positiveRule>0 and
    q.turn>old.receipt.turn and q.turn==Game.GetCurrentGameTurn() and
    q.governLastTurn==q.turn and q.deed==nil and
-   q.meritWithPurchases==before.merit and
+   q.meritWithPurchases==old.receipt.stopBaseline.merit and
    q.merit==(Game:GetProperty(meritKey) or 0) and q.effects,
    'real positive merit challenge unproved');
   local prefix='JAC_PERSONA_'..before.governor.leader..'_';
@@ -837,6 +863,7 @@ local p=Game:GetProperty(KEY) or {};
 assert(not p.nonce or p.nonce==w.nonce,'unknown mission nonce differs');
 local next={}; for k,v in pairs(p) do next[k]=v end;
 next.nonce=w.nonce; next.stage='UNKNOWN_CORE';
+next.firstUnknown=next.firstUnknown or w.observation;
 next.unknown=w.observation; next.unknownTurn=Game.GetCurrentGameTurn();
 Game:SetProperty(KEY,next); return 'UNKNOWN_CORE'
 "#;

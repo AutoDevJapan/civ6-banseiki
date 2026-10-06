@@ -2,7 +2,7 @@
 //! The module supplies context-specific diagnostic glue, not game outcomes.
 #[path = "../src/spy_group_exchange.rs"]
 mod exchange;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 fn ui(code: &str) -> Value {
     json!({"action":"ui_lua","state_name":"InGame","code":code})
 }
@@ -110,21 +110,17 @@ fn native_sends_follow_durable_intents_and_every_transition_has_a_checkpoint() {
 fn terminal_unknowns_are_saved_without_final_submission_or_false_return_claim() {
     let data = scenario();
     let steps = data["steps"].as_array().unwrap();
-    assert!(
-        steps[11]["condition"]["code"]
-            .as_str()
-            .unwrap()
-            .contains("stage~='WAIT_AI'")
-    );
+    assert!(steps[11]["condition"]["code"]
+        .as_str()
+        .unwrap()
+        .contains("stage~='WAIT_AI'"));
     for index in [15, 17, 20, 21] {
         assert!(steps[index]["code"].as_str().unwrap().contains(HAS_QUOTE));
     }
-    assert!(
-        steps[19]["condition"]["code"]
-            .as_str()
-            .unwrap()
-            .contains("stage~='WAIT_RETURN'")
-    );
+    assert!(steps[19]["condition"]["code"]
+        .as_str()
+        .unwrap()
+        .contains("stage~='WAIT_RETURN'"));
     assert_eq!(steps[24]["code"], EVIDENCE);
     assert!(steps[23]["code"].as_str().unwrap().contains("Close()"));
 }

@@ -58,6 +58,7 @@ fn generated_module_uses_the_boundary_view_instance_and_gates_before_old_handler
         .unwrap();
     assert_eq!(view.get::<i64>("OLD_CALLS").unwrap(), 2);
     lua.load("assert(EVENT_UNKNOWN:find('native unreadable')); ExposedMembers.JAC_ReturnedPreparation548Witness={stale=true}; LOAD(); assert(ExposedMembers.JAC_ReturnedPreparation548Witness==nil)").exec().unwrap();
+    lua.load("local p=ExposedMembers.JAC_PersonaBoundary.PreparedMission; assert(JAC_PreparedMission548==nil and type(p.Resume)=='function'); p.RouteEvent=function(a,id) if a==0 and id==4 then return 'OWNED_UNKNOWN' end; return 'UNOWNED' end; ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation.RouteEvent=function() RETURNED_CALLED=true; return 'UNOWNED' end; EVENT(0,4); assert(RETURNED_CALLED==nil); ExposedMembers.JAC_PreparedMission548Witness={stale=true}; LOAD(); assert(ExposedMembers.JAC_PreparedMission548Witness==nil)").exec().unwrap();
     assert_eq!(installer::hooked_view(&hooked).unwrap(), hooked);
 }
 

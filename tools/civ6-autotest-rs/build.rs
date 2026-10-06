@@ -1,10 +1,10 @@
 use std::{collections::BTreeSet, env, fs, path::Path};
 #[path = "src/spy_completed_failure.rs"]
 mod spy_completed_failure;
-#[path = "src/spy_third.rs"]
-mod spy_third;
 #[path = "src/spy_preparation_install.rs"]
 mod spy_preparation_install;
+#[path = "src/spy_third.rs"]
+mod spy_third;
 
 fn collect_ids(dir: &Path, ids: &mut BTreeSet<String>) {
     println!("cargo:rerun-if-changed={}", dir.display());
