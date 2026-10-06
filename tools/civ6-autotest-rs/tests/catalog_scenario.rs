@@ -1,12 +1,17 @@
 //! Lua 5.1 engine model tests, not live/native qualification evidence.
-//! Load the shipped Gameplay/Rules/View. Engine getters use an independent
-//! ledger/unit/title oracle; they do not read the producer's admission property.
+//! Historical private qualification uses its fixed bd252 Gameplay source.
+//! Current normal startup/qualification and private-flag rejection load shipped
+//! Gameplay separately. Engine getters use an independent ledger/unit/title
+//! oracle; they do not read the producer's admission property.
 use civ6_autotest_rs::{
     catalog_scenario as catalog, payment_scenario::READ_CLOSED_ADMISSION, repo_root,
 };
 use mlua::Lua;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+
+const LEGACY_GAMEPLAY: &str = include_str!("fixtures/catalog-gameplay-bd252.lua");
 
 fn template() -> Value {
     serde_json::from_str(catalog::NORMAL).unwrap()
@@ -16,9 +21,13 @@ fn run(lua: &Lua, code: &str) -> String {
 }
 
 fn model() -> Lua {
+    model_with_startup("", false).unwrap()
+}
+
+fn model_with_startup(engine_fault: &str, normal: bool) -> mlua::Result<Lua> {
     let lua = Lua::new();
-    let normal = template();
-    let players = normal["steps"][1]["players"].as_array().unwrap();
+    let configuration = template();
+    let players = configuration["steps"][1]["players"].as_array().unwrap();
     let list = |field: &str, prefix: &str| {
         players
             .iter()
@@ -95,17 +104,55 @@ local civicRows,official={},{}
 for n=1,15 do civicRows[n]={CivicType='CIVIC_TEST_'..n}; official[n]={CivicType='CIVIC_TEST_'..n,Index=n} end
 GameInfo.JAC_PersonaTitleCivics=collection(civicRows,'CivicType')
 GameInfo.Civics=collection(official,'CivicType')
+-- Normal Gameplay now validates the complete official promotion catalog and
+-- captures a turn-zero, all-closed baseline. The archived three-person mock's
+-- dense promotion indices collide when expanded to 22; keep the same native
+-- hashes and independent eligibility oracle, but supply valid engine indices
+-- and explicit membership rather than fabricating a saved receipt.
+local sets={}
+for index,promotion in ipairs(PROMOS) do
+ promotion.Index=512+index; promotion.BaseAbility=0
+ for _,row in ipairs(ROWS) do
+  if promotion.GovernorPromotionType==row.BasePromotionType or
+     promotion.GovernorPromotionType:sub(1,#row.BasePromotionType+7)==row.BasePromotionType..'_TITLE_' then
+   if promotion.GovernorPromotionType==row.BasePromotionType then promotion.BaseAbility=1 end
+   sets[#sets+1]={GovernorType=row.GovernorType,GovernorPromotion=promotion.GovernorPromotionType}
+  end
+ end
+end
+GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')
+GameInfo.GovernorPromotionSets=setmetatable({},{__call=function() local i=0; return function() i=i+1; return sets[i] end end})
+TURN=0
 "#).exec().unwrap();
+    lua.load(engine_fault).exec()?;
     for path in [
         "poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua",
         "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
         "poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua",
     ] {
-        lua.load(std::fs::read_to_string(repo_root().join(path)).unwrap())
-            .set_name(path)
-            .exec()
-            .unwrap();
+        let script = if !normal && path.ends_with("JAC_LeaderPersona_Gameplay.lua") {
+            LEGACY_GAMEPLAY.to_owned()
+        } else {
+            std::fs::read_to_string(repo_root().join(path)).unwrap()
+        };
+        lua.load(script).set_name(path).exec()?;
     }
+    // Only shipped initialization can create the normal acquisition baseline.
+    // Resume the archived scenario at turn one after it has been acknowledged.
+    if normal {
+        lua.load("assert(type(Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'))=='table','normal catalog startup failed')").exec()?;
+    } else {
+        assert_eq!(
+            format!(
+                "{:x}",
+                Sha256::digest(LEGACY_GAMEPLAY.replace("\r\n", "\n"))
+            ),
+            "45d9966849284ba9cfd64e1217b337582dcbbe8dfd059bee1097b7015daa58be",
+            "historical Gameplay must stay bound to bd252"
+        );
+        lua.load("assert(Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')==nil,'historical source mixed with normal authority')").exec()?;
+    }
+    lua.load("TURN=1").exec()?;
     // A call to the shipped UI reader runs in its own UI context. The Core
     // fixture intentionally has no CanEver/CanAppoint bindings.
     lua.load(
@@ -120,7 +167,91 @@ end
     )
     .exec()
     .unwrap();
-    lua
+    Ok(lua)
+}
+
+#[test]
+fn invalid_initial_engine_catalog_cannot_create_normal_receipts() {
+    for engine_fault in [
+        "TURN=1",
+        "GameInfo.GovernorPromotionSets=nil",
+        "PROMOS[2].Index=PROMOS[1].Index; GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')",
+        "PROMOS[1].BaseAbility=0",
+        "PlayerConfigurations[21].civ='WRONG'",
+        "Players[21].spent=1",
+    ] {
+        assert!(
+            model_with_startup(engine_fault, true).is_err(),
+            "invalid engine startup was accepted: {engine_fault}"
+        );
+    }
+}
+
+#[test]
+fn current_normal_all_22_owners_keep_independent_qualification_without_private_flags() {
+    let lua = model_with_startup("", true).unwrap();
+    // The original title-grant operation is preserved. This model exercise
+    // omits its two historical UI pause flags and does not claim to execute
+    // the legacy zero-operation live scenario on current Gameplay.
+    let titles = catalog::prepare_code()
+        .replace("Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)", "")
+        .replace(
+            "Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',1)",
+            "",
+        );
+    run(&lua, &titles);
+    for source in 0..22 {
+        let row = template()["steps"][1]["players"][source]["leader"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let owner = (source + 1) % 22;
+        lua.load(format!(
+            "local api=ExposedMembers.JAC_LeaderPersona; assert(api.Join({owner},{source})=='JOINED'); assert(api.PrepareEvolution({owner},'{row}')=='EVOLVING')"
+        )).exec().unwrap();
+    }
+    let core = run(&lua, &catalog::matrix_code(true));
+    assert!(core.contains("MATRIX identities=22"));
+    // Run the same complete matrix through the independent UI getter oracle.
+    let ui = catalog::matrix_code(true).replacen("local core=true", "local core=false", 1);
+    let ui_receipt = run(&lua, &ui);
+    assert_eq!(core, ui_receipt, "Core/UI 22-person receipts differ");
+    lua.load("assert(#UI_EVER_CALLS==484 and SPAWNS==22 and DESTROYS==0 and #REQUESTS==0); assert(Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==nil and Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==nil)").exec().unwrap();
+}
+
+#[test]
+fn current_shipped_publication_rejects_the_historical_private_pause_contract() {
+    for flag in [
+        "JAC_TEST853_ADMISSION_ACTIVE",
+        "JAC_TEST853_ADMISSION_MANUAL_APPOINT",
+    ] {
+        for value in ["1", "false"] {
+            let lua = model_with_startup("", true).unwrap();
+            let titles = catalog::prepare_code()
+                .replace("Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)", "")
+                .replace(
+                    "Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',1)",
+                    "",
+                );
+            run(&lua, &titles);
+            lua.load(format!(r#"
+local api=ExposedMembers.JAC_LeaderPersona; local leader='LEADER_JAC_HOJO_UJITSUNA'
+assert(api.Join(1,0)=='JOINED' and api.PrepareEvolution(1,leader)=='EVOLVING')
+assert(Players[1]:GetProperty(901017)==true)
+local get=Players[1].GetProperty; local closes={{}}; local before=#WRITES
+Players[1].GetProperty=function(self,key)
+ if key==902001 or key==907001 then closes[key]=(closes[key] or 0)+1 end
+ return get(self,key)
+end
+Game:SetProperty('{flag}',{value}); api.Reconcile()
+assert((closes[902001] or 0)>0 and (closes[907001] or 0)>0,'both native close requests required')
+for index=before+1,#WRITES do local write=WRITES[index]
+ assert(not (write.owner==1 and (write.key==901017 or write.key==905017) and write.value==true),'private flag republished eligibility')
+end
+assert(SPAWNS==1 and DESTROYS==0 and Players[1].spent==0 and #REQUESTS==0)
+"#)).exec().unwrap();
+        }
+    }
 }
 
 #[test]
@@ -182,7 +313,7 @@ fn generated_normal_setup_mode_and_zero_operation_contract_validate() {
 }
 
 #[test]
-fn all_22_cyclic_owners_costs_and_receipts_execute_with_shipped_gameplay() {
+fn historical_all_22_cyclic_owners_costs_and_receipts_execute_with_bd252_gameplay() {
     let lua = model();
     let data = catalog::build(&template()).unwrap();
     let mut captures = BTreeMap::new();
@@ -268,7 +399,7 @@ end
 }
 
 #[test]
-fn shipped_join_rejects_same_owner_and_world_duplicate_for_every_person() {
+fn historical_join_rejects_same_owner_and_world_duplicate_for_every_person() {
     let lua = model();
     run(&lua, &catalog::prepare_code());
     for source in 0..22 {
