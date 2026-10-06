@@ -717,6 +717,18 @@ local function LegStageProgress(prior,leg,label)
   a.Issued=nil;b.Issued=nil;a.Done=nil;b.Done=nil
   assert(R.Equal(a,b),label..': actual native collection intent changed')
 end
+local function ObservedCollectionDelta(leg,amount,before,after,label)
+  assert(type(leg.Before)=='number' and type(leg.After)=='number' and type(amount)=='number'
+    and amount>0 and leg.Before-leg.After==amount,label..': resumed native collection amount changed')
+  assert(before==leg.Before or before==leg.After,label..': partial native debit origin ambiguous')
+  assert((after==leg.Before or after==leg.After) and not (before==leg.After and after==leg.Before)
+    and (leg.Done~=true or after==leg.After),
+    label..': payer changed beyond newly observed native collection; pending/settled balance is ambiguous or regressed')
+  -- Issued and Done are persisted engine stages, not proof of when a balance
+  -- changed. An interrupted issued call can already have its actual After
+  -- balance while Done remains absent. Observe the delta; never settle it here.
+  return before==leg.Before and after==leg.After and amount or 0
+end
 local function SavedProgress(expected,label)
   local now=Snapshot()
   assert(now.Turn==expected.Turn and now.Pool==expected.Pool and now.Received==expected.Received,
@@ -772,10 +784,8 @@ local function SavedProgress(expected,label)
       if prior then
         LegStageProgress(prior,leg,label)
       end
-      if escrow.To==t.To and leg and leg.Done and not (prior and prior.Done) then
-        assert(leg.Before-leg.After==escrow[currency],label..': resumed native collection amount changed')
-        if expected[currency]==leg.Before then debit[currency]=debit[currency]+escrow[currency]
-        else assert(expected[currency]==leg.After,label..': partial native debit origin ambiguous') end
+      if escrow.To==t.To and leg and (leg.Issued==true or leg.Done==true) and not (prior and prior.Done==true) then
+        debit[currency]=debit[currency]+ObservedCollectionDelta(leg,escrow[currency],expected[currency],now[currency],label)
       end
     end
     if escrow.Status=='CONSUMED' then
@@ -2539,6 +2549,104 @@ end
             lua.load(advance).exec()?;
             lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'collection progression')")).exec()?;
             lua.load("local original=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.PendingSnapshot;assert(original.Product.Escrows[OFFER.ID].CollectGold.Issued==nil);assert(original.Gold==10100);assert(original.Faith==10000)").exec()?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_issued_collection_keeps_pending_stages_across_each_balance_checkpoint(
+    ) -> Result<()> {
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Issued=true;ESCROW.CollectFaith.Issued=true;ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\nt.OriginalCollection=Snapshot();t.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+        for (advance, settled) in [
+            ("", false),
+            ("GOLD=10000", false),
+            ("FAITH=9980", false),
+            (
+                "ESCROW.CollectGold.Done=true;ESCROW.CollectFaith.Done=true;ESCROW.Status='HELD'",
+                true,
+            ),
+        ] {
+            lua.load(advance).exec()?;
+            // Both the unchanged original checkpoint and the latest reload
+            // checkpoint must reconcile the same observed balances. Reading
+            // never stamps Done or issues another engine call.
+            lua.load(format!(
+                r#"{P1}
+{CORE}
+local original=R.Copy(t.OriginalCollection);local current=Snapshot()
+SavedProgress(t.OriginalCollection,'original interrupted collection')
+local resumed=SavedProgress(t.CollectionCheckpoint,'checkpoint interrupted collection')
+SavedProgress(resumed,'same checkpoint replay')
+assert(R.Equal(Snapshot(),current),'observer settled or mutated a pending collection')
+assert(R.Equal(t.OriginalCollection,original),'original payment checkpoint replaced')
+t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
+"#
+            ))
+            .exec()?;
+            if !settled {
+                lua.load(format!("{P1}\n{CORE}\nassert(ESCROW.Status=='COLLECTING');assert(ESCROW.CollectGold.Done==nil and ESCROW.CollectFaith.Done==nil);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)==false);assert(not (t.NativeDebits or {{}})[OFFER.ID])")).exec()?;
+            } else {
+                lua.load(format!("{P1}\n{CORE}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));assert(t.CollectionCheckpoint.Gold==10000 and t.CollectionCheckpoint.Faith==9980)")).exec()?;
+            }
+        }
+        lua.load("local old=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.OriginalCollection;assert(old.Gold==10100 and old.Faith==10000);assert(old.Product.Escrows[OFFER.ID].CollectGold.Done==nil)").exec()?;
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_collection_rejects_refunds_ambiguous_balances_and_original_receipt_changes(
+    ) -> Result<()> {
+        for (mutation, reason) in [
+            (
+                "GOLD=10100",
+                "payer changed beyond newly observed native collection",
+            ),
+            (
+                "GOLD=9999",
+                "payer changed beyond newly observed native collection",
+            ),
+            (
+                "FAITH=9981",
+                "payer changed beyond newly observed native collection",
+            ),
+            ("ESCROW.CollectGold.Issued=nil", "stage regressed: Issued"),
+            (
+                "ESCROW.CollectGold.Before=10099;ESCROW.CollectGold.After=9999;GOLD=9999",
+                "actual native collection intent changed",
+            ),
+            (
+                "ESCROW.CollectFaith.After=0",
+                "actual native collection intent changed",
+            ),
+            ("ESCROW.Gold=101", "escrow identity changed"),
+            ("ESCROW.To=1", "escrow identity changed"),
+            ("ESCROW.SourceVersion=9", "escrow identity changed"),
+            (
+                "OP.EnvoyReceipt.GrantDone=false",
+                "completed operation/identity/receipt/done changed",
+            ),
+            (
+                "STATE.AiEnvoyTurns['0'].Turn=6",
+                "reload moved or deleted sender turn-budget metadata",
+            ),
+            (
+                "ESCROW.Status='CONSUMED';ESCROW.Consumption={}",
+                "consumption lacks a completed native flow result",
+            ),
+        ] {
+            let lua = Lua::new();
+            lua.load(WORLD).exec()?;
+            lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Issued=true;ESCROW.CollectFaith.Issued=true;ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil")).exec()?;
+            lua.load(format!(
+                "{P1}\n{CORE}\nt.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)"
+            ))
+            .exec()?;
+            lua.load(mutation).exec()?;
+            let error = lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.CollectionCheckpoint,'interrupted native payment')")).exec().expect_err(mutation).to_string();
+            assert!(error.contains(reason), "{mutation}: {error}");
         }
         Ok(())
     }
