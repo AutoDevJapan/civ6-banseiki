@@ -70,8 +70,15 @@ fn run(args: Args) -> Result<i32> {
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
         .unwrap_or_default();
+    let session = scenario::SessionType::from_scenario(&data)?;
+    if args.owner_start && session == scenario::SessionType::Hotseat {
+        return Err(civ6_autotest_rs::Error::scenario(
+            "owner_start only supports single-player",
+        ));
+    }
     let saves = args.saves.unwrap_or_else(|| {
-        home.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single")
+        home.join("Documents/My Games/Sid Meier's Civilization VI/Saves")
+            .join(session.save_folder())
     });
     let mut runner = Runner::new(
         data,

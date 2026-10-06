@@ -30,6 +30,7 @@ use civ6_autotest_rs::{
     judge,
     runner::{AutoplayOptions, Runner, LOADSCREEN_READY},
     scenario::{safe_relative_path, validate_scenario},
+    time::Clock,
     Error, ErrorKind,
 };
 use serde_json::{json, Value};
@@ -770,7 +771,7 @@ fn test_pre_send_framing_error_is_logged_as_step_failure() {
 }
 
 #[test]
-fn test_transition_pre_send_failure_is_logged_without_waiting() {
+fn test_transition_pre_send_failure_is_bounded_by_the_step_deadline() {
     for action in ["start_game", "load"] {
         let f = Fixture::new();
         let mut backend = f.backend();
@@ -783,9 +784,9 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         });
         let step = if action == "load" {
             fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
-            json!({"action":"load","name":"existing","exact_name":true})
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":2})
         } else {
-            json!({"action":"start_game"})
+            json!({"action":"start_game","timeout":2})
         };
         let mut runner = f.runner(scenario(step), backend);
         runner.auto_restart = false;
@@ -795,11 +796,52 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         } else {
             "Network.HostGame"
         };
-        assert_eq!(lua_count(&f, needle), 1);
+        assert!(lua_count(&f, needle) > 1);
+        assert!(f.clock.now() <= 2.0);
         assert!(f.trace().presses.is_empty());
         let last = f.records().pop().unwrap();
         assert_eq!(last["status"], "FAIL");
         assert_eq!(last["detail"], "pre-send connection failed");
+    }
+}
+
+#[test]
+fn test_transition_reconnects_before_send_and_sends_once_after_recovery() {
+    for action in ["start_game", "load"] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let mut connects = 0;
+        backend.on_connect = Some(Box::new(move |_, _| {
+            connects += 1;
+            if connects <= 2 {
+                Err(Error::tuner("connection refused before send"))
+            } else {
+                Ok(())
+            }
+        }));
+        let lua = f.logs.join("Lua.log");
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("Network.HostGame") || code.contains("Network.LoadGame") {
+                append(&lua, &format!("{LOADSCREEN_READY}\n"));
+            }
+            Ok("true".into())
+        });
+        let step = if action == "load" {
+            fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":5})
+        } else {
+            json!({"action":"start_game","timeout":5})
+        };
+        let mut runner = f.direct_runner(json!({}), backend);
+        runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+        runner.run_step(&step).unwrap();
+        let needle = if action == "load" {
+            "Network.LoadGame"
+        } else {
+            "Network.HostGame"
+        };
+        assert_eq!(lua_count(&f, needle), 1);
+        assert!(f.clock.now() > 0.0 && f.clock.now() < 5.0);
     }
 }
 

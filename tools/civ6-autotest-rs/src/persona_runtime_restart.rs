@@ -46,6 +46,13 @@ impl Runner {
         if !self.persona_runtime_restart {
             return Ok(());
         }
+        if scenario::SessionType::from_scenario(&self.scenario)?
+            != scenario::SessionType::SinglePlayer
+        {
+            return Err(Error::scenario(
+                "resident restart diagnostic requires a single-player session",
+            ));
+        }
         if self.test_mode || self.owner_start || self.scenario.get("test_mode").is_some() {
             return Err(Error::scenario(
                 "resident restart diagnostic requires automatic, non-test execution",
@@ -78,6 +85,7 @@ impl Runner {
         if !self.persona_runtime_restart {
             return Ok(());
         }
+        self.validate_persona_runtime_mode()?;
         if self.test_mode || self.owner_start {
             return Err(Error::scenario(
                 "resident restart diagnostic requires automatic, non-test single-player execution",
@@ -371,6 +379,10 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         r.scenario["test_mode"] = json!({"skipped_turns":0});
         assert!(r.validate_persona_runtime_mode().is_err());
         r.scenario.as_object_mut().unwrap().remove("test_mode");
+        r.scenario["session_type"] = "hotseat".into();
+        assert!(r.validate_persona_runtime_mode().is_err());
+        assert!(r.activate_persona_runtime(r.clock.now() + 30.0).is_err());
+        r.scenario.as_object_mut().unwrap().remove("session_type");
         r.scenario["steps"] = json!([{"action":"start_native_paid_runtime"}]);
         assert!(r.validate_persona_runtime_mode().is_err());
         assert!(calls.lock().unwrap().is_empty());
