@@ -36,6 +36,26 @@ function R.TrainingOrigin(id,city)
   end
   return city:GetX(),city:GetY()
 end
+function R.TestAbortOriginFixture(id)
+  if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
+  local snapshot=Game:GetProperty("JAC_ASN_BLOCKED_TEST")
+  local errors={}
+  if snapshot and snapshot.Actor==id then
+    for _,row in ipairs(snapshot.Plots or {}) do
+      local ok,why=pcall(function()
+        local plot=Map.GetPlot(row.X,row.Y)
+        assert(plot and not plot:IsCity(),"rollback plot is missing or became a city")
+        TerrainBuilder.SetTerrainType(plot,row.Terrain)
+        TerrainBuilder.SetFeatureType(plot,row.Feature)
+        assert(plot:GetTerrainType()==row.Terrain and plot:GetFeatureType()==row.Feature,"rollback terrain differs")
+      end)
+      if not ok then errors[#errors+1]=tostring(why) end
+    end
+  end
+  Game:SetProperty(ORIGIN_TEST_KEY..tostring(id),nil)
+  Game:SetProperty(R.TEST,nil)
+  return #errors==0,table.concat(errors,"; ")
+end
 "#;
 
 fn generate(source: &str) -> Result<String> {
