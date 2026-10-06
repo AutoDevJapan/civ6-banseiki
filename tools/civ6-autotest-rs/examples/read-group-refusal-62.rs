@@ -54,6 +54,23 @@ e.production.enumeration=safe(function()
   end)
   r.spy.cost=safe(function()return city:GetBuildQueue():GetUnitCost(spy().Index)end)
   r.spy.progress=safe(function()return city:GetBuildQueue():GetUnitProgress(spy().Index)end)
+  r.spy.definition=safe(spy)
+  r.spy.canProduceHash=safe(function()
+   local allowed,reasons=city:GetBuildQueue():CanProduce(spy().Hash,false,true)
+   return {allowed=allowed,reasons=reasons,reasonsKind=type(reasons)}
+  end)
+  r.spy.canProduceListed=safe(function()
+   local params={UnitType=spy().Hash,MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION}
+   local allowed,reasons=city:GetBuildQueue():CanProduce(params,true,true)
+   return {allowed=allowed,reasons=reasons,reasonsKind=type(reasons)}
+  end)
+  r.spy.canStart=safe(function()
+   local args={
+    [CityOperationTypes.PARAM_UNIT_TYPE]=spy().Hash,
+    [CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_APPEND}
+   local allowed,reasons=CityManager.CanStartOperation(city,CityOperationTypes.BUILD,args,true)
+   return {allowed=allowed,reasons=reasons,reasonsKind=type(reasons),arguments=args}
+  end)
   r.agency.owned=safe(function()return city:GetBuildings():HasBuilding(agency().Index)end)
   r.agency.canProduce=safe(function()
    local allowed,reasons=city:GetBuildQueue():CanProduce(agency().Hash,false,true)
@@ -99,6 +116,110 @@ e.capacityCivics.enumeration=safe(function()
   v.argumentRead=safe(function() for a in GameInfo.ModifierArguments() do if a.ModifierId==row.ModifierId then v.arguments[#v.arguments+1]={name=a.Name,value=a.Value} end end; return true end)
  end end
  return true
+end)
+e.capacitySources={definitions={},definitionErrors={},bindings={},parents={}}
+e.capacitySources.enumeration=safe(function()
+ local wanted={};local definitions=e.capacitySources.definitions;local args={}
+ local function register(id,m)
+  assert(type(id)=='string','modifier ID unavailable')
+  wanted[id]=true
+  if definitions[id] then return end
+  local result={arguments={}};definitions[id]=result
+  result.read=safe(function()
+   m=m or assert(GameInfo.Modifiers[id],'modifier definition missing')
+   result.modifier=m
+   local d=assert(GameInfo.DynamicModifiers[m.ModifierType],'dynamic modifier definition missing')
+   result.definition=d
+   result.grantsCapacity=d.EffectType=='EFFECT_GRANT_SPY' or
+    (type(d.EffectType)=='string' and d.EffectType:find('SPY_CAPACITY',1,true)~=nil)
+   return true
+  end)
+ end
+ -- Each phase retains its partial rows; failure does not skip other source tables.
+ e.capacitySources.modifierRead=safe(function()
+  for row in GameInfo.Modifiers() do
+   local observed=safe(function()
+    local d=assert(GameInfo.DynamicModifiers[row.ModifierType],'dynamic modifier definition missing')
+    if type(d.EffectType)=='string' and d.EffectType:find('SPY',1,true) then register(row.ModifierId,row) end
+    return true
+   end)
+   if observed.status=='ERROR' then
+    e.capacitySources.definitionErrors[#e.capacitySources.definitionErrors+1]={modifier=row.ModifierId,result=observed}
+   end
+  end
+  return true
+ end)
+ e.capacitySources.argumentsRead=safe(function()
+  for row in GameInfo.ModifierArguments() do args[#args+1]=row end
+  return true
+ end)
+ for _,row in ipairs(args) do
+  if row.Value=='UNIT_SPY' or row.Value=='PROMOTION_CLASS_SPY' then
+   local observed=safe(function()register(row.ModifierId);return true end)
+   if observed.status=='ERROR' then
+    e.capacitySources.definitionErrors[#e.capacitySources.definitionErrors+1]={modifier=row.ModifierId,result=observed}
+   end
+  end
+ end
+ for _,row in ipairs(args) do
+  if definitions[row.ModifierId] then
+   local a=definitions[row.ModifierId].arguments;a[#a+1]={name=row.Name,value=row.Value}
+  end
+ end
+ -- Freeze each breadth-first frontier so the depth bound is independent of DB order.
+ local frontier={};for id in pairs(wanted) do frontier[id]=true end
+ for depth=1,16 do
+  local nextFrontier={}
+  for _,row in ipairs(args) do
+   if type(row.ModifierId)=='string' and frontier[row.Value] and not wanted[row.ModifierId] then
+    nextFrontier[row.ModifierId]=true
+    e.capacitySources.parents[#e.capacitySources.parents+1]={modifier=row.ModifierId,argument=row.Name,child=row.Value,depth=depth}
+   end
+  end
+  for id in pairs(nextFrontier) do wanted[id]=true end
+  frontier=nextFrontier
+  if next(frontier)==nil then break end
+ end
+ e.capacitySources.attachmentTruncated=false
+ for _,row in ipairs(args) do
+  if frontier[row.Value] and type(row.ModifierId)=='string' and not wanted[row.ModifierId] then e.capacitySources.attachmentTruncated=true end
+ end
+ local tables={CivicModifiers='CivicType',TechnologyModifiers='TechnologyType',BuildingModifiers='BuildingType',
+  PolicyModifiers='PolicyType',GovernmentModifiers='GovernmentType',TraitModifiers='TraitType',
+  GovernorModifiers='GovernorType',GovernorPromotionModifiers='GovernorPromotionType',
+  GreatPersonIndividualActionModifiers='GreatPersonIndividualType',GreatPersonIndividualBirthModifiers='GreatPersonIndividualType',
+  ProjectCompletionModifiers='ProjectType',GameModifiers='ModifierId',CommemorationModifiers='CommemorationType',
+  DistrictModifiers='DistrictType',BeliefModifiers='BeliefType',GreatWorkModifiers='GreatWorkType',
+  ImprovementModifiers='ImprovementType',UnitAbilityModifiers='UnitAbilityType',UnitPromotionModifiers='UnitPromotionType',
+  EmergencyRewards='EmergencyType',EmergencyBuffs='EmergencyType'}
+ for tab,key in pairs(tables) do
+  local result={rows={}};e.capacitySources.bindings[tab]=result
+  result.enumeration=safe(function()
+   for row in assert(GameInfo[tab],tab..' unavailable')() do
+    local mid=row.ModifierId or row.ModifierID
+    if wanted[mid] then
+     assert(#result.rows<2048,'source enumeration limit')
+     local v={source=row[key],modifier=mid,row=row};result.rows[#result.rows+1]=v
+     if tab=='PolicyModifiers' then
+      v.unlocked=safe(function()return Players[0]:GetCulture():IsPolicyUnlocked(GameInfo.Policies[v.source].Hash)end)
+      v.obsolete=safe(function()return Players[0]:GetCulture():IsPolicyObsolete(GameInfo.Policies[v.source].Hash)end)
+     elseif tab=='TechnologyModifiers' then
+      v.completed=safe(function()return Players[0]:GetTechs():HasTech(GameInfo.Technologies[v.source].Index)end)
+     end
+    end
+   end
+   return true
+  end)
+ end
+ return true
+end)
+e.capacitySources.identity={}
+e.capacitySources.identity.leader=safe(function()return PlayerConfigurations[0]:GetLeaderTypeName()end)
+e.capacitySources.identity.traits=safe(function()
+ local c=PlayerConfigurations[0]:GetCivilizationTypeName();local l=PlayerConfigurations[0]:GetLeaderTypeName();local r={}
+ for row in GameInfo.CivilizationTraits() do if row.CivilizationType==c then r[#r+1]={source=c,trait=row.TraitType} end end
+ for row in GameInfo.LeaderTraits() do if row.LeaderType==l then r[#r+1]={source=l,trait=row.TraitType} end end
+ return r
 end)
 local function quoted(s)
  return '"'..tostring(s):gsub('[%z\1-\31\\"]',function(c)
@@ -261,4 +382,135 @@ fn missing_progress_does_not_erase_eligibility_and_missing_queue_keeps_ownership
     assert_eq!(c["agency"]["canProduce"]["status"], "ERROR");
     assert_eq!(c["agency"]["owned"]["value"], true);
     assert_eq!(c["spy"]["progress"]["value"], 0);
+}
+
+#[test]
+fn capacity_sources_distinguish_production_policy_and_follow_capacity_attachment() {
+    let v = read_fixture(
+        r#"
+local function rows(a) return function() local i=0;return function()i=i+1;return a[i]end end end
+GameInfo.Modifiers=rows({{ModifierId='CAP',ModifierType='GRANT'},{ModifierId='SPEED',ModifierType='SPY_SPEED'}})
+GameInfo.DynamicModifiers={GRANT={EffectType='EFFECT_GRANT_SPY'},SPY_SPEED={EffectType='EFFECT_ADJUST_UNIT_SPY_OFFENSIVE_OPERATION_TIME'}}
+GameInfo.ModifierArguments=rows({{ModifierId='CAP',Name='Amount',Value='1'},{ModifierId='PARENT',Name='ModifierId',Value='CAP'}})
+GameInfo.PolicyModifiers=rows({{PolicyType='POLICY_SPEED',ModifierId='SPEED'}})
+GameInfo.BuildingModifiers=rows({{BuildingType='BUILDING_AGENCY',ModifierId='PARENT'}})
+GameInfo.Policies={POLICY_SPEED={Hash=72}}
+Players[0].GetCulture=function()return {IsPolicyUnlocked=function(_,h)assert(h==72);return true end,IsPolicyObsolete=function(_,h)assert(h==72);return false end}end
+"#,
+    );
+    assert_eq!(v["capacitySources"]["enumeration"]["status"], "OK");
+    assert_eq!(
+        v["capacitySources"]["definitions"]["CAP"]["grantsCapacity"],
+        true
+    );
+    assert_eq!(
+        v["capacitySources"]["definitions"]["SPEED"]["grantsCapacity"],
+        false
+    );
+    assert_eq!(
+        v["capacitySources"]["bindings"]["BuildingModifiers"]["rows"]["1"]["modifier"],
+        "PARENT"
+    );
+    assert_eq!(
+        v["capacitySources"]["bindings"]["PolicyModifiers"]["rows"]["1"]["unlocked"]["value"],
+        true
+    );
+    assert_eq!(
+        v["capacitySources"]["bindings"]["TechnologyModifiers"]["enumeration"]["status"],
+        "ERROR"
+    );
+}
+
+#[test]
+fn production_command_preflight_keeps_native_failure_without_requesting_build() {
+    let v = read_fixture(&format!(
+        r#"{PRODUCTION}
+CityOperationTypes={{PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,VALUE_APPEND=3,BUILD=4}}
+CityManager={{CanStartOperation=function(c,op,args,results)
+ assert(c:GetID()==42 and op==4 and args[1]==118 and args[2]==3 and results==true)
+ return false,{{[-7]={{'CAPACITY_FULL'}}}}
+end,RequestOperation=function()error('must not submit')end}}
+"#
+    ));
+    let r = &v["production"]["cities"]["1"]["spy"]["canStart"];
+    assert_eq!(r["status"], "OK");
+    assert_eq!(r["value"]["allowed"], false);
+    assert_eq!(r["value"]["reasons"]["-7"]["1"], "CAPACITY_FULL");
+    assert_eq!(
+        v["production"]["cities"]["1"]["spy"]["canProduce"]["value"]["allowed"],
+        false
+    );
+}
+
+#[test]
+fn promotion_class_grants_and_uppercase_emergency_binding_are_not_lost() {
+    let v = read_fixture(
+        r#"
+local function rows(a) return function()local i=0;return function()i=i+1;return a[i]end end end
+local m={ModifierId='EMERGENCY_SPY',ModifierType='UNIT_GRANT'}
+GameInfo.Modifiers=setmetatable({EMERGENCY_SPY=m},{__call=rows({m})})
+GameInfo.DynamicModifiers={UNIT_GRANT={EffectType='EFFECT_GRANT_UNIT_IN_CITY'}}
+GameInfo.ModifierArguments=rows({{ModifierId='EMERGENCY_SPY',Name='UnitPromotionClassType',Value='PROMOTION_CLASS_SPY'}})
+GameInfo.EmergencyRewards=rows({{EmergencyType='EMERGENCY_SPYING',ModifierID='EMERGENCY_SPY',OnSuccess=false}})
+"#,
+    );
+    let src = &v["capacitySources"];
+    assert_eq!(src["enumeration"]["status"], "OK");
+    assert_eq!(src["definitions"]["EMERGENCY_SPY"]["grantsCapacity"], false);
+    let row = &src["bindings"]["EmergencyRewards"]["rows"]["1"];
+    assert_eq!(row["source"], "EMERGENCY_SPYING");
+    assert_eq!(row["modifier"], "EMERGENCY_SPY");
+    assert_eq!(row["row"]["OnSuccess"], false);
+}
+
+#[cfg(test)]
+const CAPACITY_PARTIAL: &str = r#"
+local function rows(a) return function()local i=0;return function()i=i+1;return a[i]end end end
+local cap={ModifierId='CAP',ModifierType='GRANT'}
+GameInfo.Modifiers=setmetatable({CAP=cap},{__call=rows({cap})})
+GameInfo.DynamicModifiers={GRANT={EffectType='EFFECT_GRANT_SPY'}}
+GameInfo.ModifierArguments=rows({{ModifierId='CAP',Name='Amount',Value='1'},{ModifierId='MISSING',Name='UnitType',Value='UNIT_SPY'}})
+GameInfo.BuildingModifiers=rows({{BuildingType='AGENCY',ModifierId='CAP'}})
+"#;
+
+#[test]
+fn missing_definition_or_arguments_does_not_erase_other_source_bindings() {
+    let v = read_fixture(CAPACITY_PARTIAL);
+    let src = &v["capacitySources"];
+    assert_eq!(src["definitions"]["CAP"]["grantsCapacity"], true);
+    assert_eq!(src["definitions"]["MISSING"]["read"]["status"], "ERROR");
+    assert_eq!(
+        src["bindings"]["BuildingModifiers"]["rows"]["1"]["source"],
+        "AGENCY"
+    );
+    let v = read_fixture(&format!(
+        "{CAPACITY_PARTIAL}\nGameInfo.ModifierArguments=nil"
+    ));
+    assert_eq!(v["capacitySources"]["argumentsRead"]["status"], "ERROR");
+    assert_eq!(
+        v["capacitySources"]["bindings"]["BuildingModifiers"]["rows"]["1"]["source"],
+        "AGENCY"
+    );
+}
+
+#[test]
+fn attachment_limit_is_order_independent_and_retains_reachable_bindings() {
+    for reverse in [false, true] {
+        let v = read_fixture(&format!(
+            r#"{CAPACITY_PARTIAL}
+local edges={{}};for i=1,17 do edges[#edges+1]={{ModifierId='P'..i,Name='ModifierId',Value=i==1 and 'CAP' or 'P'..(i-1)}} end
+if {reverse} then local r={{}};for i=#edges,1,-1 do r[#r+1]=edges[i] end;edges=r end
+GameInfo.ModifierArguments=rows(edges)
+GameInfo.BuildingModifiers=rows({{{{BuildingType='VALID16',ModifierId='P16'}},{{BuildingType='UNRESOLVED17',ModifierId='P17'}}}})
+"#
+        ));
+        let src = &v["capacitySources"];
+        assert_eq!(src["attachmentTruncated"], true);
+        assert_eq!(src["parents"]["16"]["depth"], 16);
+        assert_eq!(
+            src["bindings"]["BuildingModifiers"]["rows"]["1"]["source"],
+            "VALID16"
+        );
+        assert!(src["bindings"]["BuildingModifiers"]["rows"]["2"].is_null());
+    }
 }
