@@ -27,7 +27,7 @@ for actor=1,3 do local id=actor
     GetUnits=function() return {Members=function() local n=0;return function() n=n+1;if n<=(id==1 and 1 or COMBAT) then return n,{GetType=function() return id==1 and 0 or 1 end} end end end} end,
     GetCities=function() return {Members=function() local done=false;return function() if done then return end;done=true;return 1,{GetPopulation=function() return id==1 and 1 or POP end,GetYield=function() return SCIENCE end} end end} end,
     GetDiplomacy=function() return {HasMet=function() return true end,IsAtWarWith=function(_,other) return STATES['war:'..id..':'..other]==true end,
-      IsAlliedWith=function(_,other) return ALLIES[id..':'..other]==true end,GetVisibilityOn=function() return id==1 and 1 or ACCESS end} end,
+      HasAllied=function(_,other) return ALLIES[id..':'..other]==true end,GetVisibilityOn=function() return id==1 and 1 or ACCESS end} end,
     GetDiplomaticAI=function() return {GetDiplomaticStateIndex=function() return STATES[id] or 0 end} end,
     GetInfluence=function() return {CanReceiveInfluence=function() return id==1 and OFFICIAL end,GetTokensReceived=function(_,sender) assert(id==1 and sender==2);return OFFICIAL_ENVOYS end,
       GetTokensToGive=function() return POOL end,ChangeTokensToGive=function(_,n) POOL=POOL+n;SENDS=SENDS+1;if FAIL_ENVOY then FAIL_ENVOY=false;error('envoy spent then threw') end end,
@@ -82,6 +82,8 @@ fn load(lua: &Lua, area: f64) -> anyhow::Result<()> {
     lua.load("RESET_EVENTS()").exec()?;
     lua.load(absorption_admission::lua()).exec()?;
     lua.load("N=JAC_AbsorptionAdmissionGameplay").exec()?;
+    lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
+        .exec()?;
     let mut catalog = product::catalog(&Repository::checked_in())?;
     catalog.runtime["Countries"]["ROKKAKU"]["AreaKm2"] = serde_json::json!(area);
     lua.load(product::render_gameplay(&catalog)).exec()?;
@@ -92,6 +94,65 @@ fn world(area: f64) -> anyhow::Result<Lua> {
     lua.load(WORLD).exec()?;
     load(&lua, area)?;
     Ok(lua)
+}
+
+#[test]
+fn ui_only_diplomacy_reads_stay_in_the_native_ui_context_and_reject_stale_turns(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(r#"
+      UI_READ_CONTEXT=setmetatable({Players={}}, {__index=_G})
+      for id,player in pairs(Players) do
+        UI_READ_CONTEXT.Players[id]={GetDiplomacy=player.GetDiplomacy,GetDiplomaticAI=player.GetDiplomaticAI}
+        local diplomacy=player.GetDiplomacy
+        player.GetDiplomacy=function() local value=diplomacy()
+          value.GetVisibilityOn=function() error('UI visibility called in Gameplay') end;return value end
+        player.GetDiplomaticAI=function() error('UI diplomatic AI called in Gameplay') end
+      end
+    "#).exec()?;
+    lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
+        .set_environment(lua.globals().get("UI_READ_CONTEXT")?)
+        .exec()?;
+    lua.load(
+        r#"
+      assert(VIEW().Status=='AVAILABLE',VIEW().Error)
+      local read=ExposedMembers.JAC_AbsorptionProductNativeRead.GetDiplomacy
+      ExposedMembers.JAC_AbsorptionProductNativeRead.GetDiplomacy=function(from,to)
+        local result=read(from,to);result.Turn=TURN-1;return result end
+      local view=VIEW();assert(view.Status=='UNAVAILABLE' and view.Error:find('stale',1,true))
+      assert(CHARGES==0 and SENDS==0 and STARTS==0)
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
+fn product_registration_during_another_flow_does_not_freeze_a_stale_preflight_plan(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(r#"
+      local P=JAC_AbsorptionProductGameplay
+      COMBAT=100;PEAK=100
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function() error('inventory unavailable before journalling') end
+      P.Command(2,{Command='REGISTER',From=1,Nonce='initial-register'});P.Tick()
+      local request=N.Get('leader-offer',VIEW().OfferID)
+      assert(request.Plan and request.LastError and STARTS==0)
+      local charged,paidGold,paidFaith=CHARGES,GOLD[2],FAITH[2]
+      assert(paidGold<5000 or paidFaith<1000)
+      FLOWS.other={ID='other',From=3,To=2,Phase='CHOICE',Phase1Complete=false}
+      Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
+      P.Command(2,{Command='REGISTER',From=1,Nonce='busy-register'})
+      request=N.Get('leader-offer',VIEW().OfferID)
+      assert(request.Status=='WAITING' and not request.Plan and CHARGES==charged and STARTS==0)
+      assert(GOLD[2]==paidGold and FAITH[2]==paidFaith)
+      COMBAT=0;FLOWS.other.Phase='DONE'
+      Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
+      JAC_AbsorptionFlowGameplay.Begin=begin;N.Tick();P.Tick()
+      assert(not N.Get('leader-offer',VIEW().OfferID).Plan and STARTS==0 and CHARGES==charged)
+    "#).exec()?;
+    Ok(())
 }
 
 #[test]

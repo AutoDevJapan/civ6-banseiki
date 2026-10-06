@@ -783,6 +783,7 @@ fn package_manifest() {
             "UI/JAC_Absorption_HeroKeys.xml",
             "UI/JAC_Absorption_AdmissionUI.lua",
             "UI/JAC_Absorption_CityStates.lua",
+            "UI/JAC_Absorption_ProductNativeRead.lua",
             "Text/JAC_Absorption_Admission_Text.xml"
         ])
     );

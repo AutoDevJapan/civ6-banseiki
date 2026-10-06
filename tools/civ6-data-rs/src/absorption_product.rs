@@ -10,6 +10,7 @@ pub const UI: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_AdmissionUI.lua";
 pub const CITY_STATES: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_CityStates.lua";
 pub const DIPLOMACY: &str = "poc/JAC_PoC_CustomCivs/UI/JAC_DiplomacyActionView.lua";
 pub const TEXT: &str = texts::OUTPUT;
+pub const NATIVE_READ_UI: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_ProductNativeRead.lua";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
@@ -252,6 +253,7 @@ pub fn generate(repo: &Repository) -> Result<Outputs> {
     );
     out.insert(UI.into(), ui.clone());
     out.insert(CITY_STATES.into(), citystates::LUA.to_owned());
+    out.insert(NATIVE_READ_UI.into(), native_ui::LUA.to_owned());
     out.insert(texts::OUTPUT.into(), texts::xml());
     // CustomCivs also runs when absorption is disabled. Keep the adapter in
     // this replacement so it never imports a file from a disabled MOD.
@@ -276,6 +278,10 @@ pub fn generate(repo: &Repository) -> Result<Outputs> {
     );
     for (id, action) in [
         (
+            "JAC_Absorption_Product_NativeRead",
+            r#"    <ImportFiles id="JAC_Absorption_Product_NativeRead" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_ProductNativeRead.lua</File></ImportFiles>"#,
+        ),
+        (
             "JAC_Absorption_Product_UI_Files",
             r#"    <ImportFiles id="JAC_Absorption_Product_UI_Files" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_AdmissionUI.lua</File><File>UI/JAC_Absorption_CityStates.lua</File></ImportFiles>"#,
         ),
@@ -299,6 +305,7 @@ pub fn generate(repo: &Repository) -> Result<Outputs> {
     for file in [
         "UI/JAC_Absorption_AdmissionUI.lua",
         "UI/JAC_Absorption_CityStates.lua",
+        "UI/JAC_Absorption_ProductNativeRead.lua",
         "Text/JAC_Absorption_Admission_Text.xml",
     ] {
         let start = source.find("<Files>").unwrap();
@@ -325,6 +332,14 @@ pub fn generate(repo: &Repository) -> Result<Outputs> {
     // admission module or its VFS/load order, including other flow features.
     let flow_ui = "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua";
     let mut source = repo.read(flow_ui)?;
+    let native_include = "include(\"JAC_Absorption_ProductNativeRead\")";
+    if !source.contains(native_include) {
+        source = source.replacen(
+            "include(\"InstanceManager\")",
+            &format!("include(\"InstanceManager\")\n{native_include}"),
+            1,
+        );
+    }
     let localized = "local function Localized(value)";
     let end = source
         .find(localized)
@@ -416,6 +431,9 @@ pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Resul
     fn wait(code: String) -> Value {
         json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"InGame","code":code}})
     }
+    steps.push(wait(
+        "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil".into(),
+    ));
     steps.push(core(format!(r#"
 local P=assert(JAC_AbsorptionProductGameplay)
 local from,to
@@ -424,6 +442,14 @@ for _,player in ipairs(PlayerManager.GetAliveMajors()) do
   if civ=='{from}' then from=player:GetID() elseif civ=='{to}' then to=player:GetID() end
 end
 assert(from and to and not Players[from]:IsHuman(),'ordinary source actor required')
+local failures,checked={{}},0
+for _,other in ipairs(PlayerManager.GetAliveMajors()) do
+  if other:GetID()~=to and not other:IsHuman() then
+    local candidate=P.Get(other:GetID(),to);checked=checked+1
+    if candidate.Status=='UNAVAILABLE' then failures[#failures+1]=tostring(other:GetID())..': '..tostring(candidate.Error) end
+  end
+end
+assert(checked>0 and #failures==0,'native country reads unavailable: '..table.concat(failures,' | '))
 local view=P.Get(from,to);assert(view.Status=='AVAILABLE',view.Error)
 assert(view.Mode=='{mode}' and view.Country.Profile.LeaderType==PlayerConfigurations[from]:GetLeaderTypeName())
 assert(view.Country.AreaKm2>0 and (view.Country.AreaKm2<10000)=={small})
@@ -580,6 +606,8 @@ const GAMEPLAY_BODY: &str = gameplay::LUA;
 mod citystates;
 #[path = "absorption_product_diplomacy.rs"]
 mod diplomacy;
+#[path = "absorption_product_native_ui.rs"]
+mod native_ui;
 #[path = "absorption_product_text.rs"]
 mod texts;
 #[path = "absorption_product_ui.rs"]

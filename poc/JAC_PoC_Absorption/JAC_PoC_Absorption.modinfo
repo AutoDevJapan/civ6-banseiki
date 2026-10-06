@@ -49,6 +49,7 @@
     <ImportFiles id="JAC_Absorption_Product_UI_Files" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_AdmissionUI.lua</File><File>UI/JAC_Absorption_CityStates.lua</File></ImportFiles>
     <ReplaceUIScript id="JAC_Absorption_Product_CityStates" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>220</LoadOrder><LuaContext>CityStates</LuaContext><LuaReplace>UI/JAC_Absorption_CityStates.lua</LuaReplace></Properties></ReplaceUIScript>
     <UpdateText id="JAC_Absorption_Admission_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Admission_Text.xml</File></UpdateText>
+    <ImportFiles id="JAC_Absorption_Product_NativeRead" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_ProductNativeRead.lua</File></ImportFiles>
   </InGameActions>
   <Files>
     <File>Config/JAC_Absorption_ArtifactTest.xml</File>
@@ -64,5 +65,6 @@
     <File>UI/JAC_Absorption_AdmissionUI.lua</File>
     <File>UI/JAC_Absorption_CityStates.lua</File>
     <File>Text/JAC_Absorption_Admission_Text.xml</File>
+    <File>UI/JAC_Absorption_ProductNativeRead.lua</File>
   </Files>
 </Mod>

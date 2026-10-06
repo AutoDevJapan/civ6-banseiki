@@ -239,7 +239,8 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
         Players[id].GetReligion=function() return {GetFaithBalance=function() return FAITH[id] end,
           ChangeFaithBalance=function(_,n) FAITH[id]=FAITH[id]+n end} end
         Players[id].GetDiplomacy=function() return {HasMet=function() return true end,
-          IsAtWarWith=function() return false end,IsAlliedWith=function() return false end} end
+          IsAtWarWith=function() return false end,HasAllied=function() return false end,
+          GetVisibilityOn=function() return 1 end} end
         Players[id].GetDiplomaticAI=function() return {GetDiplomaticStateIndex=function() return 0 end} end
         Players[id].GetInfluence=function() return {CanReceiveInfluence=function() return false end,
           GetTokensToGive=function() return ENVOY_POOL end,ChangeTokensToGive=function(_,n) ENVOY_POOL=ENVOY_POOL+n end} end
@@ -252,10 +253,48 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
     "#).exec()?;
     load_module(
         &lua,
+        "poc/JAC_PoC_Absorption/UI/JAC_Absorption_ProductNativeRead.lua",
+    )?;
+    load_module(
+        &lua,
         "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua",
     )?;
     lua.load("P=JAC_AbsorptionProductGameplay").exec()?;
     Ok(lua)
+}
+
+#[test]
+fn actual_busy_flow_blocks_competing_plans_and_rechecks_after_acknowledgment() -> mlua::Result<()> {
+    let lua = product_world(true, true)?;
+    lua.load(r#"
+      P.Command(2,{Command='REGISTER',From=1,Nonce='busy-product'})
+      local required=P.Get(1,2).Envoys.Required
+      for i=0,required-1 do P.Command(2,{Command='SEND_ENVOY',From=1,Nonce='busy-envoy:'..i,ExpectedEnvoys=i}) end
+      GameEvents.OnGameTurnStarted.Emit()
+      local original=assert(N.Get('leader-offer',P.Get(1,2).OfferID))
+      local flow=assert(TEST_FLOW.Get(original.FlowID));assert(flow.Phase=='CHOICE')
+      PEER_READY=true;PEER_READS=0
+      N.Register('competitor',function(_,from,to) PEER_READS=PEER_READS+1
+        return {From=from,To=to,Turn=Game.GetCurrentGameTurn(),Mode='MERGER',AreaKm2=10000,
+          Requirements={{ID='current',Met=PEER_READY}},RelationsResolved=true} end)
+      local peer=N.Request('competitor','peer',3,2)
+      assert(peer.Status=='WAITING' and not peer.Plan and PEER_READS==0)
+      local rolls=#RANDOM_CALLS
+      local saved=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
+      for _,request in pairs(saved.Requests) do if request.Source=='competitor' then
+        request.Status='STARTING';request.LastError='legacy conflict'
+        request.Plan={ID=request.FlowID,From=3,To=2,Mode='MERGER'} end end
+      Game:SetProperty('JAC_ABSORPTION_ADMISSION_V1',saved);N.Tick()
+      assert(not N.Get('competitor','peer').Plan and #RANDOM_CALLS==rolls and TRANSFERS==0)
+      RANDOM_QUEUE={};for i=1,500 do RANDOM_QUEUE[i]=0 end
+      for _,entry in ipairs(flow.Entries) do if not entry.EscapeOutcome then TEST_FLOW.Select(2,flow.ID,entry.ID,entry.AllowedActions[1]) end end
+      local result=TEST_FLOW.Resolve(2,flow.ID);assert(result.Phase=='RESULT',result.Error)
+      JAC_AbsorptionProductGameplay.Tick();TEST_FLOW.Acknowledge(2,flow.ID)
+      rolls=#RANDOM_CALLS;local transfers=TRANSFERS
+      PEER_READY=false;N.Tick();peer=N.Get('competitor','peer')
+      assert(peer.Status=='WAITING' and not peer.Plan and PEER_READS>0)
+      assert(#RANDOM_CALLS==rolls and TRANSFERS==transfers)
+    "#).exec()
 }
 
 #[test]
@@ -618,7 +657,7 @@ fn fixture_runs_the_actual_lua_transfer_with_no_spawn_return_value() -> mlua::Re
 }
 
 #[test]
-fn saved_normal_start_intent_survives_native_failure_before_the_flow_journal() -> mlua::Result<()> {
+fn saved_normal_preflight_intent_rechecks_conditions_before_the_flow_journal() -> mlua::Result<()> {
     let lua = admission_world()?;
     lua.load(
         r#"
@@ -644,8 +683,14 @@ fn saved_normal_start_intent_survives_native_failure_before_the_flow_journal() -
         "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
     )?;
     lua.load(r#"
-      N=JAC_AbsorptionAdmissionGameplay;N.Tick()
+      N=JAC_AbsorptionAdmissionGameplay
+      N.RegisterRequirement('RELEASE',function() return NORMAL_RELEASE end)
+      N.Tick()
       local receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
+      assert(receipt.Status=='WAITING' and not receipt.Plan and #RANDOM_CALLS==0 and TRANSFERS==0,
+        receipt.Status..' plan='..tostring(receipt.Plan~=nil)..' rolls='..#RANDOM_CALLS..' transfers='..TRANSFERS..' error='..tostring(receipt.LastError))
+      NORMAL_GOLD=100;NORMAL_RELEASE=true;N.Tick()
+      receipt=N.Get('leader-offer',NORMAL_OFFER.ID)
       assert(receipt.Status=='STARTED',receipt.LastError)
       assert(TEST_ABSORPTION.Rules.Equal(receipt.Plan,NORMAL_PLAN))
       assert(TEST_FLOW.Get(NORMAL_FLOW_ID).Phase1Complete and #RANDOM_CALLS>0)

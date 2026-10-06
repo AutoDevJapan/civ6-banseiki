@@ -256,6 +256,30 @@ local function NewRequest(source, id, from, to)
   return {Source=source, ID=id, From=from, To=to,
     FlowID='normal-admission:' .. Key(source,id), Status='WAITING'}
 end
+function N.IsOccupied(actor, ownID)
+  local journal = R.Copy(Game:GetProperty('JAC_ABSORPTION_FLOW_V1'))
+  if journal then
+    assert(journal.Version == 1 and type(journal.Flows) == 'table', 'unsupported absorption flow save')
+    for id, flow in pairs(journal.Flows) do
+      if id ~= ownID and flow.Phase ~= 'DONE' and (flow.From == actor or flow.To == actor) then return true end
+    end
+  end
+  -- Reserve both actors before F.Begin. A synchronous callback must not
+  -- prepare a competing request while the first inventory is being read.
+  for _, other in pairs(State().Requests) do
+    if other.FlowID ~= ownID and other.Status == 'STARTING' and other.Plan and not other.LastError
+      and (other.From == actor or other.To == actor) then return true end
+  end
+  return false
+end
+local function Wait(s, request, status)
+  status = status or 'WAITING'
+  if request.Status ~= status or request.Plan or request.Decision or request.LastError then
+    request.Status, request.Plan, request.Decision, request.LastError = status, nil, nil, nil
+    Save(s)
+  end
+  return R.Copy(request)
+end
 local function CancelInState(request)
   if request.Status == 'CANCELLED' then return end
   local journal = FlowRequest(request.FlowID)
@@ -321,21 +345,25 @@ function N.Check(source, id)
   local request = assert(s.Requests[key], 'normal admission request missing')
   if request.Status == 'STARTED' or request.Status == 'CANCELLED' then return R.Copy(request) end
   assert(Players[request.To] and Players[request.To]:IsMajor(), 'admission recipient must be a major civilization')
-  if reading[request.FlowID] then return R.Copy(request) end
+  if reading[request.FlowID] or starting[request.FlowID] then return R.Copy(request) end
   -- Once F.Begin has journalled P1, retry its frozen plan even if the country
   -- has already been transferred. F owns the saved rolls and asset inventory.
   local existing = FlowRequest(request.FlowID)
-  if request.Plan or existing then
+  if existing then
     assert(request.Plan and (not existing or R.Equal(existing, request.Plan)),
       'admission flow journal differs from its saved plan')
     assert(request.Plan.ID == request.FlowID and request.Plan.From == request.From
       and request.Plan.To == request.To, 'frozen admission identity changed')
   else
+    -- Only a persisted Flow journal freezes the plan. A preflight failure
+    -- or legacy queued intent must re-read conditions before any new roll.
+    if N.IsOccupied(request.From, request.FlowID) or N.IsOccupied(request.To, request.FlowID) then
+      return Wait(s, request)
+    end
     local read = providers[source]
-    if not read then return R.Copy(request) end -- another module may load later
-    if not Players[request.From]:IsAlive() or not Players[request.To]:IsAlive() then
-      if request.Status ~= 'UNAVAILABLE' then request.Status = 'UNAVAILABLE'; Save(s) end
-      return R.Copy(request)
+    if not read then return Wait(s, request) end -- another module may load later
+    if not Players[request.From] or not Players[request.From]:IsAlive() or not Players[request.To]:IsAlive() then
+      return Wait(s, request, 'UNAVAILABLE')
     end
     assert(not Players[request.From]:IsHuman(), 'existing flow absorbs AI sources only')
     local offerBefore = source == 'leader-offer' and R.Copy(s.Offers[id]) or nil
@@ -350,18 +378,16 @@ function N.Check(source, id)
     end
     s, request = latest, current
     local decision = R.Copy(value)
-    if not Ready(request, decision) then
-      if request.Status ~= 'WAITING' or request.LastError ~= nil then
-        request.Status, request.LastError = 'WAITING', nil; Save(s)
-      end
-      return R.Copy(request)
+    if N.IsOccupied(request.From, request.FlowID) or N.IsOccupied(request.To, request.FlowID)
+      or not Ready(request, decision) then
+      return Wait(s, request)
     end
     local plan = R.Copy(decision.Plan or {})
     -- These fields are authoritative gate output, not values from the caller.
     plan.ID, plan.From, plan.To, plan.Mode = request.FlowID, request.From, request.To, decision.Mode
     plan.EntryConditionsMet, plan.RelationsResolved = true, true
     request.Plan, request.Decision = plan, decision
-    request.Status = 'STARTING'; Save(s)
+    request.Status, request.LastError = 'STARTING', nil; Save(s)
   end
   starting[request.FlowID] = true
   local ok, result = pcall(F.Begin, R.Copy(request.Plan))

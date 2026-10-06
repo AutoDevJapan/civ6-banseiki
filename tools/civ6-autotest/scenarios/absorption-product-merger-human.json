@@ -163,9 +163,18 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 600,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
-      "code": "\nlocal P=assert(JAC_AbsorptionProductGameplay)\nlocal from,to\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  local civ=PlayerConfigurations[player:GetID()]:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then from=player:GetID() elseif civ=='CIVILIZATION_JAC_ODA' then to=player:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman(),'ordinary source actor required')\nlocal view=P.Get(from,to);assert(view.Status=='AVAILABLE',view.Error)\nassert(view.Mode=='MERGER' and view.Country.Profile.LeaderType==PlayerConfigurations[from]:GetLeaderTypeName())\nassert(view.Country.AreaKm2>0 and (view.Country.AreaKm2<10000)==false)\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',{From=from,To=to,Mode=view.Mode,Initial=JAC_AbsorptionGameplay.Rules.Copy(view)})\nreturn 'ordinary country, current leader, geographic area, personality and trait verified'\n"
+      "code": "\nlocal P=assert(JAC_AbsorptionProductGameplay)\nlocal from,to\nfor _,player in ipairs(PlayerManager.GetAliveMajors()) do\n  local civ=PlayerConfigurations[player:GetID()]:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then from=player:GetID() elseif civ=='CIVILIZATION_JAC_ODA' then to=player:GetID() end\nend\nassert(from and to and not Players[from]:IsHuman(),'ordinary source actor required')\nlocal failures,checked={},0\nfor _,other in ipairs(PlayerManager.GetAliveMajors()) do\n  if other:GetID()~=to and not other:IsHuman() then\n    local candidate=P.Get(other:GetID(),to);checked=checked+1\n    if candidate.Status=='UNAVAILABLE' then failures[#failures+1]=tostring(other:GetID())..': '..tostring(candidate.Error) end\n  end\nend\nassert(checked>0 and #failures==0,'native country reads unavailable: '..table.concat(failures,' | '))\nlocal view=P.Get(from,to);assert(view.Status=='AVAILABLE',view.Error)\nassert(view.Mode=='MERGER' and view.Country.Profile.LeaderType==PlayerConfigurations[from]:GetLeaderTypeName())\nassert(view.Country.AreaKm2>0 and (view.Country.AreaKm2<10000)==false)\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',{From=from,To=to,Mode=view.Mode,Initial=JAC_AbsorptionGameplay.Rules.Copy(view)})\nreturn 'ordinary country, current leader, geographic area, personality and trait verified'\n"
     },
     {
       "action": "ui_lua",

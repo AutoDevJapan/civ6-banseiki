@@ -44,7 +44,7 @@ fn world() -> mlua::Result<Lua> {
         FLOWS={}
         JAC_AbsorptionFlowGameplay={Begin=function(plan)
             BEGIN_COUNT=BEGIN_COUNT+1
-            FLOWS[plan.ID]=FLOWS[plan.ID] or {ID=plan.ID, Request=copy(plan)}
+            FLOWS[plan.ID]=FLOWS[plan.ID] or {ID=plan.ID, From=plan.From, To=plan.To, Phase='CHOICE', Request=copy(plan)}
             Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
             if FAIL_BEGIN then error('interrupted first-stage journal') end
             FLOWS[plan.ID].Phase1Complete=true; return copy(FLOWS[plan.ID])
@@ -105,7 +105,10 @@ fn stored_and_dynamic_demand_order_is_canonical_by_id() -> mlua::Result<()> {
         local a={ID='a',Met=true};local z={ID='z',Met=true}
         return {From=1,To=2,Turn=TURN,Mode='MERGER',AreaKm2=10000,RelationsResolved=true,Requirements=reverse and {z,a} or {a,z}}
       end)
-      N.Request('dynamic','first',1,2);reverse=true;N.Request('dynamic','second',1,2)
+      N.Request('dynamic','first',1,2)
+      for _,flow in pairs(FLOWS) do flow.Phase='DONE' end
+      Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
+      reverse=true;N.Request('dynamic','second',1,2)
       local a,b=N.Get('dynamic','first'),N.Get('dynamic','second')
       assert(a.Decision.Requirements[1].ID=='a' and b.Decision.Requirements[1].ID=='a')
       assert(JAC_AbsorptionGameplay.Rules.Equal(a.Decision,b.Decision) and BEGIN_COUNT==2)
@@ -505,7 +508,7 @@ fn permanent_preflight_failure_can_be_cancelled_but_an_inflight_retry_cannot() -
 }
 
 #[test]
-fn failure_before_flow_journal_still_resumes_the_saved_start_intent() -> mlua::Result<()> {
+fn failure_before_flow_journal_rechecks_live_conditions_before_starting() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(
         r#"
@@ -530,12 +533,107 @@ fn failure_before_flow_journal_still_resumes_the_saved_start_intent() -> mlua::R
         r#"
       N.Tick()
       local receipt=N.Get('leader-offer',OFFER.ID)
+      assert(receipt.Status=='WAITING' and not receipt.Plan and BEGIN_COUNT==0)
+      GOLD=100;RELEASE=true;N.Tick()
+      receipt=N.Get('leader-offer',OFFER.ID)
       assert(receipt.Status=='STARTED' and BEGIN_COUNT==1)
       assert(JAC_AbsorptionGameplay.Rules.Equal(receipt.Plan,ORIGINAL))
       N.Tick();assert(BEGIN_COUNT==1)
     "#,
     )
     .exec()
+}
+
+#[test]
+fn an_unjournaled_intent_releases_its_reservation_when_its_provider_or_source_is_gone(
+) -> mlua::Result<()> {
+    for missing_provider in [true, false] {
+        let lua = world()?;
+        lua.load(r#"
+          N.Register('external',function() return {From=1,To=2,Turn=TURN,Mode='MERGER',AreaKm2=10000,
+            Requirements={{ID='live',Met=true}},RelationsResolved=true} end)
+          JAC_AbsorptionFlowGameplay.Begin=function() error('failed before the flow journal') end
+          N.Request('external','intent',1,2)
+          local saved=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
+          for _,request in pairs(saved.Requests) do request.LastError=nil end
+          Game:SetProperty('JAC_ABSORPTION_ADMISSION_V1',saved)
+          assert(N.IsOccupied(1) and N.IsOccupied(2))
+        "#).exec()?;
+        if missing_provider {
+            load(&lua)?;
+        } else {
+            lua.load("Players[1].IsAlive=function() return false end")
+                .exec()?;
+        }
+        lua.load(
+            r#"
+          N.Tick();local request=N.Get('external','intent')
+          assert((request.Status=='WAITING' or request.Status=='UNAVAILABLE') and not request.Plan)
+          assert(not N.IsOccupied(1) and not N.IsOccupied(2) and BEGIN_COUNT==0)
+          N.Cancel('external','intent');assert(N.Get('external','intent').Status=='CANCELLED')
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn busy_participants_clear_legacy_unstarted_plans_and_reread_after_release() -> mlua::Result<()> {
+    for (other_from, other_to) in [(1, 3), (3, 2)] {
+        let lua = world()?;
+        lua.globals().set("OTHER_FROM", other_from)?;
+        lua.globals().set("OTHER_TO", other_to)?;
+        lua.load(
+            r#"
+          GOLD=100;RELEASE=true
+          FLOWS.other={ID='other',From=OTHER_FROM,To=OTHER_TO,Phase='CHOICE',Phase1Complete=false}
+          Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
+          N.DefineOffer(OFFER);local waiting=N.Request('leader-offer',OFFER.ID,1,2)
+          assert(waiting.Status=='WAITING' and not waiting.Plan and BEGIN_COUNT==0)
+          local saved=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
+          for _,request in pairs(saved.Requests) do
+            request.Status='STARTING';request.LastError='legacy conflict'
+            request.Plan={ID=request.FlowID,From=1,To=2,Mode='SMALL_STATE',Label='stale'}
+          end
+          Game:SetProperty('JAC_ABSORPTION_ADMISSION_V1',saved);N.Tick()
+          assert(not N.Get('leader-offer',OFFER.ID).Plan and BEGIN_COUNT==0)
+          GOLD=0;RELEASE=false;FLOWS.other.Phase='DONE'
+          Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS});N.Tick()
+          assert(N.Get('leader-offer',OFFER.ID).Status=='WAITING' and BEGIN_COUNT==0)
+          GOLD=100;RELEASE=true;N.Tick()
+          local current=N.Get('leader-offer',OFFER.ID)
+          assert(current.Status=='STARTED' and current.Plan.Label~='stale' and BEGIN_COUNT==1)
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn starting_reservation_blocks_a_reentrant_request_before_the_flow_journal() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(r#"
+      N.Register('competitor',function(_,from,to) return {From=from,To=to,Turn=TURN,
+        Mode='MERGER',AreaKm2=10000,Requirements={{ID='live',Met=RELEASE}},RelationsResolved=true} end)
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function(plan)
+        assert(N.IsOccupied(1) and N.IsOccupied(2))
+        local same=N.Request('leader-offer',OFFER.ID,1,2)
+        assert(same.Status=='STARTING' and same.Plan.ID==plan.ID and BEGIN_COUNT==0)
+        local peer=N.Request('competitor','peer',1,3)
+        assert(peer.Status=='WAITING' and not peer.Plan and BEGIN_COUNT==0)
+        return begin(plan)
+      end
+      GOLD=100;RELEASE=true;N.DefineOffer(OFFER);N.Tick()
+      assert(BEGIN_COUNT==1 and not N.Get('competitor','peer').Plan)
+      JAC_AbsorptionFlowGameplay.Begin=begin
+      for _,flow in pairs(FLOWS) do flow.Phase='DONE' end
+      Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
+      RELEASE=false;N.Tick();assert(BEGIN_COUNT==1)
+      RELEASE=true;N.Tick();assert(BEGIN_COUNT==2)
+    "#).exec()
 }
 
 #[test]

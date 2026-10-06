@@ -1,5 +1,6 @@
 -- Human-facing view of saved flow snapshots. Only the gameplay operation changes a flow.
 include("InstanceManager")
+include("JAC_Absorption_ProductNativeRead")
 
 local entryInstances = InstanceManager:new("AbsorptionEntry", "Root", Controls.Entries)
 local actionInstances = InstanceManager:new("AbsorptionAction", "Root", Controls.Actions)

@@ -22,10 +22,10 @@ INSTANCES={}
 InstanceManager={new=function(_,template,root,parent)
   assert(template=='QuestInstance' and root=='Top' or template=='CityStateRowInstance' and root=='CityStateBase','official instance root required')
   local im={Rows={}}
-  INSTANCES[template]=im
+  INSTANCES[template=='CityStateRowInstance' and parent==Controls.QuestsStack and 'MinorActions' or template]=im
   return {ResetInstances=function() im.Rows={} end,GetInstance=function()
     local names=template=='QuestInstance' and {'Title','Description','Reward','Callout'} or
-      {'NameLabel','Icon','QuestIcon','EnvoyCount','BonusImage1','BonusImage3','BonusImage6','Suzerain','BonusImageSuzerainOff','BonusImageSuzerainOn','SuzerainLabel','EnvoyMoreButton','EnvoyLessButton','Button','NameButton','LookAtButton'}
+      {'NameLabel','Icon','QuestIcon','Envoy','EnvoyCount','BonusImage1','BonusImage3','BonusImage6','Suzerain','BonusImageSuzerainOff','BonusImageSuzerainOn','SuzerainLabel','EnvoyMoreButton','EnvoyLessButton','Button','NameButton','LookAtButton'}
     local item={};for _,name in ipairs(names) do item[name]=control(name) end
     im.Rows[#im.Rows+1]=item;return item
   end}
@@ -53,7 +53,12 @@ function JAC_InstallCivNameOverride(name) BASE_NAME=BASE_NAME+1 end
 function include(name)
   if name=='CityStates_Expansion2' then
     function ViewList() BASE_LIST=BASE_LIST+1 end
-    function ViewCityState() BASE_VIEW=BASE_VIEW+1 end
+    function ViewCityState()
+      BASE_VIEW=BASE_VIEW+1
+      Controls.LevyMilitaryButton:SetText('native levy');Controls.LevyMilitaryButton:SetDisabled(false)
+      Controls.LevyMilitaryButton:RegisterCallback(Mouse.eLClick,function() NATIVE_LEVY=(NATIVE_LEVY or 0)+1 end)
+      Controls.PeaceWarButton:RegisterCallback(Mouse.eLClick,function() NATIVE_WAR_PEACE=(NATIVE_WAR_PEACE or 0)+1 end)
+    end
     function GetQuests() return {{Name='ordinary quest'}} end
     function OnOpenCityStates() ViewList() end
     function OnEnvoySentClick() NATIVE_ENVOY_BUTTON=(NATIVE_ENVOY_BUTTON or 0)+1 end;function OnInfluencedByClick() end;function OnQuestsClick() end;function OnRelationshipsClick() end
@@ -134,7 +139,16 @@ fn existing_small_country_controls_display_conditions_and_send_authenticated_com
       assert(INSTANCES.QuestInstance.Rows[1].Description.Text:find('返却済み',1,true))
       OFFICIAL=true;ViewCityState(1);assert(BASE_VIEW==1)
       Controls.EnvoysSentButton.Callback();assert(NATIVE_ENVOY_BUTTON==1 and #REQUESTS==3)
-      ViewCityState(3);assert(BASE_VIEW==2,'unmapped minors must retain normal screen behavior')
+      Controls.LevyMilitaryButton.Callback();Controls.PeaceWarButton.Callback()
+      assert(NATIVE_LEVY==1 and NATIVE_WAR_PEACE==1 and #REQUESTS==3)
+      assert(Controls.LevyMilitaryButton.Text=='native levy')
+      local quests=GetQuests(1);assert(#quests==2 and quests[1].Name=='ordinary quest')
+      assert(#INSTANCES.MinorActions.Rows==1)
+      VIEW.CanCancel=false;ViewCityState(1)
+      INSTANCES.MinorActions.Rows[1].NameButton.Callback()
+      assert(#REQUESTS==4 and REQUESTS[4].Command=='REGISTER' and REQUESTS[4].From==1)
+      ViewCityState(3);assert(BASE_VIEW==3,'unmapped minors must retain normal screen behavior')
+      assert(#INSTANCES.MinorActions.Rows==0)
     "#).exec()?;
     Ok(())
 }

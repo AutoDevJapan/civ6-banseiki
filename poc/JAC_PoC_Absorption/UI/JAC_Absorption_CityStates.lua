@@ -4,6 +4,7 @@ include('JAC_Absorption_AdmissionUI')
 local U=assert(JAC_AbsorptionAdmissionUI)
 local extraIM=InstanceManager:new('CityStateRowInstance','CityStateBase',Controls.CityStateStack)
 local questIM=InstanceManager:new('QuestInstance','Top',Controls.QuestsStack)
+local actionIM=InstanceManager:new('CityStateRowInstance','CityStateBase',Controls.QuestsStack)
 local current=-1
 local baseView=ViewCityState
 local baseList=ViewList
@@ -39,12 +40,28 @@ end
 function GetQuests(player)
   local view=U.Get(player)
   if not view or view.Status=='UNAVAILABLE' then return baseQuests(player) end
-  -- Product requirements replace the one-quest/one-token semantics only for
-  -- mapped product countries. Unknown ordinary minors keep the official UI.
-  return {{Name=U.Text('CONDITIONS'),Description=U.Lines(view),Reward=U.Text('ALL_CONDITIONS'),Callout=''}}
+  local quests={}
+  if not IsProductMajor(view) then
+    for _,quest in ipairs(baseQuests(player) or {}) do quests[#quests+1]=quest end
+  end
+  quests[#quests+1]={Name=U.Text('CONDITIONS'),Description=U.Lines(view),Reward=U.Text('ALL_CONDITIONS'),Callout=''}
+  return quests
 end
 local function Actions(view)
   local text,command=U.Action(view)
+  if not IsProductMajor(view) then
+    -- Reuse an existing row inside the quest area; preserve native levy,
+    -- war/peace, envoy controls and the original quest rows of real minors.
+    local row=actionIM:GetInstance()
+    for _,control in ipairs({row.Button,row.Envoy,row.BonusImage1,row.BonusImage3,row.BonusImage6,
+      row.Suzerain,row.BonusImageSuzerainOff,row.BonusImageSuzerainOn,row.SuzerainLabel,row.LookAtButton}) do control:SetHide(true) end
+    row.NameLabel:SetText(text)
+    row.NameButton:SetToolTipString(U.Lines(view))
+    row.NameButton:SetDisabled(not command or not Players[view.To]:IsTurnActive())
+    row.NameButton:RegisterCallback(Mouse.eLClick,function() if command then JAC_AbsorptionCityStatesAction(view.From,command) end end)
+    Controls.QuestsStack:CalculateSize();Controls.QuestsScroll:CalculateSize()
+    return
+  end
   Controls.LevyMilitaryButton:SetHide(false)
   Controls.LevyMilitaryButton:SetText(text)
   Controls.LevyMilitaryButton:SetToolTipString(U.Lines(view))
@@ -53,6 +70,7 @@ local function Actions(view)
 end
 function ViewCityState(player)
   current=player
+  actionIM:ResetInstances()
   local view=U.Get(player)
   if not view or view.Status=='UNAVAILABLE' or not IsProductMajor(view) then
     Controls.EnvoysSentButton:RegisterCallback(Mouse.eLClick,OnEnvoySentClick)
@@ -95,6 +113,7 @@ function ViewCityState(player)
 end
 function ViewList()
   current=-1
+  actionIM:ResetInstances()
   baseList();extraIM:ResetInstances()
   local count=0
   for _,view in ipairs(U.SmallCountries()) do if IsProductMajor(view) then

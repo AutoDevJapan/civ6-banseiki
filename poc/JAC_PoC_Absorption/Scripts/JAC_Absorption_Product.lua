@@ -68,11 +68,18 @@ local function Change(actor,currency,amount)
   if currency=='Gold' then Players[actor]:GetTreasury():ChangeGoldBalance(amount)
   else Players[actor]:GetReligion():ChangeFaithBalance(amount) end
 end
+local function NativeDiplomacy(from,to)
+  local api=assert(ExposedMembers.JAC_AbsorptionProductNativeRead,'native diplomacy UI reader unavailable')
+  local data=R.Copy(api.GetDiplomacy(from,to))
+  assert(data and data.From==from and data.To==to and data.Turn==Game.GetCurrentGameTurn()
+    and Id(data.StateType) and Num(data.Visibility),'stale or invalid native diplomacy read')
+  return data
+end
 local function Metric(actor,metric,other)
   local p=assert(Players[actor]);local value=0
   if metric=='SCIENCE_YIELD' then value=p:GetTechs():GetScienceYield()
   elseif metric=='FAITH_YIELD' then value=p:GetReligion():GetFaithYield()
-  elseif metric=='ACCESS' then value=p:GetDiplomacy():GetVisibilityOn(other)
+  elseif metric=='ACCESS' then value=NativeDiplomacy(actor,other).Visibility
   elseif metric=='POPULATION' or metric=='FOOD_YIELD' then
     for _,city in p:GetCities():Members() do
       local v=metric=='POPULATION' and city:GetPopulation() or city:GetYield(YieldTypes.FOOD)
@@ -93,10 +100,8 @@ end
 local function DiplomaticSituation(from,to)
   local d=Players[to]:GetDiplomacy()
   if d:IsAtWarWith(from) then return 'war' end
-  if d:IsAlliedWith(from) then return 'allied' end
-  local state=Players[from]:GetDiplomaticAI():GetDiplomaticStateIndex(to)
-  local info=GameInfo.DiplomaticStates[state]
-  assert(info and Id(info.StateType),'live diplomatic state unavailable')
+  if d:HasAllied(from) then return 'allied' end
+  local info=NativeDiplomacy(from,to)
   if info.StateType=='DIPLO_STATE_DENOUNCED' then return 'denounced' end
   if info.StateType=='DIPLO_STATE_DECLARED_FRIEND' then return 'friend' end
   if info.StateType=='DIPLO_STATE_UNFRIENDLY' then return 'unfriendly' end
@@ -151,7 +156,7 @@ local function RelationState(from,to)
   -- relationships expire. The other party is not silently discarded.
   for actor,p in pairs(Players) do
     if type(actor)=='number' and actor~=from and actor~=to and p:IsAlive()
-      and Players[from]:GetDiplomacy():IsAlliedWith(actor) then
+      and Players[from]:GetDiplomacy():HasAllied(actor) then
       local other=P.Country(actor)
       rows[#rows+1]={ID='alliance:'..actor,Met=false,Label='LOC_JAC_ADMISSION_ALLIANCE',LabelArgs={other and other.Name or 'LOC_JAC_ADMISSION_OTHER_COUNTRY'}}
     end
@@ -170,13 +175,7 @@ local function OwnedTiles(from)
   return count
 end
 local function Occupied(actor,ownID)
-  local state=Game:GetProperty('JAC_ABSORPTION_FLOW_V1')
-  if not state then return false end
-  assert(state.Version==1 and type(state.Flows)=='table','unsupported flow journal')
-  for _,flow in pairs(state.Flows) do
-    if flow.ID~=ownID and flow.Phase~='DONE' and (flow.From==actor or flow.To==actor) then return true end
-  end
-  return false
+  return N.IsOccupied(actor,ownID)
 end
 local function Envoys(from,to)
   local country=assert(P.Country(from),'envoy target not mapped')
