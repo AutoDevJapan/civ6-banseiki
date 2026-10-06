@@ -712,3 +712,5 @@ EXE `E3EA70`はnative queueと稼働値を反復して確認するが、現在�
 **全worldの静止証明はまだ発行できない。** `4A1161`でmanager+38A8へ3を書く原終了処理は存在するが、`4A1100`のPush wrapperはその値を検査しない。FreeJobListはpending listを再利用へ戻すだけで、未発行taskのjoin/cancelを証明しない。証明に必要なのは、(1)そのworldへの新規発行を止める実契約、(2)既に投入済みのlistが全てSpawn/処理された根拠、(3)同じsetの実Wait完了、(4)同期`4A7AD0`と発行元frameの退出、(5)破棄まで同じworldへの新しいPush/Spawnが入らないこと、である。4A1196に到達したという一点やstate3だけから`drained=true`を作らない。
 
 親のSP phase/load/teardown観測には、`world+250`の同一managerについて、最後の`4A1145/4A10F9`、原world終了入口`63E160`、shutdown Waitの入口`4A1191`と正常復帰`4A1196`、合流`4A11B3`、FreeList復帰`4A120E`、Player/AI owner破棄前`2F55B2`を対応させる。再開時は新world公開`46D34`、新list生成`49C807/49C813`と識別子の再利用を別世代として扱う。これらは今回のworkerで未実測であり、新しい観測器の導入や追加実機を実行したものではない。同期発行の停止契約を確定するまでは、得られる証拠の名前を「同一job-set待機完了」に限定する。
+
+同じSolレビューで一次命令と上記の限界を照合した。`985E50`は停止確定点ではなく待機後のpointer消去、`4A11B3`は条件付きhost callback後の合流点と命名する。`63E1B5`のvirtual通知はmanager待機より先であり、その通知中に対象オブジェクトの寿命が終わらないことも照合条件に含む。単一地点だけで全readerを排出した証明は発行しない。`de4b24bd`の限定再レビューでは部分設置/Rebuild・世代0の追加Must2件は修正済み、新Must0。初回設置順序と発行停止/排出のMustは未解決のまま保持する。

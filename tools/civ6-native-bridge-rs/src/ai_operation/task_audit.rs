@@ -78,7 +78,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
             "push":{"rcx":"list ID (native host uses low32, IDs1..64)","rdx":"native job object", "r8":"manager+400 job-set address", "r9":"pointer to 16-byte metadata copy"},
             "wait":{"rcx":"same job-set address", "rdx":"pointer to 16-byte metadata copy", "result":"normal return, not RAX=true; host clears set+8 after native arena wait"}
         },
-        "receipt_candidates":{"join_return_core":0x4a1196,"host_context_restored_core":0x4a11b3,"free_list_return_core":0x4a120e,"host_wait_commit":0x985e50},
+        "receipt_candidates":{"wait_return_core":0x4a1196,"conditional_host_callback_merge_core":0x4a11b3,"free_list_return_core":0x4a120e,"host_wait_pointer_clear":0x985e50},
         "limits":[
             "state3 is not an admission seal: Push wrapper does not check it",
             "set+8 zero is not permanent: a later Push reactivates it from set+0",
@@ -87,6 +87,7 @@ pub fn audit(core: &[u8], host: &[u8]) -> Result<Value, String> {
             "native arena wait has current-arena early-return branches; classify the executed path",
             "worker-set join does not by itself join synchronous 4A7AD0 callback or upstream issuers",
             "no new submission for this world may pass between receipt and destruction"
+            ,"world virtual notification at 63E1B5 precedes manager Wait; prove it does not invalidate reader objects first"
         ],
         "certificate_issued":false,"runtime_calls":0,"game_runs":0,"ai_acceptance":false
     }))
