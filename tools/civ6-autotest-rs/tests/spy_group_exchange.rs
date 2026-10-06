@@ -218,19 +218,45 @@ end
 struct Case(Lua);
 
 #[test]
+fn cleanup_keeps_a_stock_copied_item_that_changed_after_observation() {
+    let c = Case::new();
+    c.run("REPLY_KIND='UNSAFE'");
+    c.equalize();
+    c.run(
+        "DealManager.CopyIncomingToOutgoingWorkingDeal(0,1); JAC_GroupExchange548.PublishQuote()",
+    );
+    c.0.load(spy_group_exchange::QUOTE_CORE).exec().unwrap();
+    c.run("KEPT_ID=OUT.items[1]:GetID(); OUT.items[1].amount=999; JAC_GroupExchange548.Close(); assert(#OUT.items==1 and OUT.items[1]:GetID()==KEPT_ID); local c=JAC_GroupExchange548.Evidence().ui.cleanup; assert(#c.removed==1 and #c.retained==1 and c.retained[1]==KEPT_ID)");
+}
+
+#[test]
 fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intents() {
     for (setup, expected_sends, expected_stage) in [
         ("", 2, "RETURNED"),
         ("REPLY_KIND='NONE'", 1, "QUOTED_UNKNOWN"),
         ("REPLY_KIND='UNSAFE'", 1, "QUOTED_UNKNOWN"),
         ("AUTO_RETURN=false", 2, "RETURN_UNRESOLVED"),
+        ("FAULT='READ_REPLY'", 1, "QUOTED_UNKNOWN"),
+        ("FAULT='READ_RETURN'", 2, "RETURN_UNRESOLVED"),
+        ("FAULT='CORE_ID'", 2, "RETURN_UNRESOLVED"),
+        ("FAULT='CORE_API'", 2, "RETURN_UNRESOLVED"),
+        ("FAULT='CORE_QUOTE'", 1, "QUOTED_UNKNOWN"),
+        ("FAULT='TERMS_FINAL'", 1, "RETURN_UNRESOLVED"),
+        ("FAULT='SEND_EQUALIZE'", 0, "QUOTED_UNKNOWN"),
+        ("FAULT='SEND_FINAL'", 1, "RETURN_UNRESOLVED"),
+        (
+            "FAULT='STOCK_UNSAFE'; REPLY_KIND='UNSAFE'",
+            1,
+            "QUOTED_UNKNOWN",
+        ),
     ] {
         let lua = Lua::new();
         lua.load(NATIVE).exec().unwrap();
         lua.load(setup).exec().unwrap();
-        lua.load("local send=DealManager.SendWorkingDeal; DealManager.SendWorkingDeal=function(action,a,b) assert(SAVED_STAGE==(action==DealProposalAction.EQUALIZE and 'RESERVED' or 'FINAL_INTENT'),'send before host save'); return send(action,a,b) end").exec().unwrap();
+        lua.load("local send=DealManager.SendWorkingDeal; DealManager.SendWorkingDeal=function(action,a,b) assert(SAVED_STAGE==(action==DealProposalAction.EQUALIZE and 'RESERVED' or 'FINAL_INTENT'),'send before host save'); if (FAULT=='SEND_EQUALIZE' and action==DealProposalAction.EQUALIZE) or (FAULT=='SEND_FINAL' and action==DealProposalAction.ACCEPTED) then error('native send failure') end; local result=send(action,a,b); if FAULT=='STOCK_UNSAFE' and action==DealProposalAction.EQUALIZE then DealManager.CopyIncomingToOutgoingWorkingDeal(0,1) end; return result end").exec().unwrap();
         let scenario = host::scenario();
         for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
+            lua.load(format!("STEP={index}; if (FAULT=='READ_REPLY' and STEP==11) or (FAULT=='READ_RETURN' and STEP==19) then ExposedMembers.JAC_PersonaBoundary.ReadEnemy=function() error('native roster read failed') end end; if FAULT=='CORE_ID' and STEP==21 then Players[0]:GetUnits().FindID=function() return MAP_UNIT end; MAP_UNIT.GetID=function() return 99999 end end; if FAULT=='CORE_API' and STEP==21 then Players[0]:GetUnits().FindID=nil end; if FAULT=='CORE_QUOTE' and STEP==13 then PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.before.histories[3].turn=61 end; if FAULT=='TERMS_FINAL' and STEP==17 then IN.items[2].amount=20; OUT.items[2].amount=20 end")).exec().unwrap();
             let action = step["action"].as_str().unwrap();
             match action {
                 "load" | "exit_to_menu" => {}
@@ -274,6 +300,7 @@ fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intent
             expected_stage
         );
         lua.load("assert(CLOSED==1 and ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==ORIGINAL_TOOLTIP); assert(H[1].turn==23 and H[2].turn==45 and H[3].turn==62)").exec().unwrap();
+        lua.load("local p=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62; assert(SAVED_STAGE==p.stage); if FAULT=='CORE_ID' or FAULT=='CORE_API' or FAULT=='READ_RETURN' or FAULT=='TERMS_FINAL' then assert(p.errors and #p.errors>0 and p.returnEvidence) end; if FAULT=='STOCK_UNSAFE' then assert(#OUT.items==0 and #JAC_GroupExchange548.Evidence().ui.cleanup.removed==2) end").exec().unwrap();
     }
 }
 

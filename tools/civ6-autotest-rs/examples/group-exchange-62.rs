@@ -9,6 +9,36 @@ fn ui(code: &str) -> Value {
 fn core(code: &str) -> Value {
     json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":code})
 }
+fn observed_core(code: &str, phase: &str) -> Value {
+    let stage = if phase == "RETURN" {
+        "RETURN_UNRESOLVED"
+    } else {
+        "QUOTED_UNKNOWN"
+    };
+    core(&format!(
+        r#"
+local ok,result=pcall(function() {code} end);
+if ok then return result end
+local key='JAC_BOUNDARY_GROUP_EXCHANGE_62';
+local p=assert(Game:GetProperty(key),'owned Core record unavailable');
+local w=assert(ExposedMembers.JAC_GroupExchange548Witness,'owned witness unavailable');
+assert(p.nonce==w.nonce,'cannot write another reservation');
+p.errors=p.errors or {{}};
+p.errors[#p.errors+1]={{phase='{phase}',error=tostring(result),uiObservation=w.observation}};
+p.stage='{stage}';
+if '{phase}'=='RETURN' then p.returnEvidence=w.observation
+else p.quote=p.quote or w.observation; p.quote.acceptable=false end
+Game:SetProperty(key,p);
+return p.stage
+"#
+    ))
+}
+fn observed_send(method: &str, phase: &str, conditional: bool) -> Value {
+    ui(&format!(
+        "{}local ok,result=pcall(JAC_GroupExchange548.{method}); if not ok then return JAC_GroupExchange548.RecordSendError('{phase}',result) end; return result",
+        if conditional { HAS_QUOTE } else { "" }
+    ))
+}
 fn save() -> Value {
     json!({"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true})
 }
@@ -38,22 +68,22 @@ pub(crate) fn scenario() -> Value {
      ui("return JAC_GroupExchange548.ArmAfterSave()"),
      ui("return JAC_GroupExchange548.OpenSession()"),
      wait("return JAC_GroupExchange548.SessionReady()"),
-     ui("return JAC_GroupExchange548.EqualizeOnce()"),
+     observed_send("EqualizeOnce","EQUALIZE",false),
      save(),
      wait("return JAC_GroupExchange548.ResponseState().stage~='WAIT_AI'"),
      ui("return JAC_GroupExchange548.PublishQuote()"),
-     core(exchange::QUOTE_CORE),
+     observed_core(exchange::QUOTE_CORE,"QUOTE"),
      save(),
-     core(&format!("{HAS_QUOTE}{}",exchange::FINAL_INTENT_CORE)),
+     observed_core(&format!("{HAS_QUOTE}{}",exchange::FINAL_INTENT_CORE),"FINAL_INTENT"),
      save(),
-     ui(&format!("{HAS_QUOTE}return JAC_GroupExchange548.AcceptOnce()")),
+     observed_send("AcceptOnce","FINAL",true),
      save(),
      wait("local p=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62')); return not (p.quote and p.quote.acceptable==true) or JAC_GroupExchange548.ReturnState().stage~='WAIT_RETURN'"),
      ui(&format!("{HAS_QUOTE}return JAC_GroupExchange548.PublishReturn()")),
-     core(&format!("{HAS_QUOTE}{}",exchange::RETURN_CORE)),
+     observed_core(&format!("{HAS_QUOTE}{}",exchange::RETURN_CORE),"RETURN"),
      save(),
-     ui(EVIDENCE),
      ui("return JAC_GroupExchange548.Close()"),
+     ui(EVIDENCE),
      {"action":"exit_to_menu"}
     ]})
 }
@@ -87,12 +117,7 @@ fn terminal_unknowns_are_saved_without_final_submission_or_false_return_claim() 
             .contains("stage~='WAIT_AI'")
     );
     for index in [15, 17, 20, 21] {
-        assert!(
-            steps[index]["code"]
-                .as_str()
-                .unwrap()
-                .starts_with(HAS_QUOTE)
-        );
+        assert!(steps[index]["code"].as_str().unwrap().contains(HAS_QUOTE));
     }
     assert!(
         steps[19]["condition"]["code"]
@@ -100,6 +125,6 @@ fn terminal_unknowns_are_saved_without_final_submission_or_false_return_claim() 
             .unwrap()
             .contains("stage~='WAIT_RETURN'")
     );
-    assert_eq!(steps[23]["code"], EVIDENCE);
-    assert!(steps[24]["code"].as_str().unwrap().contains("Close()"));
+    assert_eq!(steps[24]["code"], EVIDENCE);
+    assert!(steps[23]["code"].as_str().unwrap().contains("Close()"));
 }

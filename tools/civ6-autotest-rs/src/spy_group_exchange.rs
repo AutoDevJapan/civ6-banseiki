@@ -240,6 +240,9 @@ function G.OpenSession()
  x.itemID=item:GetID(); assert(integer(x.itemID,0),'native item ID unavailable');
  item:SetValueType(x.forType); assert(item:IsValid(),'native captive item invalid');
  item:SetLocked(true); ownItem();
+ x.originalItem={id=item:GetID(),kind=item:GetType(),from=item:GetFromPlayerID(),
+  to=item:GetToPlayerID(),value=item:GetValueType(),amount=item:GetAmount(),
+  duration=item:GetDuration(),valid=item:IsValid()};
  DiplomacyManager.RequestSession(0,1,'MAKE_DEAL');
  return 'SESSION_REQUESTED'
 end
@@ -359,10 +362,24 @@ local function response()
  result.stage='AI_QUOTE'; result.needsCopy=not DealManager.AreWorkingDealsEqual(0,1);
  return result
 end
-function G.ResponseState() return copy(response()) end
+local function unknownRead(phase,err)
+ return {stage='UNKNOWN_READ',phase=phase,error=tostring(err),before=copy(x.before),
+  sessionID=x.sessionID,responses=copy(x.responses),statements=copy(x.statements),
+  incomingEvents=copy(x.incomingEvents),equalizeSent=x.equalizeSent==true,
+  finalSent=x.finalSent==true,equalizeError=x.equalizeError,finalError=x.finalError}
+end
+function G.RecordSendError(phase,err)
+ assert(x and (phase=='EQUALIZE' or phase=='FINAL'),'unknown send phase');
+ if phase=='EQUALIZE' then x.equalizeError=tostring(err) else x.finalError=tostring(err) end
+ return 'SEND_RESULT_UNRESOLVED'
+end
+function G.ResponseState()
+ local ok,r=pcall(response); if not ok then return unknownRead('QUOTE',r) end
+ return copy(r)
+end
 function G.PublishQuote()
  assert(x and not x.quotePublished,'quote already published');
- local raw=response(); assert(raw.stage~='WAIT_AI','native AI response still pending');
+ local raw=G.ResponseState(); assert(raw.stage~='WAIT_AI','native AI response still pending');
  local q={stage=raw.stage,raw=raw,acceptable=false,sessionID=x.sessionID,
   forType=x.forType,turn=x.before.turn,
   uiEnums={equalize=DealProposalAction.EQUALIZE,
@@ -409,7 +426,7 @@ function G.AcceptOnce()
  DealManager.SendWorkingDeal(DealProposalAction.ACCEPTED,0,1);
  return 'FINAL_SENT'
 end
-function G.ReturnState()
+local function returnState()
  assert(x and x.finalSent,'native final acceptance not sent');
  local now=rosterSnapshot();
  local r={stage='WAIT_RETURN',before=x.before,after=now,
@@ -437,8 +454,12 @@ function G.ReturnState()
   x=u.x,y=u.y,turn=now.turn};
  return copy(r)
 end
+function G.ReturnState()
+ local ok,r=pcall(returnState); if not ok then return unknownRead('RETURN',r) end
+ return copy(r)
+end
 function G.PublishReturn()
- assert(x and x.finalSent and not x.returnPublished,'return already published');
+ assert(x and (x.finalSent or x.finalError) and not x.returnPublished,'return already published');
  local r=G.ReturnState(); assert(r.stage~='WAIT_RETURN','native return still pending');
  x.returnPublished=true; x.returnEvidence=copy(r); publish('RETURN',r);
  return r.stage
@@ -449,7 +470,8 @@ function G.Evidence()
   quotePublished=x.quotePublished,finalSent=x.finalSent,
   returnPublished=x.returnPublished,closed=x.closed,
   statements=x.statements,responses=x.responses,incomingEvents=x.incomingEvents,
-  quote=x.quote,returnEvidence=x.returnEvidence} or nil,
+  quote=x.quote,returnEvidence=x.returnEvidence,equalizeError=x.equalizeError,
+  finalError=x.finalError,cleanup=x.cleanup} or nil,
   core=Game:GetProperty(KEY),witness=ExposedMembers[WKEY]})
 end
 function G.Close()
@@ -461,21 +483,38 @@ function G.Close()
     p.stage=='FINAL_INTENT' or p.stage=='RETURNED' or p.stage=='RETURN_UNRESOLVED')),
   'native reply evidence must be recorded before close');
  local d=DealManager.GetWorkingDeal(DealDirection.OUTGOING,0,1);
- if d and x.itemID then
-  local item=d:FindItemByID(x.itemID);
-  if item then
-   assert(item:GetType()==DealItemTypes.CAPTIVE and item:GetFromPlayerID()==1 and
-    item:GetToPlayerID()==0 and item:GetValueType()==x.forType,
-    'owned native item changed before cleanup');
-   if item:IsLocked() then item:SetLocked(false) end
-   assert(d:RemoveItemByID(x.itemID),'owned native item removal failed')
+ x.cleanup={removed={},retained={},errors={}};
+ local ownedSession,id=pcall(function()
+  local current=DiplomacyManager.FindOpenSessionID(0,1);
+  if current~=nil then assert(session()==current,'native session ownership changed') end
+  return current
+ end);
+ if ownedSession then
+  local rows=x.quote and (x.quote.outgoing or (x.quote.raw and x.quote.raw.outgoing));
+  local expected={};
+  if rows and rows.available then for _,r in ipairs(rows.items) do expected[r.id]=r end end
+  if d then
+   local ok,current=pcall(dealRows,DealDirection.OUTGOING);
+   if ok then for _,r in ipairs(current.items) do
+    local prior=expected[r.id];
+    local exact=prior and sameDealRows({items={r}},{items={prior}});
+    local original=x.originalItem and sameDealRows({items={r}},{items={x.originalItem}});
+    if exact or original then
+     local removed,err=pcall(function()
+      local item=assert(d:FindItemByID(r.id),'owned item disappeared');
+      if item:IsLocked() then item:SetLocked(false) end
+      assert(d:RemoveItemByID(r.id),'owned native item removal failed')
+     end);
+     if removed then x.cleanup.removed[#x.cleanup.removed+1]=r.id
+     else x.cleanup.errors[#x.cleanup.errors+1]=tostring(err) end
+    else x.cleanup.retained[#x.cleanup.retained+1]=r.id end
+   end else x.cleanup.errors[#x.cleanup.errors+1]=tostring(current) end
   end
- end
- if x.sessionID then
-  local id=DiplomacyManager.FindOpenSessionID(0,1);
-  if id~=nil then assert(session()==id,'native session ownership changed');
-   DiplomacyManager.CloseSession(id) end
- end
+  if id~=nil then
+   local ok,err=pcall(DiplomacyManager.CloseSession,id);
+   if not ok then x.cleanup.errors[#x.cleanup.errors+1]=tostring(err) end
+  end
+ else x.cleanup.errors[#x.cleanup.errors+1]=tostring(id) end
  x.closed=true;
  if ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==tooltip then
   ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=previousTooltip
@@ -678,7 +717,8 @@ if r.stage=='RETURNED_MAP' then
   r.returned.x==after.map[1].x and r.returned.y==after.map[1].y and
   r.returned.turn==after.turn,'returned native spy identity differs');
  local units=Players[0]:GetUnits();
- if units and type(units.FindID)=='function' then
+ assert(units and type(units.FindID)=='function','Core returned native identity API unavailable');
+ if units then
   local u=assert(units:FindID(r.returned.id),'Core returned native spy missing');
   assert(u:GetID()==r.returned.id and u:GetOwner()==0 and u:GetType()==r.returned.unitType,
    'Core returned native spy identity differs');
