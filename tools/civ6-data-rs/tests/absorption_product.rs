@@ -825,6 +825,21 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
       end
       original.Phase1Complete=false
       assert(not pcall(P1Evidence,original))
+      local inventory=CANONICAL(InventoryEvidence(original))
+      local initialMutations={
+        function(f) f.Entries[1].Name='different' end,
+        function(f) f.Entries[1].Portrait='different' end,
+        function(f) f.Entries[1].AllowedActions[1]='RECRUIT' end,
+        function(f) f.Entries[1].Abilities[1]='different' end,
+        function(f) f.Entries[2].Leader=false end,
+        function(f) f.Entries[3].NativeWork.Index=5 end,
+        function(f) f.Entries[4].DormantClass=4 end}
+      for i,mutate in ipairs(initialMutations) do
+        local changed=JAC_AbsorptionGameplay.Rules.Copy(original);mutate(changed)
+        assert(CANONICAL(InventoryEvidence(changed))~=inventory,'initial metadata mutation accepted '..i)
+      end
+      original.Phase1Complete=true
+      assert(CANONICAL(InventoryEvidence(original))==inventory,'P1 completion altered initial inventory projection')
     "#)).exec()?;
     for small in [true, false] {
         let scene: serde_json::Value = serde_json::from_str(&product::acceptance_scenario(

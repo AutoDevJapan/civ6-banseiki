@@ -12,20 +12,29 @@ pub const DIPLOMACY: &str = "poc/JAC_PoC_CustomCivs/UI/JAC_DiplomacyActionView.l
 pub const TEXT: &str = texts::OUTPUT;
 pub const NATIVE_READ_UI: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_ProductNativeRead.lua";
 pub const P1_EVIDENCE: &str = r#"
-local function P1Evidence(flow)
+local function InventoryEvidence(flow)
   local R=JAC_AbsorptionGameplay.Rules
-  assert(flow.Phase1Complete,'first-stage journal is incomplete')
   local entries={}
   for _,e in ipairs(flow.Entries or {}) do
     entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),
       UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),
-      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass,
-      EscapeOutcome=e.EscapeOutcome,P1Chance=e.P1Chance,
-      Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}}
+      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass}
   end
   return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,
-    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),
-    Phase1Complete=flow.Phase1Complete,Entries=entries}
+    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),Entries=entries}
+end
+local function P1Evidence(flow)
+  local R=JAC_AbsorptionGameplay.Rules
+  assert(flow.Phase1Complete,'first-stage journal is incomplete')
+  local evidence=InventoryEvidence(flow)
+  evidence.Phase1Complete=flow.Phase1Complete
+  for i,e in ipairs(flow.Entries or {}) do
+    local entry=evidence.Entries[i]
+    entry.EscapeOutcome=e.EscapeOutcome
+    entry.P1Chance=e.P1Chance
+    entry.Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}
+  end
+  return evidence
 end
 "#;
 
