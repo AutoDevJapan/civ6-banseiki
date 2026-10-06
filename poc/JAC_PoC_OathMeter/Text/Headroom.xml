@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData><LocalizedText>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ja_JP"><Text>誓約検査用の建造費用</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="en_US"><Text>Construction costs for oath diagnostics</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ru_RU"><Text>Стоимость строительства для проверки клятв</Text></Row>
+</LocalizedText></GameData>

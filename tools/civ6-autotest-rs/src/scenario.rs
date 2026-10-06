@@ -301,6 +301,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 bool_flags(&["exact_name", "metrics"])?;
             }
             "wait_for" => {
+                if step.get("close_diplomacy").is_some_and(|v| !v.is_boolean()) {
+                    return Err(fail("wait_for close_diplomacy must be boolean".into()));
+                }
                 let c = &step["condition"];
                 match c["type"].as_str() {
                     Some("lua") => {

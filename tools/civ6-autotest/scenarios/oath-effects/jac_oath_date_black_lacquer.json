@@ -308,6 +308,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
@@ -337,6 +338,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
@@ -366,6 +368,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
@@ -424,6 +427,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
@@ -453,6 +457,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",
@@ -482,6 +487,7 @@
     {
       "action": "wait_for",
       "timeout": 180,
+      "close_diplomacy": true,
       "condition": {
         "type": "lua",
         "state_name": "InGame",

@@ -1742,7 +1742,17 @@ impl Runner {
                 Ok("main menu reached".into())
             }
             "wait_for" => {
-                self.wait(&step["condition"], self.remaining(deadline)?, false)?;
+                let close_diplomacy = match step.get("close_diplomacy") {
+                    None => false,
+                    Some(value) => value.as_bool().ok_or_else(|| {
+                        Error::scenario("wait_for close_diplomacy must be boolean")
+                    })?,
+                };
+                self.wait(
+                    &step["condition"],
+                    self.remaining(deadline)?,
+                    close_diplomacy,
+                )?;
                 Ok(format!("condition met: {}", step["condition"]))
             }
             "pause" | "observe_for" => {

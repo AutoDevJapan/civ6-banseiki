@@ -61,6 +61,13 @@ fn meter_outputs() -> Outputs {
     let headroom_config=r#"<?xml version="1.0" encoding="utf-8"?>
 <GameInfo><Parameters><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueHeadroom" Name="LOC_JAC_OATH_QUEUE_HEADROOM" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_HEADROOM" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters></GameInfo>
 "#.to_owned();
+    let headroom_text = r#"<?xml version="1.0" encoding="utf-8"?>
+<GameData><LocalizedText>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ja_JP"><Text>誓約検査用の建造費用</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="en_US"><Text>Construction costs for oath diagnostics</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ru_RU"><Text>Стоимость строительства для проверки клятв</Text></Row>
+</LocalizedText></GameData>
+"#.to_owned();
     let modinfo = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <Mod id="{METER_ID}" version="1">
@@ -68,12 +75,16 @@ fn meter_outputs() -> Outputs {
   <Dependencies><Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="Sengoku Trees"/></Dependencies>
   <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria><Criteria id="JAC_OathMeter_Headroom"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_QUEUE_HEADROOM</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria></ActionCriteria>
   <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase><UpdateDatabase id="JAC_OathMeter_Headroom_Data" criteria="JAC_OathMeter_Headroom"><Properties><LoadOrder>400</LoadOrder></Properties><File>Data/Headroom.sql</File></UpdateDatabase></InGameActions>
-  <FrontEndActions><UpdateDatabase id="JAC_OathMeter_Headroom_Config"><File>Config/Headroom.xml</File></UpdateDatabase></FrontEndActions>
-  <Files><File>Data/Meter.sql</File><File>Data/Headroom.sql</File><File>Config/Headroom.xml</File></Files>
+  <FrontEndActions><UpdateDatabase id="JAC_OathMeter_Headroom_Config"><File>Config/Headroom.xml</File></UpdateDatabase><UpdateText id="JAC_OathMeter_Headroom_Text"><File>Text/Headroom.xml</File></UpdateText></FrontEndActions>
+  <Files><File>Data/Meter.sql</File><File>Data/Headroom.sql</File><File>Config/Headroom.xml</File><File>Text/Headroom.xml</File></Files>
 </Mod>
 "#
     );
     [
+        (
+            PathBuf::from(format!("{METER_DIR}/Text/Headroom.xml")),
+            headroom_text,
+        ),
         (
             PathBuf::from(format!("{METER_DIR}/Config/Headroom.xml")),
             headroom_config,
@@ -1081,7 +1092,7 @@ fn production_steps(
                         .replace("__SAMPLE__", &sample.to_string()),
                 ));
             }
-            steps.push(json!({"action":"wait_for","timeout":180,"condition":{"type":"lua","state_name":"InGame","code":format!("local a=JAC_OATH_AUDIT; local r=a and a.production[{}][{}].samples[{}]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()",lua_string(target),lua_string(phase),sample)}}));
+            steps.push(json!({"action":"wait_for","timeout":180,"close_diplomacy":true,"condition":{"type":"lua","state_name":"InGame","code":format!("local a=JAC_OATH_AUDIT; local r=a and a.production[{}][{}].samples[{}]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()",lua_string(target),lua_string(phase),sample)}}));
             steps.push(ui(
                 "InGame",
                 production_code(PRODUCTION_AFTER, case, effect, target, phase, flag)
@@ -1194,7 +1205,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 72);
+        assert_eq!(generated.len(), 73);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));

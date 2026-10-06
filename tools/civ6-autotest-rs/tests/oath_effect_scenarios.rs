@@ -62,6 +62,14 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
                 .count();
             assert_eq!(data["finite_turns"], turns);
             assert!(turns <= 12, "{path}: unbounded turns {turns}");
+            for pair in steps.windows(2).filter(|pair| {
+                pair[0]["code"].as_str().is_some_and(|code| {
+                    code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,")
+                })
+            }) {
+                assert_eq!(pair[1]["action"], "wait_for", "{path}");
+                assert_eq!(pair[1]["close_diplomacy"], true, "{path}");
+            }
             for step in steps.iter().filter(|s| {
                 s["code"]
                     .as_str()
