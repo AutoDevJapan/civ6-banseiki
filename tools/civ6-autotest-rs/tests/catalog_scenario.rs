@@ -48,6 +48,7 @@ fn model_with_startup_mutation(mutation: &str) -> mlua::Result<Lua> {
         &format!("local civs = {{{}}}", list("civ", "CIVILIZATION_JAC_")),
     );
     lua.load(stub).exec().unwrap();
+    lua.load("GameConfiguration=GameConfiguration or {}; GameConfiguration.GetStartTurn=function() return 0 end").exec().unwrap();
     lua.load(r#"
 IDS={}; DELAY=false; UNKNOWN=false; WRITES={}; CIVIC_COMPLETIONS=0; UI_EVER_CALLS={}
 RAW={}; print=function(value) RAW[#RAW+1]=tostring(value) end

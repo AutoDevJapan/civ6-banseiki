@@ -20,6 +20,7 @@ pub fn finish_startup(lua: &Lua) -> mlua::Result<()> {
 
 const ENGINE: &str = r#"
 NORMAL_FIXTURE_OLD_TURN=TURN; TURN=0
+GameConfiguration=GameConfiguration or {}; GameConfiguration.GetStartTurn=function() return 0 end
 for i=#ROWS+1,22 do
  local suffix='TEST_'..i
  local row={LeaderType='LEADER_JAC_'..suffix,CivilizationType='CIVILIZATION_JAC_'..suffix,

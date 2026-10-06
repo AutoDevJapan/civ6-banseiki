@@ -1,6 +1,7 @@
 // Included by gameplay.rs to exercise exactly the same shipped script loader.
 const NORMAL_FIXTURE: &str = r#"
 Game.GetCurrentGameTurn=function() return 0 end
+GameConfiguration={GetStartTurn=function() return 0 end}
 local people,governors,promotions,sets={},{},{},{}
 local names={'ASHINA_MORIKIYO','DATE_TANEMUNE','YAMANOUCHI_UESUGI_NORIMASA','TAKEDA_NOBUTORA',
  'HOJO_UJITSUNA','NAGAO_TAMEKAGE','IMAGAWA_UJITERU','ODA_NOBUHIDE','MATSUDAIRA_KIYOYASU',
@@ -272,6 +273,32 @@ ExposedMembers.JAC_LeaderPersona.Reconcile()
 emit(GameEvents,'JAC_LeaderPersonaJoin',0,{Source=2})
 assert(playerProps[0].JAC_PERSONA_RESULT=='NATIVE_UNAVAILABLE' and uiReads==0)
 "#);
+    }
+}
+
+#[test]
+fn public_configured_start_turn_initializes_and_restores_without_late_bootstrap() {
+    for start in [0,1,50,180] {
+        let a=normal_context(&format!("GameConfiguration.GetStartTurn=function() return {start} end; Game.GetCurrentGameTurn=function() return {start} end"));
+        run(&a,&format!(r#"
+local s=assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1)
+assert(s.turn=={start} and s.commit.turn=={start},"configured initial boundary")
+local l,row=normalJoin(0,1)
+used[0]=1; success(0,row,0); appointed(0,row); finalize(0,l)
+assert(ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l).paid==1,"partial payment before save")
+"#));
+        let b=restore_normal(&a,&format!("used[0]=1; GameConfiguration.GetStartTurn=function() return {start} end; Game.GetCurrentGameTurn=function() return {} end; Game.GetGreatPeople():GrantPerson(201,7,8,0,0)",start+3));
+        run(&b,r#"local l=PlayerConfigurations[1]:GetLeaderTypeName();local s=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l);assert(s.active and s.paid==1,"restored partial payment");finalize(0,l);assert(properties['JAC_PERSONA_'..l..'_STATE']=='EVOLVING',"partial person retained")"#);
+        run(&b,&format!("GameConfiguration.GetStartTurn=function() return {} end; local l=PlayerConfigurations[1]:GetLeaderTypeName(); assert(not ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l).active,'changed start boundary accepted old receipt')",start+1));
+        let late=normal_context(&format!("GameConfiguration.GetStartTurn=function() return {start} end; Game.GetCurrentGameTurn=function() return {} end",start+1));
+        run(&late,"assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil)");
+    }
+    for setup in ["GameConfiguration=nil","GameConfiguration.GetStartTurn=nil",
+        "GameConfiguration.GetStartTurn=function() error('unreadable') end",
+        "GameConfiguration.GetStartTurn=function() return '0' end",
+        "GameConfiguration.GetStartTurn=function() return -1 end"] {
+        let a=normal_context(setup);
+        run(&a,"assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil)");
     }
 }
 

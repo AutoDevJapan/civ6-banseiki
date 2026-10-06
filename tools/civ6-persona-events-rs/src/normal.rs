@@ -9,6 +9,11 @@ local registrations={}
 local function subscribed() return registrations.GovernorAppointed==true and registrations.GovernorPromoted==true end
 local function integer(n,limit) return type(n)=='number' and n>=0 and n<(limit or 9007199254740991) and n%1==0 end
 local function hash(n) return type(n)=='number' and n>=-2147483648 and n<=4294967295 and n%1==0 end
+local function configuredStartTurn()
+    if not GameConfiguration or type(GameConfiguration.GetStartTurn)~='function' then return nil end
+    local ok,value=pcall(GameConfiguration.GetStartTurn)
+    if ok and integer(value) then return value end
+end
 local function copy(v)
     if type(v)~='table' then return v end
     local t={}; for k,x in pairs(v) do t[k]=copy(x) end; return t
@@ -126,7 +131,7 @@ end
 local function readState(ignoreAdmissionSchema)
     local s=Game:GetProperty(STORE); local c=catalog()
     if not c or type(s)~='table' or s.version~=3 or s.source~=SOURCE or s.binding~=c.binding or
-       s.baseline~=0 or not integer(s.turn) or s.turn~=0 or not integer(s.sequence) or
+       s.baseline~=0 or not integer(s.turn) or s.turn~=configuredStartTurn() or not integer(s.sequence) or
        type(s.people)~='table' or type(s.owners)~='table' or #s.owners~=22 or type(s.sources)~='table' or
        type(s.commit)~='table' or s.commit.nativeClosedAll22~=true or s.commit.schema~=3 or
        s.commit.binding~=s.binding or s.commit.context~='Gameplay' or s.commit.turn~=s.turn or
@@ -225,7 +230,8 @@ if GameConfiguration and type(GameConfiguration.GetStartTurn)=='function' then
 end
 local function fresh()
     initialization.stage='fresh_preconditions'
-    if Game:GetProperty(STORE)~=nil or Game.GetCurrentGameTurn()~=0 or
+    local startTurn=configuredStartTurn()
+    if startTurn==nil or Game:GetProperty(STORE)~=nil or Game.GetCurrentGameTurn()~=startTurn or
        Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=nil or
        Game:GetProperty('JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA')~=nil or
        Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')~=nil or
@@ -257,7 +263,7 @@ local function fresh()
     local accounts={}
     initialization.stage='candidate_ready'; initialization.owner=nil; initialization.leader=nil
     for _,owner in ipairs(ids) do accounts[owner]={floor=0,floorSerial=0,expected=0,serial=0,debits={},byKey={},tainted=false} end
-    return {version=3,source=SOURCE,binding=c.binding,baseline=0,turn=0,continuityTainted=false,
+    return {version=3,source=SOURCE,binding=c.binding,baseline=0,turn=startTurn,continuityTainted=false,
         sequence=0,owners=copy(ids),sources=sources,accounts=accounts,people={},receipts={}}
 end
 local freshOK,result=pcall(fresh); initialization.candidateCallOK=freshOK
@@ -277,7 +283,7 @@ function E.NormalCommit(ok,forceClosed)
     if ok~=true or forceClosed~=true or not subscribed() or E.Enabled() or Game:GetProperty(STORE)~=nil or
        Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=3 then return end
     initialization.stage='commit_catalog'
-    local c=catalog(); if not c or c.binding~=s.binding or Game.GetCurrentGameTurn()~=0 then return end
+    local c=catalog(); if not c or c.binding~=s.binding or s.turn~=configuredStartTurn() or Game.GetCurrentGameTurn()~=s.turn then return end
     for _,owner in ipairs(s.owners) do
         initialization.stage='commit_owner'; initialization.owner=owner
         local reads=admissionReads[owner] or {}
@@ -293,7 +299,7 @@ function E.NormalCommit(ok,forceClosed)
                not ack(901000+d.governor,false) or not ack(900000+d.governor,true) then return end
         end
     end
-    s.commit={nativeClosedAll22=true,schema=3,binding=s.binding,context='Gameplay',turn=0}
+    s.commit={nativeClosedAll22=true,schema=3,binding=s.binding,context='Gameplay',turn=s.turn}
     Game:SetProperty(STORE,s)
     initialization.stage='committed'; initialization.owner=nil
 end
