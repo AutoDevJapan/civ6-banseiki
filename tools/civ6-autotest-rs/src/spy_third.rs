@@ -220,6 +220,24 @@ local function completedObservation()
   mission=nativeHistory(0,saved.id),preserved={nativeHistory(0,0),nativeHistory(0,1)}};
  recordedMission(0,o); return o
 end
+local function checkedPost(o)
+ local post=state().missionPost; if not post then return nil end
+ local recorded=recordedMission(0,o); local ack=Game:GetProperty(ACK);
+ -- Both formats need the matching synchronized acknowledgement. Legacy
+ -- saves lack only the three new identity fields, not the original proof.
+ assert(integer(post.token,1) and post.token>recorded.token and integer(post.turn,0) and
+  post.turn>=recorded.turn and post.turn<=o.turn and integer(post.frame,1) and integer(post.epoch,0) and
+  post.source=='UI' and (post.histories=='UI' or post.histories=='CORE') and
+  ack and ack.owner==0 and ack.action=='RECORD_POST' and ack.phase=='COMMAND' and
+  ack.token==post.token and ack.turn==post.turn and ack.frame==post.frame and ack.epoch==post.epoch and
+  type(ack.observed)=='table' and ack.observed.turn==post.turn and sameMission(ack.observed,o),
+  'third spy saved post acknowledgement differs');
+ local legacy=post.recordToken==nil and post.missionID==nil and post.observation==nil;
+ assert(legacy or (post.recordToken==recorded.token and post.missionID==o.mission.id and
+  type(post.observation)=='table' and post.observation.turn==post.turn and sameMission(post.observation,o)),
+  'third spy saved post acknowledgement differs');
+ return post
+end
 local function capturedResult(m)
  local e=EspionageResultTypes;
  return (m.initial==e.CAPTURED and m.escape==e.NO_RESULT) or
@@ -711,12 +729,7 @@ function T.InstallUI(hooks)
  B.EnemyMissionEventReady=function()
   if missionPending then return false end
   if T.IsThird(Game:GetProperty(RETRY)) and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION') then
-   local o=completedObservation(); local post=state().missionPost;
-   if not post then return false end
-   if post.recordToken~=nil then
-    assert(post.recordToken==Game:GetProperty(MISSION_ACK).token and post.missionID==o.mission.id and
-     sameMission(post.observation,o),'third spy saved post acknowledgement differs');
-   end
+   if not checkedPost(completedObservation()) then return false end
   end
   return eventReady()
  end;
@@ -790,18 +803,23 @@ function T.InstallUI(hooks)
       (request.resumed or recorded.turn==request.turn) and saved and saved.attacker==0 and saved.id==request.id,
       'third spy recorded mission acknowledgement differs');
      local o=missionObservation(0,request.id);
-     assert(same(o,request.observed),'third spy mission changed after Core response');
+     recordedMission(0,o);
+     assert(sameMission(o,request.observed) and o.turn>=request.turn,
+      'third spy mission changed after Core response');
+     request.resumed=request.resumed or o.turn~=recorded.turn;
+     request.turn=o.turn; request.observed=copy(o);
      local p=publish('RECORD_POST',nextToken(),nil,o);
      p.RecordToken=recorded.token; p.Resumed=request.resumed or nil;
      request.postToken=p.Token; request.stage='POST_SENT'; request.published=false;
      p.OnStart='JAC_BoundaryThirdSpyStep';
      UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,p);
     elseif request.stage=='POST_SENT' and request.published then
-     assert(same(missionObservation(0,request.id),request.observed),
+     local o=completedObservation();
+     assert(sameMission(o,request.observed) and o.turn>=request.turn,
       'third spy mission changed after post-publish confirmation');
-     local post=assert(state().missionPost,'third spy post acknowledgement missing');
+     local post=assert(checkedPost(o),'third spy post acknowledgement missing');
      assert(post.token==request.postToken and post.recordToken==request.token and
-      post.missionID==request.id and same(post.observation,request.observed),
+      post.missionID==request.id and sameMission(post.observation,request.observed),
       'third spy post acknowledgement differs');
      B.enemyMissionStatus='RECORDED';
      missionPending=nil;

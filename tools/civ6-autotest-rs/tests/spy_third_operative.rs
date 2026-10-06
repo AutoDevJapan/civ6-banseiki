@@ -337,6 +337,25 @@ impl Third {
     }
 
     fn record_result_before_publish(&self, captured: bool) {
+        self.record_result_with_outcome(
+            if captured {
+                "SUCCESS_MUST_ESCAPE"
+            } else {
+                "SUCCESS_UNDETECTED"
+            },
+            if captured { "CAPTURED" } else { "NO_RESULT" },
+            captured,
+            3,
+        );
+    }
+
+    fn record_result_with_outcome(
+        &self,
+        initial: &str,
+        escape: &str,
+        captured: bool,
+        remaining: u32,
+    ) {
         self.third_mission_started();
         self.run(&format!(
             r#"
@@ -348,13 +367,11 @@ impl Third {
              UNITS[0]={{}}; CAPTURED[1][3]={{OwningPlayer=0,Name='',Level=1,NameIndex=-1}};
              OFF_MAP[3]={{Name='',Level=1,ReturnTurn=-1,XLocation=-9999,YLocation=-9999}};
             end;
-            ENEMY_CASES.neutralize(3);
+            if {remaining}>0 then ENEMY_CASES.neutralize({remaining}) end;
             fire(Events.SpyMissionCompleted,0,2); FRAME();
             ENEMY_CASES.fireCore('JAC_BoundaryRecordEnemyMission',REQUESTS[#REQUESTS].params);
             SAVED_MISSION_ACK=JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
             "#,
-            initial = if captured { "SUCCESS_MUST_ESCAPE" } else { "SUCCESS_UNDETECTED" },
-            escape = if captured { "CAPTURED" } else { "NO_RESULT" },
         ));
     }
 
@@ -451,7 +468,7 @@ impl Third {
             fire(Events.LoadScreenClose);
             if PRESERVED_RECOVERY then
              assert(JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY'))==PRESERVED_RECOVERY);
-            end;
+            else assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY')==nil) end;
             assert(ExposedMembers.JAC_PersonaBoundary.ReadEnemy().missions['0/2']);
             "#,
         );
@@ -1170,7 +1187,7 @@ fn mission_record_requires_post_publish_history_comparison_before_result_ready()
         fire(Events.GameCoreEventPublishComplete); HISTORY[0][2].EscapeResult=17;
         "#,
     );
-    t.reject("FRAME()", "mission changed after Core response");
+    t.reject("FRAME()", "saved mission lineage or native history differs");
     t.run("assert(UI_CORE_CALLS==0 and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost)");
 }
 
@@ -1271,6 +1288,91 @@ fn result_reload_rejects_changed_native_history_and_saved_lineage_without_sendin
             .expect_err("changed result must reject");
         t.run("assert(#REQUESTS==BEFORE_RESUME_REQUESTS and #UNIT_REQUESTS==2 and PROGRESS_CALLS==1 and UI_CORE_CALLS==0 and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost)");
     }
+}
+
+#[test]
+fn stable_result_accepts_turn_progress_before_and_after_post_dispatch() {
+    for advance_before_post in [false, true] {
+        let t = Third::new();
+        t.record_result_before_publish(false);
+        if advance_before_post {
+            t.run("TURN=55");
+        }
+        t.run(
+            r#"
+            fire(Events.GameCoreEventPublishComplete); FRAME();
+            local r=REQUESTS[#REQUESTS]; assert(r.params.Action=='RECORD_POST');
+            ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r.params);
+            POST_REQUEST_COUNT=#REQUESTS; TURN=TURN+1;
+            fire(Events.GameCoreEventPublishComplete); FRAME();
+            local b=ExposedMembers.JAC_PersonaBoundary;
+            assert(b.EnemyMissionEventReady() and b.enemyMissionStatus=='RECORDED');
+            assert(HISTORY[0][2].CompletionTurn==54 and #REQUESTS==POST_REQUEST_COUNT and
+             #UNIT_REQUESTS==2 and PROGRESS_CALLS==1 and UI_CORE_CALLS==0);
+            assert(JAC_PersonaBoundaryRules.Serialize(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'))==SAVED_MISSION_ACK);
+            "#,
+        );
+        t.preserved_failures();
+    }
+}
+
+#[test]
+fn legacy_post_requires_its_matching_core_ack_and_partial_modern_fields_reject() {
+    for fault in [
+        "",
+        "post.token=nil",
+        "post.turn=53",
+        "post.frame=nil",
+        "post.epoch=nil",
+        "post.source=nil",
+        "post.histories=nil",
+        "ack.action='BEGIN'",
+        "ack.token=ack.token+1",
+        "ack.observed.mission.id=7",
+    ] {
+        let t = Third::new();
+        t.third_success(false);
+        let script_fault = if fault.is_empty() { "do end" } else { fault };
+        t.run(&format!(
+            "local post=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost; \
+             local ack=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ACK'); \
+             post.recordToken=nil; post.missionID=nil; post.observation=nil; {script_fault}; LEGACY_REQUESTS=#REQUESTS"
+        ));
+        if fault.is_empty() {
+            t.run("fire(Events.LoadScreenClose); FRAME(); assert(ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady())");
+        } else {
+            t.reject(
+                "ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()",
+                "saved post acknowledgement",
+            );
+        }
+        t.run("assert(#REQUESTS==LEGACY_REQUESTS and #UNIT_REQUESTS==2 and PROGRESS_CALLS==1 and UI_CORE_CALLS==0)");
+    }
+    for field in ["recordToken", "missionID", "observation"] {
+        let t = Third::new();
+        t.third_success(false);
+        t.run(&format!(
+            "Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').missionPost.{field}=nil"
+        ));
+        t.reject(
+            "ExposedMembers.JAC_PersonaBoundary.EnemyMissionEventReady()",
+            "saved post acknowledgement",
+        );
+    }
+}
+
+#[test]
+fn failed_native_capture_is_readable_after_reload_but_cannot_start_recovery() {
+    let t = Third::new();
+    t.record_result_with_outcome("CAPTURED", "NO_RESULT", true, 0);
+    t.recreate_view_only();
+    t.confirm_resumed_result();
+    t.run("local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyStatus(); assert(s.capturedCount==3 and s.physicalCount==3 and s.neutralized==0)");
+    t.0.load("ExposedMembers.JAC_PersonaBoundary.Queue('CAPTURE_ENEMY'); FRAME()")
+        .exec()
+        .expect_err("failed mission must not begin successful recovery");
+    t.run("assert(not Game:GetProperty('JAC_BOUNDARY_ENEMY_RECOVERY') and #UNIT_REQUESTS==2 and UI_CORE_CALLS==0)");
+    t.preserved_failures();
 }
 
 #[test]
