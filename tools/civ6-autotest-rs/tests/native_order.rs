@@ -13,6 +13,10 @@ fn scenario(middle: Vec<Value>) -> Value {
 }
 #[test]
 fn bounded_capture_can_span_loads_but_cannot_overlap_or_survive_restart() {
+    assert!(validate_scenario(&scenario(vec![
+        json!({"action":"set_native_order_phase","phase":"front"})
+    ]))
+    .is_err());
     validate_scenario(&scenario(vec![
         json!({"action":"set_native_order_phase","phase":"load"}),
         json!({"action":"load","name":"SAVED_GAME"}),
@@ -49,10 +53,10 @@ fn observer_inputs_and_phase_changes_remain_finite() {
         data[key] = value;
         assert!(native_order::validate_options(&data).is_err(), "{key}");
     }
-    let changes = vec![json!({"action":"set_native_order_phase","phase":"load"}); 8];
+    let changes = (0..8).map(|i| json!({"action":"set_native_order_phase","phase":if i%2==0 {"load"} else {"front"}})).collect::<Vec<_>>();
     validate_scenario(&scenario(changes.clone())).unwrap();
     let mut ninth = changes;
-    ninth.push(json!({"action":"set_native_order_phase","phase":"front"}));
+    ninth.push(json!({"action":"set_native_order_phase","phase":"load"}));
     assert!(validate_scenario(&scenario(ninth)).is_err());
     let mut source = start();
     source["source_dll"] = json!("D:/CC/Work/todo880/owned/candidate.dll");
@@ -65,15 +69,19 @@ fn observer_inputs_and_phase_changes_remain_finite() {
 #[test]
 fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {
     let good = json!({"type":"order_parent_receipt","schema":"todo880-order-v1","game_pid":12,
-        "game_created_filetime":34,"source_dll_sha256":"abc","child_reaped":true,
+        "game_created_filetime":34,"source_dll_sha256":"abc","child_reaped":true,"child_pid":56,"permit_granted":true,"never_attached":false,"stop_writes":1,
         "cleanup_confirmed":true,"restored":true,"live_receipt":true,"child_exit_code":0,
         "error":null,"target_close_requested":false,"child_force_terminated":false});
-    native_order::validate_receipt(&good, 12, 34, "abc").unwrap();
+    native_order::validate_receipt(&good, 12, 34, "abc", 56).unwrap();
     for key in [
         "game_pid",
         "game_created_filetime",
         "source_dll_sha256",
         "child_reaped",
+        "child_pid",
+        "permit_granted",
+        "never_attached",
+        "stop_writes",
         "cleanup_confirmed",
         "restored",
         "live_receipt",
@@ -85,16 +93,18 @@ fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {
         let mut changed = good.clone();
         changed.as_object_mut().unwrap().remove(key);
         assert!(
-            native_order::validate_receipt(&changed, 12, 34, "abc").is_err(),
+            native_order::validate_receipt(&changed, 12, 34, "abc", 56).is_err(),
             "{key}"
         );
     }
-    assert!(native_order::validate_receipt(&good, 13, 34, "abc").is_err());
-    assert!(native_order::validate_receipt(&good, 12, 35, "abc").is_err());
-    assert!(native_order::validate_receipt(&good, 12, 34, "other").is_err());
+    assert!(native_order::validate_receipt(&good, 13, 34, "abc", 56).is_err());
+    assert!(native_order::validate_receipt(&good, 12, 35, "abc", 56).is_err());
+    assert!(native_order::validate_receipt(&good, 12, 34, "other", 56).is_err());
+    assert!(native_order::validate_receipt(&good, 12, 34, "abc", 57).is_err());
+    assert!(native_order::validate_receipt(&good, 12, 34, "abc", 0).is_err());
     let mut closed = good;
     closed["target_close_requested"] = json!(true);
-    assert!(native_order::validate_receipt(&closed, 12, 34, "abc").is_err());
+    assert!(native_order::validate_receipt(&closed, 12, 34, "abc", 56).is_err());
 }
 #[test]
 fn branch_built_existing_helper_exposes_order_identity_without_game_access() {

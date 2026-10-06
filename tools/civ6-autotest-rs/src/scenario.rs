@@ -133,6 +133,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut carrier_captures = BTreeSet::new();
     let mut order_open = false;
     let mut order_changes = 0;
+    let mut order_phase = None;
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -230,6 +231,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
                 order_open = true;
                 order_changes = 0;
+                order_phase = step["phase"].as_str();
             }
             "set_native_order_phase" | "stop_native_order_capture" => {
                 if !order_open {
@@ -245,12 +247,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 if phase_change {
                     if !matches!(step["phase"].as_str(), Some("front" | "load"))
                         || order_changes >= 8
+                        || order_phase == step["phase"].as_str()
                     {
                         return Err(fail(
                             "native order requires a known phase and at most eight changes".into(),
                         ));
                     }
                     order_changes += 1;
+                    order_phase = step["phase"].as_str();
                 } else {
                     order_open = false;
                 }

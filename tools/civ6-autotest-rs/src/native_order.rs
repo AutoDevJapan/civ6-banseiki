@@ -102,12 +102,23 @@ pub fn validate_options(step: &Value) -> Result<()> {
     Ok(())
 }
 
-pub fn validate_receipt(row: &Value, pid: u32, created: u64, sha: &str) -> Result<()> {
+pub fn validate_receipt(
+    row: &Value,
+    pid: u32,
+    created: u64,
+    sha: &str,
+    observer: u32,
+) -> Result<()> {
     if row["type"] != "order_parent_receipt"
         || row["schema"] != civ6_native_probe_rs::order_capture::SCHEMA
         || row["game_pid"].as_u64() != Some(u64::from(pid))
         || row["game_created_filetime"].as_u64() != Some(created)
         || row["source_dll_sha256"] != sha
+        || observer == 0
+        || row["child_pid"].as_u64() != Some(u64::from(observer))
+        || row["permit_granted"] != true
+        || row["never_attached"] != false
+        || !row["stop_writes"].as_u64().is_some_and(|n| n <= 1)
         || row["child_reaped"] != true
         || row["cleanup_confirmed"] != true
         || row["restored"] != true
@@ -174,6 +185,8 @@ mod platform {
         created: u64,
         sha: String,
         finished: bool,
+        phase: String,
+        observer: u32,
     }
     impl Session {
         pub fn start(pid: u32, started: f64, output: &Path, step: &Value) -> Result<Self> {
@@ -284,6 +297,8 @@ mod platform {
                 created,
                 sha,
                 finished: false,
+                phase: step["phase"].as_str().unwrap().to_owned(),
+                observer: 0,
             };
             let phase = step["phase"].as_str().unwrap();
             session.wait_ready(phase)?;
@@ -305,8 +320,25 @@ mod platform {
                     self.receipt = Some(row);
                     return Err(Error::input("order observer ended before readiness"));
                 }
+                if row["type"] == "attach_ready"
+                    && row["game_pid"].as_u64() == Some(u64::from(self.pid))
+                    && row["game_created_filetime"].as_u64() == Some(self.created)
+                {
+                    let observer = row["observer_pid"]
+                        .as_u64()
+                        .and_then(|v| u32::try_from(v).ok())
+                        .filter(|&v| v > 0)
+                        .ok_or_else(|| Error::input("order observer identity missing"))?;
+                    if self.observer != 0 && self.observer != observer {
+                        return Err(Error::input("order observer identity changed"));
+                    }
+                    self.observer = observer;
+                }
                 if row["pid"].as_u64() == Some(u64::from(self.pid)) {
-                    if row["ready"] == true && row["capture_only"] == true && row["phase"] == phase
+                    if row["ready"] == true
+                        && row["capture_only"] == true
+                        && row["phase"] == phase
+                        && self.observer != 0
                     {
                         return Ok(());
                     }
@@ -316,6 +348,9 @@ mod platform {
         pub fn phase(&mut self, phase: &str) -> Result<()> {
             if !matches!(phase, "front" | "load") {
                 return Err(Error::scenario("unknown order phase"));
+            }
+            if self.phase == phase {
+                return Err(Error::scenario("native order phase must change"));
             }
             let pipe = self
                 .input
@@ -337,6 +372,7 @@ mod platform {
                     return Err(Error::input("order observer ended during phase change"));
                 }
                 if row["pid"].as_u64() == Some(u64::from(self.pid)) && row["phase_ready"] == phase {
+                    self.phase = phase.to_owned();
                     return Ok(());
                 }
                 if Instant::now() >= deadline {
@@ -390,7 +426,7 @@ mod platform {
                 .receipt
                 .as_ref()
                 .ok_or_else(|| Error::input("order parent receipt missing"))?;
-            validate_receipt(row, self.pid, self.created, &self.sha)?;
+            validate_receipt(row, self.pid, self.created, &self.sha, self.observer)?;
             if !self.artifact.is_file() {
                 return Err(Error::input("native order raw capture missing"));
             }
