@@ -762,7 +762,43 @@ fn test_load_wait_timeout_never_repeats_escape() {
         ErrorKind::Scenario,
         "entering the game",
     );
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
+}
+
+#[test]
+fn completion_marker_never_sends_escape_to_joining_room_or_unknown_states() {
+    for unknown_states in [false, true] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let clock = f.clock.clone();
+        backend.on_states = Box::new(move |_| {
+            if civ6_autotest_rs::time::Clock::now(&*clock) < 2.0 {
+                Ok(if unknown_states {
+                    vec![]
+                } else {
+                    vec!["FrontEnd".into(), "JoiningRoom".into()]
+                })
+            } else {
+                Ok(vec!["LoadScreen".into(), "InGame".into()])
+            }
+        });
+        let key_clock = f.clock.clone();
+        backend.on_press = Some(Box::new(move |_, _| {
+            assert!(
+                civ6_autotest_rs::time::Clock::now(&*key_clock) >= 2.0,
+                "Esc would cancel JoiningRoom before the native game context arrived"
+            );
+            Ok(())
+        }));
+        let mut runner = f.direct_runner(json!({}), backend);
+        ready(&f, &mut runner);
+        runner
+            .enter_game_after_loadscreen(0, 5.0, None, false)
+            .unwrap();
+        assert_eq!(f.trace().presses.len(), 1);
+        assert!(f.trace().disconnects > 0);
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+    }
 }
 
 #[test]
@@ -847,7 +883,7 @@ fn test_transition_detects_lua_log_rotation_after_escape() {
     let lua = f.logs.join("Lua.log");
     fs::write(&lua, "old loading history\n").unwrap();
     let mut backend = f.backend();
-    backend.on_states = Box::new(|_| Ok(vec![]));
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into()]));
     let mut runner = f.direct_runner(json!({}), backend);
     runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
     let before = runner.loadscreen_count().unwrap();

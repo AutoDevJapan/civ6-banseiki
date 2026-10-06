@@ -1517,6 +1517,17 @@ impl Runner {
                 if self.clock.now() >= end {
                     break;
                 }
+                if !states.iter().any(|state| {
+                    state_name_eq(state, "LoadScreen") || state_name_eq(state, "InGame")
+                }) {
+                    // A completion log can precede the new native context.
+                    // Esc in JoiningRoom exits the session; a failed/stale
+                    // state query must never authorize that global input.
+                    last = "waiting for a native game or load-screen context".into();
+                    self.disconnect();
+                    self.sleep_until(end, 0.5);
+                    continue;
+                }
                 // Use the official keyboard path outside a FireTuner Lua call.
                 // Keep direct Lua activation as an explicit diagnostic only.
                 if states.iter().any(|s| state_name_eq(s, "LoadScreen"))
