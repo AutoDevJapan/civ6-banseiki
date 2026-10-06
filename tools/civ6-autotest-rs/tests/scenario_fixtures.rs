@@ -1387,6 +1387,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
     let mut blocked_recovery_seen = false;
+    let mut hotseat_growth_seen = false;
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1403,6 +1404,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         if action(first, "enable_mods") {
             count += 1;
             blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
+            hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1467,10 +1469,11 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Preserve the prior 141 scenes and inspect the main-branch blocked-recovery
-    // scenario against the same isolation rules, rather than excluding it.
+    // Preserve the prior 142 scenes, then inspect the one new Hotseat game
+    // against the same isolation rules. The witness hold starts no new game.
     assert!(blocked_recovery_seen);
-    assert_eq!(count, 142);
+    assert!(hotseat_growth_seen);
+    assert_eq!(count, 143);
 }
 
 #[test]
