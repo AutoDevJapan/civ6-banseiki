@@ -1417,7 +1417,7 @@ mod thread_name_tests;
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_support::Fixture;
+    use super::super::test_support::{AttachReadyBarrier, Fixture};
     use super::*;
     #[test]
     fn order_capture_chain_allowlist_rejects_other_copies_and_hashes() {
@@ -1537,6 +1537,7 @@ mod tests {
             )
             .unwrap();
             d.close_ack = ack;
+            let mut ready_barrier = AttachReadyBarrier::default();
             let deadline = Instant::now() + Duration::from_secs(20);
             loop {
                 assert!(
@@ -1576,8 +1577,7 @@ mod tests {
                 }
                 status = d.handle_event(&event).unwrap();
                 d.continue_pending_with_status(status).unwrap();
-                if d.ready {
-                    d.ready = false;
+                if ready_barrier.advance(&mut d, &event) {
                     ready_tx.send(()).unwrap();
                 }
             }

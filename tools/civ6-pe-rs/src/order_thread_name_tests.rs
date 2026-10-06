@@ -1,6 +1,6 @@
 //! A real RaiseException in the existing owned Rust fixture. The baseline
 //! forwards first chance, observes second chance, then rescues the same child.
-use super::super::test_support::Fixture;
+use super::super::test_support::{AttachReadyBarrier, Fixture};
 use super::*;
 use windows_sys::Win32::System::Diagnostics::Debug::RaiseException;
 
@@ -69,8 +69,7 @@ fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
             d.close_ack=ack;
             let mut first=0;
             let mut second=0;
-            let mut attach_thread=None;
-            let mut attach_exit_observed=false;
+            let mut ready_barrier=AttachReadyBarrier::default();
             let deadline=Instant::now()+Duration::from_secs(20);
             loop {
                 assert!(Instant::now()<deadline,"owned naming event deadline");
@@ -91,7 +90,7 @@ fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
                         d.continue_pending_with_status(DBG_CONTINUE).unwrap();continue;
                     }
                     if info.ExceptionRecord.ExceptionCode==THREAD_NAME_EXCEPTION {
-                        assert!(attach_exit_observed,"naming case began before attach thread exit");
+                        assert!(ready_barrier.complete(),"naming case began before attach thread exit");
                         if info.dwFirstChance!=0 {first+=1;}else{second+=1;}
                         if baseline && first==1 && second==0 {
                             assert_eq!(d.status_after_error(&event),DBG_EXCEPTION_NOT_HANDLED);
@@ -152,26 +151,12 @@ fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
                         assert_eq!(evidence["continue_status"],DBG_CONTINUE);
                         cleanup_order(&mut d).unwrap();
                         assert_eq!(d.terminal,TerminalKind::Detached);
-                        return json!({"kind":"owned_RaiseException_thread_name","attach_thread":attach_thread,"attach_exit_observed":attach_exit_observed,"baseline_first_chance_forwarded":baseline,"first_chance":first,"second_chance":second,"exception":evidence,"invalid_event_mutations_rejected":rejected,"pending_ledger_injected_for_negative_check":true,"pending_same_thread_preserved":true,"pending_other_thread_preserved":true,"output_failure_injected":!baseline,"restored":true,"game_live":false});
+                        return json!({"kind":"owned_RaiseException_thread_name","attach_thread":ready_barrier.thread(),"attach_exit_observed":ready_barrier.complete(),"baseline_first_chance_forwarded":baseline,"first_chance":first,"second_chance":second,"exception":evidence,"invalid_event_mutations_rejected":rejected,"pending_ledger_injected_for_negative_check":true,"pending_same_thread_preserved":true,"pending_other_thread_preserved":true,"output_failure_injected":!baseline,"restored":true,"game_live":false});
                     }
                 }
                 let status=d.handle_event(&event).unwrap();
                 d.continue_pending_with_status(status).unwrap();
-                if d.ready {
-                    d.ready=false;
-                    assert!(d.attach_origin.accepted);
-                    assert_eq!(d.attach_origin.breakin_thread,Some(tid));
-                    attach_thread=Some(tid);
-                }
-                // The Windows attach helper exits immediately after its
-                // breakpoint. Do not start a teardown-focused fixture while
-                // that real EXIT_THREAD event is still waiting to be consumed.
-                if event.dwDebugEventCode==EXIT_THREAD_DEBUG_EVENT && attach_thread==Some(tid) {
-                    assert!(!d.threads.contains_key(&tid));
-                    assert!(!attach_exit_observed);
-                    attach_exit_observed=true;
-                    ready_tx.send(()).unwrap();
-                }
+                if ready_barrier.advance(&mut d,&event) { ready_tx.send(()).unwrap(); }
             }
         });
         ready_rx.recv_timeout(Duration::from_secs(8)).unwrap();

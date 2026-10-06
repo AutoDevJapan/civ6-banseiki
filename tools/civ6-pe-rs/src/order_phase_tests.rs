@@ -1,5 +1,5 @@
 //! Real owned OS fixture for the production phase barrier and thread ledger.
-use super::super::test_support::Fixture;
+use super::super::test_support::{AttachReadyBarrier, Fixture};
 use super::*;
 
 core::arch::global_asm!(
@@ -58,6 +58,7 @@ fn fixed_thread_lifecycle(erase_registers: bool) {
         let mut d = Debugger::attach(pid, process(pid,true).unwrap(), entry, 1, output, ProbeMode::Lifecycle).unwrap();
         d.mode = ProbeMode::Property;
         d.close_ack = ack;
+        let mut ready_barrier = AttachReadyBarrier::default();
         let epoch = CaptureEpoch { phase:Phase::Load, generation:0, sites:[Some(entry),None,None,None] };
         let mut ledger = CaptureThreads::default();
         let steps = BTreeMap::new();
@@ -126,7 +127,9 @@ fn fixed_thread_lifecycle(erase_registers: bool) {
                     row["registers_match"] = json!(installed_sites_match_context(&epoch.sites,&c.unwrap()));
                     rows.push(row);
                 }
-                d.continue_pending_with_status(DBG_CONTINUE).unwrap();continue;
+                d.continue_pending_with_status(DBG_CONTINUE).unwrap();
+                if ready_barrier.advance(&mut d,&event) {after_ready=true;ready_tx.send(()).unwrap();}
+                continue;
             }
             if event.dwDebugEventCode==EXCEPTION_DEBUG_EVENT {
                 let info=unsafe {event.u.Exception};
@@ -147,7 +150,7 @@ fn fixed_thread_lifecycle(erase_registers: bool) {
                 if info.ExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT && d.last_attach_breakpoint_owned {
                     d.mark_attach_ready().unwrap();
                     d.continue_pending_with_status(DBG_CONTINUE).unwrap();
-                    after_ready=true;ready_tx.send(()).unwrap();continue;
+                    assert!(!ready_barrier.advance(&mut d,&event));continue;
                 }
                 let status=d.status_after_error(&event);
                 d.continue_pending_with_status(status).unwrap();continue;
@@ -221,6 +224,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
         let mut d=Debugger::attach(pid,process(pid,true).unwrap(),remote,module.size,output,ProbeMode::Lifecycle).unwrap();
         d.mode=ProbeMode::Property;
         d.close_ack=ack;
+        let mut ready_barrier=AttachReadyBarrier::default();
         for address in front.into_iter().chain(load).flatten(){executable(&d.game,remote,address,1).unwrap();}
         let mut threads=CaptureThreads::default();
         let mut epoch=CaptureEpoch{phase:Phase::Front,generation:0,sites:front};
@@ -316,7 +320,9 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 continue;
             }
             if capture_thread_event(&mut d,&event,epoch,&mut threads,&steps).unwrap(){
-                d.continue_pending_with_status(DBG_CONTINUE).unwrap();continue;
+                d.continue_pending_with_status(DBG_CONTINUE).unwrap();
+                if ready_barrier.advance(&mut d,&event) {notice_tx.send("ready").unwrap();}
+                continue;
             }
             if event.dwDebugEventCode==EXCEPTION_DEBUG_EVENT {
                 let ex=unsafe{event.u.Exception};
@@ -360,7 +366,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 if ex.ExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT && d.last_attach_breakpoint_owned {
                     d.mark_attach_ready().unwrap();
                     d.continue_pending_with_status(DBG_CONTINUE).unwrap();
-                    notice_tx.send("ready").unwrap();continue;
+                    assert!(!ready_barrier.advance(&mut d,&event));continue;
                 }
                 d.continue_pending_with_status(d.status_after_error(&event)).unwrap();continue;
             }

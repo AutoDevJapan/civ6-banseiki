@@ -21,6 +21,48 @@ const IO_BUDGET: Duration = Duration::from_secs(8);
 const REAP_BUDGET: Duration = Duration::from_secs(15);
 const CASE_BUDGET: Duration = Duration::from_secs(50);
 
+/// Stable setup for fixtures which tear down immediately after their first
+/// probe. The Windows attach thread is transient; a breakpoint alone does not
+/// mean its real EXIT_THREAD event has been handled and continued yet.
+#[derive(Default)]
+pub(super) struct AttachReadyBarrier {
+    thread: Option<u32>,
+    complete: bool,
+}
+impl AttachReadyBarrier {
+    pub(super) fn advance(&mut self, debugger: &mut Debugger, event: &DEBUG_EVENT) -> bool {
+        if debugger.ready {
+            assert!(debugger.attach_origin.accepted);
+            assert_eq!(
+                debugger.attach_origin.breakin_thread,
+                Some(event.dwThreadId)
+            );
+            assert!(self.thread.is_none());
+            self.thread = Some(event.dwThreadId);
+            debugger.ready = false;
+        }
+        if event.dwDebugEventCode == EXIT_THREAD_DEBUG_EVENT
+            && self.thread == Some(event.dwThreadId)
+        {
+            assert!(!debugger.threads.contains_key(&event.dwThreadId));
+            assert!(
+                debugger.cleanup_event.is_none(),
+                "exit must be continued before fixture readiness"
+            );
+            assert!(!self.complete);
+            self.complete = true;
+            return true;
+        }
+        false
+    }
+    pub(super) fn complete(&self) -> bool {
+        self.complete
+    }
+    pub(super) fn thread(&self) -> Option<u32> {
+        self.thread
+    }
+}
+
 pub(super) trait ObserverJoin {
     type Output;
     fn bounded_join(self) -> thread::Result<Self::Output>;
