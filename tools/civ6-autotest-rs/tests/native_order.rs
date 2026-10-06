@@ -54,6 +54,13 @@ fn observer_inputs_and_phase_changes_remain_finite() {
     let mut ninth = changes;
     ninth.push(json!({"action":"set_native_order_phase","phase":"front"}));
     assert!(validate_scenario(&scenario(ninth)).is_err());
+    let mut source = start();
+    source["source_dll"] = json!("D:/CC/Work/todo880/owned/candidate.dll");
+    assert!(native_order::validate_options(&source).is_err());
+    source["source_dll_sha256"] = json!("a".repeat(64));
+    native_order::validate_options(&source).unwrap();
+    source["source_dll"] = json!("relative.dll");
+    assert!(native_order::validate_options(&source).is_err());
 }
 #[test]
 fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {

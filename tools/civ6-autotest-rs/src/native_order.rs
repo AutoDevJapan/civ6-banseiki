@@ -49,7 +49,24 @@ pub fn worker(args: &[String]) -> Option<Result<()>> {
 }
 
 pub fn validate_options(step: &Value) -> Result<()> {
-    if !crate::scenario::matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
+    let source_ok = match (step.get("source_dll"), step.get("source_dll_sha256")) {
+        (None, None) => true,
+        (Some(path), Some(sha)) => {
+            path.as_str().is_some_and(|p| {
+                let bytes = p.as_bytes();
+                bytes.len() > 3
+                    && bytes[0].is_ascii_alphabetic()
+                    && bytes[1] == b':'
+                    && matches!(bytes[2], b'/' | b'\\')
+                    && p.to_ascii_lowercase().ends_with(".dll")
+            }) && sha
+                .as_str()
+                .is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+        }
+        _ => false,
+    };
+    if !source_ok
+        || !crate::scenario::matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"])
         || !step["max_seconds"]
             .as_u64()
             .is_some_and(|v| (1..=300).contains(&v))
@@ -71,6 +88,8 @@ pub fn validate_options(step: &Value) -> Result<()> {
                     "load_prefix",
                     "phase",
                     "timeout",
+                    "source_dll",
+                    "source_dll_sha256",
                 ]
                 .contains(&k.as_str())
             })
@@ -179,8 +198,19 @@ mod platform {
             {
                 return Err(Error::input("order helper source differs from this driver"));
             }
-            let dll = executable.with_file_name("civ6_native_bridge_rs.dll");
+            let dll = step["source_dll"]
+                .as_str()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| executable.with_file_name("civ6_native_bridge_rs.dll"));
             let sha = format!("{:x}", Sha256::digest(fs::read(&dll)?));
+            if step["source_dll_sha256"]
+                .as_str()
+                .is_some_and(|expected| !sha.eq_ignore_ascii_case(expected))
+            {
+                return Err(Error::input(
+                    "order source DLL differs from the scenario's frozen build",
+                ));
+            }
             let artifact = output.join(format!("{}.jsonl", step["name"].as_str().unwrap()));
             if artifact.exists() || artifact.with_extension("request.json").exists() {
                 return Err(Error::scenario("order capture output already exists"));
