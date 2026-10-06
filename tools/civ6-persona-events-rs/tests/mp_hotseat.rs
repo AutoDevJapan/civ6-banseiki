@@ -24,6 +24,11 @@ fn scenario_keeps_hotseat22_and_explicit_restart_reconnect_with_no_state_forgery
     let s = scene();
     civ6_autotest_rs::scenario::validate_scenario(&s).unwrap();
     assert_eq!(s["session_type"], "hotseat");
+    assert_eq!(s["steps"][0]["exclusive_user_mods"], true);
+    assert_eq!(
+        s["steps"][0]["ids"],
+        template("leader-persona-15km.json")["steps"][0]["ids"]
+    );
     let steps = s["steps"].as_array().unwrap();
     let players = steps[2]["players"].as_array().unwrap();
     assert_eq!(players.len(), 22);

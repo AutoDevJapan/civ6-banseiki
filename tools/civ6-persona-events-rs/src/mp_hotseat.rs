@@ -217,8 +217,12 @@ pub fn build(normal: &Value, hotseat: &Value) -> Result<Value, String> {
     let mut configure = normal["steps"][1].clone();
     configure["players"] = json!(roster);
     configure["seed"] = hotseat["steps"][1]["seed"].clone();
+    let mut enable = normal["steps"][0].clone();
+    // Preserve the persona MOD set, while retaining PR121's isolated hotseat
+    // setup so unrelated user MODs cannot enter this finite diagnostic.
+    enable["exclusive_user_mods"] = true.into();
     let mut steps = vec![
-        normal["steps"][0].clone(),
+        enable,
         json!({"action":"restart_game"}),
         configure,
         hotseat["steps"][2].clone(),
