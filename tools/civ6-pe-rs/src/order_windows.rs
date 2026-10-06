@@ -432,19 +432,80 @@ fn emit(row: &Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+const THREAD_NAME_EXCEPTION: i32 = 0x406d1388;
+// Microsoft pack(8) THREADNAME_INFO on Win64 is 24 bytes / 3 ULONG_PTRs.
+// The upper DWORD of word 0 is padding, not a required zero field.
+fn thread_name_notice(d: &Debugger, event: &DEBUG_EVENT) -> Result<Value, String> {
+    let ex = unsafe { event.u.Exception }.ExceptionRecord;
+    if event.dwProcessId != d.pid
+        || ex.ExceptionCode != THREAD_NAME_EXCEPTION
+        // Windows adds EXCEPTION_SOFTWARE_ORIGINATE (SDK winnt.h) to the
+        // observed record even when RaiseException was called with flags=0.
+        || ex.ExceptionFlags & !0x80 != 0
+        || ex.NumberParameters != 3
+    {
+        return Err("not the Win64 thread-name notification shape".into());
+    }
+    let words = &ex.ExceptionInformation;
+    if words[0] as u32 != 0x1000 || (words[2] as u64 >> 32) != 0 || words[1] == 0 {
+        return Err("invalid thread-name fields".into());
+    }
+    let target = if words[2] as u32 == u32::MAX {
+        event.dwThreadId
+    } else {
+        words[2] as u32
+    };
+    for tid in [event.dwThreadId, target] {
+        let thread = d
+            .threads
+            .get(&tid)
+            .ok_or("thread-name thread is not tracked")?;
+        if unsafe { GetProcessIdOfThread(thread.handle.0) } != d.pid
+            || unsafe { GetThreadId(thread.handle.0) } != tid
+            || unsafe { WaitForSingleObject(thread.handle.0, 0) } != WAIT_TIMEOUT
+        {
+            return Err("thread-name thread ownership or lifetime differs".into());
+        }
+    }
+    let mut name = Vec::new();
+    for i in 0..256u64 {
+        let address = (words[1] as u64)
+            .checked_add(i)
+            .ok_or("thread-name address overflow")?;
+        let byte = read_exact::<1>(&d.game, address)?[0];
+        if byte == 0 {
+            return Ok(
+                json!({"target_tid":target,"name_bytes":name,"name_address":words[1],"layout":"Win64-pack8-3-ULONG_PTR","padding_ignored":(words[0] as u64)>>32}),
+            );
+        }
+        name.push(byte);
+    }
+    Err("thread-name is not terminated within 256 bytes".into())
+}
+
 fn qualify_exception(
     d: &mut Debugger,
     event: &DEBUG_EVENT,
     steps: &BTreeMap<u32, Step>,
     sites: &[u64],
-) -> Result<(), String> {
+) -> Result<i32, String> {
     if event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT {
-        return Ok(());
+        return Ok(DBG_CONTINUE);
     }
     let info = unsafe { event.u.Exception };
     let tid = event.dwThreadId;
     let address = info.ExceptionRecord.ExceptionAddress as u64;
     match info.ExceptionRecord.ExceptionCode {
+        THREAD_NAME_EXCEPTION if thread_name_notice(d, event).is_ok() => {
+            if steps.contains_key(&tid) {
+                d.last_dispatch =
+                    DispatchOutcome::Ambiguous("thread-name interrupted pending step");
+                return Err("thread-name cannot complete or discard a pending instruction".into());
+            }
+            // A validated naming notification has no instruction-completion
+            // meaning. Keep every other thread's pending step untouched.
+            return Ok(DBG_CONTINUE);
+        }
         EXCEPTION_SINGLE_STEP => {
             d.last_dispatch = DispatchOutcome::Ambiguous("order exception ownership unresolved");
             let state = d.threads.get(&tid).ok_or("unknown exception thread")?;
@@ -493,13 +554,28 @@ fn qualify_exception(
         _ => {}
     }
     d.cleanup_event = Some((*event, d.status_after_error(event)));
-    Ok(())
+    Ok(d.status_after_error(event))
 }
 
 fn exception_evidence(d: &Debugger, event: &DEBUG_EVENT, steps: &BTreeMap<u32, Step>) -> Value {
     let info = unsafe { event.u.Exception };
     let tid = event.dwThreadId;
     let mut row = json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":info.ExceptionRecord.ExceptionAddress as u64,"first_chance":info.dwFirstChance!=0,"expected_owner_pid":d.pid,"pending_step_count":steps.len()});
+    let ex = &info.ExceptionRecord;
+    row["exception_flags"] = json!(ex.ExceptionFlags);
+    row["number_parameters"] = json!(ex.NumberParameters);
+    row["exception_information"] = json!(
+        &ex.ExceptionInformation
+            [..(ex.NumberParameters as usize).min(ex.ExceptionInformation.len())]
+    );
+    row["exception_information_truncated"] =
+        json!(ex.NumberParameters as usize > ex.ExceptionInformation.len());
+    if ex.ExceptionCode == THREAD_NAME_EXCEPTION {
+        match thread_name_notice(d, event) {
+            Ok(notice) => row["thread_name_notice"] = notice,
+            Err(error) => row["thread_name_rejected"] = json!(error),
+        }
+    }
     if let Some(step) = steps.get(&tid) {
         row["pending_step"] = json!({"capture_seq":step.capture["capture_seq"],"site":step.site.name,"expected_rip":step.expected,"phase":step.phase.name(),"armed_eflags":step.armed_eflags});
     }
@@ -530,7 +606,10 @@ fn classify_then_record(
     // any fallible write, including when qualification itself fails.
     let mut row = exception_evidence(d, event, steps);
     let qualified = qualify_exception(d, event, steps, sites);
-    let status = d.status_after_error(event);
+    let status = qualified
+        .as_ref()
+        .copied()
+        .unwrap_or_else(|_| d.status_after_error(event));
     d.cleanup_event = Some((*event, status));
     row["qualification_error"] = json!(qualified.as_ref().err());
     row["continue_status"] = json!(status);
@@ -544,7 +623,16 @@ fn classify_then_record(
             json!({"type":"exception_record_failure","error":error.to_string(),"exception":fallback})
         );
     }
-    qualified.and(recorded.map_err(|e| e.to_string()))
+    qualified
+        .map(|_| ())
+        .and(recorded.map_err(|e| e.to_string()))
+}
+
+fn cleanup_order(d: &mut Debugger) -> Result<(), String> {
+    // Native default classification does not know the naming protocol. Preserve
+    // the status already fixed before recording, including on disk failure.
+    let pending = d.cleanup_event;
+    d.cleanup(pending.as_ref().map(|(event, status)| (event, *status)))
 }
 
 fn core_module(pid: u32) -> Result<Option<Module>, String> {
@@ -980,6 +1068,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                                 }
                             }
                         }
+                    } else if info.ExceptionRecord.ExceptionCode == THREAD_NAME_EXCEPTION
+                        && d.cleanup_event.as_ref().is_some_and(|(_,s)| *s == DBG_CONTINUE) {
+                        status = DBG_CONTINUE;
                     } else {
                         if steps.contains_key(&tid) {
                             d.last_dispatch =
@@ -1015,7 +1106,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         {
             d.critical_ambiguous_exception(&event, reason)
         } else {
-            d.cleanup(None)
+            cleanup_order(&mut d)
         }
     })();
     let cleanup = match cleanup {
@@ -1235,6 +1326,10 @@ mod step_tests;
 #[cfg(test)]
 #[path = "order_phase_tests.rs"]
 mod phase_tests;
+
+#[cfg(test)]
+#[path = "order_thread_name_tests.rs"]
+mod thread_name_tests;
 
 #[cfg(test)]
 mod tests {

@@ -123,6 +123,14 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+固定load実機04は5/7手順まで成功し、LeaveGame中に2プロセス検出で失敗した。原本は `D:/CC/Work/todo880/order-fixed-04-artifacts`。sequence120/121は同TID29092、code `0x406D1388` のfirst/second chanceで、旧observerは両方を透過した。4つのload siteはhit0、observerの復元・detach・回収は成功している。2プロセスの正体・失敗原因・境界不在は未確定とする。04はExceptionInformationを持たないため、正規thread-name payloadだったと断定しない。
+
+Microsoftの[thread名通知](https://learn.microsoft.com/en-us/visualstudio/debugger/tips-for-debugging-threads?view=vs-2022)はpack8のTHREADNAME_INFOをRaiseExceptionへ渡す。固定EXE SHA `e7450823…d63` をLLVMで読むとRVA `0x98BF30`、`0xC896E0`、`0xF63060`にtype0x1000・名前pointer・thread ID・flags0を組み立て、3 ULONG_PTRで同コードをRaiseException IAT `0xF96788`へ送る命令がある。DWORD typeの上位は構造体paddingなので0を要求しない。これはゲームPEに実在する通知経路の証拠であり、04の例外callsiteの同定ではない。
+
+observerは3引数のWin64形式、type0x1000、payload flags0、256byte以内に終端する読み取り可能な名前、送信元と対象の保持済み同所有process/thread・生存を照合した場合だけDBG_CONTINUEとする。対象IDのDWORD -1は送信threadを表す。未知・不正なpayloadは透過し、TIDから不明handleを再取得しない。ExceptionFlagsは0またはSDK winnt.hの `EXCEPTION_SOFTWARE_ORIGINATE=0x80` のみ許す。実OS子ではRaiseExceptionへflags0を渡しても受信レコードに0x80が付いた。[EXCEPTION_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_record)が区別する非継続bit等は許可しない。同じthreadにpending命令がある場合は完了を作らず停止し、別threadのpendingは変更しない。
+
+例外のraw記録にExceptionFlags、NumberParameters、ExceptionInformation（最大15語）、名前のbyte列と対象TID、拒否理由を追加した。継続statusを記録I/Oより前に決定し、通知受理後にdisk書込が失敗しても、そのstatusを既存cleanupへ明示して維持する。`order_capture_thread_name_real_second_chance_and_fixed_continue` は既存所有Rust子に同じRaiseExceptionを実行させ、旧first-chance透過→second-chanceを観測後に救済する対照と、修正first-chance継続を比較する。不正payload・pending台帳の検査は実イベントの否定用変形で、ゲームがその値を送った証拠にはしない。
+
 実機03（`D:/CC/Work/todo880/order-phase-03-artifacts`、actual `e5d0f16a`、observer digest `4042d7d53608461316402809f0325b75bdd13a4bb69829fbe8e948c7d0b69171`）は、保存loadとGameplay読取まで成功した後、phase切替で失敗した。TID41456はPID65240の生存handle（wait258、exit259）でheld=true、generation0、pending0だがDR0〜3/6/7が全0だった。終了thread仮説ではこの値を説明できない。結果はerror、復元・detach・子回収は成功として別に保持し、phase問題の解決やrun成功へ読み替えない。
 
 次の有限観測は `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-leave.json` を使う。7手順はrestart→同じ保存load→Gameplay読取→load固定のobserver開始→退出前の読取印→LeaveGame→stop。phase切替は0回、install/Join/支払い/保存の再送は0回。専用DLLは旧記録のc11255eb…c775を明示し、共有DLLを置換しない。親の既存runner/helperで実行でき、bootstrap workerは予約しない。
