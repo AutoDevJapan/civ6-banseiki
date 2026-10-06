@@ -43,6 +43,37 @@ return 'turn='..Game.GetCurrentGameTurn()..'|rows=484|'..table.concat(rows,',')
 "#;
 
 impl Runner {
+    pub(super) fn reconcile_persona_wait_read(
+        &mut self,
+        condition: &Value,
+        deadline: f64,
+        attempts: usize,
+    ) -> Result<bool> {
+        if !self.persona_runtime_restart
+            || attempts >= 3
+            || condition["type"] != "lua"
+            || condition["state_name"] != "InGame"
+        {
+            return Ok(false);
+        }
+        // These two exact original113 predicates only read a Game property.
+        // No other Lua condition, engine request or evolution is replayed.
+        if !matches!(condition["code"].as_str(),Some(
+            "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'" |
+            "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA_STATE')=='GOVERNOR'")) {return Ok(false);}
+        self.remaining(deadline)?;
+        let expected = self
+            .resident_runtime_identity
+            .ok_or_else(|| Error::input("persona read reconciliation lacks resident identity"))?;
+        if self.backend.validate_native_bridge_target()? != Some(expected) {
+            return Err(Error::input("persona read reconciliation target changed"));
+        }
+        self.disconnect();
+        self.log("persona_read_reconcile","OK",&format!("lost acknowledgment of pure original Governor-state read; retry {}/3; same pinned process {:?}; no evolution/payment request",attempts+1,expected))?;
+        self.sleep_until(deadline, 0.5);
+        self.remaining(deadline)?;
+        Ok(true)
+    }
     pub(super) fn read_run_logs(&self) -> Result<BTreeMap<String, String>> {
         let baseline = self
             .baseline
@@ -395,6 +426,66 @@ mod tests {
     use mlua::Lua;
     use std::sync::Mutex;
 
+    struct LostStateRead {
+        calls: Arc<Mutex<usize>>,
+        change_identity: bool,
+    }
+    impl Backend for LostStateRead {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["InGame".into()])
+        }
+        fn run_lua(&mut self, _: &str, code: &str, _: f64) -> Result<String> {
+            assert_eq!(
+                code,
+                "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"
+            );
+            let mut n = self.calls.lock().unwrap();
+            *n += 1;
+            if *n == 1 {
+                Err(Error::unknown("lost readonly acknowledgment"))
+            } else {
+                Ok("true".into())
+            }
+        }
+        fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+            Ok(Some((7, if self.change_identity { 124 } else { 123 })))
+        }
+    }
+
+    #[test]
+    fn runner_wait_reconciles_a_lost_pure_state_read_without_replaying_evolution() {
+        for changed in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let reads = Arc::new(Mutex::new(0));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(LostStateRead {
+                    calls: Arc::clone(&reads),
+                    change_identity: changed,
+                }),
+                Arc::new(SystemClock),
+            );
+            r.persona_runtime_restart = true;
+            r.resident_runtime_identity = Some((7, 123));
+            let c = json!({"type":"lua","state_name":"InGame","code":"return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"});
+            let result = r.wait(&c, 5.0, false);
+            if changed {
+                assert!(result.is_err());
+                assert_eq!(*reads.lock().unwrap(), 1);
+            } else {
+                result.unwrap();
+                assert_eq!(*reads.lock().unwrap(), 2);
+            }
+        }
+    }
+
     fn log_runner(dir: &Path) -> Runner {
         let logs = dir.join("live-logs");
         fs::create_dir(&logs).unwrap();
@@ -488,6 +579,38 @@ mod tests {
         assert!(judge::judge(&logs, "generic", None, true)
             .iter()
             .any(|c| !c.passed));
+    }
+
+    #[test]
+    fn governor_state_reconciliation_retries_only_exact_read_predicates_on_same_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(Mutex::new(vec![]));
+        let mut r = runner(dir.path(), Some((7, 123)), true, true, Arc::clone(&calls));
+        r.persona_runtime_restart = true;
+        r.resident_runtime_identity = Some((7, 123));
+        let condition = json!({"type":"lua","state_name":"InGame","code":"return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"});
+        assert!(r
+            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
+            .unwrap());
+        assert!(!r
+            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 3)
+            .unwrap());
+        for code in [
+            "JAC_EvolveLeader('LEADER_JAC_ODA_NOBUHIDE'); return true",
+            "UI.RequestPlayerOperation(0,1,{}); return true",
+            "Game:SetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE','GOVERNOR'); return true",
+        ] {
+            let mut bad = condition.clone();
+            bad["code"] = code.into();
+            assert!(!r
+                .reconcile_persona_wait_read(&bad, r.clock.now() + 30.0, 0)
+                .unwrap());
+        }
+        r.resident_runtime_identity = Some((7, 124));
+        assert!(r
+            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
+            .is_err());
+        assert!(calls.lock().unwrap().is_empty());
     }
 
     #[test]
