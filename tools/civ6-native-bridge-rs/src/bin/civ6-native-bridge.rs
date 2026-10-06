@@ -13,6 +13,10 @@ mod windows;
 
 #[cfg(windows)]
 fn main() {
+    if std::env::args().skip(1).collect::<Vec<_>>() == ["--capabilities"] {
+        println!("{}", civ6_native_bridge_rs::controller_capabilities());
+        return;
+    }
     if let Err(error) = windows::run() {
         eprintln!("bridge failed: {error}");
         std::process::exit(1);
