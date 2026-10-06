@@ -599,7 +599,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         )
         .collect();
     let expected: BTreeSet<_> = expected_names.iter().cloned().collect();
-    assert_eq!(expected.len(), 147);
+    // The explicit filenames and exact remaining-name set below define the
+    // inventory. A second numeric total becomes stale when branches add names.
     assert_eq!(
         expected.len(),
         expected_names.len(),

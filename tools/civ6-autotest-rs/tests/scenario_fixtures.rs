@@ -1388,6 +1388,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     let mut count = 0;
     let mut blocked_recovery_seen = false;
     let mut hotseat_growth_seen = false;
+    let mut banseiki_hotseat_growth_seen = false;
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1405,6 +1406,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             count += 1;
             blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
             hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
+            banseiki_hotseat_growth_seen |= name == "multiplayer-banseiki-hotseat-growth.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1469,11 +1471,12 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Preserve the prior 142 scenes, then inspect the one new Hotseat game
-    // against the same isolation rules. The witness hold starts no new game.
+    // Preserve all prior 143 scenes and apply the same isolation assertions
+    // to the new Banseiki Hotseat game. The witness hold starts no new game.
     assert!(blocked_recovery_seen);
     assert!(hotseat_growth_seen);
-    assert_eq!(count, 143);
+    assert!(banseiki_hotseat_growth_seen);
+    assert_eq!(count, 144);
 }
 
 #[test]
