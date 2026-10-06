@@ -163,9 +163,14 @@
       }
     },
     {
-      "code": "local from,to;for _,p in ipairs(PlayerManager.GetAliveMajors()) do local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName();if name=='CIVILIZATION_JAC_ASHINA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end end;assert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman() and Game.GetLocalPlayer()==to,'AI Ashina and human Oda required');local count=0;for def in GameInfo.HeroClasses() do count=count+1;assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','stock Hero enabled') end;assert(count==2,'two Sengoku Heroes required');Game:SetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST',{From=from,To=to});return 'human Oda, AI Ashina and two custom Heroes verified'",
+      "code": "local from,to;for _,p in ipairs(PlayerManager.GetAliveMajors()) do local name=PlayerConfigurations[p:GetID()]:GetCivilizationTypeName();if name=='CIVILIZATION_JAC_TAKEDA' then from=p:GetID() elseif name=='CIVILIZATION_JAC_ODA' then to=p:GetID() end end;assert(from and to and not Players[from]:IsHuman() and Players[to]:IsHuman(),'AI Takeda and human Oda required');local count=0;for def in GameInfo.HeroClasses() do count=count+1;assert(def.HeroClassType=='HEROCLASS_JAC_WARLORD_A' or def.HeroClassType=='HEROCLASS_JAC_WARLORD_B','stock Hero enabled') end;assert(count==2,'two Sengoku Heroes required');Game:SetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST',{From=from,To=to});return 'human Oda, AI Takeda and two custom Heroes verified'",
       "state_name": "JAC_Absorption_Entry",
       "action": "ui_lua"
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal to\nfor _,p in ipairs(PlayerManager.GetAliveMajors()) do\n  if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ODA' then to=p:GetID() end\nend\nassert(to~=nil and Players[to]:IsHuman() and Game.GetLocalPlayer()==to,'visible human Oda controller required')\nreturn 'UI Oda controller verified separately from Gameplay actor identity'\n"
     },
     {
       "action": "ui_lua",

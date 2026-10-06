@@ -31,6 +31,24 @@ pub fn generate(_repo: &Repository) -> Result<Outputs> {
 pub fn live_scenario(repo: &Repository) -> Result<String> {
     let base = repo.json("tools/civ6-autotest/scenarios/absorption-flow.json")?;
     let mut steps: Vec<Value> = base["steps"].as_array().unwrap()[..7].to_vec();
+    let setup = steps[6]["code"].as_str().expect("base actor setup Lua");
+    let clause = " and Game.GetLocalPlayer()==to";
+    anyhow::ensure!(
+        setup.matches(clause).count() == 1,
+        "normal actor identity clause changed"
+    );
+    steps[6]["code"] = json!(setup
+        .replacen(clause, "", 1)
+        .replace("CIVILIZATION_JAC_ASHINA", "CIVILIZATION_JAC_TAKEDA")
+        .replace("AI Ashina", "AI Takeda"));
+    steps.push(json!({"action":"ui_lua","state_name":"InGame","code":r#"
+local to
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+  if PlayerConfigurations[p:GetID()]:GetCivilizationTypeName()=='CIVILIZATION_JAC_ODA' then to=p:GetID() end
+end
+assert(to~=nil and Players[to]:IsHuman() and Game.GetLocalPlayer()==to,'visible human Oda controller required')
+return 'UI Oda controller verified separately from Gameplay actor identity'
+"#}));
     steps.push(start_calendar_step());
     fn core(code: &str) -> Value {
         json!({"action":"ui_lua", "state_name":"JAC_Absorption_Entry", "code":code})

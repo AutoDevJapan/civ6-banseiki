@@ -599,6 +599,16 @@ local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)
 return v.Status=='STARTED'
 "#
     )));
+    if !human {
+        steps.push(json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry","code":r#"
+local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
+local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+local pair=state and state.Pairs[t.From..':'..t.To]
+local request=pair and JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID)
+local flow=request and JAC_AbsorptionFlowGameplay.Get(request.FlowID)
+return flow~=nil and flow.Phase=='DONE'
+"#}}));
+    }
     steps.push(core(r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
 local pair=assert(state.Pairs[t.From..':'..t.To]);local receipt=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID))

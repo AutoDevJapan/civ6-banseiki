@@ -1,6 +1,35 @@
 use civ6_data_rs::{absorption_admission, Repository};
 use mlua::Lua;
 
+#[test]
+fn normal_fixture_proves_gameplay_roles_and_visible_controller_in_separate_contexts(
+) -> anyhow::Result<()> {
+    let scene: serde_json::Value = serde_json::from_str(&absorption_admission::live_scenario(
+        &Repository::checked_in(),
+    )?)?;
+    let steps = scene["steps"].as_array().unwrap();
+    let core = steps[6]["code"].as_str().unwrap();
+    let ui = steps[7]["code"].as_str().unwrap();
+    assert_eq!(steps[6]["state_name"], "JAC_Absorption_Entry");
+    assert_eq!(steps[7]["state_name"], "InGame");
+    let lua = Lua::new();
+    lua.load(r#"
+      PlayerManager={GetAliveMajors=function() return {{GetID=function()return 3 end},{GetID=function()return 1 end}} end}
+      Players={[3]={IsHuman=function()return false end},[1]={IsHuman=function()return true end}}
+      PlayerConfigurations={[3]={GetCivilizationTypeName=function()return 'CIVILIZATION_JAC_TAKEDA' end},[1]={GetCivilizationTypeName=function()return 'CIVILIZATION_JAC_ODA' end}}
+      Game={GetLocalPlayer=function() error('UI controller lookup in Gameplay') end,SetProperty=function(_,k,v) assert(k=='JAC_ABSORPTION_FLOW_LIVE_TEST' and v.From==3 and v.To==1);SAVED=true end}
+      GameInfo={HeroClasses=function()local n=0;return function()n=n+1;if n<=2 then return {HeroClassType=n==1 and 'HEROCLASS_JAC_WARLORD_A' or 'HEROCLASS_JAC_WARLORD_B'} end end end}
+    "#).exec()?;
+    lua.load(core).exec()?;
+    assert!(lua.globals().get::<bool>("SAVED")?);
+    lua.load("Game.GetLocalPlayer=function()return 1 end;Game.GetProperty=function()error('UI property unavailable')end").exec()?;
+    lua.load(ui).exec()?;
+    lua.load("Game.GetLocalPlayer=function()return 0 end")
+        .exec()?;
+    assert!(lua.load(ui).exec().is_err());
+    Ok(())
+}
+
 fn world() -> mlua::Result<Lua> {
     let lua = Lua::new();
     lua.load(

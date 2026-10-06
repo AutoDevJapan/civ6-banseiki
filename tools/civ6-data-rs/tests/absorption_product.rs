@@ -694,6 +694,42 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
 }
 
 #[test]
+fn ai_acceptance_waits_for_normal_application_completion_before_snapshot() -> anyhow::Result<()> {
+    for small in [true, false] {
+        let scene: serde_json::Value = serde_json::from_str(&product::acceptance_scenario(
+            &Repository::checked_in(),
+            small,
+            false,
+        )?)?;
+        let steps = scene["steps"].as_array().unwrap();
+        let snapshot = steps
+            .iter()
+            .position(|s| {
+                s["code"]
+                    .as_str()
+                    .is_some_and(|s| s.contains("t.Snapshot="))
+            })
+            .unwrap();
+        assert_eq!(
+            steps[snapshot - 1]["condition"]["state_name"],
+            "JAC_Absorption_Entry"
+        );
+        let code = steps[snapshot - 1]["condition"]["code"].as_str().unwrap();
+        let lua = Lua::new();
+        lua.load(r#"
+          Game={GetProperty=function(_,key) if key=='JAC_PRODUCT_ACCEPTANCE_V1' then return {From=1,To=2} else return {Pairs={['1:2']={ID='real'}}} end end}
+          JAC_AbsorptionAdmissionGameplay={Get=function(_,id) assert(id=='real');return {FlowID='saved'} end}
+          JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='saved');return {Phase=PHASE} end}
+        "#).exec()?;
+        for (phase, complete) in [("APPLYING", false), ("RESULT", false), ("DONE", true)] {
+            lua.globals().set("PHASE", phase)?;
+            assert_eq!(lua.load(code).eval::<bool>()?, complete);
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn real_turn_event_argument_still_runs_the_normal_ai_envoy_scan() -> anyhow::Result<()> {
     let lua = world(9999.)?;
     lua.load(
@@ -853,7 +889,10 @@ fn product_ui_uses_native_actor_identity_when_gameplay_properties_are_unpublishe
                         lua.load(code).exec()?;
                     }
                 }
-                if let Some(code) = step["condition"]["code"].as_str() {
+                if let Some(code) = step["condition"]["code"]
+                    .as_str()
+                    .filter(|_| step["condition"]["state_name"] != "JAC_Absorption_Entry")
+                {
                     assert!(
                         !code.contains("Game:GetProperty"),
                         "UI wait relies on Gameplay property publication: {code}"
