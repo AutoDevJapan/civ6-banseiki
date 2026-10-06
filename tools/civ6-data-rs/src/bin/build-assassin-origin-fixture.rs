@@ -131,4 +131,27 @@ x,y=R.TrainingOrigin(0,CITY); assert(x==120 and y==40)
         .exec()?;
         Ok(())
     }
+    #[test]
+    fn rollback_continues_after_one_plot_error_and_disables_origin() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+local props={TEST=1,JAC_ASN_DIAGNOSTIC_ORIGIN_0={City=10,X=30,Y=10},
+JAC_ASN_BLOCKED_TEST={Actor=0,Plots={{X=30,Y=10,Terrain=1,Feature=2},{X=31,Y=10,Terrain=3,Feature=-1}}}}
+Game={GetProperty=function(_,k) return props[k] end,SetProperty=function(_,k,v) props[k]=v end}
+local values={[30]={Terrain=9,Feature=-1},[31]={Terrain=9,Feature=-1}}
+Map={GetPlot=function(x,y) return {GetX=function() return x end,IsCity=function() return false end,
+  GetTerrainType=function() return values[x].Terrain end,GetFeatureType=function() return values[x].Feature end} end}
+TerrainBuilder={SetTerrainType=function(p,value) if p:GetX()==30 then error('native fixture failure') end values[p:GetX()].Terrain=value end,
+  SetFeatureType=function(p,value) values[p:GetX()].Feature=value end}
+R={TEST='TEST'}
+function CheckRollback()
+  assert(Game:GetProperty('TEST')==nil and Game:GetProperty('JAC_ASN_DIAGNOSTIC_ORIGIN_0')==nil)
+  assert(values[31].Terrain==3 and values[31].Feature==-1)
+  assert(values[30].Terrain==9)
+end
+"#).exec()?;
+        lua.load(HOOK).exec()?;
+        lua.load("local ok,why=R.TestAbortOriginFixture(0); assert(not ok and why:find('native fixture failure')); CheckRollback()").exec()?;
+        Ok(())
+    }
 }
