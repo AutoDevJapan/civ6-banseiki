@@ -227,8 +227,9 @@ fn rust_refuses_fractional_counts_partial_enumeration_and_wrong_turns() {
 fn complete_records() -> Vec<Value> {
     let (_, ui) = read("", true);
     let (_, core) = read("", false);
-    let mut records = Vec::new();
     let scene = host::scenario();
+    let mut records =
+        vec![serde_json::json!({"action":"start","status":"OK","detail":scene["name"]})];
     for (index, step) in scene["steps"].as_array().unwrap().iter().enumerate() {
         let action = format!("{}/5 {}", index + 1, step["action"].as_str().unwrap());
         let detail = match step["action"].as_str().unwrap() {
@@ -246,6 +247,7 @@ fn complete_records() -> Vec<Value> {
             .push(serde_json::json!({"action":action,"status":"START","detail":step.to_string()}));
         records.push(serde_json::json!({"action":action,"status":"OK","detail":detail}));
     }
+    records.push(serde_json::json!({"action":"judge","status":"OK","detail":"6/6 checks passed"}));
     records
 }
 
@@ -349,7 +351,12 @@ fn real_runner_startup_records_are_paired_once_before_the_pinned_load() {
         let start = serde_json::json!({"action":action,"status":"START","detail":detail});
         let ok = serde_json::json!({"action":action,"status":"OK","detail":"Civ VI relaunched via Steam; main menu visible and ready"});
         assert!(host::observations(&text(
-            &[vec![start.clone(), ok.clone()], records.clone()].concat()
+            &[
+                records[0..1].to_vec(),
+                vec![start.clone(), ok.clone()],
+                records[1..].to_vec()
+            ]
+            .concat()
         ))
         .is_ok());
         for prefix in [
@@ -361,7 +368,10 @@ fn real_runner_startup_records_are_paired_once_before_the_pinned_load() {
                 serde_json::json!({"action":action,"status":"FAIL","detail":"failed"}),
             ],
         ] {
-            assert!(host::observations(&text(&[prefix, records.clone()].concat())).is_err());
+            assert!(host::observations(&text(
+                &[records[0..1].to_vec(), prefix, records[1..].to_vec()].concat()
+            ))
+            .is_err());
         }
         assert!(host::observations(&text(
             &[
@@ -374,9 +384,22 @@ fn real_runner_startup_records_are_paired_once_before_the_pinned_load() {
         .is_err());
     }
     let skipped = serde_json::json!({"action":"auto_restart","status":"SKIP","detail":"Civ VI process is newer than all scenario mod files"});
-    assert!(host::observations(&text(&[vec![skipped.clone()], records.clone()].concat())).is_ok());
     assert!(host::observations(&text(
-        &[vec![skipped.clone(), skipped], records.clone()].concat()
+        &[
+            records[0..1].to_vec(),
+            vec![skipped.clone()],
+            records[1..].to_vec()
+        ]
+        .concat()
+    ))
+    .is_ok());
+    assert!(host::observations(&text(
+        &[
+            records[0..1].to_vec(),
+            vec![skipped.clone(), skipped],
+            records[1..].to_vec()
+        ]
+        .concat()
     ))
     .is_err());
     assert!(host::observations(&text(
@@ -412,4 +435,26 @@ fn numeric_only_tables_preserve_key_types_and_fractional_keys() {
         serde_json::json!({"kind":"number","value":1})
     );
     assert_eq!(histories["entries"][0]["value"]["turn"], 23);
+}
+
+#[test]
+fn header_and_positive_final_judge_are_required_not_an_exit_fragment() {
+    let records = complete_records();
+    let text = |r: &[Value]| {
+        r.iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert!(host::observations(&text(&records)).is_ok());
+    assert!(host::observations(&text(&records[1..])).is_err());
+    assert!(host::observations(&text(&records[..records.len() - 1])).is_err());
+    for detail in ["0/0 checks passed", "5/6 checks passed", "bad"] {
+        let mut changed = records.clone();
+        changed.last_mut().unwrap()["detail"] = detail.into();
+        assert!(host::observations(&text(&changed)).is_err());
+    }
+    let mut changed = records.clone();
+    changed[0]["detail"] = "different scenario".into();
+    assert!(host::observations(&text(&changed)).is_err());
 }

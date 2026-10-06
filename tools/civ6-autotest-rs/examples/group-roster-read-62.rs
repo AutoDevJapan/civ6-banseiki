@@ -44,6 +44,13 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
     for line in transcript.lines() {
         let row: Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
         let action = row["action"].as_str().ok_or("missing action")?;
+        if !header_seen {
+            if action == "start" && row["status"] == "OK" && row["detail"] == scene["name"] {
+                header_seen = true;
+                continue;
+            }
+            return Err("scenario header must precede startup and pinned load".into());
+        }
         if action == "launch" || action == "auto_restart" {
             if completed != 0 || pending.is_some() {
                 return Err("startup after pinned observation began".into());
@@ -130,7 +137,7 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
                         .ok_or("unknown judge result")?;
                     let passed: usize = counts.0.parse().map_err(|_| "invalid judge count")?;
                     let total: usize = counts.1.parse().map_err(|_| "invalid judge total")?;
-                    if passed != total {
+                    if total == 0 || passed != total {
                         return Err("incomplete judge result".into());
                     }
                     judge_seen = true;
@@ -174,7 +181,12 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
             return Err("failed pinned observation run".into());
         }
     }
-    if completed != expected.len() || pending.is_some() || startup_pending.is_some() {
+    if completed != expected.len()
+        || pending.is_some()
+        || startup_pending.is_some()
+        || !header_seen
+        || !judge_seen
+    {
         return Err("pinned load/wait/UI/Core/exit run incomplete".into());
     }
     Ok((
