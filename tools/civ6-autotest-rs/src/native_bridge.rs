@@ -3,6 +3,16 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+pub fn verify_controller_capabilities(success: bool, bytes: &[u8]) -> Result<()> {
+    let actual = serde_json::from_slice::<serde_json::Value>(bytes).ok();
+    if !success || actual != Some(civ6_native_bridge_rs::controller_capabilities()) {
+        return Err(Error::input(
+            "native bridge controller protocol differs from this runner; rebuild and pin the controller and DLL before another live run",
+        ));
+    }
+    Ok(())
+}
+
 pub fn verify_override_hash(expected: Option<&str>, actual: &str) -> Result<()> {
     if actual.len() != 64
         || !actual.bytes().all(|b| b.is_ascii_hexdigit())
@@ -1014,6 +1024,14 @@ mod platform {
                     verify_override_hash(std::env::var(key).ok().as_deref(), actual)?;
                 }
             }
+            // The shared release folder can contain a controller from an older
+            // branch. Reject its parser before sending PID or installing a DLL.
+            let capabilities = Command::new(&executable)
+                .arg("--capabilities")
+                .stdin(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()?;
+            verify_controller_capabilities(capabilities.status.success(), &capabilities.stdout)?;
             if artifact.exists() {
                 return Err(Error::scenario("native bridge artifact already exists"));
             }
@@ -1118,8 +1136,15 @@ mod platform {
                         let _ = session.child.wait();
                         session.finished = true;
                     }
+                    let mut diagnostic = String::new();
+                    if session.finished {
+                        if let Some(stderr) = session.child.stderr.take() {
+                            let _ = stderr.take(16_384).read_to_string(&mut diagnostic);
+                        }
+                    }
                     Err(Error::input(format!(
-                        "native bridge did not prove bounded readiness; pinned game close={close:?}"
+                        "native bridge did not prove bounded readiness; pinned game close={close:?}; controller diagnostic={}",
+                        diagnostic.trim()
                     )))
                 }
             }
