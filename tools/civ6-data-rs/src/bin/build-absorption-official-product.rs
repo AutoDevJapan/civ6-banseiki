@@ -16,6 +16,10 @@
 //! Same-turn publication notifications replay only the public, read-only Get.
 //! Turn handlers and commands are exercised only by real end_turn actions.
 //! Generating/checking this JSON is not a claim of actual-game acceptance.
+//! Observer lifecycle: WAITING -> INTENT (no native Flow journal, fresh retry)
+//! -> JOURNAL_PENDING (immutable native Request/decision/old rolls) -> STARTED.
+//! Replay continuity is checked against the original saved receipt checkpoint
+//! before advancing the next-turn snapshot; equal native counts are insufficient.
 
 use anyhow::{bail, ensure, Context, Result};
 use civ6_data_rs::{absorption_admission, Repository};
@@ -207,7 +211,45 @@ local function NativeAssets(stage)
   end
   return o,city
 end
+local function ReceiptContinuity(before,after,reload)
+  for key,old in pairs(before.Operations or {}) do
+    local current=assert((after.Operations or {})[key],'saved operation disappeared: '..key)
+    if old.Done~=true and old.Identity.Command=='REGISTER' then
+      assert(R.Equal(old.Identity,current.Identity) and old.Nonce==current.Nonce
+        and R.Equal(old.OfferIntent,current.OfferIntent) and R.Equal(old.EnvoyIdentity,current.EnvoyIdentity)
+        and R.Equal(old.EnvoyReceipt,current.EnvoyReceipt)
+        and (current.Done==nil or current.Done==false or current.Done==true),'pending registration changed immutable saved intent')
+    else
+      assert(R.Equal(old,current),'completed operation/identity/receipt/done changed: '..key)
+    end
+  end
+  if reload then
+    assert(R.Equal(before.AiEnvoyTurns or {},after.AiEnvoyTurns or {}),'reload moved or deleted sender turn-budget metadata')
+  end
+end
+local function Lifecycle(request)
+  local raw=Game:GetProperty('JAC_ABSORPTION_FLOW_V1')
+  if raw~=nil then
+    assert(type(raw)=='table' and raw.Version==1 and type(raw.Flows)=='table','unsupported native Flow journal')
+  end
+  local flow=raw and raw.Flows[request.FlowID]
+  local old=t.FrozenEvidence and t.FrozenEvidence[request.FlowID]
+  if flow then
+    assert(type(flow)=='table' and type(flow.Request)=='table' and request.Plan
+      and flow.ID==request.FlowID and flow.From==t.From and flow.To==t.To
+      and flow.Mode=='SMALL_STATE' and R.Equal(flow.Request,request.Plan),'native Flow Request does not bind the actual saved plan')
+    return {Kind=request.Status=='STARTED' and 'STARTED' or 'JOURNAL_PENDING',Journal=flow}
+  end
+  assert(not old,'immutable native Flow journal disappeared')
+  assert(request.Status~='STARTED','STARTED without a persisted native Flow journal cannot pass')
+  return {Kind=request.Plan and 'INTENT' or 'WAITING'}
+end
 local function EnvoyTurn(before,s)
+  ReceiptContinuity(before.Product,s,false)
+  if t.ReplayBaseline then
+    assert(t.ReplayHash==A.Canonical(t.ReplayBaseline),'original replay checkpoint was replaced')
+    ReceiptContinuity(t.ReplayBaseline.Product,s,false)
+  end
   local count,key,operation=0,nil,nil
   for k,op in pairs(s.Operations or {}) do
     local old=(before.Product.Operations or {})[k]
@@ -251,6 +293,13 @@ local function EnvoyTurn(before,s)
   return count
 end
 local function SavedAdmission(offer,request)
+  local lifecycle=Lifecycle(request)
+  if not lifecycle.Journal then
+    -- STARTING can be a failed preflight with an old intent. N.Check must
+    -- re-read the next turn's conditions; neither its plan nor decision freezes.
+    assert(request.Status=='STARTING' or request.Status=='WAITING','invalid pre-journal admission phase')
+    return nil
+  end
   assert((request.Status=='STARTED' or request.Status=='STARTING') and request.Plan and request.Decision,'saved admission evidence missing')
   local plan,decision=request.Plan,request.Decision
   assert(plan.ID==request.FlowID and plan.From==t.From and plan.To==t.To and plan.Mode=='SMALL_STATE'
@@ -265,6 +314,7 @@ local function SavedAdmission(offer,request)
   if request.Status=='STARTED' then
     assert(type(request.StartTurn)=='number' and request.StartTurn==math.floor(request.StartTurn)
       and request.StartTurn>=decision.Turn and request.StartTurn<=Game.GetCurrentGameTurn(),'completion turn precedes saved decision')
+    assert(lifecycle.Journal.Phase1Complete==true,'STARTED native journal has not completed phase one')
   end
   assert(type(decision.OwnedTiles)=='number' and decision.OwnedTiles>=0 and decision.OwnedTiles==math.floor(decision.OwnedTiles)
     and type(decision.Envoys)=='number' and decision.Envoys==math.floor(decision.Envoys)
@@ -376,24 +426,25 @@ local function ObserveDebit(before,s,id)
   return proof
 end
 local function PreservePending(request)
-  if not request.Plan then return end
+  local lifecycle=Lifecycle(request)
+  if not lifecycle.Journal then return end
   t.FrozenEvidence=t.FrozenEvidence or {}
   local old=t.FrozenEvidence[request.FlowID]
-  local raw=Game:GetProperty('JAC_ABSORPTION_FLOW_V1') or {}
-  local flow=(raw.Flows or {})[request.FlowID]
-  if flow then assert(R.Equal(flow.Request,request.Plan),'persisted flow changed frozen plan') end
+  local flow=lifecycle.Journal
   local now={Plan=R.Copy(request.Plan),Decision=R.Copy(request.Decision),Rolls={}}
   if flow then for _,entry in ipairs(flow.Entries or {}) do
     assert(not now.Rolls[tostring(entry.ID)],'duplicate frozen inventory entry')
     now.Rolls[tostring(entry.ID)]=R.Copy(entry.Rolls or {})
   end end
   if old then
+    assert(old.Hash==A.Canonical({Plan=old.Plan,Decision=old.Decision}),'frozen admission hash changed')
     assert(R.Equal(old.Plan,now.Plan) and R.Equal(old.Decision,now.Decision),'waiting/reload changed frozen admission evidence')
     for id,rolls in pairs(old.Rolls) do
       assert(now.Rolls[id],'waiting/reload lost a frozen inventory entry')
       for stage,roll in pairs(rolls) do assert(R.Equal(now.Rolls[id][stage],roll),'waiting/reload rerolled a frozen result') end
     end
   end
+  now.Hash=A.Canonical({Plan=now.Plan,Decision=now.Decision})
   t.FrozenEvidence[request.FlowID]=now
 end
 local function Send(before,previous)
@@ -651,19 +702,25 @@ if pair and not t.Registration then
   if request.Status=='STARTED' or request.Status=='STARTING' then
     -- A normal current-turn publication can already collect and admit.
     -- Inspect the frozen authoritative decision, never demand a live route.
-    accepted=SavedAdmission(offer,request);actual,tiles=accepted.Envoys,accepted.OwnedTiles
+    accepted=SavedAdmission(offer,request)
     PreservePending(request)
+  else assert(request.Status=='WAITING','ordinary admission registration failed') end
+  local intent=Lifecycle(request).Kind=='INTENT'
+  if accepted then actual,tiles=accepted.Envoys,accepted.OwnedTiles
   else
-    assert(request.Status=='WAITING','ordinary admission registration failed')
+    -- INTENT remains pending; its old decision is not accepted evidence.
+    -- Fresh conditions may temporarily fail during a normal preflight retry.
+    if not intent then
     NonDeposit(P.Get(t.From,t.To))
+    end
     actual=Players[t.From]:GetInfluence():GetTokensReceived(t.To);tiles=0
     for i=0,Map.GetPlotCount()-1 do if Map.GetPlotByIndex(i):GetOwner()==t.From then tiles=tiles+1 end end
   end
   for _,d in ipairs(offer.Requirements) do if d.Kind=='PRODUCT_METRIC' then
     assert(d.Metric=='FAITH_YIELD' and not minimum,'normal faith yield demand changed');minimum=d.Minimum
   end end
-  assert(minimum and (accepted or FaithYield(t.To)>=minimum),'actual faith yield did not qualify the registered ordinary offer')
-  assert(actual>=math.max(1,tiles),'AI registered before actual official received envoys covered native territory')
+  assert(minimum and (accepted or intent or FaithYield(t.To)>=minimum),'actual faith yield did not qualify the registered ordinary offer')
+  if not intent then assert(actual>=math.max(1,tiles),'AI registered before actual official received envoys covered native territory') end
   t.Registration={Turn=Game.GetCurrentGameTurn(),ID=pair.ID,Operation=R.Copy(register),
     NativeFaithYield=not accepted and FaithYield(t.To) or nil,Decision=R.Copy(accepted),Received=actual,OwnedTiles=tiles}
 end
@@ -707,6 +764,13 @@ const RESTORE_OBSERVATION: &str = r#"
 assert(t.PendingSnapshot and t.PendingHash==A.Canonical(t.PendingSnapshot),'saved pending checkpoint changed')
 local old=t.PendingSnapshot;local now=Snapshot()
 assert(now.Turn==old.Turn and now.Pool==old.Pool and now.Received==old.Received,'reload changed native envoy budget/count')
+-- Verify all saved completed operations, including the third and later sends,
+-- and exact sender budget metadata before any next-turn baseline is replaced.
+ReceiptContinuity(old.Product,now.Product,true)
+if t.ReplayBaseline then
+  assert(t.ReplayHash==A.Canonical(t.ReplayBaseline),'original replay checkpoint was replaced')
+  ReceiptContinuity(t.ReplayBaseline.Product,now.Product,false)
+else t.ReplayBaseline=R.Copy(old);t.ReplayHash=A.Canonical(t.ReplayBaseline) end
 local pair=(now.Product.Pairs or {})[t.From..':'..t.To]
 if pair then
   local request=assert(N.Get('leader-offer',pair.ID))
@@ -1334,6 +1398,7 @@ VIEW.Envoys={Route='FROZEN',Envoys=2,Required=2}
 JAC_AbsorptionAdmissionGameplay.Get=function(_,id) assert(id==OFFER.ID);return copy(REQUEST) end
 JAC_AbsorptionAdmissionGameplay.GetOffer=function(id) assert(id==OFFER.ID);return copy(OFFER) end
 JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='normal-flow');return {Phase1Complete=true} end}
+PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=copy(REQUEST.Plan),Entries={},Phase1Complete=true}}}
 "#;
 
     #[test]
@@ -1382,6 +1447,7 @@ JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='normal-flow');return {P
 {QUALIFICATION_WORLD}
 {ACCEPTED_WORLD}
 REQUEST.Status='WAITING';REQUEST.Plan=nil;REQUEST.Decision=nil
+PROPS.JAC_ABSORPTION_FLOW_V1=nil
 VIEW.Status='WAITING';VIEW.Frozen=nil;VIEW.Envoys={{Route='OFFICIAL',Envoys=2,Required=2,Eligible=true}}
 STATE.Escrows={{}};GOLD,FAITH=10100,10000
 Map={{GetPlotCount=function() return 2 end,GetPlotByIndex=function() return {{GetOwner=function() return 2 end}} end}}
@@ -1468,7 +1534,7 @@ TEST.BeforeQualification.CurrencyPrefixHash=JAC_AbsorptionGameplay.Canonical(Exp
 {ACCEPTED_WORLD}
 REQUEST.Status='STARTING';REQUEST.StartTurn=nil;VIEW.Status='STARTING'
 REGISTER.Done=false;ESCROW.Status='COLLECTING';ESCROW.CollectFaith.Done=false;FAITH=10000
-PROPS.JAC_ABSORPTION_FLOW_V1={{Flows={{['normal-flow']={{Request=copy(REQUEST.Plan),Entries={{{{ID='native-asset',Rolls={{P1_ESCAPE={{Raw=123,Used=123,Label='saved-first-roll'}}}}}}}},Phase1Complete=false}}}}}}
+PROPS.JAC_ABSORPTION_FLOW_V1={{Version=1,Flows={{['normal-flow']={{ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=copy(REQUEST.Plan),Entries={{{{ID='native-asset',Rolls={{P1_ESCAPE={{Raw=123,Used=123,Label='saved-first-roll'}}}}}}}},Phase1Complete=false}}}}}}
 "#)).exec()?;
         lua.load(format!("{CORE}\n{QUALIFICATION_TURN}")).exec()?;
         lua.load("assert(not PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.NativeDebits[OFFER.ID]);assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.DebitParts[OFFER.ID].Gold)").exec()?;
@@ -1503,7 +1569,7 @@ PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
             probe
                 .load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}"))
                 .exec()?;
-            probe.load("PROPS.JAC_ABSORPTION_FLOW_V1={Flows={['normal-flow']={Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='native-asset',Rolls={P1_ESCAPE={Used=123}}}}}}}").exec()?;
+            probe.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Phase1Complete=true,Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='native-asset',Rolls={P1_ESCAPE={Used=123}}}}}}}").exec()?;
             probe.load(format!("{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
             probe.load(mutation).exec()?;
             assert!(
@@ -1515,6 +1581,117 @@ PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
                     .is_err(),
                 "{mutation}"
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn only_a_supported_persisted_native_flow_journal_freezes_retry_evidence() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!(
+            r#"
+{QUALIFICATION_WORLD}
+{ACCEPTED_WORLD}
+REQUEST.Status='STARTING';REQUEST.StartTurn=nil;VIEW.Status='STARTING'
+PROPS.JAC_ABSORPTION_FLOW_V1=nil
+REQUEST.Decision.Requirements[1].Met=false
+"#
+        ))
+        .exec()?;
+        lua.load(format!("{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence);Game:SetProperty(KEY,t)")).exec()?;
+        // Normal retry can replace both the preflight plan and its decision.
+        lua.load(
+            r#"
+TURN=6;REQUEST.Plan.FreshMarker='re-read-on-turn-six';REQUEST.Decision.Turn=6
+REQUEST.Decision.Requirements[1].Met=true
+"#,
+        )
+        .exec()?;
+        lua.load(format!("{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence)")).exec()?;
+        // The real native journal, with its immutable Request and normal v1
+        // identity, is the first boundary at which frozen evidence may be stored.
+        lua.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='asset',Rolls={P1_ESCAPE={Used=123}}}},Phase1Complete=false}}}").exec()?;
+        lua.load("REGISTER.Done=false;REGISTER.LastError='native phase one pending'")
+            .exec()?;
+        lua.load(format!("{CORE}\nassert(SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(t.FrozenEvidence[REQUEST.FlowID]);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
+        // The queued registration may complete during normal reload publication;
+        // the original receipt checkpoint and journal-frozen decision survive.
+        lua.load("REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED';REGISTER.Done=true;REGISTER.LastError=nil;PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true").exec()?;
+        lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec()?;
+        lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Product.Operations['0:ai-register:2'].Done==false)").exec()?;
+        lua.load("REQUEST.Decision.Turn=5").exec()?;
+        assert!(lua
+            .load(format!(
+                "{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+            ))
+            .exec()
+            .is_err());
+        for mutation in [
+            "PROPS.JAC_ABSORPTION_FLOW_V1=nil",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Version=2",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Request=nil",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].ID='fake-flow'",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=false",
+        ] {
+            let result = run(
+                &format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{mutation}"),
+                "SavedAdmission(OFFER,REQUEST)",
+            )?;
+            assert!(
+                result.is_err(),
+                "native journal missing/invalid {mutation}: {result:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reload_keeps_every_completed_receipt_and_exact_budget_before_rebasing() -> Result<()> {
+        for mutation in [
+            "",
+            "QUEUED.Done=true;QUEUED.LastError=nil",
+            "STATE.Operations['0:ai-envoy:2:2']=nil",
+            "THIRD.EnvoyReceipt.Done=false",
+            "THIRD.EnvoyIdentity.SenderLeaderType='other'",
+            "STATE.AiEnvoyTurns['0'].Operation='0:ai-envoy:2:1'",
+            "STATE.AiEnvoyTurns['0'].Turn=6",
+            "STATE.AiEnvoyTurns={}",
+            "QUEUED.OfferIntent.Offer.ID='different-offer'",
+        ] {
+            let lua = Lua::new();
+            lua.load(WORLD).exec()?;
+            lua.load(format!(r#"
+{QUALIFICATION_WORLD}
+THIRD=copy(TEST.Second.Operation);THIRD.Nonce='ai-envoy:2:2';THIRD.Identity.ExpectedEnvoys=2
+THIRD.EnvoyReceipt={{Before=30,After=29,ReceivedBefore=2,ReceivedAfter=3,ChargeDone=true,GrantIntent=true,GrantDone=true,Done=true}}
+STATE.Operations['0:ai-envoy:2:2']=THIRD
+STATE.AiEnvoyTurns['0']={{Turn=5,Operation='0:ai-envoy:2:2'}}
+POOL,RECEIVED=29,3
+QUEUED={{Identity={{Command='REGISTER',From=2,To=0}},Nonce='ai-register:2',Done=false,
+ OfferIntent={{Offer={{ID='product:2:0:1',From=2,To=0}}}},LastError='preflight waiting'}}
+STATE.Operations['0:ai-register:2']=QUEUED
+"#)).exec()?;
+            lua.load(format!("{CORE}\nt.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(mutation).exec()?;
+            let result = lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec();
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty() || mutation.starts_with("QUEUED.Done=true"),
+                "{mutation}: {result:?}"
+            );
+            if result.is_ok() {
+                lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Product.Operations['0:ai-envoy:2:2']);assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayHash==JAC_AbsorptionGameplay.Canonical(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.PendingSnapshot))").exec()?;
+                // The immutable baseline remains a validator on later turns;
+                // recording a fresh native snapshot cannot erase receipt loss.
+                lua.load("STATE.Operations['0:ai-envoy:2:2']=nil").exec()?;
+                assert!(lua
+                    .load(format!(
+                        "{CORE}\nReceiptContinuity(t.ReplayBaseline.Product,Product(),false)"
+                    ))
+                    .exec()
+                    .is_err());
+            }
         }
         Ok(())
     }
