@@ -44,6 +44,7 @@ fn scene(cost: u8) -> Lua {
         KEY='JAC_PERSONA_'..LEADER..'_'
         function NATIVE_READER(replacement)
             local found
+            local targets={}
             local api=ExposedMembers.JAC_LeaderPersona
             for _,fn in ipairs({api.CompleteEvolution,api.Reconcile}) do
                 local matched=false
@@ -51,12 +52,16 @@ fn scene(cost: u8) -> Lua {
                     local name,value=debug.getupvalue(fn,index)
                     if not name then break end
                     if name=='NativeGovernor' then
+                        assert(not found or found==value,'Gameplay reader dependencies diverged')
                         found=found or value; matched=true
-                        if replacement then debug.setupvalue(fn,index,replacement) end
+                        targets[#targets+1]={fn=fn,index=index}
                         break
                     end
                 end
                 assert(matched,'real Gameplay reader dependency was not found')
+            end
+            if replacement then
+                for _,target in ipairs(targets) do debug.setupvalue(target.fn,target.index,replacement) end
             end
             return assert(found)
         end
