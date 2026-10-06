@@ -20,7 +20,8 @@
 //!   CityStates availability alone is not proof that its gameplay row exists.
 //! - Actual26 established that standard automatic allocation works with two
 //!   majors/one minor. Do not replace it with manual actor creation. The content
-//!   precheck distinguishes configuration catalog rows from loaded gameplay.
+//!   precheck verifies selectable DLC dependency values; actual gameplay
+//!   civilization/leader availability is asserted only in loaded Core.
 //! - DLC/GranColombia_Maya/Data/GranColombia_Maya_ConfigData.xml:79:
 //!   CIVILIZATION_VATICAN_CITY is in that domain.
 //! - Base/Assets/UI/Tuner/TunerCityPanel.lua:78,103: native district/building
@@ -92,7 +93,10 @@ MajorsUnchanged()
 -- Standard PlayerSetupLogic writes LEADER_DOMAIN/LEADER_VALUES auxiliary
 -- data; DLC LeaderPlayable criteria consume it. The diagnostic's two actual
 -- leaders stay fixed, but its selectable pool must expose official content.
-GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL','JAC_ALL_POOLS')
+local pools=DB.ConfigurationQuery("SELECT Value FROM DomainValues WHERE Domain = 'JAC_BanseikiHumanPools' AND Value = 'JAC_ALL_POOLS'")
+assert(type(pools)=='table' and #pools==1 and pools[1].Value=='JAC_ALL_POOLS','existing stock-inclusive pool option unavailable')
+GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL',pools[1].Value)
+assert(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')=='JAC_ALL_POOLS','stock-inclusive pool option not applied')
 MapConfiguration.SetScript('Continents.lua')
 include('PlayerSetupLogic')
 BuildHeadlessGameSetup()
@@ -100,6 +104,18 @@ g_GameParameters:FullRefresh()
 CreatePlayerParameters(0,true)
 CreatePlayerParameters(1,true)
 RefreshPlayerParameters()
+-- These are values computed by the official parameter helper, not supplied
+-- by the fixture. They are the inputs to DLC LeaderPlayable activation.
+local dlcPlayable=false
+for actor=0,1 do
+  local values=PlayerConfigurations[actor]:GetValue('LEADER_VALUES')
+  assert(type(values)=='string' and values~='','official selectable leader values missing')
+  for value in values:gmatch('[^,]+') do
+    if value=='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or value=='Players:Expansion2_Players::LEADER_LADY_SIX_SKY' then dlcPlayable=true end
+  end
+  print('[Metadata_Boot_PreSnapshot] leader-values-'..actor..'='..values)
+end
+assert(dlcPlayable,'normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency')
 HideGameSetup()
 ReleasePlayerParameters()
 MajorsUnchanged()
@@ -142,22 +158,15 @@ print('[JAC_OFFICIAL_SETUP] script=Continents.lua majors=2 hidden='..GameConfigu
 "#;
 
 const FRONTEND_BOOTSTRAP: &str = r#"
--- A configuration catalog is not a gameplay definition. Standard native
--- allocation must see the actual official row before exclusive selection.
-local civ=GameInfo and GameInfo.Civilizations and GameInfo.Civilizations['CIVILIZATION_VATICAN_CITY']
-local leader=GameInfo and GameInfo.Leaders and GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']
-print('[Metadata_Boot_PreSnapshot] gameplay-vatican='..tostring(civ~=nil)..' gameplay-leader='..tostring(leader~=nil))
-assert(civ and leader,'Vatican gameplay content absent: configuration CityStates rows alone cannot allocate the engine minor')
-assert(civ.StartingCivilizationLevelType=='CIVILIZATION_LEVEL_CITY_STATE','official Vatican data is not a native city state')
--- Actual26 proves standard two-major/one-minor allocation works. Keep that
--- engine route; exclusive selection must first have real loaded gameplay data.
+-- FrontEnd GameInfo may not yet be configured for the game being hosted.
+-- Its absence is not a failed content load. Core validates the real data.
 for actor=0,63 do
   local config=PlayerConfigurations[actor]
   if config then print('[Metadata_Boot_PreSnapshot] slot='..actor..' status='..tostring(config:GetSlotStatus())..
     ' civ='..tostring(config:GetCivilizationTypeName())..' leader='..tostring(config:GetLeaderTypeName())..
     ' level='..tostring(config:GetCivilizationLevelTypeID())) end
 end
-return 'official Vatican gameplay content validated before standard HostGame; native generation still requires Core roster check'
+return 'stock-inclusive selectable dependency and unchanged major slots prepared; loaded Core must verify native Vatican content and allocation'
 "#;
 
 const FRONTEND_PROBE: &str = r#"
@@ -179,6 +188,11 @@ return 'readonly native frontend metadata captured; no host, no actor creation, 
 "#;
 
 const CORE_ROSTER: &str = r#"
+local definition=GameInfo.Civilizations['CIVILIZATION_VATICAN_CITY']
+local leaderDefinition=GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']
+print('[JAC_OFFICIAL_CONTENT] actual-vatican='..tostring(definition~=nil)..' actual-leader='..tostring(leaderDefinition~=nil))
+assert(definition and leaderDefinition and definition.StartingCivilizationLevelType=='CIVILIZATION_LEVEL_CITY_STATE',
+  'loaded Core Vatican civilization/leader content missing or not an official city state')
 local majorCount,minorCount,minor=0,0,nil
 local rows={}
 for actor=0,63 do
@@ -193,6 +207,8 @@ for actor=0,63 do
       minorCount=minorCount+1;minor=actor
       assert(not p:IsMajor() and civ=='CIVILIZATION_VATICAN_CITY' and leader=='LEADER_MINOR_CIV_VATICAN_CITY',
         'engine generated an unexpected official minor profile')
+      assert(config:GetCivilizationLevelTypeID()==CivilizationLevelTypes.CIVILIZATION_LEVEL_CITY_STATE,
+        'actual configured Vatican player is not at the native city-state level')
     end
   end
 end
@@ -1364,16 +1380,22 @@ local majors={{Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA'
 include=function(name) assert(name=='PlayerSetupLogic') end
 BuildHeadlessGameSetup=function() g_GameParameters={FullRefresh=function() end} end
 CreatePlayerParameters=function(index,headless) assert(index==0 or index==1);assert(headless==true) end
-RefreshPlayerParameters=function() end
+RefreshPlayerParameters=function()
+ assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
+ LEADER_VALUES=NO_DEPENDENCY and 'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA' or
+  'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA,Players:Expansion2_Players::LEADER_JAC_ODA_NOBUHIDE,Players:Expansion2_Players::LEADER_SIMON_BOLIVAR'
+end
 HideGameSetup=function() g_GameParameters=nil end
 ReleasePlayerParameters=function() end
 PlayerConfigurations={}
 for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizationTypeName=function() return row.Civ end,
- GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end} end
+ GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end,
+ GetValue=function(_,key) assert(key=='LEADER_VALUES');return LEADER_VALUES end} end
 GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAnyMultiplayer=function() return false end,
  GetValue=function(key) return VALUES[key] end,SetValue=function(key,value) VALUES[key]=value end,
  GetHiddenPlayerCount=function() return 2 end,UpdateEnabledMods=function()
-  assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==2);CALLS[#CALLS+1]='mods'
+  assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==2 and VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
+  assert(LEADER_VALUES and LEADER_VALUES:find('LEADER_SIMON_BOLIVAR',1,true),'mods refreshed before dependency helper values');CALLS[#CALLS+1]='mods'
   if CHANGE_MAJOR then majors[1].Leader='wrong-leader' end
   if DROP_FILTER then VALUES.EXCLUDE_CITY_STATES={} end
  end,
@@ -1391,6 +1413,10 @@ MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return 'Conti
  GetMinMajorPlayers=function() return BOUNDS.MinMajor end,GetMaxMajorPlayers=function() return BOUNDS.MaxMajor end,
  GetMinMinorPlayers=function() return BOUNDS.MinMinor end,GetMaxMinorPlayers=function() return BOUNDS.MaxMinor end}
 DB={MakeHash=function() return 99 end,ConfigurationQuery=function(sql)
+ if sql:find('FROM DomainValues',1,true) then
+  assert(sql=="SELECT Value FROM DomainValues WHERE Domain = 'JAC_BanseikiHumanPools' AND Value = 'JAC_ALL_POOLS'")
+  return NO_POOL and {} or {{Value='JAC_ALL_POOLS'}}
+ end
  if sql:find('FROM MapSizes',1,true) then
   assert(sql:find("Domain = 'StandardMapSizes'",1,true) and sql:find("MapSizeType = 'MAPSIZE_DUEL'",1,true));return {SIZE}
  end
@@ -1403,6 +1429,8 @@ end}
             "DROP_FILTER=true",
             "DROP_BOUNDS=true",
             "SIZE.MaxCityStates=0",
+            "NO_POOL=true",
+            "NO_DEPENDENCY=true",
         ] {
             let lua = Lua::new();
             lua.load(SETUP).exec()?;
@@ -1468,6 +1496,7 @@ for _,row in ipairs(rows) do
  PlayerConfigurations[row.ID]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end}
 end
 PlayerManager={GetAliveMinors=function() return {Players[62]} end}
+GameInfo={Civilizations={CIVILIZATION_VATICAN_CITY={StartingCivilizationLevelType='CIVILIZATION_LEVEL_CITY_STATE'}},Leaders={LEADER_MINOR_CIV_VATICAN_CITY={}}}
 "#).exec()?;
         let result = lua.load(CORE_ROSTER).exec();
         assert!(result.is_err());
@@ -1484,7 +1513,7 @@ PlayerManager={GetAliveMinors=function() return {Players[62]} end}
     }
 
     #[test]
-    fn exclusive_content_requires_actual_definition_and_probe_has_no_host() -> Result<()> {
+    fn frontend_without_gameplay_data_is_valid_but_core_requires_actual_definition() -> Result<()> {
         const NATIVE_CONFIG: &str = r#"
 SlotStatus={SS_CLOSED=0,SS_COMPUTER=1,SS_TAKEN=2}
 CivilizationLevelTypes={CIVILIZATION_LEVEL_CITY_STATE=3}
@@ -1507,11 +1536,13 @@ end
             lua.load(NATIVE_CONFIG).exec()?;
             lua.load(mutation).exec()?;
             let result = lua.load(FRONTEND_BOOTSTRAP).exec();
-            assert_eq!(
-                result.is_ok(),
-                mutation.is_empty(),
-                "{mutation}: {result:?}"
-            );
+            assert!(result.is_ok(), "Frontend may lack GameInfo: {mutation}: {result:?}");
+            lua.load("Players={};PlayerManager={GetAliveMinors=function() return {} end}").exec()?;
+            let core=lua.load(CORE_ROSTER).exec();
+            assert!(core.is_err(),"Core cannot pass missing data or empty native roster");
+            if !mutation.is_empty() {
+                assert!(core.unwrap_err().to_string().contains("loaded Core Vatican civilization/leader content"));
+            }
         }
         let diagnostic = frontend_probe(&Repository::checked_in())?;
         let lua = Lua::new();
@@ -1524,6 +1555,17 @@ end
             }
         }
         assert!(!FRONTEND_PROBE.contains("SetValue"));
+        assert!(!FRONTEND_BOOTSTRAP.contains("assert("));
+        // Validate the actual existing option and filter contract instead of
+        // assuming an invented PLUS_STOCK enum from the handoff wording.
+        let config = Repository::checked_in()
+            .read("poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")?;
+        let xml = roxmltree::Document::parse(&config)?;
+        assert!(xml
+            .descendants()
+            .any(|n| n.attribute("Domain") == Some("JAC_BanseikiHumanPools")
+                && n.attribute("Value") == Some("JAC_ALL_POOLS")));
+        assert!(config.contains("?3 = 'JAC_BANSEIKI_ONLY'"));
         Ok(())
     }
 
