@@ -685,3 +685,30 @@ RuntimeCloseはまず権限と追加OPを無効化し、追加native区間が終
 再レビューでPermanentPrefixによる復旧修正は妥当とされた。一方、設置途中をINSTALLEDとするとRebuildを許してしまうため、既存OWNEDを復旧用、INSTALLEDを全設置成功用として分離し、部分設置からCloseへ進めてもRebuildはInvalidInputとした。世代0/範囲外は実行コード変更前に拒否する。最終対象は49成功・68除外・失敗ignored0・警告0（`D:/CC/Work/todo880/ai-producer-install-recovery-tests.log`）。追加2件は実OS子で公開APIの部分設置→Close→Rebuild拒否と、世代0時の原コード不変・原実行一回を確認する。これも原ゲームの通常設置完了を意味しない。
 
 world globalの書込みも一次命令で特定した。`0x46D34`（file `0x46134`）はfactoryの返したpointerを`0xB8AA68`へ公開し、`0x46B5C/0x471D9`（file `0x45F5C/0x465D9`）は後始末側で更新する。その前の`0x46B56/0x471D3`はworldのvirtual destructorを呼ぶため、globalが0になったことを破棄前の停止証明に使わない。`0x46A76/0x471BD -> 0x63E160`はworldの終了処理に入り、`0x63E176/0x63E182`で既存状態を変更し、`0x63E1B5`以降にvirtual通知・各subsystemの後始末へ進む。これらを追加で記録したが、当該byteをこちらから書いたり、状態の型だけで保留要求排出済みとする処理は追加していない。親の初回load/teardownの一件では、発行停止・排出とこれらの原処理の順序を対応させる必要がある。実機未実施、既知の初回順序・発行元排出Must2件は維持する。
+
+## 実JobManagerの発行・待機・世界破棄との対応
+
+上位callerへhookを増やす作業は止め、既存のnativeタスク管理を調べた。追加物は読み取り専用の`ai-task-lifecycle-audit`と`task_audit.rs`だけであり、通常runtimeを候補へ置き換えない。固定GameCoreに加え、Steamの`Base/Binaries/Win64Steam/CivilizationVI.exe`を一次資料とした。EXE SHA-256は`e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63`。両画像の.textはRVA1000/raw400なので、下表のコードのfile offsetはRVA−C00である。監査toolは両SHAを検証した後に命令を比較する。実行・DLL load・process attachは行わない。
+
+GameCore `0x993550`は`GetModuleHandleA(NULL)`と`GetProcAddress`でEXEの`EXP_JobManager_*`を解決する。これらは架空の追加APIではない。AI managerはworld+250、job-setはmanager+400の実体、job-listはmanager+410に保存した小さいIDであり、後者をheap pointerと解釈しない。EXEはID1..64を32byteのtable entryへ変換する。
+
+| native処理 | GameCore側の実地点 | EXE側の実地点・確認した動作 |
+|---|---|---|
+| list生成 | `49C807 -> 992160`、`49C813`でmanager+410へ保存 | `EXP_JobManager_CreateJobList=986030 -> 985550` |
+| job投入 | `4A1145 -> 992210` | `EXP_JobManager_PushJobOntoList=986060 -> 985B20`。RCX=list ID、RDX=job object、R8=job-set address、R9=16byte metadataへのpointer |
+| 実行へ渡す | `4A10F9 -> 992280` | `EXP_JobManager_SpawnList=986080 -> 985BF0`。pending listからtaskを取り出してnative arenaへ渡す |
+| 通常待機 | `4A1713 -> 9922C0`、復帰`4A1718` | `EXP_JobManager_Wait=985E20`。RCX=同じjob-set、RDX=16byte metadata。RAXのtrueを返す契約ではない |
+| world終了時の待機 | `63E1D0 -> 4A1150`、`4A1191 -> 9922C0`、復帰`4A1196` | set+8の対象を読み、`E3EA70`を通った後の`985E50`でset+8を消す |
+| host contextの復帰 | 条件付き`4A11B0 -> [host vtable+40]`、合流`4A11B3` | vtable機能名は未確定。名前を推測せず、元の条件分岐と復帰まで保持する |
+| list解放 | `4A1209 -> 9921D0`、復帰`4A120E`、`4A1215`でIDを消す | `EXP_JobManager_FreeJobList=986050 -> 9857B0`。listを管理表から外し、headを0にして再利用へ戻す。joinとしては扱わない |
+| set破棄 | manager destructorの`49BCE1 -> 992190` | `EXP_JobManager_DestroyJobSet=986040 -> 985660` |
+
+Governor関連との結び付きも実命令で確認した。`4A7A4B -> 4A1100`がreceiver+D0のjobを渡し、`4A7A53 -> 4A10B0`で実行へ渡す。metadataの名前はRVA A06920（file A05520）の`Governor Analyzer`である。これは評価用workerの根拠であり、同期callback `4A7AD0`や正式PROMOTE自体がそのjob-setに含まれるという根拠ではない。
+
+**静止証明は範囲を分ける。** 同一setのworker待機の候補地点は、shutdownの`4A1196`、host contextの合流`4A11B3`である。取得するのはPID/作成時刻・両module SHA/base・world・manager・list ID・job-set address・待機前のset+8・native呼出しのthread/連番・原Waitの正常復帰である。待機中のSEH、別set、別world、古い世代、待機前からset+8が0で実待機を通っていないケースを、そのままjoin成功へ変換しない。
+
+EXE `E3EA70`はnative queueと稼働値を反復して確認するが、現在のarenaから呼ばれた場合などに早期復帰する分岐もある。実測ではその経路を区別する。待機するthreadがjobの実行を手伝う経路もあるため、全jobが別threadで動くと仮定しない。また、`985D70`は次の投入時にset+8をset+0から再び設定する。従って待機後の0は永久的な停止ではない。
+
+**全worldの静止証明はまだ発行できない。** `4A1161`でmanager+38A8へ3を書く原終了処理は存在するが、`4A1100`のPush wrapperはその値を検査しない。FreeJobListはpending listを再利用へ戻すだけで、未発行taskのjoin/cancelを証明しない。証明に必要なのは、(1)そのworldへの新規発行を止める実契約、(2)既に投入済みのlistが全てSpawn/処理された根拠、(3)同じsetの実Wait完了、(4)同期`4A7AD0`と発行元frameの退出、(5)破棄まで同じworldへの新しいPush/Spawnが入らないこと、である。4A1196に到達したという一点やstate3だけから`drained=true`を作らない。
+
+親のSP phase/load/teardown観測には、`world+250`の同一managerについて、最後の`4A1145/4A10F9`、原world終了入口`63E160`、shutdown Waitの入口`4A1191`と正常復帰`4A1196`、合流`4A11B3`、FreeList復帰`4A120E`、Player/AI owner破棄前`2F55B2`を対応させる。再開時は新world公開`46D34`、新list生成`49C807/49C813`と識別子の再利用を別世代として扱う。これらは今回のworkerで未実測であり、新しい観測器の導入や追加実機を実行したものではない。同期発行の停止契約を確定するまでは、得られる証拠の名前を「同一job-set待機完了」に限定する。
