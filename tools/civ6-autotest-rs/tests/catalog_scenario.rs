@@ -16,6 +16,10 @@ fn run(lua: &Lua, code: &str) -> String {
 }
 
 fn model() -> Lua {
+    model_with_startup_mutation("").unwrap()
+}
+
+fn model_with_startup_mutation(mutation: &str) -> mlua::Result<Lua> {
     let lua = Lua::new();
     let normal = template();
     let players = normal["steps"][1]["players"].as_array().unwrap();
@@ -47,6 +51,22 @@ fn model() -> Lua {
     lua.load(r#"
 IDS={}; DELAY=false; UNKNOWN=false; WRITES={}; CIVIC_COMPLETIONS=0; UI_EVER_CALLS={}
 RAW={}; print=function(value) RAW[#RAW+1]=tostring(value) end
+-- Extend the archived three-person definitions before the shipped normal
+-- initializer runs. The old Index ranges collide when expanded to 22 people.
+TURN=0
+local sets={}
+for index,promotion in ipairs(PROMOS) do
+ promotion.Index=500+index
+ for _,row in ipairs(ROWS) do
+  if promotion.GovernorPromotionType==row.BasePromotionType or
+     promotion.GovernorPromotionType:sub(1,#row.BasePromotionType+7)==row.BasePromotionType..'_TITLE_' then
+   promotion.BaseAbility=promotion.GovernorPromotionType==row.BasePromotionType and 1 or 0
+   sets[#sets+1]={GovernorType=row.GovernorType,GovernorPromotion=promotion.GovernorPromotionType}
+  end
+ end
+end
+GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')
+GameInfo.GovernorPromotionSets=setmetatable({},{__call=function() local n=0; return function() n=n+1; return sets[n] end end})
 for id=0,21 do
  IDS[#IDS+1]=id
  local row=ROWS[id+1]; row.EvolutionCost=id%3+1
@@ -96,6 +116,9 @@ for n=1,15 do civicRows[n]={CivicType='CIVIC_TEST_'..n}; official[n]={CivicType=
 GameInfo.JAC_PersonaTitleCivics=collection(civicRows,'CivicType')
 GameInfo.Civics=collection(official,'CivicType')
 "#).exec().unwrap();
+    // Negative setup mutations run before the shipped initializer; no receipt,
+    // admission bit or success return is supplied by this fixture.
+    lua.load(mutation).exec()?;
     for path in [
         "poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua",
         "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
@@ -110,6 +133,10 @@ GameInfo.Civics=collection(official,'CivicType')
     // fixture intentionally has no CanEver/CanAppoint bindings.
     lua.load(
         r#"
+local normal=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,ROWS[1].LeaderType)
+assert(normal.active and normal.source=='civ6-persona-events-rs/v3/normal-Gameplay','normal fixture initialization failed')
+assert(normal.registrations.GovernorAppointed and normal.registrations.GovernorPromoted,'normal callback registration failed')
+TURN=1
 local uiRead=ExposedMembers.JAC_LeaderPersonaNativeRead
 ExposedMembers.JAC_LeaderPersonaNativeRead=function(...)
  local prior=CORE_CONTEXT; CORE_CONTEXT=false
@@ -118,13 +145,26 @@ ExposedMembers.JAC_LeaderPersonaNativeRead=function(...)
 end
 "#,
     )
-    .exec()
-    .unwrap();
-    lua
+    .exec()?;
+    Ok(lua)
 }
 
 #[test]
 fn generated_normal_setup_mode_and_zero_operation_contract_validate() {
+    // Prove each repaired startup precondition matters, with a working control.
+    model();
+    for mutation in [
+        "TURN=1",
+        "PROMOS[2].Index=PROMOS[1].Index; GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')",
+        "GameInfo.GovernorPromotionSets=nil",
+        "PROMOS[1].BaseAbility=0",
+    ] {
+        let error = match model_with_startup_mutation(mutation) {
+            Ok(_) => panic!("invalid normal fixture was accepted: {mutation}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("normal fixture initialization failed"), "{mutation}: {error}");
+    }
     let data = catalog::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&data).unwrap();
     let steps = data["steps"].as_array().unwrap();
