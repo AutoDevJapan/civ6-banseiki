@@ -20,6 +20,13 @@ fn original() -> Value {
     .unwrap()
 }
 
+fn banseiki() -> Value {
+    serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/multiplayer-banseiki-hotseat-growth.json"
+    ))
+    .unwrap()
+}
+
 #[test]
 fn persisted_process_creation_time_preserves_every_bit() {
     for bits in [0x41dab117910d2b48_u64, 0x41dab117910d2b49_u64] {
@@ -371,6 +378,54 @@ fn changed_scenario_and_unsupported_commands_are_rejected() {
     data["steps"][4]["code"] = json!("return 'fabricated growth'");
     assert!(hs::check_scenario(&data).is_err());
     assert!(scenario::validate_scenario(&original()).is_ok());
+}
+
+#[test]
+fn banseiki_hotseat_keeps_the_original_growth_oracle_and_save_load_sequence() {
+    let source = original();
+    let variant = banseiki();
+    assert_eq!(variant["session_type"], "hotseat");
+    assert_eq!(variant["steps"].as_array().unwrap().len(), 21);
+    for (base, extended) in source["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(variant["steps"].as_array().unwrap())
+    {
+        assert_eq!(extended["action"], base["action"]);
+    }
+    for index in [4, 7, 11, 14, 16, 20] {
+        assert_eq!(
+            variant["steps"][index]["code"],
+            source["steps"][index]["code"]
+        );
+    }
+    assert_eq!(
+        variant["steps"][1]["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["human"] == true)
+            .count(),
+        2
+    );
+    hs::check_scenario(&variant).unwrap();
+    let mut changed = variant.clone();
+    changed["steps"][1]["ruleset"] = json!("RULESET_EXPANSION_2");
+    assert!(hs::check_scenario(&changed).is_err());
+    changed = variant.clone();
+    changed["steps"][14]["code"] = json!("return 'fabricated growth'");
+    assert!(hs::check_scenario(&changed).is_err());
+    let output = tempfile::tempdir().unwrap();
+    let bundle = hs::prepare(
+        &variant,
+        output.path(),
+        test_nonce(),
+        "78ea4ad5-d526-4ca0-bd0e-cc4519261719",
+    )
+    .unwrap();
+    let prepared: Value = serde_json::from_slice(&fs::read(&bundle.scenario).unwrap()).unwrap();
+    hs::verify_installed(&bundle, &prepared, output.path()).unwrap();
 }
 
 #[test]

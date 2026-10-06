@@ -444,7 +444,7 @@ fn test_waiter_appearing_during_a_multi_turn_step_is_seen_before_its_end() {
 #[test]
 fn test_build_setup_checks_every_player_after_refresh() {
     let players = json!([{"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}, {"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false}]);
-    let code = scenario::build_setup_code(players.as_array().unwrap());
+    let code = scenario::build_setup_code(&json!({"players":players}));
     let order = [
         "BuildHeadlessGameSetup()",
         "g_GameParameters:FullRefresh()",

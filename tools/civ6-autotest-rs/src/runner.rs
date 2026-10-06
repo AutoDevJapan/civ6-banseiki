@@ -2960,7 +2960,7 @@ impl Runner {
                 if build {
                     self.lua(
                         "HostGame",
-                        &scenario::build_setup_code(step["players"].as_array().unwrap()),
+                        &scenario::build_setup_code(step),
                         self.budget(deadline, 30.0)?,
                     )?;
                 }

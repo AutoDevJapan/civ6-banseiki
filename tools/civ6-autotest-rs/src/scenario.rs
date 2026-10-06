@@ -858,11 +858,26 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
     lines.push("return true".into());
     lines.join("\n")
 }
-pub fn build_setup_code(players: &[Value]) -> String {
+pub fn build_setup_code(step: &Value) -> String {
+    let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "BuildHeadlessGameSetup()".to_string(),
         "g_GameParameters:FullRefresh()".into(),
+        // MapSize_ValueChanged resets participant and city-state counts during
+        // FullRefresh. Restore requested settings before checking the players.
+        format!(
+            "local participatingCount = {} + GameConfiguration.GetHiddenPlayerCount()",
+            players.len()
+        ),
+        "GameConfiguration.SetParticipatingPlayerCount(participatingCount)".into(),
+        "if GameConfiguration.GetParticipatingPlayerCount() ~= participatingCount then error('setup changed participating player count') end".into(),
     ];
+    if let Some(count) = step.get("city_states") {
+        lines.extend([
+            format!("GameConfiguration.SetValue('CITY_STATE_COUNT', {count})"),
+            format!("if GameConfiguration.GetValue('CITY_STATE_COUNT') ~= {count} then error('setup changed city-state count') end"),
+        ]);
+    }
     for (i, p) in players.iter().enumerate() {
         let slot = if p["human"] == true {
             "SS_TAKEN"

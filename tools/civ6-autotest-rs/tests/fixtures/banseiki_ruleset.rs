@@ -5,13 +5,14 @@ use rusqlite::{params_from_iter, types::Value as SqlValue, Connection};
 use std::collections::{BTreeMap, BTreeSet};
 
 const DOMAIN: &str = "Players:Expansion2_Players";
-const ORIGINAL: [&str; 6] = [
+const ORIGINAL: [&str; 7] = [
     "LEADER_JAC_ODA_NOBUHIDE",
     "LEADER_JAC_TAKEDA_NOBUTORA",
     "LEADER_CLEOPATRA",
     "LEADER_GORGO",
     "LEADER_LUDWIG",
     "LEADER_SEJONG",
+    "LEADER_HAMMURABI",
 ];
 
 fn rows<'a, 'input>(doc: &'a Document<'input>, parent: &str) -> Vec<Node<'a, 'input>> {
@@ -128,11 +129,11 @@ fn audited_exclusion_is_exact_and_applies_to_every_banseiki_slot() {
         re.find_iter(query.attribute("SQL").unwrap())
             .map(|m| m.as_str())
             .collect::<Vec<_>>(),
-        ["'LEADER_SEJONG'"]
+        ["'LEADER_SEJONG'", "'LEADER_HAMMURABI'"]
     );
     let expected: BTreeSet<String> = ORIGINAL
         .into_iter()
-        .filter(|&s| s != "LEADER_SEJONG")
+        .filter(|&s| !["LEADER_SEJONG", "LEADER_HAMMURABI"].contains(&s))
         .map(str::to_string)
         .collect();
     for player_id in [0, 1, 2] {
@@ -160,6 +161,31 @@ fn audited_exclusion_is_exact_and_applies_to_every_banseiki_slot() {
         choices(&doc, "RULESET_EXPANSION_2", 0, "JAC_ALL_POOLS"),
         original
     );
+}
+
+#[test]
+fn unsupported_babylon_partial_gameplay_is_excluded_without_changing_expansion2_choices() {
+    let xml = std::fs::read_to_string(
+        root().join("poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml"),
+    )
+    .unwrap();
+    let doc = Document::parse(&xml).unwrap();
+    for player_id in [0, 1, 2, 21] {
+        let filtered = choices(&doc, "RULESET_JAC_BANSEIKI", player_id, "JAC_ALL_POOLS");
+        assert!(!filtered.contains("LEADER_HAMMURABI"));
+        for supported in [
+            "LEADER_JAC_ODA_NOBUHIDE",
+            "LEADER_JAC_TAKEDA_NOBUTORA",
+            "LEADER_CLEOPATRA",
+            "LEADER_GORGO",
+            "LEADER_LUDWIG",
+        ] {
+            assert!(filtered.contains(supported));
+        }
+        let standard = choices(&doc, "RULESET_EXPANSION_2", player_id, "JAC_ALL_POOLS");
+        assert!(standard.contains("LEADER_HAMMURABI"));
+        assert!(standard.contains("LEADER_SEJONG"));
+    }
 }
 
 #[test]
