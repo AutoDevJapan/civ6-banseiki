@@ -189,7 +189,7 @@ fn load_uses_hotseat_mode_before_resolving_the_engine_save_type() {
         .load(scenario::load_code("mid-turn", SessionType::Hotseat))
         .eval::<bool>()
         .is_err());
-    assert_eq!(SessionType::Hotseat.save_folder(), "Multi");
+    assert_eq!(SessionType::Hotseat.save_folder(), "Hotseat");
     assert_eq!(SessionType::SinglePlayer.save_folder(), "Single");
 }
 

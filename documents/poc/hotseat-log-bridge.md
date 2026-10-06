@@ -23,7 +23,7 @@ cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge --
 生成された `JAC_Test_HotseatBridge` をCiv6のModsフォルダに置き、元のGrowthUIとともに有効にする。`bundle.json` とMOD内のnonceが一致することを確認する。ゲームがメインメニューにいる状態で、準備済みシナリオの有効化・設定・Host送信を次で一度だけ行う。
 
 ```powershell
-cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- pregame <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Multi> --mods <Modsフォルダ>
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- pregame <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Hotseat> --mods <Modsフォルダ>
 ```
 
 Host後はStagingRoomの**円形80×80の `ReadyButton`** を、実controlの矩形または確認できる画面測定から一度だけ操作する。`StartLabel` は装飾ラベルであり、固定の画面下端座標はこのツールに含めない。InGameでnonce付き `BOOT` と表示中の `DIALOG_OPEN` を確認したら、`init` がReturnを一度送る。
@@ -35,8 +35,8 @@ cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge --
 `step --number` は 4〜10、12〜19、21を順に実行する。各回の `--logs` と `--saves` は同じ実パスを指定する。10と19はメニューへ退出を要求する。メニュー復帰を確認できたときに `menu-load` を使い、StagingRoomが出た場合は再び測定済みReadyButtonを一度操作する。新しいInGameの `BOOT` と `DIALOG_OPEN` の後に `adopt-load` を使う。
 
 ```powershell
-cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- step <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Multi> --number 4
-cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- menu-load <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Multi>
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- step <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Hotseat> --number 4
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- menu-load <出力先>/bundle.json --logs <Civ6ログ> --saves <Saves/Hotseat>
 cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge -- adopt-load <出力先>/bundle.json --logs <Civ6ログ>
 ```
 
@@ -99,3 +99,11 @@ cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge --
 入力専用のLuaは元の照会・保存・ターン終了・退出を実行しない。自動の診断コマンドが送るのはF13だけである。手作業で他のキーを押したときの通常UIへの伝播を無作用にするものではない。診断は30秒で応答不明になったため再送せず、原ログと送信済み記録を保存した後、検査を終了してゲームと共有枠を解放した。
 
 別モデルが見つけた相手側の先行成長の検査漏れも修正した。六つの記録取得箇所で、手番中の累積経験値を前回の記録と現在のターンから決める。手番外のプレイヤーには成長記録全体の一致を要求する。相手が先に成長した場合、成長以外の記録が変わった場合、ユニットIDが差し替わった場合を元のLua 5.1で検査した。先行成長を拒否する検査は修正前に失敗し、修正後に合格した。元の21手順・二人各二ユニット・二回の保存読込を省略していない。
+
+## 実機16で確認した保存先
+
+実機16は `8d0879a2` と生成した四ファイルの一致を確認して、元の21手順を実行した。手順4〜8の照会と最初の手番交代は成功した。修正したゲーム内キーの定数でF13以降を認識でき、二人各二ユニットの記録を取得できた。
+
+手順9は保存を一度送信し、SaveCompleteを記録したが、検証器が `Saves/Multi` を探して停止した。同じ実行識別子の保存ファイルは `Saves/Hotseat` に存在し、308,544バイトで、作成・更新時刻はこの保存の送信後だった。原ログと保存ファイルを保存し、元の保存を再送せず、ゲームと共有枠を終了した。読込と次のターンの自然成長はまだ未合格である。
+
+ホットシートの保存先を `Hotseat` として選ぶよう修正する。実機入口の保存フォルダー指定もこの実保存先に合わせる。保存APIの種類は引き続きゲームが返す値を使い、単独プレイの保存先は `Single` のままである。元21手順や四ユニットの比較を省略せず、新しい実行識別子の試行で二回の保存読込まで確認する。

@@ -20,7 +20,7 @@ impl SessionType {
     pub fn save_folder(self) -> &'static str {
         match self {
             Self::SinglePlayer => "Single",
-            Self::Hotseat => "Multi",
+            Self::Hotseat => "Hotseat",
         }
     }
     pub fn server_type(self) -> &'static str {
