@@ -7,7 +7,7 @@ mod preparation;
 pub const OUTPUT: &str = "poc/JAC_Test_PersonaBoundary/UI/JAC_ReturnedPreparation548.lua";
 const VIEW: &str = "poc/JAC_Test_PersonaBoundary/UI/JAC_PersonaBoundary_View.lua";
 const EVENT: &str = "Events.SpyMissionCompleted.Add(function(attacker, missionID)\n";
-const HOOK: &str = "include(\"JAC_ReturnedPreparation548\");\nEvents.SpyMissionCompleted.Add(function(attacker, missionID)\n    if B.ReturnedPreparation.RouteEvent(attacker,missionID) then return; end\n";
+const HOOK: &str = "include(\"JAC_ReturnedPreparation548\");\nEvents.SpyMissionCompleted.Add(function(attacker, missionID)\n    if Game:GetProperty(\"JAC_BOUNDARY_RETURNED_PREPARATION\") then\n        local preparation=assert(B.ReturnedPreparation,\"returned preparation UI module missing\");\n        if preparation.RouteEvent(attacker,missionID) then return; end\n    end\n";
 
 pub fn connection() -> String {
     let gate = preparation::UI_EARLY_EVENT_GATE;
