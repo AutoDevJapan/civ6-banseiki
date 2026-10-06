@@ -314,3 +314,13 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 ### 324 ABIの後続接続条件
 
 `D:/CC/Work/todo324/runtime-bootstrap-abi.json`（source `7d6a1628`、2026-10-06 09:43:37）を参照する。Install configは40byte・align8・version `0x03240001`・mode6、入力trace address/sizeは0。Closeは旧native object/Lua破棄前、Rebuildは破棄後かつ新RESET前。COMMIT後Rebuildは状態を消すので行わない。未接続のABIラッパーは今回追加せず、最初の実機順序receiptから親のnative境界実装を進める。
+
+### 2026-10-07: 命名通知の修正と同一プロセス再読込
+
+実機04の所有ゲームは、Windowsの障害記録と同じPID・起動時刻のダンプにより、`0x406d1388`の命名通知で停止したと確認した。Binkの引数6語は、Win64の通知先頭24byteと余分な3語からなる。余分な値を意味付けせず、型・所有スレッド・終端付きの名前を照合した通知だけを処理する。ダンプに名前のメモリページはなく、「Bink IO」は一致するインストール済みDLLからの読取りである。原ダンプの文字列として扱わない。
+
+修正後の実機07は固定ソース`d21cff32`で7手順・6判定が成功した。保存の読込後にload側の4観測点を設け、メニュー退出後に復元・回収した。命名通知はfirst chanceで処理し、同じ例外の再通知は0。4候補のhitは0であり、破棄境界の証明にはしなかった。
+
+実機08は`82cfdf9e`で9手順・6判定が成功した。同じobserverと所有PID・起動時刻を保ち、メニュー退出後に同じ保存を再読込した。次の読込中に`context_release`2回と`context_replace`6回を同じスレッドで記録した。Lua破棄の2候補は0回。復元前の115保持スレッドは全て期待DRと一致し、不一致・不明・保留命令は0だった。復元・子回収・ゲーム終了も確認した。この終了時の照合だけで全観測期間の連続性を保証しない。
+
+根拠は`D:/CC/Work/todo880/order-fixed-07-proof.json`と`order-reload-08-proof.json`、それぞれの`*-artifacts`と全ファイルのSHA照合表。保持slotの旧値から新値への変化は観測したが、Release呼出しが実際の最終参照解放か、そのslotがGameplay/worldそのものかは未確認である。次は実呼出し元とオブジェクトの一次コードへ結び付ける。自動Install、世代Rebuild、AI自身の支払い、製品の同一プロセス読込の合格へ拡張しない。
