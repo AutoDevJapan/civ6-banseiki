@@ -1,4 +1,54 @@
 #[test]
+fn required_title_definition_without_its_official_membership_closes_fresh_start() {
+    for other_governor in [false, true] {
+        let lua = normal_context(&format!(r#"
+            local row=GameInfo.JAC_LeaderPersonas[PlayerConfigurations[1]:GetLeaderTypeName()]
+            local title=row.BasePromotionType..'_TITLE_1'
+            assert(GameInfo.GovernorPromotions[title], 'promotion definition remains present')
+            local rows={{}}
+            for entry in GameInfo.GovernorPromotionSets() do
+                if entry.GovernorType==row.GovernorType and entry.GovernorPromotion==title then
+                    if {other_governor} then
+                        rows[#rows+1]={{GovernorType=GameInfo.JAC_LeaderPersonas[PlayerConfigurations[3]:GetLeaderTypeName()].GovernorType,
+                            GovernorPromotion=title}}
+                    end
+                else rows[#rows+1]=entry end
+            end
+            GameInfo.GovernorPromotionSets=setmetatable({{}},{{__call=function()
+                local i=0; return function() i=i+1; return rows[i] end
+            end}})
+        "#));
+        run(&lua, r#"
+            assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil)
+            emit(GameEvents,'JAC_LeaderPersonaJoin',0,{Source=1})
+            assert(playerProps[0].JAC_PERSONA_RESULT=='NATIVE_UNAVAILABLE' and #unitLists[0]==0)
+        "#);
+    }
+}
+
+#[test]
+fn foreign_spent_before_its_callback_cannot_create_a_missing_person_receipt() {
+    let lua = normal_context(STOCK_GOVERNOR);
+    run(&lua, r#"
+        local leader,row=normalJoin(0,1)
+        used[0]=1; success(0,row,0); appointed(0,row)
+        -- B's actual consumption is visible before B's own callback arrives.
+        used[0]=2; finalize(0,leader)
+        assert(#unitLists[0]==1 and properties['JAC_PERSONA_'..leader..'_STATE']=='EVOLVING')
+        emit(Events,'GovernorPromoted',0,240,4000); emit(Events,'GovernorAppointed',0,240)
+        finalize(0,leader)
+        local view=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,leader)
+        assert(view.paid==1 and view.acquired[2]==nil and #unitLists[0]==1)
+        assert(properties['JAC_PERSONA_'..leader..'_STATE']=='EVOLVING')
+        -- Only A's real TITLE notification and new debit can complete A.
+        success(0,row,1); finalize(0,leader); assert(#unitLists[0]==1)
+        used[0]=3; finalize(0,leader)
+        assert(#unitLists[0]==0 and properties['JAC_PERSONA_'..leader..'_STATE']=='GOVERNOR')
+        assert(uiReads==0 and operations==0)
+    "#);
+}
+
+#[test]
 fn unreflected_stock_spending_cannot_overbook_a_new_person_reservation() {
     let lua = normal_context(STOCK_GOVERNOR);
     run(&lua, r#"
