@@ -25,21 +25,39 @@ if n~=22 or not Players[0]:IsAlive() or not Players[0]:IsHuman() then error('leg
 return 'LEGACY_ACCEPTED turn=67 reign=1 houses=22 oathFields=absent'
 "#;
 
-const SNAPSHOT: &str = r#"
-local l=Game:GetProperty('JAC_AGES_LEDGER')
+macro_rules! snapshot_lua {
+    ($tail:literal) => {
+        concat!(
+            r#"
 local function ser(v)
- if type(v)~='table' then return type(v)..':'..tostring(v) end
- local keys={} for k in pairs(v) do keys[#keys+1]=k end table.sort(keys)
- local out={} for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..ser(v[k]) end
- return '{'..table.concat(out,',')..'}'
+ if type(v)~='table' then
+  if type(v)=='number' then assert(v==v and v~=math.huge and v~=-math.huge,'nonfinite snapshot value') end
+  local text=type(v)=='number' and string.format('%.17g',v) or tostring(v)
+  local s=type(v)..':'..text; return #s..':'..s
+ end
+ local entries={}
+ for k,value in pairs(v) do entries[#entries+1]=ser(k)..ser(value) end
+ table.sort(entries)
+ return '{'..table.concat(entries)..'}'
 end
+"#,
+            "\n",
+            $tail
+        )
+    };
+}
+
+const SNAPSHOT: &str = snapshot_lua!(
+    r#"
+local l=Game:GetProperty('JAC_AGES_LEDGER')
 Game:SetProperty('JAC_TODO134_OLD_HISTORY',ser(l.history))
 Game:SetProperty('JAC_TODO134_OLD_TURN',Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)
 return 'legacy history snapshot captured without modifying the ledger'
-"#;
+"#
+);
 
 macro_rules! migration_lua {
-    ($tail:literal) => { concat!(r#"
+    ($tail:expr) => { concat!(r#"
 local function validate_migration()
 local l=Game:GetProperty('JAC_AGES_LEDGER')
 local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1
@@ -88,15 +106,10 @@ elseif not JAC_ChooseOath(rows[1].type) then error('migrated confirmation failed
 return 'migrated human chose through the existing popup and player operation'
 "#;
 
-const OATH_SNAPSHOT: &str = r#"
+const OATH_SNAPSHOT: &str = snapshot_lua!(
+    r#"
 local l=Game:GetProperty('JAC_AGES_LEDGER') local h=l.houses.p0
 if h.oathChosen~=l.reign then error('choice not received by gameplay') end
-local function ser(v)
- if type(v)~='table' then return type(v)..':'..tostring(v) end
- local keys={} for k in pairs(v) do keys[#keys+1]=k end table.sort(keys)
- local out={} for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..ser(v[k]) end
- return '{'..table.concat(out,',')..'}'
-end
 if ser(l.history)~=Game:GetProperty('JAC_TODO134_OLD_HISTORY') then error('migration changed legacy history') end
 local out={}
 for key,owner in pairs(l.houses) do
@@ -125,7 +138,8 @@ else
 end
 if Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1~=68 then error('load advanced the turn') end
 return 'MIGRATION_PERSISTED same history/oath state and all 66 flags in '..cities..' cities'
-"#;
+"#
+);
 
 const CAPABILITIES: &str = r#"
 local l=Game:GetProperty('JAC_AGES_LEDGER') local out={}
@@ -341,26 +355,13 @@ return 'diagnostic event observers registered; no acceptance'
 // A real save/load may rebuild a UI whose playback did not catch up. Record
 // the whole migrated ledger and every city flag before asking the native save
 // API; never write the migration or replay its turn in order to make it pass.
-const RESYNC_SNAPSHOT: &str = migration_lua!(
+const RESYNC_SNAPSHOT: &str = migration_lua!(snapshot_lua!(
     r#"
 local migrated=validate_migration()
 local l=assert(Game:GetProperty('JAC_AGES_LEDGER'),'resync ledger missing')
 assert(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68,'resync requires the single naturally advanced turn')
 assert(Players[0]:IsTurnActive() and not Players[0]:IsTurnActiveComplete(),'human not active before/after resync')
-local function ser(v)
- if type(v)~='table' then local s=type(v)..':'..tostring(v); return #s..':'..s end
- local entries={}
- for k,value in pairs(v) do entries[#entries+1]=ser(k)..ser(value) end
- table.sort(entries)
- return '{'..table.concat(entries)..'}'
-end
-local function oldser(v)
- if type(v)~='table' then return type(v)..':'..tostring(v) end
- local keys={} for k in pairs(v) do keys[#keys+1]=k end table.sort(keys)
- local out={} for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..oldser(v[k]) end
- return '{'..table.concat(out,',')..'}'
-end
-assert(oldser(l.history)==Game:GetProperty('JAC_TODO134_OLD_HISTORY'),'resync legacy history changed')
+assert(ser(l.history)==Game:GetProperty('JAC_TODO134_OLD_HISTORY'),'resync legacy history changed')
 local cities={}; local majors=0; local owners={}
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
  assert(not owners[p:GetID()],'duplicate resync house'); owners[p:GetID()]=true
@@ -391,7 +392,7 @@ else
 end
 return 'RESYNC_STATE_UNCHANGED turn68 houses='..majors..' cities='..#cities..' verify='..tostring(__VERIFY__)..' '..migrated
 "#
-);
+));
 
 const RESYNC_SESSIONS_CLOSED: &str = r#"
 assert(ContextPtr:IsHidden(),'diplomacy view still visible before resync save')
@@ -500,6 +501,51 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn legacy_history_snapshot_distinguishes_key_types_and_delimiters() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load("props={};ledger={history={[1]='x'}};Game={GetProperty=function()return ledger end,SetProperty=function(_,k,v)props[k]=v end,GetCurrentGameTurn=function()return 67 end};GameConfiguration={GetStartTurn=function()return 1 end}").exec()?;
+        let _: String = vm.load(SNAPSHOT).eval()?;
+        let first: String = vm.load("return props.JAC_TODO134_OLD_HISTORY").eval()?;
+        vm.load("ledger.history={['1']='x'}").exec()?;
+        let _: String = vm.load(SNAPSHOT).eval()?;
+        let second: String = vm.load("return props.JAC_TODO134_OLD_HISTORY").eval()?;
+        assert_ne!(first, second, "numeric and string keys must not collide");
+        let mut snapshots = Vec::new();
+        for table in ["{a='x,b=string:y'}", "{a='x',b='y'}", "{b='y',a='x'}"] {
+            vm.load(format!("ledger.history={table}")).exec()?;
+            let _: String = vm.load(SNAPSHOT).eval()?;
+            snapshots.push(
+                vm.load("return props.JAC_TODO134_OLD_HISTORY")
+                    .eval::<String>()?,
+            );
+        }
+        assert_ne!(
+            snapshots[0], snapshots[1],
+            "delimiters in values must not mimic entries"
+        );
+        assert_eq!(
+            snapshots[1], snapshots[2],
+            "table iteration order must not matter"
+        );
+        let mut adjacent = Vec::new();
+        for number in ["1", "1+2^-52"] {
+            vm.load(format!("ledger.history={{value={number}}}"))
+                .exec()?;
+            let _: String = vm.load(SNAPSHOT).eval()?;
+            adjacent.push(
+                vm.load("return props.JAC_TODO134_OLD_HISTORY")
+                    .eval::<String>()?,
+            );
+        }
+        assert_ne!(
+            adjacent[0], adjacent[1],
+            "adjacent doubles must not collapse through tostring"
+        );
+        vm.load("ledger.history={value=0/0}").exec()?;
+        assert!(vm.load(SNAPSHOT).eval::<String>().is_err());
+        Ok(())
+    }
+    #[test]
     fn generated_save_and_load_names_match_the_actual_driver_resolver() -> Result<()> {
         let repo = Repository::checked_in();
         let runner = civ6_autotest_rs::runner::Runner::new(
@@ -601,19 +647,20 @@ mod tests {
                 .count(),
             1
         );
-        for changed in [
-            "turn=69",
-            "active=false",
-            "ledger.houses.p0.oathDue=70",
-            "ledger.history.r1.turn=65",
-            "ledger.houses.p1.oathChosen=nil",
-            "ledger.houses.p1.oathKnowledge.tech=1",
-            "flags.O1=1",
-            "missing=true",
-            "plotOwner=1",
-        ] {
-            let vm = mlua::Lua::new();
-            vm.load(r#"
+        for golden in [false, true] {
+            for changed in [
+                "turn=69",
+                "active=false",
+                "ledger.houses.p0.oathDue=70",
+                "ledger.history.r1.turn=65",
+                "ledger.houses.p1.oathChosen=nil",
+                "ledger.houses.p1.oathKnowledge.tech=1",
+                "flags.O1=1",
+                "missing=true",
+                "plotOwner=1",
+            ] {
+                let vm = mlua::Lua::new();
+                vm.load(r#"
 turn=68;active=true;plotOwner=nil;flags={};props={};ledger={reign=1,history={r1={turn=66}},houses={}}
 Game={GetCurrentGameTurn=function()return turn end,GetProperty=function(_,k)if k=='JAC_AGES_LEDGER' then return ledger end return props[k] end,SetProperty=function(_,k,v)assert(k~='JAC_AGES_LEDGER');props[k]=v end}
 GameConfiguration={GetStartTurn=function()return 1 end}
@@ -631,16 +678,21 @@ for i=0,21 do
  Players[id]=p;majors[#majors+1]=p
 end
 PlayerManager={GetAliveMajors=function()return majors end}
-Map={GetPlot=function(x)return {GetOwner=function()return plotOwner or x-3 end,GetIndex=function()return 100+x end,GetProperty=function(_,k)if missing then return nil end return flags[k:sub(1,-4)] or 0 end} end}
+Map={GetPlot=function(x)return {GetOwner=function()return plotOwner or x-3 end,GetIndex=function()return 100+x end,GetProperty=function(_,k)if missing then return nil end return flags[(x-3)..':'..k:sub(1,-4)] or flags[k:sub(1,-4)] or 0 end} end}
 "#).exec()?;
-            let _: String = vm.load(SNAPSHOT).eval()?;
-            let _: String = vm.load(before).eval()?;
-            let _: String = vm.load(after).eval()?;
-            vm.load(changed).exec()?;
-            assert!(
-                vm.load(after).eval::<String>().is_err(),
-                "accepted changed state: {changed}"
-            );
+                if golden {
+                    vm.load("ledger.houses.p1.age='GOLDEN';flags['1:O4']=1")
+                        .exec()?;
+                }
+                let _: String = vm.load(SNAPSHOT).eval()?;
+                let _: String = vm.load(before).eval()?;
+                let _: String = vm.load(after).eval()?;
+                vm.load(changed).exec()?;
+                assert!(
+                    vm.load(after).eval::<String>().is_err(),
+                    "accepted changed state: {changed}"
+                );
+            }
         }
         Ok(())
     }
