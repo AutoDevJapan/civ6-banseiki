@@ -184,7 +184,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.TopPanel_OpenDiplomacyActionView(t.From);return 'ordinary admission screen opened'"
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nassert(t.To==Game.GetLocalPlayer());LuaEvents.TopPanel_OpenDiplomacyActionView(t.From);return 'ordinary admission screen opened'"
     },
     {
       "action": "wait_for",
@@ -198,7 +198,7 @@
     {
       "action": "ui_lua",
       "state_name": "DiplomacyActionView",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionDiplomacyAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
+      "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionDiplomacyAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
     },
     {
       "action": "ui_lua",
@@ -248,7 +248,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nif v.Status=='STARTED' then return true end\nlocal state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\nlocal pair=state and state.Pairs[t.From..':'..t.To]\nlocal admission=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')\nif pair and admission then for _,request in pairs(admission.Requests) do\n  if request.ID==pair.ID and request.Status=='STARTED' then return true end\nend end\nreturn false\n"
+        "code": "\nlocal t={Mode='MERGER'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_TAKEDA' then t.From=actor elseif civ=='CIVILIZATION_JAC_ODA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\n\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nreturn v.Status=='STARTED'\n"
       }
     },
     {

@@ -705,8 +705,9 @@ fn product_ui_uses_native_actor_identity_when_gameplay_properties_are_unpublishe
             lua.load(r#"
               Game={GetLocalPlayer=function() return 22 end,
                 GetProperty=function() error('Gameplay properties have not been published to UI') end}
-              PlayerManager={GetAliveMajors=function() return {
-                {GetID=function() return 11 end},{GetID=function() return 22 end}} end}
+              -- Absorption has removed the source from the living actor list.
+              PlayerManager={GetWasEverAliveCount=function() return 23 end,
+                GetAliveMajors=function() return {{GetID=function() return 22 end}} end}
               PlayerConfigurations={
                 [11]={GetCivilizationTypeName=function() return SMALL and 'CIVILIZATION_JAC_ODA' or 'CIVILIZATION_JAC_TAKEDA' end},
                 [22]={GetCivilizationTypeName=function() return SMALL and 'CIVILIZATION_JAC_TAKEDA' or 'CIVILIZATION_JAC_ODA' end}}

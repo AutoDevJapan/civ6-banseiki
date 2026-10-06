@@ -443,9 +443,10 @@ pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Resul
     let ui_actors = format!(
         r#"
 local t={{Mode='{mode}'}}
-for _,player in ipairs(PlayerManager.GetAliveMajors()) do
-  local civ=PlayerConfigurations[player:GetID()]:GetCivilizationTypeName()
-  if civ=='{from}' then t.From=player:GetID() elseif civ=='{to}' then t.To=player:GetID() end
+for actor=0,PlayerManager.GetWasEverAliveCount()-1 do
+  local config=PlayerConfigurations[actor]
+  local civ=config and config:GetCivilizationTypeName()
+  if civ=='{from}' then t.From=actor elseif civ=='{to}' then t.To=actor end
 end
 assert(t.From and t.To,'ordinary UI actors unavailable')
 "#,

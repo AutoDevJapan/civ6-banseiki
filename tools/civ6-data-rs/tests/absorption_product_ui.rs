@@ -153,7 +153,11 @@ fn human_envoy_scenario_waits_for_the_previous_assignment_before_sending_again(
         .exec()?;
     lua.load(
         r#"
-      Game.GetProperty=function() return {From=1,To=2} end
+      Game.GetProperty=function() error('Gameplay properties not yet published to UI') end
+      PlayerManager={GetWasEverAliveCount=function() return 3 end}
+      PlayerConfigurations={
+        [1]={GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_ODA' end},
+        [2]={GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_TAKEDA' end}}
       ContextPtr.IsHidden=function() return false end
       ViewCityState(1)
     "#,

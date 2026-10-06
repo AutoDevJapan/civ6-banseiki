@@ -184,7 +184,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.CityStates_OpenOverview(t.From);return 'ordinary admission screen opened'"
+      "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nassert(t.To==Game.GetLocalPlayer());LuaEvents.CityStates_OpenOverview(t.From);return 'ordinary admission screen opened'"
     },
     {
       "action": "wait_for",
@@ -198,7 +198,7 @@
     {
       "action": "ui_lua",
       "state_name": "CityStates",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionCityStatesAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
+      "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nlocal v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionCityStatesAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
     },
     {
       "action": "ui_lua",
@@ -218,7 +218,7 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');LuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'"
+      "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\nLuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'"
     },
     {
       "action": "wait_for",
@@ -232,7 +232,7 @@
     {
       "action": "ui_lua",
       "state_name": "CityStates",
-      "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal send;local lastSent=-1\nsend=function()\n  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))\n  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\n  if view.Envoys.Envoys>=view.Envoys.Required then\n    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return\n  end\n  -- Publications can arrive before this operation's assignment is visible.\n  -- Send the next one only after the actual count confirms the previous one.\n  if view.Envoys.Envoys<=lastSent or not Players[t.To]:IsTurnActive() then return end\n  lastSent=view.Envoys.Envoys\n  if not JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY') then\n    Events.GameCoreEventPublishComplete.Remove(send)\n    JAC_PRODUCT_ENVOYS_ERROR='visible envoy action unavailable at received='..lastSent\n  end\nend\nJAC_PRODUCT_ENVOYS_FINISHED=false;JAC_PRODUCT_ENVOYS_ERROR=nil\nEvents.GameCoreEventPublishComplete.Add(send);send()\nreturn 'existing screen envoy action advances after each real game-core publication'\n"
+      "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\n\nlocal send;local lastSent=-1\nsend=function()\n  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))\n  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\n  if view.Envoys.Envoys>=view.Envoys.Required then\n    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return\n  end\n  -- Publications can arrive before this operation's assignment is visible.\n  -- Send the next one only after the actual count confirms the previous one.\n  if view.Envoys.Envoys<=lastSent or not Players[t.To]:IsTurnActive() then return end\n  lastSent=view.Envoys.Envoys\n  if not JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY') then\n    Events.GameCoreEventPublishComplete.Remove(send)\n    JAC_PRODUCT_ENVOYS_ERROR='visible envoy action unavailable at received='..lastSent\n  end\nend\nJAC_PRODUCT_ENVOYS_FINISHED=false;JAC_PRODUCT_ENVOYS_ERROR=nil\nEvents.GameCoreEventPublishComplete.Add(send);send()\nreturn 'existing screen envoy action advances after each real game-core publication'\n"
     },
     {
       "action": "wait_for",
@@ -281,7 +281,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nif v.Status=='STARTED' then return true end\nlocal state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')\nlocal pair=state and state.Pairs[t.From..':'..t.To]\nlocal admission=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')\nif pair and admission then for _,request in pairs(admission.Requests) do\n  if request.ID==pair.ID and request.Status=='STARTED' then return true end\nend end\nreturn false\n"
+        "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\n\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nreturn v.Status=='STARTED'\n"
       }
     },
     {
