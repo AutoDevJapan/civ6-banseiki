@@ -4,6 +4,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     match args.first().map(String::as_str) {
+        Some("generate-mp-hotseat") if args.len()==4 => {
+            let normal=serde_json::from_slice(&fs::read(&args[1])?)?;
+            let hotseat=serde_json::from_slice(&fs::read(&args[2])?)?;
+            let scenario=civ6_persona_events_rs::mp_hotseat::build(&normal,&hotseat)?;
+            fs::write(&args[3],serde_json::to_string_pretty(&scenario)?)?;
+        }
         Some("embed") if args.len() == 1 => {
             let file = root.join(civ6_persona_events_rs::GAMEPLAY);
             let source = fs::read_to_string(&file)?.replace("\r\n", "\n");
@@ -46,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
             )
         }
     }
