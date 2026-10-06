@@ -142,7 +142,7 @@ mod platform {
     use std::{
         fs::{self, File},
         io::{BufRead, BufReader, Write},
-        os::windows::process::CommandExt,
+        os::windows::{fs::OpenOptionsExt, process::CommandExt},
         process::{Child, ChildStdin, Command, Stdio},
         sync::mpsc::{self, Receiver},
         thread::JoinHandle,
@@ -187,6 +187,7 @@ mod platform {
         finished: bool,
         phase: String,
         observer: u32,
+        _helper_image: File,
     }
     impl Session {
         pub fn start(pid: u32, started: f64, output: &Path, step: &Value) -> Result<Self> {
@@ -202,6 +203,12 @@ mod platform {
                 .ok_or_else(|| Error::input("order capture needs live_chain ownership"))?;
             let executable =
                 std::env::current_exe()?.with_file_name("civ6-startup-diagnostics.exe");
+            // Keep the identity query, recorded SHA, parent and observe child on
+            // the same executable until both children have been reaped.
+            let helper_image = fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&executable)?;
             let proof = Command::new(&executable)
                 .arg("order-identity")
                 .creation_flags(0x08000000)
@@ -299,6 +306,7 @@ mod platform {
                 finished: false,
                 phase: step["phase"].as_str().unwrap().to_owned(),
                 observer: 0,
+                _helper_image: helper_image,
             };
             let phase = step["phase"].as_str().unwrap();
             session.wait_ready(phase)?;
