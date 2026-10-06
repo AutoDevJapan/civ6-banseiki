@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 pub fn identity() -> Value {
     use sha2::{Digest, Sha256};
     json!({"protocol":"order-driver-v1",
-        "driver":format!("{:x}",Sha256::digest(include_str!("native_order.rs"))),
+        "driver":format!("{:x}",Sha256::digest(concat!(include_str!("native_order.rs"),
+            include_str!("runner.rs"), include_str!("scenario.rs"),
+            include_str!("bin/civ6-startup-diagnostics.rs"), include_str!("../Cargo.toml")))),
         "observer":civ6_native_probe_rs::order_capture::source_identity()["compiled_source_sha256"]})
 }
 
@@ -184,6 +186,15 @@ mod platform {
                 return Err(Error::scenario("order capture output already exists"));
             }
             let request = artifact.with_extension("driver-request.json");
+            let driver_proof = json!({"helper_path":executable,
+                "helper_sha256":format!("{:x}",Sha256::digest(fs::read(&executable)?)),
+                "runner_path":std::env::current_exe()?,"source_identity":identity(),
+                "source_checkout":crate::repo_root(),"game_pid":pid,"created_filetime":created,
+                "product_acceptance":false});
+            serde_json::to_writer_pretty(
+                File::create_new(artifact.with_extension("driver.json"))?,
+                &driver_proof,
+            )?;
             let value = json!({"schema":civ6_native_probe_rs::order_capture::SCHEMA,
                 "pid":pid,"created_filetime":created,"chain_pid":chain,"chain_created_filetime":self::created(chain)?,
                 "controller_pid":std::process::id(),"controller_created_filetime":self::created(std::process::id())?,
