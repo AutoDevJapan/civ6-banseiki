@@ -47,6 +47,12 @@ fn install_absorption_adapter(h: &Harness) {
             read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua"),
         )
         .unwrap();
+    globals
+        .set(
+            "ABS_PRODUCT_SOURCE",
+            read_repo("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua"),
+        )
+        .unwrap();
     h.exec(
         r#"
         JAC_ReligionPersistenceGameplay=nil
@@ -59,12 +65,15 @@ fn install_absorption_adapter(h: &Harness) {
         GameEvents.JAC_Absorption_TestCall={Add=function() end}
         GameEvents.JAC_Absorption_AdmissionRequested={Add=function(f) ADMISSION_REQUEST_HOOK=f end}
         GameEvents.JAC_Absorption_LeaderOffer={Add=function(f) ADMISSION_OFFER_HOOK=f end}
+        GameEvents.JAC_AbsorptionProduct_Operation={Add=function(f) PRODUCT_OPERATION_HOOK=f end}
+        ExposedMembers=ExposedMembers or {}
         GameConfiguration.IsAnyMultiplayer=function() return false end
         include=function(name)
           if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow' then return end
           local source=name=='JAC_ReligionPersistence' and RP_SOURCE
             or name=='JAC_RP_AbsorptionAdapter' and RP_ADAPTER_SOURCE
             or name=='JAC_Absorption_Admission' and ABS_ADMISSION_SOURCE
+            or name=='JAC_Absorption_Product' and ABS_PRODUCT_SOURCE
           assert(source, 'unexpected VFS include: '..name)
           assert(loadstring(source))()
         end
@@ -73,6 +82,8 @@ fn install_absorption_adapter(h: &Harness) {
         assert(JAC_AbsorptionAdmissionGameplay)
         assert(ADMISSION_REQUEST_HOOK==JAC_AbsorptionAdmissionGameplay.Request)
         assert(ADMISSION_OFFER_HOOK==JAC_AbsorptionAdmissionGameplay.DefineOffer)
+        assert(JAC_AbsorptionProductGameplay and PRODUCT_OPERATION_HOOK)
+        assert(ExposedMembers.JAC_AbsorptionProduct.Command==nil)
         "#,
     );
 }

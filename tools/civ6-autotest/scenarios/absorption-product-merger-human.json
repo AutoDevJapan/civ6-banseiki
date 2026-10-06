@@ -170,7 +170,21 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To);assert(v.Mode==t.Mode);UI.RequestPlayerOperation(t.To,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_AbsorptionProduct_Operation',Command='REGISTER',From=t.From,Nonce='acceptance-register'});return 'authenticated backend REGISTER submitted; UI116 screen acceptance is pending'"
+      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.TopPanel_OpenDiplomacyActionView(t.From);return 'ordinary admission screen opened'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "DiplomacyActionView",
+        "code": "return not ContextPtr:IsHidden() and type(JAC_AbsorptionDiplomacyAction)=='function'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "DiplomacyActionView",
+      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionDiplomacyAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
     },
     {
       "action": "ui_lua",

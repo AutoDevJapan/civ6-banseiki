@@ -371,7 +371,7 @@ fn preflight_failure_without_a_flow_can_be_cancelled_after_the_source_is_elimina
 }
 
 #[test]
-fn four_backend_scenes_use_product_actors_and_operations_without_diagnostic_demands_or_screen_claims(
+fn four_product_scenes_use_real_actors_and_approved_screen_handlers_without_diagnostic_demands(
 ) -> anyhow::Result<()> {
     let repo = Repository::checked_in();
     let lua = Lua::new();
@@ -394,8 +394,6 @@ fn four_backend_scenes_use_product_actors_and_operations_without_diagnostic_dema
                         "F.Begin(",
                         "JAC_Absorption_TestCall",
                         "RelationsReviewed=",
-                        "CityStates_OpenOverview",
-                        "JAC_Absorption_AdmissionUI",
                         "FLOW_TEST_MODE",
                     ] {
                         assert!(
@@ -407,5 +405,61 @@ fn four_backend_scenes_use_product_actors_and_operations_without_diagnostic_dema
             }
         }
     }
+    Ok(())
+}
+
+#[test]
+fn unchanged_product_waiting_turns_do_not_rewrite_the_saved_ledger() -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(
+        r#"
+      REGISTER();assert(VIEW().Status=='WAITING')
+      local write=Game.SetProperty;PRODUCT_WRITES=0
+      Game.SetProperty=function(self,key,value)
+        if key=='JAC_ABSORPTION_PRODUCT_V1' then PRODUCT_WRITES=PRODUCT_WRITES+1 end
+        return write(self,key,value)
+      end
+      for i=1,3 do GameEvents.OnGameTurnStarted.Call() end
+      assert(PRODUCT_WRITES==0 and VIEW().Status=='WAITING' and CHARGES==0 and STARTS==0)
+      READY();GameEvents.OnGameTurnStarted.Call()
+      assert(PRODUCT_WRITES>0 and CHARGES==1 and STARTS==1)
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
+fn cancelled_preflight_view_does_not_claim_that_its_refunded_deposit_is_held() -> anyhow::Result<()>
+{
+    let lua = world(10000.)?;
+    lua.load(r#"
+      JAC_AbsorptionFlowGameplay.Begin=function() error('preflight before journal') end
+      REGISTER();READY();GameEvents.OnGameTurnStarted.Call()
+      local old=VIEW().OfferID;CMD('CANCEL','cancel-view',{OfferID=old})
+      local view=VIEW();assert(view.Status=='CANCELLED' and not view.CanCancel and not view.Frozen)
+      for _,row in ipairs(view.Rows) do if row.Kind=='PRODUCT_DEPOSIT' then assert(not row.Met) end end
+      assert(GOLD[2]==5000 and FAITH[2]==1000)
+      CMD('REGISTER','register-again');assert(VIEW().OfferID~=old and VIEW().Status=='WAITING')
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn eliminated_source_releases_a_failed_preflight_deposit_once_on_the_normal_turn(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(
+        r#"
+      JAC_AbsorptionFlowGameplay.Begin=function() error('preflight before journal') end
+      REGISTER();READY();GameEvents.OnGameTurnStarted.Call()
+      local id=VIEW().OfferID;assert(CHARGES==1 and VIEW().CanCancel)
+      ALIVE[1]=false;GameEvents.OnGameTurnStarted.Call()
+      assert(N.Get('leader-offer',id).Status=='CANCELLED' and GOLD[2]==5000 and FAITH[2]==1000)
+      assert(REFUNDS==1)
+      GameEvents.OnGameTurnStarted.Call();assert(REFUNDS==1 and CHARGES==1)
+    "#,
+    )
+    .exec()?;
     Ok(())
 }

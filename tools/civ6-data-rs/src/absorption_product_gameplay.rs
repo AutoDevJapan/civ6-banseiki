@@ -12,7 +12,11 @@ local function State()
     and type(s.Envoys)=='table' and type(s.Operations)=='table','unsupported product save')
   return s
 end
-local function Save(s) Game:SetProperty(KEY,R.Copy(s)) end
+local function Save(s)
+  -- Keep unchanged waiting/replayed receipts read-only across every caller.
+  -- The decision and currency journals still save each actual transition.
+  if not R.Equal(Game:GetProperty(KEY),s) then Game:SetProperty(KEY,R.Copy(s)) end
+end
 local function Num(v) return type(v)=='number' and v==v and v>=0 and v<math.huge end
 local function Integer(v) return Num(v) and v==math.floor(v) end
 local function Id(v) return type(v)=='string' and v~='' and #v<=256 end
@@ -31,6 +35,7 @@ function P.Country(actor)
   if character and character.Personality then
     assert(C.Personalities[character.Personality],'unknown Japanese personality in person record')
     country.Profile.Personality=character.Personality
+    country.Profile.PersonalityLabel=C.Personalities[character.Personality].Label
   end
   if character and character.Trait then
     assert(character.Trait==profile.Trait,'lifetime trait cannot change')
@@ -129,7 +134,7 @@ local function RelationState(from,to)
       local aActor,bActor=ActorForCountry(a),ActorForCountry(b)
       if historic and aActor and bActor and start==nil then reviewed=false end
       if type(start)=='number' then
-        rows[#rows+1]={ID=relation.id,Met=false,Label='主従関係 '..a..' / '..b}
+        rows[#rows+1]={ID=relation.id,Met=false,Label='LOC_JAC_ADMISSION_VASSAL',LabelArgs={C.Countries[a].Name,C.Countries[b].Name}}
       end
     end
   end
@@ -138,7 +143,8 @@ local function RelationState(from,to)
   for actor,p in pairs(Players) do
     if type(actor)=='number' and actor~=from and actor~=to and p:IsAlive()
       and Players[from]:GetDiplomacy():IsAlliedWith(actor) then
-      rows[#rows+1]={ID='alliance:'..actor,Met=false,Label='他国との同盟 '..tostring(actor)}
+      local other=P.Country(actor)
+      rows[#rows+1]={ID='alliance:'..actor,Met=false,Label='LOC_JAC_ADMISSION_ALLIANCE',LabelArgs={other and other.Name or 'LOC_JAC_ADMISSION_OTHER_COUNTRY'}}
     end
   end
   local met=reviewed
@@ -204,12 +210,12 @@ local function Terms(input)
     if personality.deposit=='gold_faith' then
       deposit.Faith=math.ceil(math.max(merger and C.Balance.merger_faith_deposit or C.Balance.small_faith_deposit,
         Balance(input.From,'Faith')*C.Balance.deposit_source_share_bps/10000)*scale)
-      demands[#demands+1]={ID='reserve:gold',Kind='GOLD_MINIMUM',Minimum=C.Balance.reserve_gold,Label='預託後も保つ金の備蓄'}
+      demands[#demands+1]={ID='reserve:gold',Kind='GOLD_MINIMUM',Minimum=C.Balance.reserve_gold,Label='LOC_JAC_ADMISSION_RESERVE'}
     end
-    demands[#demands+1]={ID='deposit',Kind='PRODUCT_DEPOSIT',Gold=deposit.Gold,Faith=deposit.Faith,Label='受け渡しの保証金'}
+    demands[#demands+1]={ID='deposit',Kind='PRODUCT_DEPOSIT',Gold=deposit.Gold,Faith=deposit.Faith,Label='LOC_JAC_ADMISSION_DEPOSIT'}
   end
-  demands[#demands+1]={ID='identity',Kind='PRODUCT_IDENTITY',Profile=R.Copy(c.Profile),AreaKm2=c.AreaKm2,Label='現在の国と指導者'}
-  demands[#demands+1]={ID='terms',Kind='PRODUCT_CONTEXT',Input=R.Copy(input),Label='提示した条件の版'}
+  demands[#demands+1]={ID='identity',Kind='PRODUCT_IDENTITY',Profile=R.Copy(c.Profile),AreaKm2=c.AreaKm2,Label='LOC_JAC_ADMISSION_IDENTITY'}
+  demands[#demands+1]={ID='terms',Kind='PRODUCT_CONTEXT',Input=R.Copy(input),Label='LOC_JAC_ADMISSION_TERMS'}
   return {Input=R.Copy(input),Requirements=demands,Deposit=deposit,Relationship=RelationState(input.From,input.To)}
 end
 local function SameTermsInput(a,b)
@@ -231,7 +237,7 @@ local function Evaluate(from,to,demand,id,afterDeposit)
       and SameTermsInput(demand.Input,Input(from,to)),nil,nil
   elseif demand.Kind=='PRODUCT_DEPOSIT' then
     local escrow=id and State().Escrows[id]
-    return escrow~=nil and (escrow.Status=='HELD' or escrow.Status=='RETURNED')
+    return escrow~=nil and (escrow.Status=='HELD' or escrow.Status=='RETURNED' and escrow.ReturnReason=='VERIFIED_RESULT')
       and escrow.Gold==demand.Gold and escrow.Faith==demand.Faith,
       escrow and escrow.Status or 'NOT_PAID',demand.Gold
   end
@@ -359,16 +365,17 @@ function P.Get(from,to)
     local s=State();local pair=s.Pairs[Pair(from,to)]
     local offer=pair and N.GetOffer(pair.ID)
     local request=pair and N.Get('leader-offer',pair.ID)
-    if request and request.Plan then
+    if request and request.Plan and request.Status~='CANCELLED' then
       -- The absorbed actor may have disappeared in an AI result. Continue
       -- exposing its authoritative frozen receipt rather than reading an
       -- eliminated source or pretending that conditions were re-evaluated.
       local terms=assert(offer.ProductTerms)
       local rows={}
       for _,d in ipairs(offer.Requirements) do
-        rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=true,Minimum=d.Minimum,Gold=d.Gold,Faith=d.Faith,Frozen=true}
+        local escrow=d.Kind=='PRODUCT_DEPOSIT' and s.Escrows[offer.ID]
+        rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=true,Minimum=d.Minimum,Gold=d.Gold,Faith=d.Faith,Frozen=true,Settlement=escrow and escrow.Status}
       end
-      rows[#rows+1]={ID='relations',Label='開始時に照合した関係と第三国の前提',Met=true,Reviewed=true,Details=terms.Relationship.Rows,Frozen=true}
+      rows[#rows+1]={ID='relations',Label='LOC_JAC_ADMISSION_FROZEN_RELATIONS',Met=true,Reviewed=true,Details=terms.Relationship.Rows,Frozen=true}
       local envoys=request.Decision.Mode=='SMALL_STATE' and {Envoys=request.Decision.Envoys,Required=math.max(1,request.Decision.OwnedTiles),Route='FROZEN'} or nil
       return {From=from,To=to,Country=R.Copy(terms.Input.Country),Mode=request.Plan.Mode,
         Rows=rows,Envoys=envoys,Deposit=R.Copy(terms.Deposit),Status=request.Status,OfferID=pair.ID,
@@ -380,11 +387,11 @@ function P.Get(from,to)
     local rows={};local met=true
     for _,d in ipairs(offer and offer.Requirements or terms.Requirements) do
       local achieved,current,minimum=Evaluate(from,to,d,pair and pair.ID)
-      rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=achieved,Current=current,Minimum=minimum,Gold=d.Gold,Faith=d.Faith}
+      rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=achieved,Current=current,Minimum=minimum,Gold=d.Gold,Faith=d.Faith,Settlement=d.Kind=='PRODUCT_DEPOSIT' and current or nil}
       met=met and achieved
     end
     local relations=RelationState(from,to)
-    rows[#rows+1]={ID='relations',Label='既存の関係と第三国の前提',Met=relations.Met,Reviewed=relations.Reviewed,Details=relations.Rows}
+    rows[#rows+1]={ID='relations',Label='LOC_JAC_ADMISSION_RELATIONS',Met=relations.Met,Reviewed=relations.Reviewed,Details=relations.Rows}
     local envoys=input.Country.AreaKm2<10000 and Envoys(from,to) or nil
     if envoys then envoys.Required=math.max(1,OwnedTiles(from));met=met and envoys.Envoys>=envoys.Required end
     return {From=from,To=to,Country=R.Copy(input.Country),Mode=input.Country.AreaKm2<10000 and 'SMALL_STATE' or 'MERGER',
@@ -518,6 +525,15 @@ function P.Tick()
         local flow=F.Get(request.FlowID)
         if flow and (flow.Phase=='RESULT' or flow.Phase=='DONE') then Refund(pair.ID,'VERIFIED_RESULT') end
         if not N.CanCancelOffer(pair.ID) then return end
+      end
+      if not Players[offer.From] or not Players[offer.From]:IsAlive() then
+        -- A failed preflight has no irreversible flow. A vanished source
+        -- cannot fulfil it, so release the saved payer's refundable deposit.
+        if N.CanCancelOffer(pair.ID) then
+          N.CancelOffer(pair.ID);Refund(pair.ID,'SOURCE_ELIMINATED')
+          local s=State();s.Pairs[key].Cancelled=true;Save(s)
+        end
+        return
       end
       Refresh(offer.From,offer.To)
       pair=State().Pairs[key];offer=N.GetOffer(pair.ID)

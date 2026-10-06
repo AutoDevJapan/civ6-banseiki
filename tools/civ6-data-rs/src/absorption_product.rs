@@ -6,6 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const DATA: &str = "documents/spec/data/absorption-product.json";
 pub const GAMEPLAY: &str = "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua";
+pub const UI: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_AdmissionUI.lua";
+pub const CITY_STATES: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_CityStates.lua";
+pub const DIPLOMACY: &str = "poc/JAC_PoC_CustomCivs/UI/JAC_DiplomacyActionView.lua";
+pub const TEXT: &str = texts::OUTPUT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
@@ -99,18 +103,22 @@ pub fn catalog(repo: &Repository) -> Result<Catalog> {
         Metric::parse(t["metric"].as_str().context("metric")?)?;
         tmap.insert(t["name"].as_str().unwrap().to_owned(), t.clone());
     }
+    for (name, entry) in &mut pmap {
+        entry["Label"] =
+            json!(texts::label(name, "PERSONALITY_").context("personality display label")?);
+    }
+    for (name, entry) in &mut tmap {
+        entry["Label"] = json!(texts::label(name, "TRAIT_").context("trait display label")?);
+        entry["label"] = json!(format!(
+            "LOC_JAC_ADMISSION_METRIC_{}",
+            entry["metric"].as_str().unwrap()
+        ));
+    }
     let mut leaders = Vec::new();
     let mut countries = BTreeMap::new();
     let mut profiles = BTreeMap::new();
     let mut seen = BTreeSet::new();
     let seats = repo.json("tools/civ6-assets-rs/tests/fixtures/constants.json")?;
-    let mut names = BTreeMap::new();
-    for seat in seats["seats"].as_array().context("seats")? {
-        names.insert(
-            seat["slug"].as_str().unwrap().to_owned(),
-            seat["ja"].clone(),
-        );
-    }
     for row in data["leaders"].as_array().context("leaders")? {
         let r = row.as_array().context("typed leader row")?;
         ensure!(
@@ -153,8 +161,8 @@ pub fn catalog(repo: &Repository) -> Result<Catalog> {
             trait_name: trait_name.to_owned(),
             metric,
         });
-        profiles.insert(key,json!({"CountryID":country,"CivilizationType":civilization,"LeaderType":leader,"Personality":personality,"Trait":trait_name,"Basis":r[4]}));
-        countries.insert(country.to_owned(),json!({"ID":country,"Name":names.get(country).cloned().unwrap_or(json!(country)),"AreaKm2":area,"AreaSource":minor.map(|m|m["source"].clone()).unwrap_or(json!("documents/spec/data/absorption-country-areas.json")),"RelationsReviewed":country!="SINGAPORE","RelationSource":if minor.is_some(){"SSOT03/14.4の親国・協定監査"}else{"現製品の1534年関係台帳。実行時の関係も再読取"}}));
+        profiles.insert(key,json!({"CountryID":country,"CivilizationType":civilization,"LeaderType":leader,"Personality":personality,"Trait":trait_name,"PersonalityLabel":pmap[personality]["Label"],"TraitLabel":tmap[trait_name]["Label"],"Basis":r[4]}));
+        countries.insert(country.to_owned(),json!({"ID":country,"Name":format!("LOC_{}_NAME",civilization),"AreaKm2":area,"AreaSource":minor.map(|m|m["source"].clone()).unwrap_or(json!("documents/spec/data/absorption-country-areas.json")),"RelationsReviewed":country!="SINGAPORE","RelationSource":if minor.is_some(){"SSOT03/14.4の親国・協定監査"}else{"現製品の1534年関係台帳。実行時の関係も再読取"}}));
     }
     for seat in seats["seats"].as_array().unwrap() {
         let key = format!(
@@ -191,13 +199,21 @@ fn to_lua(v: &Value) -> String {
         Value::Null => "nil".into(),
         Value::Bool(b) => b.to_string(),
         Value::Number(n) => n.to_string(),
-        Value::String(s) => format!(
-            "\"{}\"",
-            s.replace('\\', "\\\\")
-                .replace('"', "\\\"")
-                .replace('\n', "\\n")
-                .replace('\r', "\\r")
-        ),
+        Value::String(s) => {
+            // Preserve internal canonical UTF-8 values in Lua 5.1 exactly.
+            // All display text uses LOC keys, independent of these bytes.
+            let mut value = String::from("\"");
+            for byte in s.bytes() {
+                match byte {
+                    b'\\' => value.push_str("\\\\"),
+                    b'"' => value.push_str("\\\""),
+                    32..=126 => value.push(char::from(byte)),
+                    _ => value.push_str(&format!("\\{byte:03}")),
+                }
+            }
+            value.push('"');
+            value
+        }
         Value::Array(a) => format!("{{{}}}", a.iter().map(to_lua).collect::<Vec<_>>().join(",")),
         Value::Object(o) => format!(
             "{{{}}}",
@@ -221,6 +237,64 @@ pub fn render_gameplay(catalog: &Catalog) -> String {
 pub fn generate(repo: &Repository) -> Result<Outputs> {
     let mut out = crate::absorption_admission::generate(repo)?;
     out.insert(GAMEPLAY.into(), gameplay_lua(repo)?);
+    out.insert(UI.into(), ui::LUA.to_owned());
+    out.insert(CITY_STATES.into(), citystates::LUA.to_owned());
+    out.insert(texts::OUTPUT.into(), texts::xml());
+    // CustomCivs also runs when absorption is disabled. Keep the adapter in
+    // this replacement so it never imports a file from a disabled MOD.
+    let adapter = ui::LUA
+        .strip_suffix("return U\n")
+        .context("UI adapter must finish with its module return")?;
+    out.insert(
+        DIPLOMACY.into(),
+        diplomacy::LUA.replacen(
+            "include('JAC_Absorption_AdmissionUI')",
+            &format!("do\n{adapter}\nend"),
+            1,
+        ),
+    );
+    let manifest = "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo";
+    let mut source = repo.read(manifest)?;
+    ensure!(
+        source.matches("</InGameActions>").count() == 1
+            && source.matches("<Files>").count() == 1
+            && source.matches("</Files>").count() == 1,
+        "unique absorption action and file sections required"
+    );
+    for (id, action) in [
+        (
+            "JAC_Absorption_Product_UI_Files",
+            r#"    <ImportFiles id="JAC_Absorption_Product_UI_Files" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_AdmissionUI.lua</File><File>UI/JAC_Absorption_CityStates.lua</File></ImportFiles>"#,
+        ),
+        (
+            "JAC_Absorption_Product_CityStates",
+            r#"    <ReplaceUIScript id="JAC_Absorption_Product_CityStates" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>220</LoadOrder><LuaContext>CityStates</LuaContext><LuaReplace>UI/JAC_Absorption_CityStates.lua</LuaReplace></Properties></ReplaceUIScript>"#,
+        ),
+        (
+            "JAC_Absorption_Admission_Text",
+            r#"    <UpdateText id="JAC_Absorption_Admission_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Admission_Text.xml</File></UpdateText>"#,
+        ),
+    ] {
+        if !source.contains(&format!("id=\"{id}\"")) {
+            source = source.replacen(
+                "  </InGameActions>",
+                &format!("{action}\n  </InGameActions>"),
+                1,
+            );
+        }
+    }
+    for file in [
+        "UI/JAC_Absorption_AdmissionUI.lua",
+        "UI/JAC_Absorption_CityStates.lua",
+        "Text/JAC_Absorption_Admission_Text.xml",
+    ] {
+        let start = source.find("<Files>").unwrap();
+        let declaration = format!("<File>{file}</File>");
+        if !source[start..].contains(&declaration) {
+            source = source.replacen("  </Files>", &format!("    {declaration}\n  </Files>"), 1);
+        }
+    }
+    out.insert(manifest.into(), source);
     let entry = "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua";
     let source = repo.read(entry)?;
     let include = "include(\"JAC_Absorption_Product\")";
@@ -310,10 +384,28 @@ assert(view.Country.AreaKm2>0 and (view.Country.AreaKm2<10000)=={small})
 Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',{{From=from,To=to,Mode=view.Mode,Initial=JAC_AbsorptionGameplay.Rules.Copy(view)}})
 return 'ordinary country, current leader, geographic area, personality and trait verified'
 "#,mode=if small{"SMALL_STATE"}else{"MERGER"},small=small)));
-    // UI116 is unanswered. Exercise the authenticated backend operation from
-    // InGame, without installing or claiming acceptance of any screen draft.
+    // Use the approved existing screen and the very handler bound to its
+    // action control. The server still derives all terms and authenticates
+    // the actor; no test-created demand or ready flag enters registration.
     if human {
-        steps.push(ui("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To);assert(v.Mode==t.Mode);UI.RequestPlayerOperation(t.To,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_AbsorptionProduct_Operation',Command='REGISTER',From=t.From,Nonce='acceptance-register'});return 'authenticated backend REGISTER submitted; UI116 screen acceptance is pending'".into()));
+        let screen = if small {
+            "CityStates"
+        } else {
+            "DiplomacyActionView"
+        };
+        let event = if small {
+            "CityStates_OpenOverview"
+        } else {
+            "TopPanel_OpenDiplomacyActionView"
+        };
+        let handler = if small {
+            "JAC_AbsorptionCityStatesAction"
+        } else {
+            "JAC_AbsorptionDiplomacyAction"
+        };
+        steps.push(ui(format!("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.{event}(t.From);return 'ordinary admission screen opened'")));
+        steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":screen,"code":format!("return not ContextPtr:IsHidden() and type({handler})=='function'")}}));
+        steps.push(json!({"action":"ui_lua","state_name":screen,"code":format!("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert({handler}(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'")}));
     }
     steps.push(core(
         r#"
@@ -355,15 +447,27 @@ Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
 return 'real troops, currencies and official unassigned envoys prepared for ordinary terms'
 "#.into()));
     if human && small {
-        steps.push(ui(r#"
+        steps.push(ui("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');LuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'".into()));
+        steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"CityStates","code":"return not ContextPtr:IsHidden() and type(JAC_AbsorptionCityStatesAction)=='function'"}}));
+        steps.push(
+            json!({"action":"ui_lua","state_name":"CityStates","code":r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
-local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)
-assert(v.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())
-for i=v.Envoys.Envoys,v.Envoys.Required-1 do
-  UI.RequestPlayerOperation(t.To,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_AbsorptionProduct_Operation',Command='SEND_ENVOY',From=t.From,Nonce='acceptance-envoy:'..i,ExpectedEnvoys=i})
+local send
+send=function()
+  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))
+  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())
+  if view.Envoys.Envoys>=view.Envoys.Required then
+    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return
+  end
+  assert(JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY'),'visible envoy action unavailable')
 end
-return 'major small-country backend sent real envoy operations; screen approval and acceptance are pending'
-"#.into()));
+JAC_PRODUCT_ENVOYS_FINISHED=false
+Events.GameCoreEventPublishComplete.Add(send);send()
+return 'existing screen envoy action advances after each real game-core publication'
+"#}),
+        );
+        steps.push(json!({"action":"wait_for","timeout":180,"condition":{"type":"lua","state_name":"CityStates","code":"return JAC_PRODUCT_ENVOYS_FINISHED==true"}}));
+        steps.push(json!({"action":"ui_lua","state_name":"CityStates","code":"OnClose();return 'completed envoy screen closed'"}));
     }
     // AI sends at most one envoy to a given country per normal turn. These
     // scenes use real turn advancement, with a bound from the real territory.
@@ -426,3 +530,11 @@ return 'product save/load and duplicate admission preserve first-stage rolls and
 #[path = "absorption_product_gameplay.rs"]
 mod gameplay;
 const GAMEPLAY_BODY: &str = gameplay::LUA;
+#[path = "absorption_product_citystates.rs"]
+mod citystates;
+#[path = "absorption_product_diplomacy.rs"]
+mod diplomacy;
+#[path = "absorption_product_text.rs"]
+mod texts;
+#[path = "absorption_product_ui.rs"]
+mod ui;

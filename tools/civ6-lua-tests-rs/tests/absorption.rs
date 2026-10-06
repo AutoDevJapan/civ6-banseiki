@@ -780,7 +780,10 @@ fn package_manifest() {
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
-            "UI/JAC_Absorption_HeroKeys.xml"
+            "UI/JAC_Absorption_HeroKeys.xml",
+            "UI/JAC_Absorption_AdmissionUI.lua",
+            "UI/JAC_Absorption_CityStates.lua",
+            "Text/JAC_Absorption_Admission_Text.xml"
         ])
     );
     for file in files {
@@ -795,6 +798,7 @@ fn package_manifest() {
         dependencies,
         string_set([
             "4873eb62-8ccc-4574-b784-dda455e74e68",
+            "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
             "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
             "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
             "8424840C-92EF-4426-A9B4-B4E0CB818049"

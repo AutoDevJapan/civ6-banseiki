@@ -170,7 +170,21 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To);assert(v.Mode==t.Mode);UI.RequestPlayerOperation(t.To,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_AbsorptionProduct_Operation',Command='REGISTER',From=t.From,Nonce='acceptance-register'});return 'authenticated backend REGISTER submitted; UI116 screen acceptance is pending'"
+      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.CityStates_OpenOverview(t.From);return 'ordinary admission screen opened'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "CityStates",
+        "code": "return not ContextPtr:IsHidden() and type(JAC_AbsorptionCityStatesAction)=='function'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityStates",
+      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert(JAC_AbsorptionCityStatesAction(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'"
     },
     {
       "action": "ui_lua",
@@ -190,7 +204,35 @@
     {
       "action": "ui_lua",
       "state_name": "InGame",
-      "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nassert(v.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\nfor i=v.Envoys.Envoys,v.Envoys.Required-1 do\n  UI.RequestPlayerOperation(t.To,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_AbsorptionProduct_Operation',Command='SEND_ENVOY',From=t.From,Nonce='acceptance-envoy:'..i,ExpectedEnvoys=i})\nend\nreturn 'major small-country backend sent real envoy operations; screen approval and acceptance are pending'\n"
+      "code": "local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');LuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "CityStates",
+        "code": "return not ContextPtr:IsHidden() and type(JAC_AbsorptionCityStatesAction)=='function'"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityStates",
+      "code": "\nlocal t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')\nlocal send\nsend=function()\n  local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))\n  assert(view.Envoys.Route=='PRODUCT' and not Players[t.From]:GetInfluence():CanReceiveInfluence())\n  if view.Envoys.Envoys>=view.Envoys.Required then\n    Events.GameCoreEventPublishComplete.Remove(send);JAC_PRODUCT_ENVOYS_FINISHED=true;return\n  end\n  assert(JAC_AbsorptionCityStatesAction(t.From,'SEND_ENVOY'),'visible envoy action unavailable')\nend\nJAC_PRODUCT_ENVOYS_FINISHED=false\nEvents.GameCoreEventPublishComplete.Add(send);send()\nreturn 'existing screen envoy action advances after each real game-core publication'\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "condition": {
+        "type": "lua",
+        "state_name": "CityStates",
+        "code": "return JAC_PRODUCT_ENVOYS_FINISHED==true"
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "CityStates",
+      "code": "OnClose();return 'completed envoy screen closed'"
     },
     {
       "action": "save",
