@@ -120,6 +120,24 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
         .iter()
         .all(|s| s.get("turns").is_none()));
     expected.insert(capability.to_owned());
+    let calibration = inventory["queue_calibration_scenario"]
+        .as_str()
+        .expect("separate military calibration diagnosis");
+    let data = load(calibration);
+    validate_scenario(&data).expect("calibration driver schema");
+    assert_eq!(data["diagnostic_only"], true);
+    assert_eq!(data["finite_turns"], 38);
+    assert_eq!(
+        data["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s["code"].as_str())
+            .filter(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,"))
+            .count(),
+        38
+    );
+    expected.insert(calibration.to_owned());
     let actual: BTreeSet<_> =
         std::fs::read_dir(root.join("tools/civ6-autotest/scenarios/oath-effects"))
             .expect("scenario directory")

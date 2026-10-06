@@ -478,7 +478,52 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
     db.execute_batch(sql)?;
     let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
-    assert_eq!(count, 27);
+    assert_eq!(count, 32);
+    for (id, amount, kind, property) in [
+        (
+            "JAC_TODO134_QCAL_INPUT_512",
+            "512",
+            "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
+            "JAC_TODO134_QCAL_INPUT_512_ON",
+        ),
+        (
+            "JAC_TODO134_QCAL_GROWTH",
+            "-1000",
+            "MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH",
+            "JAC_TODO134_QCAL_GROWTH_ON",
+        ),
+        (
+            "JAC_TODO134_QCAL_P100",
+            "100",
+            "MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION",
+            "JAC_TODO134_QCAL_P100_ON",
+        ),
+        (
+            "JAC_TODO134_QCAL_P1",
+            "1",
+            "MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION",
+            "JAC_TODO134_QCAL_P1_ON",
+        ),
+        (
+            "JAC_TODO134_QCAL_P15",
+            "15",
+            "MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION",
+            "JAC_TODO134_QCAL_P15_ON",
+        ),
+    ] {
+        let (actual_kind, actual_amount, actual_property): (String, String, String) = db.query_row(
+            "SELECT m.ModifierType, a.Value, p.Value FROM Modifiers m JOIN ModifierArguments a ON a.ModifierId=m.ModifierId AND a.Name='Amount' JOIN RequirementArguments p ON p.RequirementId=m.ModifierId||'_REQ' AND p.Name='PropertyName' WHERE m.ModifierId=?",
+            [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        )?;
+        assert_eq!(
+            (
+                actual_kind.as_str(),
+                actual_amount.as_str(),
+                actual_property.as_str()
+            ),
+            (kind, amount, property)
+        );
+    }
     for (id, kind, amount) in [
         (
             "JAC_TODO134_HEADROOM_PRODUCTION",
@@ -585,6 +630,31 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     assert_eq!(row.attribute("DefaultValue"), Some("0"));
     assert_eq!(row.attribute("Key2"), Some("RULESET_JAC_BANSEIKI"));
     assert_eq!(row.attribute("Visible"), Some("0"));
+    let calibration = config
+        .descendants()
+        .find(|n| n.attribute("ConfigurationId") == Some("JAC_TODO134_QUEUE_CALIBRATION"))
+        .context("calibration config row")?;
+    assert_eq!(calibration.attribute("DefaultValue"), Some("0"));
+    assert_eq!(calibration.attribute("Visible"), Some("0"));
+    assert_eq!(calibration.attribute("Key2"), Some("RULESET_JAC_BANSEIKI"));
+    let calibration_criteria = document
+        .descendants()
+        .find(|n| {
+            n.has_tag_name("Criteria") && n.attribute("id") == Some("JAC_OathMeter_Calibration")
+        })
+        .context("calibration criteria")?;
+    assert!(calibration_criteria
+        .descendants()
+        .any(|n| n.has_tag_name("ConfigurationId")
+            && n.text() == Some("JAC_TODO134_QUEUE_CALIBRATION")));
+    assert!(document
+        .descendants()
+        .any(|n| n.has_tag_name("UpdateDatabase")
+            && n.attribute("id") == Some("JAC_OathMeter_Calibration_Data")
+            && n.attribute("criteria") == Some("JAC_OathMeter_Calibration")));
+    assert!(document
+        .descendants()
+        .any(|n| n.has_tag_name("File") && n.text() == Some("Data/QueueCalibration.sql")));
     for mode in [
         "SupportsLANMultiplayer",
         "SupportsInternetMultiplayer",
@@ -592,6 +662,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
         "SupportsPlayByCloud",
     ] {
         assert_eq!(row.attribute(mode), Some("0"));
+        assert_eq!(calibration.attribute(mode), Some("0"));
     }
     db.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY,Cost INTEGER); CREATE TABLE Buildings(BuildingType TEXT PRIMARY KEY,Cost INTEGER); INSERT INTO Units VALUES('UNIT_SPEARMAN',65),('UNIT_BUILDER',50),('UNIT_GALLEY',65),('UNIT_WARRIOR',40); INSERT INTO Buildings VALUES('BUILDING_WALLS',80),('BUILDING_CASTLE',100),('BUILDING_STAR_FORT',300),('BUILDING_MONUMENT',60),('BUILDING_GRANARY',65);")?;
     db.execute_batch(headroom)?;
@@ -640,6 +711,24 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
             |r| r.get::<_, i64>(0)
         )?,
         65
+    );
+    let calibration_sql = &files[&PathBuf::from(format!("{METER_DIR}/Data/QueueCalibration.sql"))];
+    db.execute_batch(calibration_sql)?;
+    assert_eq!(
+        db.query_row(
+            "SELECT Cost FROM Units WHERE UnitType='UNIT_SPEARMAN'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        131072
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT Cost FROM Units WHERE UnitType='UNIT_BUILDER'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )?,
+        32768
     );
     Ok(())
 }

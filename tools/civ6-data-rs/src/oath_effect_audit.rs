@@ -12,6 +12,9 @@ const PRODUCTION_SAMPLES: usize = 1;
 const METER_ID: &str = "e4117d8c-4112-4f75-9a50-7d159e361fa4";
 const METER_DIR: &str = "poc/JAC_PoC_OathMeter";
 
+#[path = "oath_queue_calibration.rs"]
+mod queue_calibration;
+
 fn meter_outputs() -> Outputs {
     let mut sql = String::from(
         "-- Diagnostic only: attach explicitly, activate by owned city plot properties.\n",
@@ -57,15 +60,20 @@ fn meter_outputs() -> Outputs {
         }
     }
     sql.push_str("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('JAC_TODO134_HEADROOM_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_REQ','PropertyName','JAC_TODO134_HEADROOM_ON'),('JAC_TODO134_HEADROOM_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('JAC_TODO134_HEADROOM_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_HEADROOM_SET','JAC_TODO134_HEADROOM_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE','JAC_TODO134_HEADROOM_SET'),('JAC_TODO134_HEADROOM_GROWTH','MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH','JAC_TODO134_HEADROOM_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','YieldType','YIELD_PRODUCTION'),('JAC_TODO134_HEADROOM_PRODUCTION','Amount','4096'),('JAC_TODO134_HEADROOM_GROWTH','Amount','-1000');\n");
+    sql.push_str(queue_calibration::modifier_sql());
     let headroom_sql = "-- Opt-in diagnostic headroom; not normal costs or economic balance.\nUPDATE Units SET Cost=32768 WHERE UnitType IN ('UNIT_SPEARMAN','UNIT_BUILDER','UNIT_GALLEY');\nUPDATE Buildings SET Cost=32768 WHERE BuildingType IN ('BUILDING_WALLS','BUILDING_CASTLE','BUILDING_STAR_FORT','BUILDING_MONUMENT');\n".to_owned();
+    let calibration_sql = "-- Separate opt-in: 38 consecutive calibration turns need more headroom than the 66 oath cases.\nUPDATE Units SET Cost=131072 WHERE UnitType='UNIT_SPEARMAN';\n".to_owned();
     let headroom_config=r#"<?xml version="1.0" encoding="utf-8"?>
-<GameInfo><Parameters><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueHeadroom" Name="LOC_JAC_OATH_QUEUE_HEADROOM" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_HEADROOM" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters></GameInfo>
+<GameInfo><Parameters><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueHeadroom" Name="LOC_JAC_OATH_QUEUE_HEADROOM" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_HEADROOM" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueCalibration" Name="LOC_JAC_OATH_QUEUE_CALIBRATION" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_CALIBRATION" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters></GameInfo>
 "#.to_owned();
     let headroom_text = r#"<?xml version="1.0" encoding="utf-8"?>
 <GameData><LocalizedText>
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ja_JP"><Text>誓約検査用の建造費用</Text></Row>
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="en_US"><Text>Construction costs for oath diagnostics</Text></Row>
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ru_RU"><Text>Стоимость строительства для проверки клятв</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ja_JP"><Text>誓約検査用の軍事建造校正</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="en_US"><Text>Military queue calibration diagnostic</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ru_RU"><Text>Проверка производства военных юнитов</Text></Row>
 </LocalizedText></GameData>
 "#.to_owned();
     let modinfo = format!(
@@ -73,10 +81,10 @@ fn meter_outputs() -> Outputs {
 <Mod id="{METER_ID}" version="1">
   <Properties><Name>JAC diagnostic oath meter</Name><Description>Controlled diagnostic inputs and a 100 percent reference; inactive until explicitly attached and activated.</Description><Authors>civ6-banseiki</Authors><CompatibleVersions>2.0</CompatibleVersions></Properties>
   <Dependencies><Mod id="26c967d0-c10d-4eeb-8aaf-c83dc7e621e7" title="Sengoku Trees"/></Dependencies>
-  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria><Criteria id="JAC_OathMeter_Headroom"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_QUEUE_HEADROOM</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria></ActionCriteria>
-  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase><UpdateDatabase id="JAC_OathMeter_Headroom_Data" criteria="JAC_OathMeter_Headroom"><Properties><LoadOrder>400</LoadOrder></Properties><File>Data/Headroom.sql</File></UpdateDatabase></InGameActions>
+  <ActionCriteria><Criteria id="JAC_OathMeter_Banseiki"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse></Criteria><Criteria id="JAC_OathMeter_Headroom"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_QUEUE_HEADROOM</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria><Criteria id="JAC_OathMeter_Calibration"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_QUEUE_CALIBRATION</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria></ActionCriteria>
+  <InGameActions><UpdateDatabase id="JAC_OathMeter_Data" criteria="JAC_OathMeter_Banseiki"><Properties><LoadOrder>300</LoadOrder></Properties><File>Data/Meter.sql</File></UpdateDatabase><UpdateDatabase id="JAC_OathMeter_Headroom_Data" criteria="JAC_OathMeter_Headroom"><Properties><LoadOrder>400</LoadOrder></Properties><File>Data/Headroom.sql</File></UpdateDatabase><UpdateDatabase id="JAC_OathMeter_Calibration_Data" criteria="JAC_OathMeter_Calibration"><Properties><LoadOrder>450</LoadOrder></Properties><File>Data/QueueCalibration.sql</File></UpdateDatabase></InGameActions>
   <FrontEndActions><UpdateDatabase id="JAC_OathMeter_Headroom_Config"><File>Config/Headroom.xml</File></UpdateDatabase><UpdateText id="JAC_OathMeter_Headroom_Text"><File>Text/Headroom.xml</File></UpdateText></FrontEndActions>
-  <Files><File>Data/Meter.sql</File><File>Data/Headroom.sql</File><File>Config/Headroom.xml</File><File>Text/Headroom.xml</File></Files>
+  <Files><File>Data/Meter.sql</File><File>Data/Headroom.sql</File><File>Data/QueueCalibration.sql</File><File>Config/Headroom.xml</File><File>Text/Headroom.xml</File></Files>
 </Mod>
 "#
     );
@@ -93,6 +101,10 @@ fn meter_outputs() -> Outputs {
         (
             PathBuf::from(format!("{METER_DIR}/Data/Headroom.sql")),
             headroom_sql,
+        ),
+        (
+            PathBuf::from(format!("{METER_DIR}/Data/QueueCalibration.sql")),
+            calibration_sql,
         ),
         (
             PathBuf::from(format!("{METER_DIR}/JAC_PoC_OathMeter.modinfo")),
@@ -1168,6 +1180,11 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
         PathBuf::from(format!("{DIR}/capabilities.json")),
         format!("{}\n", serde_json::to_string_pretty(&capability)?),
     );
+    let calibration = queue_calibration::scenario(&base)?;
+    result.insert(
+        PathBuf::from(format!("{DIR}/queue-calibration.json")),
+        format!("{}\n", serde_json::to_string_pretty(&calibration)?),
+    );
     let mut inventory = Vec::new();
     for case in cases {
         let scenario = selected_scenario(&base, &case)?;
@@ -1191,8 +1208,8 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
             format!("{}\n", serde_json::to_string_pretty(&scenario)?),
         );
     }
-    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":16,
-        "quantity_acceptance":"native_100_percent_yield_reference_and_observed_unmodified_production_basis; unresolved quantities never pass","diagnostic_mod":METER_ID,"scenarios":inventory});
+    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"queue_calibration_scenario":format!("{DIR}/queue-calibration.json"),"oath_count":66,"house_count":22,"max_turns":16,
+        "quantity_acceptance":"legacy_getyield_queue_denominator_unverified; raw_progress_calibration_diagnostic_only; all_66_live_unverified","diagnostic_mod":METER_ID,"scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
         format!("{}\n", serde_json::to_string_pretty(&manifest)?),
@@ -1232,7 +1249,7 @@ pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
     }
     crate::apply_outputs(repo, generated, check)?;
     println!(
-        "oath effect audit: capability + 66 finite selected-path scenarios + inventory; live acceptance not implied; {}",
+        "oath effect audit: capability + diagnostic queue calibration + 66 finite selected-path scenarios + inventory; live acceptance not implied; {}",
         if check { "up to date" } else { "generated" }
     );
     Ok(())
@@ -1251,7 +1268,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 73);
+        assert_eq!(generated.len(), 75);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));
