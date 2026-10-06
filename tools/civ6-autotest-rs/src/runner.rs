@@ -3877,7 +3877,18 @@ impl Runner {
             }
         }
         self.disconnect();
-        if let Err(e) = self.write_result() {
+        let result_write = self.write_result();
+        if let Err(e) = self.cleanup_persona_process() {
+            code = 1;
+            self.result_passed = false;
+            self.failure = Some(format!(
+                "{}; resident process cleanup: {e}",
+                self.failure.as_deref().unwrap_or("run finished")
+            ));
+            println!("Resident process cleanup failed: {e}");
+            let _ = self.write_result();
+        }
+        if let Err(e) = result_write {
             println!("Could not save result summary: {e}");
             if self.result_passed {
                 return Err(e);
