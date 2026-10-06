@@ -394,6 +394,67 @@ mod tests {
     use super::*;
     use mlua::Lua;
     #[test]
+    fn historical_fixture_country_has_existing_cities_and_asset_free_ring() -> Result<()> {
+        let repo = Repository::checked_in();
+        let data = build(&repo)?;
+        let players = data["steps"][1]["players"].as_array().unwrap();
+        assert_eq!(players.len(), 22);
+        assert_eq!(players[0]["civ"], "CIVILIZATION_JAC_ODA");
+        assert_eq!(players[1]["civ"], "CIVILIZATION_JAC_DATE");
+        assert_eq!(players.iter().filter(|p| p["human"] == true).count(), 1);
+        assert_eq!(players[1]["human"], true);
+        let db = rusqlite::Connection::open_with_flags(
+            repo.path("poc/JAC_PoC_JapanMapScale/Maps/JAC_Japan_15km.Civ6Map"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        let (width, height): (i32, i32) =
+            db.query_row("SELECT Width,Height FROM Map", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?;
+        assert_eq!((width, height), (204, 88));
+        let cities: i32 = db.query_row("SELECT count(*) FROM Cities WHERE Owner=1", [], |r| {
+            r.get(0)
+        })?;
+        assert_eq!(cities, 4);
+        // A lower bound, not a live acceptance result: these exact seven
+        // packaged plots have no features or assets before the game starts.
+        let (x, y) = (153, 42);
+        let capital: i32 = db.query_row(
+            "SELECT c.Plot FROM Cities c JOIN Buildings b ON b.Plot=c.Plot
+             WHERE c.Owner=1 AND b.BuildingType='BUILDING_PALACE'",
+            [],
+            |r| r.get(0),
+        )?;
+        // Odd-row offset coordinates converted to cube coordinates. The
+        // packaged candidate must also satisfy the runtime search radius.
+        let (cx, cy) = (capital % width, capital / width);
+        let dq: i32 = x - (y - (y & 1)) / 2 - (cx - (cy - (cy & 1)) / 2);
+        let dr: i32 = y - cy;
+        let distance = (dq.abs() + dr.abs() + (-dq - dr).abs()) / 2;
+        assert_eq!(distance, 6);
+        assert!((3..=18).contains(&distance));
+        for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (-1, -1), (0, 1), (-1, 1)] {
+            let plot = (y + dy) * width + x + dx;
+            let safe: i32 = db.query_row(
+                "SELECT count(*) FROM Plots p JOIN PlotOwners o ON o.ID=p.ID
+                 WHERE p.ID=? AND o.Owner=1 AND coalesce(p.IsImpassable,0)=0
+                 AND p.TerrainType NOT IN ('TERRAIN_COAST','TERRAIN_OCEAN')
+                 AND p.TerrainType NOT LIKE '%MOUNTAIN'
+                 AND NOT EXISTS(SELECT 1 FROM Cities c WHERE c.Plot=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM Units u WHERE u.Plot=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM Districts d WHERE d.Plot=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM PlotFeatures f WHERE f.ID=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM PlotResources r WHERE r.ID=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM PlotImprovements i WHERE i.ID=p.ID)
+                 AND NOT EXISTS(SELECT 1 FROM PlotRoutes r WHERE r.ID=p.ID)",
+                [plot],
+                |r| r.get(0),
+            )?;
+            assert_eq!(safe, 1, "Date footprint plot {plot}");
+        }
+        Ok(())
+    }
+    #[test]
     fn checked_in_scenario_matches_generator() -> Result<()> {
         let repo = Repository::checked_in();
         assert_eq!(build(&repo)?, repo.json(OUTPUT)?);
@@ -422,6 +483,7 @@ mod tests {
         let setup = data["steps"][4]["code"].as_str().unwrap();
         for mode in [
             "safe",
+            "date_slot",
             "inactive_slot",
             "other_city",
             "resource",
@@ -438,7 +500,7 @@ mod tests {
             lua.load(format!(r#"
 local mode='{mode}'; local props={{}}; local terrain={{}}; local feature={{}}
 MUTATIONS=0; PROBES=0
-Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 1 end,
+Game={{GetLocalPlayer=function() return mode=='date_slot' and 1 or 0 end,GetCurrentGameTurn=function() return 1 end,
   GetProperty=function(_,k) return props[k] end,SetProperty=function(_,k,v) props[k]=v end}}
 local plots={{}}
 for x=0,36 do local px=x; plots[x]={{GetX=function() return px end,GetY=function() return 0 end,
@@ -450,7 +512,7 @@ for x=0,36 do local px=x; plots[x]={{GetX=function() return px end,GetY=function
   GetImprovementType=function() return mode=='improvement' and px==31 and 2 or -1 end,
   GetDistrictType=function() return mode=='district' and px==31 and 2 or -1 end,
   GetRouteType=function() return mode=='route' and px==31 and 2 or -1 end}} end
-local city={{GetID=function() return 10 end,GetOwner=function() return 0 end,GetX=function() return 0 end,GetY=function() return 0 end}}
+local city={{GetID=function() return 10 end,GetOwner=function() return mode=='date_slot' and 1 or 0 end,GetX=function() return 0 end,GetY=function() return 0 end}}
 local cities={{GetCapitalCity=function() return city end,FindID=function(_,id) if id==10 then return city end end,
   GetCount=function() return mode=='one_city' and 1 or 2 end,
   Members=function() local count=0; return function() count=count+1; if count<=2 then return count,city end end end}}
@@ -458,6 +520,7 @@ local blocker={{GetX=function() return 31 end,GetY=function() return 0 end,GetID
 local units={{Members=function() local done=false; return function()
   if mode=='occupied' and not done then done=true; return 7,blocker end end end}}
 Players={{[0]={{IsHuman=function() return true end,GetCities=function() return cities end,GetUnits=function() return units end}}}}
+if mode=='date_slot' then Players[1]=Players[0]; Players[0]=nil end
 -- An unused engine slot can have a Player object and no unit collection.
 Players[22]={{GetUnits=function() return nil end}}
 Map={{GetPlotCount=function() return 1 end,GetPlotByIndex=function() return plots[30] end,
@@ -479,7 +542,7 @@ function Verify(safe)
 end
 "#)).exec()?;
             let result = lua.load(setup).exec();
-            let safe = matches!(mode, "safe" | "inactive_slot");
+            let safe = matches!(mode, "safe" | "inactive_slot" | "date_slot");
             assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
             lua.load(format!("Verify({safe})")).exec()?;
         }

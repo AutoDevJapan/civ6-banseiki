@@ -49,7 +49,7 @@ for index=0,Map.GetPlotCount()-1 do
 end
 local keys={}; for key in pairs(rejected) do keys[#keys+1]=key end; table.sort(keys)
 for _,key in ipairs(keys) do
-  print('[JAC_ASN_BLOCKED] rejected reason='..key..' count='..rejected[key]..' first='..tostring(samples[key]))
+  print('[JAC_ASN_BLOCKED] rejected reason='..key..' check-count='..rejected[key]..' first='..tostring(samples[key]))
 end
 assert(origin,'no safe empty remote land footprint')
 local rows={}
@@ -91,6 +91,17 @@ return 'real native refusal at explicit test origin; training city and original 
 "#;
 
 pub fn transform(mut data: Value) -> Result<Value> {
+    // Historical Oda's small, developed territory has no safe seven-plot
+    // footprint (live runs 11/12). Keep the map's faction/slot order and use
+    // Date's existing four cities and empty land, without changing any assets.
+    let players = data["steps"][1]["players"].as_array_mut().unwrap();
+    let mut humans = 0;
+    for player in players {
+        let human = player["civ"] == "CIVILIZATION_JAC_DATE";
+        player["human"] = json!(human);
+        humans += usize::from(human);
+    }
+    ensure!(humans == 1, "Date fixture requires exactly one human");
     let steps = data["steps"].as_array_mut().unwrap();
     let code = steps[4]["code"].as_str().unwrap();
     let prefix = code
