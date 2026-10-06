@@ -50,6 +50,8 @@ use std::path::{Path, PathBuf};
 const USAGE: &str =
     "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe]";
 
+const P1: &str = civ6_data_rs::absorption_product::P1_EVIDENCE;
+
 const FRONTEND_FILTER: &str = r#"
 -- Use the official configuration table, not guessed city-state slots.
 local target='CIVILIZATION_VATICAN_CITY'
@@ -381,6 +383,7 @@ local function Snapshot()
   return {Turn=Game.GetCurrentGameTurn(),Product=Product(),
     Admission=R.Copy(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1') or {}),
     Flow=R.Copy(Game:GetProperty('JAC_ABSORPTION_FLOW_V1') or {}),
+    TransferTransactions=R.Copy(A.GetState().Transactions or {}),
     Gold=Players[t.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(t.To),
     Pool=Players[t.To]:GetInfluence():GetTokensToGive(),Received=Players[t.From]:GetInfluence():GetTokensReceived(t.To),
     LastOperation=R.Copy(Players[t.To]:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1'))}
@@ -638,18 +641,42 @@ local function ObserveDebit(before,s,id)
   print('[JAC_OFFICIAL_PRODUCT] actual-debit offer='..id..' origin='..fence..' gold-after='..proof.Gold.AfterSequence..' faith-after='..proof.Faith.AfterSequence)
   return proof
 end
+local function FlowProgress(old,flow,label)
+  assert(R.Equal(old.Request,flow.Request) and old.ID==flow.ID and old.From==flow.From and old.To==flow.To
+    and old.Mode==flow.Mode and old.Turn==flow.Turn,'saved flow identity/request changed: '..label)
+  assert(R.Equal(old.Inventory,flow.Inventory) and R.Equal(old.RosterAtBegin,flow.RosterAtBegin),'saved asset inventory/roster changed: '..label)
+  if old.Phase1Complete then assert(R.Equal(P1Evidence(old),P1Evidence(flow)),'saved first-stage evidence changed: '..label) end
+  local entries={};for _,entry in ipairs(flow.Entries or {}) do
+    assert(not entries[tostring(entry.ID)],'duplicate resumed asset');entries[tostring(entry.ID)]=entry
+  end
+  for _,entry in ipairs(old.Entries or {}) do
+    local current=assert(entries[tostring(entry.ID)],'saved asset disappeared')
+    assert(entry.Kind==current.Kind and R.Equal(entry.Source,current.Source) and R.Equal(entry.NativeWork,current.NativeWork)
+      and entry.UnitID==current.UnitID and entry.UnitType==current.UnitType,'saved asset identity changed')
+    for stage,roll in pairs(entry.Rolls or {}) do assert(R.Equal((current.Rolls or {})[stage],roll),'saved random roll changed: '..stage) end
+    entries[tostring(entry.ID)]=nil
+  end
+  assert(next(entries)==nil,'resumed flow added an unrelated asset')
+  if old.FinalRollsComplete then assert(flow.FinalRollsComplete==true,'final-roll completion regressed') end
+  if old.CompletedTurn then assert(flow.CompletedTurn==old.CompletedTurn,'actual completion turn changed') end
+  local phases={CHOICE={CHOICE=true,APPLYING=true,BLOCKED=true,RESULT=true,DONE=true},
+    APPLYING={APPLYING=true,BLOCKED=true,CHOICE=true,RESULT=true,DONE=true},
+    BLOCKED={BLOCKED=true,CHOICE=true,APPLYING=true,RESULT=true,DONE=true},RESULT={RESULT=true,DONE=true},DONE={DONE=true}}
+  assert(old.Phase==nil and flow.Phase==nil or phases[old.Phase] and phases[old.Phase][flow.Phase],'illegal saved flow phase transition')
+end
 local function PreservePending(request)
   local lifecycle=Lifecycle(request)
   if not lifecycle.Journal then return end
   t.FrozenEvidence=t.FrozenEvidence or {}
   local old=t.FrozenEvidence[request.FlowID]
   local flow=lifecycle.Journal
-  local now={Plan=R.Copy(request.Plan),Decision=R.Copy(request.Decision),Rolls={}}
+  local now={Plan=R.Copy(request.Plan),Decision=R.Copy(request.Decision),Rolls={},Flow=R.Copy(flow)}
   if flow then for _,entry in ipairs(flow.Entries or {}) do
     assert(not now.Rolls[tostring(entry.ID)],'duplicate frozen inventory entry')
     now.Rolls[tostring(entry.ID)]=R.Copy(entry.Rolls or {})
   end end
   if old then
+    if old.Flow then FlowProgress(old.Flow,flow,'pending/read/reload') end
     assert(old.Hash==A.Canonical({Plan=old.Plan,Decision=old.Decision}),'frozen admission hash changed')
     assert(R.Equal(old.Plan,now.Plan) and R.Equal(old.Decision,now.Decision),'waiting/reload changed frozen admission evidence')
     for id,rolls in pairs(old.Rolls) do
@@ -659,6 +686,102 @@ local function PreservePending(request)
   end
   now.Hash=A.Canonical({Plan=now.Plan,Decision=now.Decision})
   t.FrozenEvidence[request.FlowID]=now
+end
+local function VerifyConsumption(escrow,flow)
+  local receipt=assert(escrow.Consumption,'consumed escrow receipt missing')
+  assert(flow and (flow.Phase=='RESULT' or flow.Phase=='DONE') and flow.Phase1Complete and flow.FinalRollsComplete
+    and not flow.Error and not flow.WaitingFor and type(flow.CompletedTurn)=='number','consumption lacks a completed native flow result')
+  local tx=assert(A.GetState().Transactions[flow.ID],'consumption lacks actual asset-transfer transaction')
+  assert(type(flow.AppliedPlan)=='table' and type(tx.Request)=='table'
+    and tx.ID==flow.ID and tx.From==escrow.From and tx.To==escrow.To and tx.Mode==flow.Mode and tx.Status=='COMPLETE'
+    and R.Equal(tx.Request,flow.AppliedPlan),'consumption is not backed by matching native COMPLETE transfer')
+  assert(receipt.FlowID==flow.ID and receipt.From==escrow.From and receipt.To==escrow.To
+    and receipt.CompletedTurn==flow.CompletedTurn and receipt.Policy=='CONSUME_ON_VERIFIED_RESULT_V2'
+    and receipt.Gold==escrow.Gold and receipt.Faith==escrow.Faith
+    and receipt.LegacyRefunded and receipt.LegacyRefunded.Gold==0 and receipt.LegacyRefunded.Faith==0,
+    'consumption changed actual payer/amount/result or introduced a refund')
+  for _,currency in ipairs({'Gold','Faith'}) do
+    local paid=assert(escrow['Collect'..currency]);assert(paid.Done and paid.Before-paid.After==escrow[currency],'consumed actual collection leg changed')
+  end
+end
+local function SavedProgress(expected,label)
+  local now=Snapshot()
+  assert(now.Turn==expected.Turn and now.Pool==expected.Pool and now.Received==expected.Received,
+    label..': saved actual turn or native envoy counts changed')
+  ReceiptContinuity(expected.Product,now.Product,true)
+  assert(expected.Product.Version==now.Product.Version,label..': product journal version changed')
+  for key,operation in pairs(now.Product.Operations or {}) do
+    assert((expected.Product.Operations or {})[key] or operation.Identity.Command=='REGISTER',label..': unexpected new envoy operation')
+  end
+  assert(R.Equal(expected.Product.Envoys or {},now.Product.Envoys or {}),label..': native route/product envoy ledger changed')
+  for key,pair in pairs(expected.Product.Pairs or {}) do
+    local current=assert((now.Product.Pairs or {})[key],label..': saved offer pair disappeared')
+    local a,b=R.Copy(pair),R.Copy(current);a.LastError=nil;b.LastError=nil
+    assert(R.Equal(a,b),label..': saved pair identity changed')
+  end
+  for id,old in pairs((expected.Flow or {}).Flows or {}) do
+    assert(expected.Flow.Version==1 and now.Flow.Version==1,label..': native flow journal version changed')
+    local flow=assert((now.Flow.Flows or {})[id],label..': native flow journal disappeared')
+    FlowProgress(old,flow,label)
+  end
+  for key,old in pairs((expected.Admission or {}).Offers or {}) do
+    assert(R.Equal(old,(now.Admission.Offers or {})[key]),label..': saved normal offer changed')
+  end
+  for key,old in pairs((expected.Admission or {}).Requests or {}) do
+    local request=assert((now.Admission.Requests or {})[key],label..': saved admission disappeared')
+    for _,field in ipairs({'Source','ID','From','To','FlowID'}) do assert(R.Equal(old[field],request[field]),label..': admission identity changed') end
+    if ((expected.Flow or {}).Flows or {})[old.FlowID] then
+      assert(R.Equal(old.Plan,request.Plan) and R.Equal(old.Decision,request.Decision),label..': journal-frozen admission changed')
+    end
+    if old.Status=='STARTED' then assert(request.Status=='STARTED' and request.StartTurn==old.StartTurn,label..': completed admission changed') end
+  end
+  for id,old in pairs(expected.TransferTransactions or {}) do
+    local current=assert(now.TransferTransactions[id],label..': native transfer receipt disappeared')
+    assert(old.ID==current.ID and old.From==current.From and old.To==current.To and R.Equal(old.Request,current.Request),
+      label..': native transfer identity/request changed')
+    if old.Mode then assert(current.Mode==old.Mode,label..': native transfer mode changed') end
+    if old.Status=='COMPLETE' then assert(R.Equal(old,current),label..': complete native transfer receipt changed') end
+  end
+  local debit={Gold=0,Faith=0}
+  for id,old in pairs(expected.Product.Escrows or {}) do
+    assert((now.Product.Escrows or {})[id],label..': saved escrow disappeared')
+  end
+  for id,escrow in pairs(now.Product.Escrows or {}) do
+    local old=(expected.Product.Escrows or {})[id]
+    if old then
+      for _,field in ipairs({'ID','From','To','Gold','Faith','SourceVersion'}) do assert(R.Equal(old[field],escrow[field]),label..': escrow identity changed') end
+      if old.Status=='CONSUMED' then assert(R.Equal(old,escrow),label..': consumed receipt changed')
+      elseif old.Status=='HELD' then assert(escrow.Status=='HELD' or escrow.Status=='CONSUMED',label..': held escrow did not progress legally')
+      else assert(old.Status=='COLLECTING' and (escrow.Status=='COLLECTING' or escrow.Status=='HELD' or escrow.Status=='CONSUMED'),label..': invalid partial collection progression') end
+    end
+    for _,currency in ipairs({'Gold','Faith'}) do
+      local leg=escrow['Collect'..currency];local prior=old and old['Collect'..currency]
+      if prior then
+        local a,b=R.Copy(prior),R.Copy(leg);assert(b,label..': actual native collection intent disappeared')
+        a.Done=nil;b.Done=nil
+        assert(R.Equal(a,b) and (not prior.Done or leg.Done),label..': actual native collection intent changed')
+      end
+      if escrow.To==t.To and leg and leg.Done and not (prior and prior.Done) then
+        assert(leg.Before-leg.After==escrow[currency],label..': resumed native collection amount changed')
+        if expected[currency]==leg.Before then debit[currency]=debit[currency]+escrow[currency]
+        else assert(expected[currency]==leg.After,label..': partial native debit origin ambiguous') end
+      end
+    end
+    if escrow.Status=='CONSUMED' then
+      local flow
+      for _,candidate in pairs(now.Flow.Flows or {}) do if candidate.Request and candidate.Request.ProductDeposit
+          and candidate.Request.ProductDeposit.OfferID==id then flow=candidate end end
+      VerifyConsumption(escrow,flow)
+    else assert(escrow.Consumption==nil,label..': unsettled escrow already has a consumption receipt') end
+  end
+  assert(now.Gold==expected.Gold-debit.Gold and now.Faith==expected.Faith-debit.Faith,
+    label..': payer changed beyond newly observed native collection; re-debit/refund is not legal flow progression')
+  -- Reading the public view must remain inert even when normal publications
+  -- advanced APPLYING/RESULT/DONE before this observation.
+  for i=1,3 do
+    Profile(P.Get(t.From,t.To));assert(R.Equal(Snapshot(),now),label..': read-only replay changed current native state')
+  end
+  return now
 end
 local function Send(before,previous)
   assert(Game.GetCurrentGameTurn()==before.Turn+1,'send did not follow exactly one actual end_turn')
@@ -979,7 +1102,7 @@ return observed
 const RESTORE_OBSERVATION: &str = r#"
 assert(t.PendingSnapshot and t.PendingHash==A.Canonical(t.PendingSnapshot),'saved pending checkpoint changed')
 local old=t.PendingSnapshot;local now=Snapshot()
-assert(now.Turn==old.Turn and now.Pool==old.Pool and now.Received==old.Received,'reload changed native envoy budget/count')
+now=SavedProgress(old,'pending save/exit/load')
 -- Verify all saved completed operations, including the third and later sends,
 -- and exact sender budget metadata before any next-turn baseline is replaced.
 ReceiptContinuity(old.Product,now.Product,true)
@@ -1022,7 +1145,7 @@ return 'ordinary AI registration, official native envoy qualification, real depo
 "#;
 
 fn core(code: &str) -> Value {
-    json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{CORE}\n{code}")})
+    json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{code}")})
 }
 
 fn ui(code: &str) -> Value {
@@ -1059,7 +1182,7 @@ fn observe_pending(steps: &mut Vec<Value>) {
         "JAC_OFFICIAL_PENDING_READS=0;return 'begin finite read-only publication observation'",
     ));
     steps.push(json!({"action":"wait_for","timeout":30,"condition":{
-        "type":"lua","state_name":"JAC_Absorption_Entry","code":format!("{CORE}\n{OBSERVE_PENDING}")}}));
+        "type":"lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{OBSERVE_PENDING}")}}));
 }
 
 fn round_trip(steps: &mut Vec<Value>, name: &str) {
@@ -1139,7 +1262,7 @@ return v.Status=='AVAILABLE'
     steps.push(core(QUALIFIED));
     steps.push(ui("Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback);JAC_OfficialProductCurrencyCallback=nil;ExposedMembers.JAC_OfficialProductCurrencySnapshots=nil;return 'native currency snapshot observer removed after verified debit'"));
     round_trip(&mut steps, "JAC-official-product-ai-qualified");
-    steps.push(core("Unchanged(assert(t.Qualified),'qualified same-name save/exit/load');return 'qualified product receipt, actual payer and normal admission restored unchanged'"));
+    steps.push(core("SavedProgress(assert(t.Qualified),'qualified same-name save/exit/load');return 'qualified original evidence, actual payer and receipts preserved with legal flow/escrow advancement'"));
     Ok(json!({
         "name":"Official Vatican City AI product route: native qualification, exact pool/grant receipts, publication replay and same-name save/load",
         "judge_profile":"generic",
@@ -1303,14 +1426,15 @@ local function canonical(v)
  local keys={};for k in pairs(v) do keys[#keys+1]=k end;table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
  local parts={};for _,k in ipairs(keys) do parts[#parts+1]=canonical(k)..'='..canonical(v[k]) end;return '{'..table.concat(parts,';')..'}'
 end
-JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=function() return FAITH end,Canonical=canonical}
+JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=function() return FAITH end,Canonical=canonical,
+ GetState=function() return {Transactions={}} end}
 "#;
 
     fn run(mutation: &str, code: &str) -> Result<mlua::Result<()>> {
         let lua = Lua::new();
         lua.load(WORLD).exec()?;
         lua.load(mutation).exec()?;
-        Ok(lua.load(format!("{CORE}\n{code}")).exec())
+        Ok(lua.load(format!("{P1}\n{CORE}\n{code}")).exec())
     }
 
     #[test]
@@ -2074,15 +2198,21 @@ REQUEST.Status='STARTING';REQUEST.StartTurn=nil;VIEW.Status='STARTING'
 REGISTER.Done=false;ESCROW.Status='COLLECTING';ESCROW.CollectFaith.Done=false;FAITH=10000
 PROPS.JAC_ABSORPTION_FLOW_V1={{Version=1,Flows={{['normal-flow']={{ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=copy(REQUEST.Plan),Entries={{{{ID='native-asset',Rolls={{P1_ESCAPE={{Raw=123,Used=123,Label='saved-first-roll'}}}}}}}},Phase1Complete=false}}}}}}
 "#)).exec()?;
-        lua.load(format!("{CORE}\n{QUALIFICATION_TURN}")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{QUALIFICATION_TURN}"))
+            .exec()?;
         lua.load("assert(not PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.NativeDebits[OFFER.ID]);assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.DebitParts[OFFER.ID].Gold)").exec()?;
         for _ in 0..5 {
-            lua.load(format!("{CORE}\n{OBSERVE_PENDING}")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{OBSERVE_PENDING}"))
+                .exec()?;
         }
-        assert!(lua.load(format!("{CORE}\n{QUALIFIED}")).exec().is_err());
+        assert!(lua
+            .load(format!("{P1}\n{CORE}\n{QUALIFIED}"))
+            .exec()
+            .is_err());
         // Restore detached observations from the same saved test property.
         lua.load("ExposedMembers.JAC_OfficialProductCurrencySnapshots=JAC_AbsorptionGameplay.Rules.Copy(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.CurrencyHistory);JAC_OFFICIAL_PENDING_READS=nil").exec()?;
-        lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
+            .exec()?;
         lua.load(
             r#"
 TURN=6;REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED'
@@ -2092,8 +2222,9 @@ PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
 "#,
         )
         .exec()?;
-        lua.load(format!("{CORE}\n{QUALIFICATION_TURN}")).exec()?;
-        lua.load(format!("{CORE}\n{QUALIFIED}")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{QUALIFICATION_TURN}"))
+            .exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{QUALIFIED}")).exec()?;
         // Frozen decisions and already drawn rolls remain immutable even
         // though normal completion and newly drawn later-stage rolls may advance.
         for mutation in [
@@ -2108,12 +2239,12 @@ PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
                 .load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}"))
                 .exec()?;
             probe.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Phase1Complete=true,Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='native-asset',Rolls={P1_ESCAPE={Used=123}}}}}}}").exec()?;
-            probe.load(format!("{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+            probe.load(format!("{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
             probe.load(mutation).exec()?;
             assert!(
                 probe
                     .load(format!(
-                        "{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+                        "{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
                     ))
                     .exec()
                     .is_err(),
@@ -2137,7 +2268,7 @@ REQUEST.Decision.Requirements[1].Met=false
 "#
         ))
         .exec()?;
-        lua.load(format!("{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence);Game:SetProperty(KEY,t)")).exec()?;
         // Normal retry can replace both the preflight plan and its decision.
         lua.load(
             r#"
@@ -2146,22 +2277,23 @@ REQUEST.Decision.Requirements[1].Met=true
 "#,
         )
         .exec()?;
-        lua.load(format!("{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence)")).exec()?;
         // The real native journal, with its immutable Request and normal v1
         // identity, is the first boundary at which frozen evidence may be stored.
         lua.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='asset',Rolls={P1_ESCAPE={Used=123}}}},Phase1Complete=false}}}").exec()?;
         lua.load("REGISTER.Done=false;REGISTER.LastError='native phase one pending'")
             .exec()?;
-        lua.load(format!("{CORE}\nassert(SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(t.FrozenEvidence[REQUEST.FlowID]);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\nassert(SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(t.FrozenEvidence[REQUEST.FlowID]);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
         // The queued registration may complete during normal reload publication;
         // the original receipt checkpoint and journal-frozen decision survive.
         lua.load("REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED';REGISTER.Done=true;REGISTER.LastError=nil;PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true").exec()?;
-        lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
+            .exec()?;
         lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Product.Operations['0:ai-register:2'].Done==false)").exec()?;
         lua.load("REQUEST.Decision.Turn=5").exec()?;
         assert!(lua
             .load(format!(
-                "{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+                "{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
             ))
             .exec()
             .is_err());
@@ -2210,9 +2342,11 @@ QUEUED={{Identity={{Command='REGISTER',From=2,To=0}},Nonce='ai-register:2',Done=
  OfferIntent={{Offer={{ID='product:2:0:1',From=2,To=0}}}},LastError='preflight waiting'}}
 STATE.Operations['0:ai-register:2']=QUEUED
 "#)).exec()?;
-            lua.load(format!("{CORE}\nt.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)")).exec()?;
             lua.load(mutation).exec()?;
-            let result = lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec();
+            let result = lua
+                .load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
+                .exec();
             assert_eq!(
                 result.is_ok(),
                 mutation.is_empty() || mutation.starts_with("QUEUED.Done=true"),
@@ -2225,7 +2359,7 @@ STATE.Operations['0:ai-register:2']=QUEUED
                 lua.load("STATE.Operations['0:ai-envoy:2:2']=nil").exec()?;
                 assert!(lua
                     .load(format!(
-                        "{CORE}\nReceiptContinuity(t.ReplayBaseline.Product,Product(),false)"
+                        "{P1}\n{CORE}\nReceiptContinuity(t.ReplayBaseline.Product,Product(),false)"
                     ))
                     .exec()
                     .is_err());
@@ -2253,15 +2387,117 @@ STATE.Operations['0:ai-register:2']=QUEUED
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!(
-                "{CORE}\nt.SettledFirst=Snapshot();t.PublicationReplays=2;Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\nt.SettledFirst=Snapshot();t.PublicationReplays=2;Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(mutation).exec()?;
-            let result = lua.load(format!("{CORE}\n{AFTER_LOAD}")).exec();
+            let result = lua.load(format!("{P1}\n{CORE}\n{AFTER_LOAD}")).exec();
             assert_eq!(
                 result.is_ok(),
                 mutation.is_empty(),
                 "{mutation}: {result:?}"
+            );
+        }
+        Ok(())
+    }
+
+    const PROGRESS_WORLD: &str = r#"
+PROPS.JAC_ABSORPTION_ADMISSION_V1={Version=2,Offers={[OFFER.ID]=copy(OFFER)},Requests={accepted=REQUEST}}
+local flow=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow']
+flow.Turn=5;flow.Phase='APPLYING';flow.FinalRollsComplete=true
+flow.Inventory={{ID='unit-4',Kind='UNIT',UnitID=4,UnitType=7}}
+flow.RosterAtBegin={Leader={ID='leader',Owner=2}}
+flow.Entries={{ID='unit-4',Kind='UNIT',Source={Owner=2,ID=4},UnitID=4,UnitType=7,
+ AllowedActions={'INCORPORATE'},EscapeOutcome=nil,P1Chance=5000,
+ Rolls={P1_ESCAPE={Raw=4321,Used=4321,Label='original-p1'},P3_SUCCESS={Raw=3210,Used=3210,Label='original-p3'}}}}
+flow.AppliedPlan={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Units={{ID=4,Action='INCORPORATE'}}}
+TRANSFER={Transactions={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=copy(flow.AppliedPlan),Status='WAITING_UI'}}}
+JAC_AbsorptionGameplay.GetState=function() return copy(TRANSFER) end
+JAC_AbsorptionFlowGameplay.Get=function(id) return copy(PROPS.JAC_ABSORPTION_FLOW_V1.Flows[id]) end
+function CompleteNative(consume)
+ local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow']
+ f.Phase='DONE';f.CompletedTurn=5;TRANSFER.Transactions['normal-flow'].Status='COMPLETE'
+ if consume then ESCROW.Status='CONSUMED';ESCROW.Consumption={FlowID='normal-flow',From=2,To=0,CompletedTurn=5,
+ Gold=100,Faith=20,LegacyRefunded={Gold=0,Faith=0},Policy='CONSUME_ON_VERIFIED_RESULT_V2'} end
+end
+"#;
+
+    #[test]
+    fn qualified_reload_accepts_legal_apply_completion_and_consumption_without_repayment(
+    ) -> Result<()> {
+        for (mutation,ok) in [
+            ("",true), ("CompleteNative(false)",true), ("CompleteNative(true)",true),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Entries[1].Rolls.P1_ESCAPE.Used=7",false),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Entries[1].Rolls.P3_SUCCESS.Raw=99",false),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Inventory={}",false),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Entries[1].EscapeOutcome='ESCAPE'",false),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Request.ProductDeposit.Gold=0",false),
+            ("CompleteNative(true);ESCROW.CollectGold.Before=10101",false),
+            ("CompleteNative(true);ESCROW.Consumption.Gold=0",false),
+            ("CompleteNative(true);ESCROW.Consumption.LegacyRefunded.Gold=100",false),
+            ("CompleteNative(true);ESCROW.Consumption.CompletedTurn=4",false),
+            ("CompleteNative(true);TRANSFER.Transactions['normal-flow'].Status='STAGED'",false),
+            ("CompleteNative(true);TRANSFER.Transactions['normal-flow'].Request.Units={}",false),
+            ("CompleteNative(true);STATE.Operations[OPKEY]=nil",false),
+            ("CompleteNative(true);OP.EnvoyReceipt.GrantDone=false",false),
+            ("CompleteNative(true);STATE.AiEnvoyTurns['0'].Turn=6",false),
+            ("CompleteNative(true);REQUEST.Decision.Requirements[1].Met=false",false),
+            ("CompleteNative(true);PROPS.JAC_ABSORPTION_FLOW_V1.Version=2",false),
+            ("CompleteNative(true);GOLD=GOLD+100",false),
+            ("CompleteNative(true);FAITH=FAITH-20",false),
+            ("CompleteNative(true);POOL=POOL-1",false),
+            ("CompleteNative(true);RECEIVED=RECEIVED+1",false),
+        ] {
+            let lua=Lua::new();lua.load(WORLD).exec()?;
+            lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\nt.Qualified=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(mutation).exec()?;
+            let result=lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.Qualified,'qualified original continuation')")).exec();
+            assert_eq!(result.is_ok(),ok,"{mutation}: {result:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn pending_and_terminal_checkpoints_preserve_original_evidence_across_legal_resume(
+    ) -> Result<()> {
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!(
+            "{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}"
+        ))
+        .exec()?;
+        lua.load(format!("{P1}\n{CORE}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));PreservePending(REQUEST);t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load("CompleteNative(true)").exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
+            .exec()?;
+        lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Flow.Flows['normal-flow'].Phase=='APPLYING')").exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
+        ))
+        .exec()?;
+        for mutation in [
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase='APPLYING'",
+            "ESCROW.Consumption.Faith=19",
+            "TRANSFER.Transactions['normal-flow'].ExtraMutation='changed complete receipt'",
+        ] {
+            let probe = Lua::new();
+            probe.load(WORLD).exec()?;
+            probe.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nCompleteNative(true)")).exec()?;
+            probe
+                .load(format!(
+                    "{P1}\n{CORE}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
+                ))
+                .exec()?;
+            probe.load(mutation).exec()?;
+            assert!(
+                probe
+                    .load(format!(
+                        "{P1}\n{CORE}\nSavedProgress(t.Terminal,'terminal receipt')"
+                    ))
+                    .exec()
+                    .is_err(),
+                "{mutation}"
             );
         }
         Ok(())
@@ -2279,14 +2515,16 @@ STATE.Operations['0:ai-register:2']=QUEUED
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!(
-                "{CORE}\nt.SettledFirst=Snapshot();Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\nt.SettledFirst=Snapshot();Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(format!(
                 "ExposedMembers={{JAC_OfficialProductPublicationObservation={observation}}}"
             ))
             .exec()?;
-            let result = lua.load(format!("{CORE}\n{ASSERT_PUBLICATIONS}")).exec();
+            let result = lua
+                .load(format!("{P1}\n{CORE}\n{ASSERT_PUBLICATIONS}"))
+                .exec();
             assert_eq!(
                 result.is_ok(),
                 observation == "{From=2,To=0,Turn=3,Count=2}",
@@ -2319,7 +2557,7 @@ STATE.Operations['0:ai-register:2']=QUEUED
         assert_eq!(turns, 13); // one native founding turn, two measured sends, ten qualification turns
         let rendered = serde_json::to_string(&scene)?;
         assert!(!rendered.contains("test_mode"));
-        assert!(rendered.contains("qualified product receipt"));
+        assert!(rendered.contains("qualified original evidence"));
         Ok(())
     }
 
