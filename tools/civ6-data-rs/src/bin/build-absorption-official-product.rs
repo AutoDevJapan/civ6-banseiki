@@ -1692,6 +1692,35 @@ for actor=0,1 do
 end
 "#;
 
+// BuildHeadlessGameSetup refreshes game parameters only. The stock
+// PlayerSetupLogic helper publishes the selectable leader dependency values.
+// Refresh only those player parameters here: refreshing the game again also
+// resets map-size/participant bounds, which this comparison must preserve.
+const FILTER_PLAYER_DEPENDENCIES: &str = r#"
+include('PlayerSetupLogic')
+local before={}
+for actor=0,1 do
+  local p=assert(PlayerConfigurations[actor],'configured major missing')
+  before[actor]={Civ=p:GetCivilizationTypeName(),Leader=p:GetLeaderTypeName(),Slot=p:GetSlotStatus()}
+end
+RebuildPlayerParameters(true)
+RefreshPlayerParameters()
+local dependency=false
+for actor=0,1 do
+  local p=PlayerConfigurations[actor];local expected=before[actor]
+  assert(p:GetCivilizationTypeName()==expected.Civ and p:GetLeaderTypeName()==expected.Leader and p:GetSlotStatus()==expected.Slot,
+    'player dependency refresh changed an actual major')
+  local values=p:GetValue('LEADER_VALUES')
+  assert(values==nil or type(values)=='string','unexpected native selectable leader values')
+  if type(values)=='string' then for value in values:gmatch('[^,]+') do
+    if value=='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or value=='Players:Expansion2_Players::LEADER_LADY_SIX_SKY' then dependency=true end
+  end end
+end
+ReleasePlayerParameters()
+assert(dependency,'native player helper did not publish a Maya/Gran Colombia dependency')
+GameConfiguration.UpdateEnabledMods()
+"#;
+
 // Compare the proven native two-major/one-minor setup with the extra frontend
 // allocation writes. Keep every Core roster and product acceptance assertion.
 fn filter_only_scenario(repo: &Repository) -> Result<Value> {
@@ -1705,7 +1734,7 @@ fn filter_only_scenario(repo: &Repository) -> Result<Value> {
     let (setup, _) = setup
         .rsplit_once("return ")
         .context("native setup return")?;
-    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FILTER_SETUP_OBSERVATION}\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
+    product["steps"][2]["code"] = json!(format!("{setup}\n{FILTER_PLAYER_DEPENDENCIES}\n{FRONTEND_FILTER}\n{FILTER_SETUP_OBSERVATION}\nreturn 'native player dependencies and official Vatican filter; no allocation rewrites'"));
     Ok(product)
 }
 
@@ -1887,6 +1916,61 @@ GameConfiguration.GetValue=function() return 'JAC_BANSEIKI_ONLY' end"#).exec()?;
             lua.load(FILTER_SETUP_OBSERVATION).exec().is_err(),
             "required setup option must not be masked as optional metadata"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn native_player_dependencies_require_real_helper_values_and_keep_actual_majors() -> Result<()>
+    {
+        for (mutation, failure) in [
+            ("", None),
+            ("VALUES[0]=nil", Some("did not publish")),
+            (
+                "VALUES[0]='Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA'",
+                Some("did not publish"),
+            ),
+            (
+                "PlayerConfigurations[0].Leader='LEADER_SIMON_BOLIVAR'",
+                Some("changed an actual major"),
+            ),
+            (
+                "PlayerConfigurations[1].Slot=3",
+                Some("changed an actual major"),
+            ),
+        ] {
+            let lua = Lua::new();
+            lua.load(format!(r#"
+CALLS={{}};VALUES={{}}
+function include(name) assert(name=='PlayerSetupLogic');CALLS[#CALLS+1]='include' end
+PlayerConfigurations={{}}
+for actor=0,1 do local p={{Civ='Civ'..actor,Leader='Leader'..actor,Slot=actor+1}};PlayerConfigurations[actor]=p
+ function p:GetCivilizationTypeName() return self.Civ end
+ function p:GetLeaderTypeName() return self.Leader end
+ function p:GetSlotStatus() return self.Slot end
+ function p:GetValue(key) assert(key=='LEADER_VALUES');return VALUES[actor] end
+end
+function RebuildPlayerParameters(headless) assert(headless);CALLS[#CALLS+1]='rebuild' end
+function RefreshPlayerParameters()
+ CALLS[#CALLS+1]='refresh';VALUES[0]='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR';{mutation}
+end
+function ReleasePlayerParameters() CALLS[#CALLS+1]='release' end
+GameConfiguration={{UpdateEnabledMods=function()
+ assert(table.concat(CALLS,',')=='include,rebuild,refresh,release');CALLS[#CALLS+1]='mods'
+end}}
+"#)).exec()?;
+            let result = lua.load(FILTER_PLAYER_DEPENDENCIES).exec();
+            if let Some(reason) = failure {
+                assert!(result
+                    .expect_err("invalid native dependency accepted")
+                    .to_string()
+                    .contains(reason));
+                lua.load("assert(CALLS[#CALLS]~='mods')").exec()?;
+            } else {
+                result?;
+                lua.load("assert(CALLS[#CALLS]=='mods' and VALUES[1]==nil)")
+                    .exec()?;
+            }
+        }
         Ok(())
     }
 
