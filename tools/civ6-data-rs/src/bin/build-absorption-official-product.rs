@@ -207,6 +207,120 @@ local function NativeAssets(stage)
   end
   return o,city
 end
+local function EnvoyTurn(before,s)
+  local count,key,operation=0,nil,nil
+  for k,op in pairs(s.Operations or {}) do
+    local old=(before.Product.Operations or {})[k]
+    if old then assert(R.Equal(old,op),'settled operation changed on a later natural turn')
+    elseif op.Identity.To==t.To and op.Identity.Command=='SEND_ENVOY' then
+      count=count+1;key,operation=k,op
+    end
+  end
+  assert(count<=1,'AI assigned more than one envoy per recipient/actual turn')
+  local pool=Players[t.To]:GetInfluence():GetTokensToGive()
+  local received=Players[t.From]:GetInfluence():GetTokensReceived(t.To)
+  if operation then
+    local op=operation;local identity=assert(op.EnvoyIdentity);local r=assert(op.EnvoyReceipt)
+    assert(op.Done==true and identity.Route=='OFFICIAL' and identity.CountryID=='VATICAN_CITY'
+      and identity.From==t.From and identity.To==t.To and op.Identity.From==t.From and op.Identity.To==t.To,
+      'later AI assignment changed official route/recipient')
+    local profile=t.PreparedView.Country.Profile;local payer=PlayerConfigurations[t.To]
+    assert(identity.CivilizationType==profile.CivilizationType and identity.LeaderType==profile.LeaderType
+      and identity.SenderCivilizationType==payer:GetCivilizationTypeName() and identity.SenderLeaderType==payer:GetLeaderTypeName(),
+      'later AI assignment changed actual source/payer profile')
+    assert(op.Identity.ExpectedEnvoys==before.Received and op.Nonce=='ai-envoy:'..t.From..':'..before.Received
+      and key==t.To..':'..op.Nonce,'later assignment did not start at the previous observed native count')
+    assert(r.Done==true and r.ChargeDone==true and r.GrantIntent==true and r.GrantDone==true,
+      'later official assignment did not settle native charge/grant')
+    assert(r.Before==before.Pool and r.After==before.Pool-1
+      and r.ReceivedBefore==before.Received and r.ReceivedAfter==before.Received+1,
+      'native counts changed before the product receipt; competing/native assignment is ambiguous')
+    assert(pool==r.After and received==r.ReceivedAfter,
+      'native counts changed after the product receipt; extra assignment cannot pass as one envoy')
+    local budget=assert((s.AiEnvoyTurns or {})[tostring(t.To)])
+    assert(budget.Turn==Game.GetCurrentGameTurn() and budget.Operation==key,'later assignment used a different actual-turn budget')
+  else
+    assert(pool==before.Pool and received==before.Received,
+      'native envoy counts changed without a product operation; competing assignment cannot pass')
+  end
+  assert(not (s.Envoys or {})[t.From..':'..t.To],'official counts were replaced with a PRODUCT ledger')
+  return count
+end
+local function SavedAdmission(offer,request)
+  assert(request.Status=='STARTED' and request.Plan and request.Decision,'saved started admission evidence missing')
+  local plan,decision=request.Plan,request.Decision
+  assert(plan.ID==request.FlowID and plan.From==t.From and plan.To==t.To and plan.Mode=='SMALL_STATE'
+    and plan.EntryConditionsMet==true and plan.RelationsResolved==true,'saved admission plan changed actors or gate result')
+  assert(R.Equal(plan.LeaderProfile,t.PreparedView.Country.Profile) and R.Equal(plan.LeaderProfile,offer.Plan.LeaderProfile)
+    and R.Equal(plan.ProductDeposit,offer.Plan.ProductDeposit),'saved admission plan changed normal source or deposit')
+  assert(decision.From==t.From and decision.To==t.To and decision.Mode=='SMALL_STATE' and decision.AreaKm2==0.44
+    and decision.RelationsResolved==true and decision.EnvoySource=='product' and decision.EnvoysEligible==true,
+    'saved normal admission decision changed identity, relationships or envoy eligibility')
+  assert(type(decision.Turn)=='number' and decision.Turn==request.StartTurn and decision.Turn<=Game.GetCurrentGameTurn(),
+    'saved admission has an invalid actual acceptance turn')
+  assert(type(decision.OwnedTiles)=='number' and decision.OwnedTiles>=0 and decision.OwnedTiles==math.floor(decision.OwnedTiles)
+    and type(decision.Envoys)=='number' and decision.Envoys==math.floor(decision.Envoys)
+    and decision.Envoys>=math.max(1,decision.OwnedTiles),'saved official envoys did not cover native territory at acceptance')
+  local expected,seen={},{}
+  for _,d in ipairs(offer.Requirements) do assert(not expected[d.ID],'duplicate ordinary demand');expected[d.ID]=true end
+  assert(type(decision.Requirements)=='table' and #decision.Requirements==#offer.Requirements,'saved requirement results incomplete')
+  for _,row in ipairs(decision.Requirements) do
+    assert(expected[row.ID] and not seen[row.ID] and row.Met==true,'saved ordinary requirement did not pass: '..tostring(row.ID))
+    seen[row.ID]=true
+  end
+  local view=P.Get(t.From,t.To);Profile(view)
+  assert(view.Frozen==true and view.Status=='STARTED' and view.OfferID==offer.ID and view.Envoys.Route=='FROZEN'
+    and view.Envoys.Envoys==decision.Envoys and view.Envoys.Required==math.max(1,decision.OwnedTiles),
+    'frozen product view differs from its saved accepted plan/envoys')
+  return decision
+end
+local function ObserveDebit(before,s,id)
+  local escrow=assert((s.Escrows or {})[id],'actual deposit escrow absent')
+  local offer=assert(N.GetOffer(id));local deposit=offer.ProductTerms.Deposit
+  assert(escrow.ID==id and escrow.From==t.From and escrow.To==t.To and escrow.Gold==deposit.Gold and escrow.Faith==deposit.Faith,
+    'actual deposit changed offer, payer or ordinary amounts')
+  assert(escrow.Gold>0 and escrow.Faith>0 and (escrow.Status=='HELD' or escrow.Status=='CONSUMED'),'ordinary cautious deposit did not settle')
+  local gold,faith=assert(escrow.CollectGold),assert(escrow.CollectFaith)
+  assert(gold.Done==true and faith.Done==true and gold.Before-gold.After==escrow.Gold and faith.Before-faith.After==escrow.Faith,
+    'normal currency receipt did not settle exact ordinary amounts')
+  t.NativeDebits=t.NativeDebits or {}
+  local proof=t.NativeDebits[id]
+  if proof then
+    assert(proof.From==t.From and proof.To==t.To and R.Equal(proof.Gold,gold) and R.Equal(proof.Faith,faith)
+      and proof.ActualBefore.Gold==gold.Before and proof.ActualBefore.Faith==faith.Before
+      and proof.ActualAfter.Gold==gold.After and proof.ActualAfter.Faith==faith.After,
+      'saved actual-debit observations changed or did not cover both real currency legs')
+    return proof
+  end
+  -- A new receipt must match the native getter *now*, not another journal.
+  -- Later native income/spending is not retroactively attributed to this debit.
+  local actual={Turn=Game.GetCurrentGameTurn(),Gold=Players[t.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(t.To)}
+  assert(actual.Gold==gold.After and actual.Faith==faith.After,
+    'settled receipts do not match actual native balances; omitted debit or later competing currency change')
+  local observations=assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots,'independent native currency observations absent')
+  assert(observations.Owner==t.To and not observations.Overflow,'native currency observation owner/history is invalid')
+  local anchor,cursor
+  if before.Gold==gold.Before and before.Faith==faith.Before then
+    anchor={Turn=before.Turn,Gold=before.Gold,Faith=before.Faith};cursor=before.CurrencyCursor or 0
+  end
+  for index,row in ipairs(observations.Rows) do
+    if row.Turn>=before.Turn and row.Turn<=actual.Turn and row.Gold==gold.Before and row.Faith==faith.Before then
+      anchor=R.Copy(row);cursor=index
+    end
+  end
+  assert(anchor,'receipt Before was not independently observed; native income cannot be guessed')
+  for index=cursor+1,#observations.Rows do
+    local row=observations.Rows[index]
+    assert(row.Turn>=anchor.Turn and row.Turn<=actual.Turn and row.Gold==gold.After
+      and (row.Faith==faith.Before or row.Faith==faith.After),'currency changes between observed Before/After are ambiguous')
+  end
+  assert(anchor.Gold-actual.Gold==escrow.Gold and anchor.Faith-actual.Faith==escrow.Faith,'actual native debit did not match normal deposit')
+  proof={From=t.From,To=t.To,Gold=R.Copy(gold),Faith=R.Copy(faith),ActualBefore=anchor,ActualAfter=actual}
+  t.NativeDebits[id]=proof
+  print('[JAC_OFFICIAL_PRODUCT] actual-debit offer='..id..' gold='..anchor.Gold..'->'..actual.Gold..
+    ' faith='..anchor.Faith..'->'..actual.Faith)
+  return proof
+end
 local function Send(before,previous)
   assert(Game.GetCurrentGameTurn()==before.Turn+1,'send did not follow exactly one actual end_turn')
   local view=P.Get(t.From,t.To);NonDeposit(view)
@@ -411,8 +525,30 @@ const SECOND_SEND: &str = r#"
 t.Second=Send(assert(t.BeforeSecond),assert(t.First))
 assert(t.Second.Turn==t.First.Turn+1,'AI did not resume on the next actual turn')
 assert(not (Product().Pairs or {})[t.From..':'..t.To],'AI registered before actual envoy qualification')
-t.SettledSecond=Snapshot();t.BeforeQualification=Snapshot();Game:SetProperty(KEY,t)
+t.SettledSecond=Snapshot();t.BeforeQualification=Snapshot()
+t.BeforeQualification.CurrencyCursor=#assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots).Rows
+Game:SetProperty(KEY,t)
 return 'next actual end_turn sent exactly one more official envoy; previous receipt unchanged and turn budget renewed'
+"#;
+
+const CURRENCY_WATCH: &str = r#"
+-- Detached native observations only. This observer never calls commands or
+-- replaces any product reader; it cannot supply a ready/deposit condition.
+if JAC_OfficialProductCurrencyCallback then Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback) end
+local observations={Owner=to,Rows={}}
+ExposedMembers.JAC_OfficialProductCurrencySnapshots=observations
+local function Sample()
+  local turn=Game.GetCurrentGameTurn()
+  local row={Turn=turn,Gold=Players[to]:GetTreasury():GetGoldBalance(),Faith=Players[to]:GetReligion():GetFaithBalance()}
+  local last=observations.Rows[#observations.Rows]
+  if last and last.Turn==row.Turn and last.Gold==row.Gold and last.Faith==row.Faith then return end
+  if #observations.Rows>=256 then observations.Overflow=true;return end
+  observations.Rows[#observations.Rows+1]=row
+end
+Sample()
+JAC_OfficialProductCurrencyCallback=Sample
+Events.GameCoreEventPublishComplete.Add(Sample)
+return 'independent native currency snapshots subscribed before natural qualification turns'
 "#;
 
 // Inspect every later natural turn, including the first AI registration. The
@@ -421,21 +557,7 @@ return 'next actual end_turn sent exactly one more official envoy; previous rece
 const QUALIFICATION_TURN: &str = r#"
 local before=assert(t.BeforeQualification)
 assert(Game.GetCurrentGameTurn()==before.Turn+1,'qualification skipped an actual turn')
-local s=Product();local sends=0
-for key,op in pairs(s.Operations or {}) do
-  local old=(before.Product.Operations or {})[key]
-  if old then assert(R.Equal(old,op),'settled operation changed on a later natural turn')
-  elseif op.Identity.To==t.To and op.Identity.Command=='SEND_ENVOY' then
-    sends=sends+1
-    assert(op.Done and op.EnvoyIdentity.Route=='OFFICIAL' and op.Identity.From==t.From,'later AI assignment changed route/recipient')
-    local r=assert(op.EnvoyReceipt)
-    assert(r.Done and r.ChargeDone and r.GrantIntent and r.GrantDone and r.Before-r.After==1 and r.ReceivedAfter-r.ReceivedBefore==1,
-      'later official assignment did not settle exact native charge/grant')
-    local budget=assert(s.AiEnvoyTurns[tostring(t.To)])
-    assert(budget.Turn==Game.GetCurrentGameTurn() and budget.Operation==key,'later assignment used a different actual-turn budget')
-  end
-end
-assert(sends<=1,'AI assigned more than one envoy per recipient/actual turn')
+local s=Product();EnvoyTurn(before,s)
 assert(R.Equal(s.Operations[t.First.Key],t.First.Operation) and R.Equal(s.Operations[t.Second.Key],t.Second.Operation),
   'qualification changed the two saved official receipts')
 local pair=(s.Pairs or {})[t.From..':'..t.To]
@@ -450,19 +572,29 @@ if pair and not t.Registration then
     register=op
   end end
   assert(register and register.OfferIntent.Offer.ID==pair.ID,'actual AI registration intent missing')
-  assert(request.Status=='WAITING','ordinary paid offer did not wait for real deposit collection')
-  NonDeposit(P.Get(t.From,t.To))
+  local actual,tiles,accepted
+  if request.Status=='STARTED' then
+    -- A normal current-turn publication can already collect and admit.
+    -- Inspect the frozen authoritative decision, never demand a live route.
+    accepted=SavedAdmission(offer,request);actual,tiles=accepted.Envoys,accepted.OwnedTiles
+  else
+    assert(request.Status=='WAITING','ordinary admission registration failed')
+    NonDeposit(P.Get(t.From,t.To))
+    actual=Players[t.From]:GetInfluence():GetTokensReceived(t.To);tiles=0
+    for i=0,Map.GetPlotCount()-1 do if Map.GetPlotByIndex(i):GetOwner()==t.From then tiles=tiles+1 end end
+  end
   for _,d in ipairs(offer.Requirements) do if d.Kind=='PRODUCT_METRIC' then
     assert(d.Metric=='FAITH_YIELD' and not minimum,'normal faith yield demand changed');minimum=d.Minimum
   end end
-  assert(minimum and FaithYield(t.To)>=minimum,'actual faith yield did not qualify the registered ordinary offer')
-  local actual=Players[t.From]:GetInfluence():GetTokensReceived(t.To)
-  local tiles=0
-  for i=0,Map.GetPlotCount()-1 do if Map.GetPlotByIndex(i):GetOwner()==t.From then tiles=tiles+1 end end
+  assert(minimum and (accepted or FaithYield(t.To)>=minimum),'actual faith yield did not qualify the registered ordinary offer')
   assert(actual>=math.max(1,tiles),'AI registered before actual official received envoys covered native territory')
-  t.Registration={Turn=Game.GetCurrentGameTurn(),ID=pair.ID,Operation=R.Copy(register),NativeFaithYield=FaithYield(t.To),Received=actual,OwnedTiles=tiles}
+  t.Registration={Turn=Game.GetCurrentGameTurn(),ID=pair.ID,Operation=R.Copy(register),
+    NativeFaithYield=not accepted and FaithYield(t.To) or nil,Decision=R.Copy(accepted),Received=actual,OwnedTiles=tiles}
 end
-t.BeforeQualification=Snapshot();Game:SetProperty(KEY,t)
+if pair and (s.Escrows or {})[pair.ID] then ObserveDebit(before,s,pair.ID) end
+t.BeforeQualification=Snapshot()
+t.BeforeQualification.CurrencyCursor=#assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots).Rows
+Game:SetProperty(KEY,t)
 return 'natural qualification turn inspected: at most one official envoy per recipient and real non-deposit prerequisites for AI registration'
 "#;
 
@@ -470,15 +602,9 @@ const QUALIFIED: &str = r#"
 assert(t.Registration,'bounded real turns never registered a qualified ordinary AI offer')
 local s=Product();local pair=assert(s.Pairs[t.From..':'..t.To]);local request=assert(N.Get('leader-offer',pair.ID))
 assert(request.Status=='STARTED' and request.Plan and request.Plan.Mode=='SMALL_STATE',request.LastError or 'ordinary official-minor admission never started')
-assert(R.Equal(request.Plan.LeaderProfile,t.PreparedView.Country.Profile),'admitted plan does not preserve the real source leader')
-assert(request.Plan.From==t.From and request.Plan.To==t.To,'admitted plan has different actual actors')
-local escrow=assert(s.Escrows[pair.ID])
-local deposit=assert(N.GetOffer(pair.ID)).ProductTerms.Deposit
-assert(escrow.Gold==deposit.Gold and escrow.Gold>0 and (escrow.Status=='HELD' or escrow.Status=='CONSUMED'),
-  'ordinary actual deposit did not settle')
-assert(escrow.CollectGold.Done and escrow.CollectGold.Before-escrow.CollectGold.After==escrow.Gold,'normal native gold leg did not settle exactly')
-assert(escrow.Faith==deposit.Faith and escrow.Faith>0,'ordinary cautious faith deposit changed')
-assert(escrow.CollectFaith.Done and escrow.CollectFaith.Before-escrow.CollectFaith.After==escrow.Faith,'normal native faith leg did not settle exactly')
+SavedAdmission(assert(N.GetOffer(pair.ID)),request)
+assert(t.NativeDebits and t.NativeDebits[pair.ID],'normal currency receipt lacks independently verified actual debit')
+ObserveDebit(assert(t.BeforeQualification),s,pair.ID)
 local flow=assert(JAC_AbsorptionFlowGameplay.Get(request.FlowID))
 assert(flow.Phase1Complete,'normal three-stage absorption did not reach its real first-stage result')
 t.OfferID=pair.ID;t.FlowID=request.FlowID;t.Qualified=Snapshot();Game:SetProperty(KEY,t)
@@ -574,6 +700,7 @@ return v.Status=='AVAILABLE'
     round_trip(&mut steps, "JAC-official-product-ai-receipt");
     steps.push(core(AFTER_LOAD));
     advance(&mut steps);
+    steps.push(ui(CURRENCY_WATCH));
     steps.push(core(SECOND_SEND));
     for _ in 0..10 {
         advance(&mut steps);
@@ -581,6 +708,7 @@ return v.Status=='AVAILABLE'
     }
     steps.push(wait("if not from or not to or not ExposedMembers.JAC_AbsorptionProduct then return false end;local v=ExposedMembers.JAC_AbsorptionProduct.Get(from,to);return v and v.Status=='STARTED'"));
     steps.push(core(QUALIFIED));
+    steps.push(ui("Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback);JAC_OfficialProductCurrencyCallback=nil;ExposedMembers.JAC_OfficialProductCurrencySnapshots=nil;return 'native currency snapshot observer removed after verified debit'"));
     round_trip(&mut steps, "JAC-official-product-ai-qualified");
     steps.push(core("Unchanged(assert(t.Qualified),'qualified same-name save/exit/load');return 'qualified product receipt, actual payer and normal admission restored unchanged'"));
     Ok(json!({
@@ -966,6 +1094,182 @@ STATE.Operations['0:ai-envoy:2:1']=next;STATE.AiEnvoyTurns['0']={{Turn=4,Operati
                 "{mutation}: {result:?}"
             );
         }
+        Ok(())
+    }
+
+    const QUALIFICATION_WORLD: &str = r#"
+local copy=JAC_AbsorptionGameplay.Rules.Copy
+TEST.PreparedView=copy(VIEW)
+TEST.First={Key=OPKEY,Operation=copy(OP)}
+TEST.Second={Key='0:ai-envoy:2:1',Operation=copy(OP)}
+TEST.Second.Operation.Identity.ExpectedEnvoys=1;TEST.Second.Operation.Nonce='ai-envoy:2:1'
+TEST.Second.Operation.EnvoyReceipt={Before=31,After=30,ReceivedBefore=1,ReceivedAfter=2,ChargeDone=true,GrantIntent=true,GrantDone=true,Done=true}
+STATE.Operations[TEST.Second.Key]=copy(TEST.Second.Operation)
+STATE.AiEnvoyTurns['0']={Turn=4,Operation=TEST.Second.Key}
+TURN,POOL,RECEIVED=5,30,2
+VIEW.Envoys.Envoys=2
+TEST.BeforeQualification={Turn=4,Pool=30,Received=2,Gold=GOLD,Faith=FAITH,Product=copy(STATE),CurrencyCursor=1}
+ExposedMembers={JAC_OfficialProductCurrencySnapshots={Owner=0,Rows={{Turn=4,Gold=GOLD,Faith=FAITH}}}}
+"#;
+
+    #[test]
+    fn every_qualification_turn_reconciles_observed_native_counts_with_new_receipt() -> Result<()> {
+        for mutation in [
+            "",
+            "POOL=28",
+            "RECEIVED=4",
+            "NEXT.EnvoyReceipt.Before=31;NEXT.EnvoyReceipt.After=30;POOL=30",
+            "NEXT.EnvoyReceipt.ReceivedBefore=3;NEXT.EnvoyReceipt.ReceivedAfter=4;RECEIVED=4",
+            "NEXT.EnvoyIdentity.Route='PRODUCT'",
+            "NEXT.Identity.From=1",
+            "STATE.Operations.extra=JAC_AbsorptionGameplay.Rules.Copy(NEXT)",
+        ] {
+            let setup = format!(
+                r#"
+{QUALIFICATION_WORLD}
+NEXT=copy(TEST.Second.Operation);NEXT.Identity.ExpectedEnvoys=2;NEXT.Nonce='ai-envoy:2:2'
+NEXT.EnvoyReceipt={{Before=30,After=29,ReceivedBefore=2,ReceivedAfter=3,ChargeDone=true,GrantIntent=true,GrantDone=true,Done=true}}
+STATE.Operations['0:ai-envoy:2:2']=NEXT;STATE.AiEnvoyTurns['0']={{Turn=5,Operation='0:ai-envoy:2:2'}}
+POOL,RECEIVED=29,3
+{mutation}
+"#
+            );
+            let result = run(&setup, QUALIFICATION_TURN)?;
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
+        }
+        // No product receipt cannot justify an extra native-AI send either.
+        for mutation in ["", "POOL=29", "RECEIVED=3"] {
+            let result = run(
+                &format!("{QUALIFICATION_WORLD}\n{mutation}"),
+                QUALIFICATION_TURN,
+            )?;
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "no receipt/{mutation}: {result:?}"
+            );
+        }
+        Ok(())
+    }
+
+    const ACCEPTED_WORLD: &str = r#"
+OFFER={ID='product:2:0:1',From=2,To=0,AreaKm2=0.44,Requirements={
+ {ID='leader:FAITH_YIELD',Kind='PRODUCT_METRIC',Metric='FAITH_YIELD',Minimum=5},
+ {ID='deposit',Kind='PRODUCT_DEPOSIT'}, {ID='identity',Kind='PRODUCT_IDENTITY'},
+ {ID='terms',Kind='PRODUCT_CONTEXT'}, {ID='reserve:gold',Kind='GOLD_MINIMUM',Minimum=50}},
+ ProductTerms={Input={Country={Profile=copy(VIEW.Country.Profile)}},Deposit={Gold=100,Faith=20}},
+ Plan={LeaderProfile=copy(VIEW.Country.Profile),ProductDeposit={OfferID='product:2:0:1',From=2,To=0,Gold=100,Faith=20,Policy='CONSUME_ON_VERIFIED_RESULT_V2'}}}
+REQUEST={Status='STARTED',FlowID='normal-flow',StartTurn=5,
+ Plan={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',EntryConditionsMet=true,RelationsResolved=true,
+  LeaderProfile=copy(OFFER.Plan.LeaderProfile),ProductDeposit=copy(OFFER.Plan.ProductDeposit)},
+ Decision={From=2,To=0,Mode='SMALL_STATE',AreaKm2=0.44,Turn=5,RelationsResolved=true,
+  EnvoySource='product',EnvoysEligible=true,OwnedTiles=2,Envoys=2,Requirements={}}}
+for _,d in ipairs(OFFER.Requirements) do REQUEST.Decision.Requirements[#REQUEST.Decision.Requirements+1]={ID=d.ID,Met=true} end
+REGISTER={Identity={Command='REGISTER',From=2,To=0},Nonce='ai-register:2',Done=true,OfferIntent={Offer=copy(OFFER)}}
+STATE.Pairs['2:0']={ID=OFFER.ID,Sequence=1}
+STATE.Operations['0:ai-register:2']=REGISTER
+ESCROW={ID=OFFER.ID,From=2,To=0,Gold=100,Faith=20,Status='HELD',CollectGold={Before=10100,After=10000,Done=true},CollectFaith={Before=10000,After=9980,Done=true}}
+STATE.Escrows[OFFER.ID]=ESCROW
+GOLD,FAITH=10000,9980
+VIEW.Status,VIEW.Frozen,VIEW.OfferID='STARTED',true,OFFER.ID
+VIEW.Envoys={Route='FROZEN',Envoys=2,Required=2}
+JAC_AbsorptionAdmissionGameplay.Get=function(_,id) assert(id==OFFER.ID);return copy(REQUEST) end
+JAC_AbsorptionAdmissionGameplay.GetOffer=function(id) assert(id==OFFER.ID);return copy(OFFER) end
+JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='normal-flow');return {Phase1Complete=true} end}
+"#;
+
+    #[test]
+    fn early_started_registration_uses_saved_requirements_and_frozen_envoys() -> Result<()> {
+        for mutation in [
+            "",
+            "REQUEST.Status='WAITING'",
+            "REQUEST.Decision.Requirements[1].Met=false",
+            "REQUEST.Decision.Requirements[5]=nil",
+            "REQUEST.Decision.Requirements[2].ID='fake-demand'",
+            "REQUEST.Decision.Envoys=1",
+            "REQUEST.Decision.EnvoysEligible=false",
+            "REQUEST.Decision.RelationsResolved=false",
+            "REQUEST.Decision.Turn=4",
+            "REQUEST.Plan.EntryConditionsMet=false",
+            "REQUEST.Plan.From=1",
+            "REQUEST.Plan.LeaderProfile.LeaderType='LEADER_MINOR_CIV_SINGAPORE'",
+            "VIEW.Envoys.Envoys=3",
+            "VIEW.Envoys.Route='OFFICIAL'",
+        ] {
+            let result = run(
+                &format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{mutation}"),
+                QUALIFICATION_TURN,
+            )?;
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
+        }
+        // Once saved acceptance is authoritative, native yields can change
+        // with real absorption; do not re-evaluate a frozen demand against it.
+        let result = run(
+            &format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\nNATIVE_FAITH_YIELD=0"),
+            QUALIFICATION_TURN,
+        )?;
+        assert!(result.is_ok(), "accepted frozen demand: {result:?}");
+        let result = run(
+            &format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}"),
+            &format!("local function ObserveTurn()\n{QUALIFICATION_TURN}\nend\nObserveTurn()\n{QUALIFIED}"),
+        )?;
+        assert!(result.is_ok(), "early accepted continuation: {result:?}");
+        // The pre-publication WAITING branch still checks live metrics.
+        let waiting = format!(
+            r#"
+{QUALIFICATION_WORLD}
+{ACCEPTED_WORLD}
+REQUEST.Status='WAITING';REQUEST.Plan=nil;REQUEST.Decision=nil
+VIEW.Status='WAITING';VIEW.Frozen=nil;VIEW.Envoys={{Route='OFFICIAL',Envoys=2,Required=2,Eligible=true}}
+STATE.Escrows={{}};GOLD,FAITH=10100,10000
+Map={{GetPlotCount=function() return 2 end,GetPlotByIndex=function() return {{GetOwner=function() return 2 end}} end}}
+"#
+        );
+        let result = run(&waiting, QUALIFICATION_TURN)?;
+        assert!(result.is_ok(), "ordinary waiting registration: {result:?}");
+        Ok(())
+    }
+
+    #[test]
+    fn actual_debit_observation_rejects_omission_and_unobserved_or_competing_balances() -> Result<()>
+    {
+        for mutation in [
+            "", "GOLD=10100", "FAITH=10000", "GOLD=10100;FAITH=10000",
+            "GOLD=9999", "ESCROW.CollectGold.After=10001", "ESCROW.CollectFaith.Done=false",
+            "TEST.BeforeQualification.Gold=9999;ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={}",
+            "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Owner=1",
+            "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Overflow=true",
+            "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[2]={Turn=5,Gold=10000,Faith=9999}",
+        ] {
+            let result=run(&format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{mutation}"),
+                "ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)")?;
+            assert_eq!(result.is_ok(),mutation.is_empty(),"{mutation}: {result:?}");
+        }
+        // A native income change is usable only if its real Before was
+        // independently observed; do not infer it from the receipt itself.
+        let result = run(
+            &format!(
+                r#"
+{QUALIFICATION_WORLD}
+{ACCEPTED_WORLD}
+TEST.BeforeQualification.Gold=10090;TEST.BeforeQualification.Faith=9990
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=5,Gold=10100,Faith=10000}},{{Turn=5,Gold=10000,Faith=10000}},{{Turn=5,Gold=10000,Faith=9980}}}}
+"#
+            ),
+            "ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)",
+        )?;
+        assert!(
+            result.is_ok(),
+            "independently observed income and debit: {result:?}"
+        );
         Ok(())
     }
 
