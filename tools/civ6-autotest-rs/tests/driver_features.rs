@@ -9,6 +9,52 @@ use std::{
 use support_driver::{FakeBackend, Harness, ManualClock};
 
 #[test]
+fn configured_human_pool_survives_defaults_without_changing_participants() {
+    let step = json!({"action":"configure","ruleset":"RULESET_JAC_BANSEIKI","human_pool":"JAC_ALL_POOLS",
+        "map_size":"MAPSIZE_DUEL","speed":"GAMESPEED_STANDARD","seed":620981,"city_states":1,
+        "players":[{"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false},
+                   {"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}]});
+    scenario::validate_scenario(&json!({"name":"pool setup","steps":[step.clone()]})).unwrap();
+    let lua = mlua::Lua::new();
+    lua.load(r#"
+UI={IsInFrontEnd=function() return true end}
+SlotStatus={SS_TAKEN=1,SS_COMPUTER=2}
+GameConfiguration={SetToDefaults=function() VALUES={} end,SetRuleSet=function(r) RULE=r end,
+ UpdateEnabledMods=function() end,SetValue=function(k,v) VALUES[k]=v end,GetValue=function(k) return VALUES[k] end,
+ SetGameSpeedType=function() end,GetHiddenPlayerCount=function() return 4 end,
+ SetParticipatingPlayerCount=function(n) PARTICIPANTS=n end}
+MapConfiguration={SetMapSize=function() end,SetValue=function() end,SetMaxMajorPlayers=function(n) MAJORS=n end}
+PlayerConfigurations={}
+for actor=0,1 do local p={}; PlayerConfigurations[actor]=p
+ function p:SetSlotStatus(v) self.Slot=v end
+ function p:SetLeaderTypeName(v) self.Leader=v end
+ function p:SetCivilizationTypeName(v) self.Civ=v end
+ function p:GetLeaderTypeName() return self.Leader end
+ function p:GetCivilizationTypeName() return self.Civ end
+end
+"#).exec().unwrap();
+    assert!(lua
+        .load(scenario::configure_code(&step))
+        .eval::<bool>()
+        .unwrap());
+    lua.load(r#"assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS');assert(MAJORS==2 and PARTICIPANTS==6)
+assert(PlayerConfigurations[0].Slot==2 and PlayerConfigurations[0].Leader=='LEADER_JAC_TAKEDA_NOBUTORA')
+assert(PlayerConfigurations[1].Slot==1 and PlayerConfigurations[1].Leader=='LEADER_JAC_ODA_NOBUHIDE')"#).exec().unwrap();
+    for (ruleset, pool) in [
+        ("RULESET_STANDARD", json!("JAC_ALL_POOLS")),
+        ("RULESET_JAC_BANSEIKI", json!("invented")),
+        ("RULESET_JAC_BANSEIKI", json!(true)),
+    ] {
+        let mut invalid = step.clone();
+        invalid["ruleset"] = json!(ruleset);
+        invalid["human_pool"] = pool;
+        let error = scenario::validate_scenario(&json!({"name":"pool setup","steps":[invalid]}))
+            .unwrap_err();
+        assert!(error.message.contains("human_pool"), "{error}");
+    }
+}
+
+#[test]
 fn end_turn_wait_dismisses_advisor_that_appears_after_the_first_poll() {
     let state = Arc::new(Mutex::new((false, false)));
     let events = state.clone();

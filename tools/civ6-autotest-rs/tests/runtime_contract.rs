@@ -49,6 +49,11 @@ impl Backend for BundleGame {
     fn single_process(&mut self, _settle: f64) -> Result<Option<(u32, f64)>> {
         Ok(Some((7, 0.0)))
     }
+    fn press_key(&mut self, key: u16, _deadline: f64) -> Result<()> {
+        assert_eq!(key, civ6_autotest_rs::click::VK_ESCAPE);
+        self.commands.lock().unwrap().push(format!("KEY:{key}"));
+        Ok(())
+    }
     fn list_states(&mut self, _timeout: f64) -> Result<Vec<String>> {
         Ok(vec![
             "FrontEnd".into(),
@@ -210,6 +215,13 @@ fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
         .unwrap()
         .contains("old unrelated"));
     let commands = commands.lock().unwrap();
+    assert_eq!(
+        commands.iter().filter(|c| c.as_str() == "KEY:27").count(),
+        2
+    );
+    assert!(commands
+        .iter()
+        .all(|c| !c.contains("OnActivateButtonClicked")));
     assert_eq!(
         commands
             .iter()

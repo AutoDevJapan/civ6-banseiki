@@ -165,10 +165,11 @@ fn escape_activation_uses_native_input_once_and_waits_for_readiness() {
 #[test]
 fn loadscreen_input_rejects_unknown_methods() {
     for input in [json!("escpae"), json!(true), json!(null)] {
-        assert!(validate_scenario(
-            &json!({"loadscreen_input":input,"steps":[{"action":"end_turn"}]})
+        let error = validate_scenario(
+            &json!({"name":"input setup","loadscreen_input":input,"steps":[{"action":"end_turn"}]}),
         )
-        .is_err());
+        .unwrap_err();
+        assert!(error.message.contains("loadscreen_input"), "{error}");
     }
 }
 

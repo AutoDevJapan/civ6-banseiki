@@ -1680,6 +1680,7 @@ fn unfiltered_startup_probe(repo: &Repository) -> Result<Value> {
 // allocation writes. Keep every Core roster and product acceptance assertion.
 fn filter_only_scenario(repo: &Repository) -> Result<Value> {
     let mut product = scenario(repo)?;
+    product["steps"][1]["human_pool"] = json!("JAC_ALL_POOLS");
     let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
     let setup = base["steps"][2]["code"]
         .as_str()
@@ -1862,7 +1863,14 @@ mod tests {
         let compared_steps = comparison["steps"].as_array().unwrap();
         assert_eq!(original_steps.len(), compared_steps.len());
         for (index, (before, after)) in original_steps.iter().zip(compared_steps).enumerate() {
-            if index != 2 {
+            if index == 1 {
+                let mut normalized = after.clone();
+                assert_eq!(
+                    normalized.as_object_mut().unwrap().remove("human_pool"),
+                    Some(json!("JAC_ALL_POOLS"))
+                );
+                assert_eq!(before, &normalized, "configured actors or map changed");
+            } else if index != 2 {
                 assert_eq!(before, after, "acceptance step {index} changed");
             }
         }

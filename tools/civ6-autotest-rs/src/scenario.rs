@@ -161,6 +161,13 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             "configure" => {
                 bool_flags(&["build_setup"])?;
+                if let Some(pool) = step.get("human_pool") {
+                    if step["ruleset"] != BANSEIKI_RULESET
+                        || (pool != "JAC_BANSEIKI_ONLY" && pool != "JAC_ALL_POOLS")
+                    {
+                        return Err(fail("human_pool requires a supported Banseiki pool".into()));
+                    }
+                }
                 for key in ["ruleset", "map_size", "speed"] {
                     if !type_id(&step[key]) {
                         return Err(fail(format!("invalid {key}")));
@@ -447,6 +454,14 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
         ),
         "GameConfiguration.UpdateEnabledMods()".into(),
     ];
+    // Apply the real setup option before BuildHeadlessGameSetup computes the
+    // selectable leader domain used by official DLC content criteria.
+    if let Some(pool) = step["human_pool"].as_str() {
+        lines.push(format!(
+            "GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL', {})",
+            lua_string(pool)
+        ));
+    }
     if let Some(file) = step["map_file"].as_str() {
         lines.push(format!(
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
