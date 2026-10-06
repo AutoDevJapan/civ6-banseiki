@@ -322,7 +322,10 @@ local function MoveCurrency(escrow,side,currency,amount)
     assert(after>=0,'insufficient actual deposit funds')
     intent={Before=current,After=after};escrow[key]=intent;Save(s)
   end
-  if current==intent.Before then Change(escrow.To,currency,intent.After-intent.Before)
+  if current==intent.Before then
+    assert(not intent.Issued,'currency call issued; awaiting observed balance')
+    intent.Issued=true;Save(s)
+    Change(escrow.To,currency,intent.After-intent.Before)
   else assert(current==intent.After,'currency journal has an ambiguous engine balance') end
   assert(Balance(escrow.To,currency)==intent.After,'engine did not settle deposit')
   s=State();s.Escrows[escrow.ID][key].Done=true;Save(s)
@@ -356,6 +359,7 @@ local function Refund(id,reason)
         else
           local current=Balance(escrow.To,currency)
           assert(current==intent.Before or current==intent.After,'ambiguous partially collected deposit')
+          assert(not intent.Issued or current==intent.After,'issued collection awaits observation before cancellation')
           if current==intent.After then paid=escrow[currency] end
         end
       end
@@ -753,7 +757,19 @@ function P.PublicationKey()
     summary[#summary+1]={ID=key,Status=request.Status,Phase=flow and flow.Phase,
       Error=request.LastError and tostring(request.LastError):match('^[^\r\n]*')}
   end
-  return A.Canonical({Revision=s.WorkRevision or 0,Requests=summary})
+  local observed={}
+  for _,key in ipairs(R.Keys(s.Escrows or {})) do
+    local escrow=s.Escrows[key]
+    if escrow.Status=='COLLECTING' or escrow.Status=='RETURNING' then
+      local row={ID=key}
+      for _,currency in ipairs({'Gold','Faith'}) do
+        local ok,value=pcall(Balance,escrow.To,currency)
+        row[currency]=ok and value or 'UNAVAILABLE'
+      end
+      observed[#observed+1]=row
+    end
+  end
+  return A.Canonical({Revision=s.WorkRevision or 0,Requests=summary,Observed=observed})
 end
 function P.RecheckPublished(actor,turn)
   assert(Integer(actor) and Major(actor) and Players[actor]:IsAlive()
@@ -781,7 +797,7 @@ N.RegisterRequirement('PRODUCT_DEPOSIT',function(from,to,d) return Evaluate(from
 N.RegisterRequirement('PRODUCT_RELATIONS',function(from,to) return RelationState(from,to).Met and DiplomaticSituation(from,to)~='war' end)
 N.RegisterEnvoys('product',function(from,to) local value=Envoys(from,to);value.Eligible=value.Eligible and not PendingEnvoy(to);return value end)
 GameEvents.JAC_AbsorptionProduct_Operation.Add(Operation)
-GameEvents.OnGameTurnStarted.Add(P.Tick)
+GameEvents.OnGameTurnStarted.Add(function() P.Tick(false) end)
 -- Read-only exports only. Mutating functions are never available to UI.
 ExposedMembers.JAC_AbsorptionProduct={Get=P.Get,GetSmallCountries=P.GetSmallCountries,Country=P.Country,PublicationKey=P.PublicationKey}
 JAC_AbsorptionProductGameplay=P

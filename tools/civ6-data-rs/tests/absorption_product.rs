@@ -694,6 +694,22 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
 }
 
 #[test]
+fn real_turn_event_argument_still_runs_the_normal_ai_envoy_scan() -> anyhow::Result<()> {
+    let lua = world(9999.)?;
+    lua.load(
+        r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false;READY()
+      GameEvents.OnGameTurnStarted.Call(TURN)
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+      GameEvents.OnGameTurnStarted.Call(TURN)
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
 fn same_turn_publication_finishes_observed_currency_receipt_without_recharging(
 ) -> anyhow::Result<()> {
     let lua = world(10000.)?;
@@ -703,7 +719,11 @@ fn same_turn_publication_finishes_observed_currency_receipt_without_recharging(
       assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
       assert(STARTS==0 and CHARGES==1 and FAITH[2]<1000)
       local before=CANONICAL({Gold=GOLD[2],Faith=FAITH[2]})
+      for i=1,3 do JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN) end
+      assert(CANONICAL({Gold=GOLD[2],Faith=FAITH[2]})==before,'stale UI retried a currency mutation')
+      local key=JAC_AbsorptionProductGameplay.PublicationKey()
       UI_FAITH=FAITH[2]
+      assert(JAC_AbsorptionProductGameplay.PublicationKey()~=key,'observed UI balance cannot wake pending receipt')
       assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
       assert(STARTS==1 and CHARGES==1 and VIEW().Status=='STARTED')
       assert(CANONICAL({Gold=GOLD[2],Faith=FAITH[2]})==before,'receipt observation charged again')
