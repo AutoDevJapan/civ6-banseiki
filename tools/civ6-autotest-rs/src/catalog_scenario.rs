@@ -1,4 +1,6 @@
-//! Bounded, synchronous qualification diagnostic, including 21 AI owners.
+//! Normal observer-v1 qualification diagnostic: 22 persons, 21 AI owners.
+//! Human slot zero owns no subject, so its unmodified UI cannot auto-pay.
+//! This is a new scenario contract, not an input to the frozen raw checker.
 //! This is not AI-initiated payment, startup/load, unpaid assignment or a suite pass.
 //! No runtime/native implementation or permission authority is introduced here.
 //! Native mode 6 retains only a 1024-call calibration prefix; it is never a
@@ -28,6 +30,10 @@ pub fn header() -> String {
     }
     out.push_str(r#"}
 local function integer(v) return type(v)=='number' and v>=0 and v%1==0 end
+assert(Game.GetLocalPlayer()==0,'normal observer must be human slot zero')
+for _,key in ipairs({'JAC_TEST853_ADMISSION_ACTIVE','JAC_TEST853_ADMISSION_MANUAL_APPOINT','JAC_TEST853_PAID_ASSIGNMENT_V1','JAC_TEST324_EVENTS_PROBE'}) do
+ assert(Game:GetProperty(key)==nil,'private flag forbidden in normal observer: '..key)
+end
 local rows,indices,leaders,hashes,costs={},{},{},{},{}
 local n=0
 for row in GameInfo.JAC_LeaderPersonas() do
@@ -61,7 +67,9 @@ for source=0,21 do
  local total,spent=g:GetGovernorPoints(),g:GetGovernorPointsSpent()
  assert(integer(total) and spent==0,'titles unknown or already spent')
  local d=GameInfo.Governors[row.GovernorType]
- rows[source+1]={row=row,def=d,source=source,owner=(source+1)%22}
+ -- Keep every recipient foreign and non-local. Slot one receives two people;
+ -- its official title budget must cover both outstanding reservations.
+ rows[source+1]={row=row,def=d,source=source,owner=source==21 and 1 or source+1}
  catalog[#catalog+1]=source..':'..e.leader..':'..e.civ..':'..d.Index..':'..d.Hash..':'..row.EvolutionCost..':'..city:GetID()
  balance[#balance+1]=source..':'..total..':'..spent
 end
@@ -140,7 +148,7 @@ local function qualification(entry,joined,evolving)
  local ownerGov=Players[entry.owner]:GetGovernors()
  if evolving then assert(ownerGov:GetGovernorPoints()>=entry.row.EvolutionCost,'official titles not available') end
  local identity=entry.source..':'..entry.owner..':'..entry.def.Index..':'..entry.row.LeaderType..':'..entry.row.EvolutionCost
- local measured='CATALOG880 '..(core and 'GAMEPLAY_PROJECTION' or 'UI_NATIVE_QUALIFICATION')..' '..identity..' positive='..positives..' negative='..negatives..' raw='..table.concat(bits)
+ local measured='CATALOG_NORMAL_AI_V1 '..(core and 'GAMEPLAY_PROJECTION' or 'UI_NATIVE_QUALIFICATION')..' '..identity..' positive='..positives..' negative='..negatives..' raw='..table.concat(bits)
  rawQualifications[#rawQualifications+1]=measured; print(measured)
  local prefix='JAC_PERSONA_'..entry.row.LeaderType..'_'
  -- Civ6 returns zero Lua values for an absent property. Parentheses adjust
@@ -152,36 +160,34 @@ end
 }
 
 pub fn stable_code() -> String {
-    format!("{}\nreturn 'CATALOG880 STABLE turn='..turn..' catalog='..table.concat(catalog,';')..' titles='..table.concat(balance,';')", header())
+    format!("{}\nreturn 'CATALOG_NORMAL_AI_V1 STABLE turn='..turn..' catalog='..table.concat(catalog,';')..' titles='..table.concat(balance,';')", header())
 }
 
-/// These two existing flags suppress only automatic UI operation submission
-/// (View.lua Update). ACTIVE also enables the legacy Ashina projection, but
-/// mode 6 never consumes it, and Ashina's owner is 3, not private owner 0.
-/// Neither that projection nor any paid flag is read as evidence.
+/// Normal observer setup: local human owns no subject, and no turn advances.
+/// Official civic completion funds each AI's total outstanding reservations.
+/// No UI callback is disabled and no private flag is written.
 pub fn prepare_code() -> String {
     format!(
         r#"{}
-assert(Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==nil and Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==nil,'UI fixture already active')
 for _,entry in ipairs(rows) do ledger(entry,false,false) end
-Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)
-Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',1)
 local civics,seen={{}},{{}}
 for item in GameInfo.JAC_PersonaTitleCivics() do
  assert(type(item.CivicType)=='string' and not seen[item.CivicType],'invalid official title civic')
  seen[item.CivicType]=true; civics[#civics+1]=item.CivicType
 end
 table.sort(civics); assert(#civics==15,'official title sources differ')
-for _,entry in ipairs(rows) do
- local p=Players[entry.owner]; local g=p:GetGovernors(); local culture=p:GetCulture()
+local budgets={{}}
+for _,entry in ipairs(rows) do budgets[entry.owner]=(budgets[entry.owner] or 0)+entry.row.EvolutionCost end
+for owner=1,21 do
+ local budget=assert(budgets[owner]); local p=Players[owner]; local g=p:GetGovernors(); local culture=p:GetCulture()
  for _,kind in ipairs(civics) do
-  if g:GetGovernorPoints()>=entry.row.EvolutionCost then break end
+  if g:GetGovernorPoints()>=budget then break end
   local civic=assert(GameInfo.Civics[kind])
   if not culture:HasCivic(civic.Index) then culture:SetCulturalProgress(civic.Index,culture:GetCultureCost(civic.Index)) end
  end
- assert(g:GetGovernorPointsSpent()==0 and g:GetGovernorPoints()>=entry.row.EvolutionCost,'official civic progress pending or insufficient')
+ assert(g:GetGovernorPointsSpent()==0 and g:GetGovernorPoints()>=budget,'official civic progress pending or insufficient')
 end
-return 'CATALOG880 official civics only; UI automatic submission paused; no game turn requested'
+return 'CATALOG_NORMAL_AI_V1 normal observer: official AI title budgets; local human owns no subject; UI callbacks unchanged; no game turn requested'
 "#,
         header()
     )
@@ -189,7 +195,7 @@ return 'CATALOG880 official civics only; UI automatic submission paused; no game
 
 pub fn pair_code(source: usize, evolving: bool, mutate: bool) -> Result<String> {
     Ok(format!(
-        "{}\n{}\nreturn 'CATALOG880 {} '..receipt",
+        "{}\n{}\nreturn 'CATALOG_NORMAL_AI_V1 {} '..receipt",
         if mutate { header() } else { ui_code(header()) },
         pair_body(source, evolving, mutate)?,
         if evolving { "EVOLVING" } else { "JOINED" }
@@ -202,7 +208,7 @@ fn pair_body(source: usize, evolving: bool, mutate: bool) -> Result<String> {
     }
     let mut code = format!("fullMatrix=false\nlocal entry=rows[{}]\n", source + 1);
     if mutate {
-        code.push_str("assert(Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')==1 and Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')==1,'automatic UI submission not paused')\nlocal api=assert(ExposedMembers.JAC_LeaderPersona,'Gameplay API missing')\n");
+        code.push_str("assert(entry.owner~=Game.GetLocalPlayer() and not Players[entry.owner]:IsHuman(),'subject recipient must be an AI, not the local observer')\nlocal api=assert(ExposedMembers.JAC_LeaderPersona,'Gameplay API missing')\nlocal normal=api.EventsGameplayStatus(entry.owner,entry.row.LeaderType)\nassert(normal.active and normal.source=='civ6-persona-events-rs/v3/normal-Gameplay','normal accounting unavailable')\n");
         if evolving {
             code.push_str("ledger(entry,true,false)\nassert(type(api.PrepareEvolution)=='function' and api.PrepareEvolution(entry.owner,entry.row.LeaderType)=='EVOLVING','one synchronous PrepareEvolution failed or returned unknown')\n");
         } else {
@@ -232,7 +238,7 @@ pub fn batch_code(first: usize, end: usize, evolving: bool, mutate: bool) -> Res
         code.push_str("\nreceipts[#receipts+1]=receipt\nend\n");
     }
     code.push_str(&format!(
-        "return 'CATALOG880 {} '..table.concat(receipts,';')",
+        "return 'CATALOG_NORMAL_AI_V1 {} '..table.concat(receipts,';')",
         if evolving { "EVOLVING" } else { "JOINED" }
     ));
     Ok(code)
@@ -247,8 +253,8 @@ for _,entry in ipairs(rows) do
  receipts[#receipts+1]=receipt; positive=positive+p; negative=negative+n
 end
 assert(positive=={positive} and negative=={negative},'full matrix incomplete')
-print('CATALOG880 '..(core and 'GAMEPLAY_PROJECTION' or 'UI_NATIVE_QUALIFICATION')..' MATRIX positive='..positive..' negative='..negative)
-return 'CATALOG880 MATRIX identities=22 '..table.concat(receipts,';')
+print('CATALOG_NORMAL_AI_V1 '..(core and 'GAMEPLAY_PROJECTION' or 'UI_NATIVE_QUALIFICATION')..' MATRIX positive='..positive..' negative='..negative)
+return 'CATALOG_NORMAL_AI_V1 MATRIX identities=22 '..table.concat(receipts,';')
 "#,
         header(),
         positive = if evolving { 22 } else { 0 },
@@ -289,16 +295,16 @@ pub fn build(template: &Value) -> Result<Value> {
         &mut steps,
         stable_code(),
         stable_code(),
-        "CATALOG880_STABLE",
+        "CATALOG_NORMAL_AI_V1_STABLE",
     );
     // Existing action maps to BridgeMode::ProductionAdmission (6), normal
     // production_admission=true. No private scope or paid-assignment mode.
-    steps.push(json!({"action":"start_native_production_admission","name":"normal-catalog22","max_seconds":300,"timeout":30}));
+    steps.push(json!({"action":"start_native_production_admission","name":"normal-ai-observer-v1","max_seconds":300,"timeout":30}));
     steps.push(lua(READ_CLOSED_ADMISSION.into(), true));
     // The prior closed-UI proof remains separate. Spending 968 UI getter calls
     // here would exhaust the mode-6 prefix before any positive could appear.
     let mut closed = lua(matrix_code(false), true);
-    closed["capture_as"] = "CATALOG880_CLOSED".into();
+    closed["capture_as"] = "CATALOG_NORMAL_AI_V1_CLOSED".into();
     steps.push(closed);
     for source in (0..COUNT).step_by(4) {
         let end = (source + 4).min(COUNT);
@@ -308,7 +314,7 @@ pub fn build(template: &Value) -> Result<Value> {
                 batch_code(source, end, evolving, true)?,
                 batch_code(source, end, evolving, false)?,
                 &format!(
-                    "CATALOG880_{}_{}",
+                    "CATALOG_NORMAL_AI_V1_{}_{}",
                     source,
                     if evolving { "EVOLVE" } else { "JOIN" }
                 ),
@@ -319,25 +325,25 @@ pub fn build(template: &Value) -> Result<Value> {
         &mut steps,
         matrix_code(true),
         matrix_code(true),
-        "CATALOG880_FINAL",
+        "CATALOG_NORMAL_AI_V1_FINAL",
     );
     // Preserve the two differently sourced full matrices directly in steps.jsonl,
     // in addition to the per-person raw Lua log. Never compare them as one type.
     for core in [true, false] {
         let raw = matrix_code(true).replace(
-            "return 'CATALOG880 MATRIX identities=22 '..table.concat(receipts,';')",
+            "return 'CATALOG_NORMAL_AI_V1 MATRIX identities=22 '..table.concat(receipts,';')",
             "return 'positive='..positive..' negative='..negative..' '..table.concat(rawQualifications,';')",
         );
         steps.push(lua(if core { raw } else { ui_code(raw) }, core));
     }
     for core in [true, false] {
         let mut step = lua(stable_code(), core);
-        step["equals_capture"] = "CATALOG880_STABLE".into();
+        step["equals_capture"] = "CATALOG_NORMAL_AI_V1_STABLE".into();
         steps.push(step);
     }
     steps.push(json!({"action":"stop_native_production_admission","timeout":30}));
     steps.push(json!({"action":"exit_to_menu"}));
-    let result = json!({"name":"Normal 22-person qualification: Gameplay closed484; UI owned positives FIRST then final484. Initial UI closed484 and per-join UI negatives UNMEASURED (separate prior proof). Cyclic owners (21 AI), synchronous Join/PrepareEvolution, zero turns/payment/assignment operations. Parent must verify native positive22 coverage in mode6 original counters/1024-prefix; prefix is NOT full-history evidence. Not AI autonomous payment, startup/load, unpaid placement or 113-suite acceptance","judge_profile":"generic","strict_lua_errors":true,"steps":steps});
+    let result = json!({"name":"Normal 22-person qualification: Gameplay closed484; UI owned positives FIRST then final484. Initial UI closed484 and per-join UI negatives UNMEASURED (separate prior proof). Non-local AI owners only (21 AI, slot1 owns two persons), synchronous Join/PrepareEvolution, zero turns/payment/assignment operations. Parent must verify native positive22 coverage in mode6 original counters/1024-prefix; prefix is NOT full-history evidence. Not AI autonomous payment, startup/load, unpaid placement or 113-suite acceptance","judge_profile":"generic","strict_lua_errors":true,"steps":steps});
     validate_scenario(&result)?;
     Ok(result)
 }
