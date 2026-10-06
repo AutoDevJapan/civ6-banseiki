@@ -1529,6 +1529,10 @@ impl Runner {
                 Ok(false) => {}
                 Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                 Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    if self.reconcile_persona_wait_read(condition, end, unblocked)? {
+                        unblocked += 1;
+                        continue;
+                    }
                     if !self.unblock_ingame(
                         text(condition, "state_name"),
                         end,
