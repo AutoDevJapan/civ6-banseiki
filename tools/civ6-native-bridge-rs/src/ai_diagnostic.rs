@@ -5,6 +5,7 @@ use serde_json::Value;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Command {
     pub stop: bool,
+    pub reader_only: bool,
     pub subject: Subject,
 }
 impl Command {
@@ -25,6 +26,7 @@ impl Command {
             "spent",
             "title",
             "timeout",
+            "mode",
         ];
         if object.keys().any(|k| !keys.contains(&k.as_str())) {
             return Err("AI diagnostic has unknown fields (execution is unavailable)".into());
@@ -35,6 +37,11 @@ impl Command {
                 .and_then(|n| u32::try_from(n).ok())
                 .ok_or_else(|| format!("AI diagnostic requires integer {key}"))
         };
+        let reader_only = match value.get("mode") {
+            None => false,
+            Some(v) if v == "reader" => true,
+            _ => return Err("unknown observation mode".into()),
+        };
         let subject = Subject {
             pid,
             created,
@@ -42,14 +49,26 @@ impl Command {
             generation: number("generation")?,
             index: number("index")?,
             cost: number("cost")?,
-            paid: number("paid")?,
+            paid: if reader_only && value.get("paid") == Some(&Value::Null) {
+                u32::MAX
+            } else {
+                number("paid")?
+            },
             spent: number("spent")?,
             title: number("title")?,
         };
-        if !subject.valid() {
+        if if reader_only {
+            !subject.valid_reader()
+        } else {
+            !subject.valid()
+        } {
             return Err("AI diagnostic requires a partial TITLE subject, never APPOINT".into());
         }
-        Ok(Self { stop, subject })
+        Ok(Self {
+            stop,
+            subject,
+            reader_only,
+        })
     }
 }
 
@@ -58,6 +77,7 @@ impl Command {
 #[derive(Default)]
 pub struct Session {
     subject: Option<Subject>,
+    reader_only: bool,
     stopped: bool,
 }
 pub fn validate_receipt(value: &Value, command: Command) -> Result<(), String> {
@@ -68,9 +88,7 @@ pub fn validate_receipt(value: &Value, command: Command) -> Result<(), String> {
         ("owner", u64::from(s.owner)),
         ("index", u64::from(s.index)),
         ("requested_generation", u64::from(s.generation)),
-        ("generation", u64::from(s.generation)),
         ("cost", u64::from(s.cost)),
-        ("paid", u64::from(s.paid)),
         ("spent", u64::from(s.spent)),
         ("title", u64::from(s.title)),
         ("status", 0),
@@ -83,10 +101,24 @@ pub fn validate_receipt(value: &Value, command: Command) -> Result<(), String> {
     if value["kind"] != "ai_observation"
         || value.get("error").is_some()
         || pairs.into_iter().any(|(k, v)| value[k].as_u64() != Some(v))
+        || if command.reader_only && s.paid == u32::MAX {
+            value.get("paid") != Some(&Value::Null)
+        } else {
+            value["paid"].as_u64() != Some(u64::from(s.paid))
+        }
         || value["stop"].as_bool() != Some(command.stop)
         || value["operation_proven"] != false
         || value["runtime_retained"] != true
         || value["producer_drained"] != false
+        || if command.reader_only {
+            value["observation_kind"] != 1
+                || value["generation"]
+                    .as_u64()
+                    .is_none_or(|n| n < u64::from(s.generation))
+        } else {
+            value["observation_kind"] != 0
+                || value["generation"].as_u64() != Some(u64::from(s.generation))
+        }
         || value["callback_exit_proven"] != false
         || value["sampling_stop_only"].as_bool() != Some(command.stop)
         || value["dispatched"].as_u64() != Some(0)
@@ -105,9 +137,15 @@ pub fn validate_receipt(value: &Value, command: Command) -> Result<(), String> {
     Ok(())
 }
 impl Session {
+    pub fn unused(&self) -> bool {
+        self.subject.is_none() && !self.stopped
+    }
     pub fn reserve(&mut self, command: Command) -> Result<(), String> {
         if command.stop {
-            if self.subject != Some(command.subject) || self.stopped {
+            if self.subject != Some(command.subject)
+                || self.reader_only != command.reader_only
+                || self.stopped
+            {
                 return Err("AI stop identity differs or was already attempted".into());
             }
             self.stopped = true;
@@ -116,6 +154,7 @@ impl Session {
                 return Err("AI registration already attempted; no retry".into());
             }
             self.subject = Some(command.subject);
+            self.reader_only = command.reader_only;
         }
         Ok(())
     }
@@ -130,13 +169,13 @@ pub fn validate_matched_receipt(value: &Value, command: Command) -> Result<(), S
             "AI subject receipt mismatched; raw capture retained: {value}"
         ));
     }
-    if command.stop && !has_completed_callback(value, command.subject) {
+    if command.stop && !has_completed_callback(value, command.subject, command.reader_only) {
         return Err("AI sampling stopped but natural callback evidence is missing/dropped; inconclusive, no resend".into());
     }
     Ok(())
 }
 
-fn has_completed_callback(v: &Value, s: Subject) -> bool {
+fn has_completed_callback(v: &Value, s: Subject, reader_only: bool) -> bool {
     let Some(return_address) = v["gamecore_base"]
         .as_u64()
         .filter(|b| *b != 0)
@@ -155,7 +194,13 @@ fn has_completed_callback(v: &Value, s: Subject) -> bool {
             && r["accepted"] == true
             && r["capture_entry"] == true
             && r["owner"].as_u64() == Some(u64::from(s.owner))
-            && r["generation"].as_u64() == Some(u64::from(s.generation))
+            && if reader_only {
+                r["generation"]
+                    .as_u64()
+                    .is_some_and(|n| n >= u64::from(s.generation))
+            } else {
+                r["generation"].as_u64() == Some(u64::from(s.generation))
+            }
             && r["return_address"].as_u64() == Some(return_address)
             && r["sequence"]
                 .as_u64()
@@ -173,6 +218,7 @@ fn has_completed_callback(v: &Value, s: Subject) -> bool {
                     && after["after"] == true
                     && after["sequence"] == before["sequence"]
                     && after["thread"] == before["thread"]
+                    && after["generation"] == before["generation"]
             })
     })
 }
@@ -235,7 +281,7 @@ mod tests {
         let good = serde_json::json!({"kind":"ai_observation","stop":false,"pid":1,"created_filetime":2,
             "owner":2,"index":7,"requested_generation":4,"generation":4,"cost":3,"paid":1,"spent":9,"title":8,
             "status":0,"query_status":0,"execution_blockers":7,"operation_proven":false,"runtime_retained":true,
-            "producer_drained":false,"callback_exit_proven":false,"sampling_stop_only":false,
+            "producer_drained":false,"callback_exit_proven":false,"sampling_stop_only":false,"observation_kind":0,
             "dispatched":0,"verified":0,"record_present":0,"attempt_state":0,"raw_rows":[],"observations":0,"reject_reason":0});
         validate_receipt(&good, command).unwrap();
         validate_matched_receipt(&good, command).unwrap();
@@ -277,10 +323,10 @@ mod tests {
         let mut after = entry.clone();
         after["after"] = true.into();
         let evidence = serde_json::json!({"gamecore_base":0x180000000u64,"callbacks":1,"dropped":0,"raw_rows":[entry,after]});
-        assert!(has_completed_callback(&evidence, s));
+        assert!(has_completed_callback(&evidence, s, false));
         let mut empty = evidence.clone();
         empty["raw_rows"] = serde_json::json!([]);
-        assert!(!has_completed_callback(&empty, s));
+        assert!(!has_completed_callback(&empty, s, false));
         for (key, bad) in [
             ("generation", 5),
             ("owner", 3),
@@ -290,13 +336,13 @@ mod tests {
         ] {
             let mut wrong = evidence.clone();
             wrong["raw_rows"][1][key] = bad.into();
-            assert!(!has_completed_callback(&wrong, s), "{key}");
+            assert!(!has_completed_callback(&wrong, s, false), "{key}");
         }
         let mut dropped = evidence.clone();
         dropped["dropped"] = 1.into();
-        assert!(!has_completed_callback(&dropped, s));
+        assert!(!has_completed_callback(&dropped, s, false));
         let mut reversed = evidence.clone();
         reversed["raw_rows"].as_array_mut().unwrap().reverse();
-        assert!(!has_completed_callback(&reversed, s));
+        assert!(!has_completed_callback(&reversed, s, false));
     }
 }

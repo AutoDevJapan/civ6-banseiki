@@ -910,6 +910,29 @@ fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {
 }
 
 #[test]
+fn unrelated_shared_callee_calls_cannot_consume_the_selected_reader_budget() {
+    if !child("ai_operation::gateway::tests::unrelated_shared_callee_calls_cannot_consume_the_selected_reader_budget",
+        "JAC_AI_READER_BUDGET_CHILD") {return;}
+    let (_memory,receiver)=accepted_fixture();
+    for slot in 1..4 {AI_GATE_TARGETS[slot].store(ai_fixture_target as *const () as u64,Ordering::Release);}
+    let mut baseline=[0u8;0x160];
+    unsafe {ai_fixture_driver(baseline.as_mut_ptr(),ai_fixture_target as *const () as usize)};
+    for n in 0..150 {
+        let mut actual=[0u8;0x160];
+        unsafe {ai_fixture_driver(actual.as_mut_ptr(),gateways()[1+n%3])};
+        assert_eq!(actual,baseline);
+    }
+    assert!(observations().0.is_empty());assert_eq!(observations().1,0);
+    assert_eq!(NEXT.load(Ordering::Acquire),1);
+    assert_eq!(unsafe {accepted_stage_driver(receiver,gateways()[0],2)},0x1234);
+    let rows=observations().0;
+    assert_eq!(rows.len(),2);
+    assert!(rows.iter().all(|r|r.accepted&&r.capture_entry&&r.owner==Some(3)));
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire),1);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire),0);
+}
+
+#[test]
 fn resident_sampling_stop_tailcalls_all_originals_with_exact_abi_and_no_context_reads() {
     if !child("ai_operation::gateway::tests::resident_sampling_stop_tailcalls_all_originals_with_exact_abi_and_no_context_reads",
         "JAC_AI_RESIDENT_STOP_CHILD") {return;}

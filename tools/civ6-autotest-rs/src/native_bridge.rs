@@ -1001,17 +1001,42 @@ mod platform {
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
         ai_diagnostic: civ6_native_bridge_rs::ai_diagnostic::Session,
+        reader_requested:bool,
+        reader_stop:Option<Value>,
         _binary_pins: (std::fs::File, std::fs::File),
     }
 
     impl Session {
         pub fn ai_diagnostic(&mut self, request: &Value) -> Result<Value> {
+            if request["action"]=="start_native_ai_reader" {
+                if self.reader_requested || !self.ai_diagnostic.unused() || self.finished || !self.resident_runtime || self.process_has_exited() {
+                    return Err(Error::input("reader registration already requested or resident absent"));
+                }
+                civ6_native_bridge_rs::ai_reader::candidates(request).map_err(Error::input)?;
+                self.reader_requested=true;
+                let receipt=self.ai_exchange(request)?;
+                let actual=civ6_native_bridge_rs::ai_reader::selected(request,&receipt,self.pid,self.created).map_err(Error::input)?;
+                let command=civ6_native_bridge_rs::ai_diagnostic::Command::parse(&actual,self.pid,self.created).map_err(Error::input)?;
+                self.ai_diagnostic.reserve(command).map_err(Error::input)?;
+                let mut stop=actual;stop["action"]="stop_native_ai_observation".into();self.reader_stop=Some(stop);
+                return Ok(receipt);
+            }
+            if request["action"]=="stop_native_ai_reader" {
+                let stop=self.reader_stop.take().ok_or_else(||Error::input("reader actual request unknown or stop already sent"))?;
+                return self.ai_diagnostic(&stop);
+            }
+            if self.reader_requested && request["action"]=="start_native_ai_observation" {return Err(Error::input("reader request cannot be replaced"));}
             use civ6_native_bridge_rs::ai_diagnostic::{Command,validate_matched_receipt};
             if !self.resident_runtime || self.finished || self.process_has_exited() {
                 return Err(Error::input("AI diagnostics require the active resident controller"));
             }
             let command=Command::parse(request,self.pid,self.created).map_err(Error::input)?;
             self.ai_diagnostic.reserve(command).map_err(Error::input)?;
+            let value=self.ai_exchange(request)?;
+            validate_matched_receipt(&value,command).map_err(Error::input)?;
+            Ok(value)
+        }
+        fn ai_exchange(&mut self,request:&Value)->Result<Value> {
             let input=self.input.as_mut().ok_or_else(||Error::input("AI controller input is closed"))?;
             writeln!(input,"{request}").and_then(|_|input.flush()).map_err(|e|Error::input(e.to_string()))?;
             let line=self.lines.recv_timeout(Duration::from_secs(25))
@@ -1019,7 +1044,6 @@ mod platform {
             let value:Value=serde_json::from_str(line.strip_prefix("AI_RECEIPT ")
                 .ok_or_else(||Error::input("AI controller response differs; no retry"))?)
                 .map_err(|e|Error::input(e.to_string()))?;
-            validate_matched_receipt(&value,command).map_err(Error::input)?;
             Ok(value)
         }
         pub fn process_identity(&self) -> (u32, u64) {
@@ -1207,6 +1231,7 @@ mod platform {
                 assignment_subject: None,
                 resident_runtime,
                 ai_diagnostic: Default::default(),
+                reader_requested:false,reader_stop:None,
                 _binary_pins: (controller_pin, dll_pin),
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
@@ -1489,6 +1514,7 @@ mod platform {
                 assignment_subject: None,
                 resident_runtime: true,
                 ai_diagnostic: Default::default(),
+                reader_requested:false,reader_stop:None,
                 _binary_pins: (
                     std::fs::File::open(&artifact).unwrap(),
                     std::fs::File::open(&artifact).unwrap(),

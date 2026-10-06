@@ -1,4 +1,7 @@
 use crate::tuner::state_name_eq;
+#[path="native_ai_reader.rs"]
+mod native_ai_reader;
+pub(crate) const AI_READER_READ:&str=native_ai_reader::READ;
 use crate::{
     checkpoint, judge, metrics, scenario,
     time::{Clock, SystemClock},
@@ -2765,6 +2768,7 @@ impl Runner {
                 civ6_native_bridge_rs::ai_diagnostic::validate_matched_receipt(&receipt,command).map_err(Error::input)?;
                 return Ok(format!("read-only AI diagnostic; execution blocked; {receipt}"));
             }
+            "start_native_ai_reader"|"stop_native_ai_reader"=>return self.ai_reader_step(step,deadline),
             "start_native_order_capture" => {
                 self.remaining(deadline)?;
                 self.backend.start_native_order(&self.output, step)?;

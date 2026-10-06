@@ -5,7 +5,9 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 43] = [
+pub const ACTIONS: [&str; 45] = [
+    "start_native_ai_reader",
+    "stop_native_ai_reader",
     "start_native_ai_observation",
     "stop_native_ai_observation",
     "start_native_order_capture",
@@ -142,6 +144,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut runtime_used = false;
     let mut ai_session = civ6_native_bridge_rs::ai_diagnostic::Session::default();
     let mut ai_open = false;
+    let mut ai_reader_used=false;
     let mut property_used = false;
     let mut promotion_used = false;
     let mut assignment_used = false;
@@ -215,6 +218,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             assignment_used = false;
             runtime_used = false;
             ai_session = Default::default();
+            ai_reader_used=false;
         }
         if runtime_used && matches!(action, "load" | "start_game" | "exit_to_menu") {
             return Err(fail(
@@ -240,12 +244,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         }
         match action {
             "start_native_ai_observation" | "stop_native_ai_observation" => {
+                if ai_reader_used {return Err(fail("cannot mix reader and payment observations".into()));}
                 if !runtime_open { return Err(fail("AI diagnostic requires an active resident controller".into())); }
                 // Placeholder process identity only for schema validation; the
                 // live driver/controller supply and verify the actual identity.
                 let command=civ6_native_bridge_rs::ai_diagnostic::Command::parse(step,1,1).map_err(fail)?;
                 ai_session.reserve(command).map_err(fail)?;
                 ai_open=!command.stop;
+            }
+            "start_native_ai_reader"|"stop_native_ai_reader"=>{
+                if !runtime_open || !ai_session.unused() || step.as_object().unwrap().keys().any(|k| !["action","timeout"].contains(&k.as_str())) {
+                    return Err(fail("reader requires current resident with no caller-supplied identity".into()));
+                }
+                if action=="start_native_ai_reader" {
+                    if ai_open || ai_reader_used {return Err(fail("reader already requested".into()));}
+                    ai_open=true;ai_reader_used=true;
+                } else {
+                    if !ai_reader_used || !ai_open {return Err(fail("reader not open".into()));}
+                    ai_open=false;
+                }
             }
             "start_native_order_capture" => {
                 crate::native_order::validate_options(step)?;

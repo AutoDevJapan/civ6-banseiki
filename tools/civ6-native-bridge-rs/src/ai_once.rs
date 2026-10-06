@@ -21,6 +21,16 @@ pub struct Subject {
     pub title: u32,
 }
 impl Subject {
+    pub fn valid_reader(self) -> bool {
+        self.pid != 0
+            && self.created != 0
+            && self.owner < 64
+            && self.generation != 0
+            && self.index < 256
+            && (2..=3).contains(&self.cost)
+            && self.title < 4096
+            && (self.paid <= self.cost || self.paid == u32::MAX)
+    }
     pub fn valid(self) -> bool {
         self.pid != 0
             && self.created != 0
@@ -57,6 +67,7 @@ pub enum Reject {
 
 pub struct Once {
     pub subject: Subject,
+    pub reader_only: bool,
     state: AtomicU32,
     reason: AtomicU32,
     callbacks: AtomicU32,
@@ -68,6 +79,19 @@ impl Once {
         }
         Ok(Self {
             subject,
+            reader_only: false,
+            state: AtomicU32::new(State::Observing as u32),
+            reason: AtomicU32::new(0),
+            callbacks: AtomicU32::new(0),
+        })
+    }
+    pub fn observing_reader(subject: Subject) -> Result<Self, Reject> {
+        if !subject.valid_reader() {
+            return Err(Reject::Identity);
+        }
+        Ok(Self {
+            subject,
+            reader_only: true,
             state: AtomicU32::new(State::Observing as u32),
             reason: AtomicU32::new(0),
             callbacks: AtomicU32::new(0),
@@ -87,8 +111,9 @@ impl Once {
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_add(1))
             .ok();
         let s = self.subject;
-        if (pid, created, owner, generation, index)
-            != (s.pid, s.created, s.owner, s.generation, s.index)
+        if (pid, created, owner, index) != (s.pid, s.created, s.owner, s.index)
+            || generation == 0
+            || (!self.reader_only && generation != s.generation)
         {
             self.reject(Reject::Identity);
         }
@@ -120,6 +145,9 @@ impl Once {
         Err(Reject::Lifecycle)
     }
     pub fn claim(&self, actual: Subject) -> Result<(), Reject> {
+        if self.reader_only {
+            return Err(Reject::Lifecycle);
+        }
         if actual != self.subject {
             self.reject(Reject::Receipt);
             return Err(Reject::Receipt);
@@ -174,6 +202,12 @@ mod tests {
             spent: 7,
             title: 8,
         }
+    }
+    #[test]
+    fn forced_armed_reader_still_cannot_claim_payment() {
+        let reader = Once::observing_reader(subject()).unwrap();
+        reader.state.store(State::Armed as u32, Ordering::Release); // corrupted-state fixture only
+        assert_eq!(reader.claim(subject()), Err(Reject::Lifecycle));
     }
     #[test]
     fn observation_and_execution_request_never_manufacture_a_permit() {

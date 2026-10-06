@@ -18,6 +18,8 @@ pub fn controller_capabilities() -> serde_json::Value {
         "schema": "civ6-native-controller-capabilities-v1",
         "gamecore_sha256": PINNED_GAMECORE_SHA256,
         "runtime_config_version": 0x0324_0001u32,
+        "ai_diagnostic_version":0x0880_0003u32,
+        "ai_payment_execution":false,
         "modes": ["can-ever", "property", "property-scoped", "can-ever-calibration",
             "property-admission-scoped", "assign-calibration", "joined-admission",
             "production-admission", "paid-assignment-experimental",
@@ -32,6 +34,7 @@ pub const PINNED_GAMECORE_SHA256: &str =
 pub mod appointment_glue;
 pub mod ai_once;
 pub mod ai_diagnostic;
+pub mod ai_reader;
 pub mod governor_payment;
 pub mod paid_artifact;
 pub mod paid_catalog;

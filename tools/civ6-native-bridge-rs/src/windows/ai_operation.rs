@@ -501,6 +501,7 @@ pub(super) fn before(
             stamp.generation,
             definition.governor_index,
         );
+        if attempt.reader_only {return;}
     }
     let Some(_guard) = ActionGuard::enter() else {
         return;

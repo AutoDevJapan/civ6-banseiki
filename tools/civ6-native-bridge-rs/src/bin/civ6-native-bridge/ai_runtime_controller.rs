@@ -1,5 +1,7 @@
 //! Commands on the already-owned resident controller. Never loads another DLL.
 use super::*;
+#[path="ai_reader_controller.rs"]
+mod reader;
 use civ6_native_bridge_rs::{
     AI_OBSERVATION_VERSION, AiObservationConfig, AiRuntimeState,
     ai_diagnostic::{Command, Session},
@@ -16,6 +18,7 @@ pub(super) struct Control {
     session: Session,
     writer: Option<BufWriter<File>>,
     cleanup: Cleanup,
+    reader_requested:bool,
 }
 impl Control {
     pub(super) fn new() -> Self {
@@ -23,6 +26,7 @@ impl Control {
             session: Session::default(),
             writer: None,
             cleanup: Cleanup::Absent,
+            reader_requested:false,
         }
     }
     pub(super) fn handle(
@@ -33,6 +37,13 @@ impl Control {
         image: BridgeImage,
         dll: &Path,
     ) -> Result<serde_json::Value, String> {
+        if value["action"]=="start_native_ai_reader" {
+            if self.reader_requested || !self.session.unused() {return Err("AI reader already requested".into());}
+            self.reader_requested=true;
+            self.writer=Some(BufWriter::new(File::create_new(parsed.out.with_extension("ai.jsonl")).map_err(|e|e.to_string())?));
+            let request=reader::prepare(value,parsed,game,image,dll,self.writer.as_mut().unwrap())?;
+            return self.handle(&request,parsed,game,image,dll);
+        }
         let command = Command::parse(value, parsed.pid, parsed.created)?;
         self.session.reserve(command)?;
         // Reserve and create the artifact BEFORE any native registration.
@@ -46,12 +57,13 @@ impl Control {
             "created_filetime":parsed.created,"execution_mode":0,"execution_blockers":7});
         write_json(self.writer.as_mut().unwrap(), request)?;
         let result = self.call(command, game, image, dll);
-        let receipt = match result {
+        let mut receipt = match result {
             Ok(v) => v,
             Err(e) => serde_json::json!({"kind":"ai_observation","request":value,"error":e,
                 "pid":parsed.pid,"created_filetime":parsed.created,"outcome":"unknown_or_refused",
                 "retry_allowed":false,"execution_blockers":7,"operation_proven":false}),
         };
+        receipt["actual_request"]=value.clone();
         write_json(self.writer.as_mut().unwrap(), receipt.clone())?;
         Ok(receipt)
     }
@@ -113,6 +125,7 @@ impl Control {
             expected_paid: s.paid,
             expected_spent: s.spent,
             expected_title: s.title,
+            observation_kind:u32::from(command.reader_only),reserved:0,
         };
         let remote = if command.stop {
             prepare_struct(game, &mut state)?
@@ -140,11 +153,12 @@ impl Control {
         let state = capture.state;
         let receipt = serde_json::json!({"kind":"ai_observation","stop":command.stop,"pid":s.pid,
             "created_filetime":s.created,"owner":s.owner,"index":s.index,"requested_generation":s.generation,
-            "cost":s.cost,"paid":s.paid,"spent":s.spent,"title":s.title,
+            "cost":s.cost,"paid":if command.reader_only && s.paid==u32::MAX {Value::Null}else{json!(s.paid)},"spent":s.spent,"title":s.title,
             "generation":state.generation,"status":status,"query_status":query_status,"raw_rows":rows,
             "registration_no_effect":!command.stop && registration_never_started(status),
             "gamecore_base":capture.module_base,"gamecore_sha256":PINNED_GAMECORE_SHA256,
             "attempt_state":state.attempt_state,"reject_reason":state.reject_reason,"callbacks":state.callbacks,
+            "observation_kind":state.observation_kind,"world_generation_proven":false,"initial_install_order":"unknown","drain":"unknown",
             "observations":state.observations,"dropped":state.dropped,"execution_blockers":state.execution_blockers,
             "record_present":state.record_present,"record_generation":state.record_generation,
             "spent_before":state.spent_before,"spent_after":state.spent_after,"dispatched":state.dispatched,

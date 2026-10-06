@@ -14,6 +14,7 @@ fn arm(binding: u128) -> u64 {
 unsafe impl RuntimeLease for OwnedLease {
     fn observed(&self, row: &gateway::Observation, definition: crate::governor_payment::PaymentDefinition) {
         let Some(a) = ai_operation::ATTEMPT.get() else { return };
+        if a.reader_only {return;}
         if row.accepted && row.generation != a.subject.generation {
             a.observe(a.subject.pid,a.subject.created,row.owner.unwrap_or(u32::MAX),row.generation,definition.governor_index);
         }
@@ -127,6 +128,7 @@ pub(super) unsafe fn register_owner(
     ai_owner: u64,
     index: u32,
     expected: crate::ai_once::Subject,
+    reader_only: bool,
 ) -> Result<(), gateway::Failure> {
     if !runtime::ai_installed() || owner as usize >= PRODUCTION_OWNER_LIMIT {
         return Err(gateway::Failure::Lease);
@@ -136,21 +138,24 @@ pub(super) unsafe fn register_owner(
         .checked_sub(0x528)
         .ok_or(gateway::Failure::Identity)?;
     let stamp = LEASE.begin(owner, player).ok_or(gateway::Failure::Lease)?;
+    if (expected.pid,expected.created,expected.owner,expected.generation)!=(stamp.pid,stamp.created,stamp.owner,stamp.generation) {
+        return Err(gateway::Failure::Identity);
+    }
     let catalog = runtime::ready_catalog(owner as usize, binding).ok_or(gateway::Failure::Lease)?;
     let definition = catalog
         .into_iter()
         .find(|d| d.governor_index == index)
         .ok_or(gateway::Failure::Identity)?;
-    if !expected.valid()
+    if (if reader_only {!expected.valid_reader()} else {!expected.valid()})
         || expected.cost != u32::from(definition.cost)
-        || definition.titles[expected.paid as usize - 1] != Some(expected.title)
+        || definition.titles[if reader_only {0}else{expected.paid as usize - 1}] != Some(expected.title)
         || !(2..=3).contains(&definition.cost)
-        || product_permission(
+        || (!reader_only && product_permission(
             owner as usize,
             index as usize,
             player + 0x528,
             stamp.session,
-        ) != Some(true)
+        ) != Some(true))
     {
         return Err(gateway::Failure::Lease);
     }
@@ -193,7 +198,7 @@ pub(super) unsafe fn register_owner(
         return Err(gateway::Failure::Lease);
     }
     ai_operation::ATTEMPT
-        .set(crate::ai_once::Once::observing(expected).map_err(|_| gateway::Failure::Identity)?)
+        .set((if reader_only {crate::ai_once::Once::observing_reader(expected)}else{crate::ai_once::Once::observing(expected)}).map_err(|_| gateway::Failure::Identity)?)
         .map_err(|_| gateway::Failure::AlreadyUsed)?;
     *guard = Some(unsafe {
         gateway::register(base, ai_owner, callable, definition, expected.title, &LEASE)
@@ -225,6 +230,7 @@ mod tests {
             governor_index: 77,
             status: 0,
             execution_mode: 0,
+            observation_kind:0, reserved:0,
             expected_cost: 2,
             expected_paid: 1,
             expected_spent: 1,
@@ -259,8 +265,21 @@ pub struct AiObservationConfig {
     pub expected_paid: u32,
     pub expected_spent: u32,
     pub expected_title: u32,
+    pub observation_kind:u32,
+    pub reserved:u32,
 }
-pub const AI_OBSERVATION_VERSION: u32 = 0x0880_0002;
+pub const AI_OBSERVATION_VERSION: u32 = 0x0880_0003;
+
+fn reader_callable_present(player:u64)->bool {
+    let base=unsafe {GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr())} as u64;
+    let u64_at=|p|copy_current::<8>(p).map(u64::from_le_bytes);
+    let Some(ai)=player.checked_add(0x6b0).and_then(u64_at).filter(|p|*p!=0) else {return false};
+    if base==0 || ai.checked_add(0x90).and_then(u64_at)!=Some(player) {return false;}
+    let Some(head)=ai.checked_add(0x1b8).and_then(u64_at) else {return false};
+    let Some(count)=ai.checked_add(0x1c8).and_then(copy_current::<4>).map(u32::from_le_bytes).filter(|n|*n>0&&*n<=256) else {return false};
+    (0..count).filter(|slot|head.checked_add(u64::from(*slot)*0x40+0x38).and_then(u64_at).is_some_and(|callable|
+        u64_at(callable)==base.checked_add(0x9fb4b8) && callable.checked_add(0x10).and_then(u64_at)==base.checked_add(0x4a7ad0))).count()==1
+}
 
 /// Sampling stop, not a lifetime/drain certificate. One immutable registration
 /// is retained until process exit, including a partially failed installation.
@@ -330,6 +349,12 @@ pub struct AiRuntimeState {
     pub observations: u32,
     pub dropped: u32,
     pub execution_blockers: u32,
+    pub observation_kind:u32,
+    pub catalog_cost:u32,
+    pub catalog_base:u32,
+    pub catalog_title1:u32,
+    pub catalog_title2:u32,
+    pub reserved:u32,
 }
 
 /// Read-only receipt. Ready/generation come from real runtime cells; neither is
@@ -374,11 +399,15 @@ pub extern "system" fn BridgeRuntimeAiQuery(input: *mut c_void) -> u32 {
         config.observations = 0;
         config.dropped = 0;
         config.execution_blockers = crate::ai_once::EXECUTION_BLOCKERS;
+        config.observation_kind=u32::MAX;
+        config.catalog_cost=u32::MAX;config.catalog_base=u32::MAX;
+        config.catalog_title1=u32::MAX;config.catalog_title2=u32::MAX;config.reserved=0;
         if let Some(a) = ai_operation::ATTEMPT
             .get()
             .filter(|a| a.subject.owner == config.owner && a.subject.index == config.governor_index)
         {
             config.attempt_state = a.state();
+            config.observation_kind=u32::from(a.reader_only);
             config.reject_reason = a.reason();
             config.callbacks = a.callbacks();
             let (rows, dropped) = gateway::observations();
@@ -388,6 +417,12 @@ pub extern "system" fn BridgeRuntimeAiQuery(input: *mut c_void) -> u32 {
         let binding = PRODUCT_OWNERS[config.owner as usize].load();
         if let Some(player) = joined_receiver(binding).checked_sub(0x528) {
             config.ready = u32::from(LEASE.begin(config.owner, player).is_some());
+            if let Some(d)=runtime::ready_catalog(config.owner as usize,binding).and_then(|all|all.into_iter().find(|d|d.governor_index==config.governor_index)) {
+                config.catalog_cost=u32::from(d.cost);config.catalog_base=d.base;
+                config.catalog_title1=d.titles[0].unwrap_or(u32::MAX);config.catalog_title2=d.titles[1].unwrap_or(u32::MAX);
+            } else {config.ready=0;}
+            if config.generation!=runtime::generation() {config.ready=0;}
+            if ai_operation::ATTEMPT.get().is_none() && !reader_callable_present(player) {config.ready=0;}
         }
         if let Some(row) = ai_operation::last()
             .filter(|row| row.owner == config.owner && row.index == config.governor_index)
@@ -423,6 +458,7 @@ pub extern "system" fn BridgeRuntimeAiObserve(input: *mut c_void) -> u32 {
         if config.size as usize != std::mem::size_of::<AiObservationConfig>()
             || config.version != AI_OBSERVATION_VERSION
             || config.execution_mode != 0
+            || config.observation_kind>1 || config.reserved!=0
             || !cfg!(feature = "ai-observation-candidate")
             || config.owner >= 64
             || config.governor_index >= 256
@@ -474,11 +510,15 @@ pub extern "system" fn BridgeRuntimeAiObserve(input: *mut c_void) -> u32 {
                 ai_owner,
                 config.governor_index,
                 expected,
+                config.observation_kind==1,
             )
         };
         let mut status = match result {
             Ok(()) => BridgeStatus::Ok,
             Err(gateway::Failure::CriticalRestore) => BridgeStatus::Critical,
+            // ATTEMPT is published BEFORE the first gateway mutation. Its
+            // absence is evidence this refusal installed nothing.
+            Err(_) if ai_operation::ATTEMPT.get().is_none()=>BridgeStatus::InvalidInput,
             _ => BridgeStatus::HookFailure,
         } as u32;
         // Never transiently enable actions before registration succeeds.

@@ -292,6 +292,10 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
             return;
         }
         let Some(binding) = BINDING.get() else { return };
+        // Three callee sites are shared by every owner. Calls outside this
+        // registered AI callback must not exhaust its finite 128-row budget.
+        // True-stack forwarding above still preserves their original call.
+        if raw.site > 0 && INVOCATION.with(Cell::get).is_none() {return;}
         let thread = unsafe { GetCurrentThreadId() };
         if after == 0 {
             raw.ticket = match NEXT

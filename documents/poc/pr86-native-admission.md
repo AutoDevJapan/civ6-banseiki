@@ -756,7 +756,7 @@ source `ad0f7477`とレビュー修正`a3733339`の限定検査は6成功・失�
 
 既存 `start_native_paid_runtime` のcontrollerが生存中に、共通driver action `start_native_ai_observation` を実行し、自然なcallbackを観測した後 `stop_native_ai_observation`、最後に `stop_native_paid_runtime_observation` を実行する。AIの開始・停止actionには同一の `owner, generation, index, cost, paid, spent, title` を全て明示する。PID/作成時刻は入力値から採用せず、既存controllerの所有済みprocess handleから固定する。index/titleは実GameInfoのIndex、costは本人の正式定義、paidは本人Baseと連続TITLEの実bit、spentは実SPENT、generationはそのruntimeの実世代である。0や未取得値で埋めない。paid=0のAPPOINT、全額支払済み、費用2/3以外、任意address、実行modeやdrainedフラグは拒否する。AI停止前のruntime観測終了と同一processでの再登録もscenario検査で拒否する。
 
-controllerは既に読み込んだ同じbridge DLLの `BridgeRuntimeAiObserve` を呼び、実ownerの同期catalog・加入許可・AI container内の元callableを再確認する。ABI versionは `08800002`。登録は原子的に保持する不変の一対象へ結ぶ。将来実行を有効にできた場合も、既存同期after-callbackから正式factory/filter/executeへ入る直前に一回分をCASで消費する。原callbackが複数来ても再取得できず、結果不明・SEH・既払receipt不一致は再送しない。現在は生成したpermitを認めるproduction arm APIが存在せず、`execution_mode=1` をexportで拒否する。抽象fixtureのArmed状態や診断JSONから実行を有効にする経路はない。
+controllerは既に読み込んだ同じbridge DLLの `BridgeRuntimeAiObserve` を呼び、実ownerの同期catalog・加入許可・AI container内の元callableを再確認する。ABI versionは `08800003`（後述のreader query拡張。ed9時点はv2）。登録は原子的に保持する不変の一対象へ結ぶ。将来実行を有効にできた場合も、既存同期after-callbackから正式factory/filter/executeへ入る直前に一回分をCASで消費する。原callbackが複数来ても再取得できず、結果不明・SEH・既払receipt不一致は再送しない。現在は生成したpermitを認めるproduction arm APIが存在せず、`execution_mode=1` をexportで拒否する。抽象fixtureのArmed状態や診断JSONから実行を有効にする経路はない。
 
 本人の自然checkerに来た実promotion bitと自然Spent getterの戻り値を既存4sitesで採取する。比較対象と違えば拒否理由を保持し、元関数は従来どおり一回通す。`BridgeRuntimeAiCapture` は最大128行の既存記録を固定長C ABIで返し、controllerは同じ成果にraw RCX/RDX/R8/R9/RAX、R10/R11/RFLAGS/XMM、caller stack pointer/return、受理段階、owner/世代、本人Index/全promotion bitsを記録する。SPENTはsite3の自然after-call RAXであり、仮の値を補わない。原出入口の対応が欠ける・行が落ちる場合は、行数があるだけで正式操作やABI保持を合格にしない。
 
@@ -797,6 +797,34 @@ Solの最終限定再レビューは上記controller終了状態のMust解消・
 生成用コマンドは `cargo_gate.exe run --locked --offline --manifest-path tools/Cargo.toml -p civ6-autotest-rs --example persona_ai_payment_calibration -- observe <actual-request.json> <new-case.json>`。対象ゲームでは親が実世代・加入予約を確認し、`ai-observation-candidate` を明示したDLL/controllerを選ぶ。生成とschema/Lua fixture検査は実ゲームでこの開始条件を満たした証明ではない。実値が無いところを架空のowner/世代で埋めた実行ファイルは配布しない。支払い受入はこのread-only caseと別判定のまま維持する。
 
 今回の限定検査はgateway 13成功（filtered114）、receipt 4成功（filtered123）、生成器8成功（filtered0）、全て失敗ignored0・警告0。最初のgateway検査は直接通過を既存の未読frame用経路へそのまま流したため、unhook拒否がCriticalRestoreへ変わる2失敗を検出した。常駐停止専用の分岐を設け、原ABIの復元だけを共有し、停止済みbindingの解除は別途明示拒否する設計へ直した。最後のINSTALL再確認・drain拒否を含めて上記13件を実施した。logは `D:/CC/Work/todo880/ai-resident-{gateway,receipt,case}-tests.log`。Solの限定静的レビューは新Must0（`ai-resident-review.txt`）。実機0・通常AI支払い0・新hook0・独自queue0・public push0を維持する。
+
+## 公開d21との隔離統合と実値からのreader登録
+
+`d21cff321402af56acbc6a3ab89a0e5d3d6f474a` をこの隔離branchへmergeした。merge commitは `459d0069`（parents `9af36aa8 / d21cff32`）。通常Gameplay ledger、rowcatalog生成、order observer、load時save pinを親のまま保持した。共有mainやpublic branchへの反映ではない。controllerの能力照合は親の全modeを維持し、AI診断ABI v3と `ai_payment_execution=false` を追加する。通常buildでの候補feature無効も維持する。
+
+旧6stepの明示request方式に加え、入力値を必要としない `civ6-ai-readonly` を追加した。所有ゲームの既存live_chain環境内でのみ実行でき、自分でleaseを取得しない。`--no-auto-restart`、既存の単一SPゲーム、親と同じ通常再公開1回を使う。先頭で正常ledgerと実AIを読んでからnative runtimeを設置する。Join/進化/昇進/残高を作る操作は含まず、既存 `persona_runtime_restart.rs` と同じ `JAC_LeaderPersonaRepublish` による投影更新だけを初期化として使う。この再公開を「無副作用のgetter」とは表記しない。
+
+8stepは正常UI事前読取、resident開始、通常再公開1回、busy解消待ち、reader対象選択・登録、自然ターン1回、AI採取停止、通常runtime観測終了である。case生成とschema確認だけなら `--prepare-only`。通常実行はprepare出力の `run/` を新規作成させるため、親driverの「既存output leafは拒否」を保持する。wrapperは同じ候補ディレクトリのdriver/controller/DLLを使い、別laneのoverrideを継承しない。binary pinは親の実装をそのまま通る。
+
+actual-requestはこの一試行の中で、次の実読取を結んで `run/ai1466-reader.ai.request.json` にcreate-newで保存する。親がPID等を手書きする必要はない。
+
+| 値 | 実際の取得元と照合 |
+|---|---|
+| PID / FILETIME | 親の `native_bridge::Session` が所有するprocess handleとnative Queryの `GetCurrentProcessId / GetProcessTimes`。入力候補やLuaからは受け付けない |
+| owner | `PlayerManager.GetAliveMajors()` の実ID、IsHuman=false、IsAlive/IsMajor=true。実保有title残高の多いAIを優先し、native側の同owner bindingと実callback slotが存在する候補だけ選ぶ |
+| Index / cost / Base / TITLE1 | 実 `GameInfo.JAC_LeaderPersonas` のDate行とGovernors/GovernorPromotions。その値をnativeの既存22行committed catalogと照合。架空のIndexや既定値を使わない |
+| Spent / paid | 実UI getterと `EventsGameplayStatus` のnormal-v3 receiptの一致。personal paidが不明ならJSON nullを保持し、0へ変換しない。readerでは加入済み・支払済みを登録資格にしない |
+| generation | `BridgeRuntimeAiQuery` の実返値。Normal rowcatalogのreset/commitでも更新されるruntime transaction generationであり、world世代の証明とは別。選択後の登録でも同値を再検査する |
+
+各候補のnative queryとUI候補列は `.ai.jsonl` にも残る。登録は一回だけで、slot欠損や未committed catalogを払済み・加入済みへ補完しない。適格候補が無ければ登録を送らず失敗し、実値不足を記録する。選択から登録の間に世代が変わった場合も再送しない。登録前に拒否しATTEMPT未発行なら、nativeは無変更のInvalidInputを返し、存在しない登録の停止からゲーム終了へ連鎖させない。
+
+readerは支払い用の一操作許可と区別する。通常paid経路の世代・費用・prefix契約は維持し、readerは自然callback中の実transaction generationを各行に保存する。readerの同一入口/出口ペアは同owner/thread/sequence/実世代に限定するが、登録時からの世代更新をworld同一の証明にはしない。reader状態を試験でArmedへ壊してもclaimは拒否し、native before-originalもreaderでは追加操作へ進まない。実行mode1は全経路で拒否する。`world_generation_proven=false`、initial install/drainはunknown、payment authorityなし。空のcallback receiptは依然inconclusiveである。
+
+親の所有live_chain環境内での一回のコマンドは `D:/CC/Work/todo880/ai-operation-target/debug/civ6-ai-readonly.exe --output D:/CC/Work/todo880/ai-reader-next`。outputは未作成の名前を使う。初期InGame/正常台帳の条件が無ければ拒否し、新game・保存読込・Join・payを代行しない。次の実機枠は親が順序付ける。workerによる実機実行は0のままである。
+
+共有3calleeは全ownerが通るため、選択したcallback外の呼出しでは原ABIをそのまま通し、対象の128行枠を消費しない。対象callback内の別Index等は拒否記録として残す。OS子では対象外150呼出し後にも対象callbackの2行を採取できることを検査した。ここで確認するのは一callbackの復帰であり、world全体の排出ではない。
+
+統合の限定結果はnative AI対象62成功、controller3成功、driver native対象56成功、最終gateway差分14成功、最終reader driver差分3成功。後二者は前の対象と重複するので合計へ加算しない。全て失敗ignored0・警告0、`CARGO_PROFILE_DEV_DEBUG=0 / CARGO_PROFILE_TEST_DEBUG=0 / CARGO_INCREMENTAL=0`、共有cargo_gateと専用targetを使用した。通常Gameplay/rowcatalog/order本体はd21からの差分なし。Lunaの統合・最終限定レビューは新Must0で、ABI文書v2残存のSuggestionをv3へ修正した（`ai-d21-luna-review.txt / ai-d21-luna-final-review.txt`）。検査とレビューは実Civ6の支払い受入ではない。
 ### Root324: 通常Gameplay成功通知を使う有限会計
 
 基点0051068eの費用2診断は、実機agent-todo-324-a39639587c09-01で39/39手順、6/6判定が成功した。原steps.jsonl、result.jsonとtodo324-events-cost2.jsonlを照合した。所有者0・伊達稙宗Index6ではBASE成功seq1/Spent1、任命成功seq2/Spent1、TITLE_1成功seq3/Spent2となり、保存再読込で取得集合・定義・本人支払数・Spent・確定後Spentが一致した。功績・全通知履歴・保存前の確定列番号の完全比較は未達である。判定対象のRuntime Error等は0件だが、ログには公式Mods検索のcontext作成失敗と翻訳重複がある。再読込後の正式操作再送は0である。この事実は同診断だけの証明で、通常22人の実機受入ではない。
