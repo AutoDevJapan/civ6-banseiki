@@ -18,7 +18,7 @@ end
 local function method(o,k)
  return safe(function() assert(o and type(o[k])=='function',k..' unavailable'); return o[k](o) end)
 end
-local e={turn=62,saved=p,players={},enums={},deals={},candidates={},capacityCivics={}}
+local e={turn=62,saved=p,players={},enums={},deals={},candidates={},capacityCivics={},production={cities={}}}
 for _,k in ipairs({'EQUALIZE','ACCEPTED','ADJUSTED','PROPOSED','REJECTED','REJECTED_PERMANENT','EQUALIZE_FAILED','CLOSED','INSPECT'}) do
  e.enums[k]=safe(function() return assert(DealProposalAction)[k] end)
 end
@@ -39,6 +39,29 @@ for id=0,1 do
  end)
 end
 e.roster=safe(function() return assert(ExposedMembers.JAC_PersonaBoundary).ReadEnemy() end)
+e.production.enumeration=safe(function()
+ local function spy()return assert(GameInfo.Units['UNIT_SPY'],'spy definition absent')end
+ local function agency()return assert(GameInfo.Buildings['BUILDING_GOV_SPIES'],'official spy agency definition absent')end
+ for _,city in Players[0]:GetCities():Members() do
+  assert(#e.production.cities<128,'city enumeration limit')
+  local r={};e.production.cities[#e.production.cities+1]=r
+  r.id=method(city,'GetID');r.owner=method(city,'GetOwner');r.name=method(city,'GetName')
+  r.spy={};r.agency={}
+  r.spy.canProduce=safe(function()
+   local q=city:GetBuildQueue();local params={UnitType=spy().Hash,MilitaryFormationType=MilitaryFormationTypes.STANDARD_MILITARY_FORMATION}
+   local allowed,reasons=q:CanProduce(params,false,true)
+   return {allowed=allowed,reasons=reasons}
+  end)
+  r.spy.cost=safe(function()return city:GetBuildQueue():GetUnitCost(spy().Index)end)
+  r.spy.progress=safe(function()return city:GetBuildQueue():GetUnitProgress(spy().Index)end)
+  r.agency.owned=safe(function()return city:GetBuildings():HasBuilding(agency().Index)end)
+  r.agency.canProduce=safe(function()
+   local allowed,reasons=city:GetBuildQueue():CanProduce(agency().Hash,false,true)
+   return {allowed=allowed,reasons=reasons}
+  end)
+ end
+ return true
+end)
 for _,direction in ipairs({'OUTGOING','INCOMING'}) do
  local r={items={}};e.deals[direction]=r
  r.enumeration=safe(function()
@@ -194,4 +217,48 @@ fn host_reads_latest_hash_and_contains_no_mutation_step() {
     ] {
         assert!(!READ.contains(text), "{text}");
     }
+}
+
+#[cfg(test)]
+const PRODUCTION: &str = r#"
+GameInfo.Units={UNIT_SPY={Index=18,Hash=118}};GameInfo.Buildings={BUILDING_GOV_SPIES={Index=9,Hash=200}}
+MilitaryFormationTypes={STANDARD_MILITARY_FORMATION=0}
+local q={CanProduce=function(_,args,excluded,reasons)
+ assert(excluded==false and reasons==true)
+ if type(args)=='table' then assert(args.UnitType==118 and args.MilitaryFormationType==0);return false,{reason='SPY_CAPACITY'} end
+ assert(args==200);return false,{reason='ALREADY_BUILT'}
+end,GetUnitCost=function(_,i)assert(i==18);return 225 end,GetUnitProgress=function(_,i)assert(i==18);return 0 end}
+local city={GetID=function()return 42 end,GetOwner=function()return 0 end,GetName=function()return 'capital' end,GetBuildQueue=function()return q end,GetBuildings=function()return {HasBuilding=function(_,i)assert(i==9);return true end}end}
+Players[0].GetCities=function()return {Members=function()local done=false;return function()if not done then done=true;return 1,city end end end}end
+"#;
+#[test]
+fn production_probe_uses_official_parameters_and_preserves_capacity_refusal() {
+    let v = read_fixture(PRODUCTION);
+    let city = &v["production"]["cities"]["1"];
+    assert_eq!(city["spy"]["canProduce"]["value"]["allowed"], false);
+    assert_eq!(
+        city["spy"]["canProduce"]["value"]["reasons"]["reason"],
+        "SPY_CAPACITY"
+    );
+    assert_eq!(city["spy"]["cost"]["value"], 225);
+    assert_eq!(city["agency"]["owned"]["value"], true);
+}
+
+#[test]
+fn missing_progress_does_not_erase_eligibility_and_missing_queue_keeps_ownership() {
+    let v = read_fixture(&format!("{PRODUCTION}\nq.GetUnitProgress=nil"));
+    let c = &v["production"]["cities"]["1"];
+    assert_eq!(c["spy"]["progress"]["status"], "ERROR");
+    assert_eq!(c["spy"]["canProduce"]["value"]["allowed"], false);
+    assert_eq!(
+        c["spy"]["canProduce"]["value"]["reasons"]["reason"],
+        "SPY_CAPACITY"
+    );
+    assert_eq!(c["spy"]["cost"]["value"], 225);
+    let v = read_fixture(&format!("{PRODUCTION}\nq.CanProduce=nil"));
+    let c = &v["production"]["cities"]["1"];
+    assert_eq!(c["spy"]["canProduce"]["status"], "ERROR");
+    assert_eq!(c["agency"]["canProduce"]["status"], "ERROR");
+    assert_eq!(c["agency"]["owned"]["value"], true);
+    assert_eq!(c["spy"]["progress"]["value"], 0);
 }
