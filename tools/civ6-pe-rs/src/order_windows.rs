@@ -17,36 +17,37 @@ fn approved_chain_image(path: &Path) -> Result<&'static str, String> {
         .find(|image| same_path(path, Path::new(image)))
         .ok_or_else(|| "order observer chain image is not approved".into())
 }
-fn verify_amd_chain_hash(actual: &str) -> Result<(), String> {
-    if actual != AMD_CHAIN_SHA {
-        return Err("order observer AMD chain SHA mismatch".into());
-    }
-    Ok(())
-}
-fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
+fn pin_hashed_chain_file(path: &Path, expected_sha: &str) -> Result<File, String> {
     use std::os::windows::fs::OpenOptionsExt;
-    let image = approved_chain_image(path)?;
-    if image == DEFAULT_CHAIN {
-        return Ok(None);
-    }
     // Keep the approved on-disk image immutable through GO, observation and
     // recovery. Hash once while denying writes/deletes, not on every event.
     let mut pin = fs::OpenOptions::new()
         .read(true)
         .share_mode(1)
-        .open(image)
+        .open(path)
         .map_err(|e| format!("AMD chain image pin failed: {e}"))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 65536];
     loop {
-        let n = pin.read(&mut buffer).map_err(|e| format!("AMD chain image read failed: {e}"))?;
+        let n = pin
+            .read(&mut buffer)
+            .map_err(|e| format!("AMD chain image read failed: {e}"))?;
         if n == 0 {
             break;
         }
         hasher.update(&buffer[..n]);
     }
-    verify_amd_chain_hash(&format!("{:x}", hasher.finalize()))?;
-    Ok(Some(pin))
+    if format!("{:x}", hasher.finalize()) != expected_sha {
+        return Err("order observer AMD chain SHA mismatch".into());
+    }
+    Ok(pin)
+}
+fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
+    let image = approved_chain_image(path)?;
+    if image == DEFAULT_CHAIN {
+        return Ok(None);
+    }
+    pin_hashed_chain_file(Path::new(image), AMD_CHAIN_SHA).map(Some)
 }
 struct OrderChain {
     process: Handle,
@@ -1009,19 +1010,65 @@ mod tests {
             );
             assert!(pin_chain_image(Path::new(path)).is_err());
         }
-        for hash in [
-            "",
-            "800b0cb71126412237428a956fd22fd68a98e7c4812879399235256de56b958e",
-            "8a4d2d307b0a8f0cf3f2156311d9673d9490c99bafff3cbddbc1fe4e34a0a7ac",
-        ] {
-            assert!(verify_amd_chain_hash(hash).is_err());
-        }
     }
     #[test]
-    fn order_capture_chain_actual_disk_hash_is_pinned_without_launch() {
-        let pin = pin_chain_image(Path::new(AMD_CHAIN)).unwrap();
-        assert!(pin.is_some());
-        // The legacy path retains its existing path-only policy.
+    fn order_capture_chain_hash_and_file_sharing_use_owned_temp_file() {
+        struct OwnedFile(PathBuf);
+        impl Drop for OwnedFile {
+            fn drop(&mut self) {
+                let _ = fs::remove_file(&self.0);
+            }
+        }
+        let path = std::env::temp_dir().join(format!(
+            "todo880-chain-pin-{}-{}.bin",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut writer = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        let owned = OwnedFile(path);
+        writer.write_all(b"abc").unwrap();
+        drop(writer);
+        for hash in [
+            "",
+            AMD_CHAIN_SHA,
+            "800b0cb71126412237428a956fd22fd68a98e7c4812879399235256de56b958e",
+        ] {
+            assert!(
+                matches!(pin_hashed_chain_file(&owned.0, hash), Err(e) if e == "order observer AMD chain SHA mismatch")
+            );
+            // A refusal must release its handle as well.
+            drop(fs::OpenOptions::new().write(true).open(&owned.0).unwrap());
+        }
+        let pin = pin_hashed_chain_file(
+            &owned.0,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+        .unwrap();
+        assert_eq!(
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&owned.0)
+                .unwrap_err()
+                .raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(
+            fs::remove_file(&owned.0).unwrap_err().raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(fs::read(&owned.0).unwrap(), b"abc");
+        drop(pin);
+        fs::write(&owned.0, b"released").unwrap();
+        fs::remove_file(&owned.0).unwrap();
+        assert!(!owned.0.exists());
+        // This policy check does not require an installed legacy executable.
         assert!(pin_chain_image(Path::new(DEFAULT_CHAIN)).unwrap().is_none());
     }
     #[test]
