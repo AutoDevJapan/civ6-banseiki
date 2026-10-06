@@ -423,6 +423,7 @@ mod tests {
         for mode in [
             "safe",
             "inactive_slot",
+            "distant_safe",
             "other_city",
             "resource",
             "improvement",
@@ -461,7 +462,7 @@ Players={{[0]={{IsHuman=function() return true end,GetCities=function() return c
 -- An unused engine slot can have a Player object and no unit collection.
 Players[22]={{GetUnits=function() return nil end}}
 Map={{GetPlotCount=function() return 1 end,GetPlotByIndex=function() return plots[30] end,
-  GetPlot=function(x) return plots[x] end,GetPlotDistance=function() return 5 end,
+  GetPlot=function(x) return plots[x] end,GetPlotDistance=function() return mode=='distant_safe' and 50 or 5 end,
   GetAdjacentPlots=function() local rows={{}}; for x=31,36 do rows[#rows+1]=plots[x] end; return rows end}}
 GameInfo={{Terrains={{TERRAIN_GRASS_MOUNTAIN={{Index=9}}}}}}
 TerrainBuilder={{SetTerrainType=function(p,v) MUTATIONS=MUTATIONS+1; terrain[p:GetX()]=v end,
@@ -479,7 +480,7 @@ function Verify(safe)
 end
 "#)).exec()?;
             let result = lua.load(setup).exec();
-            let safe = matches!(mode, "safe" | "inactive_slot");
+            let safe = matches!(mode, "safe" | "inactive_slot" | "distant_safe");
             assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
             lua.load(format!("Verify({safe})")).exec()?;
         }

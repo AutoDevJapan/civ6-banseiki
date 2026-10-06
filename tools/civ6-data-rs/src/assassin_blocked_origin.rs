@@ -39,7 +39,9 @@ local origin,plots
 for index=0,Map.GetPlotCount()-1 do
   local p=Map.GetPlotByIndex(index)
   local distance=Map.GetPlotDistance(cityX,cityY,p:GetX(),p:GetY())
-  if distance>=3 and distance<=18 and EmptyLand(p) then
+  -- The historical map can have no unowned/self-owned land in a local radius.
+  -- Search the finite map while retaining every pre-mutation safety check.
+  if distance>=3 and EmptyLand(p) then
     local candidate={p}; for _,adjacent in ipairs(Map.GetAdjacentPlots(p:GetX(),p:GetY())) do candidate[#candidate+1]=adjacent end
     local good=#candidate==7
     if not good then Reject('incomplete-ring',#candidate) end
