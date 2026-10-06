@@ -185,36 +185,11 @@ fn oath_snapshot(verify_saved: bool) -> Value {
     ))
 }
 
-const TURN_DIAGNOSTIC: &str = r#"
-local out={'raw='..Game.GetCurrentGameTurn(),'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)}
-local function probe(object,label,name)
- local ok,fn=pcall(function() return object[name] end)
- if not ok or type(fn)~='function' then out[#out+1]=label..'.'..name..'=unavailable'; return end
- local success,value=pcall(fn,object)
- out[#out+1]=label..'.'..name..'='..(success and tostring(value) or ('error:'..tostring(value)))
-end
-if type(Game.GetLocalPlayer)=='function' then local ok,p=pcall(Game.GetLocalPlayer); out[#out+1]='local='..tostring(ok and p or 'unavailable') end
-for _,p in ipairs(PlayerManager.GetAliveMajors()) do
- local label='p'..p:GetID()
- for _,name in ipairs({'IsAlive','IsHuman','IsTurnActive','IsTurnActiveComplete','IsAITurnActive','GetTeam'}) do probe(p,label,name) end
-end
-for _,name in ipairs({'CanEndTurn','CanUnreadyTurn','IsProcessingMessages'}) do
- if UI and type(UI[name])=='function' then local ok,v=pcall(UI[name]); out[#out+1]='UI.'..name..'='..(ok and tostring(v) or 'error') end
-end
-if NotificationManager and type(NotificationManager.GetAllEndTurnBlocking)=='function' then
- local ok,v=pcall(NotificationManager.GetAllEndTurnBlocking,Game.GetLocalPlayer())
- if ok and type(v)=='table' then for _,b in ipairs(v) do out[#out+1]='block='..tostring(b) end end
-end
-if AutoplayManager and type(AutoplayManager.IsActive)=='function' then local ok,v=pcall(AutoplayManager.IsActive); out[#out+1]='autoplay='..(ok and tostring(v) or 'error') end
-local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0
-if h then for _,k in ipairs({'age','oathReign','oathChosen','oathDue'}) do out[#out+1]='human.'..k..'='..tostring(h[k]) end end
-return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
-"#;
-
-// Read the engine's session and commemoration state without acknowledging it.
-// FindOpenSessionID/GetSessionInfo: official DiplomacyActionView.lua:2052-2054.
-const SESSION_DIAGNOSTIC: &str = r#"
-local out={}
+// Every optional diagnostic API uses the same lookup and failure reporting.
+macro_rules! diagnostic_lua {
+    ($body:literal) => {
+        concat!(
+            r#"
 local function method(object,name)
  if object==nil then return nil,'owner missing' end
  local ok,fn=pcall(function() return object[name] end)
@@ -222,6 +197,56 @@ local function method(object,name)
  if type(fn)~='function' then return nil,name..' missing' end
  return fn
 end
+"#,
+            $body
+        )
+    };
+}
+
+const TURN_DIAGNOSTIC: &str = diagnostic_lua!(
+    r#"
+local out={'raw='..Game.GetCurrentGameTurn(),'elapsed='..(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1)}
+local function probe(object,label,name,...)
+ local fn,missing=method(object,name)
+ if not fn then out[#out+1]=label..'.'..name..'=unavailable:'..missing; return end
+ local success,value=pcall(fn,...)
+ out[#out+1]=label..'.'..name..'='..(success and tostring(value) or ('error:'..tostring(value)))
+end
+local localPlayer
+local getLocal,localError=method(Game,'GetLocalPlayer')
+if getLocal then local ok,p=pcall(getLocal); if ok then localPlayer=p end; out[#out+1]='local='..(ok and tostring(p) or ('unavailable:call failed:'..tostring(p)))
+else out[#out+1]='local=unavailable:'..localError end
+-- Keep queue/ready state before the roster: engine print lines can be truncated.
+for _,name in ipairs({'CanEndTurn','HasSentTurnComplete','IsProcessingMessages'}) do probe(UI,'UI',name) end
+if type(localPlayer)=='number' and localPlayer>=0 then probe(UI,'UI','IsTurnTimerElapsed',localPlayer)
+else out[#out+1]='UI.IsTurnTimerElapsed=unavailable:local player unavailable' end
+for _,name in ipairs({'IsPaused','GetPausePlayer'}) do probe(GameConfiguration,'GameConfiguration',name) end
+probe(UIManager,'UIManager','IsPopupQueueDisabled',UIManager)
+probe(AutoplayManager,'AutoplayManager','IsActive')
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+ local label='p'..p:GetID()
+ for _,name in ipairs({'IsAlive','IsHuman','IsTurnActive','IsTurnActiveComplete','CanUnreadyTurn','IsAITurnActive','GetTeam'}) do probe(p,label,name,p) end
+end
+local getBlocking,blockingError=method(NotificationManager,'GetAllEndTurnBlocking')
+if getBlocking and type(localPlayer)=='number' and localPlayer>=0 then
+ local ok,v=pcall(getBlocking,localPlayer)
+ if ok and type(v)=='table' then for _,b in ipairs(v) do out[#out+1]='block='..tostring(b) end end
+ if not ok then out[#out+1]='blocks=unavailable:call failed:'..tostring(v)
+ elseif type(v)~='table' then out[#out+1]='blocks=unavailable:returned '..type(v) end
+else
+ out[#out+1]='blocks=unavailable:'..(blockingError or 'local player unavailable')
+end
+local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0
+if h then for _,k in ipairs({'age','oathReign','oathChosen','oathDue'}) do out[#out+1]='human.'..k..'='..tostring(h[k]) end end
+return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
+"#
+);
+
+// Read the engine's session and commemoration state without acknowledging it.
+// FindOpenSessionID/GetSessionInfo: official DiplomacyActionView.lua:2052-2054.
+const SESSION_DIAGNOSTIC: &str = diagnostic_lua!(
+    r#"
+local out={}
 if ContextPtr and type(ContextPtr.IsHidden)=='function' then out[#out+1]='contextHidden='..tostring(ContextPtr:IsHidden()) end
 local find,findError=method(DiplomacyManager,'FindOpenSessionID')
 if not find then
@@ -276,7 +301,8 @@ else
  end
 end
 return 'LEGACY_SESSION_DIAGNOSTIC '..table.concat(out,' ')
-"#;
+"#
+);
 
 const CLOSE_VISIBLE_STATEMENT: &str = "if ContextPtr:IsHidden() then return 'statement already hidden; no close sent' end\nOnClose(); return 'visible statement close requested once; no end-turn resend'";
 
@@ -287,7 +313,7 @@ local function snapshot()
 {TURN_DIAGNOSTIC}
 end
 local last=''
-for _,name in ipairs({{'TurnBegin','TurnEnd','PlayerTurnActivated','PlayerTurnDeactivated','LocalPlayerTurnBegin','LocalPlayerTurnEnd','GameCoreEventPublishComplete'}}) do
+for _,name in ipairs({{'TurnBegin','TurnEnd','PlayerTurnActivated','PlayerTurnDeactivated','LocalPlayerTurnBegin','LocalPlayerTurnEnd','GameCoreEventPublishComplete','GameCoreEventPlaybackComplete'}}) do
  if Events[name] and Events[name].Add then
   local event=name
   Events[name].Add(function(...)
@@ -504,6 +530,44 @@ DiplomacyManager={FindOpenSessionID=function()return session end,GetSessionInfo=
     }
 
     #[test]
+    fn turn_diagnostic_reads_ready_and_pause_state_with_correct_receivers() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load(r#"
+ledger={houses={p0={age='NORMAL'}}}
+Game={GetCurrentGameTurn=function()return 67 end,GetLocalPlayer=function()return 0 end,GetProperty=function()return ledger end,SetProperty=function()error('diagnostic must not write')end}
+GameConfiguration={GetStartTurn=function()return 1 end,IsPaused=function(...)assert(select('#',...)==0);return false end,GetPausePlayer=function()return -1 end}
+UI={HasSentTurnComplete=function(...)assert(select('#',...)==0);return true end,IsTurnTimerElapsed=function(id)assert(id==0);return false end,RequestAction=function()error('diagnostic must not request')end}
+UIManager={};UIManager.IsPopupQueueDisabled=function(self)assert(self==UIManager);return false end
+local p;p={GetID=function()return 0 end,CanUnreadyTurn=function(self)assert(self==p);return true end,IsHuman=function()error('probe failure')end}
+PlayerManager={GetAliveMajors=function()return {p} end}
+"#).exec()?;
+        let text: String = vm.load(TURN_DIAGNOSTIC).eval()?;
+        for expected in [
+            "UI.HasSentTurnComplete=true",
+            "UI.IsTurnTimerElapsed=false",
+            "GameConfiguration.IsPaused=false",
+            "GameConfiguration.GetPausePlayer=-1",
+            "UIManager.IsPopupQueueDisabled=false",
+            "p0.CanUnreadyTurn=true",
+            "p0.IsHuman=error:",
+            "p0.IsAlive=unavailable:IsAlive missing",
+            "UI.CanEndTurn=unavailable:CanEndTurn missing",
+            "blocks=unavailable:owner missing",
+        ] {
+            assert!(text.contains(expected), "{text}");
+        }
+        assert!(text.find("UI.HasSentTurnComplete").unwrap() < text.find("p0.").unwrap());
+        vm.load("Game.GetLocalPlayer=nil;UI=nil;UIManager=nil;GameConfiguration.IsPaused=nil")
+            .exec()?;
+        let text: String = vm.load(TURN_DIAGNOSTIC).eval()?;
+        assert!(text.contains("local=unavailable:GetLocalPlayer missing"));
+        assert!(text.contains("UI.HasSentTurnComplete=unavailable:owner missing"));
+        assert!(text.contains("UI.IsTurnTimerElapsed=unavailable:local player unavailable"));
+        assert!(text.contains("GameConfiguration.IsPaused=unavailable:IsPaused missing"));
+        Ok(())
+    }
+
+    #[test]
     fn stalled_diagnostic_still_captures_both_contexts_and_event_history() -> Result<()> {
         let scene = scenarios(&Repository::checked_in())?
             .into_iter()
@@ -562,9 +626,11 @@ print=function(s)logs[#logs+1]=s end
 callbacks.PlayerTurnActivated(0,false)
 callbacks.GameCoreEventPublishComplete()
 callbacks.GameCoreEventPublishComplete()
-assert(#logs==2)
+callbacks.GameCoreEventPlaybackComplete()
+assert(#logs==3)
 assert(string.find(logs[1],'PlayerTurnActivated:0,false',1,true))
 assert(string.find(logs[2],'p0.IsTurnActive=false',1,true))
+assert(string.find(logs[3],'GameCoreEventPlaybackComplete:',1,true))
 assert(ledger.houses.p0.oaths==nil)
 "#,
         )
