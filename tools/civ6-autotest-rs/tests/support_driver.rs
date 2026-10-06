@@ -84,7 +84,7 @@ impl FakeBackend {
                 if code.contains("return tostring(startTurn)") {
                     Ok("1|0".into())
                 } else if code.contains("CAPABILITY_DISPLAY_NORMALIZED_TURN") {
-                    Ok("1|1".into())
+                    Ok("1|1|1534|true|CALENDAR_STANDARD_FROM_START_ERA|1534 AD".into())
                 } else if code.contains("IsAlive()") {
                     Ok("1|true".into())
                 } else if code.contains("Game.GetCurrentGameTurn()") {

@@ -169,6 +169,11 @@
     },
     {
       "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nassert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI','wrong ruleset')\nlocal selected=GameConfiguration.GetCalendarType()\nassert(selected=='CALENDAR_STANDARD_FROM_START_ERA' or selected==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA'),'wrong start-era calendar')\nassert(GameInfo.StartEras['ERA_ANCIENT'].Year==1534,'wrong start-era year')\nlocal turn=Game.GetCurrentGameTurn()\nassert(turn==GameConfiguration.GetStartTurn(),'not the actual start turn')\nlocal date=Calendar.MakeYearStr(turn)\nlocal numbers={};for number in tostring(date):gmatch('%d+') do numbers[#numbers+1]=number end\nassert(#numbers==1 and numbers[1]=='1534','wrong actual start date: '..tostring(date))\nreturn 'verified start date='..date\n"
+    },
+    {
+      "action": "ui_lua",
       "state_name": "JAC_Absorption_Entry",
       "code": "\nlocal N=assert(JAC_AbsorptionAdmissionGameplay)\nlocal t=assert(Game:GetProperty('JAC_ABSORPTION_FLOW_LIVE_TEST'))\nassert(not Game:GetProperty('JAC_ABSORPTION_FLOW_TEST_MODE'))\nlocal treasury=Players[t.To]:GetTreasury()\nlocal minimum=treasury:GetGoldBalance()+1000000\nlocal offer={ID='todo995-normal-merger',From=t.From,To=t.To,AreaKm2=10000,\n  Requirements={{ID='test-reserve',Kind='GOLD_MINIMUM',Minimum=minimum}},\n  RelationRequirements={}, RelationsReviewed=true}\n-- Explicit diagnostic demand, not a universal balance rule or a payment.\nN.DefineOffer(offer)\nGame:SetProperty('JAC_ABSORPTION_ADMISSION_LIVE_V1',{ID=offer.ID,From=t.From,To=t.To,Minimum=minimum})\nreturn 'normal leader offer saved; no test start used'\n"
     },

@@ -7,6 +7,21 @@ use serde_json::{json, Value};
 
 pub const OUTPUT: &str = "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua";
 
+pub fn start_calendar_step() -> Value {
+    json!({"action":"ui_lua","state_name":"InGame","code":r#"
+assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI','wrong ruleset')
+local selected=GameConfiguration.GetCalendarType()
+assert(selected=='CALENDAR_STANDARD_FROM_START_ERA' or selected==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA'),'wrong start-era calendar')
+assert(GameInfo.StartEras['ERA_ANCIENT'].Year==1534,'wrong start-era year')
+local turn=Game.GetCurrentGameTurn()
+assert(turn==GameConfiguration.GetStartTurn(),'not the actual start turn')
+local date=Calendar.MakeYearStr(turn)
+local numbers={};for number in tostring(date):gmatch('%d+') do numbers[#numbers+1]=number end
+assert(#numbers==1 and numbers[1]=='1534','wrong actual start date: '..tostring(date))
+return 'verified start date='..date
+"#})
+}
+
 pub fn generate(_repo: &Repository) -> Result<Outputs> {
     Ok([(OUTPUT.into(), lua())].into_iter().collect())
 }
@@ -16,6 +31,7 @@ pub fn generate(_repo: &Repository) -> Result<Outputs> {
 pub fn live_scenario(repo: &Repository) -> Result<String> {
     let base = repo.json("tools/civ6-autotest/scenarios/absorption-flow.json")?;
     let mut steps: Vec<Value> = base["steps"].as_array().unwrap()[..7].to_vec();
+    steps.push(start_calendar_step());
     fn core(code: &str) -> Value {
         json!({"action":"ui_lua", "state_name":"JAC_Absorption_Entry", "code":code})
     }
@@ -131,6 +147,7 @@ pub fn envoy_probe_scenario(repo: &Repository) -> Result<String> {
         base["steps"][5].clone(),
     ];
     // Let the real minor AI found its capital before testing influence.
+    steps.push(start_calendar_step());
     steps.push(json!({"action":"end_turn","timeout":180}));
     steps.push(base["steps"][5].clone());
     steps.push(

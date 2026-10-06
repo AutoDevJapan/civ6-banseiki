@@ -163,6 +163,11 @@
       }
     },
     {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nassert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI','wrong ruleset')\nlocal selected=GameConfiguration.GetCalendarType()\nassert(selected=='CALENDAR_STANDARD_FROM_START_ERA' or selected==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA'),'wrong start-era calendar')\nassert(GameInfo.StartEras['ERA_ANCIENT'].Year==1534,'wrong start-era year')\nlocal turn=Game.GetCurrentGameTurn()\nassert(turn==GameConfiguration.GetStartTurn(),'not the actual start turn')\nlocal date=Calendar.MakeYearStr(turn)\nlocal numbers={};for number in tostring(date):gmatch('%d+') do numbers[#numbers+1]=number end\nassert(#numbers==1 and numbers[1]=='1534','wrong actual start date: '..tostring(date))\nreturn 'verified start date='..date\n"
+    },
+    {
       "action": "wait_for",
       "timeout": 600,
       "condition": {

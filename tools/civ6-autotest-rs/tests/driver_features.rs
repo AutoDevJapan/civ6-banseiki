@@ -195,21 +195,47 @@ fn test_start_turn_guard() {
     let mut h = Harness::new(json!({}), FakeBackend::new().lua(|_, _| Ok("16603".into())));
     h.runner.check_start_turn(60.0).unwrap();
     assert!(h.calls().is_empty());
-    for (start, current, normalized, accepted) in [
-        (16603, 16603, true, true),
-        (1, 1, false, true),
-        (16603, 16603, false, false),
-        (16603, 16604, true, false),
-        (1, 2, false, false),
-        (0, 0, true, false),
+    for (start, current, normalized, era_year, calendar, date, accepted) in [
+        (
+            16603,
+            16603,
+            true,
+            1534,
+            "'CALENDAR_STANDARD_FROM_START_ERA'",
+            "1534 AD",
+            true,
+        ),
+        (
+            1,
+            1,
+            false,
+            1534,
+            "'CALENDAR_STANDARD_FROM_START_ERA'",
+            "1534年",
+            true,
+        ),
+        (16603, 16603, true, 1534, "12345", "1534 г.", true),
+        (16603, 16603, false, 1534, "12345", "1534 AD", false),
+        (16603, 16604, true, 1534, "12345", "1534 AD", false),
+        (1, 2, false, 1534, "12345", "1534 AD", false),
+        (0, 0, true, 1534, "12345", "1534 AD", false),
+        (1, 1, false, -4000, "12345", "4000 BC", false),
+        (1, 1, false, 1534, "'CALENDAR_DEFAULT'", "1534 AD", false),
+        (1, 1, false, 1534, "12346", "1534 AD", false),
+        (1, 1, false, 1534, "12345", "11534 AD", false),
+        (1, 1, false, 1534, "12345", "4000 BC / 1534 AD", false),
+        (1, 1, false, 1534, "12345", "", false),
     ] {
         let backend = FakeBackend::new().lua(move |state, code| {
             assert_eq!(state, "InGame");
             let lua = mlua::Lua::new();
             lua.load(format!(
-                "GameConfiguration={{GetStartTurn=function() return {start} end}};
+                "GameConfiguration={{GetStartTurn=function() return {start} end,GetCalendarType=function() return {calendar} end}};
                  Game={{GetCurrentGameTurn=function() return {current} end}};
-                 GameCapabilities={{HasCapability=function(_, ...) return {normalized} end}}"
+                 GameCapabilities={{HasCapability=function(_, ...) return {normalized} end}};
+                 GameInfo={{StartEras={{ERA_ANCIENT={{Year={era_year}}}}}}};
+                 DB={{MakeHash=function() return 12345 end}};
+                 Calendar={{MakeYearStr=function() return {} end}}", serde_json::to_string(date).unwrap()
             ))
             .exec()
             .map_err(|e| Error::scenario(e.to_string()))?;
@@ -221,7 +247,14 @@ fn test_start_turn_guard() {
         h.runner.ruleset = Some("RULESET_JAC_BANSEIKI".into());
         assert_eq!(h.runner.check_start_turn(60.0).is_ok(), accepted);
     }
-    for response in ["16603", "1|", "nan|1", "1|1|extra"] {
+    for response in [
+        "16603",
+        "1|",
+        "nan|1",
+        "1|1|extra",
+        "1|1|1534|true|C",
+        "1|1|1534|true|C|1534 AD|extra",
+    ] {
         let mut h = Harness::new(
             json!({}),
             FakeBackend::new().lua(move |_, _| Ok(response.into())),

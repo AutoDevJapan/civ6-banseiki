@@ -92,6 +92,102 @@ fn major_recipient_is_required_for_offers_requests_and_saved_prestart_plans() ->
 }
 
 #[test]
+fn every_admission_scene_checks_the_actual_start_year_and_rejects_wrong_calendars(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let mut scenes = vec![
+        absorption_admission::live_scenario(&repo)?,
+        absorption_admission::envoy_probe_scenario(&repo)?,
+    ];
+    for small in [true, false] {
+        for human in [true, false] {
+            scenes.push(civ6_data_rs::absorption_product::acceptance_scenario(
+                &repo, small, human,
+            )?);
+        }
+    }
+    let check = absorption_admission::start_calendar_step();
+    for (scene, path) in scenes.into_iter().zip([
+        "tools/civ6-autotest/scenarios/absorption-normal-admission.json",
+        "tools/civ6-autotest/scenarios/absorption-envoy-api.json",
+        "tools/civ6-autotest/scenarios/absorption-product-small-human.json",
+        "tools/civ6-autotest/scenarios/absorption-product-small-ai.json",
+        "tools/civ6-autotest/scenarios/absorption-product-merger-human.json",
+        "tools/civ6-autotest/scenarios/absorption-product-merger-ai.json",
+    ]) {
+        let scene: serde_json::Value = serde_json::from_str(&scene)?;
+        let shipped: serde_json::Value = serde_json::from_str(&repo.read(path)?)?;
+        assert_eq!(scene, shipped, "stale calendar acceptance scene: {path}");
+        assert_eq!(
+            scene["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|step| **step == check)
+                .count(),
+            1
+        );
+    }
+    for (era_year, calendar, turn, date, accepted) in [
+        (
+            1534,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16603,
+            "1534 AD",
+            true,
+        ),
+        (
+            1534,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16603,
+            "1534年",
+            true,
+        ),
+        (
+            1534,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16603,
+            "1534 г.",
+            true,
+        ),
+        (
+            -4000,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16603,
+            "4000 BC",
+            false,
+        ),
+        (1534, "CALENDAR_DEFAULT", 16603, "1534 AD", false),
+        (
+            1534,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16604,
+            "1534 AD",
+            false,
+        ),
+        (
+            1534,
+            "CALENDAR_STANDARD_FROM_START_ERA",
+            16603,
+            "15340 AD",
+            false,
+        ),
+        (1534, "CALENDAR_STANDARD_FROM_START_ERA", 16603, "", false),
+    ] {
+        let lua = Lua::new();
+        lua.load(format!("GameConfiguration={{GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,GetCalendarType=function() return '{}' end,GetStartTurn=function() return 16603 end}};GameInfo={{StartEras={{ERA_ANCIENT={{Year={era_year}}}}}}};Game={{GetCurrentGameTurn=function() return {turn} end}};DB={{MakeHash=function() return 12345 end}};Calendar={{MakeYearStr=function() return {} end}}", calendar, serde_json::to_string(date)?)).exec()?;
+        assert_eq!(
+            lua.load(check["code"].as_str().unwrap())
+                .eval::<String>()
+                .is_ok(),
+            accepted,
+            "{date}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn faith_requirements_use_the_existing_context_aware_absorption_reader() -> mlua::Result<()> {
     let lua = world()?;
     lua.load(

@@ -405,6 +405,7 @@ pub fn generate(repo: &Repository) -> Result<Outputs> {
 pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Result<String> {
     let base = repo.json("tools/civ6-autotest/scenarios/absorption-flow.json")?;
     let mut steps = base["steps"].as_array().unwrap()[..6].to_vec();
+    steps.push(crate::absorption_admission::start_calendar_step());
     let from = if small {
         "CIVILIZATION_JAC_ODA"
     } else {

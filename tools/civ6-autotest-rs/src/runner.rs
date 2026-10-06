@@ -1455,21 +1455,27 @@ impl Runner {
         }
         let value = self.lua(
             "InGame",
-            "local start=GameConfiguration.GetStartTurn();local turn=Game.GetCurrentGameTurn();if GameCapabilities.HasCapability('CAPABILITY_DISPLAY_NORMALIZED_TURN') then turn=turn-start+1 end;return tostring(start)..'|'..tostring(turn)",
+            "local start=GameConfiguration.GetStartTurn();local turn=Game.GetCurrentGameTurn();if GameCapabilities.HasCapability('CAPABILITY_DISPLAY_NORMALIZED_TURN') then turn=turn-start+1 end;local era=GameInfo.StartEras['ERA_ANCIENT'];local calendar=GameConfiguration.GetCalendarType();local selected=calendar=='CALENDAR_STANDARD_FROM_START_ERA' or calendar==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA');return table.concat({tostring(start),tostring(turn),tostring(era and era.Year),tostring(selected),tostring(calendar),tostring(Calendar.MakeYearStr(Game.GetCurrentGameTurn()))},'|')",
             self.budget(deadline, 5.0)?,
         )?;
         // The Sengoku calendar legitimately starts near raw turn 16603.
-        // Match the official TopPanel's normalized display, not its raw epoch.
+        // Match both the official normalized turn and its actual calendar date.
         let observation = value.trim().trim_matches('"');
-        let valid = observation
-            .split_once('|')
-            .is_some_and(|(start, displayed)| {
-                start.parse::<i64>().is_ok_and(|start| start >= 1)
-                    && displayed.parse::<i64>() == Ok(1)
-            });
+        let fields: Vec<_> = observation.split('|').collect();
+        let valid = fields.len() == 6
+            && fields[0].parse::<i64>().is_ok_and(|start| start >= 1)
+            && fields[1].parse::<i64>() == Ok(1)
+            && fields[2].parse::<i64>() == Ok(1534)
+            && fields[3] == "true"
+            && {
+                let mut numbers = fields[5]
+                    .split(|c: char| !c.is_ascii_digit())
+                    .filter(|s| !s.is_empty());
+                numbers.next() == Some("1534") && numbers.next().is_none()
+            };
         if !valid {
             return Err(Error::scenario(format!(
-                "{} start-turn observation {value} does not display turn 1",
+                "{} start observation {value} must display turn 1 in year 1534 with the Sengoku start-era calendar",
                 scenario::BANSEIKI_RULESET
             )));
         }
