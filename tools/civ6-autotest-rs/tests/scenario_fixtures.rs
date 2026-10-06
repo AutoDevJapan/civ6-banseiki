@@ -1386,6 +1386,7 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
 fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_boundary() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
+    let mut blocked_recovery_seen = false;
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1401,6 +1402,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
             count += 1;
+            blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1465,9 +1467,10 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Includes the four main-branch carrier/religion/spent-spread scenes,
-    // alongside the isolated promotion-call and assignment calibration games.
-    assert_eq!(count, 141);
+    // Preserve the prior 141 scenes and inspect the main-branch blocked-recovery
+    // scenario against the same isolation rules, rather than excluding it.
+    assert!(blocked_recovery_seen);
+    assert_eq!(count, 142);
 }
 
 #[test]

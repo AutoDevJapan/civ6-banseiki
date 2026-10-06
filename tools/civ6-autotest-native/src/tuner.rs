@@ -483,6 +483,9 @@ mod tests {
         let handle = thread::spawn(move || {
             let (mut stream, peer) = listener.accept().unwrap();
             assert!(peer.ip().is_loopback());
+            // Fragmented fixture frames must not incur Nagle/delayed-ACK waits.
+            // Otherwise the query alone can exhaust the command's test budget.
+            stream.set_nodelay(true).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
@@ -505,7 +508,7 @@ mod tests {
                         assert_eq!(tag, HANDSHAKE);
                         state_queries += 1;
                         if matches!(reply, Reply::SlowQueryAndAck) && state_queries > 1 {
-                            thread::sleep(Duration::from_millis(100));
+                            thread::sleep(Duration::from_millis(400));
                         }
                         fixture_frame(&mut stream, COMMAND, "O\0another print");
                         fixture_frame(&mut stream, HANDSHAKE, &states);
@@ -529,7 +532,7 @@ mod tests {
                                 &format!("{token}|OK|one\n{token}|OK|two"),
                             ),
                             Reply::SlowQueryAndAck => {
-                                thread::sleep(Duration::from_millis(150));
+                                thread::sleep(Duration::from_millis(800));
                                 let body = format!("{token}|OK|true\0").into_bytes();
                                 let wire = [
                                     (body.len() as u32).to_le_bytes().as_slice(),
@@ -818,8 +821,10 @@ mod tests {
     fn state_query_and_lua_ack_share_one_deadline() {
         let (port, server) = fake(STATES, Reply::SlowQueryAndAck);
         let mut client = TunerClient::connect(port, Duration::from_secs(1)).unwrap();
+        // Each delay fits the budget separately, but their sum does not.
+        // Leave enough query margin for loaded CI runners to send the command.
         assert!(matches!(
-            client.run_lua("InGame", "return true", Duration::from_millis(200)),
+            client.run_lua("InGame", "return true", Duration::from_secs(1)),
             Err(TunerError::Unknown(_))
         ));
         drop(client);

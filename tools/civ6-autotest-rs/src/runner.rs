@@ -3398,10 +3398,9 @@ impl Runner {
         let start_line = core_start
             .map(|v| format!("local startTurn = {v}\n"))
             .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
-        let start_code = format!(
-            "if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)"
-        );
-        let mut autoplay_started = false;
+        let autoplay_owner = uuid::Uuid::new_v4().simple().to_string();
+        let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nJAC_AUTOTEST_AUTO_OWNER = '{autoplay_owner}'\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() if JAC_AUTOTEST_AUTO_OWNER == '{autoplay_owner}' then JAC_AUTOTEST_AUTO_DONE = true end end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
+        let mut autoplay_attempted = false;
         type AutoplayOutcome = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
         let execution = (|| -> Result<AutoplayOutcome> {
             let (pid, initial_memory, started) = if options.record_metrics {
@@ -3416,8 +3415,9 @@ impl Runner {
             } else {
                 (None, Value::Null, 0.0)
             };
-            let start_value = self.lua("InGame", &start_code, self.budget(deadline, 5.0)?)?;
-            autoplay_started = true;
+            let start_budget = self.budget(deadline, 5.0)?;
+            autoplay_attempted = true;
+            let start_value = self.lua("InGame", &start_code, start_budget)?;
             let parts: Vec<_> = start_value.split('|').collect();
             if parts.len() != 2 {
                 return Err(Error::scenario(format!(
@@ -3625,7 +3625,7 @@ impl Runner {
                                 )));
                             }
                             let remaining = target - current.turn;
-                            self.lua("InGame",&format!("JAC_AUTOTEST_AUTO_DONE = false\nAutoplayManager.SetTurns({remaining})\nAutoplayManager.SetReturnAsPlayer({human})\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn true"),self.budget(deadline,5.0)?)?;
+                            self.lua("InGame",&format!("if JAC_AUTOTEST_AUTO_OWNER ~= '{autoplay_owner}' then error('autoplay ownership changed') end\nJAC_AUTOTEST_AUTO_DONE = false\nAutoplayManager.SetTurns({remaining})\nAutoplayManager.SetReturnAsPlayer({human})\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn true"),self.budget(deadline,5.0)?)?;
                             if chosen.is_none() && !diplomacy_since_resume {
                                 restarts += 1;
                             } else if diplomacy_since_resume {
@@ -3660,7 +3660,7 @@ impl Runner {
         let execution = execution.and_then(|value| {
             let mut attempts = 0;
             loop {
-                match self.lua("InGame","if JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true",self.budget(deadline,5.0)?) {
+                match self.lua("InGame",&format!("if JAC_AUTOTEST_AUTO_HANDLER then\n if JAC_AUTOTEST_AUTO_OWNER ~= '{autoplay_owner}' then error('autoplay ownership changed') end\n LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER)\nend\nif JAC_AUTOTEST_AUTO_OWNER == '{autoplay_owner}' then JAC_AUTOTEST_AUTO_HANDLER = nil; JAC_AUTOTEST_AUTO_OWNER = nil end\nreturn true"),self.budget(deadline,5.0)?) {
                     Ok(_) => break,
                     Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                     Err(e) if retryable(&e) => {
@@ -3678,9 +3678,9 @@ impl Runner {
             Err(e)
                 if e.kind == ErrorKind::Interrupted || crate::time::check_interrupt().is_err() =>
             {
-                if autoplay_started {
+                if autoplay_attempted {
                     if let Err(cleanup) =
-                        crate::time::with_interrupt_cleanup(|| self.stop_autoplay())
+                        crate::time::with_interrupt_cleanup(|| self.stop_autoplay(&autoplay_owner))
                     {
                         println!("Autoplay cleanup failed: {cleanup}");
                     }
@@ -3691,19 +3691,11 @@ impl Runner {
                     Error::interrupted(format!("Interrupted while autoplay failed: {e}"))
                 });
             }
-            // A confirmed start must be stopped even if a later read loses its reply.
-            Err(e)
-                if !autoplay_started
-                    && matches!(
-                        e.kind,
-                        ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
-                    ) =>
-            {
-                return Err(e);
-            }
             Err(e) => {
-                if let Err(cleanup) = self.stop_autoplay() {
-                    println!("Autoplay cleanup failed: {cleanup}");
+                if autoplay_attempted {
+                    if let Err(cleanup) = self.stop_autoplay(&autoplay_owner) {
+                        println!("Autoplay cleanup failed: {cleanup}");
+                    }
                 }
                 return Err(e);
             }
@@ -3734,8 +3726,35 @@ impl Runner {
         }
         Ok(detail)
     }
-    fn stop_autoplay(&mut self) -> Result<String> {
-        self.lua("InGame", "if AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nreturn true", 5.0)
+    fn stop_autoplay(&mut self, owner: &str) -> Result<String> {
+        // A lost start reply can follow SetActive(true). Identify this attempt
+        // in Lua, not by an acknowledgment, and never stop an existing run.
+        let deadline = self.clock.now() + 5.0;
+        let owns = format!("return JAC_AUTOTEST_AUTO_OWNER == '{owner}'");
+        // Reserve time for the guarded stop and its verification even if the
+        // ownership read loses its entire reply budget.
+        match self.lua("InGame", &owns, self.budget(deadline, 1.0)?) {
+            Ok(value) if value == "false" => return Ok("autoplay not owned".into()),
+            Ok(value) if value == "true" => {}
+            // Even when the read is unavailable, the stop itself checks the
+            // owner atomically. It is sent once; its reply is never replayed.
+            Ok(_) | Err(_) => self.disconnect(),
+        }
+        let stop = format!("if JAC_AUTOTEST_AUTO_OWNER ~= '{owner}' then return false end\nif AutoplayManager.IsActive() then AutoplayManager.SetActive(false) end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_HANDLER = nil\nJAC_AUTOTEST_AUTO_OWNER = nil\nreturn true");
+        let stopped = self.lua("InGame", &stop, self.budget(deadline, 2.0)?);
+        if stopped.is_err() {
+            self.disconnect();
+        }
+        let verify = format!(
+            "return JAC_AUTOTEST_AUTO_OWNER ~= '{owner}' or not AutoplayManager.IsActive()"
+        );
+        if self.lua("InGame", &verify, self.budget(deadline, 5.0)?)? == "true" {
+            Ok("owned autoplay stopped or no longer owned".into())
+        } else {
+            Err(stopped
+                .err()
+                .unwrap_or_else(|| Error::scenario("owned autoplay is still active")))
+        }
     }
     fn era_state(&mut self, deadline: f64) -> Result<(i64, i64, i64, i64)> {
         let value=self.lua("InGame","local eras = Game.GetEras()\nreturn tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(eras:GetCurrentEraMinimumEndTurn()) .. '|' .. tostring(eras:GetCurrentEraMaximumEndTurn()) .. '|' .. tostring(eras:GetNextEraCountdown())",self.budget(deadline,5.0)?)?;

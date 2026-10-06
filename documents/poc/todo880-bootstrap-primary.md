@@ -133,6 +133,10 @@ $env:CARGO_TARGET_DIR='D:/CC/Work/todo880/bootstrap-target'
 
 snapshotはPEをファイルとして読むだけ。SHA・opcode・実行sectionを確認し、ソースファイル一覧と各SHA、コンパイル時source digest、生成時checkout HEADをJSONに出す。コンパイル後にソースが変わっていれば拒否する。`live_runs=0`、未観測counterはnull、共通境界とGameplay同定はunknown。checkout HEADとcompiled source digestを分け、未コミット編集をHEADだけで同一と扱わない。
 
+`order-capture-contract` の既定Cargo検査3件は所有tempだけを使う。不正byte列を既存`disk_sites`と実CLIのsnapshot/summaryへ渡す拒否検査、manifestの構造検査、無効manifest・引数・未存在入力のCLI拒否を実行する。Civ6未導入時にreturn成功やignoreへ逃がす分岐はない。実物EXE/GameCoreの肯定照合は上記の明示 `snapshot <Steam EXE>`／`summary <Steam EXE>` が担い、Cargo件数へ加算しない。未導入・SHA不一致・source不一致はこの明示実行の失敗である。
+
+実PCではsnapshotの終了0、8 sites、`checkout_sources_match_binary=true`、`gamecore_identity_verified=true`、`live_runs=0`、各siteの未観測counter=nullを確認し、JSONと実行EXEのSHAを別receiptへ保存する。既存 `D:/CC/Work/todo880/bootstrap-phase-8ac3b847-snapshot.json` と `bootstrap-phase-8ac3b847-results.json` はその候補の実物照合として保持し、新CI候補の合格へ読み替えない。snapshotは起動・attachを行わない。
+
 | phase | slot 0 | slot 1 | slot 2 | slot 3 |
 |---|---|---|---|---|
 | `front` | loader復帰 `0xF8577` | factory call `0xF845D` | factory復帰 `0xF845F` | lua_newstate復帰 `0x972BBD` |
