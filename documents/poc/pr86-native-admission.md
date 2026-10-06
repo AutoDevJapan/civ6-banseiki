@@ -716,3 +716,28 @@ EXE `E3EA70`はnative queueと稼働値を反復して確認するが、現在�
 同じSolレビューで一次命令と上記の限界を照合した。`985E50`は停止確定点ではなく待機後のpointer消去、`4A11B3`は条件付きhost callback後の合流点と命名する。`63E1B5`のvirtual通知はmanager待機より先であり、その通知中に対象オブジェクトの寿命が終わらないことも照合条件に含む。単一地点だけで全readerを排出した証明は発行しない。`de4b24bd`の限定再レビューでは部分設置/Rebuild・世代0の追加Must2件は修正済み、新Must0。初回設置順序と発行停止/排出のMustは未解決のまま保持する。
 
 親指示により有限sourceを`de4b24bd`、静的監査を`d88b715e/e2c77556`で固定し、既存1466のnoteへ未解決3点（初回AI前Install、同job-set Waitと発行停止、同期callback/保留発行元の退出）と上記の根拠を保存した。1466は未完了を保持し、新しいToDoを作らない。残っていた監査binの小検査だけを既存の共有cargo_gate待ち列から回収し、1成功・失敗ignoredfiltered0・警告0・終了コード0を確認した（`D:/CC/Work/todo880/ai-task-lifecycle-tests.log`）。前の49件へ重複集計せず、追加実機・追加予約・public pushは行っていない。次の実測は親bootstrap/SP結果に依存する。候補feature既定無効、親PR未統合、通常AI支払い受入未達を保持する。
+
+## 次の有限AI校正の生成シナリオ（親公開44ade925を読取確認）
+
+`tools/civ6-autotest-rs/examples/persona_ai_payment_calibration.rs`と専用support Rustを追加した。親公開44ade925の`persona_unjoined_ai`は未加入否定、`payment_scenario`は人間owner0専用であり、どちらも加入済みAIの追加支払いを実証したものではない。新生成器は既存の`ui_lua/InGame`と`end_turn`だけを使う。UIからAI ownerへ正式操作を送信せず、Gameplayの欠けたgetterを補完しない。読み取れないnative値は失敗し、nilを0や許可へ変換しない。
+
+生成コマンドは`cargo run --locked --manifest-path tools/Cargo.toml -p civ6-autotest-rs --example persona_ai_payment_calibration -- bundle 2 <未作成の出力dir>`。共有cargo_gate・専用targetを使用する。owner2は例であり、実AI ownerを引数にする。出力は9個の既存driver schemaに沿うscenarioと`requirements.json`である。後者はdriverへ渡すscenarioではなく、親が実測と結ぶ必要条件の機械可読一覧。既存ディレクトリ・ファイルを上書きしない。
+
+| segment | 読む前提と実ターン後の要求 | 判定範囲 |
+|---|---|---|
+| 01 unjoined | 同一AIの全22人物が未加入、実称号残高1以上。前後で正式任命なし・可否false | 未加入AI否定だけ。加入済み支払いと別判定 |
+| 02/05 appointment | 正式加入・全額予約済み、本人偉人が生存、paid0。実ターン後BaseだけとSpent+1 | 原AIの正式任命0→1。追加TITLE adapterはpaid0を処理しない |
+| 03 Date / 06 Uesugi | 本人paid1から次TITLE1だけ、Spent+1、他の21人物の全bit不変 | 費用2完成分／費用3のpaid2部分 |
+| 07 partial reload | 親が確定した物理saveを読んだ後にUesugi paid2を読む。ターン・送信なし | 保存時のafter snapshotと全項目一致。読込世代の証明は別 |
+| 08 Uesugi | paid2からTITLE2だけ、Spent+1 | 費用3の最終一段 |
+| 04/09 full hold | 本人全額・通常GOVERNOR完了・偉人不在・配置資格あり。実ターン後Spent/bit不変 | 二重支払いなし。通常Finalize不成立を成功扱いしない |
+
+各step/holdは実ターンを一回だけ進める。readは全22人物のGovernor Index・source cost・Base/TITLE Index・取得済み全promotion・本人ownerを確認し、実Spentと全paid合計が等しいこと、全予約の残額が足りることを要求する。対象の保存費用とsurcharge=cost−1も明示一致を要求する。未払い時は本人偉人が保持され、各cityへの正式配置可否がfalseでなければ失敗する。UI出力は`AI1466_SNAPSHOT`に続くJSONであり、常に`operation_proven=false`とする。UIで見えたbit差分だけから原関数・同期thread・操作の一回性を認定しない。
+
+部分保存では06のafter JSONと07のJSONを親の出力から抜き出し、`persona_ai_payment_calibration compare-reload <before.json> <after.json>`で照合できる。これは費用3の本人paid2・全22人物・Spent・予約・偉人・turnの一致検査であり、同一PIDの世代更新や前世代reader排出の権限を作らない。物理save名/hashとPID作成時刻・native generationは親receiptで別に固定する。resident runtime下の同一process loadを拒否する既存driver規則を変更しない。
+
+**一つの親管理の校正を始める前に閉じる境界**は、同じPID作成時刻・module集合でInstall完了が最初の`5E2D0/4012F0/4A7AD0`より先であること、および前節のissuer停止・同setの実Wait・同期callback退出が破棄より先であること。既存front/load order observerはこの全てを採取する機能を持たないので、そのready/復元成功をこれらの証明へ読み替えない。`63E1B5`の先行通知中に寿命を終えないことも必要である。上位hookを追加して範囲を広げる修正は今回行わない。
+
+**正式支払いの合格にはnative側の記録が別途必要**である。自然stage2・原callback1回・同owner/generation/thread・正式factory/filter/executeの引数・本人の次Index・元checker結果・Spent前後・全bit差分を同じ操作に結ぶ。通常AI任命と追加支払いは未完了1466の本体課題であり、後段へ移していない。現候補の制約は、paid0を任命しない、同時登録が一owner/person、親helperにAI登録の通常actionがない、同一ターン内の複数callbackを一操作に制限する予約/armがない、という点である。生成したsegmentで二段進めば失敗し、要求一回として帳尻を合わせない。現候補は自然callback内の同期executeであって、engine queueへ一回だけ入れたことを証明するreceiptをまだ持たない。これらが未接続のままbundle全体を自動実行できるとは表示しない。
+
+準備する1回の親試行の上限は、本人2名・正式任命2回・追加PROMOTE3回・途中保存読込1回。既知の未加入AI否定が成功しても本人追加支払いは別結果のまま残す。観測が欠ける・実APIが無い・費用/本人が不一致ならinconclusive/失敗とし、模擬API検査の合格でAI受入を完成にしない。worker実機・public push・全workspace検査はいずれも0、候補featureの既定無効を維持する。
