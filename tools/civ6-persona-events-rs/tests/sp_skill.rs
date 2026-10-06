@@ -15,6 +15,33 @@ fn template() -> Value {
     ))
     .unwrap()
 }
+
+#[test]
+fn an_active_human_turn_without_the_committed_deed_does_not_release_the_wait() {
+    let lua = Lua::new();
+    lua.load(r#"
+turn=9; active=true; busy=false; merit=2; deed=nil; writes=0; requests=0
+JAC_SKILL_AUDIT={expectedTurn=9,advanced=true,previous={merit=2},reward=2}
+Players={[0]={IsTurnActive=function() return active end}}
+UI={IsGameCoreBusy=function() return busy end,RequestAction=function() requests=requests+1 end}
+Game={GetCurrentGameTurn=function() return turn end,
+ GetProperty=function(_,key) if key:find('DEED_GOVERN_TURN_') then return deed else return merit end end,
+ SetProperty=function() writes=writes+1 end}
+"#).exec().unwrap();
+    assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("deed=9; merit=4; busy=true").exec().unwrap();
+    assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("busy=false").exec().unwrap();
+    assert!(lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("merit=3").exec().unwrap();
+    assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("JAC_SKILL_AUDIT.advanced=false; deed=nil; merit=2")
+        .exec()
+        .unwrap();
+    assert!(lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    assert_eq!(lua.globals().get::<i64>("writes").unwrap(), 0);
+    assert_eq!(lua.globals().get::<i64>("requests").unwrap(), 0);
+}
 #[test]
 fn funding_uses_only_required_bounded_normal_turns_and_draft_cannot_run() {
     for (cost, reward, merit, expected) in [(3, 2, 2, 1), (8, 2, 2, 3), (10, 3, 2, 3), (8, 2, 8, 0)]

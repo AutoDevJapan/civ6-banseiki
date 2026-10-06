@@ -7,6 +7,15 @@ use serde_json::{json, Value};
 pub const NODE: &str = "LEADER_JAC_DATE_TANEMUNE_ENVOYS_1";
 pub const SAVE: &str = "JAC-SP-Normal-Merit-Skill";
 pub const MAX_EARNING_TURNS: u32 = 4;
+pub const EARN_READY: &str = r#"
+local q=assert(JAC_SKILL_AUDIT)
+if Game.GetCurrentGameTurn()~=q.expectedTurn or not Players[0]:IsTurnActive() or UI.IsGameCoreBusy() then return false end
+if not q.advanced then return true end
+local prefix='JAC_PERSONA_LEADER_JAC_DATE_TANEMUNE_'
+local merit=Game:GetProperty(prefix..'MERIT')
+return Game:GetProperty(prefix..'DEED_GOVERN_TURN_'..q.expectedTurn)==q.expectedTurn and
+ type(merit)=='number' and merit>=q.previous.merit+q.reward
+"#;
 pub const EARN_REQUEST: &str = r#"
 local q=assert(JAC_SKILL_AUDIT); local current=snapshot()
 assert(Players[0]:IsTurnActive() and current.established==true and current.neutralized==0)
@@ -87,7 +96,7 @@ return serial({{state=current,node=node.NodeType,cost=node.Cost,reward=reward,re
     steps.push(json!({"action":"stop_native_paid_runtime_observation","timeout":30}));
     for n in 1..=MAX_EARNING_TURNS {
         steps.push(ui("InGame",format!("{HEADER}\n{READER}\nlocal prior=assert(JAC_SKILL_AUDIT); assert(prior.lastFundingStep<{n},'do not resend end turn'); prior.lastFundingStep={n}\n{EARN_REQUEST}")));
-        let mut turn_wait=wait("local q=assert(JAC_SKILL_AUDIT); return Game.GetCurrentGameTurn()>=q.expectedTurn and Players[0]:IsTurnActive()");
+        let mut turn_wait = wait(EARN_READY);
         turn_wait["timeout"] = 600.into();
         steps.push(turn_wait);
         steps.push(ui("InGame",format!(r#"{HEADER}

@@ -357,7 +357,16 @@ local function mapInventory(owner)
  for _,u in units:Members() do
   assert(getter(u,'GetType'),'required third spy Core identity getter unavailable: GetType');
   local def=assert(GameInfo.Units[u:GetType()],'native map unit type unavailable');
-  if def.Spy then identity(u,owner); count=count+1 end
+  if def.Spy then
+   identity(u,owner);
+   local hasX,hasY=getter(u,'GetX'),getter(u,'GetY');
+   assert(hasX==hasY,'partial third spy Core unit position API');
+   local x,y; if hasX then x,y=u:GetX(),u:GetY() end;
+   -- Core retains a captured/off-map Unit which the UI Members list omits.
+   -- Only the observed paired sentinel is excluded. Missing coordinates
+   -- remain conservatively counted and cannot authorize an empty map.
+   if not (hasX and x==-9999 and y==-9999) then count=count+1 end
+  end
  end
  return count,units
 end

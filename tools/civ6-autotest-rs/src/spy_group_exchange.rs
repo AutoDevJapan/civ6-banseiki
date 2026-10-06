@@ -577,9 +577,18 @@ if type(d.GetSpyCapacity)=='function' then
 end
 local units=Players[0]:GetUnits();
 if units and type(units.Members)=='function' then
- local n=0; for _,u in units:Members() do
-  local def=GameInfo.Units[u:GetType()]; if def and def.Spy then n=n+1 end
- end; assert(n==0,'Core active map spies changed'); source.map='CORE'
+ local n=0; local offMap={}; for _,u in units:Members() do
+  local def=GameInfo.Units[u:GetType()]; if def and def.Spy then
+   local hasX,hasY=type(u.GetX)=='function',type(u.GetY)=='function';
+   assert(hasX==hasY,'partial Core spy position API');
+   local x,y; if hasX then x,y=u:GetX(),u:GetY() end;
+   if hasX and x==-9999 and y==-9999 then
+    assert(u:GetOwner()==0,'Core off-map spy owner differs');
+    offMap[#offMap+1]={id=u:GetID(),owner=u:GetOwner(),unitType=u:GetType(),x=x,y=y,
+      classification='OFF_MAP_SENTINEL',individualCaptiveIdentity='UNKNOWN'};
+   else n=n+1 end
+  end
+ end; assert(n==0,'Core active map spies changed'); source.map='CORE'; source.offMapUnits=offMap
 end
 Game:SetProperty(KEY,{stage='RESERVED',nonce=w.nonce,turn=62,forType=w.forType,
  candidateCount=w.candidateCount,before=w.before,sources=source});

@@ -14,6 +14,41 @@ fn root() -> PathBuf {
 }
 
 struct Third(Lua);
+
+#[test]
+fn core_only_off_map_backing_unit_is_not_adopted_as_new_production() {
+    let t = Third::new();
+    t.run(
+        r#"
+local p=Players[0]; local original=p.GetUnits
+p.GetUnits=function(self)
+ local units=original(self)
+ if not units.sentinelTestWrapped then
+  units.sentinelTestWrapped=true; local members=units.Members
+  units.Members=function(collection)
+   local iterator=members(collection); local emitted=false
+   return function()
+    local k,v=iterator(); if v then return k,v end
+    if CORE_READ and not emitted then
+     emitted=true
+     return 999,{GetID=function() return 1031337 end,GetOwner=function() return 0 end,
+      GetType=function() return GameInfo.Units['UNIT_SPY'].Index end,
+      GetX=function() return -9999 end,GetY=function() return -9999 end}
+    end
+   end
+  end
+ end
+ return units
+end
+"#,
+    );
+
+    t.run("SENTINEL_BASELINE=JAC_PersonaBoundaryRules.Serialize({HISTORY[0][0],HISTORY[0][1]})");
+    t.produce();
+    t.bind();
+    t.run("assert(Game:GetProperty('JAC_BOUNDARY_SPY').id~=1031337,'sentinel adopted'); assert(UI_CORE_CALLS==0,'UI calls='..tostring(UI_CORE_CALLS))");
+    t.run("local r=JAC_PersonaBoundaryRules; assert(r.Serialize({HISTORY[0][0],HISTORY[0][1]})==SENTINEL_BASELINE); local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'); assert(a.properties.JAC_BOUNDARY_ENEMY_SPY_RETRY.spyID==851976)");
+}
 impl Third {
     fn run(&self, code: &str) {
         self.0.load(code).exec().unwrap();

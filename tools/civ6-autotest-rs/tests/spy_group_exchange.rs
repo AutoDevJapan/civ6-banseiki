@@ -364,6 +364,31 @@ impl Case {
 }
 
 #[test]
+fn captured_core_backing_unit_is_preserved_but_not_counted_as_an_active_map_spy() {
+    let c = Case::new();
+    c.run("local units=Players[0]:GetUnits(); units.Members=function() local done=false; return function() if not done then done=true; return 1,MAP_UNIT end end end; MAP_UNIT.GetID=function() return 1048586 end; MAP_UNIT.GetX=function() return -9999 end; MAP_UNIT.GetY=function() return -9999 end");
+    c.reserve();
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62; assert(p.stage=='RESERVED'); assert(#p.sources.offMapUnits==1); local u=p.sources.offMapUnits[1]; assert(u.id==1048586 and u.owner==0 and u.x==-9999 and u.y==-9999 and u.classification=='OFF_MAP_SENTINEL' and u.individualCaptiveIdentity=='UNKNOWN'); assert(#SENDS==0)");
+}
+
+#[test]
+fn unknown_core_position_cannot_make_a_nonempty_spy_inventory_empty() {
+    for fault in [
+        "MAP_UNIT.GetX=function() return -9999 end",
+        "MAP_UNIT.GetX=nil; MAP_UNIT.GetY=nil",
+    ] {
+        let c = Case::new();
+        c.run("assert(JAC_GroupExchange548.Prepare()=='PREPARED'); local units=Players[0]:GetUnits(); units.Members=function() local done=false; return function() if not done then done=true; return 1,MAP_UNIT end end end");
+        c.run(fault);
+        c.rejects(
+            spy_group_exchange::RESERVE_CORE,
+            "Core active map spies changed",
+        );
+        c.run("assert(PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62==nil and #SENDS==0)");
+    }
+}
+
+#[test]
 fn native_reply_quote_saved_intent_one_accept_and_returned_actual_id() {
     let c = Case::new();
     c.reserve();
