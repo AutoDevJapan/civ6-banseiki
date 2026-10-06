@@ -1694,8 +1694,11 @@ end
 
 // BuildHeadlessGameSetup refreshes game parameters only. The stock
 // PlayerSetupLogic helper publishes the selectable leader dependency values.
-// Refresh only those player parameters here: refreshing the game again also
-// resets map-size/participant bounds, which this comparison must preserve.
+// Keep the headless game context alive during player writes: their stock
+// Config_EndWrite callback refreshes that context. Without it, the callback
+// builds an interactive setup with Controls absent from FrontEnd. Use the
+// complete stock lifecycle, and reject changed actors instead of repairing
+// their configuration manually.
 const FILTER_PLAYER_DEPENDENCIES: &str = r#"
 include('PlayerSetupLogic')
 local before={}
@@ -1703,8 +1706,10 @@ for actor=0,1 do
   local p=assert(PlayerConfigurations[actor],'configured major missing')
   before[actor]={Civ=p:GetCivilizationTypeName(),Leader=p:GetLeaderTypeName(),Slot=p:GetSlotStatus()}
 end
+BuildHeadlessGameSetup()
 RebuildPlayerParameters(true)
-RefreshPlayerParameters()
+GameSetup_RefreshParameters()
+assert(g_GameParameters and not g_GameParameters.Stalled,'native parameter refresh stalled')
 local dependency=false
 for actor=0,1 do
   local p=PlayerConfigurations[actor];local expected=before[actor]
@@ -1717,6 +1722,7 @@ for actor=0,1 do
   end end
 end
 ReleasePlayerParameters()
+HideGameSetup()
 assert(dependency,'native player helper did not publish a Maya/Gran Colombia dependency')
 GameConfiguration.UpdateEnabledMods()
 "#;
@@ -1924,6 +1930,7 @@ GameConfiguration.GetValue=function() return 'JAC_BANSEIKI_ONLY' end"#).exec()?;
     {
         for (mutation, failure) in [
             ("", None),
+            ("g_GameParameters.Stalled=true", Some("refresh stalled")),
             ("VALUES[0]=nil", Some("did not publish")),
             (
                 "VALUES[0]='Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA'",
@@ -1949,13 +1956,16 @@ for actor=0,1 do local p={{Civ='Civ'..actor,Leader='Leader'..actor,Slot=actor+1}
  function p:GetSlotStatus() return self.Slot end
  function p:GetValue(key) assert(key=='LEADER_VALUES');return VALUES[actor] end
 end
-function RebuildPlayerParameters(headless) assert(headless);CALLS[#CALLS+1]='rebuild' end
-function RefreshPlayerParameters()
- CALLS[#CALLS+1]='refresh';VALUES[0]='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR';{mutation}
+function BuildHeadlessGameSetup() g_GameParameters={{}};CALLS[#CALLS+1]='build' end
+function RebuildPlayerParameters(headless) assert(headless and g_GameParameters);CALLS[#CALLS+1]='rebuild' end
+function GameSetup_RefreshParameters()
+ assert(g_GameParameters,'player writes would build an interactive context');CALLS[#CALLS+1]='refresh'
+ VALUES[0]='Players:Expansion2_Players::LEADER_SIMON_BOLIVAR';{mutation}
 end
 function ReleasePlayerParameters() CALLS[#CALLS+1]='release' end
+function HideGameSetup() assert(CALLS[#CALLS]=='release');g_GameParameters=nil;CALLS[#CALLS+1]='hide' end
 GameConfiguration={{UpdateEnabledMods=function()
- assert(table.concat(CALLS,',')=='include,rebuild,refresh,release');CALLS[#CALLS+1]='mods'
+ assert(table.concat(CALLS,',')=='include,build,rebuild,refresh,release,hide');CALLS[#CALLS+1]='mods'
 end}}
 "#)).exec()?;
             let result = lua.load(FILTER_PLAYER_DEPENDENCIES).exec();

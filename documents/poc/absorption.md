@@ -374,7 +374,9 @@ c3d1b039はこの開始応答不明だけを捕捉し、一度送った開始命
 
 実機49（03dd6bb3）は7/104まで成功した。候補一覧の戻り値ゼロを記録でき、公式地図・全指導者設定の保持とゲーム開始を確認したが、本体のバチカン文明・指導者定義は両方とも無かった。Modding.logはMaya/Gran Colombiaを有効なDLCに列挙する一方、今回のゲームに読み込む対象へ含めていない。Lua.logの実際の両プレイヤーのLEADER_VALUESはnilだった。原本は共有実機作業フォルダーの `agent-todo-995-e1431fc7a84c-49/` と `D:/CC/Work/todo995/shepherd-live49-observation.log` に保持する。
 
-公式MainMenu.lua:163-169はゲーム設定だけでなくプレイヤー設定も構築・更新してから開始する。現実行器の構築はゲーム設定だけなので、指導者候補の補助値が空のままになっていた。今回の限定シナリオには公式PlayerSetupLogicのRebuildPlayerParameters・RefreshPlayerParameters・ReleasePlayerParametersを追加し、実際の文明・指導者・操作主体を維持したままDLCの候補値を計算する。参加人数や地図境界を再設定せず、候補値を手書きしない。更新後にDLC依存が無ければ開始前に停止し、実際の本体定義と全製品検査も引き続き必須とする。候補値が空・無関係な値・参加勢力や操作主体の変更という負例を検査した。実機の成功はまだ未確認である。
+公式MainMenu.lua:163-169はゲーム設定だけでなくプレイヤー設定も構築・更新してから開始する。現実行器の構築はゲーム設定だけなので、指導者候補の補助値が空のままになっていた。限定シナリオで公式PlayerSetupLogicのプレイヤー設定を更新し、実際の文明・指導者・操作主体を維持したままDLCの候補値を計算する。参加人数や地図境界を再設定せず、候補値を手書きしない。更新後にDLC依存が無ければ開始前に停止し、実際の本体定義と全製品検査も引き続き必須とする。候補値が空・無関係な値・参加勢力や操作主体の変更という負例を検査した。
+
+9fcd1901の実機50は3/104まで成功し、プレイヤー設定の更新で停止した。公式の書込完了通知はゲーム設定も更新するため、破棄済みのゲーム設定を画面付きで作り直し、FrontEndには無いControls.ParametersStackを参照した。Lua.logのスタックはPlayerSetupLogic.lua:1475からGameSetupLogic.lua:629への経路を示している。一部だけ更新する方法を止め、BuildHeadlessGameSetup → RebuildPlayerParameters → GameSetup_RefreshParameters → ReleasePlayerParameters → HideGameSetupの公式の完全な処理順へ組み直した。更新中のゲーム設定が存在すること、更新停滞時の拒否、ゲーム設定を破棄してからMODを更新することを検査する。開始前の失敗であり、製品の実機成功には数えない。原本は `agent-todo-995-e1431fc7a84c-50/` と `shepherd-live50-player-refresh.log`。組み直した候補の実機確認は残っている。
 
 ## 三段階吸収バックエンドの実装と検証状況
 
