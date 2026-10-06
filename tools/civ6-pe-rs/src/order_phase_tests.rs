@@ -34,6 +34,15 @@ extern "C" {
 /// or delayed exit bookkeeping is injected in this independent case.
 #[test]
 fn order_capture_fixed_thread_lifecycle_retains_debug_registers() {
+    fixed_thread_lifecycle(false);
+}
+
+#[test]
+fn order_capture_stop_snapshot_detects_owned_os_register_erasure() {
+    fixed_thread_lifecycle(true);
+}
+
+fn fixed_thread_lifecycle(erase_registers: bool) {
     let mut child = Fixture::start();
     let pid = child.child.id();
     let entry = child.entry;
@@ -69,9 +78,35 @@ fn order_capture_fixed_thread_lifecycle_retains_debug_registers() {
                     row["registers_match"] = json!(wait==WAIT_TIMEOUT && c.as_ref().is_ok_and(|c| installed_sites_match_context(&epoch.sites,c)));
                     rows.push(row);
                 }
+                let erased_tid = if erase_registers {
+                    let tid = *d.held.iter().next().expect("owned live fixture thread");
+                    let handle = &d.threads[&tid].handle;
+                    let mut c = context(handle).unwrap();
+                    c.Dr0=0;c.Dr1=0;c.Dr2=0;c.Dr3=0;c.Dr6=0;c.Dr7=0;
+                    set_context(handle,&c).unwrap();
+                    let actual=context(handle).unwrap();
+                    assert_eq!([actual.Dr0,actual.Dr1,actual.Dr2,actual.Dr3,actual.Dr7],[0;5]);
+                    Some(tid)
+                } else {None};
+                let audit = stop_register_evidence(&d,epoch,&ledger,&steps);
+                mark(&mut d,audit.clone()).unwrap();
+                assert_eq!(audit["summary"]["mismatched"],u64::from(erase_registers));
+                assert_eq!(audit["summary"]["coverage_over_interval"],"unknown");
+                assert_eq!(audit["summary"]["zero_hits_proves_unreached"],false);
+                if let Some(tid)=erased_tid {
+                    let row=audit["thread_checks"].as_array().unwrap().iter().find(|r|r["tid"]==tid).unwrap();
+                    assert_eq!(row["disposition"],"debug_register_mismatch");
+                    assert_eq!(row["last_written_generation"],0);
+                    assert_eq!(row["held"],true);
+                    assert_eq!(row["raw_context"]["dr0"],0);
+                    assert_eq!(row["raw_context"]["dr7"],0);
+                    // The diagnostic itself must not rearm the erased thread.
+                    let after=context(&d.threads[&tid].handle).unwrap();
+                    assert_eq!([after.Dr0,after.Dr1,after.Dr2,after.Dr3,after.Dr7],[0;5]);
+                }
                 d.cleanup(None).unwrap();
                 assert_eq!(d.terminal,TerminalKind::Detached);
-                return json!({"kind":"owned_os_fixed_thread_lifecycle","pid":pid,"phase_changes":0,"register_reset_injected":false,"exit_delay_injected":false,"hits":hits,"fresh_thread_ids":fresh_threads,"fresh_hit_ids":fresh_hits,"exit_tids":exit_tids,"samples":rows,"restored":true,"game_live":false});
+                return json!({"kind":"owned_os_fixed_thread_lifecycle","pid":pid,"phase_changes":0,"register_reset_injected":erase_registers,"erased_tid":erased_tid,"stop_register_audit":audit,"exit_delay_injected":false,"hits":hits,"fresh_thread_ids":fresh_threads,"fresh_hit_ids":fresh_hits,"exit_tids":exit_tids,"samples":rows,"restored":true,"game_live":false});
             }
             let mut event = DEBUG_EVENT::default();
             if unsafe { WaitForDebugEventEx(&mut event,20) } == 0 {continue;}

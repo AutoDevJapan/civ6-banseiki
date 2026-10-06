@@ -193,6 +193,55 @@ fn reject_arm(d: &mut Debugger, mut row: Value, error: String) -> String {
     }
     error
 }
+// A stop-time sample can prove loss at that instant, never continuous coverage.
+// Call only after the existing cleanup freeze, before TF or DR restoration.
+fn stop_register_evidence(
+    d: &Debugger,
+    epoch: CaptureEpoch,
+    threads: &CaptureThreads,
+    steps: &BTreeMap<u32, Step>,
+) -> Value {
+    let mut rows = Vec::new();
+    let (mut matched, mut mismatched, mut unknown, mut exited, mut pending) = (0, 0, 0, 0, 0);
+    for &tid in d.threads.keys() {
+        let (mut row, c, wait) = arm_evidence(d, tid, Some(epoch), epoch, &threads.generations);
+        row["pending_step_for_tid"] = json!(steps.contains_key(&tid));
+        let disposition = if row["thread_owner_pid"] != d.pid || row["handle_tid"] != tid {
+            unknown += 1;
+            "ownership_unproven"
+        } else if wait == WAIT_OBJECT_0 {
+            exited += 1;
+            "signaled_handle_coverage_unknown"
+        } else if wait != WAIT_TIMEOUT || !d.held.contains(&tid) || c.is_err() {
+            unknown += 1;
+            "context_unproven"
+        } else if steps.contains_key(&tid) {
+            pending += 1;
+            "pending_instruction_not_completed"
+        } else if threads.generations.get(&tid) != Some(&epoch.generation)
+            || d.threads[&tid].armed_sites != epoch.sites
+        {
+            mismatched += 1;
+            "generation_or_sites_mismatch"
+        } else if !installed_sites_match_context(&epoch.sites, &c.unwrap()) {
+            mismatched += 1;
+            "debug_register_mismatch"
+        } else {
+            matched += 1;
+            "matched_at_stop_only"
+        };
+        row["disposition"] = json!(disposition);
+        rows.push(row);
+    }
+    let status = if mismatched > 0 {
+        "mismatch"
+    } else if unknown + exited + pending > 0 || matched == 0 {
+        "incomplete"
+    } else {
+        "matched_at_stop"
+    };
+    json!({"type":"pre_restore_registers","summary":{"snapshot_status":status,"phase":epoch.phase.name(),"generation":epoch.generation,"tracked":rows.len(),"matched":matched,"mismatched":mismatched,"unknown":unknown,"signaled":exited,"pending":pending,"coverage_over_interval":"unknown","zero_hits_proves_unreached":false},"thread_checks":rows})
+}
 fn install_sites(
     d: &mut Debugger,
     tid: u32,
@@ -1091,9 +1140,22 @@ pub fn observe(req: Request) -> Result<(), String> {
         }
         Ok(())
     })).unwrap_or_else(|_|Err("capture loop panicked; restoring before exit".into()));
-    // Clear ONLY the TF introduced by this adapter before shared restoration.
+    let mut stop_register_audit = Value::Null;
+    let mut audit_write = Ok(());
+    // Record before clearing TF or restoring DRs. Diagnostic I/O failure must
+    // not bypass restoration or turn a verified detach into game termination.
     let cleanup = (|| -> Result<(), String> {
-        d.freeze()?;
+        let frozen = d.freeze();
+        let audit = match &frozen {
+            Ok(()) => stop_register_evidence(&d, epoch, &capture_threads, &steps),
+            Err(e) => {
+                json!({"type":"pre_restore_registers","summary":{"snapshot_status":"freeze_failed","tracked":d.threads.len(),"coverage_over_interval":"unknown","zero_hits_proves_unreached":false},"freeze_error":e})
+            }
+        };
+        stop_register_audit = audit["summary"].clone();
+        audit_write = mark(&mut d, audit);
+        frozen?;
+        // Clear ONLY the TF introduced by this adapter before shared restoration.
         for tid in steps.keys() {
             let state = d.threads.get(tid).ok_or("pending step lost thread")?;
             if unsafe { WaitForSingleObject(state.handle.0, 0) } == WAIT_OBJECT_0 {
@@ -1135,9 +1197,9 @@ pub fn observe(req: Request) -> Result<(), String> {
     drop(input_reader);
     mark(
         &mut d,
-        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"capture_thread_events":{"armed_creates":capture_threads.created,"exit_events":capture_threads.exited,"final_tracked":capture_threads.generations.len()},"phase_generation":epoch.generation,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
+        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok()&&audit_write.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"stop_register_audit":stop_register_audit,"stop_register_record_error":audit_write.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"capture_thread_events":{"armed_creates":capture_threads.created,"exit_events":capture_threads.exited,"final_tracked":capture_threads.generations.len()},"phase_generation":epoch.generation,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
-    result.and(cleanup)
+    result.and(cleanup).and(audit_write)
 }
 
 /// Parent stub: only invoke from the existing live_chain-owned controller lane.

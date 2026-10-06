@@ -123,6 +123,27 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+### 実機07後の4候補再点検とstop時の記録
+
+親の実機07（actual `d21`、observer source `d8591f10…1fb0`）は7/7手順と6判定が成功した。Binkの6語通知はfirst-chanceでDBG_CONTINUEとなり、second-chanceは0。原コピー `D:/CC/Work/todo880/order-fixed-07-artifacts` の13ファイルを `order-fixed-07-hashes.json` と再照合した。ただしloadの4候補は全hit0で、製品Close/Rebuild境界は未証明である。
+
+固定SHAのEXEとGameCoreをLLVMで再読した。候補は次の範囲に限られる。
+
+| 候補（全てEXE RVA） | 確認できた対象 | 証明できないこと |
+|---|---|---|
+| `0xF7110` / `0xF7830` | EXEの保持オブジェクト+0x450からContextの仮想+0x1A0・+8を呼ぶ。GameCore factoryの固定仮想表0xA101E8では、それぞれCore0x58FF70→0x07BBF0とCore0x8972D0（ret） | Gameplay Luaや324 runtimeが参照するnative objectの破棄そのもの |
+| `0x971B11` / `0x971CB7` | EXEの所有者+0x10をRCXとしてthunk0xDBD83C→Havok `lua_close` IAT0xF962F0へ渡す | RCXがGameplay stateであること。UIを含むEXE側Lua経路との区別 |
+
+GameCoreの直接importに `lua_close` / `lua_newstate` はない。これは間接呼出しの不在を意味しない。EXE0xF8E30→CoreのDllDestroyGameContext（0x58FD10）には内部オブジェクトの仮想+0x10とdestructorがあるが、その前のEXE0x29C2A0にも破棄callがある。現4候補を「Gameplay破棄4点」と呼ばず、export閉鎖を旧Luaより前と確定しない。再点検の命令・仮想表は `bootstrap-live07-pe-recheck.txt` / `.json` に記録した。
+
+07のrawは命名通知threadのDR一致を示すが、stop直前の保持済み116thread全体は記録していなかった。そこで既存cleanupのfreeze直後、TF解除・DR復元の前に `pre_restore_registers` を1行追加する。保持済みhandleごとに所有PID/TID、wait、exit、held、現在DR0〜3/6/7、期待site、世代、pendingを記録する。既存の比較条件は変更せず、不一致・終了済み・読取不明・pendingを分ける。記録I/O失敗でも復元を先に完了させ、出力失敗を結果へ残す。read-only記録は再armせず、ゲームへの新しい書込を追加しない。
+
+この採取は[GetThreadContextの停止thread条件](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getthreadcontext)に従う。freeze失敗時はDR一致を判定しない。全件一致もstopの瞬間だけの証拠で、期間中の一時的消失・既に退出したthread・未処理CREATEイベントを覆わない。`coverage_over_interval=unknown` と `zero_hits_proves_unreached=false` を常に保持する。既存解析器はこの診断行を命令完了として数えない。
+
+所有OS子の既存lifecycle検査を共用し、停止した所有threadのDRを実際に0へ消去する否定ケースを追加した。実読取で不一致1件を検出し、採取後も0のまま（再armなし）、既存cleanupで原DRへ復元・子回収する。これは故障注入であり、Civ6のDR消失原因を再現したとの主張ではない。
+
+次の1シナリオは同じ `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-leave.json` の7手順を使い、source固定したhelperだけ更新する。新しいsiteやphase切替は足さない。不一致ならstop時の観測装置の欠測を実証したものとして保持し、自動再armやhit0からの未到達判定をしない。全一致かつhit0でも「未到達確定」とせず、この4点の再試行を繰り返さずCore側native owner破棄への静的call連鎖同定へ戻る。hitが得られた場合だけ、そのRCX・時系列を324の旧native objectと照合する。通常Install/Close/Rebuildの製品接続は引き続き未達である。
+
 ### 実機04のdumpで確認した6語通知
 
 追加一次証拠 `D:/CC/Work/todo880/order-fixed-04-windows-events.json` のApplication1000/1001はPID53272・開始FILETIME `0x1DD55D24B88AD90` と同runへ一致する。原dump `C:/Users/makhmeto/AppData/Local/CrashDumps/CivilizationVI.exe.53272.dmp` は85,471,399byte、SHA-256 `8588bdc1fc4146dea482e3a1340bc4c026913b8f524defb3d60302f78430b1a4`。SDK minidumpapiset.hのExceptionStream/ModuleList/MemoryList定義に従い読み取り、前後SHA不変を確認した。ExceptionStreamはTID29092、code0x406d1388、flags0x80、KernelBase+0xC41CA、NumberParameters=6である。
