@@ -5,6 +5,10 @@ mod spy_group_exchange;
 
 use mlua::Lua;
 
+#[allow(dead_code)]
+#[path = "../examples/group-exchange-62.rs"]
+mod host;
+
 const NATIVE: &str = r#"
 TIME=10; PROPERTIES={}; SESSION=nil; CLOSED=0; SENDS={}; NEXT_ID=2;
 REPLY_KIND='GOOD'; AUTO_RETURN=true; REPLY_SESSION=7; REPLY_INITIATOR=0;
@@ -15,8 +19,9 @@ function history(id,turn)
 end
 H={history(0,23),history(1,45),history(2,62)};
 PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE={histories={H[1],H[2]}};
-PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE={missionPost={histories={H[1],H[2],H[3]}}};
-PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK={observed={mission=H[3]}};
+-- spy_third::coreHistories stores the provenance string, not the rows.
+PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE={missionPost={histories='UI'}};
+PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK={histories='UI',observed={mission=H[3],preserved={H[1],H[2]}}};
 PROPERTIES.JAC_BOUNDARY_ENEMY_MISSION={attacker=0,id=2,turn=62};
 Game={}; function Game:GetProperty(k) return PROPERTIES[k] end
 function Game:SetProperty(k,v) PROPERTIES[k]=v end
@@ -211,6 +216,82 @@ end
 
 struct Case(Lua);
 
+#[test]
+fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intents() {
+    for (setup, expected_sends, expected_stage) in [
+        ("", 2, "RETURNED"),
+        ("REPLY_KIND='NONE'", 1, "QUOTED_UNKNOWN"),
+        ("REPLY_KIND='UNSAFE'", 1, "QUOTED_UNKNOWN"),
+        ("AUTO_RETURN=false", 2, "RETURN_UNRESOLVED"),
+    ] {
+        let lua = Lua::new();
+        lua.load(NATIVE).exec().unwrap();
+        lua.load(setup).exec().unwrap();
+        lua.load("local send=DealManager.SendWorkingDeal; DealManager.SendWorkingDeal=function(action,a,b) assert(SAVED_STAGE==(action==DealProposalAction.EQUALIZE and 'RESERVED' or 'FINAL_INTENT'),'send before host save'); return send(action,a,b) end").exec().unwrap();
+        let scenario = host::scenario();
+        for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
+            let action = step["action"].as_str().unwrap();
+            match action {
+                "load" | "exit_to_menu" => {}
+                "save" => lua
+                    .load("SAVED_STAGE=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.stage")
+                    .exec()
+                    .unwrap(),
+                "wait_for" => {
+                    let code = step["condition"]["code"].as_str().unwrap();
+                    if !lua.load(code).eval::<bool>().unwrap() {
+                        lua.load("TIME=TIME+31").exec().unwrap();
+                        assert!(
+                            lua.load(code).eval::<bool>().unwrap(),
+                            "wait {index} did not terminate"
+                        );
+                    }
+                }
+                "ui_lua" => {
+                    let core = step["state_name"] == "GameCore_Tuner";
+                    if core {
+                        lua.load("UI_SAVED={UI,DealManager,DiplomacyManager,DealItemTypes,DealProposalAction,DealValidationResult}; UI=nil; DealManager=nil; DiplomacyManager=nil; DealItemTypes=nil; DealProposalAction=nil; DealValidationResult=nil").exec().unwrap();
+                    }
+                    lua.load(step["code"].as_str().unwrap())
+                        .exec()
+                        .unwrap_or_else(|e| panic!("step {index}: {e}"));
+                    if core {
+                        lua.load("UI,DealManager,DiplomacyManager,DealItemTypes,DealProposalAction,DealValidationResult=unpack(UI_SAVED)").exec().unwrap();
+                    }
+                }
+                other => panic!("uncovered host operation {other}"),
+            }
+        }
+        assert_eq!(
+            lua.load("return #SENDS").eval::<i64>().unwrap(),
+            expected_sends
+        );
+        assert_eq!(
+            lua.load("return PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.stage")
+                .eval::<String>()
+                .unwrap(),
+            expected_stage
+        );
+        lua.load("assert(CLOSED==1 and ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==ORIGINAL_TOOLTIP); assert(H[1].turn==23 and H[2].turn==45 and H[3].turn==62)").exec().unwrap();
+    }
+}
+
+#[test]
+fn core_rejects_a_recycled_find_id_result() {
+    let c = Case::new();
+    c.equalize();
+    c.run("JAC_GroupExchange548.PublishQuote()");
+    c.0.load(spy_group_exchange::QUOTE_CORE).exec().unwrap();
+    c.0.load(spy_group_exchange::FINAL_INTENT_CORE)
+        .exec()
+        .unwrap();
+    c.run("JAC_GroupExchange548.AcceptOnce(); JAC_GroupExchange548.PublishReturn(); local u=Players[0]:GetUnits(); u.FindID=function() return MAP_UNIT end; MAP_UNIT.GetID=function() return 99999 end");
+    c.rejects(
+        spy_group_exchange::RETURN_CORE,
+        "Core returned native spy identity differs",
+    );
+}
+
 impl Case {
     fn new() -> Self {
         let lua = Lua::new();
@@ -270,7 +351,7 @@ fn native_reply_quote_saved_intent_one_accept_and_returned_actual_id() {
     c.run("local r=JAC_GroupExchange548.ReturnState(); assert(r.stage=='RETURNED_MAP' and r.returned.id==77777 and #r.after.captured==2 and r.after.physical==3)");
     c.run("assert(JAC_GroupExchange548.PublishReturn()=='RETURNED_MAP')");
     c.0.load(spy_group_exchange::RETURN_CORE).exec().unwrap();
-    c.run("assert(PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.stage=='RETURNED'); assert(#SENDS==2 and SENDS[1].action==DealProposalAction.EQUALIZE and SENDS[2].action==DealProposalAction.ACCEPTED); assert(PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[1]==H[1] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[2]==H[2] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE.missionPost.histories[3]==H[3])");
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.stage=='RETURNED'); assert(#SENDS==2 and SENDS[1].action==DealProposalAction.EQUALIZE and SENDS[2].action==DealProposalAction.ACCEPTED); assert(PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[1]==H[1] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[2]==H[2] and PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK.observed.mission==H[3] and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_STATE.missionPost.histories=='UI')");
     c.run("assert(JAC_GroupExchange548.Close()=='CLOSED' and CLOSED==1); assert(ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==ORIGINAL_TOOLTIP)");
 }
 

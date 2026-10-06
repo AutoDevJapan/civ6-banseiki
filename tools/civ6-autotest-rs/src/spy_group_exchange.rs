@@ -42,10 +42,12 @@ local function histories()
  local post=assert(s.missionPost,'third mission post missing');
  local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'),'third native mission acknowledgement missing');
  local event=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third event missing');
+ assert((post.histories=='UI' or post.histories=='CORE') and ack.observed and
+  ack.observed.preserved,'third history provenance or native acknowledgement missing');
  local h={history(a.histories[1],0,23),history(a.histories[2],1,45),
-  history(post.histories[3],2,62)};
+  history(ack.observed.mission,2,62)};
  assert(event.attacker==0 and event.id==2 and event.turn==62 and
-  sameHistory(h[1],post.histories[1]) and sameHistory(h[2],post.histories[2]) and
+  sameHistory(h[1],ack.observed.preserved[1]) and sameHistory(h[2],ack.observed.preserved[2]) and
   ack.observed and sameHistory(h[3],ack.observed.mission),
   'third mission lineage differs');
  local d=Players[0]:GetDiplomacy();
@@ -513,7 +515,7 @@ local function same(h,k)
   h.plot==k.plot and h.initial==k.initial and h.escape==k.escape
 end
 for i=1,3 do
- local p=i<=2 and a.histories[i] or s.missionPost.histories[3];
+ local p=i<=2 and a.histories[i] or ack.observed.mission;
  assert(same(b.histories[i],p),'saved failure history changed');
 end
 assert(same(b.histories[3],ack.observed.mission),'third native acknowledgement changed');
@@ -552,7 +554,7 @@ local a=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'));
 local s=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE'));
 local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
 for i=1,3 do
- local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or s.missionPost.histories[3];
+ local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or ack.observed.mission;
  assert(n and h.id==n.id and h.turn==n.turn and h.operation==n.operation and
   h.plot==n.plot and h.initial==n.initial and h.escape==n.escape,
   'saved native failure history changed before quote')
@@ -626,8 +628,9 @@ assert(p.stage=='QUOTED' and p.quote and p.quote.acceptable==true and
  'saved explicit native quote differs');
 local a=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'));
 local s=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE'));
+local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
 for i=1,3 do
- local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or s.missionPost.histories[3];
+ local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or ack.observed.mission;
  assert(n and h.id==n.id and h.turn==n.turn and h.operation==n.operation and
   h.plot==n.plot and h.initial==n.initial and h.escape==n.escape,
   'saved native failure history changed before final intent')
@@ -650,8 +653,9 @@ assert(p.stage=='FINAL_INTENT' and p.finalIntent and w.phase=='RETURN' and
  'native return does not match final intent');
 local a=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'));
 local s=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE'));
+local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'));
 for i=1,3 do
- local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or s.missionPost.histories[3];
+ local h=p.before.histories[i]; local n=i<=2 and a.histories[i] or ack.observed.mission;
  assert(n and h.id==n.id and h.turn==n.turn and h.operation==n.operation and
   h.plot==n.plot and h.initial==n.initial and h.escape==n.escape,
   'saved native failure history changed before return')
@@ -675,7 +679,7 @@ if r.stage=='RETURNED_MAP' then
  local units=Players[0]:GetUnits();
  if units and type(units.FindID)=='function' then
   local u=assert(units:FindID(r.returned.id),'Core returned native spy missing');
-  assert(u:GetOwner()==0 and u:GetType()==r.returned.unitType,
+  assert(u:GetID()==r.returned.id and u:GetOwner()==0 and u:GetType()==r.returned.unitType,
    'Core returned native spy identity differs');
   if type(u.GetX)=='function' and type(u.GetY)=='function' then
    assert(u:GetX()==r.returned.x and u:GetY()==r.returned.y,
