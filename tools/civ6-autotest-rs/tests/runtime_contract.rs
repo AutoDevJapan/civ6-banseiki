@@ -99,6 +99,9 @@ impl Backend for BundleGame {
                 self.target - self.turn
             ));
         }
+        if code.contains("IsAlive()") {
+            return Ok(format!("{}|true", self.turn));
+        }
         if code.contains("Network.SaveGame") {
             let re = regex::Regex::new(r#"Name=("[^"]+")"#).unwrap();
             let name: String = serde_json::from_str(&re.captures(code).unwrap()[1]).unwrap();

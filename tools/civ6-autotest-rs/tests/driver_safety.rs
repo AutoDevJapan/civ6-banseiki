@@ -209,7 +209,9 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
         let mut backend = f.backend();
         backend.on_states = Box::new(|_| Ok(vec!["InGame".into(), "InGameTopOptionsMenu".into()]));
         backend.on_lua = Box::new(move |_, code, _| {
-            if code.contains("CloseImmediately") {
+            if code == "return ContextPtr:IsHidden()" {
+                Ok("false".into())
+            } else if code.contains("CloseImmediately") {
                 Err(Error::new(kind, "menu command failed"))
             } else {
                 Ok("true".into())
@@ -224,10 +226,23 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
             kind,
             "menu command failed",
         );
-        assert_eq!(f.trace().lua.len(), 2);
+        let trace = f.trace();
+        let close = trace
+            .lua
+            .iter()
+            .position(|(_, code, _)| code.contains("CloseImmediately"))
+            .unwrap();
+        assert!(trace.lua[..close]
+            .iter()
+            .any(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
+        assert!(trace.lua[close + 1..]
+            .iter()
+            .all(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
         assert_eq!(lua_count(&f, "CloseImmediately"), 1);
         assert_eq!(f.trace().presses.len(), 1);
-        assert!(f.clock.sleeps().is_empty());
+        if kind == ErrorKind::LuaExecution {
+            assert!(f.clock.sleeps().is_empty());
+        }
     }
 }
 
@@ -970,7 +985,7 @@ fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
 }
 
 #[test]
-fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
+fn test_autoplay_lua_error_cleans_up_only_after_acknowledged_start() {
     for fail_at in ["start", "status"] {
         for kind in [ErrorKind::LuaResponseUnknown, ErrorKind::LuaExecution] {
             let f = Fixture::new();
@@ -996,7 +1011,10 @@ fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
                 "may have run",
             );
             assert_eq!(lua_count(&f, "SetActive(true)"), 1);
-            assert_eq!(lua_count(&f, "SetActive(false)"), 0);
+            assert_eq!(
+                lua_count(&f, "SetActive(false)"),
+                usize::from(fail_at == "status")
+            );
         }
     }
 }

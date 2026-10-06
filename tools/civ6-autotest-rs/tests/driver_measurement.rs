@@ -136,11 +136,16 @@ fn test_result_keeps_partial_measurements_on_failed_run() {
         Ok("2|true|false|2|0".to_string()),
         Err(Error::scenario("fixture stopped after one turn")),
     ]);
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("return tostring(startTurn)") {
             Ok("1|0".into())
         } else if code.contains("tostring(AutoplayManager.IsActive())") {
-            statuses.pop_front().unwrap()
+            let status = statuses.pop_front().unwrap()?;
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            Ok(status)
+        } else if code.contains("IsAlive()") {
+            Ok(format!("{observed_turn}|true"))
         } else {
             Ok("true".into())
         }
