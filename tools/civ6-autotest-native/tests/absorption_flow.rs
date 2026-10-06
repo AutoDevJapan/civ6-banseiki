@@ -101,7 +101,8 @@ fn world() -> mlua::Result<Lua> {
     lua.load(WORLD)
         .set_name("absorption_world.lua")
         .call::<()>(rows)?;
-    lua.load("function include(_) end").exec()?;
+    lua.load("function include(_) end;GameConfiguration.GetStartTurn=function() return 0 end")
+        .exec()?;
     load_module(
         &lua,
         "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua",

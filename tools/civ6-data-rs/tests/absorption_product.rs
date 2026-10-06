@@ -16,6 +16,8 @@ GRANTS,FAIL_GRANT,GRANT_DELTA=0,false,1
 CAN_GIVE,CAN_GIVE_TO=true,true
 local props={}
 Game={GetProperty=function(_,k) return copy(props[k]) end,SetProperty=function(_,k,v) props[k]=copy(v) end,GetCurrentGameTurn=function() return TURN end}
+START_TURN=0
+GameConfiguration={GetStartTurn=function() return START_TURN end}
 Players,PlayerConfigurations={},{}
 for actor=1,3 do local id=actor
   Players[id]={IsAlive=function() return ALIVE[id] end,IsHuman=function() return HUMAN[id] end,IsMajor=function() return MAJOR[id] and not (id==1 and OFFICIAL) end,IsTurnActive=function() return true end,
@@ -98,6 +100,82 @@ fn world(area: f64) -> anyhow::Result<Lua> {
     lua.load(WORLD).exec()?;
     load(&lua, area)?;
     Ok(lua)
+}
+
+#[test]
+fn changing_terms_follow_elapsed_ten_turn_windows_at_zero_and_historical_starts(
+) -> anyhow::Result<()> {
+    for start in [0, 16603] {
+        let lua = world(10000.)?;
+        lua.globals().set("START_TURN", start)?;
+        lua.globals().set("TURN", start)?;
+        lua.load(r#"
+          JAC_AbsorptionGameplay.GetRoster=function(actor)
+            return actor==1 and {['leader:1']={Personality='自由'}} or {} end
+          REGISTER();local current=VIEW().OfferID
+          assert(N.GetOffer(current).ProductTerms.Input.FreeEpoch==0,'first window must start at 0.9')
+          for _,elapsed in ipairs({9,10,19,20,29,30}) do
+            TURN=START_TURN+elapsed;JAC_AbsorptionProductGameplay.Tick()
+            local expected=math.floor(elapsed/10)
+            local next=VIEW().OfferID
+            assert(N.GetOffer(next).ProductTerms.Input.FreeEpoch==expected,'elapsed window mismatch')
+            if elapsed%10==0 then
+              assert(next~=current and N.Get('leader-offer',current).Status=='CANCELLED')
+            else assert(next==current,'terms changed before ten elapsed turns') end
+            current=next
+          end
+        "#).exec()?;
+        load(&lua, 10000.)?;
+        lua.load("local before=VIEW().OfferID;JAC_AbsorptionProductGameplay.Tick();assert(VIEW().OfferID==before and CHARGES==0 and STARTS==0)").exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn changing_terms_do_not_replace_saved_phase_one_at_a_historical_window_boundary(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(
+        r#"
+      START_TURN=16603;TURN=START_TURN
+      JAC_AbsorptionGameplay.GetRoster=function(actor)
+        return actor==1 and {['leader:1']={Personality='自由'}} or {} end
+      REGISTER();READY();JAC_AbsorptionProductGameplay.Tick();assert(STARTS==1)
+      ORIGINAL_OFFER=VIEW().OfferID
+      ORIGINAL_PLAN=N.Get('leader-offer',ORIGINAL_OFFER).Plan
+      ORIGINAL_FLOW=JAC_AbsorptionFlowGameplay.Get(ORIGINAL_PLAN.ID)
+      assert(N.GetOffer(ORIGINAL_OFFER).ProductTerms.Input.FreeEpoch==0)
+      TURN=START_TURN+10
+    "#,
+    )
+    .exec()?;
+    load(&lua, 10000.)?;
+    lua.load(r#"
+      JAC_AbsorptionProductGameplay.Tick();GameEvents.OnGameTurnStarted.Call()
+      assert(VIEW().OfferID==ORIGINAL_OFFER and STARTS==1)
+      assert(JAC_AbsorptionGameplay.Rules.Equal(N.Get('leader-offer',ORIGINAL_OFFER).Plan,ORIGINAL_PLAN))
+      assert(JAC_AbsorptionGameplay.Rules.Equal(JAC_AbsorptionFlowGameplay.Get(ORIGINAL_PLAN.ID),ORIGINAL_FLOW))
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn deposit_share_uses_source_balances_independently_of_recipient_balances() -> anyhow::Result<()> {
+    for recipient in [100000, 500000] {
+        let lua = world(10000.)?;
+        lua.globals().set("RECIPIENT_BALANCE", recipient)?;
+        lua.load(
+            r#"
+          GOLD[1]=80000;FAITH[1]=8000;GOLD[2]=RECIPIENT_BALANCE;FAITH[2]=60000
+          local quote=VIEW();assert(quote.Deposit.Gold==23000 and quote.Deposit.Faith==2300)
+          REGISTER();READY();JAC_AbsorptionProductGameplay.Tick()
+          assert(GOLD[1]==80000 and FAITH[1]==8000,'source funds must remain untouched')
+          assert(GOLD[2]==RECIPIENT_BALANCE-23000 and FAITH[2]==57700 and CHARGES==1)
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
 }
 
 #[test]

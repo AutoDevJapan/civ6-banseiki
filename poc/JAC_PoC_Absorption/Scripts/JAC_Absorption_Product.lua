@@ -234,8 +234,10 @@ local function Input(from,to)
   assert(not Players[from]:IsHuman(),'current absorption engine requires an AI source')
   assert(target:GetDiplomacy():HasMet(from),'admission target has not been met')
   local situation=DiplomaticSituation(from,to)
+  local turn,start=Game.GetCurrentGameTurn(),GameConfiguration.GetStartTurn()
+  assert(Integer(turn) and Integer(start) and turn>=start,'game start turn unavailable or invalid')
   return {Country=country,From=from,To=to,Version=C.Version,Situation=situation,
-    FreeEpoch=math.floor(Game.GetCurrentGameTurn()/C.Balance.free_change_turns)}
+    FreeEpoch=math.floor((turn-start)/C.Balance.free_change_turns)}
 end
 local function Terms(input)
   local c=input.Country
