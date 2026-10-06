@@ -539,6 +539,21 @@ fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result
     Ok(())
 }
 
+fn lock_bundle(path: &Path) -> Result<std::fs::File> {
+    // Windows byte-range locks also reject reads through another handle in
+    // this process. Keep the lock separate from the bundle we must deserialize.
+    let lock_path = fs::canonicalize(path)?.with_extension("lock");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(lock_path)?;
+    file.try_lock()
+        .map_err(|_| Error::scenario("hotseat bundle is already in use"))?;
+    Ok(file)
+}
+
 fn run(args: Args) -> Result<()> {
     // Hold one OS file lock across each state transition. The journal alone
     // cannot prevent two commands from reading the same `next` concurrently.
@@ -548,12 +563,7 @@ fn run(args: Args) -> Result<()> {
         | Command::Init { bundle, .. }
         | Command::Step { bundle, .. }
         | Command::MenuLoad { bundle, .. }
-        | Command::AdoptLoad { bundle, .. } => {
-            let file = OpenOptions::new().read(true).write(true).open(bundle)?;
-            file.try_lock()
-                .map_err(|_| Error::scenario("hotseat bundle is already in use"))?;
-            Some(file)
-        }
+        | Command::AdoptLoad { bundle, .. } => Some(lock_bundle(bundle)?),
     };
     match args.command {
         Command::Prepare { scenario, output } => {
@@ -605,6 +615,21 @@ fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundle_is_readable_while_other_commands_are_excluded() {
+        let dir = tempfile::tempdir().unwrap();
+        let bundle = dir.path().join("bundle.json");
+        fs::write(&bundle, b"{\"nonce\":\"example\"}").unwrap();
+        let first = lock_bundle(&bundle).unwrap();
+        let parsed: Value = serde_json::from_slice(&fs::read(&bundle).unwrap()).unwrap();
+        assert_eq!(parsed["nonce"], "example");
+        assert!(lock_bundle(&bundle).is_err());
+        // Aliases to the same bundle must use the same canonical lock.
+        assert!(lock_bundle(&dir.path().join("./bundle.json")).is_err());
+        drop(first);
+        assert!(lock_bundle(&bundle).is_ok());
+    }
 
     #[test]
     fn runtime_audit_rejects_unframed_lua_errors() {
