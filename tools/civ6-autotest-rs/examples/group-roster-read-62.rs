@@ -42,6 +42,9 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
     let mut judge_seen = false;
     let mut outputs = std::collections::BTreeMap::new();
     for line in transcript.lines() {
+        if judge_seen {
+            return Err("record after final judge".into());
+        }
         let row: Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
         let action = row["action"].as_str().ok_or("missing action")?;
         if !header_seen {
@@ -179,6 +182,8 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
             pending = None;
         } else if row["status"] == "FAIL" {
             return Err("failed pinned observation run".into());
+        } else {
+            return Err("unknown observation status".into());
         }
     }
     if completed != expected.len()

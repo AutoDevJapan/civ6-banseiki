@@ -457,4 +457,16 @@ fn header_and_positive_final_judge_are_required_not_an_exit_fragment() {
     let mut changed = records.clone();
     changed[0]["detail"] = "different scenario".into();
     assert!(host::observations(&text(&changed)).is_err());
+    for extra in [
+        serde_json::json!({"action":"unknown","status":"SKIP","detail":"unknown"}),
+        serde_json::json!({"action":"launch","status":"OK","detail":"Civ VI relaunched via Steam"}),
+        records.last().unwrap().clone(),
+    ] {
+        let mut changed = records.clone();
+        changed.push(extra.clone());
+        assert!(host::observations(&text(&changed)).is_err());
+        let mut changed = records.clone();
+        changed.insert(1, extra);
+        assert!(host::observations(&text(&changed)).is_err());
+    }
 }
