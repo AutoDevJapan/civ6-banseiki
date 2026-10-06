@@ -211,7 +211,11 @@ local function EnvoyTurn(before,s)
   local count,key,operation=0,nil,nil
   for k,op in pairs(s.Operations or {}) do
     local old=(before.Product.Operations or {})[k]
-    if old then assert(R.Equal(old,op),'settled operation changed on a later natural turn')
+    if old then
+      if old.Identity.Command=='REGISTER' and not old.Done then
+        assert(R.Equal(old.Identity,op.Identity) and old.Nonce==op.Nonce and R.Equal(old.OfferIntent,op.OfferIntent),
+          'pending registration changed its saved intent')
+      else assert(R.Equal(old,op),'settled operation changed on a later natural turn') end
     elseif op.Identity.To==t.To and op.Identity.Command=='SEND_ENVOY' then
       count=count+1;key,operation=k,op
     end
@@ -247,7 +251,7 @@ local function EnvoyTurn(before,s)
   return count
 end
 local function SavedAdmission(offer,request)
-  assert(request.Status=='STARTED' and request.Plan and request.Decision,'saved started admission evidence missing')
+  assert((request.Status=='STARTED' or request.Status=='STARTING') and request.Plan and request.Decision,'saved admission evidence missing')
   local plan,decision=request.Plan,request.Decision
   assert(plan.ID==request.FlowID and plan.From==t.From and plan.To==t.To and plan.Mode=='SMALL_STATE'
     and plan.EntryConditionsMet==true and plan.RelationsResolved==true,'saved admission plan changed actors or gate result')
@@ -256,8 +260,12 @@ local function SavedAdmission(offer,request)
   assert(decision.From==t.From and decision.To==t.To and decision.Mode=='SMALL_STATE' and decision.AreaKm2==0.44
     and decision.RelationsResolved==true and decision.EnvoySource=='product' and decision.EnvoysEligible==true,
     'saved normal admission decision changed identity, relationships or envoy eligibility')
-  assert(type(decision.Turn)=='number' and decision.Turn==request.StartTurn and decision.Turn<=Game.GetCurrentGameTurn(),
+  assert(type(decision.Turn)=='number' and decision.Turn>=0 and decision.Turn==math.floor(decision.Turn) and decision.Turn<=Game.GetCurrentGameTurn(),
     'saved admission has an invalid actual acceptance turn')
+  if request.Status=='STARTED' then
+    assert(type(request.StartTurn)=='number' and request.StartTurn==math.floor(request.StartTurn)
+      and request.StartTurn>=decision.Turn and request.StartTurn<=Game.GetCurrentGameTurn(),'completion turn precedes saved decision')
+  end
   assert(type(decision.OwnedTiles)=='number' and decision.OwnedTiles>=0 and decision.OwnedTiles==math.floor(decision.OwnedTiles)
     and type(decision.Envoys)=='number' and decision.Envoys==math.floor(decision.Envoys)
     and decision.Envoys>=math.max(1,decision.OwnedTiles),'saved official envoys did not cover native territory at acceptance')
@@ -269,57 +277,124 @@ local function SavedAdmission(offer,request)
     seen[row.ID]=true
   end
   local view=P.Get(t.From,t.To);Profile(view)
-  assert(view.Frozen==true and view.Status=='STARTED' and view.OfferID==offer.ID and view.Envoys.Route=='FROZEN'
+  assert(view.Frozen==true and view.Status==request.Status and view.OfferID==offer.ID and view.Envoys.Route=='FROZEN'
     and view.Envoys.Envoys==decision.Envoys and view.Envoys.Required==math.max(1,decision.OwnedTiles),
     'frozen product view differs from its saved accepted plan/envoys')
   return decision
 end
+-- Observation contract: a Core snapshot fixes one immutable native starting
+-- balance and a sequence fence. No historical value before that fence can
+-- authorize a later debit. The full canonical snapshot binds the checkpoint.
+local function CurrencyOrigin(snapshot)
+  local history=assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots,'currency observer absent')
+  assert(history.Owner==t.To and not history.Overflow,'currency observer invalid')
+  snapshot.CurrencyCursor=#history.Rows
+  snapshot.CurrencyPoint={Turn=snapshot.Turn,Gold=snapshot.Gold,Faith=snapshot.Faith,Sequence=snapshot.CurrencyCursor}
+  snapshot.CurrencyHash=A.Canonical(snapshot.CurrencyPoint)
+  snapshot.CurrencyPrefixHash=A.Canonical(history.Rows)
+  t.CurrencyHistory=R.Copy(history)
+  return snapshot
+end
 local function ObserveDebit(before,s,id)
   local escrow=assert((s.Escrows or {})[id],'actual deposit escrow absent')
-  local offer=assert(N.GetOffer(id));local deposit=offer.ProductTerms.Deposit
+  local deposit=assert(N.GetOffer(id)).ProductTerms.Deposit
   assert(escrow.ID==id and escrow.From==t.From and escrow.To==t.To and escrow.Gold==deposit.Gold and escrow.Faith==deposit.Faith,
     'actual deposit changed offer, payer or ordinary amounts')
-  assert(escrow.Gold>0 and escrow.Faith>0 and (escrow.Status=='HELD' or escrow.Status=='CONSUMED'),'ordinary cautious deposit did not settle')
-  local gold,faith=assert(escrow.CollectGold),assert(escrow.CollectFaith)
-  assert(gold.Done==true and faith.Done==true and gold.Before-gold.After==escrow.Gold and faith.Before-faith.After==escrow.Faith,
-    'normal currency receipt did not settle exact ordinary amounts')
-  t.NativeDebits=t.NativeDebits or {}
-  local proof=t.NativeDebits[id]
-  if proof then
-    assert(proof.From==t.From and proof.To==t.To and R.Equal(proof.Gold,gold) and R.Equal(proof.Faith,faith)
-      and proof.ActualBefore.Gold==gold.Before and proof.ActualBefore.Faith==faith.Before
-      and proof.ActualAfter.Gold==gold.After and proof.ActualAfter.Faith==faith.After,
-      'saved actual-debit observations changed or did not cover both real currency legs')
-    return proof
+  assert(escrow.Gold>0 and escrow.Faith>0 and (escrow.Status=='COLLECTING' or escrow.Status=='HELD' or escrow.Status=='CONSUMED'),
+    'ordinary cautious deposit has invalid phase')
+  t.NativeDebits=t.NativeDebits or {};t.DebitOrigins=t.DebitOrigins or {};t.DebitParts=t.DebitParts or {};t.DebitIntents=t.DebitIntents or {}
+  local origin=t.DebitOrigins[id]
+  if not origin then origin=R.Copy(before);t.DebitOrigins[id]=origin end
+  assert(origin.CurrencyPoint and origin.CurrencyHash==A.Canonical(origin.CurrencyPoint)
+    and origin.CurrencyPoint.Sequence==origin.CurrencyCursor and origin.CurrencyPoint.Turn==origin.Turn
+    and origin.CurrencyPoint.Gold==origin.Gold and origin.CurrencyPoint.Faith==origin.Faith,'currency snapshot sequence/hash contract changed')
+  local observations=assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots,'native currency observations absent')
+  local fence=origin.CurrencyCursor
+  assert(observations.Owner==t.To and not observations.Overflow and type(fence)=='number'
+    and fence>=0 and fence==math.floor(fence) and fence<=#observations.Rows,'native currency origin/sequence unavailable')
+  local prefix={};for index=1,fence do prefix[index]=observations.Rows[index] end
+  assert(origin.CurrencyPrefixHash==A.Canonical(prefix),'native history before the snapshot fence was replaced')
+  local parts=t.DebitParts[id] or {};t.DebitParts[id]=parts
+  local intents=t.DebitIntents[id] or {};t.DebitIntents[id]=intents
+  local complete=escrow.Status~='COLLECTING'
+  for _,currency in ipairs({'Gold','Faith'}) do
+    local leg=escrow['Collect'..currency];local proof=parts[currency]
+    if leg then
+      assert(type(leg.Before)=='number' and type(leg.After)=='number' and leg.Before-leg.After==escrow[currency],
+        'currency intent does not match ordinary amount')
+      local intent={Before=leg.Before,After=leg.After,Amount=escrow[currency]}
+      assert(not intents[currency] or R.Equal(intents[currency],intent),'pending currency intent changed')
+      intents[currency]=intent
+      if proof then
+        assert(proof.OriginHash==origin.CurrencyHash and proof.BeforeSequence>=fence and proof.AfterSequence>proof.BeforeSequence
+          and proof.Before==leg.Before and proof.After==leg.After and proof.Amount==escrow[currency]
+          and leg.Done==true and R.Equal(observations.Rows[proof.AfterSequence],proof.ActualAfter),
+          'saved actual currency proof or sequenced observation changed')
+        assert(proof.ActualBefore[currency]==proof.Before and proof.ActualAfter[currency]==proof.After,
+          'stored native observations do not cover the real currency leg')
+        if proof.BeforeSequence==fence then assert(R.Equal(proof.ActualBefore,origin.CurrencyPoint),'original Core currency point changed') end
+        if proof.BeforeSequence>fence then
+          assert(R.Equal(observations.Rows[proof.BeforeSequence],proof.ActualBefore),'native Before observation changed')
+        end
+      elseif leg.Done==true then
+        local beforeIndex=origin.CurrencyPoint[currency]==leg.Before and fence or nil
+        local afterIndex
+        -- Never search at or before the fixed snapshot fence. An observed
+        -- income after it may precede collection; old same-turn spending may not.
+        for index=fence+1,#observations.Rows do
+          local row=observations.Rows[index]
+          assert(row.Sequence==index and row.Turn>=origin.Turn and row.Turn<=Game.GetCurrentGameTurn(),'currency observation sequence/turn changed')
+          if not beforeIndex and row[currency]==leg.Before then beforeIndex=index
+          elseif beforeIndex and row[currency]==leg.After then afterIndex=index;break
+          elseif beforeIndex and row[currency]~=leg.Before then error('competing currency change inside native debit observations') end
+        end
+        local native=currency=='Gold' and Players[t.To]:GetTreasury():GetGoldBalance() or A.PlayerFaithBalance(t.To)
+        if beforeIndex and not afterIndex and native==leg.After then
+          -- This Core read is a new independent observation after the fence,
+          -- including when the native UI publication is one update behind.
+          assert(#observations.Rows<256,'native currency observation limit reached')
+          local row={Turn=Game.GetCurrentGameTurn(),Gold=Players[t.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(t.To),Sequence=#observations.Rows+1}
+          observations.Rows[#observations.Rows+1]=row;afterIndex=row.Sequence
+        end
+        if beforeIndex and afterIndex then
+          proof={OriginHash=origin.CurrencyHash,BeforeSequence=beforeIndex,AfterSequence=afterIndex,
+            Before=leg.Before,After=leg.After,Amount=escrow[currency],ActualAfter=R.Copy(observations.Rows[afterIndex]),
+            ActualBefore=R.Copy(beforeIndex==fence and origin.CurrencyPoint or observations.Rows[beforeIndex])}
+          parts[currency]=proof
+        else complete=false end
+      else complete=false end
+    else complete=false end
   end
-  -- A new receipt must match the native getter *now*, not another journal.
-  -- Later native income/spending is not retroactively attributed to this debit.
-  local actual={Turn=Game.GetCurrentGameTurn(),Gold=Players[t.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(t.To)}
-  assert(actual.Gold==gold.After and actual.Faith==faith.After,
-    'settled receipts do not match actual native balances; omitted debit or later competing currency change')
-  local observations=assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots,'independent native currency observations absent')
-  assert(observations.Owner==t.To and not observations.Overflow,'native currency observation owner/history is invalid')
-  local anchor,cursor
-  if before.Gold==gold.Before and before.Faith==faith.Before then
-    anchor={Turn=before.Turn,Gold=before.Gold,Faith=before.Faith};cursor=before.CurrencyCursor or 0
-  end
-  for index,row in ipairs(observations.Rows) do
-    if row.Turn>=before.Turn and row.Turn<=actual.Turn and row.Gold==gold.Before and row.Faith==faith.Before then
-      anchor=R.Copy(row);cursor=index
+  t.CurrencyHistory=R.Copy(observations)
+  if not complete then return false end
+  local proof={From=t.From,To=t.To,Origin=R.Copy(origin.CurrencyPoint),OriginHash=origin.CurrencyHash,
+    Gold=R.Copy(parts.Gold),Faith=R.Copy(parts.Faith)}
+  local old=t.NativeDebits[id]
+  assert(not old or R.Equal(old,proof),'complete native debit evidence changed')
+  t.NativeDebits[id]=proof
+  print('[JAC_OFFICIAL_PRODUCT] actual-debit offer='..id..' origin='..fence..' gold-after='..proof.Gold.AfterSequence..' faith-after='..proof.Faith.AfterSequence)
+  return proof
+end
+local function PreservePending(request)
+  if not request.Plan then return end
+  t.FrozenEvidence=t.FrozenEvidence or {}
+  local old=t.FrozenEvidence[request.FlowID]
+  local raw=Game:GetProperty('JAC_ABSORPTION_FLOW_V1') or {}
+  local flow=(raw.Flows or {})[request.FlowID]
+  if flow then assert(R.Equal(flow.Request,request.Plan),'persisted flow changed frozen plan') end
+  local now={Plan=R.Copy(request.Plan),Decision=R.Copy(request.Decision),Rolls={}}
+  if flow then for _,entry in ipairs(flow.Entries or {}) do
+    assert(not now.Rolls[tostring(entry.ID)],'duplicate frozen inventory entry')
+    now.Rolls[tostring(entry.ID)]=R.Copy(entry.Rolls or {})
+  end end
+  if old then
+    assert(R.Equal(old.Plan,now.Plan) and R.Equal(old.Decision,now.Decision),'waiting/reload changed frozen admission evidence')
+    for id,rolls in pairs(old.Rolls) do
+      assert(now.Rolls[id],'waiting/reload lost a frozen inventory entry')
+      for stage,roll in pairs(rolls) do assert(R.Equal(now.Rolls[id][stage],roll),'waiting/reload rerolled a frozen result') end
     end
   end
-  assert(anchor,'receipt Before was not independently observed; native income cannot be guessed')
-  for index=cursor+1,#observations.Rows do
-    local row=observations.Rows[index]
-    assert(row.Turn>=anchor.Turn and row.Turn<=actual.Turn and row.Gold==gold.After
-      and (row.Faith==faith.Before or row.Faith==faith.After),'currency changes between observed Before/After are ambiguous')
-  end
-  assert(anchor.Gold-actual.Gold==escrow.Gold and anchor.Faith-actual.Faith==escrow.Faith,'actual native debit did not match normal deposit')
-  proof={From=t.From,To=t.To,Gold=R.Copy(gold),Faith=R.Copy(faith),ActualBefore=anchor,ActualAfter=actual}
-  t.NativeDebits[id]=proof
-  print('[JAC_OFFICIAL_PRODUCT] actual-debit offer='..id..' gold='..anchor.Gold..'->'..actual.Gold..
-    ' faith='..anchor.Faith..'->'..actual.Faith)
-  return proof
+  t.FrozenEvidence[request.FlowID]=now
 end
 local function Send(before,previous)
   assert(Game.GetCurrentGameTurn()==before.Turn+1,'send did not follow exactly one actual end_turn')
@@ -525,8 +600,7 @@ const SECOND_SEND: &str = r#"
 t.Second=Send(assert(t.BeforeSecond),assert(t.First))
 assert(t.Second.Turn==t.First.Turn+1,'AI did not resume on the next actual turn')
 assert(not (Product().Pairs or {})[t.From..':'..t.To],'AI registered before actual envoy qualification')
-t.SettledSecond=Snapshot();t.BeforeQualification=Snapshot()
-t.BeforeQualification.CurrencyCursor=#assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots).Rows
+t.SettledSecond=Snapshot();t.BeforeQualification=CurrencyOrigin(Snapshot())
 Game:SetProperty(KEY,t)
 return 'next actual end_turn sent exactly one more official envoy; previous receipt unchanged and turn budget renewed'
 "#;
@@ -535,11 +609,11 @@ const CURRENCY_WATCH: &str = r#"
 -- Detached native observations only. This observer never calls commands or
 -- replaces any product reader; it cannot supply a ready/deposit condition.
 if JAC_OfficialProductCurrencyCallback then Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback) end
-local observations={Owner=to,Rows={}}
+local observations=ExposedMembers.JAC_OfficialProductCurrencySnapshots or {Owner=to,Rows={}}
 ExposedMembers.JAC_OfficialProductCurrencySnapshots=observations
 local function Sample()
   local turn=Game.GetCurrentGameTurn()
-  local row={Turn=turn,Gold=Players[to]:GetTreasury():GetGoldBalance(),Faith=Players[to]:GetReligion():GetFaithBalance()}
+  local row={Turn=turn,Gold=Players[to]:GetTreasury():GetGoldBalance(),Faith=Players[to]:GetReligion():GetFaithBalance(),Sequence=#observations.Rows+1}
   local last=observations.Rows[#observations.Rows]
   if last and last.Turn==row.Turn and last.Gold==row.Gold and last.Faith==row.Faith then return end
   if #observations.Rows>=256 then observations.Overflow=true;return end
@@ -557,6 +631,7 @@ return 'independent native currency snapshots subscribed before natural qualific
 const QUALIFICATION_TURN: &str = r#"
 local before=assert(t.BeforeQualification)
 assert(Game.GetCurrentGameTurn()==before.Turn+1,'qualification skipped an actual turn')
+t.TurnOrigin=R.Copy(before)
 local s=Product();EnvoyTurn(before,s)
 assert(R.Equal(s.Operations[t.First.Key],t.First.Operation) and R.Equal(s.Operations[t.Second.Key],t.Second.Operation),
   'qualification changed the two saved official receipts')
@@ -568,15 +643,16 @@ if pair and not t.Registration then
   assert(R.Equal(offer.ProductTerms.Input.Country.Profile,t.PreparedView.Country.Profile),'ordinary AI source profile was replaced')
   local register,minimum=nil,nil
   for _,op in pairs(s.Operations) do if op.Identity.Command=='REGISTER' and op.Identity.To==t.To then
-    assert(not register and op.Done and op.Identity.From==t.From and op.Nonce=='ai-register:'..t.From,'not one ordinary AI registration')
+    assert(not register and op.Identity.From==t.From and op.Nonce=='ai-register:'..t.From,'not one ordinary AI registration')
     register=op
   end end
   assert(register and register.OfferIntent.Offer.ID==pair.ID,'actual AI registration intent missing')
   local actual,tiles,accepted
-  if request.Status=='STARTED' then
+  if request.Status=='STARTED' or request.Status=='STARTING' then
     -- A normal current-turn publication can already collect and admit.
     -- Inspect the frozen authoritative decision, never demand a live route.
     accepted=SavedAdmission(offer,request);actual,tiles=accepted.Envoys,accepted.OwnedTiles
+    PreservePending(request)
   else
     assert(request.Status=='WAITING','ordinary admission registration failed')
     NonDeposit(P.Get(t.From,t.To))
@@ -591,11 +667,57 @@ if pair and not t.Registration then
   t.Registration={Turn=Game.GetCurrentGameTurn(),ID=pair.ID,Operation=R.Copy(register),
     NativeFaithYield=not accepted and FaithYield(t.To) or nil,Decision=R.Copy(accepted),Received=actual,OwnedTiles=tiles}
 end
-if pair and (s.Escrows or {})[pair.ID] then ObserveDebit(before,s,pair.ID) end
-t.BeforeQualification=Snapshot()
-t.BeforeQualification.CurrencyCursor=#assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots).Rows
+if pair then
+  local request=assert(N.Get('leader-offer',pair.ID))
+  if request.Plan then SavedAdmission(assert(N.GetOffer(pair.ID)),request);PreservePending(request) end
+  if (s.Escrows or {})[pair.ID] then ObserveDebit(before,s,pair.ID) end
+end
+t.BeforeQualification=CurrencyOrigin(Snapshot())
 Game:SetProperty(KEY,t)
 return 'natural qualification turn inspected: at most one official envoy per recipient and real non-deposit prerequisites for AI registration'
+"#;
+
+// A short, bounded poll lets native publications finish. Pending is a valid
+// observation, not acceptance. Only normal end_turn/publication handlers can
+// resume it; this condition reads their evidence and stores detached snapshots.
+const OBSERVE_PENDING: &str = r#"
+EnvoyTurn(assert(t.TurnOrigin),Product())
+local pair=(Product().Pairs or {})[t.From..':'..t.To]
+local complete=true
+if pair then
+  local request=assert(N.Get('leader-offer',pair.ID))
+  if request.Plan then SavedAdmission(assert(N.GetOffer(pair.ID)),request);PreservePending(request) end
+  local escrow=(Product().Escrows or {})[pair.ID]
+  if escrow then complete=ObserveDebit(assert(t.TurnOrigin),Product(),pair.ID)~=false end
+  complete=complete and request.Status=='STARTED'
+end
+t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot)
+t.CurrencyHistory=R.Copy(assert(ExposedMembers.JAC_OfficialProductCurrencySnapshots))
+Game:SetProperty(KEY,t)
+-- The fifth read ends this observation window even if still pending. The
+-- finite next-turn sequence continues; the final QUALIFIED check cannot pass
+-- without completed plan, receipts, native debits and phase one.
+JAC_OFFICIAL_PENDING_READS=(JAC_OFFICIAL_PENDING_READS or 0)+1
+local observed=complete or JAC_OFFICIAL_PENDING_READS>=5
+if observed then t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t) end
+return observed
+"#;
+
+const RESTORE_OBSERVATION: &str = r#"
+assert(t.PendingSnapshot and t.PendingHash==A.Canonical(t.PendingSnapshot),'saved pending checkpoint changed')
+local old=t.PendingSnapshot;local now=Snapshot()
+assert(now.Turn==old.Turn and now.Pool==old.Pool and now.Received==old.Received,'reload changed native envoy budget/count')
+local pair=(now.Product.Pairs or {})[t.From..':'..t.To]
+if pair then
+  local request=assert(N.Get('leader-offer',pair.ID))
+  if request.Plan then SavedAdmission(assert(N.GetOffer(pair.ID)),request);PreservePending(request) end
+  if (now.Product.Escrows or {})[pair.ID] then ObserveDebit(assert(t.BeforeQualification),now.Product,pair.ID) end
+end
+-- Reload may legitimately publish and finish STARTING/COLLECTING. Frozen
+-- decisions/rolls and observed debits, rather than the mutable status enum,
+-- define preservation. No normal product request is resent by this scene.
+t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)
+return 'pending checkpoint restored; frozen decision/rolls and origin sequence preserved across normal reload publications'
 "#;
 
 const QUALIFIED: &str = r#"
@@ -603,8 +725,15 @@ assert(t.Registration,'bounded real turns never registered a qualified ordinary 
 local s=Product();local pair=assert(s.Pairs[t.From..':'..t.To]);local request=assert(N.Get('leader-offer',pair.ID))
 assert(request.Status=='STARTED' and request.Plan and request.Plan.Mode=='SMALL_STATE',request.LastError or 'ordinary official-minor admission never started')
 SavedAdmission(assert(N.GetOffer(pair.ID)),request)
+local registered=false
+for _,op in pairs(s.Operations) do if op.Identity.Command=='REGISTER' and op.Identity.To==t.To then
+  assert(not registered and op.Done==true and op.Identity.From==t.From and op.Nonce=='ai-register:'..t.From,'registration operation is not complete')
+  registered=true
+end end
+assert(registered,'qualified registration operation missing')
 assert(t.NativeDebits and t.NativeDebits[pair.ID],'normal currency receipt lacks independently verified actual debit')
-ObserveDebit(assert(t.BeforeQualification),s,pair.ID)
+assert(ObserveDebit(assert(t.BeforeQualification),s,pair.ID),'native debit observations are still incomplete')
+PreservePending(request)
 local flow=assert(JAC_AbsorptionFlowGameplay.Get(request.FlowID))
 assert(flow.Phase1Complete,'normal three-stage absorption did not reach its real first-stage result')
 t.OfferID=pair.ID;t.FlowID=request.FlowID;t.Qualified=Snapshot();Game:SetProperty(KEY,t)
@@ -643,6 +772,14 @@ fn native_assets(stage: &str) -> Value {
 fn advance(steps: &mut Vec<Value>) {
     steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
     steps.push(active());
+}
+
+fn observe_pending(steps: &mut Vec<Value>) {
+    steps.push(core(
+        "JAC_OFFICIAL_PENDING_READS=0;return 'begin finite read-only publication observation'",
+    ));
+    steps.push(json!({"action":"wait_for","timeout":30,"condition":{
+        "type":"lua","state_name":"JAC_Absorption_Entry","code":format!("{CORE}\n{OBSERVE_PENDING}")}}));
 }
 
 fn round_trip(steps: &mut Vec<Value>, name: &str) {
@@ -702,9 +839,18 @@ return v.Status=='AVAILABLE'
     advance(&mut steps);
     steps.push(ui(CURRENCY_WATCH));
     steps.push(core(SECOND_SEND));
-    for _ in 0..10 {
+    for index in 0..10 {
         advance(&mut steps);
         steps.push(core(QUALIFICATION_TURN));
+        observe_pending(&mut steps);
+        if index == 0 {
+            round_trip(&mut steps, "JAC-official-product-ai-pending");
+            // Core restores only detached read evidence; UI still obtains
+            // actors from official configuration and never reads properties.
+            steps.push(core("ExposedMembers.JAC_OfficialProductCurrencySnapshots=R.Copy(assert(t.CurrencyHistory));return 'restore saved native observation history'"));
+            steps.push(ui(CURRENCY_WATCH));
+            steps.push(core(RESTORE_OBSERVATION));
+        }
     }
     steps.push(wait("if not from or not to or not ExposedMembers.JAC_AbsorptionProduct then return false end;local v=ExposedMembers.JAC_AbsorptionProduct.Get(from,to);return v and v.Status=='STARTED'"));
     steps.push(core(QUALIFIED));
@@ -838,7 +984,12 @@ PlayerConfigurations={[0]={GetCivilizationTypeName=function() return 'CIVILIZATI
  [2]={GetCivilizationTypeName=function() return profile.CivilizationType end,GetLeaderTypeName=function() return profile.LeaderType end}}
 JAC_AbsorptionProductGameplay={Get=function() return copy(VIEW) end}
 JAC_AbsorptionAdmissionGameplay={}
-JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=function() return FAITH end}
+local function canonical(v)
+ if type(v)~='table' then return type(v)..':'..tostring(v) end
+ local keys={};for k in pairs(v) do keys[#keys+1]=k end;table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
+ local parts={};for _,k in ipairs(keys) do parts[#parts+1]=canonical(k)..'='..canonical(v[k]) end;return '{'..table.concat(parts,';')..'}'
+end
+JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=function() return FAITH end,Canonical=canonical}
 "#;
 
     fn run(mutation: &str, code: &str) -> Result<mlua::Result<()>> {
@@ -1109,7 +1260,10 @@ STATE.AiEnvoyTurns['0']={Turn=4,Operation=TEST.Second.Key}
 TURN,POOL,RECEIVED=5,30,2
 VIEW.Envoys.Envoys=2
 TEST.BeforeQualification={Turn=4,Pool=30,Received=2,Gold=GOLD,Faith=FAITH,Product=copy(STATE),CurrencyCursor=1}
-ExposedMembers={JAC_OfficialProductCurrencySnapshots={Owner=0,Rows={{Turn=4,Gold=GOLD,Faith=FAITH}}}}
+ExposedMembers={JAC_OfficialProductCurrencySnapshots={Owner=0,Rows={{Turn=4,Gold=GOLD,Faith=FAITH,Sequence=1}}}}
+TEST.BeforeQualification.CurrencyPoint={Turn=4,Gold=GOLD,Faith=FAITH,Sequence=1}
+TEST.BeforeQualification.CurrencyHash=JAC_AbsorptionGameplay.Canonical(TEST.BeforeQualification.CurrencyPoint)
+TEST.BeforeQualification.CurrencyPrefixHash=JAC_AbsorptionGameplay.Canonical(ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows)
 "#;
 
     #[test]
@@ -1193,7 +1347,7 @@ JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='normal-flow');return {P
             "REQUEST.Decision.Envoys=1",
             "REQUEST.Decision.EnvoysEligible=false",
             "REQUEST.Decision.RelationsResolved=false",
-            "REQUEST.Decision.Turn=4",
+            "REQUEST.StartTurn=4",
             "REQUEST.Plan.EntryConditionsMet=false",
             "REQUEST.Plan.From=1",
             "REQUEST.Plan.LeaderProfile.LeaderType='LEADER_MINOR_CIV_SINGAPORE'",
@@ -1250,7 +1404,7 @@ Map={{GetPlotCount=function() return 2 end,GetPlotByIndex=function() return {{Ge
             "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[2]={Turn=5,Gold=10000,Faith=9999}",
         ] {
             let result=run(&format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{mutation}"),
-                "ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)")?;
+                "assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID),'actual debit incomplete')")?;
             assert_eq!(result.is_ok(),mutation.is_empty(),"{mutation}: {result:?}");
         }
         // A native income change is usable only if its real Before was
@@ -1261,15 +1415,107 @@ Map={{GetPlotCount=function() return 2 end,GetPlotByIndex=function() return {{Ge
 {QUALIFICATION_WORLD}
 {ACCEPTED_WORLD}
 TEST.BeforeQualification.Gold=10090;TEST.BeforeQualification.Faith=9990
-ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=5,Gold=10100,Faith=10000}},{{Turn=5,Gold=10000,Faith=10000}},{{Turn=5,Gold=10000,Faith=9980}}}}
+TEST.BeforeQualification.CurrencyPoint={{Turn=4,Gold=10090,Faith=9990,Sequence=1}}
+TEST.BeforeQualification.CurrencyHash=JAC_AbsorptionGameplay.Canonical(TEST.BeforeQualification.CurrencyPoint)
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=4,Gold=10090,Faith=9990,Sequence=1}}}}
+TEST.BeforeQualification.CurrencyPrefixHash=JAC_AbsorptionGameplay.Canonical(ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows)
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[2]={{Turn=5,Gold=10100,Faith=10000,Sequence=2}}
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[3]={{Turn=5,Gold=10000,Faith=10000,Sequence=3}}
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[4]={{Turn=5,Gold=10000,Faith=9980,Sequence=4}}
 "#
             ),
-            "ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)",
+            "assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID))",
         )?;
         assert!(
             result.is_ok(),
             "independently observed income and debit: {result:?}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn stale_same_turn_history_cannot_pay_a_debit_after_the_snapshot_fence() -> Result<()> {
+        let stale = format!(
+            r#"
+{QUALIFICATION_WORLD}
+{ACCEPTED_WORLD}
+ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=5,Gold=10100,Faith=10000,Sequence=1}},{{Turn=5,Gold=10000,Faith=9980,Sequence=2}}}}
+TEST.BeforeQualification.Turn=5;TEST.BeforeQualification.Gold=10000;TEST.BeforeQualification.Faith=9980
+TEST.BeforeQualification.CurrencyCursor=2
+TEST.BeforeQualification.CurrencyPoint={{Turn=5,Gold=10000,Faith=9980,Sequence=2}}
+TEST.BeforeQualification.CurrencyHash=JAC_AbsorptionGameplay.Canonical(TEST.BeforeQualification.CurrencyPoint)
+TEST.BeforeQualification.CurrencyPrefixHash=JAC_AbsorptionGameplay.Canonical(ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows)
+"#
+        );
+        for mutation in [
+            "", "TEST.BeforeQualification.CurrencyCursor=0",
+            "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[1].Gold=99999",
+            "ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows[3]={Turn=5,Gold=10000,Faith=9980,Sequence=3}",
+        ] {
+            let result=run(&format!("{stale}\n{mutation}"),
+                "assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID),'old spending cannot prove a new debit')")?;
+            assert!(result.is_err(),"stale history/no actual debit {mutation}: {result:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn partial_settlement_and_starting_survive_finite_wait_reload_and_next_turn() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!(r#"
+{QUALIFICATION_WORLD}
+{ACCEPTED_WORLD}
+REQUEST.Status='STARTING';REQUEST.StartTurn=nil;VIEW.Status='STARTING'
+REGISTER.Done=false;ESCROW.Status='COLLECTING';ESCROW.CollectFaith.Done=false;FAITH=10000
+PROPS.JAC_ABSORPTION_FLOW_V1={{Flows={{['normal-flow']={{Request=copy(REQUEST.Plan),Entries={{{{ID='native-asset',Rolls={{P1_ESCAPE={{Raw=123,Used=123,Label='saved-first-roll'}}}}}}}},Phase1Complete=false}}}}}}
+"#)).exec()?;
+        lua.load(format!("{CORE}\n{QUALIFICATION_TURN}")).exec()?;
+        lua.load("assert(not PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.NativeDebits[OFFER.ID]);assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.DebitParts[OFFER.ID].Gold)").exec()?;
+        for _ in 0..5 {
+            lua.load(format!("{CORE}\n{OBSERVE_PENDING}")).exec()?;
+        }
+        assert!(lua.load(format!("{CORE}\n{QUALIFIED}")).exec().is_err());
+        // Restore detached observations from the same saved test property.
+        lua.load("ExposedMembers.JAC_OfficialProductCurrencySnapshots=JAC_AbsorptionGameplay.Rules.Copy(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.CurrencyHistory);JAC_OFFICIAL_PENDING_READS=nil").exec()?;
+        lua.load(format!("{CORE}\n{RESTORE_OBSERVATION}")).exec()?;
+        lua.load(
+            r#"
+TURN=6;REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED'
+REGISTER.Done=true;ESCROW.Status='HELD';ESCROW.CollectFaith.Done=true
+GOLD,FAITH=10005,9980 -- later gold income must not invalidate the earlier observed gold leg
+PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
+"#,
+        )
+        .exec()?;
+        lua.load(format!("{CORE}\n{QUALIFICATION_TURN}")).exec()?;
+        lua.load(format!("{CORE}\n{QUALIFIED}")).exec()?;
+        // Frozen decisions and already drawn rolls remain immutable even
+        // though normal completion and newly drawn later-stage rolls may advance.
+        for mutation in [
+            "REQUEST.Decision.Turn=6",
+            "REQUEST.StartTurn=4",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Entries[1].Rolls.P1_ESCAPE.Used=999",
+            "PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Entries={}",
+        ] {
+            let probe = Lua::new();
+            probe.load(WORLD).exec()?;
+            probe
+                .load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}"))
+                .exec()?;
+            probe.load("PROPS.JAC_ABSORPTION_FLOW_V1={Flows={['normal-flow']={Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='native-asset',Rolls={P1_ESCAPE={Used=123}}}}}}}").exec()?;
+            probe.load(format!("{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+            probe.load(mutation).exec()?;
+            assert!(
+                probe
+                    .load(format!(
+                        "{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+                    ))
+                    .exec()
+                    .is_err(),
+                "{mutation}"
+            );
+        }
         Ok(())
     }
 
@@ -1336,7 +1582,7 @@ ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=5,Gold=10100,F
     }
 
     #[test]
-    fn scene_has_two_same_name_round_trips_and_single_actual_turn_steps() -> Result<()> {
+    fn scene_has_pending_and_complete_round_trips_and_single_actual_turn_steps() -> Result<()> {
         let scene = scenario(&Repository::checked_in())?;
         let steps = scene["steps"].as_array().unwrap();
         let mut trips = 0;
@@ -1354,7 +1600,7 @@ ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows={{{{Turn=5,Gold=10100,F
                 assert_eq!(steps[index + 1]["action"], "wait_for");
             }
         }
-        assert_eq!(trips, 2);
+        assert_eq!(trips, 3);
         assert_eq!(turns, 13); // one native founding turn, two measured sends, ten qualification turns
         let rendered = serde_json::to_string(&scene)?;
         assert!(!rendered.contains("test_mode"));
