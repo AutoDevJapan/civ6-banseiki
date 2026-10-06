@@ -41,6 +41,11 @@
 //! -> JOURNAL_PENDING (immutable native Request/decision/old rolls) -> STARTED.
 //! Replay continuity is checked against the original saved receipt checkpoint
 //! before advancing the next-turn snapshot; equal native counts are insufficient.
+//! The opt-in local-human startup probe swaps only configured actor ordering.
+//! MainMenu.lua:182-189 uses normal default single-player setup; stock
+//! SetupParameters.lua:538-566 permits local Human and non-Human auxiliary
+//! writes, while rejecting a nonlocal Human outside hotseat. This motivates a
+//! comparison, not a diagnosis of Actual35's pre-Core host timeout.
 
 use anyhow::{bail, ensure, Context, Result};
 use civ6_data_rs::{absorption_admission, Repository};
@@ -48,7 +53,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 const USAGE: &str =
-    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe]";
+    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe | --local-human-probe]";
 
 const P1: &str = civ6_data_rs::absorption_product::P1_EVIDENCE;
 
@@ -1291,11 +1296,170 @@ return v.Status=='AVAILABLE'
     }))
 }
 
+// The experiment's role expectations come from the actual configure schema.
+// It changes array order only: each civilization retains its leader/controller.
+fn configured_roles(configure: &Value) -> Result<String> {
+    let players = configure["players"]
+        .as_array()
+        .context("configured role players")?;
+    ensure!(
+        players.len() == 2,
+        "local-human probe requires exactly two majors"
+    );
+    let mut roles = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for (actor, player) in players.iter().enumerate() {
+        let civ = player["civ"].as_str().context("configured civilization")?;
+        let leader = player["leader"].as_str().context("configured leader")?;
+        let human = player["human"].as_bool().context("configured controller")?;
+        let expected = match civ {
+            "CIVILIZATION_JAC_ODA" => ("LEADER_JAC_ODA_NOBUHIDE", true),
+            "CIVILIZATION_JAC_TAKEDA" => ("LEADER_JAC_TAKEDA_NOBUTORA", false),
+            _ => bail!("unexpected configured civilization: {civ}"),
+        };
+        ensure!(
+            seen.insert(civ) && (leader, human) == expected,
+            "configured leader/controller identity changed: {civ}"
+        );
+        roles.push(format!(
+            "{{Actor={actor},Civ={},Leader={},Human={human}}}",
+            serde_json::to_string(civ)?,
+            serde_json::to_string(leader)?
+        ));
+    }
+    Ok(format!("local expected={{{}}}\n", roles.join(",")))
+}
+
+fn configured_frontend(configure: &Value) -> Result<String> {
+    let start = FRONTEND_ALLOCATE
+        .find("local expected={")
+        .context("frontend expected roles")?;
+    let end = FRONTEND_ALLOCATE
+        .find("local function MajorsUnchanged()")
+        .context("frontend role guard")?;
+    Ok(format!("{}{}for _,role in ipairs(expected) do role.Slot=role.Human and SlotStatus.SS_TAKEN or SlotStatus.SS_COMPUTER end\n{}",&FRONTEND_ALLOCATE[..start],configured_roles(configure)?,&FRONTEND_ALLOCATE[end..]))
+}
+
+const LOCAL_HUMAN_PERMISSIONS: &str = r#"
+assert(Network.GetLocalPlayerID()==0,'local-human probe did not obtain local slot zero')
+assert(not GameConfiguration.IsAnyMultiplayer() and not GameConfiguration.IsHotseat(),'local-human probe is not ordinary single player')
+for actor=0,1 do
+  local parameters=assert(GetPlayerParameters(actor),'local-human probe player parameters missing')
+  local parameter=assert(parameters.Parameters.PlayerLeader,'local-human probe leader parameter missing')
+  assert(parameters:Config_CanWriteParameter(parameter)==true,'ordinary helper cannot write local Human/nonlocal AI at actor '..actor)
+end
+"#;
+
+const LOCAL_HUMAN_METADATA: &str = r#"
+local function Read(label,fn)
+  local ok,value=pcall(fn)
+  print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
+end
+Read('local-player-id',function() return Network.GetLocalPlayerID() end)
+Read('in-session',function() return Network.IsInSession() end)
+Read('net-session-host',function() return Network.IsNetSessionHost() end)
+Read('game-host',function() return Network.IsGameHost() end)
+Read('game-state',function() return GameConfiguration.GetGameState() end)
+Read('local-ready',function() return PlayerConfigurations[Network.GetLocalPlayerID()]:GetReady() end)
+Read('human-ids',function() return table.concat(GameConfiguration.GetHumanPlayerIDs(),',') end)
+return 'independent actual local/session/ready metadata; no event or readiness mutation'
+"#;
+
+const LOCAL_HUMAN_CORE: &str = r#"
+local from,to,human
+for actor=0,63 do
+  local player=Players[actor];local config=PlayerConfigurations[actor]
+  if player and player:IsAlive() and config then
+    if config:GetCivilizationTypeName()=='CIVILIZATION_VATICAN_CITY' then from=actor end
+  end
+end
+for _,role in ipairs(expected) do
+  local p=assert(Players[role.Actor],'configured major is absent in Core')
+  local c=assert(PlayerConfigurations[role.Actor])
+  assert(p:IsAlive() and p:IsMajor() and p:IsHuman()==role.Human
+    and c:GetCivilizationTypeName()==role.Civ and c:GetLeaderTypeName()==role.Leader,
+    'actual configured civilization/leader/controller role changed')
+  if role.Human then assert(role.Actor==Game.GetLocalPlayer(),'Oda Human is not the actual local controller');human=role.Actor
+  else to=role.Actor end
+  print('[JAC_OFFICIAL_LOCAL_HUMAN_ROLE] actor='..role.Actor..' civ='..role.Civ..' leader='..role.Leader..' human='..tostring(p:IsHuman()))
+end
+assert(from and to and human~=nil,'native Vatican/AI Takeda/local Human Oda role mapping missing')
+local heroes=GameConfiguration.GetValue('GAMEMODE_HEROES')
+assert(heroes==true or heroes==1,'actual Heroes & Legends configuration missing')
+assert(JAC_AbsorptionFlowGameplay and ExposedMembers.JAC_HeroReadAPI,'native flow/Hero modules unavailable')
+t={From=from,To=to,Human=human} -- local observation only; never persisted
+local before=Snapshot()
+for read=1,3 do
+  local country=assert(P.Country(from),'ordinary official country reader unavailable')
+  local profile=assert(country.Profile)
+  assert(country.ID=='VATICAN_CITY' and country.AreaKm2==0.44
+    and profile.CivilizationType==PlayerConfigurations[from]:GetCivilizationTypeName()
+    and profile.LeaderType==PlayerConfigurations[from]:GetLeaderTypeName(),'actual official country/profile binding changed')
+  assert(profile.Personality=='慎重' and profile.Trait=='霊神','ordinary source personality/trait changed')
+  local view=P.Get(from,to)
+  assert(view.From==from and view.To==to,'startup product view actor binding changed')
+  -- Qualification may still be unmet at startup. This probe records the real
+  -- product view and never supplies requirements, modifies assets or pays.
+  if view.Country then assert(R.Equal(view.Country,country) and view.Mode=='SMALL_STATE','startup product view profile changed') end
+  print('[JAC_OFFICIAL_LOCAL_HUMAN_PROFILE] read='..read..' actual-turn='..Game.GetCurrentGameTurn()..' source='..from..' recipient='..to..' status='..tostring(view.Status)..' error='..tostring(view.Error))
+  assert(R.Equal(before,Snapshot()),'startup profile read mutated native/product journals')
+end
+return 'local-human startup comparison only; native roles/content and inert profile reads verified, product acceptance not completed'
+"#;
+
+fn local_human_probe(repo: &Repository) -> Result<Value> {
+    let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
+    let mut steps = base["steps"].as_array().context("official startup steps")?[..6].to_vec();
+    let players = steps[1]["players"]
+        .as_array_mut()
+        .context("official configure players")?;
+    ensure!(players.len() == 2, "official probe major count changed");
+    players.swap(0, 1);
+    let roles = configured_roles(&steps[1])?;
+    ensure!(
+        steps[1]["players"][0]["human"] == true,
+        "local-human probe requires Oda Human at slot zero"
+    );
+    let allocate = configured_frontend(&steps[1])?;
+    // Check permissions while the ordinary helper's parameters still exist,
+    // after independently printing their values and before releasing them.
+    ensure!(
+        allocate.matches("ReleasePlayerParameters()").count() == 1,
+        "official helper release boundary changed"
+    );
+    let allocate = allocate.replace(
+        "ReleasePlayerParameters()",
+        &format!("{LOCAL_HUMAN_PERMISSIONS}\nReleasePlayerParameters()"),
+    );
+    let (setup, _) = steps[2]["code"]
+        .as_str()
+        .context("official setup Lua")?
+        .rsplit_once("return ")
+        .context("official setup return")?;
+    steps[2]["code"] = json!(format!(
+        "local function Prepare()\n{setup}\n{FRONTEND_FILTER}\n{allocate}\nend\nlocal ok,why=pcall(Prepare)\nprint('[Metadata_Boot_PreSnapshot] preparation-ok='..tostring(ok)..' reason='..tostring(why))\nlocal function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\nassert(ok,why)\n{FRONTEND_BOOTSTRAP}"
+    ));
+    // All metadata is independently guarded. Host/deadline/state observation
+    // belongs to the runner's single inherited start_game action.
+    steps.insert(3,json!({"action":"ui_lua","state_name":"FrontEnd","code":format!("local function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\n{LOCAL_HUMAN_METADATA}")}));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":CORE_ROSTER}));
+    steps.push(active());
+    steps.push(core(&format!("{roles}\n{LOCAL_HUMAN_CORE}")));
+    ensure!(
+        steps.len() <= 18,
+        "local-human startup probe exceeded finite scope"
+    );
+    Ok(
+        json!({"name":"Official Vatican startup comparison: local Human Oda0 and AI Takeda1; read-only native proof, no product acceptance claim","judge_profile":"generic","steps":steps}),
+    )
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
     output: PathBuf,
     check: bool,
     frontend_probe: bool,
+    local_human_probe: bool,
 }
 
 fn options(args: &[String]) -> Result<Option<Options>> {
@@ -1305,6 +1469,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
     let mut output = None;
     let mut check = false;
     let mut frontend_probe = false;
+    let mut local_human_probe = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -1322,10 +1487,18 @@ fn options(args: &[String]) -> Result<Option<Options>> {
                 ensure!(!frontend_probe, "--frontend-probe specified twice");
                 frontend_probe = true;
             }
+            "--local-human-probe" => {
+                ensure!(!local_human_probe, "--local-human-probe specified twice");
+                local_human_probe = true;
+            }
             _ => bail!("unknown argument {arg}; {USAGE}"),
         }
     }
     let output = output.context(USAGE)?;
+    ensure!(
+        !(frontend_probe && local_human_probe),
+        "choose one probe mode; {USAGE}"
+    );
     ensure!(output.is_absolute(), "--output must be an absolute path");
     ensure!(
         output.extension().is_some_and(|ext| ext == "json"),
@@ -1335,6 +1508,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
         output,
         check,
         frontend_probe,
+        local_human_probe,
     }))
 }
 
@@ -1384,6 +1558,8 @@ fn main() -> Result<()> {
         "{}\n",
         serde_json::to_string_pretty(&if options.frontend_probe {
             frontend_probe(&Repository::checked_in())?
+        } else if options.local_human_probe {
+            local_human_probe(&Repository::checked_in())?
         } else {
             scenario(&Repository::checked_in())?
         })?
@@ -2902,6 +3078,185 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
     }
 
     #[test]
+    fn local_human_probe_changes_only_role_order_and_retains_one_normal_host_boundary() -> Result<()>
+    {
+        let repo = Repository::checked_in();
+        let normal = scenario(&repo)?;
+        let probe = local_human_probe(&repo)?;
+        let mut expected = normal["steps"][1].clone();
+        expected["players"].as_array_mut().unwrap().swap(0, 1);
+        assert_eq!(probe["steps"][1], expected);
+        let steps = probe["steps"].as_array().unwrap();
+        assert!(steps.len() <= 18);
+        assert_eq!(
+            steps.iter().filter(|s| s["action"] == "start_game").count(),
+            1
+        );
+        assert_eq!(steps[4], normal["steps"][3]);
+        assert_eq!(steps[0], normal["steps"][0]);
+        assert_eq!(steps[5], normal["steps"][4]);
+        assert_eq!(steps[6], normal["steps"][5]);
+        let setup = steps[2]["code"].as_str().unwrap();
+        for required in [
+            "GAMEMODE_HEROES",
+            "JAC_ALL_POOLS",
+            "EXCLUDE_CITY_STATES",
+            "RefreshPlayerParameters()",
+            "ordinary helper cannot write",
+            "LEADER_SIMON_BOLIVAR",
+            "LEADER_LADY_SIX_SKY",
+        ] {
+            assert!(setup.contains(required), "missing {required}");
+        }
+        assert!(
+            setup.find("ordinary helper cannot write").unwrap()
+                < setup.find("ReleasePlayerParameters()").unwrap()
+        );
+        let old = normal["steps"][2]["code"].as_str().unwrap();
+        assert!(old.contains("Slot=SlotStatus.SS_COMPUTER},\n  {Civ='CIVILIZATION_JAC_ODA'"));
+        for step in steps {
+            assert!(!["end_turn", "save", "load"]
+                .iter()
+                .any(|a| step["action"] == *a));
+            if let Some(code) = step
+                .get("code")
+                .or_else(|| step["condition"].get("code"))
+                .and_then(Value::as_str)
+            {
+                Lua::new().load(code).into_function()?;
+                for forbidden in [
+                    "Network.HostGame",
+                    "P.Tick(",
+                    "P.Command(",
+                    "N.Request(",
+                    "F.Begin(",
+                    "GiveFreeTokenToPlayer(",
+                    "ChangeGoldBalance",
+                    "ChangeTokensToGive",
+                    "SetHasMet",
+                    "Game:SetProperty",
+                    "SetReady",
+                    "TestCall",
+                    "RegisterRequirement(",
+                    "SetLeaderType",
+                    "SetCivilizationType",
+                ] {
+                    assert!(!code.contains(forbidden), "probe bypass: {forbidden}");
+                }
+            }
+        }
+        // Adding a startup-only option must not alter the acceptance protocol.
+        assert_eq!(scenario(&repo)?, normal);
+        Ok(())
+    }
+
+    #[test]
+    fn configured_role_projection_rejects_profile_controller_and_count_substitution() -> Result<()>
+    {
+        let normal = scenario(&Repository::checked_in())?;
+        for reversed in [false, true] {
+            let mut config = normal["steps"][1].clone();
+            if reversed {
+                config["players"].as_array_mut().unwrap().swap(0, 1);
+            }
+            assert!(configured_frontend(&config)?.contains("MajorsUnchanged()"));
+            for (field, value) in [
+                (
+                    "human",
+                    json!(!config["players"][0]["human"].as_bool().unwrap()),
+                ),
+                ("leader", json!("LEADER_SIMON_BOLIVAR")),
+                ("civ", json!("CIVILIZATION_JAC_ASHINA")),
+            ] {
+                let mut bad = config.clone();
+                bad["players"][0][field] = value;
+                assert!(configured_roles(&bad).is_err(), "{field}");
+            }
+            let mut bad = config.clone();
+            bad["players"].as_array_mut().unwrap().pop();
+            assert!(configured_roles(&bad).is_err());
+            let mut bad = config.clone();
+            bad["players"][1] = bad["players"][0].clone();
+            assert!(configured_roles(&bad).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn local_human_core_reads_actual_roles_and_profile_without_acceptance_mutations() -> Result<()>
+    {
+        let scene = local_human_probe(&Repository::checked_in())?;
+        let code = scene["steps"].as_array().unwrap().last().unwrap()["code"]
+            .as_str()
+            .unwrap();
+        for (mutation,reason) in [
+            ("",None),
+            ("VIEW.Status='UNAVAILABLE';VIEW.Error='native startup input not yet available';VIEW.Country=nil",None),
+            ("PlayerConfigurations[0].GetLeaderTypeName=function() return 'LEADER_SIMON_BOLIVAR' end",Some("actual configured civilization/leader/controller role changed")),
+            ("Players[1].IsHuman=function() return true end",Some("actual configured civilization/leader/controller role changed")),
+            ("Game.GetLocalPlayer=function() return 1 end",Some("Oda Human is not the actual local controller")),
+            ("COUNTRY.Profile.Personality='冷静'",Some("ordinary source personality/trait changed")),
+            ("VIEW.To=0",Some("startup product view actor binding changed")),
+            ("GameConfiguration.GetValue=function() return false end",Some("actual Heroes & Legends configuration missing")),
+            ("JAC_AbsorptionProductGameplay.Get=function() GOLD=GOLD-1;return copy(VIEW) end",Some("startup profile read mutated native/product journals")),
+        ] {
+            let lua=Lua::new();lua.load(WORLD).exec()?;
+            lua.load(r#"
+copy=JAC_AbsorptionGameplay.Rules.Copy
+Game.GetLocalPlayer=function() return 0 end
+GameConfiguration={GetValue=function(key) assert(key=='GAMEMODE_HEROES');return true end}
+ExposedMembers={JAC_HeroReadAPI={}};JAC_AbsorptionFlowGameplay={}
+for actor=0,1 do local id=actor;Players[id].IsAlive=function() return true end;Players[id].IsMajor=function() return true end;Players[id].IsHuman=function() return id==0 end end
+Players[2].IsAlive=function() return true end
+PlayerConfigurations[0]={GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_ODA' end,GetLeaderTypeName=function() return 'LEADER_JAC_ODA_NOBUHIDE' end}
+PlayerConfigurations[1]={GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_TAKEDA' end,GetLeaderTypeName=function() return 'LEADER_JAC_TAKEDA_NOBUTORA' end}
+Players[2].GetInfluence=function() return {GetTokensReceived=function(_,sender) assert(sender==1);return RECEIVED end} end
+VIEW.To=1
+COUNTRY=copy(VIEW.Country)
+JAC_AbsorptionProductGameplay.Country=function(actor) assert(actor==2);return copy(COUNTRY) end
+"#).exec()?;
+            lua.load(mutation).exec()?;
+            let result=lua.load(code).exec();
+            if let Some(reason)=reason {assert!(result.expect_err(mutation).to_string().contains(reason),"{mutation}");}
+            else {result?;lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.To==0);assert(GOLD==10100 and POOL==31 and RECEIVED==1)").exec()?;}
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn local_human_permissions_and_metadata_keep_real_independent_getter_results() -> Result<()> {
+        for (mutation, ok) in [
+            ("", true),
+            ("LOCAL=1", false),
+            ("MULTI=true", false),
+            ("CANWRITE[1]=false", false),
+        ] {
+            let lua = Lua::new();
+            lua.load(r#"
+LOCAL=0;CANWRITE={[0]=true,[1]=true};Network={GetLocalPlayerID=function() return LOCAL end}
+GameConfiguration={IsAnyMultiplayer=function() return MULTI==true end,IsHotseat=function() return false end}
+GetPlayerParameters=function(actor) return {Parameters={PlayerLeader={}},Config_CanWriteParameter=function() return CANWRITE[actor] end} end
+"#).exec()?;
+            lua.load(mutation).exec()?;
+            assert_eq!(
+                lua.load(LOCAL_HUMAN_PERMISSIONS).exec().is_ok(),
+                ok,
+                "{mutation}"
+            );
+        }
+        let lua = Lua::new();
+        lua.load(r#"
+MESSAGES={};print=function(s) MESSAGES[#MESSAGES+1]=s end
+Network={GetLocalPlayerID=function() return 0 end,IsInSession=function() return false end,IsNetSessionHost=function() error('unsupported getter') end,IsGameHost=function() return true end}
+GameConfiguration={GetGameState=function() return 0 end,GetHumanPlayerIDs=function() return {0} end}
+PlayerConfigurations={[0]={GetReady=function() return false end}}
+"#).exec()?;
+        lua.load(LOCAL_HUMAN_METADATA).exec()?;
+        lua.load("local s=table.concat(MESSAGES,'\\n');assert(s:find('local-player-id ok=true type=number value=0',1,true));assert(s:find('net-session-host ok=false type=error',1,true));assert(s:find('local-ready ok=true type=boolean value=false',1,true));assert(s:find('human-ids ok=true type=string value=0',1,true))").exec()?;
+        Ok(())
+    }
+
+    #[test]
     fn cli_requires_an_explicit_absolute_json_and_check_never_writes() -> Result<()> {
         let root = std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
@@ -2919,7 +3274,8 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             Some(Options {
                 output: output.clone(),
                 check: true,
-                frontend_probe: false
+                frontend_probe: false,
+                local_human_probe: false
             })
         );
         assert!(options(&[]).is_err());
@@ -2944,6 +3300,14 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
         ])
         .is_err());
         assert!(options(&["--help".into()])?.is_none());
+        let mut probe_args = args.clone();
+        probe_args.push("--local-human-probe".into());
+        assert!(options(&probe_args)?.unwrap().local_human_probe);
+        probe_args.push("--local-human-probe".into());
+        assert!(options(&probe_args).is_err());
+        probe_args.pop();
+        probe_args.push("--frontend-probe".into());
+        assert!(options(&probe_args).is_err());
         assert!(emit(&output, "new\n", true).is_err());
         assert!(!output.exists());
         emit(&output, "original\n", false)?;
