@@ -177,9 +177,10 @@ local tooltip;
 tooltip=function(...)
  if x and not x.closed and x.sessionRequested and x.itemID and x.forType==-1 then
   local ok,key=pcall(function()
-   local d,item=ownItem(); local now=rosterSnapshot();
-   local selected,count=candidate(d);
-   assert(selected==x.forType and count==3 and sameBaseline(now),
+   local _,item=ownItem(); local now=rosterSnapshot();
+   -- The official available-item list can shrink once this item is locked.
+   -- Its validated pre-add candidate is retained in this UI instance.
+   assert(x.candidateCount==3 and x.forType==-1 and sameBaseline(now),
     'owned tooltip group changed');
    assert(type(item.GetValueTypeNameID)=='function' and
     item:GetValueTypeNameID()==nil,'native captive already has tooltip name');

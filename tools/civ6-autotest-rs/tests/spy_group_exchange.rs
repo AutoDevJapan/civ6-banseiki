@@ -158,6 +158,7 @@ function DealManager.GetWorkingDeal(direction)
 end
 function DealManager.HasPendingDeal() return false end
 function DealManager.GetPossibleDealItems()
+ if #OUT.items>0 then return {} end
  return {{ForType=-1,IsValid=true,ValidationResult=1},
   {ForType=-1,IsValid=true,ValidationResult=1},
   {ForType=-1,IsValid=true,ValidationResult=1}}
