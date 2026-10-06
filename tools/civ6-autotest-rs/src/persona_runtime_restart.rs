@@ -365,13 +365,16 @@ impl Runner {
         self.retirement_authorized(deadline, true)?;
         // Steam launches asynchronously. A timeout/cancellation can occur
         // before any window exists, so process ownership cannot depend on UI.
-        if self.persona_launched_process.is_none() && self.persona_launch_requested {
-            self.persona_launched_process = self.backend.pin_launched_process()?;
-        }
+        self.bind_persona_launch()?;
         // A launched game belongs to this run before a save has loaded or the
         // resident bridge has been installed. Retain that independent ownership
         // through cancellation, preflight failure and an uncertain install.
         let Some(game) = self.persona_launched_process else {
+            if self.persona_launch_requested {
+                return Err(Error::input(
+                    "Steam launch remains unassociated; outer live_chain cleanup required",
+                ));
+            }
             return Ok(());
         };
         self.retirement_authorized(deadline, true)?;
@@ -383,6 +386,7 @@ impl Runner {
                 ));
             }
             self.disconnect();
+            self.retirement_authorized(deadline, true)?;
             self.backend.terminate(game.pid, game.started)?;
             if !self.backend.wait_exit(game.pid, deadline)? {
                 return Err(Error::input("persona launched process exit not confirmed"));
@@ -396,6 +400,16 @@ impl Runner {
         self.persona_transition(json!({"kind":"preinstall_process_exit",
             "pid":game.pid,"started":game.started,"confirmed":true,
             "already_exited":inspected.is_none(),"same_process_reload":false}))
+    }
+
+    pub(super) fn bind_persona_launch(&mut self) -> Result<()> {
+        if self.persona_runtime_restart
+            && self.persona_launch_requested
+            && self.persona_launched_process.is_none()
+        {
+            self.persona_launched_process = self.backend.pin_launched_process()?;
+        }
+        Ok(())
     }
 
     fn retirement_authorized(&self, deadline: f64, cleanup: bool) -> Result<()> {
@@ -484,6 +498,9 @@ mod tests {
         window_error: Option<ErrorKind>,
         dx11_error: bool,
         pin_rejected: bool,
+        no_process: bool,
+        lease_checks: usize,
+        lease_changes_at: Option<usize>,
     }
     struct LaunchBackend(Arc<Mutex<LaunchState>>);
     impl Backend for LaunchBackend {
@@ -493,7 +510,9 @@ mod tests {
         fn launch(&mut self) -> Result<()> {
             let mut s = self.0.lock().unwrap();
             s.calls.push("launch");
-            s.process = Some((7, 1.0));
+            if !s.no_process {
+                s.process = Some((7, 1.0));
+            }
             Ok(())
         }
         fn wait_window(&mut self, _: f64) -> Result<isize> {
@@ -519,7 +538,12 @@ mod tests {
             Ok(s.process.map(Into::into))
         }
         fn live_lease_budget(&self) -> Result<Option<f64>> {
-            match self.0.lock().unwrap().lease_error {
+            let mut s = self.0.lock().unwrap();
+            s.lease_checks += 1;
+            if s.lease_changes_at == Some(s.lease_checks) {
+                return Err(Error::new(ErrorKind::LiveLease, "ownership changed"));
+            }
+            match s.lease_error {
                 Some(message) => Err(Error::new(ErrorKind::LiveLease, message)),
                 None => Ok(None),
             }
@@ -550,6 +574,7 @@ mod tests {
             "pid_reused",
             "exit_pending",
             "already_exited",
+            "lease_changed_at_terminate",
         ] {
             let dir = tempfile::tempdir().unwrap();
             let state = Arc::new(Mutex::new(LaunchState {
@@ -580,29 +605,45 @@ mod tests {
                     "pid_reused" => s.process = Some((7, 2.0)),
                     "exit_pending" => s.exit_confirmed = false,
                     "already_exited" => s.process = None,
+                    "lease_changed_at_terminate" => {
+                        s.lease_checks = 0;
+                        s.lease_changes_at = Some(3);
+                    }
                     _ => {}
                 }
             }
             let result = r.cleanup_persona_process();
             let s = state.lock().unwrap();
             match case {
-                "lease_changed" | "pid_reused" => {
+                "lease_changed" | "pid_reused" | "lease_changed_at_terminate" => {
                     assert!(result.is_err());
-                    assert_eq!(s.calls, ["launch"]);
+                    assert_eq!(s.calls, ["launch", "pin_without_window"]);
                     assert_eq!(r.persona_launched_process, attempt.process);
                 }
                 "exit_pending" => {
                     assert!(result.is_err());
-                    assert_eq!(s.calls, ["launch", "terminate", "wait_exit"]);
+                    assert_eq!(
+                        s.calls,
+                        ["launch", "pin_without_window", "terminate", "wait_exit"]
+                    );
                     assert_eq!(r.persona_launched_process, attempt.process);
                 }
                 _ => {
                     result.unwrap();
                     assert_eq!(r.persona_launched_process, None);
                     if case == "already_exited" {
-                        assert_eq!(s.calls, ["launch", "release"]);
+                        assert_eq!(s.calls, ["launch", "pin_without_window", "release"]);
                     } else {
-                        assert_eq!(s.calls, ["launch", "terminate", "wait_exit", "release"]);
+                        assert_eq!(
+                            s.calls,
+                            [
+                                "launch",
+                                "pin_without_window",
+                                "terminate",
+                                "wait_exit",
+                                "release"
+                            ]
+                        );
                     }
                     let receipt: Value = serde_json::from_str(
                         &fs::read_to_string(dir.path().join("persona-runtime-transitions.jsonl"))
@@ -679,26 +720,56 @@ mod tests {
             let s = state.lock().unwrap();
             if pin_rejected {
                 assert!(result.is_err());
-                assert_eq!(s.calls, ["launch", "pin_without_window"]);
+                assert_eq!(
+                    s.calls,
+                    ["launch", "pin_without_window", "pin_without_window"]
+                );
                 assert!(r.persona_launch_requested);
             } else {
                 result.unwrap();
                 assert!(!r.persona_launch_requested);
                 assert_eq!(r.persona_launched_process, None);
-                let expected = if dx11_error {
-                    vec!["launch", "terminate", "wait_exit", "release"]
-                } else {
-                    vec![
-                        "launch",
-                        "pin_without_window",
-                        "terminate",
-                        "wait_exit",
-                        "release",
-                    ]
-                };
+                let expected = vec![
+                    "launch",
+                    "pin_without_window",
+                    "terminate",
+                    "wait_exit",
+                    "release",
+                ];
                 assert_eq!(s.calls, expected);
             }
         }
+    }
+
+    #[test]
+    fn absent_launch_candidate_stays_unresolved_for_outer_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(Mutex::new(LaunchState {
+            no_process: true,
+            window_error: Some(ErrorKind::Interrupted),
+            ..Default::default()
+        }));
+        let mut r = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            dir.path().into(),
+            dir.path().into(),
+            dir.path().into(),
+            4318,
+            Box::new(LaunchBackend(Arc::clone(&state))),
+            Arc::new(SystemClock),
+        );
+        r.persona_runtime_restart = true;
+        let mut attempt = StartupAttempt::default();
+        assert!(r
+            .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+            .is_err());
+        let error = r.cleanup_persona_process().unwrap_err();
+        assert!(error.message.contains("outer live_chain cleanup required"));
+        assert!(r.persona_launch_requested && r.persona_launched_process.is_none());
+        assert_eq!(
+            state.lock().unwrap().calls,
+            ["launch", "pin_without_window", "pin_without_window"]
+        );
     }
 
     struct LostStateRead {

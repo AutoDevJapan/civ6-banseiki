@@ -244,11 +244,11 @@ pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
     let Some((pid, started)) = crate::restart::single_civ_process(0.0)? else {
         return Ok(None);
     };
-    if !floor.is_finite() || !started.is_finite() || started < floor {
-        return Err(Error::input(
-            "process predates this Steam launch or has invalid creation time",
-        ));
-    }
+    let observed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| Error::input(e.to_string()))?
+        .as_secs_f64();
+    super::validate_launch_binding(floor, observed, started)?;
     let game = GameProcess { pid, started };
     let handle = pinned(game, 0x1000)?;
     let raw = handle.0 as isize;

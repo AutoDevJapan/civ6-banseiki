@@ -2028,6 +2028,7 @@ impl Runner {
         let mut next_launch = 0.0;
         let mut last = "no Civ VI process yet".to_string();
         while self.clock.now() < deadline {
+            self.bind_persona_launch()?;
             self.backend.startup_cancel_check()?;
             if recovery {
                 self.backend.check_startup_lock()?;
@@ -2069,6 +2070,7 @@ impl Runner {
                 }
                 self.backend.launch()?;
                 startup.launch_requested = true;
+                self.bind_persona_launch()?;
                 attempts += 1;
                 next_launch = now + 45.0;
                 println!("Steam Civ VI launch attempt {attempts}");
@@ -2078,13 +2080,17 @@ impl Runner {
                 .wait_window(deadline.min(self.clock.now() + 5.0))
             {
                 Ok(hwnd) => {
+                    self.bind_persona_launch()?;
                     if pin_process && startup.launch_requested {
                         startup.process = self.backend.pin_startup_process(hwnd)?;
                         if self.persona_runtime_restart {
-                            self.persona_launched_process =
-                                Some(startup.process.ok_or_else(|| {
-                                    Error::input("persona launch did not pin its process")
-                                })?);
+                            if startup.process.is_none()
+                                || startup.process != self.persona_launched_process
+                            {
+                                return Err(Error::input(
+                                    "persona window differs from the bound launch process",
+                                ));
+                            }
                         }
                     }
                     self.backend.require_dx11(hwnd)?;
