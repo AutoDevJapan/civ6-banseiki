@@ -14,6 +14,94 @@ fn template() -> Value {
 }
 
 #[test]
+fn assignment_step_uses_shipped_void_api_once_then_waits_for_real_state() {
+    let scene = sp_runtime::build(&template()).unwrap();
+    let steps = scene["steps"].as_array().unwrap();
+    let at = steps
+        .iter()
+        .position(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("one normal assignment requested"))
+        })
+        .unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let view = std::fs::read_to_string(
+        root.join("poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua"),
+    )
+    .unwrap();
+    let begin = view.find("function JAC_AssignLeader(").unwrap();
+    let end = begin + view[begin..].find("function JAC_PromoteLeader(").unwrap();
+    let lua = Lua::new();
+    lua.load(r#"
+calls=0; allowed=true
+Active=function() return true end
+Get=function(_,key) if key=='OWNER' then return 0 else return 'GOVERNOR' end end
+Game={GetLocalPlayer=function() return 0 end}
+GameInfo={JAC_LeaderPersonas={LEADER_JAC_DATE_TANEMUNE={GovernorType='DATE'}},Governors={DATE={Hash=1006,Index=6}}}
+city={GetID=function() return 65536 end}
+CityManager={GetCity=function(owner,id) assert(owner==0 and id==65536); return city end}
+Players={[0]={GetGovernors=function() return {CanAssignGovernor=function(_,hash,c) assert(hash==1006 and c==city);return allowed end} end,
+GetCities=function() return {Members=function() local n=0;return function() n=n+1;if n==1 then return 1,city end end end} end}}
+PlayerOperations={ASSIGN_GOVERNOR=3,PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
+UI={RequestPlayerOperation=function(owner,operation,args) assert(owner==0 and operation==3 and args.governor==6 and args.owner==0 and args.city==65536);calls=calls+1 end}
+"#).exec().unwrap();
+    lua.load(&view[begin..end]).exec().unwrap();
+    let result: String = lua
+        .load(steps[at]["code"].as_str().unwrap())
+        .eval()
+        .unwrap();
+    assert_eq!(result, "one normal assignment requested");
+    lua.load("assert(calls==1);allowed=false").exec().unwrap();
+    assert!(lua
+        .load(steps[at]["code"].as_str().unwrap())
+        .exec()
+        .unwrap_err()
+        .to_string()
+        .contains("city not assignable"));
+    lua.load("assert(calls==1)").exec().unwrap();
+    assert_eq!(steps[at + 1]["action"], "wait_for");
+    assert!(steps[at + 1]["condition"]["code"]
+        .as_str()
+        .unwrap()
+        .contains("GetAssignedCity"));
+}
+
+#[test]
+fn generated_cli_file_exactly_matches_current_scenario_source() {
+    let output = std::env::temp_dir().join(format!(
+        "todo324-sp-runtime-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../civ6-autotest/scenarios/leader-persona-15km.json");
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let status = command
+        .arg("generate-sp-runtime")
+        .arg(input)
+        .arg(&output)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let actual = std::fs::read_to_string(&output).unwrap();
+    std::fs::remove_file(&output).unwrap();
+    let expected = serde_json::to_string_pretty(&sp_runtime::build(&template()).unwrap()).unwrap();
+    assert_eq!(
+        actual, expected,
+        "CLI scenario must match the current generator exactly"
+    );
+}
+
+#[test]
 fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     let scene = sp_runtime::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&scene).unwrap();
@@ -67,6 +155,21 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     );
     assert!(attach < turn && turn < saved);
     assert_eq!(steps[turn]["turns"], 1);
+    // The pre-turn audit must follow the official AI title grant, not merely
+    // repeat the fresh-start check before any title can be spent.
+    assert_eq!(steps[turn - 2]["state_name"], "GameCore_Tuner");
+    assert!(steps[turn - 2]["code"]
+        .as_str()
+        .unwrap()
+        .contains("AI has no usable official title"));
+    for position in [turn - 1, turn + 1] {
+        assert_eq!(steps[position]["state_name"], "InGame");
+        assert!(steps[position]["code"]
+            .as_str()
+            .unwrap()
+            .contains(sp_runtime::AI_ADMISSION));
+    }
+    assert_eq!(body.matches(sp_runtime::AI_ADMISSION).count(), 2);
     assert_eq!(steps[turn + 1]["state_name"], "InGame");
     assert!(steps[turn + 1]["code"]
         .as_str()
@@ -107,6 +210,7 @@ fn ai_world() -> Lua {
     let lua = Lua::new();
     lua.load(r#"
 badGovernor=false; badPerson=false; joined=false; aiCount=21
+admissionResult=false; admissionCalls={}; badOwner=7; badHash=109
 Game={GetProperty=function() return joined and 7 or nil end}
 local rows={}; for i=1,22 do rows[i]={LeaderType='L'..i,GovernorType='G'..i,PersonType='P'..i} end
 GameInfo={Governors={},GreatPersonIndividuals={},GreatPersonClasses={C={UnitType='U'}},Units={U={Index=99}},
@@ -116,7 +220,12 @@ for i=1,22 do GameInfo.Governors['G'..i]={Hash=100+i}; local p={GreatPersonIndiv
 PlayerManager={GetAliveMajors=function()
  local all={}; for i=1,aiCount do local owner=i
   all[#all+1]={IsHuman=function() return false end,GetID=function() return owner end,
-   GetGovernors=function() return {HasGovernor=function(_,hash) return badGovernor and owner==7 and hash==109 end} end,
+   GetGovernors=function() return {
+    HasGovernor=function(_,hash) return badGovernor and owner==7 and hash==109 end,
+    CanEverAppointGovernor=function(_,hash)
+     local key=owner..'/'..hash; admissionCalls[key]=(admissionCalls[key] or 0)+1
+     if owner==badOwner and hash==badHash then return admissionResult end; return false
+    end} end,
    GetUnits=function() return {Members=function()
     local n=0; return function() n=n+1; if n==1 then return 1,{GetType=function() return 1 end,GetGreatPerson=function() error('ordinary unit GP read') end}
      elseif n==2 and badPerson and owner==7 then return 2,{GetType=function() return 99 end,GetGreatPerson=function() return {GetIndividual=function() return 9 end} end} end end
@@ -125,6 +234,46 @@ PlayerManager={GetAliveMajors=function()
 end}
 "#).exec().unwrap();
     lua
+}
+
+#[test]
+fn ai_admission_checks_all_462_pairs_before_and_after_turn_and_rejects_permission_only_faults() {
+    let lua = ai_world();
+    for phase in 1..=2 {
+        lua.load(sp_runtime::AI_ADMISSION).exec().unwrap();
+        lua.load(format!("local n=0; for owner=1,21 do for hash=101,122 do assert(admissionCalls[owner..'/'..hash]=={phase}); n=n+1 end end; assert(n==462)")).exec().unwrap();
+    }
+    // Native objects remain absent: these faults would pass both old audits.
+    for result in ["true", "nil", "0", "'false'"] {
+        for (owner, hash) in [(1, 101), (7, 109), (21, 122)] {
+            let lua = ai_world();
+            lua.load(sp_runtime::AI_ADMISSION).exec().unwrap();
+            lua.load(format!(
+                "badOwner={owner}; badHash={hash}; admissionResult={result}"
+            ))
+            .exec()
+            .unwrap();
+            lua.load(sp_runtime::AI_GOVERNORS).exec().unwrap();
+            lua.load(sp_runtime::AI_GREAT_PEOPLE).exec().unwrap();
+            let err = lua
+                .load(sp_runtime::AI_ADMISSION)
+                .exec()
+                .unwrap_err()
+                .to_string();
+            assert!(
+                err.contains("unjoined AI appointment permission opened"),
+                "{err}"
+            );
+        }
+    }
+    for fault in ["aiCount=20", "joined=true"] {
+        let lua = ai_world();
+        lua.load(fault).exec().unwrap();
+        assert!(
+            lua.load(sp_runtime::AI_ADMISSION).exec().is_err(),
+            "{fault}"
+        );
+    }
 }
 
 #[test]

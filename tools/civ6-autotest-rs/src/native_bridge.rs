@@ -3,6 +3,31 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+pub fn verify_override_hash(expected: Option<&str>, actual: &str) -> Result<()> {
+    if actual.len() != 64
+        || !actual.bytes().all(|b| b.is_ascii_hexdigit())
+        || expected != Some(actual)
+    {
+        return Err(Error::input(
+            "native bridge override does not match its frozen hashes",
+        ));
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod asset_contract_tests {
+    #[test]
+    fn override_requires_both_an_explicit_and_matching_sha() {
+        let sha = "a".repeat(64);
+        super::verify_override_hash(Some(&sha), &sha).unwrap();
+        for expected in [None, Some(""), Some("abc")] {
+            assert!(super::verify_override_hash(expected, &sha).is_err());
+        }
+        assert!(super::verify_override_hash(Some(&"b".repeat(64)), &sha).is_err());
+        assert!(super::verify_override_hash(Some(""), "").is_err());
+    }
+}
+
 /// Installation/observation receipt only. It does not establish appointment,
 /// payment, load safety or any successful gameplay decision.
 pub fn validate_runtime_receipt(text: &str, pid: u32, created: u64) -> Result<()> {
@@ -896,6 +921,7 @@ mod platform {
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
+        _binary_pins: (std::fs::File, std::fs::File),
     }
 
     impl Session {
@@ -950,7 +976,17 @@ mod platform {
                 ));
             }
             let (created, target) = pinned_created(pid, started)?;
-            let executable = std::env::current_exe()?.with_file_name("civ6-native-bridge.exe");
+            let runner = std::env::current_exe()?;
+            let executable =
+                if let Some(directory) = std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY") {
+                    let directory = PathBuf::from(directory);
+                    if !directory.is_absolute() {
+                        return Err(Error::input("native bridge directory must be absolute"));
+                    }
+                    directory.join("civ6-native-bridge.exe")
+                } else {
+                    runner.with_file_name("civ6-native-bridge.exe")
+                };
             let dll = executable.with_file_name("civ6_native_bridge_rs.dll");
             if !executable.is_file() || !dll.is_file() {
                 return Err(Error::input(
@@ -958,9 +994,36 @@ mod platform {
                 ));
             }
             let artifact = output.join(format!("{name}.jsonl"));
+            use std::os::windows::fs::OpenOptionsExt;
+            let controller_pin = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&executable)?;
+            let dll_pin = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&dll)?;
+            let controller_sha = format!("{:x}", Sha256::digest(std::fs::read(&executable)?));
+            let dll_sha = format!("{:x}", Sha256::digest(std::fs::read(&dll)?));
+            if std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY").is_some() {
+                for (key, actual) in [
+                    ("CIV6_NATIVE_BRIDGE_CONTROLLER_SHA256", &controller_sha),
+                    ("CIV6_NATIVE_BRIDGE_DLL_SHA256", &dll_sha),
+                ] {
+                    verify_override_hash(std::env::var(key).ok().as_deref(), actual)?;
+                }
+            }
             if artifact.exists() {
                 return Err(Error::scenario("native bridge artifact already exists"));
             }
+            let mut manifest = std::fs::File::create_new(artifact.with_extension("assets.json"))?;
+            serde_json::to_writer_pretty(
+                &mut manifest,
+                &serde_json::json!({"runner":runner,
+                "controller":executable,"controller_sha256":controller_sha,"dll":dll,"dll_sha256":dll_sha,
+                "process_pid":pid,"process_created_filetime":created,"product_acceptance":false}),
+            )?;
+            manifest.flush()?;
             let mut child = Command::new(executable)
                 .args([
                     "--pid",
@@ -994,6 +1057,7 @@ mod platform {
                     "CIV6_AUTOTEST_CONTROLLER_PID",
                     std::process::id().to_string(),
                 )
+                .env("CIV6_AUTOTEST_RUNNER_PATH", &runner)
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
             let input = child.stdin.take();
@@ -1042,6 +1106,7 @@ mod platform {
                 mode,
                 assignment_subject: None,
                 resident_runtime,
+                _binary_pins: (controller_pin, dll_pin),
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -1270,6 +1335,10 @@ mod platform {
                 mode: BridgeMode::ProductionAdmission,
                 assignment_subject: None,
                 resident_runtime: true,
+                _binary_pins: (
+                    std::fs::File::open(&artifact).unwrap(),
+                    std::fs::File::open(&artifact).unwrap(),
+                ),
             };
             let outcome = session.stop_inner();
             session.finished = true;
