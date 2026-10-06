@@ -13,7 +13,7 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
     assert_eq!(inventory["live_verified"], false);
     assert_eq!(inventory["oath_count"], 66);
     assert_eq!(inventory["house_count"], 22);
-    assert_eq!(inventory["max_turns"], 12);
+    assert_eq!(inventory["max_turns"], 16);
     let modinfo =
         std::fs::read_to_string(root.join("poc/JAC_PoC_SengokuTrees/JAC_PoC_SengokuTrees.modinfo"))
             .expect("MOD UI contexts");
@@ -61,7 +61,7 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
                 .filter(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,"))
                 .count();
             assert_eq!(data["finite_turns"], turns);
-            assert!(turns <= 12, "{path}: unbounded turns {turns}");
+            assert!(turns <= 16, "{path}: unbounded turns {turns}");
             for pair in steps.windows(2).filter(|pair| {
                 pair[0]["code"].as_str().is_some_and(|code| {
                     code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,")

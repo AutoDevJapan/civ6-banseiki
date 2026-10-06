@@ -57,7 +57,7 @@ fn meter_outputs() -> Outputs {
         }
     }
     sql.push_str("INSERT INTO Requirements (RequirementId,RequirementType) VALUES ('JAC_TODO134_HEADROOM_REQ','REQUIREMENT_PLOT_PROPERTY_MATCHES');\nINSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_REQ','PropertyName','JAC_TODO134_HEADROOM_ON'),('JAC_TODO134_HEADROOM_REQ','PropertyMinimum','1');\nINSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('JAC_TODO134_HEADROOM_SET','REQUIREMENTSET_TEST_ALL');\nINSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_HEADROOM_SET','JAC_TODO134_HEADROOM_REQ');\nINSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE','JAC_TODO134_HEADROOM_SET'),('JAC_TODO134_HEADROOM_GROWTH','MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH','JAC_TODO134_HEADROOM_SET');\nINSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_HEADROOM_PRODUCTION','YieldType','YIELD_PRODUCTION'),('JAC_TODO134_HEADROOM_PRODUCTION','Amount','4096'),('JAC_TODO134_HEADROOM_GROWTH','Amount','-1000');\n");
-    let headroom_sql = "-- Opt-in diagnostic headroom; not normal costs or economic balance.\nUPDATE Units SET Cost=32768 WHERE UnitType IN ('UNIT_SPEARMAN','UNIT_BUILDER','UNIT_GALLEY');\nUPDATE Buildings SET Cost=32768 WHERE BuildingType IN ('BUILDING_WALLS','BUILDING_CASTLE','BUILDING_STAR_FORT');\n".to_owned();
+    let headroom_sql = "-- Opt-in diagnostic headroom; not normal costs or economic balance.\nUPDATE Units SET Cost=32768 WHERE UnitType IN ('UNIT_SPEARMAN','UNIT_BUILDER','UNIT_GALLEY');\nUPDATE Buildings SET Cost=32768 WHERE BuildingType IN ('BUILDING_WALLS','BUILDING_CASTLE','BUILDING_STAR_FORT','BUILDING_MONUMENT');\n".to_owned();
     let headroom_config=r#"<?xml version="1.0" encoding="utf-8"?>
 <GameInfo><Parameters><Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathQueueHeadroom" Name="LOC_JAC_OATH_QUEUE_HEADROOM" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_QUEUE_HEADROOM" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters></GameInfo>
 "#.to_owned();
@@ -756,11 +756,7 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
                 production_steps(&mut steps, case, effect, target, effect.amount);
             }
             // A real, unrelated build measures leakage independently of city production.
-            let control = if effect.kind == "naval" {
-                "UNIT_SPEARMAN"
-            } else {
-                "UNIT_BUILDER"
-            };
+            let control = production_control(&effect.kind);
             production_steps(&mut steps, case, effect, control, 0);
         }
     }
@@ -800,6 +796,14 @@ fn production_targets(kind: &str) -> &'static [&'static str] {
     }
 }
 
+fn production_control(kind: &str) -> &'static str {
+    match kind {
+        "walls" => "BUILDING_MONUMENT",
+        "naval" => "UNIT_SPEARMAN",
+        _ => "UNIT_BUILDER",
+    }
+}
+
 fn production_expectations(case: &Case) -> Vec<(String, i64)> {
     let mut targets = Vec::new();
     for effect in &case.effects {
@@ -807,15 +811,7 @@ fn production_expectations(case: &Case) -> Vec<(String, i64)> {
             targets.push((target.to_string(), effect.amount));
         }
         if !production_targets(&effect.kind).is_empty() {
-            targets.push((
-                if effect.kind == "naval" {
-                    "UNIT_SPEARMAN"
-                } else {
-                    "UNIT_BUILDER"
-                }
-                .to_string(),
-                0,
-            ));
+            targets.push((production_control(&effect.kind).to_string(), 0));
         }
     }
     targets
@@ -911,6 +907,37 @@ end
 return 'production turn '..__PHASE__..' oath flag='..value
 "#;
 
+const PRODUCTION_CORE: &str = r#"
+local target=__TARGET__; local phase=__PHASE__; local stage=__STAGE__; local sample=__SAMPLE__
+assert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')
+local rows={}
+for _,city in Players[0]:GetCities():Members() do
+ local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')
+ rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}
+end
+assert(#rows>0,'core production cities missing')
+Game:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})
+return 'core production snapshot '..target..'/'..phase..'/'..stage
+"#;
+
+const PRODUCTION_CORE_READER: &str = r#"
+local function core_production(target,phase,stage,sample,t)
+ local data=assert(Game:GetProperty('JAC_TODO134_QUEUE_CORE'),'core production snapshot missing')
+ assert(data.target==target and data.phase==phase and data.stage==stage and data.sample==sample,'core production snapshot identity changed')
+ assert(data.turn==Game.GetCurrentGameTurn(),'core and UI production turns differ')
+ local found=nil
+ for _,row in ipairs(assert(data.cities)) do
+  if row.city==t.City then
+   assert(not found,'duplicate core production city')
+   assert(row.plot==t.Plot and row.owner==0,'core and UI production city differ')
+   found=number(row.production,'core city production')
+  end
+ end
+ return assert(found,'selected city missing from core production snapshot')
+end
+"#;
+
 const PRODUCTION_BEFORE: &str = r#"
 local target=__TARGET__; local phase=__PHASE__; local sample=__SAMPLE__
 local t=assert(assert(JAC_OATH_AUDIT).current,'actual build request missing')
@@ -923,7 +950,8 @@ assert(q:GetCurrentProductionTypeHash()==def.Hash,'target is not actually being 
 assert(Map.GetPlotByIndex(t.Plot):GetProperty(__OATH__..'_ON')==__FLAG__,'city diagnostic flag differs from requested phase')
 local progress=t.Building and q:GetBuildingProgress(def.Index) or q:GetUnitProgress(def.Index)
 local cost=t.Building and q:GetBuildingCost(def.Index) or q:GetUnitCost(def.Index)
-local production=city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index)
+local ui_production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'UI city production')
+local production=core_production(target,phase,'before',sample,t)
 assert(production>4000 and cost-progress>production*1.5,'queue has insufficient reporting precision or completion headroom')
 assert(type(progress)=='number' and type(cost)=='number' and type(production)=='number' and progress==progress and cost==cost and production==production and cost<math.huge and production<math.huge and cost>progress and production>0,'no finite numeric active production')
 JAC_OATH_AUDIT=assert(JAC_OATH_AUDIT,'UI audit context was lost')
@@ -932,8 +960,8 @@ JAC_OATH_AUDIT.production[target]=JAC_OATH_AUDIT.production[target] or {}
 local rows=JAC_OATH_AUDIT.production[target]
 rows[phase]=rows[phase] or {samples={}}
 assert(rows[phase].samples[sample]==nil,'do not overwrite a production observation')
-rows[phase].samples[sample]={before=progress,cost=cost,city_yield=production,city=t.City,plot=t.Plot,turn=Game.GetCurrentGameTurn()}
-return string.format('{"target":"%s","phase":"%s","sample":%d,"city":%d,"progress_before":%.9f,"cost":%.9f,"city_production":%.9f}',target,phase,sample,t.City,progress,cost,production)
+rows[phase].samples[sample]={before=progress,cost=cost,city_yield=production,ui_city_yield=ui_production,city=t.City,plot=t.Plot,turn=Game.GetCurrentGameTurn()}
+return string.format('{"target":"%s","phase":"%s","sample":%d,"city":%d,"progress_before":%.9f,"cost":%.9f,"core_city_production":%.9f,"ui_city_production":%.9f}',target,phase,sample,t.City,progress,cost,production,ui_production)
 "#;
 
 const PRODUCTION_AFTER: &str = r#"
@@ -954,8 +982,9 @@ local cost=number(t.Building and q:GetBuildingCost(def.Index) or q:GetUnitCost(d
 assert(math.abs(cost-r.cost)<0.00002,'production cost changed during one-turn observation')
 assert(type(progress)=='number' and progress>r.before and progress<r.cost,'actual queue progress did not advance without completion')
 r.after=progress; r.delta=progress-r.before
-r.city_yield_after=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'end-of-turn city production')
-return string.format('{"target":"%s","phase":"%s","sample":%d,"city":%d,"progress_before":%.9f,"progress_after":%.9f,"observed_delta":%.9f,"city_production_before":%.9f,"city_production_after":%.9f}',target,phase,sample,t.City,r.before,progress,r.delta,r.city_yield,r.city_yield_after)
+r.city_yield_after=core_production(target,phase,'after',sample,t)
+r.ui_city_yield_after=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'end-of-turn UI production')
+return string.format('{"target":"%s","phase":"%s","sample":%d,"city":%d,"progress_before":%.9f,"progress_after":%.9f,"observed_delta":%.9f,"core_city_production_before":%.9f,"core_city_production_after":%.9f,"ui_city_production_before":%.9f,"ui_city_production_after":%.9f}',target,phase,sample,t.City,r.before,progress,r.delta,r.city_yield,r.city_yield_after,r.ui_city_yield,r.ui_city_yield_after)
 "#;
 
 const PRODUCTION_END_TURN: &str = r#"
@@ -975,6 +1004,9 @@ local target=__TARGET__; local amount=__AMOUNT__
 local t=assert(assert(JAC_OATH_AUDIT).current)
 assert(t.Target==target,'production target changed')
 local rows=assert(assert(JAC_OATH_AUDIT).production[target])
+local warmup=assert(assert(rows.warmup).samples[1],'non-measurement conditioning turn missing')
+number(warmup.turn,'conditioning turn'); number(warmup.before,'conditioning progress before'); number(warmup.after,'conditioning progress after'); number(warmup.cost,'conditioning cost')
+assert(warmup.end_requested==true and warmup.after>warmup.before and warmup.after<warmup.cost,'conditioning turn did not advance without completion')
 local previous=nil; local cost=nil; local city=nil; local plot=nil; local stable=true; local readings={}
 local function summarize(name)
  local samples=assert(assert(rows[name]).samples,'phase samples missing')
@@ -984,11 +1016,14 @@ local function summarize(name)
   number(r.before,'sample before'); number(r.after,'sample after'); number(r.delta,'sample delta')
   readings[#readings+1]=r.before; readings[#readings+1]=r.after
   number(r.city_yield,'sample production before'); number(r.city_yield_after,'sample production after')
+  number(r.ui_city_yield,'sample UI production before'); number(r.ui_city_yield_after,'sample UI production after')
   assert(r.delta>0 and r.city_yield>0 and math.abs(r.after-r.before-r.delta)<0.00002,'invalid actual progress sample')
-  if previous then assert(r.turn==previous.turn+1 and math.abs(r.before-previous.after)<0.00002,'production samples are not continuous consecutive turns') end
+  if previous then assert(r.turn==previous.turn+1 and math.abs(r.before-previous.after)<0.00002,'production samples are not continuous consecutive turns')
+  else assert(r.turn==warmup.turn+1 and r.city==warmup.city and r.plot==warmup.plot and r.cost==warmup.cost and math.abs(r.before-warmup.after)<0.00002,'measurement is not continuous from conditioning turn') end
   if city then assert(r.city==city and r.plot==plot,'production source city changed') else city=r.city; plot=r.plot end
   if cost then assert(math.abs(r.cost-cost)<0.00002,'queue cost changed between samples') else cost=number(r.cost,'sample cost') end
   if math.abs(r.city_yield_after-r.city_yield)>0.00002 then stable=false end
+  if math.abs(r.ui_city_yield-r.city_yield)>0.00002 or math.abs(r.ui_city_yield_after-r.city_yield_after)>0.00002 then stable=false end
   delta=delta+r.delta; yield=yield+r.city_yield; previous=r
  end
  return {delta=delta,city_yield=yield}
@@ -1035,7 +1070,7 @@ fn production_code(
     phase: &str,
     flag: i64,
 ) -> String {
-    substitute(
+    let code = substitute(
         template,
         case,
         &[
@@ -1046,7 +1081,12 @@ fn production_code(
             ("__FLAG__", &flag.to_string()),
             ("__SAMPLES_PER_PHASE__", &PRODUCTION_SAMPLES.to_string()),
         ],
-    )
+    );
+    if template == PRODUCTION_BEFORE || template == PRODUCTION_AFTER {
+        format!("{PRODUCTION_CORE_READER}\n{code}")
+    } else {
+        code
+    }
 }
 
 fn production_steps(
@@ -1070,21 +1110,21 @@ fn production_steps(
         production_code(PRODUCTION_REQUEST, case, effect, target, "", 1),
     ));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":format!("local t=JAC_OATH_AUDIT and JAC_OATH_AUDIT.current; local c=t and Players[0]:GetCities():FindID(t.City); return c and c:GetBuildQueue():GetCurrentProductionTypeHash()==GameInfo.{}[{}].Hash",if target.starts_with("BUILDING_") {"Buildings"} else {"Units"},lua_string(target))}}));
-    for (phase, flag) in [("off_first", 0), ("on", 1), ("off_last", 0)] {
+    for (phase, flag) in [("warmup", 0), ("off_first", 0), ("on", 1), ("off_last", 0)] {
         steps.push(ui(
             "GameCore_Tuner",
             production_code(PRODUCTION_TOGGLE, case, effect, target, phase, flag)
-                .replace("__PROBE_FINE__", "1")
-                .replace(
-                    "__PROBE_SHIFT__",
-                    if phase == "off_first" { "0" } else { "1" },
-                )
-                .replace(
-                    "__PROBE_SECOND__",
-                    if phase == "off_last" { "1" } else { "0" },
-                ),
+                .replace("__PROBE_FINE__", "0")
+                .replace("__PROBE_SHIFT__", "0")
+                .replace("__PROBE_SECOND__", "0"),
         ));
         for sample in 1..=PRODUCTION_SAMPLES {
+            steps.push(ui(
+                "GameCore_Tuner",
+                production_code(PRODUCTION_CORE, case, effect, target, phase, flag)
+                    .replace("__STAGE__", "'before'")
+                    .replace("__SAMPLE__", &sample.to_string()),
+            ));
             for template in [PRODUCTION_BEFORE, PRODUCTION_END_TURN] {
                 steps.push(ui(
                     "InGame",
@@ -1093,6 +1133,12 @@ fn production_steps(
                 ));
             }
             steps.push(json!({"action":"wait_for","timeout":180,"close_diplomacy":true,"condition":{"type":"lua","state_name":"InGame","code":format!("local a=JAC_OATH_AUDIT; local r=a and a.production[{}][{}].samples[{}]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()",lua_string(target),lua_string(phase),sample)}}));
+            steps.push(ui(
+                "GameCore_Tuner",
+                production_code(PRODUCTION_CORE, case, effect, target, phase, flag)
+                    .replace("__STAGE__", "'after'")
+                    .replace("__SAMPLE__", &sample.to_string()),
+            ));
             steps.push(ui(
                 "InGame",
                 production_code(PRODUCTION_AFTER, case, effect, target, phase, flag)
@@ -1135,7 +1181,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
                 );
             }
             if !production_targets(&effect.kind).is_empty() {
-                targets.push(json!({"target":if effect.kind=="naval" {"UNIT_SPEARMAN"} else {"UNIT_BUILDER"},"expected_percent":0,"role":"non_target_control"}));
+                targets.push(json!({"target":production_control(&effect.kind),"expected_percent":0,"role":"non_target_control"}));
             }
         }
         inventory.push(json!({"house":case.house,"civilization":case.civ,"oath":case.oath,"scenario":path,"turns":turns,
@@ -1145,7 +1191,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
             format!("{}\n", serde_json::to_string_pretty(&scenario)?),
         );
     }
-    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":12,
+    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"oath_count":66,"house_count":22,"max_turns":16,
         "quantity_acceptance":"native_100_percent_yield_reference_and_observed_unmodified_production_basis; unresolved quantities never pass","diagnostic_mod":METER_ID,"scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
@@ -1235,18 +1281,18 @@ mod tests {
             assert!(!all_codes.contains("__TARGET__"));
             let turns = bounded_turns(steps);
             let expected = if case.effects.iter().any(|e| e.kind == "walls") {
-                12
+                16
             } else if case
                 .effects
                 .iter()
                 .any(|e| e.kind == "military" || e.kind == "naval")
             {
-                6
+                8
             } else {
                 0
             };
             assert_eq!(turns, expected, "{}", case.oath);
-            assert!(turns <= 12);
+            assert!(turns <= 16);
             assert!(steps.iter().all(|s| s["action"] != "autoplay"));
             assert!(steps.last().context("last step")?["code"]
                 .as_str()

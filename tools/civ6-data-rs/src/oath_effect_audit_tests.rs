@@ -64,17 +64,17 @@ fn oda() -> Result<Case> {
 const PRODUCTION_OBSERVATIONS: &str = r#"
 JAC_OATH_AUDIT={current={Target='UNIT_SPEARMAN',City=3},production={}}
 function audit_rows(off,on,last,first_yield,on_yield,last_yield)
- local turn=0; local progress=0
+ local turn=0; local progress=10
  local function phase(delta,yield)
   local samples={}
   for i=1,1 do
    turn=turn+1; local before=progress; progress=progress+delta
-   samples[i]={city=3,plot=22,turn=turn,before=before,after=progress,delta=delta,city_yield=yield,city_yield_after=yield,cost=1000}
+   samples[i]={city=3,plot=22,turn=turn,before=before,after=progress,delta=delta,city_yield=yield,city_yield_after=yield,ui_city_yield=yield,ui_city_yield_after=yield,cost=1000}
   end
   return {samples=samples}
  end
  local first=phase(off,first_yield); local active=phase(on,on_yield); local final=phase(last,last_yield)
- return {off_first=first,on=active,off_last=final}
+ return {warmup={samples={{city=3,plot=22,turn=0,before=0,after=10,cost=1000,end_requested=true}}},off_first=first,on=active,off_last=final}
 end
 JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10.01,13.9035,11.02,10.01,12.09,11.02)
 "#;
@@ -101,6 +101,119 @@ fn actual_progress_verifies_fifteen_percent_separately_from_city_yield() -> Resu
             "accepted wrong on-progress {delta}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn queue_inputs_stay_fixed_and_conditioning_precedes_every_measured_target() -> Result<()> {
+    let repo = Repository::checked_in();
+    let files = outputs(&repo)?;
+    for case in cases(&repo)? {
+        let scene: Value = serde_json::from_str(
+            &files[&PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()))],
+        )?;
+        let vm = Lua::new();
+        vm.load(format!(r#"
+properties={{}}; current_oath={}; ledger={{reign=1,houses={{p0={{oathChosen=1,civ={},oaths={{}}}}}}}}
+Game={{GetProperty=function(_,key) if key=='JAC_AGES_LEDGER' then return ledger else return {{Target=current_target,Oath=current_oath}} end end,SetProperty=function()end}}
+local city={{GetOwner=function()return 0 end,GetX=function()return 1 end,GetY=function()return 1 end}}
+Players={{[0]={{GetCities=function()return {{Members=function() local done=false; return function() if not done then done=true; return 1,city end end end}} end}}}}
+local plot={{GetOwner=function()return 0 end,SetProperty=function(_,key,value)properties[key]=value end}}
+Map={{GetPlot=function()return plot end}}
+"#,lua_string(&case.oath),lua_string(&case.civ))).exec()?;
+        let mut counts = std::collections::BTreeMap::<String, usize>::new();
+        for step in scene["steps"].as_array().context("steps")? {
+            let Some(code) = step["code"].as_str() else {
+                continue;
+            };
+            if !code.contains("return 'production turn '") {
+                continue;
+            }
+            let target = code
+                .split("local target=")
+                .nth(1)
+                .context("target")?
+                .split(';')
+                .next()
+                .context("target delimiter")?;
+            vm.load(format!("current_target={target}")).exec()?;
+            vm.load(code).exec()?;
+            let _: bool=vm.load("assert(properties.JAC_TODO134_FINE_ON==0 and properties.JAC_TODO134_SHIFT_ON==0 and properties.JAC_TODO134_SHIFT_TWO_ON==0); assert(properties.JAC_TODO134_HEADROOM_ON==1); return true").eval()?;
+            let n = counts.entry(target.to_owned()).or_default();
+            if *n == 0 {
+                assert!(
+                    code.contains("'production turn '..\"warmup\""),
+                    "first phase must condition queue: {}",
+                    case.oath
+                )
+            }
+            *n += 1;
+        }
+        assert!(
+            counts.values().all(|n| *n == 5),
+            "conditioning, off/on/off and restore required"
+        );
+        assert_eq!(counts.len(), production_expectations(&case).len());
+        if case.effects.iter().any(|e| e.kind == "walls") {
+            assert!(production_expectations(&case).contains(&("BUILDING_MONUMENT".into(), 0)));
+            assert!(!production_expectations(&case)
+                .iter()
+                .any(|(t, _)| t == "UNIT_BUILDER"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn generated_core_snapshot_rejects_missing_stale_foreign_and_nonfinite_observations() -> Result<()>
+{
+    let code = generated_code(&oda()?, "return 'core production snapshot '")?;
+    let vm = Lua::new();
+    vm.load(r#"
+props={JAC_OATH_PRODUCTION_TEST={Target='UNIT_SPEARMAN'}}; ui_turn=7
+Game={GetCurrentGameTurn=function()return ui_turn end,GetProperty=function(_,key)return props[key] end,SetProperty=function(_,key,value)props[key]=value end}
+GameInfo={Yields={YIELD_PRODUCTION={Index=0}}}
+local cities={}; for i=1,2 do local id=i==1 and 3 or 5; local x=i; cities[i]={GetID=function()return id end,GetOwner=function()return 0 end,GetX=function()return x end,GetY=function()return 1 end,GetYield=function()return 4096.125+x-1 end} end
+Players={[0]={GetCities=function()return {Members=function() local i=0; return function() i=i+1; if cities[i] then return i,cities[i] end end end} end}}
+Map={GetPlot=function(x)return {GetOwner=function()return 0 end,GetIndex=function()return x==1 and 22 or 33 end} end}
+"#).exec()?;
+    let reader=vm.load(format!("{LUA_HELPERS}\n{PRODUCTION_CORE_READER}\nreturn function() return core_production('UNIT_SPEARMAN','warmup','before',1,{{City=3,Plot=22}}) end")).eval::<mlua::Function>()?;
+    vm.load(&code).exec()?;
+    assert_eq!(reader.call::<f64>(())?, 4096.125);
+    for mutation in [
+        "props.JAC_TODO134_QUEUE_CORE=nil",
+        "props.JAC_TODO134_QUEUE_CORE.turn=6",
+        "props.JAC_TODO134_QUEUE_CORE.stage='after'",
+        "props.JAC_TODO134_QUEUE_CORE.target='UNIT_BUILDER'",
+        "props.JAC_TODO134_QUEUE_CORE.cities[1].owner=1",
+        "props.JAC_TODO134_QUEUE_CORE.cities[1].plot=33",
+        "props.JAC_TODO134_QUEUE_CORE.cities[1].production='4096.125'",
+        "props.JAC_TODO134_QUEUE_CORE.cities[1].production=0/0",
+        "props.JAC_TODO134_QUEUE_CORE.cities[2]=props.JAC_TODO134_QUEUE_CORE.cities[1]",
+    ] {
+        vm.load(&code).exec()?;
+        vm.load(mutation).exec()?;
+        assert!(reader.call::<f64>(()).is_err(), "accepted {mutation}");
+    }
+    Ok(())
+}
+
+#[test]
+fn absent_conditioning_and_core_ui_disagreement_never_prove_production() -> Result<()> {
+    let code = generated_code(&oda()?, "local target=\"UNIT_SPEARMAN\"; local amount=15")?;
+    let vm = Lua::new();
+    vm.load(PRODUCTION_OBSERVATIONS).exec()?;
+    vm.load("JAC_OATH_AUDIT.production.UNIT_SPEARMAN.warmup=nil")
+        .exec()?;
+    assert!(decode(&vm, &code).is_err());
+    vm.load(PRODUCTION_OBSERVATIONS).exec()?;
+    vm.load("JAC_OATH_AUDIT.production.UNIT_SPEARMAN.off_first.samples[1].ui_city_yield=999")
+        .exec()?;
+    assert_eq!(decode(&vm, &code)?["quantity_verified"], false);
+    vm.load(PRODUCTION_OBSERVATIONS).exec()?;
+    vm.load("JAC_OATH_AUDIT.production.UNIT_SPEARMAN.warmup.samples[1].turn='0'")
+        .exec()?;
+    assert!(decode(&vm, &code).is_err());
     Ok(())
 }
 
@@ -164,7 +277,8 @@ fn generated_native_end_turn_is_forced_and_is_never_requested_twice() -> Result<
     lua.load(PRODUCTION_OBSERVATIONS).exec()?;
     lua.load(r#"
 local calls=0
-Game={GetCurrentGameTurn=function() return 1 end}
+JAC_OATH_AUDIT.production.UNIT_SPEARMAN.warmup.samples[1].end_requested=nil
+Game={GetCurrentGameTurn=function() return 0 end}
 Players={[0]={IsTurnActive=function() return true end}}
 ActionTypes={ACTION_ENDTURN=9}
 UI={RequestAction=function(action,params) assert(action==9 and params.REASON=='UserForced'); calls=calls+1 end}
@@ -479,7 +593,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     ] {
         assert_eq!(row.attribute(mode), Some("0"));
     }
-    db.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY,Cost INTEGER); CREATE TABLE Buildings(BuildingType TEXT PRIMARY KEY,Cost INTEGER); INSERT INTO Units VALUES('UNIT_SPEARMAN',65),('UNIT_BUILDER',50),('UNIT_GALLEY',65),('UNIT_WARRIOR',40); INSERT INTO Buildings VALUES('BUILDING_WALLS',80),('BUILDING_CASTLE',100),('BUILDING_STAR_FORT',300),('BUILDING_MONUMENT',60);")?;
+    db.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY,Cost INTEGER); CREATE TABLE Buildings(BuildingType TEXT PRIMARY KEY,Cost INTEGER); INSERT INTO Units VALUES('UNIT_SPEARMAN',65),('UNIT_BUILDER',50),('UNIT_GALLEY',65),('UNIT_WARRIOR',40); INSERT INTO Buildings VALUES('BUILDING_WALLS',80),('BUILDING_CASTLE',100),('BUILDING_STAR_FORT',300),('BUILDING_MONUMENT',60),('BUILDING_GRANARY',65);")?;
     db.execute_batch(headroom)?;
     for unit in ["UNIT_SPEARMAN", "UNIT_BUILDER", "UNIT_GALLEY"] {
         assert_eq!(
@@ -488,7 +602,12 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
             32768
         );
     }
-    for building in ["BUILDING_WALLS", "BUILDING_CASTLE", "BUILDING_STAR_FORT"] {
+    for building in [
+        "BUILDING_WALLS",
+        "BUILDING_CASTLE",
+        "BUILDING_STAR_FORT",
+        "BUILDING_MONUMENT",
+    ] {
         assert_eq!(
             db.query_row(
                 "SELECT Cost FROM Buildings WHERE BuildingType=?",
@@ -516,11 +635,11 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     );
     assert_eq!(
         db.query_row(
-            "SELECT Cost FROM Buildings WHERE BuildingType='BUILDING_MONUMENT'",
+            "SELECT Cost FROM Buildings WHERE BuildingType='BUILDING_GRANARY'",
             [],
             |r| r.get::<_, i64>(0)
         )?,
-        60
+        65
     );
     Ok(())
 }
