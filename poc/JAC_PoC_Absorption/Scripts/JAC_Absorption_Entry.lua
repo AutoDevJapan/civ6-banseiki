@@ -4,6 +4,7 @@ if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
 include("JAC_Absorption_Flow")
 include("JAC_Absorption_Admission")
+include("JAC_Absorption_Product")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 if GameInfo.JAC_RP_Religions then
   JAC_RP_AdapterInclude = true

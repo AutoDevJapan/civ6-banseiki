@@ -272,7 +272,9 @@ local function Inventory(plan)
     Portrait = "ICON_" .. PlayerConfigurations[plan.From]:GetLeaderTypeName(),
     AllowedActions = R.Copy(CHOICES.GREAT_PERSON),
     Source = { ID = leaderID, Kind = "GREAT_PERSON", Owner = plan.From,
-      Loyalty = 50 }, Leader = true,
+      Loyalty = 50, Personality = plan.LeaderProfile and plan.LeaderProfile.Personality,
+      Trait = plan.LeaderProfile and plan.LeaderProfile.Trait,
+      CountryID = plan.LeaderProfile and plan.LeaderProfile.CountryID }, Leader = true,
   }
   table.sort(entries, function(a, b) return tostring(a.ID) < tostring(b.ID) end)
   return entries, roster

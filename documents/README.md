@@ -26,6 +26,8 @@
 | [`spec/data/sengoku-reigns.json`](spec/data/sengoku-reigns.json) | 戦国パックの改元の表（弘治から令和までの史実の元号の年月と ja・en・ru の名前、令和の100年後の遅代）。`tools/civ6-data-rs/src/reigns.rs` が PoC の表と文を作る |
 | [`research/sengoku-events.md`](research/sengoku-events.md) | 戦国パックの史実イベント61件（鉄砲伝来・キリスト教伝来・検地・長尾→上杉ほか）。影響勢力・早期解放の研究・史実の年のBoostと助言ポップアップ・暫定の効果案 |
 | [`spec/data/sengoku-events.json`](spec/data/sengoku-events.json) | 上記イベントの機械可読データ |
+| [`spec/data/absorption-product.json`](spec/data/absorption-product.json) | 現指導者の日本語の性格・特性、要求の型と暫定値。SSOT9.4の機械可読設定 |
+| [`spec/data/absorption-country-areas.json`](spec/data/absorption-country-areas.json) | ゲームのタイル数と分離した日本22勢力の地理配分による分類用参照面積、資料と生成方法 |
 | [`poc/README.md`](poc/README.md) | PoC の検証手順と結果 |
 | [`poc/sengoku-tree-unlocks.md`](poc/sengoku-tree-unlocks.md) | 戦国ツリー62ノードの公式代理・未接続解放と閃きの照合 |
 | [`poc/sengoku-tree-compatibility.md`](poc/sengoku-tree-compatibility.md) | 戦国ツリーPoCのGathering Storm互換処理、ローカル定義の行番号、未検証項目 |

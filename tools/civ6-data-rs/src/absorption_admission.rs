@@ -219,7 +219,7 @@ pub fn lua() -> String {
 -- Gameplay-only callbacks re-read the normal admission decision, never UI flags.
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 local R = A.Rules
-local N, providers, readers, starting, reading = {}, {}, {}, {}, {}
+local N, providers, readers, envoyReaders, starting, reading = {}, {}, {}, {}, {}, {}
 local KEY = 'JAC_ABSORPTION_ADMISSION_V1'
 local function State()
   local s = R.Copy(Game:GetProperty(KEY) or {Version=2, Requests={}, Offers={}})
@@ -292,8 +292,13 @@ local function Ready(request, decision)
   assert(type(decision.RelationsResolved) == 'boolean', 'relation prerequisites required')
   if not met or not decision.RelationsResolved then return false end
   if decision.Mode == 'SMALL_STATE' then
-    assert(type(decision.CanReceiveInfluence) == 'boolean', 'live influence eligibility required')
-    if not decision.CanReceiveInfluence then return false end
+    local eligible=decision.CanReceiveInfluence
+    if decision.EnvoySource then
+      assert(envoyReaders[decision.EnvoySource], 'registered envoy source required')
+      eligible=decision.EnvoysEligible
+    end
+    assert(type(eligible) == 'boolean', 'live influence eligibility required')
+    if not eligible then return false end
     assert(Number(decision.OwnedTiles) and decision.OwnedTiles == math.floor(decision.OwnedTiles),
       'owned tile count required separately from country area')
     assert(Number(decision.Envoys) and decision.Envoys == math.floor(decision.Envoys),
@@ -421,6 +426,19 @@ function N.RegisterRequirement(kind, read)
     'unique live leader requirement reader required')
   readers[kind] = read
 end
+function N.RegisterEnvoys(source, read)
+  assert(ID(source) and type(read)=='function' and not envoyReaders[source], 'unique envoy reader required')
+  envoyReaders[source]=read
+end
+function N.GetOffer(id) return R.Copy(State().Offers[id]) end
+function N.CanCancelOffer(id)
+  local s=State();if not s.Offers[id] then return false end
+  local request=s.Requests[Key('leader-offer',id)]
+  if not request then return true end
+  if request.Status=='CANCELLED' or starting[request.FlowID] or FlowRequest(request.FlowID) then return false end
+  local waiting=request.Status=='WAITING' or request.Status=='UNAVAILABLE'
+  return waiting and not request.Plan or (waiting or request.Status=='STARTING') and request.LastError~=nil
+end
 local function DemandList(list)
   assert(type(list) == 'table', 'leader demand list required')
   local seen, count = {}, 0
@@ -536,9 +554,16 @@ N.Register('leader-offer', function(id, from, to)
     end
     decision.OwnedTiles = tiles
     -- Official CityStates.lua uses the recipient's GetTokensReceived(sender).
-    local influence = Players[from]:GetInfluence()
-    decision.CanReceiveInfluence = influence:CanReceiveInfluence()
-    decision.Envoys = influence:GetTokensReceived(to)
+    if offer.EnvoySource then
+      local read=assert(envoyReaders[offer.EnvoySource], 'product envoy reader missing')
+      local envoys=read(from,to,R.Copy(offer))
+      decision.EnvoySource,decision.EnvoysEligible=offer.EnvoySource,envoys.Eligible
+      decision.Envoys=envoys.Envoys
+    else
+      local influence = Players[from]:GetInfluence()
+      decision.CanReceiveInfluence = influence:CanReceiveInfluence()
+      decision.Envoys = influence:GetTokensReceived(to)
+    end
   end
   return decision
 end)

@@ -162,6 +162,7 @@ pub fn apply_outputs(repo: &Repository, outputs: Outputs, check: bool) -> Result
 }
 
 pub mod absorption_admission;
+pub mod absorption_product;
 pub mod assassin;
 /// Source-derived map/art/city-name/feud ports that the assets worker can reuse.
 pub mod asset_dependencies;

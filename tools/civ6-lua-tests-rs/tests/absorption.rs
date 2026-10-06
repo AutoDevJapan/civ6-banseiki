@@ -775,6 +775,7 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Flow.lua",
             "Scripts/JAC_Absorption_Entry.lua",
             "Scripts/JAC_Absorption_Admission.lua",
+            "Scripts/JAC_Absorption_Product.lua",
             "Scripts/JAC_CarrierBoundary.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
@@ -795,6 +796,7 @@ fn package_manifest() {
         string_set([
             "4873eb62-8ccc-4574-b784-dda455e74e68",
             "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+            "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
             "8424840C-92EF-4426-A9B4-B4E0CB818049"
         ])
     );
