@@ -107,6 +107,20 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then
 end end
 assert(owners==21 and pairs==462,'AI governor matrix incomplete')
 "#;
+/// Check permission independently: absence of an appointed object is insufficient.
+pub const AI_ADMISSION: &str = r#"
+local owners,pairs=0,0
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then
+ owners=owners+1; local gs=p:GetGovernors()
+ for row in GameInfo.JAC_LeaderPersonas() do
+  assert(Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=p:GetID(),'AI joined unexpectedly; admission precondition lost')
+  local d=assert(GameInfo.Governors[row.GovernorType])
+  assert(gs:CanEverAppointGovernor(d.Hash)==false,'unjoined AI appointment permission opened: '..p:GetID()..'/'..row.LeaderType)
+  pairs=pairs+1
+ end
+end end
+assert(owners==21 and pairs==462,'AI admission matrix incomplete')
+"#;
 pub const AI_GREAT_PEOPLE: &str = r#"
 local owners,pairs=0,0
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do if not p:IsHuman() then
@@ -272,6 +286,7 @@ end end
 assert(count==21); return '21 AI have an official title for the actual opponent turn'
 "#));
     steps.push(ui("InGame", format!(r#"{HEADER}
+{AI_ADMISSION}
 {SNAPSHOT}
 local v=assert(sample()); assert(v.phase=='full' and v.assigned==v.city)
 local q=assert(JAC_NORMAL_SP_AUDIT); q.beforeAITurn=Game.GetCurrentGameTurn(); q.beforeAI=v
@@ -281,12 +296,13 @@ assert(Players[0]:IsTurnActive()); return 'resident runtime retained; actual opp
     steps.push(ui("InGame", format!(r#"{HEADER}
 local q=assert(JAC_NORMAL_SP_AUDIT)
 assert(Game.GetCurrentGameTurn()>q.beforeAITurn and Players[0]:IsTurnActive(),'actual opponent turn did not finish')
+{AI_ADMISSION}
 {AI_GOVERNORS}
 {SNAPSHOT}
 local v=assert(sample()); local b=q.beforeAI
 assert(v.phase=='full' and v.assigned==v.city and v.city==b.city and v.index==b.index and v.spent==b.spent and v.normalPaid==b.normalPaid)
 assert(v.app.sequence==b.app.sequence and v.first.sequence==b.first.sequence and v.second.sequence==b.second.sequence,'payment was replayed during opponent turn')
-return 'UI: 21 AI / 462 unjoined governors absent after actual turn; paid human state retained'
+return 'UI: 21 AI / 462 unjoined permissions closed and governors absent after actual turn; paid human state retained'
 "#)));
     steps.push(ui("GameCore_Tuner", AI_GREAT_PEOPLE));
     let settled = format!(

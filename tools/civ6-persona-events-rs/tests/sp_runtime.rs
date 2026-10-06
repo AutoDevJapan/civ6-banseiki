@@ -14,6 +14,34 @@ fn template() -> Value {
 }
 
 #[test]
+fn generated_cli_file_exactly_matches_current_scenario_source() {
+    let output = std::env::temp_dir().join(format!(
+        "todo324-sp-runtime-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../civ6-autotest/scenarios/leader-persona-15km.json");
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"))
+        .arg("generate-sp-runtime")
+        .arg(input)
+        .arg(&output)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let actual = std::fs::read_to_string(&output).unwrap();
+    std::fs::remove_file(&output).unwrap();
+    let expected = serde_json::to_string_pretty(&sp_runtime::build(&template()).unwrap()).unwrap();
+    assert_eq!(
+        actual, expected,
+        "CLI scenario must match the current generator exactly"
+    );
+}
+
+#[test]
 fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     let scene = sp_runtime::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&scene).unwrap();
@@ -67,6 +95,21 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     );
     assert!(attach < turn && turn < saved);
     assert_eq!(steps[turn]["turns"], 1);
+    // The pre-turn audit must follow the official AI title grant, not merely
+    // repeat the fresh-start check before any title can be spent.
+    assert_eq!(steps[turn - 2]["state_name"], "GameCore_Tuner");
+    assert!(steps[turn - 2]["code"]
+        .as_str()
+        .unwrap()
+        .contains("AI has no usable official title"));
+    for position in [turn - 1, turn + 1] {
+        assert_eq!(steps[position]["state_name"], "InGame");
+        assert!(steps[position]["code"]
+            .as_str()
+            .unwrap()
+            .contains(sp_runtime::AI_ADMISSION));
+    }
+    assert_eq!(body.matches(sp_runtime::AI_ADMISSION).count(), 2);
     assert_eq!(steps[turn + 1]["state_name"], "InGame");
     assert!(steps[turn + 1]["code"]
         .as_str()
@@ -107,6 +150,7 @@ fn ai_world() -> Lua {
     let lua = Lua::new();
     lua.load(r#"
 badGovernor=false; badPerson=false; joined=false; aiCount=21
+admissionResult=false; admissionCalls={}; badOwner=7; badHash=109
 Game={GetProperty=function() return joined and 7 or nil end}
 local rows={}; for i=1,22 do rows[i]={LeaderType='L'..i,GovernorType='G'..i,PersonType='P'..i} end
 GameInfo={Governors={},GreatPersonIndividuals={},GreatPersonClasses={C={UnitType='U'}},Units={U={Index=99}},
@@ -116,7 +160,12 @@ for i=1,22 do GameInfo.Governors['G'..i]={Hash=100+i}; local p={GreatPersonIndiv
 PlayerManager={GetAliveMajors=function()
  local all={}; for i=1,aiCount do local owner=i
   all[#all+1]={IsHuman=function() return false end,GetID=function() return owner end,
-   GetGovernors=function() return {HasGovernor=function(_,hash) return badGovernor and owner==7 and hash==109 end} end,
+   GetGovernors=function() return {
+    HasGovernor=function(_,hash) return badGovernor and owner==7 and hash==109 end,
+    CanEverAppointGovernor=function(_,hash)
+     local key=owner..'/'..hash; admissionCalls[key]=(admissionCalls[key] or 0)+1
+     if owner==badOwner and hash==badHash then return admissionResult end; return false
+    end} end,
    GetUnits=function() return {Members=function()
     local n=0; return function() n=n+1; if n==1 then return 1,{GetType=function() return 1 end,GetGreatPerson=function() error('ordinary unit GP read') end}
      elseif n==2 and badPerson and owner==7 then return 2,{GetType=function() return 99 end,GetGreatPerson=function() return {GetIndividual=function() return 9 end} end} end end
@@ -125,6 +174,46 @@ PlayerManager={GetAliveMajors=function()
 end}
 "#).exec().unwrap();
     lua
+}
+
+#[test]
+fn ai_admission_checks_all_462_pairs_before_and_after_turn_and_rejects_permission_only_faults() {
+    let lua = ai_world();
+    for phase in 1..=2 {
+        lua.load(sp_runtime::AI_ADMISSION).exec().unwrap();
+        lua.load(format!("local n=0; for owner=1,21 do for hash=101,122 do assert(admissionCalls[owner..'/'..hash]=={phase}); n=n+1 end end; assert(n==462)")).exec().unwrap();
+    }
+    // Native objects remain absent: these faults would pass both old audits.
+    for result in ["true", "nil", "0", "'false'"] {
+        for (owner, hash) in [(1, 101), (7, 109), (21, 122)] {
+            let lua = ai_world();
+            lua.load(sp_runtime::AI_ADMISSION).exec().unwrap();
+            lua.load(format!(
+                "badOwner={owner}; badHash={hash}; admissionResult={result}"
+            ))
+            .exec()
+            .unwrap();
+            lua.load(sp_runtime::AI_GOVERNORS).exec().unwrap();
+            lua.load(sp_runtime::AI_GREAT_PEOPLE).exec().unwrap();
+            let err = lua
+                .load(sp_runtime::AI_ADMISSION)
+                .exec()
+                .unwrap_err()
+                .to_string();
+            assert!(
+                err.contains("unjoined AI appointment permission opened"),
+                "{err}"
+            );
+        }
+    }
+    for fault in ["aiCount=20", "joined=true"] {
+        let lua = ai_world();
+        lua.load(fault).exec().unwrap();
+        assert!(
+            lua.load(sp_runtime::AI_ADMISSION).exec().is_err(),
+            "{fault}"
+        );
+    }
 }
 
 #[test]
