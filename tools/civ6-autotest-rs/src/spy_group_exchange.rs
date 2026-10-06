@@ -218,6 +218,31 @@ function G.Prepare()
  publish('PREPARED',{stage='PREPARED'});
  return 'PREPARED'
 end
+-- Only the host's audited live04 resume sequence calls this. RESERVED alone
+-- does not prove that EQUALIZE was never sent after that checkpoint.
+function G.ResumeReserved(proof)
+ assert(not x and proof=='live04-969d4256-b4daf733-58a796ad',
+  'fresh UI instance and audited host receipt required');
+ local p=assert(Game:GetProperty(KEY),'saved Core reservation missing');
+ assert(p.stage=='RESERVED' and p.turn==62 and p.forType==-1 and
+  p.candidateCount==3 and type(p.nonce)=='string' and #p.nonce>0 and
+  type(p.before)=='table' and p.before.turn==62 and p.sources and
+  not p.quote and not p.finalIntent and not p.returnEvidence and not p.errors,
+  'reservation cannot resume from a later or unknown transition');
+ assert(Game.GetLocalPlayer()==0 and Players[0]:IsHuman() and
+  not Players[1]:IsHuman() and Players[0]:IsTurnActive(),
+  'native human/AI roles or active turn changed');
+ peace(); assert(DiplomacyManager.FindOpenSessionID(0,1)==nil,
+  'fresh process must not retain a diplomacy session');
+ local deal=outgoing(); assert(#ids(deal)==0,'existing native offer must be preserved');
+ local selected,count=candidate(deal);
+ assert(selected==p.forType and count==p.candidateCount,'saved candidate changed');
+ x={before=copy(p.before),forType=p.forType,candidateCount=p.candidateCount,
+  nonce=p.nonce,statements={},responses={},incomingEvents={},resumeProof=proof};
+ assert(sameBaseline(rosterSnapshot()),'saved baseline differs after load');
+ publish('RESUMED_RESERVED',{stage='RESERVED'});
+ return 'RESUMED_RESERVED'
+end
 function G.ArmAfterSave()
  assert(x and not x.armed and not x.sessionRequested,'UI instance or arm changed');
  local p=assert(Game:GetProperty(KEY),'saved Core reservation missing');
