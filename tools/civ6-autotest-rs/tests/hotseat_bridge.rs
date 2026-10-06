@@ -39,7 +39,7 @@ fn persisted_process_creation_time_preserves_every_bit() {
     assert_eq!(saved.started.to_bits(), 0x41dab117910d2b48);
 }
 
-fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
+fn lua_run_with_growth(xp: u32, before_next_round_capture: &str) -> (Vec<hs::Frame>, String) {
     let nonce = test_nonce();
     let output = tempfile::tempdir().unwrap();
     let bundle = hs::prepare(
@@ -123,14 +123,14 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
     lua.load(&plan).exec().unwrap();
     lua.load(&witness).exec().unwrap();
     lua.load("assert(contextHidden == false)").exec().unwrap();
-    lua.load(format!("updateHandler(); assert(key(124)); assert(key(125)); assert(key(125)); assert(key(133)); assert(key(133)); localID=1; updateHandler(); assert(key(126)); assert(key(127)); assert(key(134)); assert(savedName=='JAC-Hotseat-Mid-Round-'..runNonce); assert(saveType==1); assert(key(128)); localID=0; turn=1; for uid=1,2 do local r=growthRecords[0][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP={xp}; r.LastXPTurn=1 end; assert(key(129)); assert(key(130)); localID=1; for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end; assert(key(131)); assert(key(134)); assert(savedName=='JAC-Hotseat-Next-Player-'..runNonce); assert(key(132))")).exec().unwrap();
+    lua.load(format!("updateHandler(); assert(key(124)); assert(key(125)); assert(key(125)); assert(key(133)); assert(key(133)); localID=1; updateHandler(); assert(key(126)); assert(key(127)); assert(key(134)); assert(savedName=='JAC-Hotseat-Mid-Round-'..runNonce); assert(saveType==1); JAC_HOTSEAT_GROWTH_PREVIOUS=nil; assert(key(128)); localID=0; turn=1; for uid=1,2 do local r=growthRecords[0][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP={xp}; r.LastXPTurn=1 end; assert(key(129)); {before_next_round_capture}; assert(key(130)); localID=1; for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end; assert(key(131)); assert(key(134)); assert(savedName=='JAC-Hotseat-Next-Player-'..runNonce); JAC_HOTSEAT_GROWTH_PREVIOUS=nil; assert(key(132))")).exec().unwrap();
     lua.load("dialogVisible=true; dialogReady=false; paused=false; updateHandler(); dialogReady=true; paused=true; updateHandler(); dialogVisible=false; dialogReady=false; updateHandler(); paused=false; updateHandler(); updateHandler()").exec().unwrap();
     let log = lines.lock().unwrap().join("\n");
     (hs::parse_frames(&log, test_nonce()).unwrap(), log)
 }
 
 fn lua_run() -> (Vec<hs::Frame>, String) {
-    lua_run_with_growth(20)
+    lua_run_with_growth(20, "do end")
 }
 
 #[test]
@@ -166,6 +166,16 @@ fn actual_scenario_lua_runs_in_lua51_and_witness_returns_real_fields() {
         .find(|f| f.step == 5 && f.kind == "RESULT")
         .unwrap();
     assert!(growth.body.contains("0~1~1~0~calm~steady~spear~none~0"));
+    for (saved, loaded) in [(8, 12), (17, 21)] {
+        let result = |step| {
+            &frames
+                .iter()
+                .find(|f| f.step == step && f.kind == "RESULT")
+                .unwrap()
+                .body
+        };
+        assert_eq!(result(saved), result(loaded));
+    }
     assert!(frames.iter().any(|f| f.step == 5 && f.kind == "DUPLICATE"));
     assert!(frames.iter().any(|f| f.step == 6 && f.kind == "REQUESTED"));
     assert!(frames
@@ -180,10 +190,46 @@ fn actual_scenario_lua_runs_in_lua51_and_witness_returns_real_fields() {
 
 #[test]
 fn actual_growth_lua_rejects_nineteen_instead_of_twenty_xp() {
-    let (frames, _) = lua_run_with_growth(19);
+    let (frames, _) = lua_run_with_growth(19, "do end");
     assert!(frames.iter().any(|f| f.step == 15
         && f.kind == "ERROR"
         && f.body.contains("growth did not advance once")));
+    assert!(!frames.iter().any(|f| f.step == 15 && f.kind == "RESULT"));
+}
+
+#[test]
+fn actual_growth_lua_rejects_opponent_credit_before_its_turn() {
+    let (frames, _) = lua_run_with_growth(
+        20,
+        "for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end",
+    );
+    assert!(frames.iter().any(|f| f.step == 15
+        && f.kind == "ERROR"
+        && f.body.contains("inactive growth record changed")));
+    assert!(!frames.iter().any(|f| f.step == 15 && f.kind == "RESULT"));
+}
+
+#[test]
+fn actual_growth_lua_rejects_inactive_metadata_change() {
+    let (frames, _) = lua_run_with_growth(
+        20,
+        "growthRecords[1][1]:GetProperty('JAC_POC_GROWTHUI_WARLORD').Trait='changed'",
+    );
+    assert!(frames.iter().any(|f| f.step == 15
+        && f.kind == "ERROR"
+        && f.body.contains("inactive growth record changed")));
+    assert!(!frames.iter().any(|f| f.step == 15 && f.kind == "RESULT"));
+}
+
+#[test]
+fn actual_growth_lua_rejects_replaced_unit_id() {
+    let (frames, _) = lua_run_with_growth(
+        20,
+        "local original=growthRecords[1][1]; growthRecords[1][1]={GetID=function() return 99 end, GetProperty=function(_, key) return original:GetProperty(key) end}",
+    );
+    assert!(frames
+        .iter()
+        .any(|f| f.step == 15 && f.kind == "ERROR" && f.body.contains("unexpected growth unit")));
     assert!(!frames.iter().any(|f| f.step == 15 && f.kind == "RESULT"));
 }
 
