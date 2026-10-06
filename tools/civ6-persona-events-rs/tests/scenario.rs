@@ -21,8 +21,8 @@ fn finite_diagnostic_has_one_payment_sender_and_only_its_new_save() {
     let steps = scenario["steps"].as_array().unwrap();
     assert_eq!(
         steps.len(),
-        38,
-        "retain the finite 38-step diagnostic; the driver adds its initial restart"
+        39,
+        "retain the finalized full-state capture; the driver adds its initial restart"
     );
     let lua = Lua::new();
     let mut appoint = 0;
