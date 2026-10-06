@@ -244,6 +244,8 @@ fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intent
         ("FAULT='TERMS_FINAL'", 1, "RETURN_UNRESOLVED"),
         ("FAULT='SEND_EQUALIZE'", 0, "QUOTED_UNKNOWN"),
         ("FAULT='SEND_FINAL'", 1, "RETURN_UNRESOLVED"),
+        ("FAULT='NON_SCALAR'", 1, "QUOTED_UNKNOWN"),
+        ("FAULT='CLOSE_READ'", 2, "RETURNED"),
         (
             "FAULT='STOCK_UNSAFE'; REPLY_KIND='UNSAFE'",
             1,
@@ -257,6 +259,7 @@ fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intent
         let scenario = host::scenario();
         for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
             lua.load(format!("STEP={index}; if (FAULT=='READ_REPLY' and STEP==11) or (FAULT=='READ_RETURN' and STEP==19) then ExposedMembers.JAC_PersonaBoundary.ReadEnemy=function() error('native roster read failed') end end; if FAULT=='CORE_ID' and STEP==21 then Players[0]:GetUnits().FindID=function() return MAP_UNIT end; MAP_UNIT.GetID=function() return 99999 end end; if FAULT=='CORE_API' and STEP==21 then Players[0]:GetUnits().FindID=nil end; if FAULT=='CORE_QUOTE' and STEP==13 then PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.before.histories[3].turn=61 end; if FAULT=='TERMS_FINAL' and STEP==17 then IN.items[2].amount=20; OUT.items[2].amount=20 end")).exec().unwrap();
+            lua.load("if FAULT=='NON_SCALAR' and STEP==11 then OUT.items[1].GetAmount=function() return function() end end end; if FAULT=='CLOSE_READ' and STEP==23 then DealManager.GetWorkingDeal=function() error('native cleanup read failed') end end").exec().unwrap();
             let action = step["action"].as_str().unwrap();
             match action {
                 "load" | "exit_to_menu" => {}
@@ -299,7 +302,7 @@ fn host_executes_success_refusal_timeout_and_unresolved_return_with_saved_intent
                 .unwrap(),
             expected_stage
         );
-        lua.load("assert(CLOSED==1 and ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==ORIGINAL_TOOLTIP); assert(H[1].turn==23 and H[2].turn==45 and H[3].turn==62)").exec().unwrap();
+        lua.load("assert(CLOSED==1 and ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey==ORIGINAL_TOOLTIP); assert(H[1].turn==23 and H[2].turn==45 and H[3].turn==62); if FAULT=='NON_SCALAR' then assert(PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.quote.raw.error:find('non%-scalar')) end; if FAULT=='CLOSE_READ' then assert(#JAC_GroupExchange548.Evidence().ui.cleanup.errors==1) end").exec().unwrap();
         lua.load("local p=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62; assert(SAVED_STAGE==p.stage); if FAULT=='CORE_ID' or FAULT=='CORE_API' or FAULT=='READ_RETURN' or FAULT=='TERMS_FINAL' then assert(p.errors and #p.errors>0 and p.returnEvidence) end; if FAULT=='STOCK_UNSAFE' then assert(#OUT.items==0 and #JAC_GroupExchange548.Evidence().ui.cleanup.removed==2) end").exec().unwrap();
     }
 }

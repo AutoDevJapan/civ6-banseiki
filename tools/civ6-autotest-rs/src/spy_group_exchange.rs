@@ -374,8 +374,9 @@ function G.RecordSendError(phase,err)
  return 'SEND_RESULT_UNRESOLVED'
 end
 function G.ResponseState()
- local ok,r=pcall(response); if not ok then return unknownRead('QUOTE',r) end
- return copy(r)
+ local ok,r=pcall(function() return copy(response()) end);
+ if not ok then return unknownRead('QUOTE',r) end
+ return r
 end
 function G.PublishQuote()
  assert(x and not x.quotePublished,'quote already published');
@@ -455,8 +456,9 @@ local function returnState()
  return copy(r)
 end
 function G.ReturnState()
- local ok,r=pcall(returnState); if not ok then return unknownRead('RETURN',r) end
- return copy(r)
+ local ok,r=pcall(function() return copy(returnState()) end);
+ if not ok then return unknownRead('RETURN',r) end
+ return r
 end
 function G.PublishReturn()
  assert(x and (x.finalSent or x.finalError) and not x.returnPublished,'return already published');
@@ -482,8 +484,9 @@ function G.Close()
    (p.stage=='QUOTED_UNKNOWN' or p.stage=='QUOTED' or
     p.stage=='FINAL_INTENT' or p.stage=='RETURNED' or p.stage=='RETURN_UNRESOLVED')),
   'native reply evidence must be recorded before close');
- local d=DealManager.GetWorkingDeal(DealDirection.OUTGOING,0,1);
  x.cleanup={removed={},retained={},errors={}};
+ local haveDeal,d=pcall(DealManager.GetWorkingDeal,DealDirection.OUTGOING,0,1);
+ if not haveDeal then x.cleanup.errors[#x.cleanup.errors+1]=tostring(d); d=nil end
  local ownedSession,id=pcall(function()
   local current=DiplomacyManager.FindOpenSessionID(0,1);
   if current~=nil then assert(session()==current,'native session ownership changed') end
