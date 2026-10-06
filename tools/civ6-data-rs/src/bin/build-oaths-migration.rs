@@ -222,11 +222,23 @@ if DiplomacyManager and type(DiplomacyManager.FindOpenSessionID)=='function' the
   if id~=0 then
    local ok,session=pcall(DiplomacyManager.FindOpenSessionID,0,id)
    out[#out+1]='session.p'..id..'='..(ok and tostring(session) or 'unavailable')
-   if ok and type(session)=='number' and session>=0 and type(DiplomacyManager.GetSessionInfo)=='function' then
+   local label='sessionInfo.'..id
+   if not ok then
+    out[#out+1]=label..'=unavailable:FindOpenSessionID failed:'..tostring(session)
+   elseif type(session)~='number' or session<0 then
+    out[#out+1]=label..'=not queried:session type='..type(session)..' value='..tostring(session)
+   elseif type(DiplomacyManager.GetSessionInfo)~='function' then
+    out[#out+1]=label..'=unavailable:GetSessionInfo missing'
+   else
     local success,info=pcall(DiplomacyManager.GetSessionInfo,session)
-    if success and type(info)=='table' then
+    if not success then
+     out[#out+1]=label..'=unavailable:GetSessionInfo failed:'..tostring(info)
+    elseif type(info)~='table' then
+     out[#out+1]=label..'=unavailable:GetSessionInfo returned '..type(info)
+    else
      local keys={}; for key in pairs(info) do keys[#keys+1]=tostring(key) end; table.sort(keys)
-     for _,key in ipairs(keys) do out[#out+1]='sessionInfo.'..id..'.'..key..'='..tostring(info[key]) end
+     out[#out+1]=label..'=table fields='..#keys
+     for _,key in ipairs(keys) do out[#out+1]=label..'.'..key..'='..tostring(info[key]) end
     end
    end
   end
@@ -407,6 +419,57 @@ Game={GetEras=function()return {GetPlayerNumAllowedCommemorations=function(_,id)
         vm.load("DiplomacyManager=nil;Game.GetEras=nil").exec()?;
         let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
         assert_eq!(text, "LEGACY_SESSION_DIAGNOSTIC contextHidden=false");
+        Ok(())
+    }
+
+    #[test]
+    fn session_diagnostic_distinguishes_empty_info_from_unavailable_and_unqueried() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load(r#"
+PlayerManager={GetAliveMajors=function()return {{GetID=function()return 4 end}} end}
+Game={}
+session=7; calls=0
+DiplomacyManager={FindOpenSessionID=function()return session end,GetSessionInfo=function()calls=calls+1;return {} end}
+"#).exec()?;
+        let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+        assert!(text.contains("sessionInfo.4=table fields=0"));
+        for (setup, expected) in [
+            (
+                "DiplomacyManager.GetSessionInfo=nil",
+                "unavailable:GetSessionInfo missing",
+            ),
+            (
+                "DiplomacyManager.GetSessionInfo=function()error('probe failure') end",
+                "unavailable:GetSessionInfo failed:",
+            ),
+            (
+                "DiplomacyManager.GetSessionInfo=function()return nil end",
+                "unavailable:GetSessionInfo returned nil",
+            ),
+            (
+                "DiplomacyManager.GetSessionInfo=function()return false end",
+                "unavailable:GetSessionInfo returned boolean",
+            ),
+            (
+                "DiplomacyManager.FindOpenSessionID=function()error('lookup failure') end",
+                "unavailable:FindOpenSessionID failed:",
+            ),
+        ] {
+            vm.load(setup).exec()?;
+            let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+            assert!(text.contains(expected), "{text}");
+        }
+        vm.load("DiplomacyManager.FindOpenSessionID=function()return session end;DiplomacyManager.GetSessionInfo=function()calls=calls+1;error('must not query excluded IDs') end").exec()?;
+        for setup in ["session=nil", "session=-1", "session='opaque'"] {
+            vm.load(setup).exec()?;
+            let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+            assert!(
+                text.contains("sessionInfo.4=not queried:session type="),
+                "{text}"
+            );
+            assert!(!text.contains("closed"), "{text}");
+        }
+        assert_eq!(vm.globals().get::<i32>("calls")?, 1);
         Ok(())
     }
 
