@@ -1083,6 +1083,7 @@ pub struct Runner {
     /// process for each saved-game load. This does not prove in-process reload.
     pub persona_runtime_restart: bool,
     persona_runtime_generation: u32,
+    persona_launched_process: Option<crate::startup::GameProcess>,
     persona_archived_logs: BTreeMap<String, String>,
     persona_current_log_prefix: BTreeMap<String, String>,
     persona_current_logs_archived: bool,
@@ -1152,6 +1153,7 @@ impl Runner {
             resident_runtime_identity: None,
             persona_runtime_restart: false,
             persona_runtime_generation: 0,
+            persona_launched_process: None,
             persona_archived_logs: BTreeMap::new(),
             persona_current_log_prefix: BTreeMap::new(),
             persona_current_logs_archived: false,
@@ -2059,6 +2061,12 @@ impl Runner {
                     self.backend.require_dx11(hwnd)?;
                     if pin_process && startup.launch_requested {
                         startup.process = self.backend.pin_startup_process(hwnd)?;
+                        if self.persona_runtime_restart {
+                            self.persona_launched_process =
+                                Some(startup.process.ok_or_else(|| {
+                                    Error::input("persona launch did not pin its process")
+                                })?);
+                        }
                     }
                     return Ok(());
                 }
@@ -2316,6 +2324,7 @@ impl Runner {
         }
         self.backend.finish_native_process_exit()?;
         self.resident_runtime_identity = None;
+        self.persona_launched_process = None;
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
