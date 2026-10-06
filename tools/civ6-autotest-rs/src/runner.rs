@@ -1493,12 +1493,27 @@ impl Runner {
                 }
                 "lua" => {
                     let budget = self.budget(end, 5.0)?;
-                    self.lua(
+                    let pinned = if self.persona_runtime_restart {
+                        self.resident_runtime_identity
+                    } else {
+                        None
+                    };
+                    if let Some(identity) = pinned {
+                        if self.backend.validate_native_bridge_target()? != Some(identity) {
+                            return Err(Error::input("persona wait target changed before read"));
+                        }
+                    }
+                    let result = self.lua(
                         text(condition, "state_name"),
                         text(condition, "code"),
                         budget,
-                    )
-                    .map(|v| {
+                    );
+                    if let Some(identity) = pinned {
+                        if self.backend.validate_native_bridge_target()? != Some(identity) {
+                            return Err(Error::input("persona wait target changed after read"));
+                        }
+                    }
+                    result.map(|v| {
                         last = format!("Lua returned {v:?}");
                         v == condition
                             .get("equals")
@@ -1532,6 +1547,9 @@ impl Runner {
                     if self.reconcile_persona_wait_read(condition, end, unblocked)? {
                         unblocked += 1;
                         continue;
+                    }
+                    if self.persona_runtime_restart {
+                        return Err(e);
                     }
                     if !self.unblock_ingame(
                         text(condition, "state_name"),
