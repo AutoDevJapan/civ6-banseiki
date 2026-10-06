@@ -252,6 +252,10 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 親の実行記録には実際に起動したdiagnosticsのSHAとcheckout HEADも保存する。observerのcompiled_source_sha256は共有capture実装を束縛するが、diagnostics wrapper/runner全体を束縛しない。Steamフォルダへの配置や共有DLLの置換は不要。
 次の1実機は、同じowned lease下でfront ready後に初回factory/Lua初期化を取り、load phase_ready後に旧context/Lua破棄を取る。既にfactoryが通過した状態なら初回未観測と記録する。4slotの非選択phaseは欠測であり呼出し0としない。初期receipt前に解析器や自動Installを追加しない。
 
+### 固定AMD版chainからの観測
+
+観測器のchain許可対象は標準 `D:/CC/Tools/civ6-live/live_chain.exe` と、追加の固定 `D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe`（SHA-256 `267ee55fdbe47e507bbefcbb8154780bb2a4070412802f923e0762764d7dc82b`）だけとする。AMD版は開始時に読み取りhandleで書換え・削除を防いでhashを検査し、親／子それぞれが回収完了まで保持する。PID/FILETIME、生存、標準lock、30分lease、祖先関係と継承PIDの検査は維持する。共有lock検査は期待imageを受け取る内部関数へ分け、既存probe呼出しには従来imageだけを渡す。任意pathをrequestに追加せず、548の別コピーも拒否する。固定AMD版のdisk hash検査は起動・実機観測ではない。
+
 ### 324 ABIの後続接続条件
 
 `D:/CC/Work/todo324/runtime-bootstrap-abi.json`（source `7d6a1628`、2026-10-06 09:43:37）を参照する。Install configは40byte・align8・version `0x03240001`・mode6、入力trace address/sizeは0。Closeは旧native object/Lua破棄前、Rebuildは破棄後かつ新RESET前。COMMIT後Rebuildは状態を消すので行わない。未接続のABIラッパーは今回追加せず、最初の実機順序receiptから親のnative境界実装を進める。

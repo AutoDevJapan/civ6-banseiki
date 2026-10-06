@@ -7,6 +7,61 @@ use windows_sys::Win32::System::Memory::{
 };
 
 const TF: u32 = 1 << 8;
+const DEFAULT_CHAIN: &str = "D:/CC/Tools/civ6-live/live_chain.exe";
+const AMD_CHAIN: &str = "D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe";
+const AMD_CHAIN_SHA: &str = "267ee55fdbe47e507bbefcbb8154780bb2a4070412802f923e0762764d7dc82b";
+
+fn approved_chain_image(path: &Path) -> Result<&'static str, String> {
+    [DEFAULT_CHAIN, AMD_CHAIN]
+        .into_iter()
+        .find(|image| same_path(path, Path::new(image)))
+        .ok_or_else(|| "order observer chain image is not approved".into())
+}
+fn verify_amd_chain_hash(actual: &str) -> Result<(), String> {
+    if actual != AMD_CHAIN_SHA {
+        return Err("order observer AMD chain SHA mismatch".into());
+    }
+    Ok(())
+}
+fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let image = approved_chain_image(path)?;
+    if image == DEFAULT_CHAIN {
+        return Ok(None);
+    }
+    // Keep the approved on-disk image immutable through GO, observation and
+    // recovery. Hash once while denying writes/deletes, not on every event.
+    let pin = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(image)
+        .map_err(|e| format!("AMD chain image pin failed: {e}"))?;
+    verify_amd_chain_hash(&sha256(Path::new(image))?)?;
+    Ok(Some(pin))
+}
+struct OrderChain {
+    process: Handle,
+    image: &'static str,
+    _image_pin: Option<File>,
+}
+impl OrderChain {
+    fn pin(pid: u32, created: u64) -> Result<Self, String> {
+        let process = process(pid, false)?;
+        if created == 0 || !alive(&process)? || process_created(&process)? != created {
+            return Err("order observer chain PID/FILETIME changed".into());
+        }
+        let image = approved_chain_image(&process_path(&process)?)?;
+        let image_pin = pin_chain_image(Path::new(image))?;
+        Ok(Self {
+            process,
+            image,
+            _image_pin: image_pin,
+        })
+    }
+}
+fn verify_order_lock(lock: &Path, chain_pid: u32, chain: &OrderChain) -> Result<(), String> {
+    verify_lock_for_image(lock, chain_pid, &chain.process, Path::new(chain.image))
+}
 struct Step {
     site: Site,
     expected: u64,
@@ -290,14 +345,9 @@ fn reader(ack: Arc<AtomicBool>) -> (Reader, Receiver<Result<String, String>>) {
 pub fn observe(req: Request) -> Result<(), String> {
     // Resolve authority before attach. No lock acquisition, reservation, launch,
     // injection, DLL loading, memory setter or runtime API is present here.
-    let chain = exact_process(
-        req.chain_pid,
-        req.chain_created,
-        Path::new("D:/CC/Tools/civ6-live/live_chain.exe"),
-        false,
-    )?;
+    let chain = OrderChain::pin(req.chain_pid, req.chain_created)?;
     let lock = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
-    verify_lock(lock, req.chain_pid, &chain)?;
+    verify_order_lock(lock, req.chain_pid, &chain)?;
     let controller = process(req.controller_pid, false)?;
     if process_created(&controller)? != req.controller_created
         || !alive(&controller)?
@@ -362,7 +412,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     emit(&identity)?;
     let mut admission = plan::protocol::Admission::new(identity, token);
     admission.await_go()?;
-    verify_lock(lock, req.chain_pid, &chain)?;
+    verify_order_lock(lock, req.chain_pid, &chain)?;
     if !alive(&controller)? || !alive(&game_guard)? || process_created(&game_guard)? != req.created
     {
         return Err("identity changed after GO".into());
@@ -430,7 +480,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                     return Err("pending instruction did not complete before drain deadline".into());
                 }
             }
-            verify_lock(lock, req.chain_pid, &chain)?;
+            verify_order_lock(lock, req.chain_pid, &chain)?;
             if !alive(&controller)? || !alive(&game_guard)? {
                 return Err("pinned owner or game exited".into());
             }
@@ -748,13 +798,13 @@ pub fn observe(req: Request) -> Result<(), String> {
 /// phase acknowledgements, and emits a separate real child-reaping receipt.
 struct NativeRecovery {
     game: Handle,
-    chain: Handle,
+    chain: OrderChain,
     req: Request,
     termination_requested: bool,
 }
 impl plan::protocol::Recovery for NativeRecovery {
     fn authorize(&mut self) -> Result<(), String> {
-        verify_lock(
+        verify_order_lock(
             Path::new("D:/CC/Tools/civ6-live/civ6.lock"),
             self.req.chain_pid,
             &self.chain,
@@ -814,13 +864,8 @@ pub fn parent(mut value: Value) -> Result<(), String> {
     value["controller_pid"] = json!(parent_pid_value);
     value["controller_created_filetime"] = json!(process_created(&self_handle)?);
     let req = Request::parse(&value)?;
-    let chain = exact_process(
-        req.chain_pid,
-        req.chain_created,
-        Path::new("D:/CC/Tools/civ6-live/live_chain.exe"),
-        false,
-    )?;
-    verify_lock(
+    let chain = OrderChain::pin(req.chain_pid, req.chain_created)?;
+    verify_order_lock(
         Path::new("D:/CC/Tools/civ6-live/civ6.lock"),
         req.chain_pid,
         &chain,
@@ -933,6 +978,54 @@ pub fn parent(mut value: Value) -> Result<(), String> {
 mod tests {
     use super::super::test_support::Fixture;
     use super::*;
+    #[test]
+    fn order_capture_chain_allowlist_rejects_other_copies_and_hashes() {
+        assert_eq!(
+            approved_chain_image(Path::new(DEFAULT_CHAIN)).unwrap(),
+            DEFAULT_CHAIN
+        );
+        assert_eq!(
+            approved_chain_image(Path::new(r"d:\cc\tools\civ6-live\LIVE_CHAIN_PR86_AMD.EXE")).unwrap(),
+            AMD_CHAIN
+        );
+        for path in [
+            "D:/CC/Work/pr86-boundary-resume-548/chain-close-548/live_chain.exe",
+            "D:/CC/Work/live_chain_pr86_amd.exe",
+            "D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe.other",
+            "live_chain_pr86_amd.exe",
+        ] {
+            assert!(
+                approved_chain_image(Path::new(path)).is_err(),
+                "accepted {path}"
+            );
+            assert!(pin_chain_image(Path::new(path)).is_err());
+        }
+        for hash in [
+            "",
+            "800b0cb71126412237428a956fd22fd68a98e7c4812879399235256de56b958e",
+            "8a4d2d307b0a8f0cf3f2156311d9673d9490c99bafff3cbddbc1fe4e34a0a7ac",
+        ] {
+            assert!(verify_amd_chain_hash(hash).is_err());
+        }
+    }
+    #[test]
+    fn order_capture_chain_actual_disk_hash_is_pinned_without_launch() {
+        let pin = pin_chain_image(Path::new(AMD_CHAIN)).unwrap();
+        assert!(pin.is_some());
+        // The legacy path retains its existing path-only policy.
+        assert!(pin_chain_image(Path::new(DEFAULT_CHAIN)).unwrap().is_none());
+    }
+    #[test]
+    fn order_capture_chain_wrong_filetime_is_rejected_before_image_admission() {
+        let own = process(std::process::id(), false).unwrap();
+        let created = process_created(&own).unwrap();
+        assert!(
+            matches!(OrderChain::pin(std::process::id(), created + 1), Err(e) if e == "order observer chain PID/FILETIME changed")
+        );
+        assert!(
+            matches!(OrderChain::pin(std::process::id(), created), Err(e) if e == "order observer chain image is not approved")
+        );
+    }
     #[test]
     fn order_capture_owned_single_step_keeps_continue_when_output_fails() {
         let mut child = Fixture::start();
