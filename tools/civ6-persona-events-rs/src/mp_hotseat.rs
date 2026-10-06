@@ -324,8 +324,8 @@ pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, Strin
         .ok_or("players absent")?
         .truncate(12);
     // Official SetupParameters.xml uses Pangaea.lua as the MP default; never
-    // infer the SP default Continents.lua after SetToDefaults(HOTSEAT).
-    config["map_file"] = "Continents.lua".into();
+    // infer a map from defaults: request the official MP default explicitly.
+    config["map_file"] = "Pangaea.lua".into();
     let roster = config["players"].as_array().unwrap();
     let mut expected = String::from("local expected={\n");
     for p in roster {
@@ -342,7 +342,7 @@ assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat FrontEnd req
 assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI')
 local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')
 print('MP_SETUP12 MAP_SCRIPT type='..type(actualMap)..' value='..tostring(actualMap))
-assert(type(actualMap)=='string' and actualMap=='Continents.lua','ordinary generated Continents map required')
+assert(type(actualMap)=='string' and actualMap=='Pangaea.lua','ordinary generated Pangaea map required')
 assert(MapConfiguration.GetMaxMajorPlayers()==12,'map maximum differs from stock staging limit')
 assert(GameConfiguration.GetParticipatingPlayerCount()==12+GameConfiguration.GetHiddenPlayerCount())
 assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==0)
@@ -350,7 +350,7 @@ for id=0,11 do local p=assert(PlayerConfigurations[id]);local e=expected[id+1]
  assert(p:GetLeaderTypeName()==e.leader and p:GetCivilizationTypeName()==e.civ)
  assert(p:GetSlotStatus()==(id<2 and SlotStatus.SS_TAKEN or SlotStatus.SS_COMPUTER),'human/AI slot mismatch')
 end
-return 'MP_SETUP12 PREFLIGHT map=Continents.lua max=12 majors=12 humans=0,1 ai=2..11; no Host sent by this read'
+return 'MP_SETUP12 PREFLIGHT map=Pangaea.lua max=12 majors=12 humans=0,1 ai=2..11; no Host sent by this read'
 "#
     );
     let arrived = format!(
@@ -359,7 +359,7 @@ assert(GameConfiguration.IsHotseat() and Game.GetLocalPlayer()==0 and Players[0]
 assert(Game.GetCurrentGameTurn()==GameConfiguration.GetStartTurn(),'unexpected starting turn')
 local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')
 print('MP_SETUP12 STARTED MAP_SCRIPT type='..type(actualMap)..' value='..tostring(actualMap))
-assert(type(actualMap)=='string' and actualMap=='Continents.lua')
+assert(type(actualMap)=='string' and actualMap=='Pangaea.lua')
 local ids=PlayerManager.GetAliveMajorIDs();assert(#ids==12,'actual major count differs');local seen={{}}
 for _,id in ipairs(ids)do assert(type(id)=='number' and id>=0 and id<12 and not seen[id]);seen[id]=true
  local p=assert(Players[id]);local cfg=assert(PlayerConfigurations[id]);local e=expected[id+1]
@@ -374,7 +374,7 @@ return 'MP_SETUP12 STARTED actual12majors human0,1 ai10; player0 active; persona
 "#
     );
     Ok(
-        json!({"name":"MP setup-only12: two humans ten AI, six persona MODs, generated Continents; preflight and actual game start, no native runtime/payment/22-major acceptance",
+        json!({"name":"MP setup-only12: two humans ten AI, six persona MODs, generated Pangaea; preflight and actual game start, no native runtime/payment/22-major acceptance",
         "session_type":"hotseat","judge_profile":"generic","strict_lua_errors":true,"steps":[
          payment["steps"][0],{"action":"restart_game"},config,
          {"action":"ui_lua","state_name":"FrontEnd","code":preflight},

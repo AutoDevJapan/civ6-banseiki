@@ -310,7 +310,7 @@ fn setup_probe_is_one_bounded_start_without_persona_runtime_or_payment() {
             .count(),
         2
     );
-    assert_eq!(steps[2]["map_file"], "Continents.lua");
+    assert_eq!(steps[2]["map_file"], "Pangaea.lua");
     assert_eq!(steps[0], scene()["steps"][0]);
     assert_eq!(
         steps.iter().filter(|s| s["action"] == "start_game").count(),
@@ -343,7 +343,7 @@ fn setup_world() -> Lua {
     let lua = Lua::new();
     let probe = setup_probe();
     lua.load(r#"
-map='Continents.lua';maximum=12;count=12;humans=2;active=0;turn=1;accounting=false
+map='Pangaea.lua';maximum=12;count=12;humans=2;active=0;turn=1;accounting=false
 UI={IsInFrontEnd=function()return true end}
 GameConfiguration={IsHotseat=function()return true end,GetRuleSet=function()return 'RULESET_JAC_BANSEIKI' end,
 GetParticipatingPlayerCount=function()return count+2 end,GetHiddenPlayerCount=function()return 2 end,GetValue=function()return 0 end,GetStartTurn=function()return 1 end,IsPaused=function()return false end}
