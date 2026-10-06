@@ -32,7 +32,7 @@ fn generated_module_uses_the_boundary_view_instance_and_gates_before_old_handler
         .set_environment(view.clone())
         .exec()
         .unwrap();
-    lua.load("assert(JAC_ReturnedPreparation548==nil); local p=ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation; assert(type(p.Resume)=='function'); Game.GetProperty=function() return {stage='SOURCES_INTENT',sources={}} end; p.OwnedAuxiliaryEvent=function(a,id) return a==0 and id==3 end").exec().unwrap();
+    lua.load("assert(JAC_ReturnedPreparation548==nil); local p=ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation; assert(type(p.Resume)=='function'); SOURCE_OWNER=0; Game.GetProperty=function() return {stage='SOURCES_INTENT',sources={spy={id=700,owner=SOURCE_OWNER},target={owner=1}}} end; Players={[0]={GetDiplomacy=function() return {GetMission=function(_,owner,id) assert(owner==0 and id==3); return {Operation=60,PlotIndex=8511,CompletionTurn=70,InitialResult=0,EscapeResult=-1} end} end}}; p.OwnedAuxiliaryEvent=function(a,id) return a==0 and id==3 end").exec().unwrap();
     lua.globals()
         .get::<mlua::Function>("EVENT")
         .unwrap()
@@ -58,6 +58,10 @@ fn generated_module_uses_the_boundary_view_instance_and_gates_before_old_handler
         .unwrap();
     assert_eq!(view.get::<i64>("OLD_CALLS").unwrap(), 2);
     lua.load("assert(EVENT_UNKNOWN:find('native unreadable')); ExposedMembers.JAC_ReturnedPreparation548Witness={stale=true}; LOAD(); assert(ExposedMembers.JAC_ReturnedPreparation548Witness==nil)").exec().unwrap();
+    lua.load("SOURCE_OWNER=1; EVENT(0,3); SOURCE_OWNER=0")
+        .exec()
+        .unwrap();
+    assert_eq!(view.get::<i64>("OLD_CALLS").unwrap(), 3);
     lua.load("local p=ExposedMembers.JAC_PersonaBoundary.PreparedMission; assert(JAC_PreparedMission548==nil and type(p.Resume)=='function'); p.RouteEvent=function(a,id) if a==0 and id==4 then return 'OWNED_UNKNOWN' end; return 'UNOWNED' end; ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation.RouteEvent=function() RETURNED_CALLED=true; return 'UNOWNED' end; EVENT(0,4); assert(RETURNED_CALLED==nil); ExposedMembers.JAC_PreparedMission548Witness={stale=true}; LOAD(); assert(ExposedMembers.JAC_PreparedMission548Witness==nil)").exec().unwrap();
     assert_eq!(installer::hooked_view(&hooked).unwrap(), hooked);
 }
