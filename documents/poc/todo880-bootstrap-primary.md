@@ -123,6 +123,16 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+実機03（`D:/CC/Work/todo880/order-phase-03-artifacts`、actual `e5d0f16a`、observer digest `4042d7d53608461316402809f0325b75bdd13a4bb69829fbe8e948c7d0b69171`）は、保存loadとGameplay読取まで成功した後、phase切替で失敗した。TID41456はPID65240の生存handle（wait258、exit259）でheld=true、generation0、pending0だがDR0〜3/6/7が全0だった。終了thread仮説ではこの値を説明できない。結果はerror、復元・detach・子回収は成功として別に保持し、phase問題の解決やrun成功へ読み替えない。
+
+次の有限観測は `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-leave.json` を使う。7手順はrestart→同じ保存load→Gameplay読取→load固定のobserver開始→退出前の読取印→LeaveGame→stop。phase切替は0回、install/Join/支払い/保存の再送は0回。専用DLLは旧記録のc11255eb…c775を明示し、共有DLLを置換しない。親の既存runner/helperで実行でき、bootstrap workerは予約しない。
+
+load4siteの実hitとcompletion、RCXの旧context/Lua候補、TID・sequenceを退出操作の時間帯へ対応付ける。正常cleanupでもhit0を境界証明にしない。固定phaseでは観測外threadのDR保持全数を証明できないため、無hit・一部hitを「該当callなし」と断定しない。取得できた順序はLeaveGameの当該世代だけの証拠で、初回startup、Load/Continue/Quickload共通境界やGameplay Lua同定を証明しない。退出siteを得た場合だけresident Close候補を絞り、Rebuildは旧破棄後・新RESET前、許可公開は自然COMMITとする。loader/factory側の常時接続は別の未達条件として維持する。
+
+`order_capture_fixed_thread_lifecycle_retains_debug_registers` は既存の所有Rust子と本番thread登録を使い、CREATE_THREAD直後のreadback、新規threadの実関数入口、停止したidle時のDRを記録する。phase変更・レジスタ改変注入・EXIT遅延注入はしない。これはCiv6を模擬成功させる検査ではなく、Windowsによる一律初期化リセット仮説を限定的に比較する検査である。
+
+公式[CREATE_THREAD_DEBUG_INFO](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-create_thread_debug_info)は開始addressが近似であり得ることを記す。[SetThreadContext](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setthreadcontext)はOS管理bitの補正を記すが、後続初期化によるDR0〜3の一律消去を保証していない。全0を自分の設定とみなす比較緩和や自動再armは追加しない。
+
 `civ6-order-observer`をfeature `bootstrap-order`の明示指定時だけビルドする。実装は `tools/civ6-pe-rs/src/order_capture.rs`、`order_windows.rs`、`bin/civ6-order-observer.rs`。既存native-probe側はCargoのfeature/bin/dependency宣言とmodule入口だけを追加し、同じソースのDebugger、attach識別、thread HANDLE、CleanupGateを再利用する。既存governor/propertyの実機hardware禁止を解除していない。324 runtimeは変更していない。旧probe一式のcloneは0。
 
 ```powershell
