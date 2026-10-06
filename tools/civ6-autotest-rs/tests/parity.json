@@ -1369,7 +1369,7 @@
     "class": "ScenarioSafetyTests",
     "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
     "rust_test": "autoplay_lua_errors_reconcile_attempted_start_and_stop_once",
-    "assertions": "Unknown/confirmed errors preserve one start mutation; cleanup runs once only after an acknowledged start.",
+    "assertions": "Unknown/confirmed errors preserve one start mutation; cleanup reads the per-attempt Lua owner and stops only that run once, even when the start acknowledgment is lost.",
     "rust_target": "driver_safety"
   },
   {
