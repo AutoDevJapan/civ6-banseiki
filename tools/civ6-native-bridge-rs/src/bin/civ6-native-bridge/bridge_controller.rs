@@ -402,16 +402,24 @@ fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), Str
 }
 
 fn approved_chain(path: &Path) -> bool {
-    same_path(path, Path::new(CHAIN)) || same_path(path, Path::new(AMD_CHAIN))
+    let path = path.to_string_lossy().replace('\\', "/");
+    path.eq_ignore_ascii_case(CHAIN) || path.eq_ignore_ascii_case(AMD_CHAIN)
 }
 fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
-    use std::os::windows::fs::OpenOptionsExt;
-    if same_path(path, Path::new(CHAIN)) {
-        return Ok(None);
-    }
-    if !same_path(path, Path::new(AMD_CHAIN)) {
+    if !approved_chain(path) {
         return Err("unapproved bridge chain image".into());
     }
+    if path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .eq_ignore_ascii_case(CHAIN)
+    {
+        return Ok(None);
+    }
+    pin_hashed_chain_file(path, AMD_CHAIN_SHA).map(Some)
+}
+fn pin_hashed_chain_file(path: &Path, expected: &str) -> Result<File, String> {
+    use std::os::windows::fs::OpenOptionsExt;
     let mut file = fs::OpenOptions::new()
         .read(true)
         .share_mode(1)
@@ -426,10 +434,10 @@ fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
         }
         digest.update(&bytes[..count]);
     }
-    if format!("{:x}", digest.finalize()) != AMD_CHAIN_SHA {
+    if format!("{:x}", digest.finalize()) != expected {
         return Err("bridge AMD chain SHA mismatch".into());
     }
-    Ok(Some(file))
+    Ok(file)
 }
 
 struct Module {
@@ -1632,6 +1640,31 @@ mod tests {
             assert!(pin_chain_image(Path::new(path)).is_err());
         }
         assert!(pin_chain_image(Path::new(CHAIN)).unwrap().is_none());
+    }
+    #[test]
+    fn chain_hash_pin_uses_owned_bytes_and_prevents_replacement_until_drop() {
+        use super::*;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fixture.exe");
+        fs::write(&path, b"abc").unwrap();
+        assert!(pin_hashed_chain_file(&path, AMD_CHAIN_SHA).is_err());
+        let pin = pin_hashed_chain_file(
+            &path,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+        .unwrap();
+        assert_eq!(
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap_err()
+                .raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+        drop(pin);
+        fs::write(&path, b"released").unwrap();
+        fs::remove_file(&path).unwrap();
     }
     use super::*;
     use std::cell::Cell;
