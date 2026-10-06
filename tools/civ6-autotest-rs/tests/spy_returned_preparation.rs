@@ -4,6 +4,9 @@
 mod preparation;
 
 use mlua::Lua;
+#[allow(dead_code)]
+#[path = "../examples/returned-preparation-stage.rs"]
+mod host;
 
 const FIXTURE: &str = r#"
 PROPERTIES={}; CONTEXT='UI'; TURN=62; TIME=10; REQUESTS={}; WRITES={};
@@ -185,7 +188,7 @@ ExposedMembers={JAC_PersonaBoundary={ReadEnemy=function()
    operation=UNIT_OPERATION,endTurn=UNIT_END}
  end
  for i=1,ACTIVE_COUNT do
-  active[i]={name='Returned',level=1,returnTurn=TURN+2,x=145,y=40}
+  active[i]={name='Returned',level=1,returnTurn=UNIT_END,x=145,y=40}
  end
  for i=1,CAPTURED do captured[i]={captor=1,name='',nameIndex=-1,level=1} end
  return {attacker=0,owner=1,turn=TURN,
@@ -206,6 +209,68 @@ end
 
 struct Case {
     lua: Lua,
+}
+
+#[test]
+fn host_stages_resume_each_turn_without_resending_and_record_native_success_or_failure() {
+    for failed in [false, true] {
+        let lua = Lua::new();
+        lua.load(FIXTURE).exec().unwrap();
+        lua.load("PROPERTIES.JAC_BOUNDARY_ENEMY_CONFIG={owner=1,cityID=20}; SAVE_STAGE=nil; local send=UnitManager.RequestOperation; UnitManager.RequestOperation=function(u,op,args) local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; assert(p and SAVE_STAGE==p.stage,'native send before physical host save'); return send(u,op,args) end").exec().unwrap();
+        let mut phases = vec![
+            "travel-start",
+            "travel-tick",
+            "travel-tick",
+            "sources-start",
+        ];
+        phases.extend(std::iter::repeat_n("sources-tick", 7));
+        phases.push("sources-observe");
+        let mut turns = 0;
+        for phase in phases {
+            let scenario = host::scenario("JAC-Enemy-Neutralization-modeled-save", phase).unwrap();
+            for (index, step) in scenario["steps"].as_array().unwrap().iter().enumerate() {
+                match step["action"].as_str().unwrap() {
+                    "load" => {
+                        lua.load("CONTEXT='UI'; JAC_ReturnedPreparation548=nil; ExposedMembers.JAC_ReturnedPreparation548Witness=nil; ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil").exec().unwrap();
+                        lua.load(preparation::UI_SETUP).exec().unwrap();
+                        lua.load("ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation=JAC_ReturnedPreparation548").exec().unwrap();
+                    }
+                    "save" => lua
+                        .load("SAVE_STAGE=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage")
+                        .exec()
+                        .unwrap(),
+                    "ui_lua" => {
+                        lua.globals()
+                            .set(
+                                "CONTEXT",
+                                if step["state_name"] == "GameCore_Tuner" {
+                                    "CORE"
+                                } else {
+                                    "UI"
+                                },
+                            )
+                            .unwrap();
+                        lua.load(step["code"].as_str().unwrap())
+                            .exec()
+                            .unwrap_or_else(|e| panic!("{phase} step{index}: {e}"));
+                    }
+                    "wait_for" => assert!(
+                        lua.load(step["condition"]["code"].as_str().unwrap())
+                            .eval::<bool>()
+                            .unwrap()
+                    ),
+                    "end_turn" => {
+                        turns += 1;
+                        lua.load(format!("TURN=TURN+1; CONTEXT='UI'; if TURN>=UNIT_END and UNIT_END>=0 then if ACTIVE_COUNT==1 then ACTIVE_COUNT=0; MAP_COUNT=1; UNIT_ID=701; UNIT_X=145; UNIT_Y=40; else SOURCE_TURNS={}; NEW_MISSION={{Operation=60,PlotIndex=8511,CompletionTurn=TURN,InitialResult={},EscapeResult=-1}} end; UNIT_OPERATION=-1; UNIT_END=-1 end",if failed {0}else{6},if failed {3}else{0})).exec().unwrap();
+                    }
+                    "exit_to_menu" => {}
+                    other => panic!("unmodeled action {other}"),
+                }
+            }
+        }
+        assert_eq!(turns, 9);
+        lua.load(format!("assert(#REQUESTS==2); local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; assert(p.stage=='SOURCES_RECEIPT' and p.outcome=='{}'); assert(H[1].turn==23 and H[2].turn==45 and H[3].turn==62)",if failed {"SOURCES_FAILED"} else {"SOURCES_COMPLETE"})).exec().unwrap();
+    }
 }
 
 impl Case {
@@ -423,11 +488,12 @@ fn old_history_change_after_owned_sources_event_blocks_receipt() {
     c.arrive(700);
     c.sources_intent();
     c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(); assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)); JAC_ReturnedPreparation548.SourceResult(); H[1].turn=24; CONTEXT='CORE'");
-    assert!(c
-        .lua
-        .load(preparation::SOURCES_RECEIPT_CORE)
-        .exec()
-        .is_err());
+    assert!(
+        c.lua
+            .load(preparation::SOURCES_RECEIPT_CORE)
+            .exec()
+            .is_err()
+    );
     c.run("CONTEXT='UI'; assert(#WRITES==3 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='SOURCES_INTENT')");
 }
 
