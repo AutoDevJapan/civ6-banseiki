@@ -2646,6 +2646,44 @@ impl Runner {
                 fs::write(self.output.join("native-spy-failures-report.json"), json)?;
                 Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
             }
+            "inspect_native_spy_research" => {
+                let phase = text(step, "phase");
+                if !crate::spy_research::PHASES.contains(&phase) {
+                    return Err(Error::scenario("unknown native research inspection phase"));
+                }
+                let raw = self.lua(
+                    "InGame",
+                    &crate::spy_research::read(),
+                    self.budget(deadline, 30.0)?,
+                )?;
+                let report_path = self
+                    .output
+                    .join(format!("native-spy-civic-{phase}-report.json"));
+                if report_path.exists() {
+                    return Err(Error::scenario(
+                        "native research evidence already exists for this phase",
+                    ));
+                }
+                crate::spy_research::preserve_raw(&self.output, phase, &raw)?;
+                let report = crate::spy_research::diagnose(&raw)?;
+                if phase == "after_reload" {
+                    let before: serde_json::Value = serde_json::from_str(&fs::read_to_string(
+                        self.output
+                            .join("native-spy-civic-after_acceptance-report.json"),
+                    )?)
+                    .map_err(|e| Error::scenario(e.to_string()))?;
+                    crate::spy_research::check_reload(&before, &report)?;
+                }
+                if phase == "capacity_ready"
+                    && report.stage != crate::spy_research::Stage::CapacityReady
+                {
+                    return Err(Error::scenario("native capacity three is not yet observed"));
+                }
+                let json = serde_json::to_string_pretty(&report)
+                    .map_err(|e| Error::scenario(e.to_string()))?;
+                fs::write(report_path, json)?;
+                Ok(format!("native Civic accepted; stage={:?} capacity={} captiveCount={} intent={}; old failures preserved; neutralization success=false", report.stage, report.civic.capacity, report.civic.captured, report.civic.intent_token))
+            }
             "carrier_exchange" => {
                 let token = text(step, "token");
                 let candidate = text(step, "candidate");

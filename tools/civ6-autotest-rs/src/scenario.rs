@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 37] = [
+pub const ACTIONS: [&str; 38] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -22,6 +22,7 @@ pub const ACTIONS: [&str; 37] = [
     "wait_for",
     "observe_captive_session",
     "inspect_native_spy_failures",
+    "inspect_native_spy_research",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -126,6 +127,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
+    let mut carrier_captures = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -493,6 +495,17 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     ));
                 }
             }
+            "inspect_native_spy_research" => {
+                if step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout", "phase"].contains(&key.as_str()))
+                }) || !crate::spy_research::PHASES
+                    .contains(&step["phase"].as_str().unwrap_or_default())
+                {
+                    return Err(fail("native spy research inspection needs a known phase and only accepts timeout".into()));
+                }
+            }
             "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
                 let token = step["token"]
@@ -510,11 +523,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     )?;
                 }
                 for key in ["capture_as", "equals_capture"] {
-                    if action == "carrier_exchange" && step.get(key).is_some() {
-                        return Err(fail(format!("carrier_exchange does not support {key}")));
+                    if let Some(value) = step.get(key) {
+                        if action == "carrier_exchange" {
+                            return Err(fail(format!("carrier_exchange does not support {key}")));
+                        }
+                        if !type_id(value) {
+                            return Err(fail(format!("invalid {key}")));
+                        }
                     }
-                    if step.get(key).is_some_and(|v| !type_id(v)) {
-                        return Err(fail(format!("invalid {key}")));
+                }
+                if action == "carrier_checkpoint" {
+                    if let Some(key) = step["equals_capture"].as_str() {
+                        if !carrier_captures.contains(key) {
+                            return Err(fail(
+                                "carrier equals_capture needs an earlier capture_as".into(),
+                            ));
+                        }
+                    }
+                    if let Some(key) = step["capture_as"].as_str() {
+                        carrier_captures.insert(key.to_owned());
                     }
                 }
             }
