@@ -138,6 +138,47 @@ fn reader_uses_actual_nonfirst_assignment_and_distinct_owned_destination() {
 }
 
 #[test]
+fn delayed_republish_waits_read_only_without_resending_and_rejects_unknown_gate() {
+    let scene = side::build(&template(), Some("Successful-Physical-0001"), 1).unwrap();
+    let step = scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| {
+            s["condition"]["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("unknown native destination permission"))
+        })
+        .unwrap();
+    assert_eq!(step["action"], "wait_for");
+    assert_eq!(step["timeout"], 90);
+    let code = step["condition"]["code"].as_str().unwrap();
+    assert!(!code.contains("RequestPlayerOperation") && !code.contains("SetProperty"));
+    let lua = world();
+    lua.load(
+        r#"
+Game.GetLocalPlayer=function() return 0 end
+PlayerConfigurations={[1]={GetLeaderTypeName=function() return L end}}
+JAC_REASSIGN_AUDIT={target=9,before={city={id=42}}}
+gate=false; reads=0; gs.CanAssignGovernor=function(_,hash,city)
+ assert(hash==106 and city:GetID()==9); reads=reads+1; return gate
+end
+UI={RequestPlayerOperation=function() error('read-only wait resent request') end}
+"#,
+    )
+    .exec()
+    .unwrap();
+    assert!(!lua.load(code).eval::<bool>().unwrap());
+    assert!(!lua.load(code).eval::<bool>().unwrap());
+    lua.load("gate=true").exec().unwrap();
+    assert!(lua.load(code).eval::<bool>().unwrap());
+    lua.load("assert(reads==3); gate=nil").exec().unwrap();
+    assert!(lua.load(code).exec().is_err());
+    lua.load("gate=true; assigned=77").exec().unwrap();
+    assert!(lua.load(code).exec().is_err());
+}
+
+#[test]
 fn shipped_void_assignment_is_sent_once_and_completion_wait_reads_actual_target() {
     let scene = side::build(&template(), Some("Successful-Physical-0001"), 1).unwrap();
     let steps = scene["steps"].as_array().unwrap();

@@ -129,12 +129,15 @@ return serial(before)
     steps.push(baseline);
     steps.push(json!({"action":"start_native_paid_runtime","name":"normal-reassign-runtime","max_seconds":300,"timeout":30}));
     steps.push(ui("UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaRepublish'}); return 'one canonical normal refresh; no payment request'"));
-    steps.push(ui(format!(
+    steps.push(wait(format!(
         r#"{HEADER}
 local q=assert(JAC_REASSIGN_AUDIT); local target=assert(CityManager.GetCity(0,q.target))
 assert(target:GetOwner()==0 and target:GetID()~=q.before.city.id)
-assert(gs:CanAssignGovernor(def.Hash,target)==true,'native destination permission not observed')
-return 'explicit runtime permits the distinct owned target city'
+local g=assert(gs:GetGovernor(def.Hash)); local old=assert(g:GetAssignedCity())
+assert(g:GetOwner()==0 and g:GetType()==def.Index and old:GetOwner()==0 and old:GetID()==q.before.city.id,'saved assignment changed before request')
+local allowed=gs:CanAssignGovernor(def.Hash,target)
+assert(type(allowed)=='boolean','unknown native destination permission')
+return allowed==true
 "#
     )));
     steps.push(json!({"action":"ui_lua","state_name":"JAC_LeaderPersona_View","code":format!(r#"
