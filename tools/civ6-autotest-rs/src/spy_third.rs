@@ -186,11 +186,68 @@ local function placeholderSet(roster)
   end
  end; table.sort(result); return R.EncodeText(R.Serialize(result)),count
 end
+local function sameMission(a,b)
+ local left,right=copy(a),copy(b); left.turn=nil; right.turn=nil;
+ return same(left,right)
+end
+local function recordedMission(owner,o)
+ local retry=Game:GetProperty(RETRY); local a=archive(); local s=state();
+ local recorded=assert(Game:GetProperty(MISSION_ACK),'third spy mission acknowledgement missing');
+ local saved=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third spy mission not recorded');
+ local reference=assert(Game:GetProperty('JAC_BOUNDARY_SPY'),'third spy mission reference missing');
+ local marker=Game:GetProperty('JAC_BOUNDARY_SPY_BARRIER'); local intent=s.intents.SPY_MISSION;
+ local m=o.mission; local op=m and GameInfo.UnitOperations[m.operation];
+ assert(T.IsThird(retry) and owner==0 and o.owner==owner and reference.owner==owner and
+  reference.id==retry.spyID and o.spyID==retry.spyID and intent and intent.spyID==retry.spyID and
+  retry.missionRequested and marker and marker.owner==owner and marker.spyID==retry.spyID and
+  marker.action=='SPY_MISSION' and recorded.owner==owner and integer(recorded.token,1) and
+  integer(recorded.turn,0) and type(recorded.observed)=='table' and
+  recorded.observed.turn==recorded.turn and saved.attacker==owner and saved.id==m.id and
+  saved.turn==recorded.turn and m.turn==saved.turn and m.turn>=intent.turn and
+  o.turn==Game.GetCurrentGameTurn() and o.turn>=recorded.turn and
+  integer(m.id,0) and not T.ArchivedEvent(retry,m.id) and op and
+  op.Hash==GameInfo.UnitOperations['UNITOPERATION_SPY_NEUTRALIZE_GOVERNOR'].Hash and
+  m.plot==a.histories[1].plot and same(o.preserved,a.histories) and
+  sameMission(o,recorded.observed),'third spy saved mission lineage or native history differs');
+ return recorded
+end
+-- UI only. The mission's completion turn remains immutable; the observation
+-- turn can advance after loading. No unit operation or mission record is sent.
+local function completedObservation()
+ local saved=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'));
+ local reference=assert(Game:GetProperty('JAC_BOUNDARY_SPY'));
+ local o={owner=0,turn=Game.GetCurrentGameTurn(),spyID=reference.id,
+  mission=nativeHistory(0,saved.id),preserved={nativeHistory(0,0),nativeHistory(0,1)}};
+ recordedMission(0,o); return o
+end
+local function capturedResult(m)
+ local e=EspionageResultTypes;
+ return (m.initial==e.CAPTURED and m.escape==e.NO_RESULT) or
+  ((m.initial==e.SUCCESS_MUST_ESCAPE or m.initial==e.FAIL_MUST_ESCAPE) and m.escape==e.CAPTURED)
+end
+local function preservesWithOneExtra(records,serialize,expected,allowed)
+ for index,value in ipairs(records) do if allowed(value) then
+  local kept={}; for i,row in ipairs(records) do if i~=index then kept[#kept+1]=row end end;
+  if serialize(kept)==expected then return true end
+ end end; return false
+end
 function T.CheckRoster(roster)
  local a=archive(); local text,count=placeholderSet(roster);
- assert(#roster.captured==2 and count==2 and captiveSet(roster)==a.captivesText and
-  text==a.placeholdersText and #roster.offMap==#roster.activeOffMap+2 and
-  roster.physicalCount==2+#roster.map+#roster.activeOffMap and roster.physicalCount<=3,
+ local captured=Game:GetProperty(MISSION_ACK) and capturedResult(completedObservation().mission) or false;
+ local expected=captured and 3 or 2;
+ local captivesPreserved=captiveSet(roster)==a.captivesText;
+ local placeholdersPreserved=text==a.placeholdersText;
+ if captured then
+  captivesPreserved=preservesWithOneExtra(roster.captured,
+   function(rows) return captiveSet({captured=rows}) end,a.captivesText,
+   function(row) return row.captor==1 end);
+  placeholdersPreserved=preservesWithOneExtra(roster.offMap,
+   function(rows) return placeholderSet({offMap=rows}) end,a.placeholdersText,
+   function(row) return row.returnTurn==-1 and row.x==-9999 and row.y==-9999 end);
+ end
+ assert(#roster.captured==expected and count==expected and captivesPreserved and
+  placeholdersPreserved and #roster.offMap==#roster.activeOffMap+expected and
+  roster.physicalCount==expected+#roster.map+#roster.activeOffMap and roster.physicalCount<=3,
   'preserved captive groups or third operative roster changed');
 end
 local ui,core,pending,arms,used,missionPending,nativeUI;
@@ -409,12 +466,14 @@ function T.InstallCore(hooks)
   assert(not ack or p.Token>ack.token,'third spy request token was replayed');
   local o=published(owner,p);
   if p.Action=='RECORD_POST' then
-   local recorded=assert(Game:GetProperty(MISSION_ACK),'third spy mission acknowledgement missing');
-   assert(p.Token>recorded.token and p.Frame>recorded.frame and p.PublishEpoch>recorded.epoch and
-    same(o,recorded.observed),'third spy mission changed after Core response');
-   local saved=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third spy mission not recorded');
-   assert(saved.attacker==owner and saved.id==o.mission.id and saved.turn==o.turn,'third spy recorded mission differs');
-   local s=state(); s.missionPost={token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+   local recorded=recordedMission(owner,o);
+   assert(p.Token>recorded.token and p.RecordToken==recorded.token and
+    (p.Resumed==true or (p.Resumed==nil and p.Frame>recorded.frame and
+     p.PublishEpoch>recorded.epoch and same(o,recorded.observed))),
+    'third spy mission changed after Core response');
+   local s=state(); assert(not s.missionPost,'third spy mission post was replayed');
+   s.missionPost={token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
+    missionID=o.mission.id,recordToken=recorded.token,observation=copy(o),
     source='UI',histories=coreHistories(owner,{o.preserved[1],o.preserved[2],o.mission})};
    Game:SetProperty(STATE,s);
    Game:SetProperty(ACK,{owner=owner,token=p.Token,turn=p.Turn,frame=p.Frame,epoch=p.PublishEpoch,
@@ -651,12 +710,22 @@ function T.InstallUI(hooks)
  local eventReady=B.EnemyMissionEventReady;
  B.EnemyMissionEventReady=function()
   if missionPending then return false end
-  if T.IsThird(Game:GetProperty(RETRY)) and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION') and
-   not state().missionPost then return false end
+  if T.IsThird(Game:GetProperty(RETRY)) and Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION') then
+   local o=completedObservation(); local post=state().missionPost;
+   if not post then return false end
+   if post.recordToken~=nil then
+    assert(post.recordToken==Game:GetProperty(MISSION_ACK).token and post.missionID==o.mission.id and
+     sameMission(post.observation,o),'third spy saved post acknowledgement differs');
+   end
+  end
   return eventReady()
  end;
  B.ThirdSpyStatus=function()
-  local o=T.Read(); checkReady(o);
+  local o=T.Read();
+  if Game:GetProperty(MISSION_ACK) then
+   completedObservation(); checkFailures(o);
+   assert(o.civicOwned==true and o.capacity==3,'third spy completed mission capacity differs');
+  else checkReady(o) end
   if T.IsThird(Game:GetProperty(RETRY)) then T.CheckRoster(ui.roster(0)) end
   local s=Game:GetProperty(STATE); o.bound=s and s.bound or false;
   o.progressed=Game:GetProperty(PRODUCTION) and Game:GetProperty(PRODUCTION).progressed or false;
@@ -701,6 +770,16 @@ function T.InstallUI(hooks)
   ExposedMembers[WITNESS]=nil; ExposedMembers.JAC_PersonaThirdSpyDispatch=nil;
  end);
  T.UpdateUI=function()
+  -- A saved Core acknowledgement is the durable source of this read-only
+  -- continuation. Rebuild only the UI comparison; never replay RECORD_MISSION,
+  -- production, travel, or the native spy operation. Fresh UI frame/epoch
+  -- counters belong to this continuation, not to the pre-load context.
+  if not missionPending and T.IsThird(Game:GetProperty(RETRY)) and
+   Game:GetProperty(MISSION_ACK) and not state().missionPost then
+   local o=completedObservation(); local recorded=Game:GetProperty(MISSION_ACK);
+   missionPending={stage='SENT',token=recorded.token,turn=o.turn,
+    observed=copy(o),id=o.mission.id,published=true,resumed=true};
+  end
   if missionPending then
    local request=missionPending;
    local ok,err=pcall(function()
@@ -708,17 +787,23 @@ function T.InstallUI(hooks)
      local recorded=Game:GetProperty(MISSION_ACK);
      local saved=Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION');
      assert(recorded and recorded.token==request.token and recorded.owner==0 and
-      recorded.turn==request.turn and saved and saved.attacker==0 and saved.id==request.id,
+      (request.resumed or recorded.turn==request.turn) and saved and saved.attacker==0 and saved.id==request.id,
       'third spy recorded mission acknowledgement differs');
      local o=missionObservation(0,request.id);
      assert(same(o,request.observed),'third spy mission changed after Core response');
      local p=publish('RECORD_POST',nextToken(),nil,o);
+     p.RecordToken=recorded.token; p.Resumed=request.resumed or nil;
      request.postToken=p.Token; request.stage='POST_SENT'; request.published=false;
      p.OnStart='JAC_BoundaryThirdSpyStep';
      UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,p);
     elseif request.stage=='POST_SENT' and request.published then
      assert(same(missionObservation(0,request.id),request.observed),
       'third spy mission changed after post-publish confirmation');
+     local post=assert(state().missionPost,'third spy post acknowledgement missing');
+     assert(post.token==request.postToken and post.recordToken==request.token and
+      post.missionID==request.id and same(post.observation,request.observed),
+      'third spy post acknowledgement differs');
+     B.enemyMissionStatus='RECORDED';
      missionPending=nil;
     end
    end);
