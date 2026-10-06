@@ -360,7 +360,7 @@ const RESYNC_SNAPSHOT: &str = migration_lua!(snapshot_lua!(
 local migrated=validate_migration()
 local l=assert(Game:GetProperty('JAC_AGES_LEDGER'),'resync ledger missing')
 assert(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68,'resync requires the single naturally advanced turn')
-assert(Players[0]:IsTurnActive() and not Players[0]:IsTurnActiveComplete(),'human not active before/after resync')
+assert(Players[0]:IsTurnActive() and not Players[0]:IsTurnActiveComplete(),'human control not restored before/after resync: active='..tostring(Players[0]:IsTurnActive())..' complete='..tostring(Players[0]:IsTurnActiveComplete()))
 assert(ser(l.history)==Game:GetProperty('JAC_TODO134_OLD_HISTORY'),'resync legacy history changed')
 local cities={}; local majors=0; local owners={}
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
@@ -453,6 +453,11 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
         lua("GameCore_Tuner", &turn_event_observer()),
         lua("InGame", &turn_event_observer()),
         json!({"action":"observe_for","seconds":30,"timeout":45}),
+        // Capture both control states before the strict snapshot can fail.
+        // An active-but-complete loaded turn must remain a failure, with evidence.
+        lua("GameCore_Tuner", TURN_DIAGNOSTIC),
+        lua("InGame", TURN_DIAGNOSTIC),
+        lua("InGame", SESSION_DIAGNOSTIC),
         resync_snapshot(true),
         lua(
             "InGame",
@@ -461,9 +466,6 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
                 RESYNC_SNAPSHOT.replace("__VERIFY__", "true")
             ),
         ),
-        lua("GameCore_Tuner", TURN_DIAGNOSTIC),
-        lua("InGame", TURN_DIAGNOSTIC),
-        lua("InGame", SESSION_DIAGNOSTIC),
     ]);
     Ok(vec![
         ("legacy-capabilities.json", probe),
@@ -651,6 +653,7 @@ mod tests {
             for changed in [
                 "turn=69",
                 "active=false",
+                "Players[0].IsTurnActiveComplete=function()return true end",
                 "ledger.houses.p0.oathDue=70",
                 "ledger.history.r1.turn=65",
                 "ledger.houses.p1.oathChosen=nil",
