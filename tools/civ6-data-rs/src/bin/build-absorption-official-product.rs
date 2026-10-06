@@ -1327,6 +1327,37 @@ end}
     }
 
     #[test]
+    fn core_roster_accepts_real_vatican_and_rejects_other_profile_or_major() -> Result<()> {
+        for mutation in [
+            "",
+            "MINOR.Civ='CIVILIZATION_SINGAPORE'",
+            "MINOR.Major=true",
+            "MINOR.Receives=false",
+        ] {
+            let lua = Lua::new();
+            lua.load(r#"
+Players,PlayerConfigurations={},{}
+MINOR={ID=2,Civ='CIVILIZATION_VATICAN_CITY',Leader='LEADER_MINOR_CIV_VATICAN_CITY',Major=false,Receives=true}
+local rows={{ID=0,Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Major=true},
+ {ID=1,Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Major=true},MINOR}
+for _,row in ipairs(rows) do
+ Players[row.ID]={GetID=function() return row.ID end,IsAlive=function() return true end,IsMajor=function() return row.Major==true end,
+ GetInfluence=function() return {CanReceiveInfluence=function() return row.Receives==true end} end}
+ PlayerConfigurations[row.ID]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end}
+end
+PlayerManager={GetAliveMinors=function() return {Players[2]} end}
+"#).exec()?;
+            lua.load(mutation).exec()?;
+            assert_eq!(
+                lua.load(CORE_ROSTER).exec().is_ok(),
+                mutation.is_empty(),
+                "{mutation}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn core_roster_rejects_empty_native_city_state_before_actor_wait() -> Result<()> {
         let lua = Lua::new();
         lua.load(r#"
