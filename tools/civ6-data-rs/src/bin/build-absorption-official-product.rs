@@ -64,7 +64,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 const USAGE: &str =
-    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe | --local-human-probe]";
+    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe | --local-human-probe | --unfiltered-startup-probe]";
 
 const P1: &str = civ6_data_rs::absorption_product::P1_EVIDENCE;
 
@@ -1539,12 +1539,150 @@ fn local_human_probe(repo: &Repository) -> Result<Value> {
     )
 }
 
+const UNFILTERED_POOL: &str = r#"
+GameConfiguration.SetValue('EXCLUDE_CITY_STATES',{})
+local exclude=GameConfiguration.GetValue('EXCLUDE_CITY_STATES')
+assert(type(exclude)=='table' and next(exclude)==nil,'unfiltered city-state exclusion array was not stored empty')
+assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==1 and MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua',
+  'unfiltered probe changed native minor count/map script')
+"#;
+
+// Error availability is printed explicitly: nil after Release/Hide is not
+// evidence that post-content configuration was validated without errors.
+const UNFILTERED_ERRORS: &str = r#"
+local function Read(label,fn)
+  local ok,value=pcall(fn)
+  print('[JAC_OFFICIAL_POOL_CFG] phase='..phase..' '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
+  return ok,value
+end
+local function ErrorRow(label,fn)
+  local ok,value=Read(label,fn)
+  if ok and type(value)=='table' then
+    Read(label..'-Id',function() return value.Id end)
+    Read(label..'-Reason',function() return value.Reason end)
+  end
+end
+Read('timestamp-ticks',function() return GetTickCount() end)
+Read('game-parameters-available',function() return g_GameParameters~=nil end)
+Read('stalled',function() return assert(g_GameParameters,'game parameters released').Stalled end)
+ErrorRow('game-error',function() return GetGameParametersError() end)
+local ok,ids=Read('participating-ids',function() return GameConfiguration.GetParticipatingPlayerIDs() end)
+if ok and type(ids)=='table' then for _,actor in ipairs(ids) do
+  Read('participant-'..actor..'-id',function() return actor end)
+  Read('participant-'..actor..'-parameters-available',function() return GetPlayerParameters(actor)~=nil end)
+  ErrorRow('participant-'..actor..'-error',function() return GetPlayerParameterError(actor) end)
+end end
+"#;
+
+const UNFILTERED_MODS: &str = r#"
+-- StagingRoom.lua:3010 enumerates GetEnabledMods; Mods.lua:255,287 and
+-- MainMenu.lua:486 read official mod handles/info, Enabled and Allowance.
+local ok,mods=Read('enabled-mods',function() return GameConfiguration.GetEnabledMods() end)
+if ok and type(mods)=='table' then for index,row in ipairs(mods) do
+  Read('enabled-mod-'..index..'-Id',function() return row.Id end)
+  if type(row)=='table' then
+    local keys={};for key in pairs(row) do keys[#keys+1]=key end
+    table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
+    for _,key in ipairs(keys) do Read('enabled-mod-'..index..'-'..tostring(key),function() return row[key] end) end
+  end
+end end
+local id='9DE86512-DE1A-400D-8C0A-AB46EBBF76B9'
+local ok,handle=Read('maya-gran-colombia-handle',function() return Modding.GetModHandle(id) end)
+if ok and handle~=nil then
+  local infoOK,info=Read('maya-gran-colombia-info',function() return Modding.GetModInfo(handle) end)
+  if infoOK and info then
+    Read('maya-gran-colombia-Id',function() return info.Id end)
+    Read('maya-gran-colombia-Enabled',function() return info.Enabled end)
+    Read('maya-gran-colombia-Allowance',function() return info.Allowance end)
+  end
+end
+return 'post-content/bounds raw configuration observations only; not a DLC gameplay availability or product acceptance proof'
+"#;
+
+const UNFILTERED_CORE: &str = r#"
+for _,role in ipairs(expected) do
+  local p=assert(Players[role.Actor]);local c=assert(PlayerConfigurations[role.Actor])
+  assert(p:IsAlive() and p:IsMajor() and p:IsHuman()==role.Human
+    and c:GetCivilizationTypeName()==role.Civ and c:GetLeaderTypeName()==role.Leader,
+    'unfiltered probe actual major/controller profile changed')
+  if role.Human then assert(Game.GetLocalPlayer()==role.Actor,'unfiltered probe actual local Human Oda changed') end
+end
+local majors,minors,minor=0,0,nil
+for actor=0,63 do
+  local p=Players[actor];local c=PlayerConfigurations[actor]
+  if p and p:IsAlive() then
+    local influence=p:GetInfluence()
+    local receives=influence and type(influence.CanReceiveInfluence)=='function' and influence:CanReceiveInfluence() or false
+    local civ=c and c:GetCivilizationTypeName();local leader=c and c:GetLeaderTypeName()
+    print('[JAC_OFFICIAL_POOL_CORE] actor='..actor..' civ='..tostring(civ)..' leader='..tostring(leader)..' major='..tostring(p:IsMajor())..' receives='..tostring(receives))
+    if p:IsMajor() then majors=majors+1 end
+    if receives then
+      minors=minors+1;minor=actor
+      local definition=civ and GameInfo.Civilizations[civ];local leaderDefinition=leader and GameInfo.Leaders[leader]
+      assert(not p:IsMajor() and not p:IsHuman() and c:GetCivilizationLevelTypeID()==CivilizationLevelTypes.CIVILIZATION_LEVEL_CITY_STATE
+        and definition and leaderDefinition and definition.StartingCivilizationLevelType=='CIVILIZATION_LEVEL_CITY_STATE',
+        'unfiltered probe minor is not a real official native city state')
+      print('[JAC_OFFICIAL_POOL_CORE] native-minor='..minor..' definition='..definition.StartingCivilizationLevelType..' leader-defined=true')
+    end
+  end
+end
+assert(majors==2 and minors==1 and minor~=nil,'unfiltered probe native two-major/one-minor allocation missing')
+local found=false;for _,p in ipairs(PlayerManager.GetAliveMinors()) do if p:GetID()==minor then found=true end end
+assert(found,'unfiltered probe minor absent from real native roster')
+local heroes=GameConfiguration.GetValue('GAMEMODE_HEROES')
+assert(heroes==true or heroes==1,'unfiltered probe actual Heroes configuration missing')
+assert(JAC_AbsorptionFlowGameplay and ExposedMembers.JAC_HeroReadAPI
+  and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function','unfiltered probe native Flow/Hero modules absent')
+print('[JAC_OFFICIAL_POOL_CORE] actual-vatican='..tostring(GameInfo.Civilizations.CIVILIZATION_VATICAN_CITY~=nil)..
+  ' actual-vatican-leader='..tostring(GameInfo.Leaders.LEADER_MINOR_CIV_VATICAN_CITY~=nil)..' product-acceptance=0')
+return 'Pool correlation diagnostic only; product-acceptance=0, no qualification/payment/envoy/receipt acceptance'
+"#;
+
+fn unfiltered_frontend() -> Result<String> {
+    let start = FRONTEND_ALLOCATE
+        .find("-- Validate the complete current pool again")
+        .context("official pool guard boundary")?;
+    let end = FRONTEND_ALLOCATE
+        .find("print('[JAC_OFFICIAL_SETUP]")
+        .context("official setup metadata boundary")?;
+    let allocate=format!("{}local finalExclude=GameConfiguration.GetValue('EXCLUDE_CITY_STATES')\nassert(type(finalExclude)=='table' and next(finalExclude)==nil,'unfiltered final exclusion array changed')\n{}",&FRONTEND_ALLOCATE[..start],&FRONTEND_ALLOCATE[end..]);
+    Ok(allocate.replace(
+        "ReleasePlayerParameters()",
+        &format!(
+            "do\nlocal phase='before-release'\n{UNFILTERED_ERRORS}\nend\nReleasePlayerParameters()"
+        ),
+    ))
+}
+
+fn unfiltered_startup_probe(repo: &Repository) -> Result<Value> {
+    let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
+    let mut steps = base["steps"].as_array().context("official startup steps")?[..6].to_vec();
+    let roles = configured_roles(&steps[1])?;
+    let (setup, _) = steps[2]["code"]
+        .as_str()
+        .context("official setup Lua")?
+        .rsplit_once("return ")
+        .context("official setup return")?;
+    let allocate = unfiltered_frontend()?;
+    steps[2]["code"]=json!(format!("{LOCAL_HUMAN_SESSION_EVENTS}\n{setup}\n{UNFILTERED_POOL}\n{allocate}\n{FRONTEND_BOOTSTRAP}"));
+    steps.insert(3,json!({"action":"ui_lua","state_name":"FrontEnd","code":format!("local phase='after-content-and-bounds'\n{UNFILTERED_ERRORS}\n{UNFILTERED_MODS}")}));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{roles}\n{UNFILTERED_CORE}")}));
+    ensure!(
+        steps.len() <= 11,
+        "unfiltered startup probe exceeded finite scope"
+    );
+    Ok(
+        json!({"name":"Unfiltered official city-state pool correlation diagnostic only; product acceptance=0","judge_profile":"generic","steps":steps}),
+    )
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
     output: PathBuf,
     check: bool,
     frontend_probe: bool,
     local_human_probe: bool,
+    unfiltered_startup_probe: bool,
 }
 
 fn options(args: &[String]) -> Result<Option<Options>> {
@@ -1555,6 +1693,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
     let mut check = false;
     let mut frontend_probe = false;
     let mut local_human_probe = false;
+    let mut unfiltered_startup_probe = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -1576,12 +1715,23 @@ fn options(args: &[String]) -> Result<Option<Options>> {
                 ensure!(!local_human_probe, "--local-human-probe specified twice");
                 local_human_probe = true;
             }
+            "--unfiltered-startup-probe" => {
+                ensure!(
+                    !unfiltered_startup_probe,
+                    "--unfiltered-startup-probe specified twice"
+                );
+                unfiltered_startup_probe = true;
+            }
             _ => bail!("unknown argument {arg}; {USAGE}"),
         }
     }
     let output = output.context(USAGE)?;
     ensure!(
-        !(frontend_probe && local_human_probe),
+        [frontend_probe, local_human_probe, unfiltered_startup_probe]
+            .iter()
+            .filter(|&&v| v)
+            .count()
+            <= 1,
         "choose one probe mode; {USAGE}"
     );
     ensure!(output.is_absolute(), "--output must be an absolute path");
@@ -1594,6 +1744,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
         check,
         frontend_probe,
         local_human_probe,
+        unfiltered_startup_probe,
     }))
 }
 
@@ -1645,6 +1796,8 @@ fn main() -> Result<()> {
             frontend_probe(&Repository::checked_in())?
         } else if options.local_human_probe {
             local_human_probe(&Repository::checked_in())?
+        } else if options.unfiltered_startup_probe {
+            unfiltered_startup_probe(&Repository::checked_in())?
         } else {
             scenario(&Repository::checked_in())?
         })?
@@ -1893,11 +2046,12 @@ for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizatio
 GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAnyMultiplayer=function() return false end,
  GetValue=function(key) return VALUES[key] end,SetValue=function(key,value) VALUES[key]=value end,
  GetHiddenPlayerCount=function() return 2 end,UpdateEnabledMods=function()
-  assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==2 and VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
+  assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==(UNFILTERED and 0 or 2) and VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
   assert(LEADER_VALUES and LEADER_VALUES:find('LEADER_SIMON_BOLIVAR',1,true),'mods refreshed before dependency helper values');CALLS[#CALLS+1]='mods'
   if CHANGE_MAJOR then majors[1].Leader='wrong-leader' end
   if CHANGE_CONTROLLER then majors[1].Slot=1 end
   if DROP_FILTER then VALUES.EXCLUDE_CITY_STATES={} end
+  if INJECT_EXCLUSION then VALUES.EXCLUDE_CITY_STATES={'CIVILIZATION_GENEVA'} end
  end,
  SetParticipatingPlayerCount=function(n)
   assert(n==4,'city states must not be added to participating major/hidden count')
@@ -2031,6 +2185,37 @@ end}
                 assert_eq!(probe["steps"][4]["action"], "start_game");
                 lua.load("assert(Network.GetLocalPlayerID()==-1);assert(GetPlayerParameters(0):Config_CanWriteParameter()==false);assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA')").exec()?;
                 lua.load("assert(table.concat(SEQUENCE,',')=='build,rebuild,game1,player1,game2,player2,release,hide')").exec()?;
+            }
+        }
+        let probe = unfiltered_startup_probe(&Repository::checked_in())?;
+        let code = probe["steps"][2]["code"].as_str().unwrap();
+        for (mutation, reason) in [
+            ("", None),
+            (
+                "INJECT_EXCLUSION=true",
+                Some("unfiltered final exclusion array changed"),
+            ),
+            (
+                "CHANGE_MAJOR=true",
+                Some("standard setup changed an actual major civilization, leader or controller"),
+            ),
+            (
+                "NO_DEPENDENCY=true",
+                Some("normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency"),
+            ),
+        ] {
+            let lua = Lua::new();
+            lua.load(format!("UNFILTERED=true\n{SETUP}\n{mutation}"))
+                .exec()?;
+            let result = lua.load(code).exec();
+            if let Some(reason) = reason {
+                assert!(
+                    result.expect_err(mutation).to_string().contains(reason),
+                    "{mutation}"
+                );
+            } else {
+                result?;
+                lua.load("assert(next(VALUES.EXCLUDE_CITY_STATES)==nil);assert(VALUES.CITY_STATE_COUNT==1 and VALUES.GAMEMODE_HEROES==true);assert(BOUNDS.MaxMajor==2 and BOUNDS.MaxMinor==6);assert(table.concat(SEQUENCE,',')=='build,rebuild,game1,player1,game2,player2,release,hide')").exec()?;
             }
         }
         Ok(())
@@ -3505,6 +3690,140 @@ Modding={GetLastModErrorString=function() error('mod error getter unavailable') 
     }
 
     #[test]
+    fn unfiltered_probe_preserves_configuration_and_only_relaxes_its_own_pool() -> Result<()> {
+        let repo = Repository::checked_in();
+        let normal = scenario(&repo)?;
+        let local = local_human_probe(&repo)?;
+        let probe = unfiltered_startup_probe(&repo)?;
+        let steps = probe["steps"].as_array().unwrap();
+        assert!(steps.len() <= 11);
+        assert_eq!(steps[1], normal["steps"][1]);
+        for (probe_index, normal_index) in [(0, 0), (4, 3), (5, 4), (6, 5)] {
+            assert_eq!(steps[probe_index], normal["steps"][normal_index]);
+        }
+        assert_eq!(
+            steps.iter().filter(|s| s["action"] == "start_game").count(),
+            1
+        );
+        let setup = steps[2]["code"].as_str().unwrap();
+        assert!(setup.contains("SetValue('EXCLUDE_CITY_STATES',{})"));
+        assert!(setup.contains(
+            "normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency"
+        ));
+        assert!(!setup.contains("final engine pool is not exactly Vatican City"));
+        for scene in [&normal, &local] {
+            assert!(scene["steps"][2]["code"]
+                .as_str()
+                .unwrap()
+                .contains("final engine pool is not exactly Vatican City"));
+        }
+        assert!(steps.last().unwrap()["code"]
+            .as_str()
+            .unwrap()
+            .contains("product-acceptance=0"));
+        for step in steps {
+            assert!(!["end_turn", "save", "load"]
+                .iter()
+                .any(|action| step["action"] == *action));
+            if let Some(code) = step
+                .get("code")
+                .or_else(|| step["condition"].get("code"))
+                .and_then(Value::as_str)
+            {
+                Lua::new().load(code).into_function()?;
+                for forbidden in [
+                    "Network.HostGame",
+                    "Network.LeaveGame",
+                    "SetReady",
+                    "SetLeaderType",
+                    "SetCivilizationType",
+                    "Game:SetProperty",
+                    "P.Command(",
+                    "N.Request(",
+                    "F.Begin(",
+                    "GiveFreeTokenToPlayer(",
+                ] {
+                    assert!(!code.contains(forbidden), "{forbidden}");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unfiltered_native_base_minor_is_only_a_diagnostic_and_does_not_pass_vatican_acceptance(
+    ) -> Result<()> {
+        let scene = unfiltered_startup_probe(&Repository::checked_in())?;
+        let code = scene["steps"].as_array().unwrap().last().unwrap()["code"]
+            .as_str()
+            .unwrap();
+        for (mutation,reason) in [
+            ("",None),
+            ("Players[0].IsHuman=function() return true end",Some("actual major/controller profile changed")),
+            ("Game.GetLocalPlayer=function() return 0 end",Some("actual local Human Oda changed")),
+            ("Players[2].IsMajor=function() return true end",Some("not a real official native city state")),
+            ("GameInfo.Civilizations.CIVILIZATION_HONG_KONG=nil",Some("not a real official native city state")),
+            ("GameInfo.Leaders.LEADER_MINOR_CIV_HONG_KONG=nil",Some("not a real official native city state")),
+            ("Players[2].GetInfluence=function() return {CanReceiveInfluence=function() return false end} end",Some("native two-major/one-minor allocation missing")),
+            ("PlayerManager.GetAliveMinors=function() return {} end",Some("minor absent from real native roster")),
+            ("ExposedMembers.JAC_HeroReadAPI.ReadPlayer=nil",Some("native Flow/Hero modules absent")),
+        ] {
+            let lua=Lua::new();lua.load(r#"
+MESSAGES={};print=function(s) MESSAGES[#MESSAGES+1]=s end
+Game={GetLocalPlayer=function() return 1 end};GameConfiguration={GetValue=function() return true end}
+CivilizationLevelTypes={CIVILIZATION_LEVEL_CITY_STATE=3}
+GameInfo={Civilizations={CIVILIZATION_HONG_KONG={StartingCivilizationLevelType='CIVILIZATION_LEVEL_CITY_STATE'}},Leaders={LEADER_MINOR_CIV_HONG_KONG={}}}
+Players={};PlayerConfigurations={}
+local rows={{ID=0,Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA'},
+ {ID=1,Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE'},
+ {ID=2,Civ='CIVILIZATION_HONG_KONG',Leader='LEADER_MINOR_CIV_HONG_KONG'}}
+for _,row in ipairs(rows) do local id=row.ID
+ Players[id]={GetID=function() return id end,IsAlive=function() return true end,IsMajor=function() return id<2 end,IsHuman=function() return id==1 end,
+ GetInfluence=function() return {CanReceiveInfluence=function() return id==2 end} end}
+ PlayerConfigurations[id]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end,GetCivilizationLevelTypeID=function() return id==2 and 3 or 0 end}
+end
+PlayerManager={GetAliveMinors=function() return {Players[2]} end}
+JAC_AbsorptionFlowGameplay={};ExposedMembers={JAC_HeroReadAPI={ReadPlayer=function() return nil end}}
+"#).exec()?;
+            lua.load(mutation).exec()?;
+            let result=lua.load(code).eval::<String>();
+            if let Some(reason)=reason {assert!(result.expect_err(mutation).to_string().contains(reason),"{mutation}");}
+            else {
+                assert!(result?.contains("product-acceptance=0"));
+                lua.load("local s=table.concat(MESSAGES,'\\n');assert(s:find('actual-vatican=false actual-vatican-leader=false product-acceptance=0',1,true))").exec()?;
+                assert!(lua.load(CORE_ROSTER).exec().expect_err("Vatican-only acceptance must reject missing DLC").to_string().contains("loaded Core Vatican civilization/leader content"));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn unfiltered_mod_and_all_participant_error_rows_remain_independent_observations() -> Result<()>
+    {
+        for missing_mods in [false, true] {
+            let lua = Lua::new();
+            lua.load(format!(r#"
+MESSAGES={{}};print=function(s) MESSAGES[#MESSAGES+1]=s end
+phase='after-content-and-bounds'
+GetTickCount=function() return 654 end
+g_GameParameters=nil
+GameConfiguration={{GetParticipatingPlayerIDs=function() return {{0,1,7}} end,GetEnabledMods=function()
+ if {missing_mods} then error('enabled mods unavailable') end
+ return {{{{Id='base-id',Title='Base',Official=true}}}} end}}
+GetGameParametersError=function() return nil end
+GetPlayerParameters=function(actor) return nil end
+GetPlayerParameterError=function(actor) if actor==0 then error('error getter unavailable') end;return {{Id='NativeError'..actor,Reason='reason'..actor}} end
+Modding={{GetModHandle=function(id) assert(id=='9DE86512-DE1A-400D-8C0A-AB46EBBF76B9');return 9 end,
+ GetModInfo=function(handle) assert(handle==9);return {{Id='9DE86512-DE1A-400D-8C0A-AB46EBBF76B9',Enabled=false,Allowance=false}} end}}
+"#)).exec()?;
+            lua.load(format!("{UNFILTERED_ERRORS}\n{UNFILTERED_MODS}"))
+                .exec()?;
+            lua.load("local s=table.concat(MESSAGES,'\\n');assert(s:find('game-parameters-available ok=true type=boolean value=false',1,true));assert(s:find('participant-0-error ok=false type=error',1,true));assert(s:find('participant-7-error-Id ok=true type=string value=NativeError7',1,true));assert(s:find('participant-7-error-Reason ok=true type=string value=reason7',1,true));assert(s:find('maya-gran-colombia-Enabled ok=true type=boolean value=false',1,true));assert(s:find('maya-gran-colombia-Allowance ok=true type=boolean value=false',1,true))").exec()?;
+        }
+        Ok(())
+    }
+
+    #[test]
     fn cli_requires_an_explicit_absolute_json_and_check_never_writes() -> Result<()> {
         let root = std::env::var_os("CARGO_TARGET_DIR")
             .map(PathBuf::from)
@@ -3523,7 +3842,8 @@ Modding={GetLastModErrorString=function() error('mod error getter unavailable') 
                 output: output.clone(),
                 check: true,
                 frontend_probe: false,
-                local_human_probe: false
+                local_human_probe: false,
+                unfiltered_startup_probe: false
             })
         );
         assert!(options(&[]).is_err());
@@ -3556,6 +3876,18 @@ Modding={GetLastModErrorString=function() error('mod error getter unavailable') 
         probe_args.pop();
         probe_args.push("--frontend-probe".into());
         assert!(options(&probe_args).is_err());
+        let mut unfiltered = args.clone();
+        unfiltered.push("--unfiltered-startup-probe".into());
+        assert!(options(&unfiltered)?.unwrap().unfiltered_startup_probe);
+        for incompatible in [
+            "--unfiltered-startup-probe",
+            "--local-human-probe",
+            "--frontend-probe",
+        ] {
+            let mut bad = unfiltered.clone();
+            bad.push(incompatible.into());
+            assert!(options(&bad).is_err());
+        }
         assert!(emit(&output, "new\n", true).is_err());
         assert!(!output.exists());
         emit(&output, "original\n", false)?;
