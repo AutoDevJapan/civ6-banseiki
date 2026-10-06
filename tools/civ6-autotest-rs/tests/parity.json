@@ -1368,8 +1368,8 @@
     "source": "tools/civ6-autotest/tests/test_safety.py",
     "class": "ScenarioSafetyTests",
     "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
-    "rust_test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
-    "assertions": "Unknown/confirmed errors at start/status each preserve one start mutation and no cleanup mutation.",
+    "rust_test": "test_autoplay_lua_error_cleans_up_only_after_acknowledged_start",
+    "assertions": "Unknown/confirmed errors preserve one start mutation; cleanup runs once only after an acknowledged start.",
     "rust_target": "driver_safety"
   },
   {

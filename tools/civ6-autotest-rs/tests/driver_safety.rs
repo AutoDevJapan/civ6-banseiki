@@ -1012,7 +1012,7 @@ fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
 }
 
 #[test]
-fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
+fn test_autoplay_lua_error_cleans_up_only_after_acknowledged_start() {
     for fail_at in ["start", "status"] {
         for kind in [ErrorKind::LuaResponseUnknown, ErrorKind::LuaExecution] {
             let f = Fixture::new();
@@ -1038,7 +1038,10 @@ fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
                 "may have run",
             );
             assert_eq!(lua_count(&f, "SetActive(true)"), 1);
-            assert_eq!(lua_count(&f, "SetActive(false)"), 0);
+            assert_eq!(
+                lua_count(&f, "SetActive(false)"),
+                usize::from(fail_at == "status")
+            );
         }
     }
 }

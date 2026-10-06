@@ -63,12 +63,18 @@ fn test_turn_metrics_preserve_missing_samples() {
 #[test]
 fn test_autoplay_writes_turn_and_memory_samples() {
     let mut statuses = VecDeque::from(["2|true|false|1|0", "3|false|true|0|0"]);
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            return Ok(statuses.pop_front().unwrap().into());
+            let status = statuses.pop_front().unwrap();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status.into());
         }
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
+        }
+        if code.contains("IsAlive()") {
+            return Ok(format!("{observed_turn}|true"));
         }
         Ok("true".into())
     });
@@ -194,7 +200,7 @@ fn test_autoplay_reports_eliminated_human_instead_of_overshoot() {
         } else if code.contains("tostring(AutoplayManager.IsActive())") {
             Ok("52|false|true|0|-1".into())
         } else if code.contains("IsAlive()") {
-            Ok("false".into())
+            Ok("52|false".into())
         } else {
             Ok("true".into())
         }
@@ -215,12 +221,18 @@ fn test_event_and_transient_inactive_state_do_not_complete_or_restart_early() {
         "4|false|false|0|0",
         "4|false|true|0|0",
     ])));
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
         }
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            return Ok(statuses.lock().unwrap().pop_front().unwrap().into());
+            let status = statuses.lock().unwrap().pop_front().unwrap();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status.into());
+        }
+        if code.contains("IsAlive()") {
+            return Ok(format!("{observed_turn}|true"));
         }
         Ok("true".into())
     });

@@ -23,12 +23,19 @@ struct Game {
     closed: Vec<String>,
     cleanup_fail_once: bool,
     cleanup_calls: usize,
+    alive_ack_lost_once: bool,
+    alive_ack_always_lost: bool,
+    dies_after_lost_ack: bool,
+    alive: bool,
+    stop_calls: usize,
+    stop_ack_lost: bool,
     next_screen: Option<String>,
 }
 impl Game {
     fn new(turns: &[i64]) -> Self {
         let mut game = Self {
             turn: 1,
+            alive: true,
             pending: turns.iter().copied().collect(),
             ..Default::default()
         };
@@ -68,6 +75,14 @@ impl Game {
                 ));
             }
         }
+        if code.contains("AutoplayManager.SetActive(false)") {
+            self.stop_calls += 1;
+            self.active = false;
+            if self.stop_ack_lost {
+                return Err(Error::unknown("stop acknowledgement lost"));
+            }
+            return Ok("true".into());
+        }
         if let Some(start) = code.find("SetTurns(") {
             let rest = &code[start + "SetTurns(".len()..];
             self.left = rest.split(')').next().unwrap().parse().unwrap();
@@ -93,7 +108,20 @@ impl Game {
             return Ok("none".into());
         }
         if code.contains("IsAlive()") {
-            return Ok("true".into());
+            if self.alive_ack_always_lost {
+                return Err(Error::unknown("alive read acknowledgement never arrived"));
+            }
+            if self.alive_ack_lost_once {
+                self.alive_ack_lost_once = false;
+                self.advance();
+                if self.dies_after_lost_ack {
+                    self.alive = false;
+                }
+                return Err(Error::unknown(
+                    "alive read ran but FireTuner acknowledgement was lost",
+                ));
+            }
+            return Ok(format!("{}|{}", self.turn, self.alive));
         }
         Ok("true".into())
     }
@@ -159,6 +187,62 @@ fn test_statement_after_final_turn_retries_only_idempotent_handler_cleanup() {
     assert!(h
         .log()
         .contains("closed AI diplomacy statement after an InGame timeout"));
+}
+
+#[test]
+fn autoplay_retries_only_the_alive_read_after_lost_acknowledgement() {
+    let mut game = Game::new(&[]);
+    game.alive_ack_lost_once = true;
+    let (h, game, result) = autoplay(game, 2);
+    assert!(result.unwrap().contains("autoplay completed 2 turns (1->3"));
+    assert_eq!(game.lock().unwrap().turn, 3);
+    assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+    assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
+    assert!(h.events().iter().any(|event| event == "disconnect"));
+}
+
+#[test]
+fn exhausted_alive_read_stops_autoplay_once_and_preserves_the_failure() {
+    for stop_ack_lost in [false, true] {
+        let mut game = Game::new(&[]);
+        game.alive_ack_always_lost = true;
+        game.stop_ack_lost = stop_ack_lost;
+        let (h, game, result) = autoplay(game, 2);
+        let error = result.unwrap_err();
+        assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+        assert!(error
+            .to_string()
+            .contains("alive read acknowledgement never arrived"));
+        let game = game.lock().unwrap();
+        assert_eq!(game.stop_calls, 1);
+        assert!(!game.active);
+        assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+        assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(false)"), 1);
+        assert!(count(&h, "InGame", "Players[0]:IsAlive()") >= 2);
+    }
+}
+
+#[test]
+fn lost_alive_ack_does_not_record_a_death_on_the_old_turn() {
+    let mut game = Game::new(&[]);
+    game.alive_ack_lost_once = true;
+    game.dies_after_lost_ack = true;
+    let (mut h, game) = harness(game);
+    let result = h.runner.autoplay(
+        2,
+        600.0,
+        AutoplayOptions {
+            allow_human_elimination: true,
+            ..Default::default()
+        },
+    );
+    assert!(result
+        .unwrap()
+        .contains("human_elimination_first_observed_turn=3"));
+    assert_eq!(game.lock().unwrap().turn, 3);
+    assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+    assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
+    assert!(h.log().contains("first_observed_turn=3"));
 }
 
 #[test]

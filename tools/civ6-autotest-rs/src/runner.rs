@@ -776,6 +776,24 @@ impl Runner {
             self.budget(deadline, 5.0)?,
         )?)
     }
+    pub fn human_alive(&mut self, human: i64, deadline: f64) -> Result<(i64, bool)> {
+        // This is a read-only probe. A lost FireTuner acknowledgement may be
+        // retried without replaying the command that started autoplay.
+        let end = deadline.min(self.clock.now() + 30.0);
+        let code = format!("return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Players[{human}]:IsAlive())");
+        let value = self.retry_idempotent(end, |r| r.lua("InGame", &code, r.budget(end, 5.0)?))?;
+        let (turn, alive) = value
+            .split_once('|')
+            .ok_or_else(|| Error::scenario(format!("Unexpected player alive status: {value:?}")))?;
+        let turn = parse_integer(turn)?;
+        match alive {
+            "true" => Ok((turn, true)),
+            "false" => Ok((turn, false)),
+            _ => Err(Error::scenario(format!(
+                "Unexpected player alive status: {value:?}"
+            ))),
+        }
+    }
     pub fn research_query(
         &mut self,
         code: &str,
@@ -2364,17 +2382,14 @@ impl Runner {
                             .as_bool()
                             .unwrap()
                     } else {
-                        let value = self.lua(
-                            "InGame",
-                            &format!("return tostring(Players[{human}]:IsAlive())"),
-                            self.budget(deadline, 5.0)?,
-                        )?;
-                        if !["true", "false"].contains(&value.as_str()) {
-                            return Err(Error::scenario(format!(
-                                "Unexpected player alive status: {value:?}"
-                            )));
+                        let (alive_turn, alive) = self.human_alive(human, deadline)?;
+                        if alive_turn != current.turn {
+                            // A read-only retry can finish on the next turn.
+                            // Refresh status before attributing survival or
+                            // elimination to this turn.
+                            continue;
                         }
-                        value == "true"
+                        alive
                     };
                     last_alive_check = Some(current.turn);
                     if alive {
@@ -2497,11 +2512,13 @@ impl Runner {
                     Error::interrupted(format!("Interrupted while autoplay failed: {e}"))
                 });
             }
+            // A confirmed start must be stopped even if a later read loses its reply.
             Err(e)
-                if matches!(
-                    e.kind,
-                    ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
-                ) =>
+                if !autoplay_started
+                    && matches!(
+                        e.kind,
+                        ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
+                    ) =>
             {
                 return Err(e)
             }
