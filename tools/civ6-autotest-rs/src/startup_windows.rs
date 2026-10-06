@@ -240,6 +240,22 @@ impl PinnedGame {
         Ok(())
     }
 }
+pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
+    let Some((pid, started)) = crate::restart::single_civ_process(0.0)? else {
+        return Ok(None);
+    };
+    if !floor.is_finite() || !started.is_finite() || started < floor {
+        return Err(Error::input(
+            "process predates this Steam launch or has invalid creation time",
+        ));
+    }
+    let game = GameProcess { pid, started };
+    let handle = pinned(game, 0x1000)?;
+    let raw = handle.0 as isize;
+    std::mem::forget(handle);
+    Ok(Some(PinnedGame { game, handle: raw }))
+}
+
 pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
     let mut pid = 0;
     unsafe {

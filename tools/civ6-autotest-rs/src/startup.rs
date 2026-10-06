@@ -261,8 +261,8 @@ pub fn verify_lock_record(record: &Value, chain_pid: u32) -> Result<()> {
 mod platform;
 #[cfg(windows)]
 pub use platform::{
-    collect_diagnostics, diagnostic_worker, loading_evidence, pin_window_process, reset_display,
-    DiagnosticSession, PinnedGame, RecoveryLease,
+    collect_diagnostics, diagnostic_worker, loading_evidence, pin_launched_process,
+    pin_window_process, reset_display, DiagnosticSession, PinnedGame, RecoveryLease,
 };
 #[cfg(not(windows))]
 #[derive(Default)]
@@ -272,6 +272,10 @@ impl DiagnosticSession {
     pub fn finish(&mut self) -> Result<Value> {
         Ok(json!({"status":"all_exited"}))
     }
+}
+#[cfg(not(windows))]
+pub fn pin_launched_process(_: f64) -> Result<Option<PinnedGame>> {
+    Err(Error::input("startup process identity requires Windows"))
 }
 #[cfg(not(windows))]
 pub fn pin_window_process(_: isize, _: f64) -> Result<PinnedGame> {

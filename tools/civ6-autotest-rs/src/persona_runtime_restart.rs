@@ -362,6 +362,12 @@ impl Runner {
         if self.resident_runtime_identity.is_some() {
             return self.retire_persona_process_inner(deadline, true);
         }
+        self.retirement_authorized(deadline, true)?;
+        // Steam launches asynchronously. A timeout/cancellation can occur
+        // before any window exists, so process ownership cannot depend on UI.
+        if self.persona_launched_process.is_none() && self.persona_launch_requested {
+            self.persona_launched_process = self.backend.pin_launched_process()?;
+        }
         // A launched game belongs to this run before a save has loaded or the
         // resident bridge has been installed. Retain that independent ownership
         // through cancellation, preflight failure and an uncertain install.
@@ -384,6 +390,7 @@ impl Runner {
         }
         self.backend.finish_native_process_exit()?;
         self.persona_launched_process = None;
+        self.persona_launch_requested = false;
         // A failed load may leave incomplete logs. Preserve them via the run's
         // normal error path; cleanup must not depend on a successful load.
         self.persona_transition(json!({"kind":"preinstall_process_exit",
@@ -418,6 +425,7 @@ impl Runner {
             self.backend.finish_native_process_exit()?;
             self.resident_runtime_identity = None;
             self.persona_launched_process = None;
+            self.persona_launch_requested = false;
             if self.baseline.is_some() && !self.persona_current_logs_archived {
                 self.archive_persona_log_generation()?;
             }
@@ -445,6 +453,7 @@ impl Runner {
         self.backend.finish_native_process_exit()?;
         self.resident_runtime_identity = None;
         self.persona_launched_process = None;
+        self.persona_launch_requested = false;
         if self.baseline.is_some() && !self.persona_current_logs_archived {
             self.archive_persona_log_generation()?;
         }
@@ -472,6 +481,9 @@ mod tests {
         calls: Vec<&'static str>,
         lease_error: Option<&'static str>,
         exit_confirmed: bool,
+        window_error: Option<ErrorKind>,
+        dx11_error: bool,
+        pin_rejected: bool,
     }
     struct LaunchBackend(Arc<Mutex<LaunchState>>);
     impl Backend for LaunchBackend {
@@ -485,10 +497,26 @@ mod tests {
             Ok(())
         }
         fn wait_window(&mut self, _: f64) -> Result<isize> {
+            if let Some(kind) = self.0.lock().unwrap().window_error {
+                return Err(Error::new(kind, "window not available"));
+            }
             Ok(1)
         }
         fn require_dx11(&mut self, _: isize) -> Result<()> {
+            if self.0.lock().unwrap().dx11_error {
+                return Err(Error::input("window validation failed"));
+            }
             Ok(())
+        }
+        fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+            let mut s = self.0.lock().unwrap();
+            s.calls.push("pin_without_window");
+            if s.pin_rejected {
+                return Err(Error::input(
+                    "process predates launch or identity is ambiguous",
+                ));
+            }
+            Ok(s.process.map(Into::into))
         }
         fn live_lease_budget(&self) -> Result<Option<f64>> {
             match self.0.lock().unwrap().lease_error {
@@ -613,6 +641,64 @@ mod tests {
         assert_eq!(r.persona_launched_process, None);
         r.cleanup_persona_process().unwrap();
         assert!(state.lock().unwrap().calls.is_empty());
+    }
+
+    #[test]
+    fn launch_cleanup_is_independent_of_window_arrival_and_dx11_validation() {
+        for (window_error, dx11_error, pin_rejected) in [
+            (Some(ErrorKind::Interrupted), false, false),
+            (Some(ErrorKind::Scenario), false, false),
+            (None, true, false),
+            (Some(ErrorKind::Interrupted), false, true),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = Arc::new(Mutex::new(LaunchState {
+                exit_confirmed: true,
+                window_error,
+                dx11_error,
+                pin_rejected,
+                ..Default::default()
+            }));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(LaunchBackend(Arc::clone(&state))),
+                Arc::new(SystemClock),
+            );
+            r.persona_runtime_restart = true;
+            let mut attempt = StartupAttempt::default();
+            assert!(r
+                .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+                .is_err());
+            assert!(r.persona_launch_requested);
+            assert_eq!(r.resident_runtime_identity, None);
+            let result = r.cleanup_persona_process();
+            let s = state.lock().unwrap();
+            if pin_rejected {
+                assert!(result.is_err());
+                assert_eq!(s.calls, ["launch", "pin_without_window"]);
+                assert!(r.persona_launch_requested);
+            } else {
+                result.unwrap();
+                assert!(!r.persona_launch_requested);
+                assert_eq!(r.persona_launched_process, None);
+                let expected = if dx11_error {
+                    vec!["launch", "terminate", "wait_exit", "release"]
+                } else {
+                    vec![
+                        "launch",
+                        "pin_without_window",
+                        "terminate",
+                        "wait_exit",
+                        "release",
+                    ]
+                };
+                assert_eq!(s.calls, expected);
+            }
+        }
     }
 
     struct LostStateRead {

@@ -28,6 +28,11 @@ pub trait Backend: Send {
     fn pin_startup_process(&mut self, _hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         Ok(self.single_process(0.0)?.map(Into::into))
     }
+    fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+        Err(Error::input(
+            "backend cannot identify a windowless launched process",
+        ))
+    }
     fn startup_loading_evidence(
         &mut self,
         _game: crate::startup::GameProcess,
@@ -692,6 +697,17 @@ pub struct SystemBackend {
     native_order: Option<crate::native_order::Session>,
 }
 impl Backend for SystemBackend {
+    fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+        let floor = self
+            .launch_floor
+            .ok_or_else(|| Error::input("no Steam launch request to pin"))?;
+        let Some(pin) = crate::startup::pin_launched_process(floor)? else {
+            return Ok(None);
+        };
+        let game = pin.game;
+        self.startup_pin = Some(pin);
+        Ok(Some(game))
+    }
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         crate::live_lease::environment_budget()
     }
@@ -983,9 +999,8 @@ impl Backend for SystemBackend {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| Error::input("Steam launch timestamp unavailable"))?
             .as_secs_f64();
-        self.launch_floor = None;
-        crate::restart::request_steam_launch()?;
         self.launch_floor = Some(floor);
+        crate::restart::request_steam_launch()?;
         Ok(())
     }
     fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
@@ -1084,6 +1099,7 @@ pub struct Runner {
     pub persona_runtime_restart: bool,
     persona_runtime_generation: u32,
     persona_launched_process: Option<crate::startup::GameProcess>,
+    persona_launch_requested: bool,
     persona_archived_logs: BTreeMap<String, String>,
     persona_current_log_prefix: BTreeMap<String, String>,
     persona_current_logs_archived: bool,
@@ -1154,6 +1170,7 @@ impl Runner {
             persona_runtime_restart: false,
             persona_runtime_generation: 0,
             persona_launched_process: None,
+            persona_launch_requested: false,
             persona_archived_logs: BTreeMap::new(),
             persona_current_log_prefix: BTreeMap::new(),
             persona_current_logs_archived: false,
@@ -2047,6 +2064,9 @@ impl Runner {
                 if recovery {
                     self.backend.check_startup_lock()?;
                 }
+                if self.persona_runtime_restart {
+                    self.persona_launch_requested = true;
+                }
                 self.backend.launch()?;
                 startup.launch_requested = true;
                 attempts += 1;
@@ -2058,7 +2078,6 @@ impl Runner {
                 .wait_window(deadline.min(self.clock.now() + 5.0))
             {
                 Ok(hwnd) => {
-                    self.backend.require_dx11(hwnd)?;
                     if pin_process && startup.launch_requested {
                         startup.process = self.backend.pin_startup_process(hwnd)?;
                         if self.persona_runtime_restart {
@@ -2068,6 +2087,7 @@ impl Runner {
                                 })?);
                         }
                     }
+                    self.backend.require_dx11(hwnd)?;
                     return Ok(());
                 }
                 Err(e) if e.kind == ErrorKind::Input => last = e.to_string(),
@@ -2325,6 +2345,7 @@ impl Runner {
         self.backend.finish_native_process_exit()?;
         self.resident_runtime_identity = None;
         self.persona_launched_process = None;
+        self.persona_launch_requested = false;
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
