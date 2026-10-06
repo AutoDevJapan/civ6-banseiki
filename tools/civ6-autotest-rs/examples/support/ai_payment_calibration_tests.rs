@@ -8,7 +8,7 @@ fn fixture(cost: u8, paid: u8, unjoined: bool) -> Lua {
     let lua = Lua::new();
     lua.load(format!(r#"
 TARGET={target}; COST={cost}; SPENT={paid}; TURN=10; HUMAN=false; FAIL=''; UNKNOWN=false; ASSIGN=false
-FLAGS={{}}; ROWS={{}}; PROPS={{}}; TOTAL=20; STAGE='EVOLVING'; UNIT=55
+FLAGS={{}}; ROWS={{}}; PROPS={{}}; TOTAL=20; STAGE='EVOLVING'; UNIT=55; OTHER_UNIT=false; BROKEN_INDIVIDUAL=false
 local function iter(values) return function() local n=0; return function() n=n+1; return values[n] end end end
 local function members(values) return function() local n=0; return function() n=n+1; if values[n] then return n,values[n] end end end end
 local defs,ps,all={{}},{{}},{{}}
@@ -22,6 +22,7 @@ for n=0,21 do
 end
 setmetatable(ps,{{__call=iter(all)}})
 GameInfo={{JAC_LeaderPersonas=iter(ROWS),Governors=defs,GovernorPromotions=ps,GreatPersonIndividuals={{[99]={{GreatPersonIndividualType='P'..TARGET}}}}}}
+GameInfo.GreatPersonClasses={{GREAT_PERSON_CLASS_JAC_PERSONA={{UnitType='PERSON'}}}}; GameInfo.Units={{PERSON={{Index=123}}}}
 local target=ROWS[TARGET+1]; local prefix='JAC_PERSONA_'..target.LeaderType..'_'
 if not {unjoined} then
  PROPS[prefix..'OWNER']=2; PROPS[prefix..'SOURCE']=TARGET==0 and 1 or 4
@@ -47,11 +48,23 @@ function p:GetCities() return {{Members=members({{{{GetID=function() return 8 en
 function p:GetUnits()
  local units={{}}
  if not {unjoined} and UNIT~=nil then
-  units[1]={{GetID=function() return UNIT end,GetOwner=function() return 2 end,GetGreatPerson=function() return {{IsGreatPerson=function() return true end,GetIndividual=function() return 99 end}} end}}
+  units[1]={{GetType=function() return 123 end,GetID=function() return UNIT end,GetOwner=function() return 2 end,GetGreatPerson=function() return {{IsGreatPerson=function() return true end,GetIndividual=function() return BROKEN_INDIVIDUAL and 100 or 99 end}} end}}
  end
  return {{Members=members(units)}}
 end
 Players={{[0]={{IsHuman=function() return true end}},[2]=p}}
+for id=0,21 do
+ if id~=2 then
+  local other=id; Players[id]=Players[id] or {{}}
+  Players[id].GetUnits=function()
+   local units={{}}
+   if OTHER_UNIT and other==3 then
+    units[1]={{GetType=function() return 123 end,GetID=function() return 77 end,GetOwner=function() return 3 end,GetGreatPerson=function() return {{IsGreatPerson=function() return true end,GetIndividual=function() return BROKEN_INDIVIDUAL and 100 or 99 end}} end}}
+   end
+   return {{Members=members(units)}}
+  end
+ end
+end
 PlayerConfigurations={{[1]={{GetLeaderTypeName=function() return '{DATE}' end}},[4]={{GetLeaderTypeName=function() return '{UESUGI}' end}}}}
 Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return TURN end,
  GetProperty=function(_,key)
@@ -141,6 +154,8 @@ fn wrong_spend_other_person_nil_cost_and_false_completion_are_rejected() {
         "STAGE='GOVERNOR'",
         "ASSIGN=true",
         "HUMAN=true",
+        "BROKEN_INDIVIDUAL=true",
+        "OTHER_UNIT=true",
     ] {
         let lua = fixture(3, 1, false);
         snapshot(&lua, &plan.first());
@@ -171,6 +186,9 @@ fn negative_lane_and_reload_do_not_grant_payment_or_replay_it() {
         "FAIL='open'",
         "FLAGS[0][0]=true;SPENT=1",
         "TOTAL=0",
+        "OTHER_UNIT=true",
+        "OTHER_UNIT=true;BROKEN_INDIVIDUAL=true",
+        "Players[21]=nil",
     ] {
         let lua = fixture(2, 0, true);
         lua.load(failure).exec().unwrap();
@@ -231,5 +249,10 @@ fn completed_hold_requires_full_formal_payment_finalization_and_no_repayment() {
         snapshot(&lua, &plan.first());
         lua.load("TURN=11").exec().unwrap();
         snapshot(&lua, &plan.second());
+        lua.load("OTHER_UNIT=true").exec().unwrap();
+        assert!(
+            lua.load(plan.first()).eval::<String>().is_err(),
+            "completed person's unit survives under another owner"
+        );
     }
 }

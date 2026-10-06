@@ -115,6 +115,7 @@ impl Plan {
             || paid > cost
             || (phase == Phase::Step && paid == cost)
             || (phase == Phase::Unjoined && paid != 0)
+            || (phase == Phase::Reload && (cost != 3 || paid != 2))
         {
             return Err("requires one real AI slot, explicit cost2/3 and valid paid prefix");
         }
@@ -217,10 +218,24 @@ local function read()
   rows[#rows+1]={row=row,def=def,expected=expected}
  end
  assert(#rows==22 and seen[leader],'complete actual catalog required')
- if unjoined then
-  for _,unit in p:GetUnits():Members() do
-   local gp=unit:GetGreatPerson(); local person=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]
-   assert(not person or not personTypes[person.GreatPersonIndividualType],'unjoined personal Great Person exists')
+ local class=assert(GameInfo.GreatPersonClasses['GREAT_PERSON_CLASS_JAC_PERSONA'],'personal unit class absent')
+ local unitType=assert(GameInfo.Units[class.UnitType],'personal unit type absent').Index
+ assert(integer(unitType),'unknown personal unit Index')
+ local unitCounts,personalUnits={},{}
+ for id=0,21 do
+  local other=assert(Players[id],'missing configured owner while counting personal units')
+  for _,unit in other:GetUnits():Members() do
+   if unit:GetType()==unitType then
+    local gp=assert(unit:GetGreatPerson(),'personal unit Great Person interface absent')
+    assert(gp:IsGreatPerson()==true,'personal unit is not a typed Great Person')
+    local person=assert(GameInfo.GreatPersonIndividuals[gp:GetIndividual()],'personal unit individual missing')
+    local kind=person.GreatPersonIndividualType
+    assert(personTypes[kind],'personal unit individual not in catalog')
+    assert(unit:GetOwner()==id and integer(unit:GetID()),'personal unit owner or ID differs')
+    unitCounts[kind]=(unitCounts[kind] or 0)+1
+    personalUnits[kind]={owner=id,id=unit:GetID()}
+    assert(not unjoined,'unjoined personal unit exists')
+   end
   end
  end
  table.sort(rows,function(a,b) return a.row.LeaderType<b.row.LeaderType end)
@@ -270,14 +285,9 @@ local function read()
     local source=Game:GetProperty(key..'SOURCE')
     assert(integer(source) and source<64 and source~=owner and PlayerConfigurations[source]:GetLeaderTypeName()==leader,'joined source identity differs')
     assert(paid==requiredPaid,'target formal paid prefix differs')
-    local units=0; local unitID=Game:GetProperty(key..'UNIT')
+    local units=unitCounts[row.PersonType] or 0; local unitID=Game:GetProperty(key..'UNIT')
     targetSource=source; targetStage=stage; targetUnit=unitID
-    for _,unit in p:GetUnits():Members() do
-     local gp=unit:GetGreatPerson(); local person=gp and gp:IsGreatPerson() and GameInfo.GreatPersonIndividuals[gp:GetIndividual()]
-     if person and person.GreatPersonIndividualType==row.PersonType then
-      units=units+1; assert(unit:GetOwner()==owner and unit:GetID()==unitID,'personal Great Person identity differs')
-     end
-    end
+    if units>0 then local u=personalUnits[row.PersonType]; assert(u.owner==owner and u.id==unitID,'personal Great Person belongs to another owner/unit') end
     assert((stage=='EVOLVING' and units==1 and integer(unitID)) or (stage=='GOVERNOR' and units==0 and unitID==nil and paid==requiredCost),'premature Great Person removal or false completion')
     if paid<requiredCost then
      local cities=0

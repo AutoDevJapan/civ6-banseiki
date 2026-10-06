@@ -734,7 +734,11 @@ EXE `E3EA70`はnative queueと稼働値を反復して確認するが、現在�
 
 各step/holdは実ターンを一回だけ進める。readは全22人物のGovernor Index・source cost・Base/TITLE Index・取得済み全promotion・本人ownerを確認し、実Spentと全paid合計が等しいこと、全予約の残額が足りることを要求する。対象の保存費用とsurcharge=cost−1も明示一致を要求する。未払い時は本人偉人が保持され、各cityへの正式配置可否がfalseでなければ失敗する。UI出力は`AI1466_SNAPSHOT`に続くJSONであり、常に`operation_proven=false`とする。UIで見えたbit差分だけから原関数・同期thread・操作の一回性を認定しない。
 
+ユニットは対象AIだけでなく全22ownerの人物用unit typeを確認する。型が人物用なのにGreat Person interfaceや個体データが無い場合は拒否する。本人偉人が別ownerに残る場合・複製される場合も未払い保持や全額後の破棄として受理しない。この点は初回レビューMustとして修正した。getterの欠損を模擬APIで補っていない。
+
 部分保存では06のafter JSONと07のJSONを親の出力から抜き出し、`persona_ai_payment_calibration compare-reload <before.json> <after.json>`で照合できる。これは費用3の本人paid2・全22人物・Spent・予約・偉人・turnの一致検査であり、同一PIDの世代更新や前世代reader排出の権限を作らない。物理save名/hashとPID作成時刻・native generationは親receiptで別に固定する。resident runtime下の同一process loadを拒否する既存driver規則を変更しない。
+
+reload生成はこの比較器が扱う費用3・paid2だけに限定する。同じpathを比較前後に指定するCLI入力も拒否する。ただし別pathへの複写までは出所を証明できないため、親は06/07の異なる実出力と物理save receiptを結ぶ。JSON一致をload成功やAI支払いのauthorityへ格上げしない。
 
 **一つの親管理の校正を始める前に閉じる境界**は、同じPID作成時刻・module集合でInstall完了が最初の`5E2D0/4012F0/4A7AD0`より先であること、および前節のissuer停止・同setの実Wait・同期callback退出が破棄より先であること。既存front/load order observerはこの全てを採取する機能を持たないので、そのready/復元成功をこれらの証明へ読み替えない。`63E1B5`の先行通知中に寿命を終えないことも必要である。上位hookを追加して範囲を広げる修正は今回行わない。
 

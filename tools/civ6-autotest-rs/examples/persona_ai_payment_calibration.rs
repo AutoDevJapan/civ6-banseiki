@@ -38,6 +38,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if args.len() == 3 && args[0] == "compare-reload" {
+        if std::fs::canonicalize(&args[1])? == std::fs::canonicalize(&args[2])? {
+            return Err("use distinct before-save and after-load artifacts; equality alone proves no reload".into());
+        }
         let before = serde_json::from_slice(&std::fs::read(&args[1])?)?;
         let after = serde_json::from_slice(&std::fs::read(&args[2])?)?;
         println!("{}", calibration::compare_reload(&before, &after)?);
