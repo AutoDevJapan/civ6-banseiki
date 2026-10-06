@@ -213,10 +213,10 @@ fn journal(path: &Path) -> Result<Journal> {
     last.ok_or_else(|| Error::scenario("empty hotseat journal"))
 }
 
-fn current_frames(logs: &Path, nonce: &str) -> Result<(Vec<hs::Frame>, usize)> {
+fn current_frames(logs: &Path, run_id: &str) -> Result<(Vec<hs::Frame>, usize)> {
     let bytes = fs::read(logs.join("Lua.log"))?;
     let raw = String::from_utf8_lossy(&bytes);
-    let needle = format!("JAC_HS|1|{nonce}|");
+    let needle = format!("JAC_HS|1|{run_id}|");
     let matching = raw
         .split_inclusive('\n')
         .filter(|line| line.contains(&needle))
@@ -230,7 +230,7 @@ fn current_frames(logs: &Path, nonce: &str) -> Result<(Vec<hs::Frame>, usize)> {
         .rposition(|line| line.contains("|BOOT|1/"))
         .ok_or_else(|| Error::scenario("nonce-matched BOOT is missing"))?;
     Ok((
-        hs::parse_available_frames(&matching[start..].concat(), nonce)?,
+        hs::parse_available_frames(&matching[start..].concat(), run_id)?,
         boots,
     ))
 }
