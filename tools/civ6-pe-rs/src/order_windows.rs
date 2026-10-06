@@ -225,7 +225,14 @@ fn qualify_exception(
                 return Err("exception register identity differs".into());
             }
             if let Some(step) = steps.get(&tid) {
-                plan::verify_step(step.expected, address, c.Rip, c.Dr6, c.EFlags, step.armed_eflags)?;
+                plan::verify_step(
+                    step.expected,
+                    address,
+                    c.Rip,
+                    c.Dr6,
+                    c.EFlags,
+                    step.armed_eflags,
+                )?;
             } else {
                 if c.EFlags & TF != 0
                     || plan::classify_hit(
@@ -270,7 +277,9 @@ fn exception_evidence(d: &Debugger, event: &DEBUG_EVENT, steps: &BTreeMap<u32, S
             row["thread_owner_pid"] = json!(unsafe { GetProcessIdOfThread(state.handle.0) });
             row["armed_sites"] = json!(state.armed_sites);
             match context(&state.handle) {
-                Ok(c) => row["raw_context"] = json!({"context_flags":c.ContextFlags,"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"eflags":c.EFlags,"dr0":c.Dr0,"dr1":c.Dr1,"dr2":c.Dr2,"dr3":c.Dr3,"dr6":c.Dr6,"dr7":c.Dr7}),
+                Ok(c) => {
+                    row["raw_context"] = json!({"context_flags":c.ContextFlags,"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"eflags":c.EFlags,"dr0":c.Dr0,"dr1":c.Dr1,"dr2":c.Dr2,"dr3":c.Dr3,"dr6":c.Dr6,"dr7":c.Dr7})
+                }
                 Err(error) => row["raw_context_error"] = json!(error),
             }
         }
@@ -298,7 +307,11 @@ fn classify_then_record(
     let fallback = row.clone();
     let recorded = record(d, row);
     if let Err(error) = &recorded {
-        let _ = writeln!(std::io::stderr(), "{}", json!({"type":"exception_record_failure","error":error.to_string(),"exception":fallback}));
+        let _ = writeln!(
+            std::io::stderr(),
+            "{}",
+            json!({"type":"exception_record_failure","error":error.to_string(),"exception":fallback})
+        );
     }
     qualified.and(recorded.map_err(|e| e.to_string()))
 }
@@ -1033,7 +1046,8 @@ mod tests {
             DEFAULT_CHAIN
         );
         assert_eq!(
-            approved_chain_image(Path::new(r"d:\cc\tools\civ6-live\LIVE_CHAIN_PR86_AMD.EXE")).unwrap(),
+            approved_chain_image(Path::new(r"d:\cc\tools\civ6-live\LIVE_CHAIN_PR86_AMD.EXE"))
+                .unwrap(),
             AMD_CHAIN
         );
         for path in [
