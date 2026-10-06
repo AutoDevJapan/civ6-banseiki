@@ -7,9 +7,14 @@ local KEY='JAC_ABSORPTION_PRODUCT_V1'
 local RELATIONS='JAC_COUNTRY_RELATIONS_V1'
 local busy=false
 local function State()
-  local s=R.Copy(Game:GetProperty(KEY) or {Version=1,Pairs={},Escrows={},Envoys={},Operations={}})
-  assert(s.Version==1 and type(s.Pairs)=='table' and type(s.Escrows)=='table'
+  local s=R.Copy(Game:GetProperty(KEY) or {Version=2,Pairs={},Escrows={},Envoys={},Operations={}})
+  assert((s.Version==1 or s.Version==2) and type(s.Pairs)=='table' and type(s.Escrows)=='table'
     and type(s.Envoys)=='table' and type(s.Operations)=='table','unsupported product save')
+  -- Preserve every old payment/refund intent. New settlement enums always
+  -- save as v2, which the v1 writer rejects before any currency operation.
+  local sourceVersion=s.Version
+  s.SourceVersion=s.SourceVersion or sourceVersion;s.Version=2
+  for _,escrow in pairs(s.Escrows) do escrow.SourceVersion=escrow.SourceVersion or sourceVersion end
   return s
 end
 local function Save(s)
@@ -42,10 +47,13 @@ function P.Country(actor)
   end
   return country
 end
-local function Actors()
+local function Major(actor)
+  return Players[actor] and Players[actor]:IsMajor() == true
+end
+local function Actors(majorOnly)
   local ids={}
   for actor,player in pairs(Players) do
-    if type(actor)=='number' and player:IsAlive() and P.Country(actor) then ids[#ids+1]=actor end
+    if type(actor)=='number' and player:IsAlive() and (not majorOnly or Major(actor)) and P.Country(actor) then ids[#ids+1]=actor end
   end
   table.sort(ids);return ids
 end
@@ -148,6 +156,8 @@ local function RelationState(from,to)
     end
   end
   local met=reviewed
+  local seen={};for _,row in ipairs(rows) do assert(not seen[row.ID],'duplicate relationship identity');seen[row.ID]=true end
+  table.sort(rows,function(a,b) return a.ID<b.ID end)
   for _,row in ipairs(rows) do met=met and row.Met end
   return {Reviewed=reviewed,Met=met,Rows=rows,Source=country.RelationSource}
 end
@@ -171,7 +181,8 @@ local function Envoys(from,to)
   local country=assert(P.Country(from),'envoy target not mapped')
   assert(country.AreaKm2<10000,'envoys are for small countries')
   local influence=Players[from]:GetInfluence()
-  if influence and influence:CanReceiveInfluence() then
+  if not Major(from) then
+    assert(influence and influence:CanReceiveInfluence(),'official minor cannot receive influence')
     local count=influence:GetTokensReceived(to);assert(Integer(count),'official envoy count unavailable')
     return {Envoys=count,Eligible=true,Route='OFFICIAL'}
   end
@@ -181,11 +192,26 @@ local function Envoys(from,to)
   if entry then assert(entry.CountryID==country.ID and entry.CivilizationType==country.Profile.CivilizationType,'envoy country actor changed') end
   return {Envoys=entry and entry.Count or 0,Eligible=true,Route='PRODUCT'}
 end
+local function EnvoyIdentity(from,to,route)
+  local country=assert(P.Country(from))
+  local config=assert(PlayerConfigurations[to])
+  return {From=from,To=to,Route=route,CountryID=country.ID,
+    CivilizationType=country.Profile.CivilizationType,LeaderType=country.Profile.LeaderType,
+    SenderCivilizationType=config:GetCivilizationTypeName(),SenderLeaderType=config:GetLeaderTypeName()}
+end
+local function PendingEnvoy(to,except)
+  for key,op in pairs(State().Operations) do
+    if key~=except and op.Identity.Command=='SEND_ENVOY' and op.Identity.To==to
+      and not op.Done and not (op.EnvoyReceipt and op.EnvoyReceipt.Done) then return true end
+  end
+  return false
+end
 local function Input(from,to)
   local country=assert(P.Country(from),'country/leader is not registered')
   assert(ActorForCountry(country.ID)==from,'country is not uniquely bound to the current actor')
   local target=assert(Players[to],'receiving actor missing')
   assert(from~=to and Players[from]:IsAlive() and target:IsAlive(),'admission actor unavailable')
+  assert(Major(to),'admission recipient must be a major civilization')
   assert(not Players[from]:IsHuman(),'current absorption engine requires an AI source')
   assert(target:GetDiplomacy():HasMet(from),'admission target has not been met')
   local situation=DiplomaticSituation(from,to)
@@ -216,12 +242,19 @@ local function Terms(input)
   end
   demands[#demands+1]={ID='identity',Kind='PRODUCT_IDENTITY',Profile=R.Copy(c.Profile),AreaKm2=c.AreaKm2,Label='LOC_JAC_ADMISSION_IDENTITY'}
   demands[#demands+1]={ID='terms',Kind='PRODUCT_CONTEXT',Input=R.Copy(input),Label='LOC_JAC_ADMISSION_TERMS'}
+  table.sort(demands,function(a,b) return a.ID<b.ID end)
   return {Input=R.Copy(input),Requirements=demands,Deposit=deposit,Relationship=RelationState(input.From,input.To)}
 end
 local function SameTermsInput(a,b)
   if not R.Equal(a.Country,b.Country) or a.Version~=b.Version or a.From~=b.From or a.To~=b.To then return false end
   local stability=C.Personalities[a.Country.Profile.Personality].stability
   return stability=='fixed' or a.Situation==b.Situation and (stability~='changing' or a.FreeEpoch==b.FreeEpoch)
+end
+local function PaidLeg(escrow,currency)
+  if escrow[currency]==0 then return true end
+  local intent=escrow['Collect'..currency]
+  return intent and intent.Done==true and Num(intent.Before) and Num(intent.After)
+    and intent.Before-intent.After==escrow[currency] or false
 end
 local function Evaluate(from,to,demand,id,afterDeposit)
   if demand.Kind=='PRODUCT_METRIC' then
@@ -237,7 +270,8 @@ local function Evaluate(from,to,demand,id,afterDeposit)
       and SameTermsInput(demand.Input,Input(from,to)),nil,nil
   elseif demand.Kind=='PRODUCT_DEPOSIT' then
     local escrow=id and State().Escrows[id]
-    return escrow~=nil and (escrow.Status=='HELD' or escrow.Status=='RETURNED' and escrow.ReturnReason=='VERIFIED_RESULT')
+    return escrow~=nil and (escrow.Status=='HELD' or escrow.Status=='CONSUMED')
+      and escrow.ID==id and escrow.From==from and escrow.To==to and PaidLeg(escrow,'Gold') and PaidLeg(escrow,'Faith')
       and escrow.Gold==demand.Gold and escrow.Faith==demand.Faith,
       escrow and escrow.Status or 'NOT_PAID',demand.Gold
   end
@@ -252,7 +286,8 @@ local function NextOffer(pair,terms)
   return {ID=id,From=terms.Input.From,To=terms.Input.To,AreaKm2=c.AreaKm2,
     Requirements=requirements,RelationRequirements={{ID='relations',Kind='PRODUCT_RELATIONS'}},
     RelationsReviewed=RelationState(terms.Input.From,terms.Input.To).Reviewed,EnvoySource='product',ProductTerms=R.Copy(terms),
-    Plan={LeaderProfile=R.Copy(c.Profile)}},seq
+    Plan={LeaderProfile=R.Copy(c.Profile),ProductDeposit={OfferID=id,From=terms.Input.From,To=terms.Input.To,
+      Gold=terms.Deposit.Gold,Faith=terms.Deposit.Faith,Policy='CONSUME_ON_VERIFIED_RESULT_V2'}}},seq
 end
 -- Currency journal: save intended before/after values before each engine
 -- call. A call which mutates then throws is recovered by its observed value.
@@ -280,10 +315,10 @@ local function Collect(offer)
   if amounts.Gold==0 and amounts.Faith==0 then return end
   if not escrow then
     assert(Balance(offer.To,'Gold')>=amounts.Gold and Balance(offer.To,'Faith')>=amounts.Faith,'insufficient actual deposit funds')
-    escrow={ID=offer.ID,From=offer.From,To=offer.To,Gold=amounts.Gold,Faith=amounts.Faith,Status='COLLECTING'}
+    escrow={ID=offer.ID,From=offer.From,To=offer.To,Gold=amounts.Gold,Faith=amounts.Faith,Status='COLLECTING',SourceVersion=2}
     s.Escrows[offer.ID]=escrow;Save(s)
   end
-  if escrow.Status=='HELD' or escrow.Status=='RETURNED' then return end
+  if escrow.Status=='HELD' or escrow.Status=='RETURNED' or escrow.Status=='CONSUMED' or escrow.Status=='LEGACY_SETTLED' then return end
   assert(escrow.Status=='COLLECTING','deposit cannot be collected again')
   MoveCurrency(escrow,'Collect','Gold',escrow.Gold)
   MoveCurrency(escrow,'Collect','Faith',escrow.Faith)
@@ -319,6 +354,59 @@ local function Refund(id,reason)
   MoveCurrency(escrow,'Return','Faith',escrow.ReturnFaithAmount)
   s=State();s.Escrows[id].Status='RETURNED';Save(s)
 end
+local function Consume(offer,request,flow)
+  local s=State();local escrow=s.Escrows[offer.ID]
+  local amounts=offer.ProductTerms.Deposit
+  if amounts.Gold==0 and amounts.Faith==0 then return end
+  assert(escrow and escrow.ID==offer.ID and escrow.From==offer.From and escrow.To==offer.To
+    and escrow.Gold==amounts.Gold and escrow.Faith==amounts.Faith,'deposit settlement payer or amounts changed')
+  assert(request.Status=='STARTED' and request.Plan and flow.ID==request.FlowID and flow.From==escrow.From and flow.To==escrow.To
+    and R.Equal(flow.Request,request.Plan) and flow.Mode==request.Plan.Mode and flow.Phase1Complete and flow.FinalRollsComplete
+    and (flow.Phase=='RESULT' or flow.Phase=='DONE')
+    and Integer(flow.CompletedTurn) and not flow.Error and not flow.WaitingFor,'deposit needs a verified matching flow result')
+  local tx=A.GetState().Transactions[flow.ID]
+  assert(tx and tx.Status=='COMPLETE' and tx.ID==flow.ID and tx.From==escrow.From and tx.To==escrow.To and tx.Mode==flow.Mode,
+    'deposit needs the complete asset-transfer receipt')
+  for _,currency in ipairs({'Gold','Faith'}) do
+    local amount=escrow[currency]
+    if amount>0 then
+      local paid=escrow['Collect'..currency]
+      assert(paid and paid.Done and Num(paid.Before) and Num(paid.After) and paid.Before-paid.After==amount,
+        'deposit collection leg is not verified')
+    end
+  end
+  if escrow.Status=='CONSUMED' or escrow.Status=='LEGACY_SETTLED' then
+    local receipt=escrow.Consumption
+    assert(receipt and receipt.FlowID==flow.ID and receipt.From==escrow.From and receipt.To==escrow.To
+      and receipt.CompletedTurn==flow.CompletedTurn and receipt.Policy=='CONSUME_ON_VERIFIED_RESULT_V2'
+      and receipt.Gold+receipt.LegacyRefunded.Gold==escrow.Gold and receipt.Faith+receipt.LegacyRefunded.Faith==escrow.Faith,
+      'deposit consumption receipt changed');return
+  end
+  assert(escrow.Status=='HELD' or escrow.SourceVersion==1 and escrow.ReturnReason=='VERIFIED_RESULT'
+    and (escrow.Status=='RETURNING' or escrow.Status=='RETURNED'),'deposit was not fully held for this result')
+  local returned={Gold=0,Faith=0}
+  for _,currency in ipairs({'Gold','Faith'}) do
+    local amount=escrow[currency]
+    -- A prior v1 result-refund may have already credited one currency. Never
+    -- reclaim it or credit the other leg. Record the exact legacy exception.
+    local intent=escrow['Return'..currency]
+    if intent then
+      local refund=escrow['Return'..currency..'Amount']
+      assert(Num(refund) and refund<=amount and intent.After-intent.Before==refund,'invalid legacy refund leg')
+      if intent.Done then returned[currency]=refund
+      else
+        local current=Balance(escrow.To,currency)
+        assert(current==intent.Before or current==intent.After,'ambiguous legacy result refund')
+        if current==intent.After then returned[currency]=refund end
+      end
+    end
+  end
+  escrow.Consumption={FlowID=flow.ID,From=escrow.From,To=escrow.To,CompletedTurn=flow.CompletedTurn,
+    Gold=escrow.Gold-returned.Gold,Faith=escrow.Faith-returned.Faith,LegacyRefunded=returned,
+    Policy='CONSUME_ON_VERIFIED_RESULT_V2'}
+  escrow.Status=(returned.Gold>0 or returned.Faith>0) and 'LEGACY_SETTLED' or 'CONSUMED'
+  Save(s) -- completion only: no new debit and no currency credit
+end
 local function Refresh(from,to)
   local s=State();local key=Pair(from,to);local pair=s.Pairs[key]
   if not pair then return end
@@ -340,6 +428,7 @@ local function Refresh(from,to)
   s=State();pair=s.Pairs[key];pair.ID,pair.Sequence=replacement.ID,seq;Save(s)
 end
 local function CanPrepare(offer,ignoreEnvoys)
+  if not Major(offer.To) or PendingEnvoy(offer.To) then return false end
   local request=N.Get('leader-offer',offer.ID)
   local flowID=request and request.FlowID
   if Occupied(offer.From,flowID) or Occupied(offer.To,flowID) then return false end
@@ -373,7 +462,7 @@ function P.Get(from,to)
       local rows={}
       for _,d in ipairs(offer.Requirements) do
         local escrow=d.Kind=='PRODUCT_DEPOSIT' and s.Escrows[offer.ID]
-        rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=true,Minimum=d.Minimum,Gold=d.Gold,Faith=d.Faith,Frozen=true,Settlement=escrow and escrow.Status}
+        rows[#rows+1]={ID=d.ID,Kind=d.Kind,Label=d.Label,Met=d.Kind~='PRODUCT_DEPOSIT' or Evaluate(from,to,d,offer.ID),Minimum=d.Minimum,Gold=d.Gold,Faith=d.Faith,Frozen=true,Settlement=escrow and escrow.Status}
       end
       rows[#rows+1]={ID='relations',Label='LOC_JAC_ADMISSION_FROZEN_RELATIONS',Met=true,Reviewed=true,Details=terms.Relationship.Rows,Frozen=true}
       local envoys=request.Decision.Mode=='SMALL_STATE' and {Envoys=request.Decision.Envoys,Required=math.max(1,request.Decision.OwnedTiles),Route='FROZEN'} or nil
@@ -393,14 +482,18 @@ function P.Get(from,to)
     local relations=RelationState(from,to)
     rows[#rows+1]={ID='relations',Label='LOC_JAC_ADMISSION_RELATIONS',Met=relations.Met,Reviewed=relations.Reviewed,Details=relations.Rows}
     local envoys=input.Country.AreaKm2<10000 and Envoys(from,to) or nil
-    if envoys then envoys.Required=math.max(1,OwnedTiles(from));met=met and envoys.Envoys>=envoys.Required end
+    if envoys then envoys.Required=math.max(1,OwnedTiles(from));met=met and envoys.Eligible and not PendingEnvoy(to) and envoys.Envoys>=envoys.Required end
     return {From=from,To=to,Country=R.Copy(input.Country),Mode=input.Country.AreaKm2<10000 and 'SMALL_STATE' or 'MERGER',
       Rows=rows,Envoys=envoys,Deposit=R.Copy(terms.Deposit),Status=request and request.Status or pair and pair.Cancelled and 'CANCELLED' or 'AVAILABLE',
       OfferID=pair and pair.ID,Input=R.Copy(terms.Input),LiveInput=input,
       CanCancel=pair~=nil and not pair.Cancelled and N.CanCancelOffer(pair.ID),
       Ready=met and relations.Met and input.Situation~='war',Error=pair and pair.LastError}
   end)
-  if not ok then return {From=from,To=to,Status='UNAVAILABLE',Error=tostring(value)} end
+  if not ok then
+    local pair=State().Pairs[Pair(from,to)]
+    return {From=from,To=to,Status='UNAVAILABLE',Error=tostring(value),OfferID=pair and pair.ID,
+      CanCancel=pair and not pair.Cancelled and N.CanCancelOffer(pair.ID) or false}
+  end
   return R.Copy(value)
 end
 function P.GetSmallCountries(to)
@@ -412,21 +505,59 @@ function P.GetSmallCountries(to)
   end
   return rows
 end
-local function SendEnvoy(from,to,nonce,expected)
+local function SendEnvoy(from,to,opkey,expected)
   local envoys=Envoys(from,to)
-  assert(envoys.Route=='PRODUCT','official minors use the official GIVE_INFLUENCE_TOKEN operation')
-  local s=State();local key=Pair(from,to);local entry=s.Envoys[key]
-  if not entry then local c=P.Country(from);entry={CountryID=c.ID,CivilizationType=c.Profile.CivilizationType,Count=0,Receipts={}};s.Envoys[key]=entry end
-  local receipt=entry.Receipts[nonce]
+  local identity=EnvoyIdentity(from,to,envoys.Route)
+  assert(envoys.Route=='PRODUCT' or not Players[to]:IsHuman(),'human official minors use native envoy placement')
+  local s=State();local operation=assert(s.Operations[opkey])
+  assert(R.Equal(operation.EnvoyIdentity,identity),'envoy sender, recipient or route changed')
+  local receipt=operation.EnvoyReceipt
   if receipt and receipt.Done then return end
-  assert(expected==entry.Count,'stale envoy assignment')
+  assert(not PendingEnvoy(to,opkey),'another envoy assignment is unsettled')
   local pool=Players[to]:GetInfluence();local count=pool:GetTokensToGive()
   assert(Integer(count),'official envoy pool unavailable')
-  if not receipt then assert(count>=1,'no unassigned envoys');receipt={Before=count,After=count-1};entry.Receipts[nonce]=receipt;Save(s) end
-  if count==receipt.Before then pool:ChangeTokensToGive(-1)
-  else assert(count==receipt.After,'envoy pool journal is ambiguous') end
-  assert(pool:GetTokensToGive()==receipt.After,'official envoy pool was not consumed')
-  s=State();entry=s.Envoys[key];entry.Count=entry.Count+1;entry.Receipts[nonce].Done=true;Save(s)
+  if not receipt then
+    assert(expected==envoys.Envoys,'stale envoy assignment')
+    assert(count>=1,'no unassigned envoys')
+    -- An old unfinished PRODUCT receipt cannot be charged a second time.
+    local legacy=s.Envoys[Pair(from,to)]
+    if legacy then for _,old in pairs(legacy.Receipts or {}) do assert(old.Done,'legacy envoy assignment is unsettled') end end
+    receipt={Before=count,After=count-1,ReceivedBefore=expected,ReceivedAfter=expected+1}
+    operation.EnvoyReceipt=receipt;Save(s)
+  end
+  if not receipt.ChargeDone then
+    -- Observe even a mutate-then-throw call before returning its error. If
+    -- that observation was not saved, an altered pool on replay is ambiguous.
+    assert(count==receipt.Before and envoys.Envoys==receipt.ReceivedBefore,'envoy charge journal is ambiguous')
+    local ok,err=pcall(pool.ChangeTokensToGive,pool,-1)
+    assert(pool:GetTokensToGive()==receipt.After and Envoys(from,to).Envoys==receipt.ReceivedBefore,
+      'official envoy pool was not consumed exactly once')
+    assert(R.Equal(identity,EnvoyIdentity(from,to,Envoys(from,to).Route)),'envoy identity changed during charge')
+    s=State();s.Operations[opkey].EnvoyReceipt.ChargeDone=true;Save(s)
+    if not ok then error(err) end
+  end
+  s=State();receipt=s.Operations[opkey].EnvoyReceipt
+  assert(pool:GetTokensToGive()==receipt.After,'envoy pool journal is ambiguous')
+  assert(Envoys(from,to).Envoys==receipt.ReceivedBefore,'envoy grant journal is ambiguous')
+  receipt.GrantIntent=true;Save(s)
+  if identity.Route=='OFFICIAL' then
+    -- Official scenario API, not a replacement for native policy/first-meet
+    -- operations. Only an observed exact +1 is attributed to this grant.
+    local ok,err=pcall(pool.GiveFreeTokenToPlayer,pool,from)
+    assert(pool:GetTokensToGive()==receipt.After and Envoys(from,to).Envoys==receipt.ReceivedAfter,
+      'official envoy grant journal is ambiguous')
+    assert(R.Equal(identity,EnvoyIdentity(from,to,Envoys(from,to).Route)),'envoy identity changed during grant')
+    s=State();receipt=s.Operations[opkey].EnvoyReceipt
+    receipt.GrantDone,receipt.Done=true,true;Save(s)
+    if not ok then error(err) end
+  else
+    -- PRODUCT assignments and their DONE receipt share one property write.
+    s=State();local key=Pair(from,to);local entry=s.Envoys[key]
+    if not entry then entry={CountryID=identity.CountryID,CivilizationType=identity.CivilizationType,Count=0,Receipts={}};s.Envoys[key]=entry end
+    assert(entry.Count==receipt.ReceivedBefore,'product envoy grant journal is ambiguous')
+    entry.Count=receipt.ReceivedAfter
+    receipt=s.Operations[opkey].EnvoyReceipt;receipt.GrantDone,receipt.Done=true,true;Save(s)
+  end
 end
 function P.Command(actor,params)
   assert(Integer(actor) and Players[actor] and Players[actor]:IsAlive(),'actual player actor required')
@@ -436,9 +567,12 @@ function P.Command(actor,params)
   for _,field in ipairs({'Requirements','AreaKm2','RelationsReviewed','Met','Plan','Deposit'}) do assert(params[field]==nil,'UI cannot supply gameplay conditions') end
   local from=params.From
   assert(Integer(from),'product source actor required')
+  if params.Command~='CANCEL' then assert(Major(actor),'admission recipient must be a major civilization') end
   local opkey=tostring(actor)..':'..params.Nonce
   local s=State();local previous=s.Operations[opkey]
   local identity={Command=params.Command,From=from,To=actor,ExpectedEnvoys=params.ExpectedEnvoys,OfferID=params.OfferID}
+  local envoyIdentity=params.Command=='SEND_ENVOY' and EnvoyIdentity(from,actor,Envoys(from,actor).Route) or nil
+  if previous and envoyIdentity then assert(R.Equal(previous.EnvoyIdentity,envoyIdentity),'envoy sender, recipient or route changed') end
   if previous then assert(R.Equal(previous.Identity,identity),'operation nonce reused with changed intent');if previous.Done then return P.Get(from,actor) end
   end
   local input
@@ -457,13 +591,14 @@ function P.Command(actor,params)
     elseif params.Command=='SEND_ENVOY' then
       assert(not Occupied(from) and not Occupied(actor),'cannot send envoys during absorption')
       local envoys=Envoys(from,actor)
-      assert(envoys.Route=='PRODUCT' and params.ExpectedEnvoys==envoys.Envoys,'stale or unofficial envoy assignment')
+      assert((envoys.Route=='PRODUCT' or not Players[actor]:IsHuman()) and params.ExpectedEnvoys==envoys.Envoys,'stale or unofficial envoy assignment')
+      assert(not PendingEnvoy(actor),'another envoy assignment is unsettled')
       assert(Players[actor]:GetInfluence():GetTokensToGive()>=1,'no unassigned envoys')
     end
-    s.Operations[opkey]={Identity=identity,Nonce=params.Nonce};Save(s)
+    s.Operations[opkey]={Identity=identity,Nonce=params.Nonce,EnvoyIdentity=envoyIdentity};Save(s)
   end
   if params.Command=='SEND_ENVOY' then
-    SendEnvoy(from,actor,params.Nonce,params.ExpectedEnvoys)
+    SendEnvoy(from,actor,opkey,params.ExpectedEnvoys)
   elseif params.Command=='REGISTER' then
     s=State();local key=Pair(from,actor);local pair=s.Pairs[key]
     if not pair or pair.Cancelled then
@@ -523,14 +658,14 @@ function P.Tick()
       end
       if request and request.Plan then
         local flow=F.Get(request.FlowID)
-        if flow and (flow.Phase=='RESULT' or flow.Phase=='DONE') then Refund(pair.ID,'VERIFIED_RESULT') end
+        if flow and (flow.Phase=='RESULT' or flow.Phase=='DONE') then Consume(offer,request,flow) end
         if not N.CanCancelOffer(pair.ID) then return end
       end
-      if not Players[offer.From] or not Players[offer.From]:IsAlive() then
+      if not Players[offer.From] or not Players[offer.From]:IsAlive() or not Major(offer.To) then
         -- A failed preflight has no irreversible flow. A vanished source
         -- cannot fulfil it, so release the saved payer's refundable deposit.
         if N.CanCancelOffer(pair.ID) then
-          N.CancelOffer(pair.ID);Refund(pair.ID,'SOURCE_ELIMINATED')
+          N.CancelOffer(pair.ID);Refund(pair.ID,not Major(offer.To) and 'INVALID_RECIPIENT' or 'SOURCE_ELIMINATED')
           local s=State();s.Pairs[key].Cancelled=true;Save(s)
         end
         return
@@ -545,7 +680,7 @@ function P.Tick()
   end
   -- AI uses the same operations, token pool, demands, settlement, and N gate.
   -- It only registers offers whose non-deposit conditions already hold.
-  for _,to in ipairs(Actors()) do if not Players[to]:IsHuman() and not Occupied(to) then
+  for _,to in ipairs(Actors(true)) do if not Players[to]:IsHuman() and not Occupied(to) then
     for _,from in ipairs(Actors()) do if from~=to and not Players[from]:IsHuman() and not Occupied(from) then
       local ok,acted=pcall(function()
         local view=P.Get(from,to)
@@ -553,7 +688,7 @@ function P.Tick()
         local pair=State().Pairs[Pair(from,to)]
         local offer=pair and N.GetOffer(pair.ID) or NextOffer({},Terms(Input(from,to)))
         if not CanPrepare(offer,true) then return end
-        if view.Envoys and view.Envoys.Route=='PRODUCT' and view.Envoys.Envoys<view.Envoys.Required
+        if view.Envoys and view.Envoys.Envoys<view.Envoys.Required
           and Players[to]:GetInfluence():GetTokensToGive()>0 then
           P.Command(to,{Command='SEND_ENVOY',From=from,Nonce='ai-envoy:'..from..':'..view.Envoys.Envoys,ExpectedEnvoys=view.Envoys.Envoys})
         end
@@ -574,7 +709,7 @@ N.RegisterRequirement('PRODUCT_IDENTITY',function(from,to,d) return Evaluate(fro
 N.RegisterRequirement('PRODUCT_CONTEXT',function(from,to,d) return Evaluate(from,to,d) end)
 N.RegisterRequirement('PRODUCT_DEPOSIT',function(from,to,d) return Evaluate(from,to,d,d.OfferID) end)
 N.RegisterRequirement('PRODUCT_RELATIONS',function(from,to) return RelationState(from,to).Met and DiplomaticSituation(from,to)~='war' end)
-N.RegisterEnvoys('product',function(from,to) return Envoys(from,to) end)
+N.RegisterEnvoys('product',function(from,to) local value=Envoys(from,to);value.Eligible=value.Eligible and not PendingEnvoy(to);return value end)
 GameEvents.JAC_AbsorptionProduct_Operation.Add(Operation)
 GameEvents.OnGameTurnStarted.Add(P.Tick)
 -- Read-only exports only. Mutating functions are never available to UI.

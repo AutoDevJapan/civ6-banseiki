@@ -11,7 +11,7 @@ local baseList=ViewList
 local baseQuests=GetQuests
 local function IsProductMajor(view)
   local p=view and Players[view.From]
-  return p and p:GetInfluence() and not p:GetInfluence():CanReceiveInfluence()
+  return p and p:IsMajor() and view.Envoys and view.Envoys.Route=='PRODUCT'
 end
 function JAC_AbsorptionCityStatesAction(from,command)
   if from~=current then return false end

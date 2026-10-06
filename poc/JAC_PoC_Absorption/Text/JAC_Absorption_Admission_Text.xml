@@ -16,6 +16,15 @@
     <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="ja_JP"><Text>返却済み</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="en_US"><Text>Returned</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_RETURNED" Language="ru_RU"><Text>Возвращено</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="ja_JP"><Text>消費済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="en_US"><Text>Consumed</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_CONSUMED" Language="ru_RU"><Text>Израсходовано</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="ja_JP"><Text>旧版の返却分を除き精算済み</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="en_US"><Text>Settled, excluding legacy refunds</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_LEGACY_SETTLED" Language="ru_RU"><Text>Расчёт завершён с учётом возвратов прежней версии</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="ja_JP"><Text>費用の精算を確認中</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="en_US"><Text>Verifying cost settlement</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_VERIFYING_SETTLEMENT" Language="ru_RU"><Text>Проверка расчёта расходов</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="ja_JP"><Text>返却を確認中</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="en_US"><Text>Verifying return</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_RETURNING" Language="ru_RU"><Text>Проверка возврата</Text></Row>
@@ -43,9 +52,9 @@
     <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="ja_JP"><Text>必要使節</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="en_US"><Text>Required envoys</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_REQUIRED_ENVOYS" Language="ru_RU"><Text>Требуется послов</Text></Row>
-    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ja_JP"><Text>条件達成時に保証金を預け、取込み結果の検証完了後に返却</Text></Row>
-    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="en_US"><Text>Deposit when conditions are met; return after verification of the admission result</Text></Row>
-    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ru_RU"><Text>Залог вносится после выполнения условий и возвращается после проверки результата</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ja_JP"><Text>条件達成時に保証金を預け、成立時の費用として消費。成立前の取消し・条件置換では実払分を返却</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="en_US"><Text>Deposit when conditions are met; consume as a cost when admission is verified. Refund actual payments for cancellation or changed terms before admission.</Text></Row>
+    <Row Tag="LOC_JAC_ADMISSION_ESCROW_POLICY" Language="ru_RU"><Text>Залог вносится после выполнения условий и расходуется при подтверждении присоединения. При отмене или изменении условий до присоединения возвращаются фактические платежи.</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="ja_JP"><Text>登録を取り消す</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="en_US"><Text>Cancel registration</Text></Row>
     <Row Tag="LOC_JAC_ADMISSION_CANCEL" Language="ru_RU"><Text>Отменить заявку</Text></Row>

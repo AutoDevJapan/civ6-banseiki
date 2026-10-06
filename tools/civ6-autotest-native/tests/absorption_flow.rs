@@ -258,6 +258,229 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
 }
 
 #[test]
+fn actual_product_and_generic_operations_reject_minor_recipients_without_mutating_assets()
+-> mlua::Result<()> {
+    let lua = product_world(true, false)?;
+    lua.load(r#"
+      Players[2].IsMajor=function() return false end
+      local money,faith,pool=MONEY[2],FAITH[2],ENVOY_POOL
+      local units,cities=Players[1]:GetUnits():GetCount(),Players[1]:GetCities():GetCount()
+      assert(P.Get(1,2).Status=='UNAVAILABLE')
+      assert(not pcall(P.Command,2,{Command='REGISTER',From=1,Nonce='minor-register'}))
+      assert(not pcall(P.Command,2,{Command='SEND_ENVOY',From=1,Nonce='minor-envoy',ExpectedEnvoys=0}))
+      assert(not pcall(N.DefineOffer,NORMAL_OFFER))
+      assert(not pcall(N.Request,'leader-offer',NORMAL_OFFER.ID,1,2))
+      GameEvents.JAC_AbsorptionProduct_Operation.Emit(2,{Command='REGISTER',From=1,Nonce='minor-event'})
+      assert(not Players[2]:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1').Accepted)
+      GameEvents.OnGameTurnStarted.Emit()
+      assert(MONEY[2]==money and FAITH[2]==faith and ENVOY_POOL==pool and #RANDOM_CALLS==0)
+      assert(Players[1]:GetUnits():GetCount()==units and Players[1]:GetCities():GetCount()==cities)
+      assert(SPAWNS==0 and KILLS==0 and TRANSFERS==0)
+      assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')==nil and Game:GetProperty('JAC_ABSORPTION_FLOW_V1')==nil)
+    "#).exec()
+}
+
+#[test]
+fn actual_official_minor_ai_spends_pool_reads_native_recipient_and_enters_verified_flow()
+-> mlua::Result<()> {
+    let lua = product_world(true, false)?;
+    lua.load(r#"
+      Players[1].IsMajor=function() return false end
+      PlayerConfigurations[1].GetCivilizationTypeName=function() return 'CIVILIZATION_VATICAN_CITY' end
+      PlayerConfigurations[1].GetLeaderTypeName=function() return 'LEADER_MINOR_CIV_VATICAN_CITY' end
+      OFFICIAL_RECEIVED,OFFICIAL_SPENDS,OFFICIAL_GRANTS,OFFICIAL_READS=0,0,0,0
+      Players[1].GetInfluence=function() return {CanReceiveInfluence=function() return true end,
+        GetTokensReceived=function(_,sender) assert(sender==2);OFFICIAL_READS=OFFICIAL_READS+1;return OFFICIAL_RECEIVED end} end
+      Players[2].GetInfluence=function() return {CanReceiveInfluence=function() return false end,
+        GetTokensToGive=function() return ENVOY_POOL end,
+        ChangeTokensToGive=function(_,n) assert(n==-1);ENVOY_POOL=ENVOY_POOL+n;OFFICIAL_SPENDS=OFFICIAL_SPENDS+1 end,
+        GiveFreeTokenToPlayer=function(_,recipient) assert(recipient==1);OFFICIAL_RECEIVED=OFFICIAL_RECEIVED+1;OFFICIAL_GRANTS=OFFICIAL_GRANTS+1 end} end
+      for _,actor in ipairs({1,2}) do local id=actor;local religion=Players[id].GetReligion
+        Players[id].GetReligion=function() local result=religion();result.GetFaithYield=function() return id==1 and 1 or 100 end;return result end
+      end
+      local required=P.Get(1,2).Envoys.Required;assert(required<=ENVOY_POOL)
+      for i=1,required+2 do GameEvents.OnGameTurnStarted.Emit() end
+      local view=P.Get(1,2);local request=assert(N.Get('leader-offer',view.OfferID))
+      assert(request.Status=='STARTED',request.LastError or view.Error)
+      local flow=assert(TEST_FLOW.Get(request.FlowID));assert(flow.Phase=='RESULT' or flow.Phase=='DONE',flow.Error)
+      assert(OFFICIAL_RECEIVED==required and ENVOY_POOL==20-required and OFFICIAL_SPENDS==required and OFFICIAL_GRANTS==required)
+      assert(OFFICIAL_READS>0 and Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Envoys['1:2']==nil)
+      local escrow=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Escrows[view.OfferID]
+      assert(escrow.Status=='CONSUMED' and escrow.Consumption.FlowID==flow.ID)
+      assert(MONEY[2]==5000-escrow.Gold and FAITH[2]==1000-escrow.Faith)
+      OFFICIAL_PROOF=TEST_ABSORPTION.Canonical(flow);OFFICIAL_COST=MONEY[2]..':'..FAITH[2]
+    "#).exec()?;
+    for path in [
+        FLOW,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua",
+    ] {
+        load_module(&lua, path)?;
+    }
+    lua.load(
+        r#"
+      JAC_AbsorptionAdmissionGameplay.Tick();JAC_AbsorptionProductGameplay.Tick()
+      local request=N.Get('leader-offer',P.Get(1,2).OfferID)
+      assert(TEST_ABSORPTION.Canonical(TEST_FLOW.Get(request.FlowID))==OFFICIAL_PROOF)
+      assert(MONEY[2]..':'..FAITH[2]==OFFICIAL_COST and OFFICIAL_SPENDS==OFFICIAL_GRANTS)
+    "#,
+    )
+    .exec()
+}
+
+fn panel_languages(lua: &Lua) -> mlua::Result<()> {
+    let languages = lua.create_table()?;
+    for language in ["ja_JP", "en_US", "ru_RU"] {
+        languages.set(language, lua.create_table()?)?;
+    }
+    let rows = regex::Regex::new(
+        r#"(?s)<Row\s+Tag="([^"]+)"\s+Language="([^"]+)">\s*<Text>(.*?)</Text>\s*</Row>"#,
+    )
+    .map_err(mlua::Error::external)?;
+    for path in [
+        "poc/JAC_PoC_Absorption/Text/JAC_Absorption_Text.xml",
+        "poc/JAC_PoC_Absorption/Text/JAC_Absorption_Admission_Text.xml",
+    ] {
+        let source = fs::read_to_string(repo_path(path)).map_err(mlua::Error::external)?;
+        for row in rows.captures_iter(&source) {
+            let text = quick_xml::escape::unescape(&row[3]).map_err(mlua::Error::external)?;
+            languages
+                .get::<mlua::Table>(&row[2])?
+                .set(&row[1], text.as_ref())?;
+        }
+    }
+    lua.globals().set("PANEL_LANGUAGES", languages)?;
+    lua.load(r#"
+      LANGUAGE='en_US'
+      Locale.Lookup=function(key,...)
+        local value=PANEL_LANGUAGES[LANGUAGE][key] or key
+        for i,arg in ipairs({...}) do value=value:gsub('{'..i..'}',function() return tostring(arg) end) end
+        return value
+      end
+    "#).exec()
+}
+
+#[test]
+fn actual_product_flow_panel_localizes_choice_result_and_reload_without_changing_japanese_save()
+-> mlua::Result<()> {
+    let lua = product_world(true, true)?;
+    lua.load(r#"
+      P.Command(2,{Command='REGISTER',From=1,Nonce='panel-register'})
+      local required=P.Get(1,2).Envoys.Required
+      for i=0,required-1 do P.Command(2,{Command='SEND_ENVOY',From=1,Nonce='panel-envoy:'..i,ExpectedEnvoys=i}) end
+      GameEvents.OnGameTurnStarted.Emit()
+      PANEL_FLOW_ID=N.Get('leader-offer',P.Get(1,2).OfferID).FlowID
+      local flow=assert(TEST_FLOW.Get(PANEL_FLOW_ID));assert(flow.Phase=='CHOICE')
+      PANEL_BEFORE=TEST_ABSORPTION.Canonical(flow)
+    "#).exec()?;
+    lua.load(PANEL_WORLD).exec()?;
+    panel_languages(&lua)?;
+    load_module(&lua, "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua")?;
+    for (language, personality, trait_name) in [
+        ("en_US", "Careful", "Valiant"),
+        ("ru_RU", "Осторожный", "Доблестный"),
+        ("ja_JP", "慎重", "武人"),
+    ] {
+        lua.globals().set("LANGUAGE", language)?;
+        lua.globals().set("EXPECTED_PERSONALITY", personality)?;
+        lua.globals().set("EXPECTED_TRAIT", trait_name)?;
+        lua.load(r#"
+          Events.GameCoreEventPublishComplete.Emit()
+          local panel=JAC_AbsorptionFlow_UI;assert(panel.SelectEntry('leader:1'))
+          local leader
+          for _,row in ipairs(panel.GetView().rows) do if row.id=='leader:1' then leader=row end end
+          assert(leader and leader.abilities:find(EXPECTED_PERSONALITY,1,true) and leader.abilities:find(EXPECTED_TRAIT,1,true))
+          if LANGUAGE~='ja_JP' then assert(not leader.abilities:find('慎重',1,true) and not leader.abilities:find('武人',1,true)) end
+          assert(TEST_ABSORPTION.Canonical(TEST_FLOW.Get(PANEL_FLOW_ID))==PANEL_BEFORE)
+        "#).exec()?;
+    }
+    lua.load(r#"
+      RANDOM_QUEUE={};for i=1,500 do RANDOM_QUEUE[i]=0 end
+      local flow=TEST_FLOW.Get(PANEL_FLOW_ID)
+      for _,entry in ipairs(flow.Entries) do if not entry.EscapeOutcome then TEST_FLOW.Select(2,flow.ID,entry.ID,entry.AllowedActions[1]) end end
+      local result=TEST_FLOW.Resolve(2,flow.ID);assert(result.Phase=='RESULT',result.Error)
+      JAC_AbsorptionProductGameplay.Tick()
+      local leader=TEST_ABSORPTION.GetRoster(2)['leader:1']
+      assert(leader.Personality=='慎重' and leader.Trait=='武人')
+      PANEL_BEFORE=TEST_ABSORPTION.Canonical(TEST_FLOW.Get(PANEL_FLOW_ID))
+      PANEL_ROSTER=TEST_ABSORPTION.Canonical(TEST_ABSORPTION.GetRoster(2))
+    "#).exec()?;
+    for path in [
+        FLOW,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua",
+    ] {
+        load_module(&lua, path)?;
+    }
+    for (language, personality, trait_name, cost) in [
+        ("en_US", "Careful", "Valiant", "Consumed"),
+        ("ru_RU", "Осторожный", "Доблестный", "Израсходовано"),
+    ] {
+        lua.globals().set("LANGUAGE", language)?;
+        lua.globals().set("EXPECTED_PERSONALITY", personality)?;
+        lua.globals().set("EXPECTED_TRAIT", trait_name)?;
+        lua.globals().set("EXPECTED_COST", cost)?;
+        load_module(&lua, "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua")?;
+        lua.load(r#"
+          local view=JAC_AbsorptionFlow_UI.GetView();assert(view.phase=='RESULT')
+          local leader;for _,row in ipairs(view.rows) do if row.id=='leader:1' then leader=row end end
+          assert(leader.abilities:find(EXPECTED_PERSONALITY,1,true) and leader.abilities:find(EXPECTED_TRAIT,1,true))
+          assert(not leader.abilities:find('慎重',1,true) and not leader.abilities:find('武人',1,true))
+          assert(view.deposit:find(EXPECTED_COST,1,true) and not view.deposit:find('return after verification',1,true))
+          assert(TEST_ABSORPTION.Canonical(TEST_FLOW.Get(PANEL_FLOW_ID))==PANEL_BEFORE)
+          assert(TEST_ABSORPTION.Canonical(TEST_ABSORPTION.GetRoster(2))==PANEL_ROSTER)
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn actual_panel_shared_lookup_covers_all_saved_person_types_and_legacy_ids_without_admission_module()
+-> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(PANEL_WORLD).exec()?;
+    panel_languages(&lua)?;
+    lua.load(r#"
+      PANEL_CASES={{'勇敢','BRAVE','武人','VALIANT'},{'冷静','CALM','鬼神','FIERCE'},
+        {'慎重','CAREFUL','策士','ASTUTE'},{'陽気','JOLLY','魔神','SHREWD'},
+        {'温厚','GENTLE','教者','DEVOUT'},{'強気','BOLD','霊神','ASCETIC'},
+        {'自由','FICKLE','凡人','MUNDANE'},{'忠実','LOYAL','天才','ADEPT'}}
+      ExposedMembers.JAC_AbsorptionProduct=nil
+      ExposedMembers.JAC_AbsorptionFlow={GetPending=function() return JAC_AbsorptionRules.Copy(PANEL_SAVED) end}
+    "#).exec()?;
+    for language in ["en_US", "ru_RU", "ja_JP"] {
+        lua.globals().set("LANGUAGE", language)?;
+        for alias in ["canonical", "legacy", "loc"] {
+            lua.globals().set("ALIAS", alias)?;
+            lua.load(r#"
+              PANEL_SAVED={ID='independent-person-display',From=1,To=2,Mode='MERGER',Phase='RESULT',Entries={}}
+              for i,case in ipairs(PANEL_CASES) do
+                local prefix=ALIAS=='legacy' and 'JAC_' or 'LOC_JAC_'
+                PANEL_SAVED.Entries[i]={ID='person:'..i,Kind='PERSON',Name='Person '..i,
+                  Source={Personality=ALIAS=='canonical' and case[1] or prefix..'PERSONALITY_'..case[2],
+                    Trait=ALIAS=='canonical' and case[3] or prefix..'TRAIT_'..case[4]},
+                  Abilities={'ADMINISTRATION','LOC_JAC_ADMISSION_GOLD'},Success=true,FinalOutcome='RECRUIT'}
+              end
+              RAW_PANEL=TEST_ABSORPTION.Canonical(PANEL_SAVED)
+            "#).exec()?;
+            load_module(&lua, "poc/JAC_PoC_Absorption/UI/JAC_AbsorptionFlow.lua")?;
+            lua.load(r#"
+              local view=JAC_AbsorptionFlow_UI.GetView();assert(view.phase=='RESULT' and #view.rows==8 and view.deposit==nil)
+              for i,row in ipairs(view.rows) do local case=PANEL_CASES[i]
+                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_PERSONALITY_'..case[2]),1,true))
+                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_TRAIT_'..case[4]),1,true))
+                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ABS_FLOW_VALUE_ADMINISTRATION'),1,true))
+                assert(row.abilities:find(Locale.Lookup('LOC_JAC_ADMISSION_GOLD'),1,true))
+                if LANGUAGE~='ja_JP' then assert(not row.abilities:find(case[1],1,true) and not row.abilities:find(case[3],1,true)) end
+              end
+              assert(TEST_ABSORPTION.Canonical(PANEL_SAVED)==RAW_PANEL)
+            "#).exec()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_saved_rolls()
 -> mlua::Result<()> {
     for small in [true, false] {

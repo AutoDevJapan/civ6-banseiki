@@ -289,6 +289,7 @@ local function Ready(request, decision)
     met = met and condition.Met
   end
   assert(count == #decision.Requirements, 'missing leader requirement')
+  table.sort(decision.Requirements, function(a,b) return a.ID<b.ID end)
   assert(type(decision.RelationsResolved) == 'boolean', 'relation prerequisites required')
   if not met or not decision.RelationsResolved then return false end
   if decision.Mode == 'SMALL_STATE' then
@@ -319,6 +320,7 @@ function N.Check(source, id)
   local s, key = State(), Key(source, id)
   local request = assert(s.Requests[key], 'normal admission request missing')
   if request.Status == 'STARTED' or request.Status == 'CANCELLED' then return R.Copy(request) end
+  assert(Players[request.To] and Players[request.To]:IsMajor(), 'admission recipient must be a major civilization')
   if reading[request.FlowID] then return R.Copy(request) end
   -- Once F.Begin has journalled P1, retry its frozen plan even if the country
   -- has already been transferred. F owns the saved rolls and asset inventory.
@@ -389,6 +391,7 @@ function N.Request(source, id, from, to)
   assert(ID(source) and ID(id) and Player(from) and Player(to) and from ~= to,
     'normal admission request identity required')
   assert(providers[source], 'normal admission reader not registered')
+  assert(Players[to]:IsMajor(), 'admission recipient must be a major civilization')
   local s, key = State(), Key(source, id)
   local request = s.Requests[key]
   if request then
@@ -412,7 +415,7 @@ function N.Tick()
   -- Defined leader offers are evaluated by normal gameplay without JAC_AUTOTEST.
   for _, id in ipairs(R.Keys(s.Offers)) do
     local offer = s.Offers[id]
-    if not s.Requests[Key('leader-offer', id)] then
+    if not s.Requests[Key('leader-offer', id)] and Players[offer.To] and Players[offer.To]:IsMajor() then
       N.Request('leader-offer', id, offer.From, offer.To)
     end
   end
@@ -449,6 +452,7 @@ local function DemandList(list)
     seen[demand.ID], count = true, count + 1
   end
   assert(count == #list, 'missing leader demand')
+  table.sort(list, function(a,b) return a.ID<b.ID end)
 end
 -- Called by normal map/leader rule modules with their explicit demands. Values
 -- are not a universal personality formula and never use the SSOT example costs.
@@ -457,6 +461,7 @@ local function ValidateOffer(offer)
   assert(type(offer) == 'table' and ID(offer.ID) and Player(offer.From)
     and Player(offer.To) and offer.From ~= offer.To and Number(offer.AreaKm2) and offer.AreaKm2 > 0,
     'leader offer identity and real country area required')
+  assert(Players[offer.To]:IsMajor(), 'admission recipient must be a major civilization')
   DemandList(offer.Requirements); DemandList(offer.RelationRequirements)
   assert(type(offer.RelationsReviewed) == 'boolean', 'explicit relationship review required')
   assert(#offer.Requirements > 0, 'explicit leader demands required')

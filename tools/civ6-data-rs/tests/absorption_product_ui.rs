@@ -37,8 +37,8 @@ VIEW={From=1,To=2,Status='AVAILABLE',Mode='SMALL_STATE',Country={Name='六角',P
     {ID='deposit',Label='保証金',Kind='PRODUCT_DEPOSIT',Gold=115,Faith=23,Met=false},{ID='relations',Label='関係',Met=false,Reviewed=false}}}
 ExposedMembers={JAC_AbsorptionProduct={Get=function(from,to) assert(to==2);if from~=1 then return {Status='UNAVAILABLE'} end;return VIEW end,
  GetSmallCountries=function(to) assert(to==2);return {VIEW} end}}
-Players={[1]={GetInfluence=function() return {CanReceiveInfluence=function() return OFFICIAL==true end} end},
- [2]={IsTurnActive=function() return true end,GetInfluence=function() return {GetTokensToGive=function() return 2 end} end}}
+Players={[1]={IsMajor=function() return not OFFICIAL end,GetInfluence=function() return {CanReceiveInfluence=function() return OFFICIAL==true end} end},
+ [2]={IsMajor=function() return true end,IsTurnActive=function() return true end,GetInfluence=function() return {GetTokensToGive=function() return 2 end} end}}
 Game={GetLocalPlayer=function() return 2 end,GetCurrentGameTurn=function() return 7 end}
 Locale={Lookup=function(s) return s end};ContextPtr={GetID=function() return 'CityStates' end,IsHidden=function() return true end}
 UI={RequestPlayerOperation=function(actor,op,params) assert(actor==2 and op==13);REQUESTS[#REQUESTS+1]=params end}
@@ -56,7 +56,7 @@ function include(name)
     function ViewCityState() BASE_VIEW=BASE_VIEW+1 end
     function GetQuests() return {{Name='ordinary quest'}} end
     function OnOpenCityStates() ViewList() end
-    function OnEnvoySentClick() end;function OnInfluencedByClick() end;function OnQuestsClick() end;function OnRelationshipsClick() end
+    function OnEnvoySentClick() NATIVE_ENVOY_BUTTON=(NATIVE_ENVOY_BUTTON or 0)+1 end;function OnInfluencedByClick() end;function OnQuestsClick() end;function OnRelationshipsClick() end
   elseif name=='DiplomacyActionView_Expansion2' then
     function SelectPlayer() BASE_SELECT=BASE_SELECT+1 end
     function GetInitialStatementOptions() return {{Text='original diplomacy'}} end
@@ -133,6 +133,7 @@ fn existing_small_country_controls_display_conditions_and_send_authenticated_com
       VIEW.Rows[2].Settlement='RETURNED';VIEW.Rows[2].Met=false;ViewCityState(1)
       assert(INSTANCES.QuestInstance.Rows[1].Description.Text:find('返却済み',1,true))
       OFFICIAL=true;ViewCityState(1);assert(BASE_VIEW==1)
+      Controls.EnvoysSentButton.Callback();assert(NATIVE_ENVOY_BUTTON==1 and #REQUESTS==3)
       ViewCityState(3);assert(BASE_VIEW==2,'unmapped minors must retain normal screen behavior')
     "#).exec()?;
     Ok(())
@@ -149,7 +150,7 @@ fn small_country_rows_keep_their_respective_actor_when_multiple_countries_are_li
       end
       local other=copy(VIEW);other.From=3;other.Country.Name='三好'
       other.Country.Profile.CivilizationType='CIVILIZATION_JAC_MIYOSHI'
-      Players[3]={GetInfluence=function() return {CanReceiveInfluence=function() return false end} end}
+      Players[3]={IsMajor=function() return true end,GetInfluence=function() return {CanReceiveInfluence=function() return false end} end}
       Players[3].GetCities=function() return {GetCapitalCity=function() return {GetX=function() return 30 end,GetY=function() return 40 end} end} end
       ExposedMembers.JAC_AbsorptionProduct.Get=function(from,to)
         assert(to==2);return from==1 and VIEW or from==3 and other or {Status='UNAVAILABLE'}
@@ -226,6 +227,47 @@ fn display_uses_english_and_russian_resources_without_changing_canonical_profile
         );
         let canonical: String = lua.load("return VIEW.Country.Profile.Personality").eval()?;
         assert_eq!(canonical, "慎重");
+    }
+    Ok(())
+}
+
+#[test]
+fn shared_lookup_renders_all_canonical_and_legacy_character_labels_and_consumed_cost(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    lua.load(repo.read(absorption_product::UI)?).exec()?;
+    lua.load(
+        r#"
+      VIEW.Country.Profile.PersonalityLabel=nil;VIEW.Country.Profile.TraitLabel=nil
+      LABEL_CASES={
+        {'勇敢','BRAVE','武人','VALIANT'},{'冷静','CALM','鬼神','FIERCE'},
+        {'慎重','CAREFUL','策士','ASTUTE'},{'陽気','JOLLY','魔神','SHREWD'},
+        {'温厚','GENTLE','教者','DEVOUT'},{'強気','BOLD','霊神','ASCETIC'},
+        {'自由','FICKLE','凡人','MUNDANE'},{'忠実','LOYAL','天才','ADEPT'}}
+      VIEW.Rows[2].Settlement='CONSUMED';VIEW.Rows[2].Met=true
+    "#,
+    )
+    .exec()?;
+    for language in ["en_US", "ru_RU", "ja_JP"] {
+        lua.globals().set("LANGUAGE", language)?;
+        lua.load(r#"
+          for _,case in ipairs(LABEL_CASES) do
+            for _,alias in ipairs({'canonical','legacy','loc'}) do
+              local personality=alias=='canonical' and case[1] or (alias=='legacy' and 'JAC_' or 'LOC_JAC_')..'PERSONALITY_'..case[2]
+              local trait=alias=='canonical' and case[3] or (alias=='legacy' and 'JAC_' or 'LOC_JAC_')..'TRAIT_'..case[4]
+              VIEW.Country.Profile.Personality,VIEW.Country.Profile.Trait=personality,trait
+              local output=JAC_AbsorptionAdmissionUI.Lines(VIEW)
+              assert(output:find(Locale.Lookup('LOC_JAC_ADMISSION_PERSONALITY_'..case[2]),1,true))
+              assert(output:find(Locale.Lookup('LOC_JAC_ADMISSION_TRAIT_'..case[4]),1,true))
+              if LANGUAGE~='ja_JP' then assert(not output:find(case[1],1,true) and not output:find(case[3],1,true)) end
+              assert(VIEW.Country.Profile.Personality==personality and VIEW.Country.Profile.Trait==trait)
+              assert(output:find(Locale.Lookup('LOC_JAC_ADMISSION_CONSUMED'),1,true))
+            end
+          end
+          Players[2].IsMajor=function() return false end
+          assert(not JAC_AbsorptionAdmissionUI.Send(VIEW,'REGISTER') and #REQUESTS==0)
+        "#).exec()?;
     }
     Ok(())
 }

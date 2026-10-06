@@ -26,7 +26,7 @@ fn world() -> mlua::Result<Lua> {
           GetCurrentGameTurn=function() return TURN end}
         Players={}
         for id=1,3 do
-          Players[id]={IsAlive=function() return true end,IsHuman=function() return id==2 end,
+          Players[id]={IsAlive=function() return true end,IsHuman=function() return id==2 end,IsMajor=function() return true end,
             GetTreasury=function() return {GetGoldBalance=function() return GOLD end} end,
             GetReligion=function() return {GetFaithBalance=function() return FAITH end} end,
             GetInfluence=function() return {CanReceiveInfluence=function() return CAN_RECEIVE end,
@@ -68,6 +68,48 @@ fn load(lua: &Lua) -> mlua::Result<()> {
         "N=JAC_AbsorptionAdmissionGameplay; N.RegisterRequirement('RELATION_RELEASE',function() return RELEASE end)",
     )
     .exec()
+}
+
+#[test]
+fn major_recipient_is_required_for_offers_requests_and_saved_prestart_plans() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      Players[2].IsMajor=function() return false end
+      assert(not pcall(N.DefineOffer,OFFER))
+      assert(not pcall(N.Request,'leader-offer',OFFER.ID,1,2))
+      assert(Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')==nil and BEGIN_COUNT==0)
+      Players[2].IsMajor=function() return true end
+      N.DefineOffer(OFFER);N.Request('leader-offer',OFFER.ID,1,2)
+      Players[2].IsMajor=function() return false end
+      GOLD=100;RELEASE=true;N.Tick();assert(BEGIN_COUNT==0)
+      assert(N.Get('leader-offer',OFFER.ID).LastError:find('major civilization',1,true))
+      assert(N.CanCancelOffer(OFFER.ID));N.CancelOffer(OFFER.ID)
+      assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn stored_and_dynamic_demand_order_is_canonical_by_id() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(r#"
+      local original=JAC_AbsorptionGameplay.Rules.Copy(OFFER)
+      OFFER.Requirements={original.Requirements[2],original.Requirements[1]}
+      N.DefineOffer(OFFER)
+      assert(N.GetOffer(OFFER.ID).Requirements[1].ID=='faith-reserve')
+      N.DefineOffer(original)
+      local reverse=false
+      N.Register('dynamic',function()
+        local a={ID='a',Met=true};local z={ID='z',Met=true}
+        return {From=1,To=2,Turn=TURN,Mode='MERGER',AreaKm2=10000,RelationsResolved=true,Requirements=reverse and {z,a} or {a,z}}
+      end)
+      N.Request('dynamic','first',1,2);reverse=true;N.Request('dynamic','second',1,2)
+      local a,b=N.Get('dynamic','first'),N.Get('dynamic','second')
+      assert(a.Decision.Requirements[1].ID=='a' and b.Decision.Requirements[1].ID=='a')
+      assert(JAC_AbsorptionGameplay.Rules.Equal(a.Decision,b.Decision) and BEGIN_COUNT==2)
+    "#).exec()
 }
 
 #[test]
