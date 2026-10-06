@@ -184,6 +184,16 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }) {
                     return Err(fail("invalid map_file".into()));
                 }
+                if let Some(script) = step.get("map_script") {
+                    if step.get("map_file").is_some()
+                        || !matches(r"^[A-Za-z][A-Za-z0-9_]*\.lua$", script)
+                    {
+                        return Err(fail(
+                            "map_script requires a Lua filename and cannot accompany map_file"
+                                .into(),
+                        ));
+                    }
+                }
                 if step
                     .get("city_states")
                     .is_some_and(|v| !v.as_i64().is_some_and(|n| (0..=24).contains(&n)))
@@ -466,6 +476,12 @@ pub fn configure_code_for_session(step: &Value, session: SessionType) -> String 
         lines.push(format!(
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
             lua_string(file)
+        ));
+    }
+    if let Some(script) = step["map_script"].as_str() {
+        lines.push(format!(
+            "MapConfiguration.SetValue('MAP_SCRIPT', {})",
+            lua_string(script)
         ));
     }
     lines.extend([format!("MapConfiguration.SetMapSize({})",lua_string(step["map_size"].as_str().unwrap())),format!("GameConfiguration.SetGameSpeedType({})",lua_string(step["speed"].as_str().unwrap())),format!("MapConfiguration.SetValue('RANDOM_SEED', {})",step["seed"]),format!("GameConfiguration.SetValue('GAME_SYNC_RANDOM_SEED', {})",step["seed"]),format!("MapConfiguration.SetMaxMajorPlayers({})",players.len()),format!("GameConfiguration.SetParticipatingPlayerCount({} + GameConfiguration.GetHiddenPlayerCount())",players.len())]);

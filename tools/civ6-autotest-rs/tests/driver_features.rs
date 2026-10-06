@@ -11,7 +11,7 @@ use support_driver::{FakeBackend, Harness, ManualClock};
 #[test]
 fn configured_human_pool_survives_defaults_without_changing_participants() {
     let step = json!({"action":"configure","ruleset":"RULESET_JAC_BANSEIKI","human_pool":"JAC_ALL_POOLS",
-        "map_size":"MAPSIZE_DUEL","speed":"GAMESPEED_STANDARD","seed":620981,"city_states":1,
+        "map_size":"MAPSIZE_DUEL","map_script":"Continents.lua","speed":"GAMESPEED_STANDARD","seed":620981,"city_states":1,
         "players":[{"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false},
                    {"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}]});
     scenario::validate_scenario(&json!({"name":"pool setup","steps":[step.clone()]})).unwrap();
@@ -23,7 +23,7 @@ GameConfiguration={SetToDefaults=function() VALUES={} end,SetRuleSet=function(r)
  UpdateEnabledMods=function() end,SetValue=function(k,v) VALUES[k]=v end,GetValue=function(k) return VALUES[k] end,
  SetGameSpeedType=function() end,GetHiddenPlayerCount=function() return 4 end,
  SetParticipatingPlayerCount=function(n) PARTICIPANTS=n end}
-MapConfiguration={SetMapSize=function() end,SetValue=function() end,SetMaxMajorPlayers=function(n) MAJORS=n end}
+MapConfiguration={SetMapSize=function() end,SetValue=function(k,v) if k=='MAP_SCRIPT' then SCRIPT=v end end,SetMaxMajorPlayers=function(n) MAJORS=n end}
 PlayerConfigurations={}
 for actor=0,1 do local p={}; PlayerConfigurations[actor]=p
  function p:SetSlotStatus(v) self.Slot=v end
@@ -37,7 +37,7 @@ end
         .load(scenario::configure_code(&step))
         .eval::<bool>()
         .unwrap());
-    lua.load(r#"assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS');assert(MAJORS==2 and PARTICIPANTS==6)
+    lua.load(r#"assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS' and SCRIPT=='Continents.lua');assert(MAJORS==2 and PARTICIPANTS==6)
 assert(PlayerConfigurations[0].Slot==2 and PlayerConfigurations[0].Leader=='LEADER_JAC_TAKEDA_NOBUTORA')
 assert(PlayerConfigurations[1].Slot==1 and PlayerConfigurations[1].Leader=='LEADER_JAC_ODA_NOBUHIDE')"#).exec().unwrap();
     for (ruleset, pool) in [
@@ -52,6 +52,44 @@ assert(PlayerConfigurations[1].Slot==1 and PlayerConfigurations[1].Leader=='LEAD
             .unwrap_err();
         assert!(error.message.contains("human_pool"), "{error}");
     }
+    for script in [
+        json!("../Continents.lua"),
+        json!(true),
+        json!("Continents.Civ6Map"),
+    ] {
+        let mut invalid = step.clone();
+        invalid["map_script"] = script;
+        let error = scenario::validate_scenario(&json!({"name":"map setup","steps":[invalid]}))
+            .unwrap_err();
+        assert!(error.message.contains("map_script"), "{error}");
+    }
+    let mut conflict = step.clone();
+    conflict["map_file"] =
+        json!("{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map");
+    assert!(
+        scenario::validate_scenario(&json!({"name":"map setup","steps":[conflict]}))
+            .unwrap_err()
+            .message
+            .contains("map_script")
+    );
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    h.runner.run_step(&step).unwrap();
+    let calls = h.calls();
+    let configure = calls
+        .iter()
+        .position(|c| {
+            c.1.contains("GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL'")
+                && c.1.contains("MapConfiguration.SetValue('MAP_SCRIPT'")
+        })
+        .unwrap();
+    let build = calls
+        .iter()
+        .position(|c| c.1.contains("BuildHeadlessGameSetup()"))
+        .unwrap();
+    assert!(
+        configure < build,
+        "native selectable domains must be computed after map and pool configuration"
+    );
 }
 
 #[test]

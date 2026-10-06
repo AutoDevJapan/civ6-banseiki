@@ -1681,6 +1681,7 @@ fn unfiltered_startup_probe(repo: &Repository) -> Result<Value> {
 fn filter_only_scenario(repo: &Repository) -> Result<Value> {
     let mut product = scenario(repo)?;
     product["steps"][1]["human_pool"] = json!("JAC_ALL_POOLS");
+    product["steps"][1]["map_script"] = json!("Continents.lua");
     let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
     let setup = base["steps"][2]["code"]
         .as_str()
@@ -1688,7 +1689,7 @@ fn filter_only_scenario(repo: &Repository) -> Result<Value> {
     let (setup, _) = setup
         .rsplit_once("return ")
         .context("native setup return")?;
-    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
+    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\nassert(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')=='JAC_ALL_POOLS','stock-inclusive option did not survive native setup')\nfor actor=0,1 do local p=PlayerConfigurations[actor];print('[JAC_OFFICIAL_FILTER_SETUP] actor='..actor..' pool='..tostring(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL'))..' script='..tostring(MapConfiguration.GetValue('MAP_SCRIPT'))..' values='..tostring(p:GetValue('LEADER_VALUES'))) end\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
     Ok(product)
 }
 
@@ -1868,6 +1869,10 @@ mod tests {
                 assert_eq!(
                     normalized.as_object_mut().unwrap().remove("human_pool"),
                     Some(json!("JAC_ALL_POOLS"))
+                );
+                assert_eq!(
+                    normalized.as_object_mut().unwrap().remove("map_script"),
+                    Some(json!("Continents.lua"))
                 );
                 assert_eq!(before, &normalized, "configured actors or map changed");
             } else if index != 2 {
