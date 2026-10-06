@@ -4,6 +4,16 @@
 //! - Base/Assets/Configuration/Data/SetupParameters.xml:26 and
 //!   DLC/Expansion2/Config/Expansion2_Config.xml:25: EXCLUDE_CITY_STATES is
 //!   a GameConfiguration array, selected from the Expansion2CityStates domain.
+//! - Base/Assets/UI/FrontEnd/GameSetupLogic.lua:788-827 and
+//!   Base/Assets/UI/Automation/Automation_StandardTests.lua:38-53: map-size
+//!   major/minor bounds are separate; participating count is majors + hidden,
+//!   not majors + city states. Base/Assets/Configuration/Data/MapSizes.xml:5
+//!   supplies the official DUEL bounds (0..6 minors).
+//! - Base/Assets/UI/FrontEnd/PlayerSetupLogic.lua:49-95 and
+//!   Base/Assets/UI/FrontEnd/Mods.lua:904: preserve actual major selections;
+//!   update enabled content after the final configuration. Expansion2's
+//!   Maps/Utility/AssignStartingPlots.lua:144-150 reads already alive minor IDs;
+//!   changing a count in Gameplay cannot create the missing engine slot.
 //! - DLC/GranColombia_Maya/Data/GranColombia_Maya_ConfigData.xml:79:
 //!   CIVILIZATION_VATICAN_CITY is in that domain.
 //! - Base/Assets/UI/Tuner/TunerCityPanel.lua:78,103: native district/building
@@ -52,7 +62,89 @@ end
 for _,civ in ipairs(exclude) do assert(selected[civ],'official city-state exclusion missing') end
 assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==1,'one official minor required')
 assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','official Continents required')
-return 'all official city states except Vatican City excluded in GameConfiguration'
+"#;
+
+const FRONTEND_ALLOCATE: &str = r#"
+-- Headless setup can retain bounds from the previous map/ruleset domain.
+-- Storing a count/exclusion list alone does not repair native map-size bounds.
+-- Reapply the official configuration contract after selecting Continents.
+assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI','wrong official acceptance ruleset')
+assert(not GameConfiguration.IsAnyMultiplayer(),'single-player official acceptance required')
+local expected={
+  {Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Slot=SlotStatus.SS_COMPUTER},
+  {Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Slot=SlotStatus.SS_TAKEN}}
+local function MajorsUnchanged()
+  for index,row in ipairs(expected) do
+    local p=assert(PlayerConfigurations[index-1],'configured major slot missing')
+    assert(p:GetCivilizationTypeName()==row.Civ and p:GetLeaderTypeName()==row.Leader and p:GetSlotStatus()==row.Slot,
+      'standard setup changed an actual major civilization, leader or controller')
+  end
+end
+MajorsUnchanged()
+-- Content dependencies must see the selected country pool, not the previous
+-- map's empty pool. This is the normal FrontEnd API, not a manual NPC slot.
+GameConfiguration.UpdateEnabledMods()
+local sizes=DB.ConfigurationQuery("SELECT MinPlayers, MaxPlayers, MinCityStates, MaxCityStates FROM MapSizes WHERE Domain = 'StandardMapSizes' AND MapSizeType = 'MAPSIZE_DUEL'")
+assert(type(sizes)=='table' and #sizes==1,'official DUEL configuration bounds unavailable')
+local size=sizes[1]
+assert(type(size.MinPlayers)=='number' and size.MinPlayers<=2 and size.MaxPlayers>=2
+  and type(size.MinCityStates)=='number' and size.MinCityStates<=1 and size.MaxCityStates>=1,
+  'official DUEL cannot support two majors and one minor')
+assert(MapConfiguration.GetMapSize()=='MAPSIZE_DUEL' or MapConfiguration.GetMapSize()==DB.MakeHash('MAPSIZE_DUEL'),'DUEL map size changed')
+MapConfiguration.SetMinMajorPlayers(size.MinPlayers)
+MapConfiguration.SetMaxMajorPlayers(2)
+MapConfiguration.SetMinMinorPlayers(size.MinCityStates)
+MapConfiguration.SetMaxMinorPlayers(size.MaxCityStates)
+GameConfiguration.SetValue('CITY_STATE_COUNT',1)
+GameConfiguration.SetParticipatingPlayerCount(2+GameConfiguration.GetHiddenPlayerCount())
+MajorsUnchanged()
+assert(MapConfiguration.GetMinMajorPlayers()==size.MinPlayers and MapConfiguration.GetMaxMajorPlayers()==2
+  and MapConfiguration.GetMinMinorPlayers()==size.MinCityStates and MapConfiguration.GetMaxMinorPlayers()==size.MaxCityStates,
+  'native map-size player bounds were not applied')
+assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==1 and MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua',
+  'final engine minor count/map script changed')
+-- Validate the complete current pool again after enabling content. No country
+-- classification, leader override, hand-built minor or ready flag is supplied.
+local finalRows=DB.ConfigurationQuery("SELECT CivilizationType FROM CityStates WHERE Domain = 'Expansion2CityStates' ORDER BY CivilizationType")
+local finalExclude=GameConfiguration.GetValue('EXCLUDE_CITY_STATES');local exclusions={}
+assert(type(finalRows)=='table' and type(finalExclude)=='table','final native country pool unavailable')
+for _,civ in ipairs(finalExclude) do assert(not exclusions[civ],'duplicate final country exclusion');exclusions[civ]=true end
+local included,excluded=0,0
+for _,row in ipairs(finalRows) do
+  if exclusions[row.CivilizationType] then excluded=excluded+1
+  else included=included+1;assert(row.CivilizationType=='CIVILIZATION_VATICAN_CITY','final pool includes another official country') end
+end
+assert(included==1 and excluded==#finalExclude,'final engine pool is not exactly Vatican City')
+print('[JAC_OFFICIAL_SETUP] script=Continents.lua majors=2 hidden='..GameConfiguration.GetHiddenPlayerCount()..
+  ' minor-count=1 min-minor='..MapConfiguration.GetMinMinorPlayers()..' max-minor='..MapConfiguration.GetMaxMinorPlayers())
+return 'official DUEL limits and single-country pool committed through standard engine configuration'
+"#;
+
+const CORE_ROSTER: &str = r#"
+local majorCount,minorCount,minor=0,0,nil
+local rows={}
+for actor=0,63 do
+  local config=PlayerConfigurations[actor];local p=Players[actor]
+  if p and p:IsAlive() then
+    local influence=p:GetInfluence()
+    local receives=influence and type(influence.CanReceiveInfluence)=='function' and influence:CanReceiveInfluence() or false
+    local civ=config and config:GetCivilizationTypeName();local leader=config and config:GetLeaderTypeName()
+    rows[#rows+1]=actor..':'..tostring(civ)..':'..tostring(leader)..':major='..tostring(p:IsMajor())..':receives='..tostring(receives)
+    if p:IsMajor() then majorCount=majorCount+1 end
+    if receives then
+      minorCount=minorCount+1;minor=actor
+      assert(not p:IsMajor() and civ=='CIVILIZATION_VATICAN_CITY' and leader=='LEADER_MINOR_CIV_VATICAN_CITY',
+        'engine generated an unexpected official minor profile')
+    end
+  end
+end
+print('[JAC_OFFICIAL_ROSTER] '..table.concat(rows,' | '))
+assert(majorCount==2 and minorCount==1 and minor~=nil,
+  'native city-state allocation missing: actual major='..majorCount..' actual influence-receiving minor='..minorCount)
+local found=false
+for _,p in ipairs(PlayerManager.GetAliveMinors()) do if p:GetID()==minor then found=true end end
+assert(found,'actual official minor is absent from the native minor roster')
+return 'all 64 actual slots read in Core; exactly two majors and one official Vatican minor allocated by the engine'
 "#;
 
 // UI derives identities from its own configurations. No Gameplay property is
@@ -506,12 +598,15 @@ assert(not t,'fresh acceptance game required')
 assert(not Game:GetProperty('JAC_ABSORPTION_FLOW_TEST_MODE'),'diagnostic flow mode must be absent')
 local from,to,human,majors,minors=nil,nil,nil,0,0
 for _,p in ipairs(PlayerManager.GetAliveMinors()) do
+  local influence=p:GetInfluence()
+  if influence and influence:CanReceiveInfluence() then
   minors=minors+1
   local id=p:GetID();local config=PlayerConfigurations[id]
   assert(config:GetCivilizationTypeName()=='CIVILIZATION_VATICAN_CITY' and config:GetLeaderTypeName()=='LEADER_MINOR_CIV_VATICAN_CITY',
     'the configured sole official minor is not Vatican City')
   assert(not p:IsHuman() and not p:IsMajor() and p:GetInfluence():CanReceiveInfluence(),'actual official minor cannot receive influence')
   from=id
+  end
 end
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
   majors=majors+1
@@ -871,7 +966,8 @@ fn scenario(repo: &Repository) -> Result<Value> {
     let (setup, _) = setup
         .rsplit_once("return ")
         .context("official setup return")?;
-    steps[2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}"));
+    steps[2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FRONTEND_ALLOCATE}"));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":CORE_ROSTER}));
     steps.push(active());
     steps.push(core(SELECT_AND_BLOCK));
     advance(&mut steps);
@@ -1163,6 +1259,100 @@ MapConfiguration={GetValue=function(k) assert(k=='MAP_SCRIPT');return 'Continent
                 lua.load("local v=GameConfiguration.GetValue('EXCLUDE_CITY_STATES');assert(#v==2 and v[1]=='CIVILIZATION_GENEVA' and v[2]=='CIVILIZATION_SINGAPORE')").exec()?;
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn standard_frontend_contract_restores_minor_bounds_after_pool_and_mod_update() -> Result<()> {
+        // Test the documented API order/arguments only; this does not model
+        // or claim that Civ6's native engine actually generated a city state.
+        const SETUP: &str = r#"
+ROWS={{CivilizationType='CIVILIZATION_GENEVA'},{CivilizationType='CIVILIZATION_VATICAN_CITY'},{CivilizationType='CIVILIZATION_SINGAPORE'}}
+SIZE={MinPlayers=2,MaxPlayers=4,MinCityStates=0,MaxCityStates=6}
+VALUES={CITY_STATE_COUNT=1};BOUNDS={MinMajor=2,MaxMajor=2,MinMinor=0,MaxMinor=0};CALLS={}
+SlotStatus={SS_COMPUTER=1,SS_TAKEN=2}
+local majors={{Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Slot=1},{Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Slot=2}}
+PlayerConfigurations={}
+for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizationTypeName=function() return row.Civ end,
+ GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end} end
+GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAnyMultiplayer=function() return false end,
+ GetValue=function(key) return VALUES[key] end,SetValue=function(key,value) VALUES[key]=value end,
+ GetHiddenPlayerCount=function() return 2 end,UpdateEnabledMods=function()
+  assert(VALUES.EXCLUDE_CITY_STATES and #VALUES.EXCLUDE_CITY_STATES==2);CALLS[#CALLS+1]='mods'
+  if CHANGE_MAJOR then majors[1].Leader='wrong-leader' end
+  if DROP_FILTER then VALUES.EXCLUDE_CITY_STATES={} end
+ end,
+ SetParticipatingPlayerCount=function(n)
+  assert(n==4,'city states must not be added to participating major/hidden count')
+  assert(BOUNDS.MinMinor==0 and BOUNDS.MaxMinor==6 and VALUES.CITY_STATE_COUNT==1,'participating setup preceded native bounds/count')
+  CALLS[#CALLS+1]='participating'
+ end}
+MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return 'Continents.lua' end,
+ GetMapSize=function() return 'MAPSIZE_DUEL' end,
+ SetMinMajorPlayers=function(n) BOUNDS.MinMajor=n end,SetMaxMajorPlayers=function(n) BOUNDS.MaxMajor=n end,
+ SetMinMinorPlayers=function(n) assert(CALLS[1]=='mods');BOUNDS.MinMinor=n end,
+ SetMaxMinorPlayers=function(n) if not DROP_BOUNDS then BOUNDS.MaxMinor=n end end,
+ GetMinMajorPlayers=function() return BOUNDS.MinMajor end,GetMaxMajorPlayers=function() return BOUNDS.MaxMajor end,
+ GetMinMinorPlayers=function() return BOUNDS.MinMinor end,GetMaxMinorPlayers=function() return BOUNDS.MaxMinor end}
+DB={MakeHash=function() return 99 end,ConfigurationQuery=function(sql)
+ if sql:find('FROM MapSizes',1,true) then
+  assert(sql:find("Domain = 'StandardMapSizes'",1,true) and sql:find("MapSizeType = 'MAPSIZE_DUEL'",1,true));return {SIZE}
+ end
+ assert(sql=="SELECT CivilizationType FROM CityStates WHERE Domain = 'Expansion2CityStates' ORDER BY CivilizationType");return ROWS
+end}
+"#;
+        for mutation in [
+            "",
+            "CHANGE_MAJOR=true",
+            "DROP_FILTER=true",
+            "DROP_BOUNDS=true",
+            "SIZE.MaxCityStates=0",
+        ] {
+            let lua = Lua::new();
+            lua.load(SETUP).exec()?;
+            lua.load(mutation).exec()?;
+            let result = lua
+                .load(format!("{FRONTEND_FILTER}\n{FRONTEND_ALLOCATE}"))
+                .exec();
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
+            if result.is_ok() {
+                lua.load("assert(CALLS[1]=='mods' and CALLS[2]=='participating');assert(BOUNDS.MaxMinor==6)").exec()?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn core_roster_rejects_empty_native_city_state_before_actor_wait() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+Players,PlayerConfigurations={},{}
+local rows={{ID=0,Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Major=true},
+ {ID=1,Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Major=true},
+ {ID=62,Civ='CIVILIZATION_FREE_CITIES',Leader='LEADER_FREE_CITIES'},
+ {ID=63,Civ='CIVILIZATION_BARBARIAN'}}
+for _,row in ipairs(rows) do
+ Players[row.ID]={IsAlive=function() return true end,IsMajor=function() return row.Major==true end,
+ GetInfluence=function() return {CanReceiveInfluence=function() return false end} end}
+ PlayerConfigurations[row.ID]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end}
+end
+PlayerManager={GetAliveMinors=function() return {Players[62]} end}
+"#).exec()?;
+        let result = lua.load(CORE_ROSTER).exec();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("actual influence-receiving minor=0"));
+        let scene = scenario(&Repository::checked_in())?;
+        assert_eq!(scene["steps"][6]["state_name"], "JAC_Absorption_Entry");
+        assert_eq!(scene["steps"][6]["code"], CORE_ROSTER);
+        assert_eq!(scene["steps"][7]["action"], "wait_for");
+        assert!(!CORE_ROSTER.contains("Set"));
         Ok(())
     }
 
