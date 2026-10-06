@@ -115,6 +115,9 @@ pub trait Backend: Send {
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
+    fn native_ai_diagnostic(&mut self, _: &Value) -> Result<Value> {
+        Err(Error::input("backend has no AI diagnostic controller"))
+    }
     fn select_native_assignment_subject(
         &mut self,
         _: u32,
@@ -201,6 +204,10 @@ pub trait Backend: Send {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "native_ai_tests.rs"]
+mod native_ai_tests;
 
 #[cfg(test)]
 mod native_trace_step_tests {
@@ -886,6 +893,11 @@ impl Backend for SystemBackend {
             }
             None => Ok(None),
         }
+    }
+    fn native_ai_diagnostic(&mut self, request: &Value) -> Result<Value> {
+        self.validate_native_bridge_target()?;
+        self.native_bridge.as_mut().ok_or_else(||Error::input("resident controller absent"))?
+            .ai_diagnostic(request)
     }
     fn finish_native_process_exit(&mut self) -> Result<()> {
         if self
@@ -2353,6 +2365,14 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "start_native_ai_observation" | "stop_native_ai_observation" => {
+                self.remaining(deadline)?;
+                let (pid,created)=self.resident_runtime_identity.ok_or_else(||Error::input("AI diagnostic requires resident runtime"))?;
+                let command=civ6_native_bridge_rs::ai_diagnostic::Command::parse(step,pid,created).map_err(Error::input)?;
+                let receipt=self.backend.native_ai_diagnostic(step)?;
+                civ6_native_bridge_rs::ai_diagnostic::validate_matched_receipt(&receipt,command).map_err(Error::input)?;
+                Ok(format!("read-only AI diagnostic; execution blocked; {receipt}"))
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"

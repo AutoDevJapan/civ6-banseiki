@@ -1,5 +1,7 @@
 //! Explicit ownership transfer, separate from the bounded uninstall contract.
 use super::*;
+#[path = "ai_runtime_controller.rs"]
+mod ai_control;
 
 struct Exports {
     install: usize,
@@ -290,9 +292,11 @@ pub(super) fn run(
     std::io::stdout().flush().map_err(|e| e.to_string())?;
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
-        let mut line = String::new();
-        let _ = sender.send(std::io::stdin().lock().read_line(&mut line).map(|_| line));
+        for line in std::io::stdin().lock().lines() {
+            if sender.send(line).is_err() { break; }
+        }
     });
+    let mut ai = ai_control::Control::new();
     let deadline = Instant::now() + Duration::from_secs(u64::from(parsed.duration));
     loop {
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -300,6 +304,16 @@ pub(super) fn run(
             break;
         }
         match receiver.recv_timeout(remaining.min(Duration::from_secs(1))) {
+            Ok(Ok(line)) if line.trim_start().starts_with('{') => {
+                verify_lease(chain_pid, chain, 0)?;
+                if !alive(game) { return Err("AI diagnostic process exited".into()); }
+                if sha256(&dll)? != bridge_sha {return Err("AI diagnostic DLL identity changed".into());}
+                let result = serde_json::from_str::<serde_json::Value>(&line).map_err(|e|e.to_string())
+                    .and_then(|value| ai.handle(&value, parsed, game, image, &dll));
+                let receipt = match result { Ok(v)=>v, Err(e)=>json!({"kind":"ai_observation","error":e,"retry_allowed":false}) };
+                println!("AI_RECEIPT {receipt}");
+                std::io::stdout().flush().map_err(|e|e.to_string())?;
+            }
             Ok(_) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
@@ -307,6 +321,7 @@ pub(super) fn run(
             break;
         }
     }
+    let ai_stop = ai.finish(game,image,&dll,&bridge_sha);
     let status = remote_call(game, stop, 0, "BridgeRuntimeStopObservation")?;
     if status != BridgeStatus::Ok as u32 {
         return Err(format!(
@@ -329,7 +344,7 @@ pub(super) fn run(
         json!({"kind":"observation_stop","status":status,
         "runtime_retained":true,"three_entries_published":true,"trace_retained":true}),
     )?;
-    Ok(())
+    ai_stop
 }
 
 #[cfg(test)]

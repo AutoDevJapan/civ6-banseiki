@@ -2,7 +2,7 @@
 //! All pointers below are the fixed native caller's exact ABIs, not Lua APIs.
 use super::*;
 use crate::ai_operation::gateway::{LeaseStamp, RuntimeLease};
-use crate::governor_payment::{read_current, CurrentMemory, PaymentDefinition, PromotionSnapshot};
+use crate::governor_payment::{CurrentMemory, PaymentDefinition, PromotionSnapshot, read_current};
 use std::{cell::RefCell, sync::OnceLock};
 
 #[repr(C, align(8))]
@@ -37,6 +37,7 @@ struct Api {
     execute: unsafe extern "system-unwind" fn(*mut Wrapper),
 }
 static API: OnceLock<Api> = OnceLock::new();
+pub(super) static ATTEMPT: OnceLock<crate::ai_once::Once> = OnceLock::new();
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static ACTION_THREAD: AtomicU32 = AtomicU32::new(0);
 static NATIVE_UNWINDS: AtomicU32 = AtomicU32::new(0);
@@ -52,6 +53,9 @@ unsafe extern "system" fn native_cleanup(
     if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
         NATIVE_UNWINDS.fetch_add(1, Ordering::AcqRel);
         cancel();
+        if let Some(attempt) = ATTEMPT.get() {
+            attempt.finish(false);
+        }
         let pending = CLEANUP.with(|cell| std::mem::replace(&mut *cell.borrow_mut(), [(0, 0); 3]));
         for (pointer, destructor) in pending.into_iter().rev() {
             if pointer != 0 {
@@ -182,7 +186,11 @@ pub(super) fn configure(base: u64, enabled: bool) -> Result<(), ()> {
         ENABLED.store(false, Ordering::Release);
         return Ok(());
     }
-    if base == 0 {
+    if base == 0
+        || ATTEMPT
+            .get()
+            .is_none_or(|a| a.state() != crate::ai_once::State::Armed as u32)
+    {
         return Err(());
     }
     if API.get().is_none() {
@@ -485,6 +493,15 @@ pub(super) fn before(
     definition: PaymentDefinition,
 ) {
     BEFORE.with(|cell| *cell.borrow_mut() = None);
+    if let Some(attempt) = ATTEMPT.get() {
+        attempt.observe(
+            stamp.pid,
+            stamp.created,
+            stamp.owner,
+            stamp.generation,
+            definition.governor_index,
+        );
+    }
     let Some(_guard) = ActionGuard::enter() else {
         return;
     };
@@ -547,6 +564,23 @@ pub(super) fn after(
     let Some(title) = definition.titles[now.paid[slot] as usize - 1] else {
         return;
     };
+    let Some(attempt) = ATTEMPT.get() else { return };
+    let actual = crate::ai_once::Subject {
+        pid: stamp.pid,
+        created: stamp.created,
+        owner: stamp.owner,
+        generation: stamp.generation,
+        index: definition.governor_index,
+        cost: u32::from(definition.cost),
+        paid: u32::from(now.paid[slot]),
+        spent: now.spent,
+        title,
+    };
+    // Consume BEFORE entering the official factory/filter/dispatcher. Unknown
+    // outcomes and filtered requests never return this slot to Armed.
+    if attempt.claim(actual).is_err() {
+        return;
+    }
     let dispatched = unsafe {
         api.promote(stamp.owner, definition.governor_index, title, || {
             ENABLED.load(Ordering::Acquire) && lease.current(stamp, player)
@@ -564,6 +598,7 @@ pub(super) fn after(
         && post
             .as_ref()
             .is_some_and(|(after, position)| *position == slot && *after == expected);
+    attempt.finish(verified);
     if let Ok(mut record) = LAST.lock() {
         *record = Some(StepRecord {
             owner: stamp.owner,

@@ -17,6 +17,8 @@ pub const PINNED_GAMECORE_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 
 pub mod appointment_glue;
+pub mod ai_once;
+pub mod ai_diagnostic;
 pub mod governor_payment;
 pub mod paid_artifact;
 pub mod paid_catalog;
@@ -28,6 +30,7 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
+    AiCapture,
     AiObservationConfig,AiRuntimeState,AI_OBSERVATION_VERSION,
     supports_atomic_promotion_fetch, AssignCalibrationObservation, AssignCalibrationTrace,
     BridgeConfig, BridgeMode, BridgeStatus, BridgeTrace, CalibrationObservation, CalibrationTrace,

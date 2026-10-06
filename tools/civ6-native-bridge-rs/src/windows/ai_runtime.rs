@@ -12,6 +12,16 @@ fn arm(binding: u128) -> u64 {
 }
 
 unsafe impl RuntimeLease for OwnedLease {
+    fn observed(&self, row: &gateway::Observation, definition: crate::governor_payment::PaymentDefinition) {
+        let Some(a) = ai_operation::ATTEMPT.get() else { return };
+        if row.accepted && row.generation != a.subject.generation {
+            a.observe(a.subject.pid,a.subject.created,row.owner.unwrap_or(u32::MAX),row.generation,definition.governor_index);
+        }
+        if row.accepted && !row.after && matches!(row.raw.site,1|2) {
+            a.check_paid(row.own.and_then(|p|p.diagnostic_paid(a.subject.owner,definition).ok()).map(u32::from));
+        }
+        if row.accepted && row.after && row.raw.site == 3 { a.check_spent(row.raw.rax); }
+    }
     fn on_unwind(&self) {
         ai_operation::cancel();
     }
@@ -116,6 +126,7 @@ pub(super) unsafe fn register_owner(
     owner: u32,
     ai_owner: u64,
     index: u32,
+    expected: crate::ai_once::Subject,
 ) -> Result<(), gateway::Failure> {
     if !runtime::ai_installed() || owner as usize >= PRODUCTION_OWNER_LIMIT {
         return Err(gateway::Failure::Lease);
@@ -130,7 +141,10 @@ pub(super) unsafe fn register_owner(
         .into_iter()
         .find(|d| d.governor_index == index)
         .ok_or(gateway::Failure::Identity)?;
-    if !(2..=3).contains(&definition.cost)
+    if !expected.valid()
+        || expected.cost != u32::from(definition.cost)
+        || definition.titles[expected.paid as usize - 1] != Some(expected.title)
+        || !(2..=3).contains(&definition.cost)
         || product_permission(
             owner as usize,
             index as usize,
@@ -178,15 +192,11 @@ pub(super) unsafe fn register_owner(
     if guard.is_some() || !LEASE.current(stamp, player) {
         return Err(gateway::Failure::Lease);
     }
+    ai_operation::ATTEMPT
+        .set(crate::ai_once::Once::observing(expected).map_err(|_| gateway::Failure::Identity)?)
+        .map_err(|_| gateway::Failure::AlreadyUsed)?;
     *guard = Some(unsafe {
-        gateway::register(
-            base,
-            ai_owner,
-            callable,
-            definition,
-            definition.titles[0].ok_or(gateway::Failure::Identity)?,
-            &LEASE,
-        )
+        gateway::register(base, ai_owner, callable, definition, expected.title, &LEASE)
     }?);
     Ok(())
 }
@@ -215,6 +225,10 @@ mod tests {
             governor_index: 77,
             status: 0,
             execution_mode: 0,
+            expected_cost: 2,
+            expected_paid: 1,
+            expected_spent: 1,
+            expected_title: 78,
         };
         // Test library has no production GameCore owner. Typed config itself
         // cannot turn a current process or a numeric index into permission.
@@ -239,10 +253,59 @@ pub struct AiObservationConfig {
     pub generation: u32,
     pub governor_index: u32,
     pub status: u32,
-    /// 0 observes; 1 requests one formal title after an unchanged AI callback.
+    /// Only 0 is admitted. Execution awaits real lifecycle receipts.
     pub execution_mode: u32,
+    pub expected_cost: u32,
+    pub expected_paid: u32,
+    pub expected_spent: u32,
+    pub expected_title: u32,
 }
-pub const AI_OBSERVATION_VERSION: u32 = 0x0880_0001;
+pub const AI_OBSERVATION_VERSION: u32 = 0x0880_0002;
+
+/// Sampling stop, not a lifetime/drain certificate. One immutable registration
+/// is retained until process exit, including a partially failed installation.
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeRuntimeAiStopObservation(input: *mut c_void) -> u32 {
+    if !committed_range(
+        input as usize,
+        std::mem::size_of::<AiRuntimeState>(),
+        std::mem::align_of::<AiRuntimeState>(),
+        true,
+    ) {
+        return BridgeStatus::InvalidInput as u32;
+    }
+    let Ok(_guard) = runtime::INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    let c = unsafe { &*input.cast::<AiRuntimeState>() };
+    let Some(a) = ai_operation::ATTEMPT.get() else {
+        return BridgeStatus::InvalidInput as u32;
+    };
+    if c.size as usize != std::mem::size_of::<AiRuntimeState>()
+        || c.version != AI_OBSERVATION_VERSION
+        || (
+            c.game_pid,
+            c.created_filetime,
+            c.owner,
+            c.generation,
+            c.governor_index,
+        ) != (
+            a.subject.pid,
+            a.subject.created,
+            a.subject.owner,
+            a.subject.generation,
+            a.subject.index,
+        )
+        || c.game_pid != unsafe { GetCurrentProcessId() }
+        || current_created_filetime() != Some(c.created_filetime)
+    {
+        return BridgeStatus::ProcessIdentity as u32;
+    }
+    ai_operation::cancel();
+    a.stop();
+    gateway::stop_observation();
+    BridgeRuntimeAiQuery(input)
+}
 
 #[repr(C)]
 pub struct AiRuntimeState {
@@ -261,6 +324,12 @@ pub struct AiRuntimeState {
     pub title: u32,
     pub dispatched: u32,
     pub verified: u32,
+    pub attempt_state: u32,
+    pub reject_reason: u32,
+    pub callbacks: u32,
+    pub observations: u32,
+    pub dropped: u32,
+    pub execution_blockers: u32,
 }
 
 /// Read-only receipt. Ready/generation come from real runtime cells; neither is
@@ -299,6 +368,23 @@ pub extern "system" fn BridgeRuntimeAiQuery(input: *mut c_void) -> u32 {
         config.title = 0;
         config.dispatched = 0;
         config.verified = 0;
+        config.attempt_state = u32::MAX;
+        config.reject_reason = 0;
+        config.callbacks = 0;
+        config.observations = 0;
+        config.dropped = 0;
+        config.execution_blockers = crate::ai_once::EXECUTION_BLOCKERS;
+        if let Some(a) = ai_operation::ATTEMPT
+            .get()
+            .filter(|a| a.subject.owner == config.owner && a.subject.index == config.governor_index)
+        {
+            config.attempt_state = a.state();
+            config.reject_reason = a.reason();
+            config.callbacks = a.callbacks();
+            let (rows, dropped) = gateway::observations();
+            config.observations = rows.len() as u32;
+            config.dropped = dropped;
+        }
         let binding = PRODUCT_OWNERS[config.owner as usize].load();
         if let Some(player) = joined_receiver(binding).checked_sub(0x528) {
             config.ready = u32::from(LEASE.begin(config.owner, player).is_some());
@@ -336,7 +422,8 @@ pub extern "system" fn BridgeRuntimeAiObserve(input: *mut c_void) -> u32 {
         let mut config = unsafe { ptr::read(input.cast::<AiObservationConfig>()) };
         if config.size as usize != std::mem::size_of::<AiObservationConfig>()
             || config.version != AI_OBSERVATION_VERSION
-            || config.execution_mode > 1
+            || config.execution_mode != 0
+            || !cfg!(feature = "ai-observation-candidate")
             || config.owner >= 64
             || config.governor_index >= 256
             || config.generation == 0
@@ -369,7 +456,26 @@ pub extern "system" fn BridgeRuntimeAiObserve(input: *mut c_void) -> u32 {
         };
         let base =
             unsafe { GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr()) } as u64;
-        let result = unsafe { register_owner(base, config.owner, ai_owner, config.governor_index) };
+        let expected = crate::ai_once::Subject {
+            pid: config.game_pid,
+            created: config.created_filetime,
+            owner: config.owner,
+            generation: config.generation,
+            index: config.governor_index,
+            cost: config.expected_cost,
+            paid: config.expected_paid,
+            spent: config.expected_spent,
+            title: config.expected_title,
+        };
+        let result = unsafe {
+            register_owner(
+                base,
+                config.owner,
+                ai_owner,
+                config.governor_index,
+                expected,
+            )
+        };
         let mut status = match result {
             Ok(()) => BridgeStatus::Ok,
             Err(gateway::Failure::CriticalRestore) => BridgeStatus::Critical,

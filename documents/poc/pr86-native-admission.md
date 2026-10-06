@@ -747,3 +747,25 @@ reload生成はこの比較器が扱う費用3・paid2だけに限定する。�
 準備する1回の親試行の上限は、本人2名・正式任命2回・追加PROMOTE3回・途中保存読込1回。既知の未加入AI否定が成功しても本人追加支払いは別結果のまま残す。観測が欠ける・実APIが無い・費用/本人が不一致ならinconclusive/失敗とし、模擬API検査の合格でAI受入を完成にしない。worker実機・public push・全workspace検査はいずれも0、候補featureの既定無効を維持する。
 
 source `ad0f7477`とレビュー修正`a3733339`の限定検査は6成功・失敗ignoredfiltered0・警告0（`D:/CC/Work/todo880/ai-calibration-unit-owner-tests.log`）。最初のLua fixture検査はMembersの返値が1値になっていたため1成功3失敗となり、既存engine形式のindex/valueの2値へ直してから実施した。成功したfixtureは実Civ6で支払えた証拠ではない。同じSol再レビューは新Must0。生成bundleは`tools/target/ai1466-calibration-a3733339`に9scenario＋requirementsを出力済みで、生成器内の既存driver validationとJSON読込を確認した。親はこのdirを自動一括実行せず、記載した開始条件を満たした段階だけ既存live順序へ差し込む。途中save/load・AI登録・正式操作の取得は親receiptとの接続待ちであり、今回の準備をもって通常AI支払いを完了扱いしない。
+
+## 同一人物の一操作制限と共通driverの読取登録校正
+
+5756以後の有限変更では、既存常駐controllerのstdin/stdoutへ診断コマンドを接続した。通常ビルドでは追加feature `ai-observation-candidate` は無効。校正用DLLを明示してビルドした場合だけ登録を受理する。既存の `ai-producer-candidate` を有効にする必要はなく、上位hookを追加しない。通常runtime本体の `windows/runtime.rs` とbootstrapソースは変更しない。親runner/nativeadapterとの取り込みは3-wayで行う。
+
+既存 `start_native_paid_runtime` のcontrollerが生存中に、共通driver action `start_native_ai_observation` を実行し、自然なcallbackを観測した後 `stop_native_ai_observation`、最後に `stop_native_paid_runtime_observation` を実行する。AIの開始・停止actionには同一の `owner, generation, index, cost, paid, spent, title` を全て明示する。PID/作成時刻は入力値から採用せず、既存controllerの所有済みprocess handleから固定する。index/titleは実GameInfoのIndex、costは本人の正式定義、paidは本人Baseと連続TITLEの実bit、spentは実SPENT、generationはそのruntimeの実世代である。0や未取得値で埋めない。paid=0のAPPOINT、全額支払済み、費用2/3以外、任意address、実行modeやdrainedフラグは拒否する。AI停止前のruntime観測終了と同一processでの再登録もscenario検査で拒否する。
+
+controllerは既に読み込んだ同じbridge DLLの `BridgeRuntimeAiObserve` を呼び、実ownerの同期catalog・加入許可・AI container内の元callableを再確認する。ABI versionは `08800002`。登録は原子的に保持する不変の一対象へ結ぶ。将来実行を有効にできた場合も、既存同期after-callbackから正式factory/filter/executeへ入る直前に一回分をCASで消費する。原callbackが複数来ても再取得できず、結果不明・SEH・既払receipt不一致は再送しない。現在は生成したpermitを認めるproduction arm APIが存在せず、`execution_mode=1` をexportで拒否する。抽象fixtureのArmed状態や診断JSONから実行を有効にする経路はない。
+
+本人の自然checkerに来た実promotion bitと自然Spent getterの戻り値を既存4sitesで採取する。比較対象と違えば拒否理由を保持し、元関数は従来どおり一回通す。`BridgeRuntimeAiCapture` は最大128行の既存記録を固定長C ABIで返し、controllerは同じ成果にraw RCX/RDX/R8/R9/RAX、R10/R11/RFLAGS/XMM、caller stack pointer/return、受理段階、owner/世代、本人Index/全promotion bitsを記録する。SPENTはsite3の自然after-call RAXであり、仮の値を補わない。原出入口の対応が欠ける・行が落ちる場合は、行数があるだけで正式操作やABI保持を合格にしない。
+
+成果は既存runtimeの3行receiptを変更せず、同名stemの `.ai.jsonl` に要求と応答を保存し、`AI_RECEIPT` 応答をdriverへ返す。応答には原要求の対象・実世代・native status・query status・拒否状態・raw行・drop数・実GameCore baseを含む。登録を送る前に一回分を予約し、応答不明でも開始を再送しない。終了も一回だけ試みる。正常なcontroller終了時は未終了の採取停止を一回試みるが、強制終了したcontrollerから後処理できたと仮定しない。preflightだけで失敗した場合、またはnativeが登録処理以前にInvalidInput/ProcessIdentityを返したと確定した場合には、不要な自動停止を発行しない。登録拒否から存在しない対象の停止失敗、さらにゲーム終了へ連鎖させない。Panic/HookFailure/Critical/応答不明は無変更と断定しない。本人のreceipt不一致は生記録を保存し、driver手順を失敗として返すが、採取停止の成功自体と区別する。
+
+`BridgeRuntimeAiStopObservation` は採取と追加操作を止めるだけであり、既存callbackやproducerの全排出、解除、Close/Rebuild成功を表さない。元callable/gateway/参照データはprocess終了まで保持する。全応答は `producer_drained=false`、`operation_proven=false`。初回AIより前のInstall、同job-setの実Waitと新規発行停止、同期callback退出の3条件は常時execution blockerとして保持する。この校正で正式TITLE要求を送ることはなく、通常AI本人費用2/3の受入は未達のままである。原任命0→1と追加TITLE1→2は引き続き別判定とする。
+
+採取停止専用の状態をClose用のACTIVEと分けた。初回限定回帰では共用によりClose後の遅いcallback行を落とし、54成功2失敗となったため修正した。修正後はnative限定57成功（失敗ignored0、filtered68）、controller限定3成功（filtered16）、driver限定2成功（filtered64）、生成器6成功（filtered0）。receipt関連の差分4件も再検査したが57件へ重複加算しない。全て共有cargo_gateと専用targetを使用し、警告0。検査logは `D:/CC/Work/todo880/ai-diagnostic-{native,controller,driver,generator,receipt}-tests.log`。Win64 OS子で実行中原callbackの採取停止・原一回・採取後の遅いcallback・未証明Close拒否、controllerでは実OSの呼出し/読取と実未installed exportの登録拒否を検査した。Civ6の受入を模擬した合格ではなく、実機0・正式AI支払い0である。
+
+別モデルレビューのMustは確定登録拒否後の不要な自動停止、明示停止のpreflight失敗で自動停止予約が失われる経路、停止の非成功/応答不明が予約なしの成功へ抜ける経路だった。終了を予約の有無だけで扱う設計を廃止し、`Cleanup` の未登録・停止待ち・停止結果不明・停止確認済みを区別した。停止待ちはnative呼出し直前まで保持し、その境界を越えれば結果不明として再送しない。native成功と同一対象の実停止receiptがそろった場合だけ停止確認済みになる。controller終了時は既に予約済みの明示停止を再予約せず、残るnative停止だけを一回試みる。preflight失敗・非成功・応答不明は終了失敗を保持し、再度finishしても成功へ転換しない。これらを専用OS検査へ追加した。本人receipt不一致を手順失敗とするSuggestionも反映した。
+
+DLL/controllerの限定buildは `cargo_gate.exe build --locked --offline --manifest-path tools/Cargo.toml -p civ6-native-bridge-rs --lib --bin civ6-native-bridge --features ai-observation-candidate`。生成DLLのCOFF exportで `BridgeRuntimeAiObserve / Query / Capture / StopObservation` の4入口を確認する。ビルド成果はworker専用target内に置き、共有DLLへ配置しない。通常のbuild指定にfeatureを追加しない。
+
+Solの最終限定再レビューは上記controller終了状態のMust解消・新Must0（`D:/CC/Work/todo880/ai-diagnostic-cleanup-review.txt`）。これは静的差分レビューであり、native同期入口・初回設置・実producer停止/Wait/退出の未証明を解消した判定ではない。

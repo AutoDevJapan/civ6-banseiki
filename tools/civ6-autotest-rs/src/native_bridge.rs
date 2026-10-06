@@ -897,9 +897,27 @@ mod platform {
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
+        ai_diagnostic: civ6_native_bridge_rs::ai_diagnostic::Session,
     }
 
     impl Session {
+        pub fn ai_diagnostic(&mut self, request: &Value) -> Result<Value> {
+            use civ6_native_bridge_rs::ai_diagnostic::{Command,validate_matched_receipt};
+            if !self.resident_runtime || self.finished || self.process_has_exited() {
+                return Err(Error::input("AI diagnostics require the active resident controller"));
+            }
+            let command=Command::parse(request,self.pid,self.created).map_err(Error::input)?;
+            self.ai_diagnostic.reserve(command).map_err(Error::input)?;
+            let input=self.input.as_mut().ok_or_else(||Error::input("AI controller input is closed"))?;
+            writeln!(input,"{request}").and_then(|_|input.flush()).map_err(|e|Error::input(e.to_string()))?;
+            let line=self.lines.recv_timeout(Duration::from_secs(25))
+                .map_err(|_|Error::input("AI diagnostic response unknown; no retry"))?;
+            let value:Value=serde_json::from_str(line.strip_prefix("AI_RECEIPT ")
+                .ok_or_else(||Error::input("AI controller response differs; no retry"))?)
+                .map_err(|e|Error::input(e.to_string()))?;
+            validate_matched_receipt(&value,command).map_err(Error::input)?;
+            Ok(value)
+        }
         pub fn process_identity(&self) -> (u32, u64) {
             (self.pid, self.created)
         }
@@ -1043,6 +1061,7 @@ mod platform {
                 mode,
                 assignment_subject: None,
                 resident_runtime,
+                ai_diagnostic: Default::default(),
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -1271,6 +1290,7 @@ mod platform {
                 mode: BridgeMode::ProductionAdmission,
                 assignment_subject: None,
                 resident_runtime: true,
+                ai_diagnostic: Default::default(),
             };
             let outcome = session.stop_inner();
             session.finished = true;
@@ -2082,6 +2102,9 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn ai_diagnostic(&mut self, _: &Value) -> Result<Value> {
+        Err(Error::input("AI diagnostics require Windows"))
+    }
     pub fn select_assignment_subject(
         &mut self,
         _: u32,

@@ -182,7 +182,11 @@ impl Plan {
                 "checker_rva":"2DDBB0", "official_call_rva":"30EC0F", "approval_call_rva":"30EC24", "execute_rva":"38C80"},
             "reload":"Use exact physical save receipt and hash, never latest pointer. Keep PID/creation/generation receipts external. Match reload snapshot to saved owner, catalog, all flags and Spent; then TITLE2 only. Current driver forbids same-process load under resident runtime; do not bypass it.",
             "missing_results":"unknown/inconclusive, never zero or pass; UI bit/Spent change is corroboration and not proof of which caller performed it",
-            "runtime_gaps":["no normal helper action to register BridgeRuntimeAiObserve", "single owner/person registration", "one full turn does not cap multiple stage2 callbacks", "automatic callback execution is not an engine queue receipt", "initial install and issuer drain unproven"]})
+            "diagnostic_candidate":{"feature":"ai-observation-candidate", "default_enabled":false,
+                "start_action":"start_native_ai_observation", "stop_action":"stop_native_ai_observation",
+                "scope":"one immutable owner/person/generation/partial TITLE receipt, one registration attempt per process",
+                "execution_enabled":false,"stop_is_producer_drain":false},
+            "runtime_gaps":["read-only diagnostic action exists; normal execution remains blocked", "single owner/person registration", "atomic one-attempt gate has no production lifecycle arm", "automatic callback execution is not an engine queue receipt", "initial install and issuer drain unproven"]})
     }
 }
 

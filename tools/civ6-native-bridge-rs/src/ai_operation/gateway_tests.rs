@@ -908,6 +908,36 @@ fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {
         assert!(!same_registration(changed, original), "field {field}");
     }
 }
+
+#[test]
+fn ai_diagnostic_sampling_stop_during_original_preserves_once_and_does_not_certify_drain() {
+    if !child("ai_operation::gateway::tests::ai_diagnostic_sampling_stop_during_original_preserves_once_and_does_not_certify_drain",
+        "JAC_AI_SAMPLE_STOP_CHILD") {return;}
+    let (_memory,receiver)=accepted_fixture();
+    FIXTURE_ACTION.store(3,Ordering::Release);
+    let stopper=std::thread::spawn(|| {
+        let deadline=std::time::Instant::now()+std::time::Duration::from_secs(2);
+        while !ORIGINAL_ENTERED.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now()<deadline);
+            std::thread::yield_now();
+        }
+        stop_observation();
+        assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire),1);
+        let count=observations().0.len();
+        ORIGINAL_RELEASE.store(true,Ordering::Release);
+        count
+    });
+    assert_eq!(unsafe {accepted_stage_driver(receiver,gateways()[0],2)},0x1234);
+    let count=stopper.join().unwrap();
+    assert_eq!(count,1);
+    assert_eq!(observations().0.len(),count);
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire),1);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire),0);
+    assert_eq!(unsafe {accepted_stage_driver(receiver,gateways()[0],2)},0x1234);
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire),2);
+    assert_eq!(observations().0.len(),count);
+    assert_eq!(close_registered(),Err(Failure::CallerNotQuiescent));
+}
 unsafe impl RuntimeLease for Reject {
     fn begin(&self, _: u32, _: u64) -> Option<LeaseStamp> {
         None

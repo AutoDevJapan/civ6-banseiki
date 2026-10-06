@@ -7,6 +7,7 @@ edition.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [features]
+ai-observation-candidate = []
 # Candidate only: issuer drain/load ordering is not yet established in Civ6.
 # Ordinary builds retain the refusal instead of enabling an unproved teardown.
 ai-producer-candidate = []

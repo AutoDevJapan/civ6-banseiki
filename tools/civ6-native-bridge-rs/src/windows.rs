@@ -32,6 +32,9 @@ pub use composite::CompositeTrace;
 mod runtime;
 #[path = "windows/ai_runtime.rs"]
 mod ai_runtime;
+#[path = "windows/ai_observation.rs"]
+mod ai_observation;
+pub use ai_observation::AiCapture;
 #[path = "windows/ai_operation.rs"]
 mod ai_operation;
 pub use ai_runtime::{AiObservationConfig,AiRuntimeState,AI_OBSERVATION_VERSION};

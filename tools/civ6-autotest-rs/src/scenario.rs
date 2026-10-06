@@ -4,7 +4,9 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 37] = [
+pub const ACTIONS: [&str; 39] = [
+    "start_native_ai_observation",
+    "stop_native_ai_observation",
     "restart_game",
     "enable_mods",
     "configure",
@@ -121,6 +123,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut promotion_open = false;
     let mut runtime_open = false;
     let mut runtime_used = false;
+    let mut ai_session = civ6_native_bridge_rs::ai_diagnostic::Session::default();
+    let mut ai_open = false;
     let mut property_used = false;
     let mut promotion_used = false;
     let mut assignment_used = false;
@@ -181,6 +185,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             promotion_used = false;
             assignment_used = false;
             runtime_used = false;
+            ai_session = Default::default();
         }
         if runtime_used && matches!(action, "load" | "start_game" | "exit_to_menu") {
             return Err(fail(
@@ -205,6 +210,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             ));
         }
         match action {
+            "start_native_ai_observation" | "stop_native_ai_observation" => {
+                if !runtime_open { return Err(fail("AI diagnostic requires an active resident controller".into())); }
+                // Placeholder process identity only for schema validation; the
+                // live driver/controller supply and verify the actual identity.
+                let command=civ6_native_bridge_rs::ai_diagnostic::Command::parse(step,1,1).map_err(fail)?;
+                ai_session.reserve(command).map_err(fail)?;
+                ai_open=!command.stop;
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"
@@ -283,7 +296,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "stop_native_paid_runtime_observation"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
-                if !bridge_open
+                if ai_open || !bridge_open
                     || property_open != (action == "stop_native_property_trace")
                     || calibration_open != (action == "stop_native_can_ever_calibration")
                     || assignment_open != (action == "stop_native_assign_calibration")

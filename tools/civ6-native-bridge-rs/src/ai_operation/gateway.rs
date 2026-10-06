@@ -67,6 +67,7 @@ pub unsafe trait RuntimeLease: Sync {
     fn before_original(&self, _stamp: LeaseStamp, _player: u64, _definition: PaymentDefinition) {}
     fn after_original(&self, _stamp: LeaseStamp, _player: u64, _definition: PaymentDefinition) {}
     fn on_unwind(&self) {}
+    fn observed(&self, _row: &Observation, _definition: PaymentDefinition) {}
 }
 
 #[repr(C)]
@@ -105,6 +106,7 @@ static ROWS: Mutex<Vec<Observation>> = Mutex::new(Vec::new());
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static DROPPED: AtomicU32 = AtomicU32::new(0);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+static SAMPLING_STOPPED: AtomicBool = AtomicBool::new(false);
 struct BindingStore {
     current: AtomicPtr<Binding>,
     used: AtomicU32,
@@ -414,8 +416,11 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
             own,
             capture_entry: CAPTURE.with(|c| c.borrow().is_some()),
         };
+        binding.lease.observed(&row, binding.definition);
         if let Ok(mut rows) = ROWS.try_lock() {
-            if rows.len() < CAPACITY {
+            if SAMPLING_STOPPED.load(Ordering::Acquire) {
+                // Sampling was stopped; original-call bookkeeping still runs.
+            } else if rows.len() < CAPACITY {
                 rows.push(row)
             } else {
                 DROPPED.fetch_add(1, Ordering::Relaxed);
@@ -833,6 +838,18 @@ pub fn observations() -> (Vec<Observation>, u32) {
         ROWS.lock().unwrap_or_else(|e| e.into_inner()).clone(),
         DROPPED.load(Ordering::Acquire),
     )
+}
+pub fn observation_module_base() -> Option<u64> {
+    BINDING.get().map(|binding|binding.base)
+}
+
+/// Stops collection only. Code and bindings remain pinned; this is NOT a
+/// producer-stop, callback-drain, uninstall, or world-destruction receipt.
+pub fn stop_observation() {
+    SAMPLING_STOPPED.store(true, Ordering::Release);
+    ACTIVE.store(false, Ordering::Release);
+    // Serialize only the bounded row publication, not original callbacks.
+    drop(ROWS.lock().unwrap_or_else(|e| e.into_inner()));
 }
 
 #[cfg(test)]
