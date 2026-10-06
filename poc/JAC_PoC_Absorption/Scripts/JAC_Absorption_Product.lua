@@ -786,7 +786,7 @@ function P.RecheckPublished(actor,turn)
   -- cannot create an endless synchronized-operation loop or a second send.
   if fresh then s.PublicationTurns[key]=turn;Save(s,false) end
   publishing=true
-  local ok,err=pcall(function() P.Tick(not fresh);N.Tick() end)
+  local ok,err=pcall(function() P.Tick(not fresh);N.Tick();F.Tick() end)
   publishing=false
   if not ok then error(err) end
   return true

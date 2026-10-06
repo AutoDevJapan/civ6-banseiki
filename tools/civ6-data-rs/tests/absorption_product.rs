@@ -53,7 +53,7 @@ JAC_AbsorptionFlowGameplay={Begin=function(plan)
   STARTS=STARTS+1;FLOWS[plan.ID]=FLOWS[plan.ID] or {ID=plan.ID,From=plan.From,To=plan.To,Request=copy(plan),Phase='CHOICE',Phase1Complete=true}
   Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
   if FAIL_BEGIN then FAIL_BEGIN=false;error('P1 interrupted') end
-  return copy(FLOWS[plan.ID]) end,Get=function(id) return copy(FLOWS[id]) end}
+  return copy(FLOWS[plan.ID]) end,Get=function(id) return copy(FLOWS[id]) end,Tick=function() end}
 function READY() COMBAT=10;ACCESS=4;POP=10;SCIENCE=100 end
 function CMD(command,nonce,extras) local p=extras or {};p.Command=command;p.Nonce=nonce;p.From=p.From or 1
   return JAC_AbsorptionProductGameplay.Command(2,p) end
@@ -690,6 +690,30 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
           assert(not state or next(state.Operations)==nil,'rejected permission left a pending operation')
         "#).exec()?;
     }
+    Ok(())
+}
+
+#[test]
+fn publication_reconciles_saved_ai_asset_application_without_a_second_begin() -> anyhow::Result<()>
+{
+    let lua = world(10000.)?;
+    lua.load(r#"
+      REGISTER();READY()
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function(plan) local flow=begin(plan);FLOWS[plan.ID].Phase='APPLYING';return FLOWS[plan.ID] end
+      local reconciled=0
+      JAC_AbsorptionFlowGameplay.Tick=function()
+        local request=N.Get('leader-offer',VIEW().OfferID)
+        if request and request.Status=='STARTED' then
+          local flow=FLOWS[request.FlowID]
+          if flow.Phase=='APPLYING' then flow.Phase='DONE';reconciled=reconciled+1 end
+        end
+      end
+      assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
+      assert(STARTS==1 and CHARGES==1 and reconciled==1)
+      for i=1,3 do JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN) end
+      assert(STARTS==1 and CHARGES==1 and reconciled==1)
+    "#).exec()?;
     Ok(())
 }
 
