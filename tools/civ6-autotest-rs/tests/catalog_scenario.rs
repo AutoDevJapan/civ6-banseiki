@@ -242,6 +242,32 @@ assert(costs[1] and costs[2] and costs[3])
 }
 
 #[test]
+fn absent_saved_properties_may_return_zero_lua_values() {
+    let lua = model();
+    lua.load(
+        r#"
+local get=Game.GetProperty
+Game.GetProperty=function(self,key)
+ local value=get(self,key)
+ if value==nil then return end
+ return value
+end
+"#,
+    )
+    .exec()
+    .unwrap();
+    run(&lua, &catalog::prepare_code());
+    let baseline = run(&lua, &catalog::matrix_code(false));
+    assert!(baseline.contains(":nil:nil:nil:"));
+    run(&lua, &catalog::pair_code(0, false, true).unwrap());
+    let joined = run(&lua, &catalog::pair_code(0, false, false).unwrap());
+    assert!(joined.contains(":GREAT_PERSON:") && joined.contains(":nil:"));
+    run(&lua, &catalog::pair_code(0, true, true).unwrap());
+    let evolving = run(&lua, &catalog::pair_code(0, true, false).unwrap());
+    assert!(evolving.contains(":EVOLVING:"));
+}
+
+#[test]
 fn shipped_join_rejects_same_owner_and_world_duplicate_for_every_person() {
     let lua = model();
     run(&lua, &catalog::prepare_code());

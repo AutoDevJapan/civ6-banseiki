@@ -59,6 +59,8 @@ const PROMOTION_CALL_WINDOW: [u8; 16] = [
 const PROPERTY_PREFIX_LEN: usize = 5;
 const PROPERTY_PREFIX_PAD: [u8; PROPERTY_PREFIX_LEN] = [0xcc; PROPERTY_PREFIX_LEN];
 const CAN_EVER_PROLOGUE: [u8; 5] = [0x48, 0x89, 0x5c, 0x24, 0x08];
+#[path = "runtime_controller.rs"]
+mod runtime_controller;
 const PROPERTY_PROLOGUE: [u8; 8] = [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30];
 
 struct Handle(HANDLE);
@@ -154,6 +156,14 @@ impl OwnedJob {
     }
 
     fn disarm_after_verified_entry_restoration(&self) -> Result<(), String> {
+        self.disarm()
+    }
+
+    fn disarm_after_verified_runtime_transfer(&self) -> Result<(), String> {
+        self.disarm()
+    }
+
+    fn disarm(&self) -> Result<(), String> {
         self.set_limits(JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)?;
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         if unsafe {
@@ -198,6 +208,7 @@ struct Args {
     out: PathBuf,
     mode: BridgeMode,
     paid_experiment: bool,
+    runtime: bool,
 }
 
 fn args(raw: &[String]) -> Result<Args, String> {
@@ -243,7 +254,9 @@ fn args(raw: &[String]) -> Result<Args, String> {
         "property-admission-scoped" => BridgeMode::PropertyAdmissionScoped,
         "assign-calibration" => BridgeMode::AssignCalibration,
         "joined-admission" => BridgeMode::JoinedAdmission,
-        "production-admission" | "paid-assignment-experimental" => BridgeMode::ProductionAdmission,
+        "production-admission" | "paid-assignment-experimental" | "paid-assignment-runtime" => {
+            BridgeMode::ProductionAdmission
+        }
         "promotion-call" => BridgeMode::PromotionCall,
         _ => return Err("invalid bridge mode".into()),
     };
@@ -264,6 +277,7 @@ fn args(raw: &[String]) -> Result<Args, String> {
         out,
         mode,
         paid_experiment: fields.get("--mode") == Some(&"paid-assignment-experimental"),
+        runtime: fields.get("--mode") == Some(&"paid-assignment-runtime"),
     })
 }
 
@@ -928,6 +942,18 @@ pub fn run() -> Result<(), String> {
     let original_prefix = property_target
         .map(|property| pinned_property_prefix(&game, property))
         .transpose()?;
+    if parsed.runtime {
+        return runtime_controller::run(
+            &parsed,
+            &game,
+            &chain,
+            chain_pid,
+            target,
+            original,
+            property_original.unwrap(),
+            original_prefix.unwrap(),
+        );
+    }
     let dll = bridge_dll()?;
     let bridge_sha = sha256(&dll)?;
     let (install_rva, uninstall_rva) = exported_rvas(&dll)?;
@@ -1734,6 +1760,24 @@ mod tests {
         job.disarm_after_verified_entry_restoration().unwrap();
         drop(job);
         assert!(alive(&target_handle));
+    }
+
+    #[test]
+    fn runtime_transfer_keeps_target_alive_when_observer_job_drops() {
+        let target = SleepingChild::start();
+        let peer = SleepingChild::start();
+        let target_handle = target.handle(OWNED_TEST_RIGHTS);
+        let peer_handle = peer.handle(PROCESS_SYNCHRONIZE);
+        let job = OwnedJob::attach(
+            &target_handle,
+            target.0.id(),
+            process_created(&target_handle).unwrap(),
+        )
+        .unwrap();
+        job.disarm_after_verified_runtime_transfer().unwrap();
+        drop(job);
+        assert!(alive(&target_handle));
+        assert!(alive(&peer_handle));
     }
 
     #[test]

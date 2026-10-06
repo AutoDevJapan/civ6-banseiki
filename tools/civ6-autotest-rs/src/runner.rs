@@ -131,6 +131,9 @@ pub trait Backend: Send {
     fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
         Ok(None)
     }
+    fn finish_native_process_exit(&mut self) -> Result<()> {
+        Ok(())
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -256,6 +259,9 @@ mod native_trace_step_tests {
 
     struct BridgeBackend(Arc<Mutex<Vec<String>>>);
     impl Backend for BridgeBackend {
+        fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+            Some((7, 123))
+        }
         fn start_native_bridge(
             &mut self,
             _: &Path,
@@ -428,6 +434,107 @@ mod native_trace_step_tests {
     }
 
     #[test]
+    fn runtime_dispatch_stops_observation_without_reporting_entry_restoration() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let output = std::env::temp_dir().join("pr86-native-runtime-dispatch");
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            output.clone(),
+            output.clone(),
+            output,
+            4318,
+            Box::new(BridgeBackend(Arc::clone(&calls))),
+            Arc::new(SystemClock),
+        );
+        runner
+            .run_step(
+                &json!({"action":"start_native_paid_runtime","name":"runtime","max_seconds":25}),
+            )
+            .unwrap();
+        let detail = runner
+            .run_step(&json!({"action":"stop_native_paid_runtime_observation"}))
+            .unwrap();
+        assert!(detail.contains("native decisions retained until game exit"));
+        assert!(!detail.contains("restored"));
+        assert_eq!(
+            *calls.lock().unwrap(),
+            ["start:runtime:25:paid-assignment-runtime", "stop"]
+        );
+    }
+
+    struct RuntimeIdentityBackend {
+        after_stop: Option<(u32, u64)>,
+        stopped: bool,
+        reads: Arc<Mutex<usize>>,
+    }
+    impl Backend for RuntimeIdentityBackend {
+        fn start_native_bridge(&mut self, _: &Path, _: &str, _: u64, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn native_bridge_identity(&self) -> Option<(u32, u64)> {
+            Some((7, 123))
+        }
+        fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
+            self.stopped = true;
+            Ok(Some(PathBuf::from("resident.jsonl")))
+        }
+        fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
+            Ok(if self.stopped {
+                self.after_stop
+            } else {
+                Some((7, 123))
+            })
+        }
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["InGame".into()])
+        }
+        fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            *self.reads.lock().unwrap() += 1;
+            Ok("paid assignment=true".into())
+        }
+    }
+    #[test]
+    fn stopped_runtime_still_requires_same_pid_and_creation_time_before_read() {
+        for identity in [Some((7, 123)), None, Some((8, 123)), Some((7, 124))] {
+            let reads = Arc::new(Mutex::new(0));
+            let dir = tempfile::tempdir().unwrap();
+            let mut runner = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(RuntimeIdentityBackend {
+                    after_stop: identity,
+                    stopped: false,
+                    reads: Arc::clone(&reads),
+                }),
+                Arc::new(SystemClock),
+            );
+            runner.run_step(&json!({"action":"start_native_paid_runtime","name":"runtime","max_seconds":25})).unwrap();
+            runner
+                .run_step(&json!({"action":"stop_native_paid_runtime_observation"}))
+                .unwrap();
+            let result = runner
+                .run_step(&json!({"action":"ui_lua","state_name":"InGame","code":"return true"}));
+            if identity == Some((7, 123)) {
+                let detail = result.unwrap();
+                assert!(detail.contains("native_process="));
+                assert_eq!(*reads.lock().unwrap(), 1);
+            } else {
+                assert!(result
+                    .unwrap_err()
+                    .message
+                    .contains("resident runtime target changed"));
+                assert_eq!(*reads.lock().unwrap(), 0);
+            }
+        }
+    }
+
+    #[test]
     fn runner_dispatches_four_argument_assignment_observer() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let output = std::env::temp_dir().join("pr86-assignment1433-dispatch");
@@ -565,6 +672,7 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
     native_trace: Option<crate::native_trace::Session>,
     native_bridge: Option<crate::native_bridge::Session>,
+    native_runtime: Option<crate::native_bridge::Session>,
 }
 impl Backend for SystemBackend {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
@@ -675,7 +783,7 @@ impl Backend for SystemBackend {
         seconds: u64,
         mode: &str,
     ) -> Result<()> {
-        if self.native_trace.is_some() {
+        if self.native_trace.is_some() || self.native_runtime.is_some() {
             return Err(Error::scenario("native governor trace already active"));
         }
         if self.live_lease_budget()?.is_some_and(|remaining| {
@@ -713,7 +821,10 @@ impl Backend for SystemBackend {
         seconds: u64,
         mode: &str,
     ) -> Result<()> {
-        if self.native_bridge.is_some() || self.native_trace.is_some() {
+        if self.native_bridge.is_some()
+            || self.native_trace.is_some()
+            || self.native_runtime.is_some()
+        {
             return Err(Error::scenario("another native observation is active"));
         }
         if self
@@ -742,10 +853,11 @@ impl Backend for SystemBackend {
     fn native_bridge_identity(&self) -> Option<(u32, u64)> {
         self.native_bridge
             .as_ref()
+            .or(self.native_runtime.as_ref())
             .map(|session| session.process_identity())
     }
     fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
-        if self.native_bridge.is_none() {
+        if self.native_bridge.is_none() && self.native_runtime.is_none() {
             return Ok(None);
         }
         self.require_single_process()?;
@@ -754,6 +866,7 @@ impl Backend for SystemBackend {
             .ok_or_else(|| Error::input("observed game is absent"))?;
         self.native_bridge
             .as_ref()
+            .or(self.native_runtime.as_ref())
             .unwrap()
             .verify_current_process(pid, started)
             .map(Some)
@@ -763,12 +876,29 @@ impl Backend for SystemBackend {
             Some(bridge) => {
                 let result = bridge.stop().map(Some);
                 if result.is_ok() {
-                    self.native_bridge = None;
+                    if bridge.retains_process_after_stop() {
+                        self.native_runtime = self.native_bridge.take();
+                    } else {
+                        self.native_bridge = None;
+                    }
                 }
                 result
             }
             None => Ok(None),
         }
+    }
+    fn finish_native_process_exit(&mut self) -> Result<()> {
+        if self
+            .native_runtime
+            .as_ref()
+            .is_some_and(|runtime| !runtime.process_has_exited())
+        {
+            return Err(Error::input(
+                "resident runtime target exit is not confirmed",
+            ));
+        }
+        self.native_runtime = None;
+        Ok(())
     }
     fn select_native_assignment_subject(
         &mut self,
@@ -896,6 +1026,7 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     pub lua_captures: BTreeMap<String, String>,
+    resident_runtime_identity: Option<(u32, u64)>,
     pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
     checkpoint_run_id: String,
@@ -947,6 +1078,7 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             lua_captures: BTreeMap::new(),
+            resident_runtime_identity: None,
             carrier_captures: BTreeMap::new(),
             ruleset: None,
             checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
@@ -1957,6 +2089,8 @@ impl Runner {
                 }
             }
         }
+        self.backend.finish_native_process_exit()?;
+        self.resident_runtime_identity = None;
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
@@ -2224,6 +2358,7 @@ impl Runner {
             | "start_native_assign_calibration"
             | "start_native_joined_admission"
             | "start_native_production_admission"
+            | "start_native_paid_runtime"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
                 self.remaining(deadline)?;
@@ -2233,6 +2368,7 @@ impl Runner {
                     ("start_native_assign_calibration", None) => "assign-calibration",
                     ("start_native_joined_admission", None) => "joined-admission",
                     ("start_native_production_admission", None) => "production-admission",
+                    ("start_native_paid_runtime", None) => "paid-assignment-runtime",
                     ("start_native_promotion_call_trace", None) => "promotion-call",
                     ("start_native_property_trace", None) => "property",
                     ("start_native_property_trace", Some(scope))
@@ -2276,6 +2412,12 @@ impl Runner {
                     step["max_seconds"].as_u64().unwrap(),
                     mode,
                 )?;
+                if mode == "paid-assignment-runtime" {
+                    self.resident_runtime_identity =
+                        Some(self.backend.native_bridge_identity().ok_or_else(|| {
+                            Error::input("resident runtime did not pin a game identity")
+                        })?);
+                }
                 if let Some(((pid, started), subject)) = assignment_subject {
                     self.backend
                         .select_native_assignment_subject(pid, started, subject)?;
@@ -2290,7 +2432,9 @@ impl Runner {
                         )
                     })
                     .unwrap_or_default();
-                Ok(if mode == "promotion-call" {
+                Ok(if mode == "paid-assignment-runtime" {
+                    format!("game-owned three-entry native runtime installed; observation bounded; artifact {}.jsonl{process}", text(step, "name"))
+                } else if mode == "promotion-call" {
                     format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
                 } else {
                     format!(
@@ -2304,6 +2448,7 @@ impl Runner {
             | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
             | "stop_native_production_admission"
+            | "stop_native_paid_runtime_observation"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 self.remaining(deadline)?;
@@ -2311,7 +2456,9 @@ impl Runner {
                     .backend
                     .stop_native_bridge()?
                     .ok_or_else(|| Error::scenario("native bridge was not active"))?;
-                if action == "stop_native_property_trace" {
+                if action == "stop_native_paid_runtime_observation" {
+                    Ok(format!("runtime observation stopped; native decisions retained until game exit; artifact {}", artifact.display()))
+                } else if action == "stop_native_property_trace" {
                     Ok(format!(
                         "native property entry restored; prefix retained until game exit; raw rows collected, key and value mapping unverified; artifact {}",
                         artifact.display()
@@ -2405,6 +2552,27 @@ impl Runner {
                     } else {
                         ""
                     }
+                ))
+            }
+            "choose_dedication" => {
+                let human = step["human"]
+                    .as_i64()
+                    .ok_or_else(|| Error::scenario("Missing dedication human"))?;
+                let local = parse_integer(&self.lua(
+                    "InGame",
+                    "return Game.GetLocalPlayer()",
+                    self.budget(deadline, 5.0)?,
+                )?)?;
+                if local != human {
+                    return Err(Error::scenario(format!(
+                        "Dedication human {human} is not the local player {local}"
+                    )));
+                }
+                let selected = self.choose_dedication(human, deadline)?.ok_or_else(|| {
+                    Error::scenario("No pending dedication; nothing was submitted")
+                })?;
+                Ok(format!(
+                    "human={human} chose commemoration indices={selected}"
                 ))
             }
             "start_game" => {
@@ -2562,6 +2730,13 @@ impl Runner {
             }
             "ui_lua" => {
                 let native_before = self.backend.validate_native_bridge_target()?;
+                if self.resident_runtime_identity.is_some()
+                    && native_before != self.resident_runtime_identity
+                {
+                    return Err(Error::input(
+                        "resident runtime target changed or disappeared before Lua read",
+                    ));
+                }
                 let mut attempts = 0;
                 let lua_timeout = step["lua_timeout"]
                     .as_f64()
@@ -2596,6 +2771,13 @@ impl Runner {
                     }
                 };
                 let native_after = self.backend.validate_native_bridge_target()?;
+                if self.resident_runtime_identity.is_some()
+                    && native_after != self.resident_runtime_identity
+                {
+                    return Err(Error::input(
+                        "resident runtime target changed or disappeared after Lua read",
+                    ));
+                }
                 if native_before != native_after {
                     return Err(Error::input(
                         "native observation changed during UI execution",
@@ -2612,17 +2794,19 @@ impl Runner {
                 if let Some(key) = step["capture_as"].as_str() {
                     self.lua_captures.insert(key.into(), value.clone());
                 }
-                let process_receipt = if value.starts_with(crate::persona_payment::MARKER) {
-                    let (pid, created) = native_after.ok_or_else(|| {
-                        Error::input("payment UI read requires a pinned native observation")
-                    })?;
-                    format!(
-                        "; native_process={}",
-                        json!({"pid":pid,"created_filetime":created})
-                    )
-                } else {
-                    String::new()
-                };
+                if value.starts_with(crate::persona_payment::MARKER) && native_after.is_none() {
+                    return Err(Error::input(
+                        "payment UI read requires a pinned native observation",
+                    ));
+                }
+                let process_receipt = native_after
+                    .map(|(pid, created)| {
+                        format!(
+                            "; native_process={}",
+                            json!({"pid":pid,"created_filetime":created})
+                        )
+                    })
+                    .unwrap_or_default();
                 Ok(format!(
                     "ran Lua in {}; return={value}{process_receipt}",
                     text(step, "state_name")
