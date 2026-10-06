@@ -1494,6 +1494,7 @@ impl Runner {
         response_unknown: bool,
     ) -> Result<()> {
         let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
+        let mut response_unknown = response_unknown;
         let mut sent = false;
         let mut last = "loading screen not ready".to_string();
         let mut snapshot = json!({"transition_response":self.transition_response,"states":[],"state_error":null,
@@ -1517,12 +1518,29 @@ impl Runner {
                     break;
                 }
                 if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
-                    self.lua(
+                    let response = self.lua(
                         "LoadScreen",
                         "OnActivateButtonClicked()\nreturn true",
                         self.budget(end, 5.0)?,
-                    )?;
-                    last = "Begin Game pressed via LoadScreen Lua".into();
+                    );
+                    match response {
+                        Ok(reply) => {
+                            snapshot["begin_game_response"] =
+                                json!({"status":"acknowledged","reply":reply});
+                            last = "Begin Game pressed via LoadScreen Lua".into();
+                        }
+                        Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
+                            // Activation may already have closed its Lua state.
+                            // Never send it again; confirm InGame readiness under
+                            // the same deadline instead of treating a lost reply
+                            // as proof that loading failed.
+                            snapshot["begin_game_response"] = json!({"status":"unknown",
+                                "error":error.to_string(),"error_kind":"LuaResponseUnknown"});
+                            response_unknown = true;
+                            last = "Begin Game reply unknown; awaiting InGame readiness".into();
+                        }
+                        Err(error) => return Err(error),
+                    }
                 } else {
                     self.remaining(end)?;
                     self.backend.press_key(crate::click::VK_ESCAPE, end)?;
