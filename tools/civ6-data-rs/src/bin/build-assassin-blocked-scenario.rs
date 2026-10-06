@@ -2,6 +2,9 @@ use anyhow::Result;
 use civ6_data_rs::{assassin, Repository};
 use serde_json::{json, Value};
 
+#[path = "../assassin_blocked_origin.rs"]
+mod origin;
+
 const OUTPUT: &str = "tools/civ6-autotest/scenarios/assassin-blocked-recovery.json";
 const PREFIX: &str = r#"
 local R=ExposedMembers.JAC_Assassin; assert(R,'assassin gameplay absent')
@@ -135,7 +138,7 @@ fn round_trip(steps: &mut Vec<Value>, name: &str) {
         assassin::active(),
     ]);
 }
-fn build(repo: &Repository) -> Result<Value> {
+fn build_base(repo: &Repository) -> Result<Value> {
     let base = repo.json("tools/civ6-autotest/scenarios/assassin-leader-save-load.json")?;
     let mut steps = base["steps"].as_array().unwrap()[..3].to_vec();
     let disabled = steps[0]["disable_ids"].as_array_mut().unwrap();
@@ -367,6 +370,10 @@ return 'next real turn preserves one completion and original lock; test hook dis
     )
 }
 
+fn build(repo: &Repository) -> Result<Value> {
+    origin::transform(build_base(repo)?)
+}
+
 fn main() -> Result<()> {
     let repo = Repository::checked_in();
     let data = build(&repo)?;
@@ -410,9 +417,73 @@ mod tests {
         Ok(())
     }
     #[test]
+    fn remote_fixture_preserves_city_and_rejects_assets_before_mutation() -> Result<()> {
+        let data = build(&Repository::checked_in())?;
+        let setup = data["steps"][4]["code"].as_str().unwrap();
+        for mode in [
+            "safe",
+            "resource",
+            "improvement",
+            "district",
+            "route",
+            "wonder",
+            "water",
+            "foreign",
+            "occupied",
+            "one_city",
+        ] {
+            let lua = Lua::new();
+            lua.load(format!(r#"
+local mode='{mode}'; local props={{}}; local terrain={{}}; local feature={{}}
+MUTATIONS=0; PROBES=0
+Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 1 end,
+  GetProperty=function(_,k) return props[k] end,SetProperty=function(_,k,v) props[k]=v end}}
+local plots={{}}
+for x=0,36 do local px=x; plots[x]={{GetX=function() return px end,GetY=function() return 0 end,
+  IsCity=function() return px==0 end,IsWater=function() return mode=='water' and px==31 end,
+  IsImpassable=function() return terrain[px]==9 end,GetOwner=function() return mode=='foreign' and px==31 and 1 or -1 end,
+  GetTerrainType=function() return terrain[px] or 1 end,GetFeatureType=function() return feature[px] or -1 end,
+  IsNaturalWonder=function() return mode=='wonder' and px==31 end,
+  GetResourceType=function() return mode=='resource' and px==31 and 2 or -1 end,
+  GetImprovementType=function() return mode=='improvement' and px==31 and 2 or -1 end,
+  GetDistrictType=function() return mode=='district' and px==31 and 2 or -1 end,
+  GetRouteType=function() return mode=='route' and px==31 and 2 or -1 end}} end
+local city={{GetID=function() return 10 end,GetOwner=function() return 0 end,GetX=function() return 0 end,GetY=function() return 0 end}}
+local cities={{GetCapitalCity=function() return city end,FindID=function(_,id) if id==10 then return city end end,
+  GetCount=function() return mode=='one_city' and 1 or 2 end,
+  Members=function() local count=0; return function() count=count+1; if count<=2 then return count,city end end end}}
+local blocker={{GetX=function() return 31 end,GetY=function() return 0 end,GetID=function() return 7 end}}
+local units={{Members=function() local done=false; return function()
+  if mode=='occupied' and not done then done=true; return 7,blocker end end end}}
+Players={{[0]={{IsHuman=function() return true end,GetCities=function() return cities end,GetUnits=function() return units end}}}}
+Map={{GetPlotCount=function() return 1 end,GetPlotByIndex=function() return plots[30] end,
+  GetPlot=function(x) return plots[x] end,GetPlotDistance=function() return 5 end,
+  GetAdjacentPlots=function() local rows={{}}; for x=31,36 do rows[#rows+1]=plots[x] end; return rows end}}
+GameInfo={{Terrains={{TERRAIN_GRASS_MOUNTAIN={{Index=9}}}}}}
+TerrainBuilder={{SetTerrainType=function(p,v) MUTATIONS=MUTATIONS+1; terrain[p:GetX()]=v end,
+  SetFeatureType=function(p,v) MUTATIONS=MUTATIONS+1; feature[p:GetX()]=v end}}
+UnitManager={{InitUnitValidAdjacentHex=function() PROBES=PROBES+1 end}}
+local ox,oy
+ExposedMembers={{JAC_Assassin={{TEST='TEST',State=function() return {{}} end,Turn=function() return 1 end,
+  IsAssassin=function() return false end,UnitForPlayer=function() return 'ASSASSIN' end,
+  TestTrainingOrigin=function(_,_,x,y) ox,oy=x,y; return true end,
+  TrainingOrigin=function() return ox,oy end,TestAbortOriginFixture=function() return true end}}}}
+function Verify(safe)
+  assert(plots[0]:IsCity() and plots[0]:GetTerrainType()==1 and plots[0]:GetFeatureType()==-1)
+  if safe then assert(MUTATIONS==14 and PROBES==1 and ox==30 and oy==0)
+  else assert(MUTATIONS==0 and PROBES==0) end
+end
+"#)).exec()?;
+            let result = lua.load(setup).exec();
+            assert_eq!(result.is_ok(), mode == "safe", "{mode}: {result:?}");
+            lua.load(format!("Verify({})", mode == "safe")).exec()?;
+        }
+        Ok(())
+    }
+    #[test]
     fn native_terrain_discovery_handles_fallback_and_rejects_unsafe_probes() -> Result<()> {
         let repo = Repository::checked_in();
-        let data = build(&repo)?;
+        let data = build_base(&repo)?;
         let setup = data["steps"][4]["code"].as_str().unwrap();
         let fixture = r#"
 Game.GetLocalPlayer=function() return 0 end

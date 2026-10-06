@@ -1,5 +1,4 @@
 use anyhow::{ensure, Result};
-use civ6_data_rs::Repository;
 use serde_json::{json, Value};
 
 const SETUP: &str = r#"
@@ -15,8 +14,9 @@ Game:SetProperty(R.TEST,1)
 local cityX,cityY=city:GetX(),city:GetY(); local center=Map.GetPlot(cityX,cityY)
 local function EmptyLand(p)
   if not p or p:IsCity() or p:IsWater() or p:IsImpassable() or
-    (p:GetOwner()~=-1 and p:GetOwner()~=owner) or p:GetResourceType()~=-1 or
-    p:GetImprovementType()~=-1 or p:GetDistrictType()~=-1 then return false end
+    (p:GetOwner()~=-1 and p:GetOwner()~=owner) then return false end
+  -- Use the same pre-mutation asset check as the city-origin scenario.
+  if not pcall(AssetFree,p) then return false end
   for id=0,63 do local player=Players[id]
     if player then for _,u in player:GetUnits():Members() do
       if u:GetX()==p:GetX() and u:GetY()==p:GetY() then return false end
@@ -74,29 +74,29 @@ print('[JAC_ASN_BLOCKED] qualified origin='..sx..','..sy..' training-city='..cit
 return 'real native refusal at explicit test origin; training city and original units preserved'
 "#;
 
-fn build(repo: &Repository) -> Result<Value> {
-    let mut data = repo.json("tools/civ6-autotest/scenarios/assassin-blocked-recovery.json")?;
+pub fn transform(mut data: Value) -> Result<Value> {
     let steps = data["steps"].as_array_mut().unwrap();
     let code = steps[4]["code"].as_str().unwrap();
-    let prefix = code.split("Game:SetProperty(R.TEST,1)").next().unwrap();
+    let prefix = code
+        .split("Game:SetProperty(R.TEST,1)")
+        .next()
+        .unwrap()
+        .to_owned();
     ensure!(prefix.contains("local function IntactCity()"));
     steps[4]["code"] = json!(format!("{prefix}\n{SETUP}"));
-    let mut lock_replacements = 0;
-    for step in steps.iter_mut() {
-        if let Some(code) = step["code"].as_str() {
-            if code.contains("local ok,why=R.StartProduction(t.Actor,t.City)") {
-                ensure!(code.matches("local ok,why=R.StartProduction(t.Actor,t.City); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')").count()==1,"lock replacement not unique");
-                lock_replacements += 1;
-                step["code"] = json!(code.replace(
-                    "local ok,why=R.StartProduction(t.Actor,t.City); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')",
-                    "local lockedCities=0\nfor _,candidate in Players[t.Actor]:GetCities():Members() do\n  lockedCities=lockedCities+1\n  local ok,why=R.StartProduction(t.Actor,candidate:GetID()); assert(not ok and why=='PRODUCTION_LOCK','nationwide lock not enforced')\nend\nassert(lockedCities>=2,'nationwide lock requires independent second city')\nassert(Same(R.State(t.Actor),t.Complete),'rejected city request changed completion state')",
-                ));
-            }
-        }
-    }
+    // The base scenario now checks every city after recovery, load and the next
+    // turn. Preserve these checks instead of replacing a stale one-city snippet.
+    let lock_checks = steps
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .filter(|code| code.contains("; NationwideLock()"))
+        .count();
     ensure!(
-        lock_replacements == 1,
-        "lock check not replaced exactly once"
+        lock_checks == 3
+            && prefix.contains("assert(count>=2")
+            && prefix.contains("before.LastCompletion+10")
+            && prefix.contains("R.StartProduction(t.Actor,city:GetID())"),
+        "base scenario must retain all three nationwide lock checks"
     );
     let last = steps.last_mut().unwrap();
     let final_code = last["code"].as_str().unwrap();
@@ -114,55 +114,4 @@ fn build(repo: &Repository) -> Result<Value> {
     }
     data["name"]=json!("Assassin: native blocked-origin retry through real turns, pending save/load and recovery (explicit test origin)");
     Ok(data)
-}
-fn main() -> Result<()> {
-    let path = std::env::args().nth(1).unwrap();
-    let data = build(&Repository::checked_in())?;
-    std::fs::write(path, serde_json::to_string_pretty(&data)? + "\n")?;
-    Ok(())
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn preserves_real_turns_and_round_trips_with_explicit_origin() -> Result<()> {
-        let data = build(&Repository::checked_in())?;
-        let lua = mlua::Lua::new();
-        let steps = data["steps"].as_array().unwrap();
-        assert_eq!(steps.len(), 32);
-        let mut compiled = 0;
-        for step in steps {
-            if let Some(code) = step["code"]
-                .as_str()
-                .or_else(|| step["condition"]["code"].as_str())
-            {
-                lua.load(code).into_function()?;
-                compiled += 1;
-            }
-        }
-        assert!(compiled >= 16);
-        assert_eq!(
-            steps.iter().filter(|s| s["action"] == "end_turn").count(),
-            4
-        );
-        assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 2);
-        assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 2);
-        assert!(!SETUP.contains("R.Tick("));
-        let joined = steps
-            .iter()
-            .filter_map(|s| s["code"].as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(joined.contains("lockedCities>=2"));
-        assert!(joined.contains("TestTrainingOrigin(t.Actor,t.City,nil,nil)"));
-        assert!(joined.contains("TEST_MODE_OFF"));
-        assert!(steps
-            .iter()
-            .filter(|s| s["action"] == "ui_lua")
-            .all(|s| s["code"]
-                .as_str()
-                .unwrap()
-                .contains("TestAbortOriginFixture")));
-        Ok(())
-    }
 }
