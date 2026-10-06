@@ -4,7 +4,10 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 38] = [
+pub const ACTIONS: [&str; 41] = [
+    "start_native_order_capture",
+    "set_native_order_phase",
+    "stop_native_order_capture",
     "restart_game",
     "enable_mods",
     "configure",
@@ -128,12 +131,22 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
     let mut carrier_captures = BTreeSet::new();
+    let mut order_open = false;
+    let mut order_changes = 0;
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
             .as_str()
             .filter(|s| ACTIONS.contains(s))
             .ok_or_else(|| fail("unknown action".into()))?;
+        if order_open
+            && (action == "restart_game"
+                || (action.starts_with("start_native_") && action != "start_native_order_capture"))
+        {
+            return Err(fail(
+                "stop native order capture before restart or another observer".into(),
+            ));
+        }
         let bool_flags = |names: &[&str]| -> Result<()> {
             for name in names {
                 if step.get(*name).is_some_and(|v| !v.is_boolean()) {
@@ -207,6 +220,41 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             ));
         }
         match action {
+            "start_native_order_capture" => {
+                crate::native_order::validate_options(step)?;
+                if order_open || trace_open || bridge_open || runtime_used {
+                    return Err(fail("another native observation is active".into()));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_owned()) {
+                    return Err(fail("native capture names must be unique".into()));
+                }
+                order_open = true;
+                order_changes = 0;
+            }
+            "set_native_order_phase" | "stop_native_order_capture" => {
+                if !order_open {
+                    return Err(fail("native order capture is not active".into()));
+                }
+                let phase_change = action == "set_native_order_phase";
+                if step.as_object().unwrap().keys().any(|key| {
+                    !["action", "timeout"].contains(&key.as_str())
+                        && !(phase_change && key == "phase")
+                }) {
+                    return Err(fail("unexpected native order option".into()));
+                }
+                if phase_change {
+                    if !matches!(step["phase"].as_str(), Some("front" | "load"))
+                        || order_changes >= 8
+                    {
+                        return Err(fail(
+                            "native order requires a known phase and at most eight changes".into(),
+                        ));
+                    }
+                    order_changes += 1;
+                } else {
+                    order_open = false;
+                }
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"
@@ -692,7 +740,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             return Err(fail("timeout must be a finite positive number".into()));
         }
     }
-    if trace_open || bridge_open {
+    if trace_open || bridge_open || order_open {
         return Err(Error::scenario("native governor trace has no stop step"));
     }
     Ok(())

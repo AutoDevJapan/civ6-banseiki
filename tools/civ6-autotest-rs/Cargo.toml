@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 civ6-cli-compat-rs = { path = "../civ6-cli-compat-rs" }
-civ6-native-probe-rs = { path = "../civ6-native-probe-rs" }
+civ6-native-probe-rs = { path = "../civ6-native-probe-rs", features = ["bootstrap-order"] }
 civ6-native-bridge-rs = { path = "../civ6-native-bridge-rs" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4", features = ["derive"] }

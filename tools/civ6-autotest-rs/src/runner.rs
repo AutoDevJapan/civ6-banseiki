@@ -134,6 +134,15 @@ pub trait Backend: Send {
     fn finish_native_process_exit(&mut self) -> Result<()> {
         Ok(())
     }
+    fn start_native_order(&mut self, _: &Path, _: &Value) -> Result<()> {
+        Err(Error::input("backend cannot observe native startup order"))
+    }
+    fn native_order_phase(&mut self, _: &str) -> Result<()> {
+        Err(Error::input("native order capture is not active"))
+    }
+    fn stop_native_order(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
     fn memory(&mut self, _pid: u32) -> Result<Value> {
         Err(Error::input("backend has no process memory"))
     }
@@ -673,6 +682,7 @@ pub struct SystemBackend {
     native_trace: Option<crate::native_trace::Session>,
     native_bridge: Option<crate::native_bridge::Session>,
     native_runtime: Option<crate::native_bridge::Session>,
+    native_order: Option<crate::native_order::Session>,
 }
 impl Backend for SystemBackend {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
@@ -783,7 +793,11 @@ impl Backend for SystemBackend {
         seconds: u64,
         mode: &str,
     ) -> Result<()> {
-        if self.native_trace.is_some() || self.native_runtime.is_some() {
+        if self.native_trace.is_some()
+            || self.native_bridge.is_some()
+            || self.native_runtime.is_some()
+            || self.native_order.is_some()
+        {
             return Err(Error::scenario("native governor trace already active"));
         }
         if self.live_lease_budget()?.is_some_and(|remaining| {
@@ -824,6 +838,7 @@ impl Backend for SystemBackend {
         if self.native_bridge.is_some()
             || self.native_trace.is_some()
             || self.native_runtime.is_some()
+            || self.native_order.is_some()
         {
             return Err(Error::scenario("another native observation is active"));
         }
@@ -855,6 +870,43 @@ impl Backend for SystemBackend {
             .as_ref()
             .or(self.native_runtime.as_ref())
             .map(|session| session.process_identity())
+    }
+    fn start_native_order(&mut self, output: &Path, step: &Value) -> Result<()> {
+        if self.native_order.is_some()
+            || self.native_bridge.is_some()
+            || self.native_trace.is_some()
+            || self.native_runtime.is_some()
+        {
+            return Err(Error::scenario("another native observation owns this game"));
+        }
+        crate::native_order::validate_options(step)?;
+        if self.live_lease_budget()?.is_some_and(|remaining| {
+            remaining <= step["max_seconds"].as_u64().unwrap() as f64 + 45.0
+        }) {
+            return Err(Error::input(
+                "live_chain lease cannot cover order observation",
+            ));
+        }
+        self.require_single_process()?;
+        let (pid, started) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("Civ6 is absent"))?;
+        self.native_order = Some(crate::native_order::Session::start(
+            pid, started, output, step,
+        )?);
+        Ok(())
+    }
+    fn native_order_phase(&mut self, phase: &str) -> Result<()> {
+        self.native_order
+            .as_mut()
+            .ok_or_else(|| Error::input("native order capture is not active"))?
+            .phase(phase)
+    }
+    fn stop_native_order(&mut self) -> Result<Option<PathBuf>> {
+        self.native_order
+            .take()
+            .map(|mut session| session.stop())
+            .transpose()
     }
     fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
         if self.native_bridge.is_none() && self.native_runtime.is_none() {
@@ -2353,6 +2405,31 @@ impl Runner {
             });
         let deadline = self.clock.now() + timeout;
         match action {
+            "start_native_order_capture" => {
+                self.remaining(deadline)?;
+                self.backend.start_native_order(&self.output, step)?;
+                self.remaining(deadline)?;
+                return Ok("native order capture ready; runtime activation=false".into());
+            }
+            "set_native_order_phase" => {
+                self.remaining(deadline)?;
+                self.backend.native_order_phase(text(step, "phase"))?;
+                self.remaining(deadline)?;
+                return Ok(format!("native order phase ready: {}", text(step, "phase")));
+            }
+            "stop_native_order_capture" => {
+                let path = self
+                    .backend
+                    .stop_native_order()?
+                    .ok_or_else(|| Error::scenario("native order capture was not active"))?;
+                return Ok(format!(
+                    "native order capture restored and reaped: {}",
+                    path.display()
+                ));
+            }
+            _ => {}
+        }
+        match action {
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"
@@ -3601,6 +3678,12 @@ impl Runner {
         };
         // Also runs on a failed step. Session::Drop is the last fallback when
         // an early return or unwind skips this result path.
+        if let Err(e) = self.backend.stop_native_order() {
+            code = 1;
+            self.result_passed = false;
+            self.failure = Some(format!("native order observer cleanup: {e}"));
+            println!("Native order observer cleanup failed: {e}");
+        }
         if let Err(e) = self.backend.stop_native_trace() {
             code = 1;
             self.result_passed = false;
