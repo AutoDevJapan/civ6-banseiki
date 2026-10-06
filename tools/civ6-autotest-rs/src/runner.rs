@@ -1083,6 +1083,9 @@ pub struct Runner {
     /// process for each saved-game load. This does not prove in-process reload.
     pub persona_runtime_restart: bool,
     persona_runtime_generation: u32,
+    persona_archived_logs: BTreeMap<String, String>,
+    persona_current_log_prefix: BTreeMap<String, String>,
+    persona_current_logs_archived: bool,
     pub baseline: Option<Value>,
     pub log_step_baseline: Option<Value>,
     pub log_matches_consumed: BTreeMap<(String, String), usize>,
@@ -1149,6 +1152,9 @@ impl Runner {
             resident_runtime_identity: None,
             persona_runtime_restart: false,
             persona_runtime_generation: 0,
+            persona_archived_logs: BTreeMap::new(),
+            persona_current_log_prefix: BTreeMap::new(),
+            persona_current_logs_archived: false,
             carrier_captures: BTreeMap::new(),
             ruleset: None,
             checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
@@ -3293,6 +3299,7 @@ impl Runner {
                 if self.persona_runtime_restart && self.resident_runtime_identity.is_some() {
                     self.retire_persona_process(deadline)?;
                     self.restart_game(self.remaining(deadline)?)?;
+                    self.begin_persona_log_generation()?;
                     return Ok("main menu reached in fresh process; diagnostic resident runtime retired with previous game".into());
                 }
                 self.lua(
@@ -4083,7 +4090,8 @@ impl Runner {
             self.failure = Some("Run did not finish".into());
         }
         if let Some(baseline) = &self.baseline {
-            match judge::read_since(&self.logs, baseline) {
+            let _ = baseline;
+            match self.read_run_logs() {
                 Ok(logs) => {
                     for (name, content) in logs {
                         if let Err(e) = fs::write(self.output.join(name), content) {
@@ -4207,7 +4215,7 @@ impl Runner {
                 }
             }
         }
-        let logs = judge::read_since(&self.logs, self.baseline.as_ref().unwrap())?;
+        let logs = self.read_run_logs()?;
         let checks = judge::judge(
             &logs,
             self.scenario["judge_profile"].as_str().unwrap_or("generic"),

@@ -43,6 +43,135 @@ return 'turn='..Game.GetCurrentGameTurn()..'|rows=484|'..table.concat(rows,',')
 "#;
 
 impl Runner {
+    pub(super) fn read_run_logs(&self) -> Result<BTreeMap<String, String>> {
+        let baseline = self
+            .baseline
+            .as_ref()
+            .ok_or_else(|| Error::scenario("run log baseline missing"))?;
+        if !self.persona_runtime_restart {
+            return judge::read_since(&self.logs, baseline);
+        }
+        let mut out = self.persona_archived_logs.clone();
+        if !self.persona_current_logs_archived {
+            for name in judge::LOG_NAMES {
+                let content = format!(
+                    "{}{}",
+                    self.persona_current_log_prefix
+                        .get(name)
+                        .map(String::as_str)
+                        .unwrap_or(""),
+                    self.log_since_same_generation(name, baseline)?
+                );
+                let text = out.entry(name.into()).or_default();
+                if !text.is_empty() && !text.ends_with('\n') {
+                    text.push('\n');
+                }
+                text.push_str(&content);
+            }
+        }
+        if judge::LOG_NAMES.iter().any(|n| !out.contains_key(*n)) {
+            return Err(Error::scenario("a persona log generation is incomplete"));
+        }
+        Ok(out)
+    }
+
+    /// Called only after the old pinned process's exit has been confirmed,
+    /// and before launching the replacement which truncates engine logs.
+    fn archive_persona_log_generation(&mut self) -> Result<()> {
+        let baseline = self
+            .baseline
+            .as_ref()
+            .ok_or_else(|| Error::scenario("persona archive baseline missing"))?;
+        let mut logs = BTreeMap::new();
+        for name in judge::LOG_NAMES {
+            logs.insert(
+                name.to_owned(),
+                format!(
+                    "{}{}",
+                    self.persona_current_log_prefix
+                        .get(name)
+                        .map(String::as_str)
+                        .unwrap_or(""),
+                    self.log_since_same_generation(name, baseline)?
+                ),
+            );
+        }
+        let dir = self.output.join(format!(
+            "persona-logs-{:04}",
+            self.persona_runtime_generation
+        ));
+        fs::create_dir(&dir)?;
+        let mut manifest = BTreeMap::new();
+        for (name, content) in &logs {
+            fs::write(dir.join(name), content)?;
+            let raw = fs::read(self.logs.join(name))?;
+            fs::write(dir.join(format!("full-{name}")), &raw)?;
+            manifest.insert(name.clone(),json!({"bytes":content.len(),"sha256":format!("{:x}",Sha256::digest(content.as_bytes())),"full_bytes":raw.len(),"full_sha256":format!("{:x}",Sha256::digest(&raw))}));
+        }
+        fs::write(
+            dir.join("manifest.json"),
+            serde_json::to_vec_pretty(
+                &json!({"generation":self.persona_runtime_generation,"files":manifest,"baseline":baseline}),
+            )?,
+        )?;
+        for (name, content) in &logs {
+            let text = self.persona_archived_logs.entry(name.clone()).or_default();
+            if !text.is_empty() && !text.ends_with('\n') {
+                text.push('\n');
+            }
+            text.push_str(content);
+        }
+        self.persona_current_logs_archived = true;
+        // Also publish the aggregate on failed transitions, so the original
+        // independent checker sees all observed generations rather than just
+        // the most recent process's empty logs.
+        for (name, content) in &self.persona_archived_logs {
+            fs::write(self.output.join(name), content)?;
+        }
+        let checks = judge::judge(&logs, "generic", None, true);
+        if let Some(check) = checks.iter().find(|c| !c.passed) {
+            return Err(Error::scenario(format!(
+                "archived persona generation failed {}: {}",
+                check.name, check.detail
+            )));
+        }
+        Ok(())
+    }
+
+    pub(super) fn begin_persona_log_generation(&mut self) -> Result<()> {
+        let baseline = judge::snapshot_logs(&self.logs)?;
+        let mut prefix = BTreeMap::new();
+        // Preserve startup bytes while keeping the nonzero prefix/tail marker.
+        // An empty marker would miss in-place truncation within this process.
+        for name in judge::LOG_NAMES {
+            let mark = &baseline["files"][name];
+            if mark["inode"].is_null() {
+                return Err(Error::scenario("replacement process log missing"));
+            }
+            let (raw, inode) = judge::read_log_file(&self.logs.join(name))?;
+            if judge::log_marker_replaced(&raw, mark, inode) {
+                return Err(Error::scenario(
+                    "replacement log changed while binding its generation",
+                ));
+            }
+            let offset = mark["offset"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .filter(|n| *n <= raw.len())
+                .ok_or_else(|| Error::scenario("replacement log offset invalid"))?;
+            prefix.insert(
+                name.into(),
+                String::from_utf8_lossy(&raw[..offset]).into_owned(),
+            );
+        }
+        self.baseline = Some(baseline);
+        self.persona_current_log_prefix = prefix;
+        self.write_baseline()?;
+        self.log_step_baseline = None;
+        self.log_matches_consumed.clear();
+        self.persona_current_logs_archived = false;
+        Ok(())
+    }
     pub(super) fn validate_persona_runtime_mode(&self) -> Result<()> {
         if !self.persona_runtime_restart {
             return Ok(());
@@ -228,6 +357,9 @@ impl Runner {
         if inspected.is_none() && cleanup {
             self.backend.finish_native_process_exit()?;
             self.resident_runtime_identity = None;
+            if self.baseline.is_some() && !self.persona_current_logs_archived {
+                self.archive_persona_log_generation()?;
+            }
             return self.persona_transition(json!({"kind":"process_exit","pid":identity.0,"created_filetime":identity.1,"confirmed":true,"already_exited":true,"same_process_reload":false}));
         }
         let (pid, started) =
@@ -251,6 +383,9 @@ impl Runner {
         }
         self.backend.finish_native_process_exit()?;
         self.resident_runtime_identity = None;
+        if self.baseline.is_some() && !self.persona_current_logs_archived {
+            self.archive_persona_log_generation()?;
+        }
         self.persona_transition(
             json!({"kind":"process_exit","generation":self.persona_runtime_generation,
             "pid":identity.0,"created_filetime":identity.1,"confirmed":true,
@@ -268,6 +403,95 @@ mod tests {
     use super::*;
     use mlua::Lua;
     use std::sync::Mutex;
+
+    fn log_runner(dir: &Path) -> Runner {
+        let logs = dir.join("live-logs");
+        fs::create_dir(&logs).unwrap();
+        for name in judge::LOG_NAMES {
+            fs::write(logs.join(name), "initial prefix\n").unwrap();
+        }
+        let mut r = runner(
+            dir,
+            Some((7, 123)),
+            true,
+            true,
+            Arc::new(Mutex::new(vec![])),
+        );
+        r.logs = logs;
+        r.persona_runtime_restart = true;
+        r.persona_runtime_generation = 1;
+        r.baseline = Some(judge::snapshot_logs(&r.logs).unwrap());
+        r
+    }
+
+    #[test]
+    fn renewed_process_preserves_old_errors_and_counts_only_new_loadscreen_events() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = log_runner(dir.path());
+        fs::write(r.logs.join("Lua.log"),"initial prefix\nLoadScreen: OnLoadGameViewStateDone\nRuntime Error: bad JAC_PoC_LeaderPersona/script.lua\nstack traceback:\n").unwrap();
+        assert_eq!(r.loadscreen_count().unwrap(), 1);
+        assert!(r.archive_persona_log_generation().is_err());
+        assert!(r.persona_current_logs_archived);
+        assert!(r.read_run_logs().unwrap()["Lua.log"].contains("Runtime Error: bad"));
+        for name in judge::LOG_NAMES {
+            fs::write(r.logs.join(name), "replacement process\n").unwrap();
+        }
+        r.begin_persona_log_generation().unwrap();
+        assert_eq!(r.loadscreen_count().unwrap(), 0);
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(r.logs.join("Lua.log"))
+            .unwrap();
+        writeln!(f, "LoadScreen: OnLoadGameViewStateDone").unwrap();
+        drop(f);
+        assert_eq!(r.loadscreen_count().unwrap(), 1);
+        let merged = r.read_run_logs().unwrap();
+        assert!(
+            merged["Lua.log"].contains("Runtime Error: bad")
+                && merged["Lua.log"].contains("replacement process")
+        );
+        assert!(judge::judge(&merged, "generic", None, true)
+            .iter()
+            .any(|c| !c.passed));
+        assert!(dir.path().join("persona-logs-0001/full-Lua.log").is_file());
+    }
+
+    #[test]
+    fn rotation_inside_a_generation_cannot_be_blessed_as_a_log_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = log_runner(dir.path());
+        fs::write(r.logs.join("Lua.log"), "short\n").unwrap();
+        assert!(r.archive_persona_log_generation().is_err());
+        assert!(!r.persona_current_logs_archived && r.persona_archived_logs.is_empty());
+        assert!(r.read_run_logs().is_err());
+        fs::remove_file(r.logs.join("Database.log")).unwrap();
+        assert!(r.begin_persona_log_generation().is_err());
+    }
+
+    #[test]
+    fn all_three_generations_are_exported_once_after_each_confirmed_exit() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = log_runner(dir.path());
+        for name in judge::LOG_NAMES {
+            fs::write(r.logs.join(name), format!("initial prefix\nfirst {name}\n")).unwrap();
+        }
+        r.resident_runtime_identity = Some((7, 123));
+        r.retire_persona_process(r.clock.now() + 30.0).unwrap();
+        for name in judge::LOG_NAMES {
+            fs::write(r.logs.join(name), format!("second {name}\n")).unwrap();
+        }
+        r.begin_persona_log_generation().unwrap();
+        r.persona_runtime_generation = 2;
+        r.resident_runtime_identity = Some((7, 123));
+        r.retire_persona_process(r.clock.now() + 30.0).unwrap();
+        for name in judge::LOG_NAMES {
+            let logs = r.read_run_logs().unwrap();
+            let merged = &logs[name];
+            assert_eq!(merged.matches("first").count(), 1);
+            assert_eq!(merged.matches("second").count(), 1);
+            assert_eq!(fs::read_to_string(dir.path().join(name)).unwrap(), *merged);
+        }
+    }
 
     fn model() -> Lua {
         let lua = Lua::new();
