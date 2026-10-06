@@ -598,7 +598,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
         )
         .collect();
     let expected: BTreeSet<_> = expected_names.iter().cloned().collect();
-    assert_eq!(expected.len(), 145);
+    assert_eq!(expected.len(), 147);
     assert_eq!(
         expected.len(),
         expected_names.len(),
