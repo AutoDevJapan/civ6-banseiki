@@ -718,37 +718,71 @@ fn publication_reconciles_saved_ai_asset_application_without_a_second_begin() ->
 }
 
 #[test]
-fn ai_acceptance_waits_for_normal_application_completion_before_snapshot() -> anyhow::Result<()> {
+fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(format!("{}\n{}", product::P1_EVIDENCE, r#"
+      local original={ID='original',From=1,To=2,Mode='MERGER',Turn=7,
+        Request={ID='offer',LeaderProfile={LeaderType='original-leader'}},
+        RosterAtBegin={person={Owner=1}},Inventory={UnitIDs={11}},Phase1Complete=true,
+        Entries={{ID='person',Kind='UNIT',Name='original name',Portrait='portrait',Source={Owner=1},
+          UnitID=11,UnitType='UNIT_WARRIOR',AllowedActions={'KEEP'},Abilities={'ability'},
+          Leader=true,NativeWork={Index=4},DormantClass=3,
+          EscapeOutcome='STAY',P1Chance=0.5,
+          Rolls={P1_ESCAPE={Raw=22,Used=22,Label='escape',Debug=false,Turn=7},
+                 P1_BRANCH={Raw=44,Used=44,Label='branch',Debug=false,Turn=7}}}},Phase='APPLYING'}
+      local baseline=CANONICAL(P1Evidence(original))
+      local advanced=JAC_AbsorptionGameplay.Rules.Copy(original)
+      advanced.Phase='DONE';advanced.AcknowledgedTurn=8;advanced.CompletedTurn=8
+      advanced.AppliedPlan={Status='COMPLETE'};advanced.FinalRollsComplete=true
+      advanced.Entries[1].Rolls.P3_RESULT={Raw=91};advanced.Entries[1].Applied=true
+      assert(CANONICAL(P1Evidence(advanced))==baseline)
+      local mutations={
+        function(f) f.ID='different' end,function(f) f.From=3 end,function(f) f.To=3 end,
+        function(f) f.Mode='SMALL_STATE' end,function(f) f.Turn=8 end,
+        function(f) f.Request.LeaderProfile.LeaderType='different' end,
+        function(f) f.RosterAtBegin.person.Owner=2 end,function(f) f.Inventory.UnitIDs[1]=12 end,
+        function(f) f.Entries[1].ID='different' end,function(f) f.Entries[1].Kind='HERO' end,
+        function(f) f.Entries[1].Name='different' end,function(f) f.Entries[1].Portrait='different' end,
+        function(f) f.Entries[1].Source.Owner=2 end,function(f) f.Entries[1].UnitID=12 end,
+        function(f) f.Entries[1].UnitType='UNIT_SCOUT' end,
+        function(f) f.Entries[1].AllowedActions[1]='ESCAPE' end,
+        function(f) f.Entries[1].Abilities[1]='different' end,
+        function(f) f.Entries[1].Leader=false end,
+        function(f) f.Entries[1].NativeWork.Index=5 end,
+        function(f) f.Entries[1].DormantClass=4 end,
+        function(f) f.Entries[1].EscapeOutcome='ESCAPE' end,
+        function(f) f.Entries[1].P1Chance=0.9 end,
+        function(f) f.Entries[1].Rolls.P1_ESCAPE.Raw=23 end,
+        function(f) f.Entries[1].Rolls.P1_BRANCH.Used=45 end,
+        function(f) f.Entries[1].Rolls.P1_ESCAPE.Label='different' end,
+        function(f) f.Entries[1].Rolls.P1_BRANCH.Debug=true end,
+        function(f) f.Entries[1].Rolls.P1_BRANCH.Turn=8 end,
+        function(f) f.Entries={} end}
+      for i,mutate in ipairs(mutations) do
+        local changed=JAC_AbsorptionGameplay.Rules.Copy(original);mutate(changed)
+        assert(CANONICAL(P1Evidence(changed))~=baseline,'P1 mutation accepted '..i)
+      end
+      original.Phase1Complete=false
+      assert(not pcall(P1Evidence,original))
+    "#)).exec()?;
     for small in [true, false] {
         let scene: serde_json::Value = serde_json::from_str(&product::acceptance_scenario(
             &Repository::checked_in(),
             small,
             false,
         )?)?;
-        let steps = scene["steps"].as_array().unwrap();
-        let snapshot = steps
+        let codes: Vec<&str> = scene["steps"]
+            .as_array()
+            .unwrap()
             .iter()
-            .position(|s| {
-                s["code"]
-                    .as_str()
-                    .is_some_and(|s| s.contains("t.Snapshot="))
-            })
-            .unwrap();
-        assert_eq!(
-            steps[snapshot - 1]["condition"]["state_name"],
-            "JAC_Absorption_Entry"
-        );
-        let code = steps[snapshot - 1]["condition"]["code"].as_str().unwrap();
-        let lua = Lua::new();
-        lua.load(r#"
-          Game={GetProperty=function(_,key) if key=='JAC_PRODUCT_ACCEPTANCE_V1' then return {From=1,To=2} else return {Pairs={['1:2']={ID='real'}}} end end}
-          JAC_AbsorptionAdmissionGameplay={Get=function(_,id) assert(id=='real');return {FlowID='saved'} end}
-          JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='saved');return {Phase=PHASE} end}
-        "#).exec()?;
-        for (phase, complete) in [("APPLYING", false), ("RESULT", false), ("DONE", true)] {
-            lua.globals().set("PHASE", phase)?;
-            assert_eq!(lua.load(code).eval::<bool>()?, complete);
-        }
+            .filter_map(|step| step["code"].as_str())
+            .collect();
+        assert!(codes
+            .iter()
+            .any(|code| code.contains("Canonical(P1Evidence(flow))==t.Snapshot")));
+        assert!(codes
+            .iter()
+            .any(|code| code.contains("product replay charged twice")));
     }
     Ok(())
 }

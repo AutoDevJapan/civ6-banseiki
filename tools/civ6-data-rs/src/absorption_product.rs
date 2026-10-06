@@ -11,6 +11,23 @@ pub const CITY_STATES: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_CityStat
 pub const DIPLOMACY: &str = "poc/JAC_PoC_CustomCivs/UI/JAC_DiplomacyActionView.lua";
 pub const TEXT: &str = texts::OUTPUT;
 pub const NATIVE_READ_UI: &str = "poc/JAC_PoC_Absorption/UI/JAC_Absorption_ProductNativeRead.lua";
+pub const P1_EVIDENCE: &str = r#"
+local function P1Evidence(flow)
+  local R=JAC_AbsorptionGameplay.Rules
+  assert(flow.Phase1Complete,'first-stage journal is incomplete')
+  local entries={}
+  for _,e in ipairs(flow.Entries or {}) do
+    entries[#entries+1]={ID=e.ID,Kind=e.Kind,Name=e.Name,Portrait=e.Portrait,Source=R.Copy(e.Source),
+      UnitID=e.UnitID,UnitType=e.UnitType,AllowedActions=R.Copy(e.AllowedActions),Abilities=R.Copy(e.Abilities),
+      Leader=e.Leader,NativeWork=R.Copy(e.NativeWork),DormantClass=e.DormantClass,
+      EscapeOutcome=e.EscapeOutcome,P1Chance=e.P1Chance,
+      Rolls={P1_ESCAPE=R.Copy(e.Rolls and e.Rolls.P1_ESCAPE),P1_BRANCH=R.Copy(e.Rolls and e.Rolls.P1_BRANCH)}}
+  end
+  return {ID=flow.ID,From=flow.From,To=flow.To,Mode=flow.Mode,Turn=flow.Turn,
+    Request=R.Copy(flow.Request),RosterAtBegin=R.Copy(flow.RosterAtBegin),Inventory=R.Copy(flow.Inventory),
+    Phase1Complete=flow.Phase1Complete,Entries=entries}
+end
+"#;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
@@ -599,17 +616,7 @@ local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)
 return v.Status=='STARTED'
 "#
     )));
-    if !human {
-        steps.push(json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry","code":r#"
-local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
-local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
-local pair=state and state.Pairs[t.From..':'..t.To]
-local request=pair and JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID)
-local flow=request and JAC_AbsorptionFlowGameplay.Get(request.FlowID)
-return flow~=nil and flow.Phase=='DONE'
-"#}}));
-    }
-    steps.push(core(r#"
+    steps.push(core(format!("{}\n{}",P1_EVIDENCE,r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
 local pair=assert(state.Pairs[t.From..':'..t.To]);local receipt=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID))
 assert(receipt.Status=='STARTED' and receipt.Plan.Mode==t.Mode and receipt.Plan.LeaderProfile.LeaderType==t.Initial.Country.Profile.LeaderType)
@@ -617,10 +624,10 @@ local escrow=assert(state.Escrows[pair.ID]);assert(escrow.Gold>0 and (escrow.Sta
 assert(escrow.CollectGold.Done and escrow.CollectGold.Before-escrow.CollectGold.After==escrow.Gold,'real gold leg did not settle')
 if escrow.Faith>0 then assert(escrow.CollectFaith.Done and escrow.CollectFaith.Before-escrow.CollectFaith.After==escrow.Faith) end
 local flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID));assert(flow.Phase1Complete)
-t.OfferID=pair.ID;t.FlowID=receipt.FlowID;t.Snapshot=JAC_AbsorptionGameplay.Canonical(flow)
+t.OfferID=pair.ID;t.FlowID=receipt.FlowID;t.Snapshot=JAC_AbsorptionGameplay.Canonical(P1Evidence(flow))
 Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
 return 'ordinary product requirements, actual deposit, and normal three-stage flow accepted'
-"#.into()));
+"#)));
     let save = format!(
         "JAC-product-{}-{}-choice",
         if small { "small" } else { "merger" },
@@ -628,15 +635,15 @@ return 'ordinary product requirements, actual deposit, and normal three-stage fl
     );
     save_reload(&mut steps, save);
     steps.push(wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil".into()));
-    steps.push(core(r#"
+    steps.push(core(format!("{}\n{}",P1_EVIDENCE,r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local flow=JAC_AbsorptionFlowGameplay.Get(t.FlowID)
-assert(JAC_AbsorptionGameplay.Canonical(flow)==t.Snapshot,'saved product P1 changed')
+assert(JAC_AbsorptionGameplay.Canonical(P1Evidence(flow))==t.Snapshot,'saved product P1 changed')
 local before=Players[t.To]:GetTreasury():GetGoldBalance()
 JAC_AbsorptionAdmissionGameplay.Request('leader-offer',t.OfferID,t.From,t.To)
-assert(JAC_AbsorptionGameplay.Canonical(JAC_AbsorptionFlowGameplay.Get(t.FlowID))==t.Snapshot)
+assert(JAC_AbsorptionGameplay.Canonical(P1Evidence(JAC_AbsorptionFlowGameplay.Get(t.FlowID)))==t.Snapshot)
 assert(Players[t.To]:GetTreasury():GetGoldBalance()==before,'product replay charged twice')
 return 'product save/load and duplicate admission preserve first-stage rolls and payment'
-"#.into()));
+"#)));
     Ok(format!(
         "{}\n",
         serde_json::to_string_pretty(
