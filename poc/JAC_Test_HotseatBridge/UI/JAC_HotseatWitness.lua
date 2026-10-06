@@ -15,6 +15,7 @@ local booted = false
 local lastShown = nil
 local lastReady = nil
 local lastError = nil
+local awaitingTurnReady = nil
 local NIL = {}
 local serial = 0
 
@@ -102,11 +103,11 @@ local function snapshot()
       append(result, record.LastXPTurn)
     end
   end
-  return fields(result), shown, ready
+  return fields(result), shown, ready, result[4], result[5], result[7], result[1], result[3]
 end
 
 local function observe()
-  local ok, observed, shown, ready = pcall(snapshot)
+  local ok, observed, shown, ready, active, human, paused, turn, localID = pcall(snapshot)
   if not ok then
     if observed ~= lastError then emit("WITNESS_ERROR", 0, tostring(observed)); lastError = observed end
     return
@@ -120,7 +121,20 @@ local function observe()
     emit("DIALOG_WAIT", 0, observed)
   end
   if ready and lastReady ~= true then emit("DIALOG_OPEN", 0, observed) end
-  if not shown and lastShown == true then emit("DIALOG_CLOSED", 0, observed) end
+  if shown then awaitingTurnReady = nil end
+  if not shown and lastShown == true then
+    emit("DIALOG_CLOSED", 0, observed)
+    awaitingTurnReady = {turn, localID}
+  end
+  if awaitingTurnReady and not shown then
+    if turn ~= awaitingTurnReady[1] or localID ~= awaitingTurnReady[2] then
+      emit("WITNESS_ERROR", 0, "turn/player changed before unpaused turn became ready")
+      awaitingTurnReady = nil
+    elseif active and human and not paused then
+      emit("TURN_READY", 0, observed)
+      awaitingTurnReady = nil
+    end
+  end
   lastShown = shown
   lastReady = ready
 end

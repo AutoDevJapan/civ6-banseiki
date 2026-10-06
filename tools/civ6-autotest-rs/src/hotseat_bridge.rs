@@ -784,26 +784,35 @@ impl<I: TransportIo> Controller<I> {
         self.io
             .key(0x0d, deadline)
             .map_err(|e| Error::unknown(format!("PlayerChange Return outcome unknown: {e}")))?;
+        let mut saw_closed = false;
         while self.io.now() < deadline {
             self.verify_owner()?;
             for frame in self.io.frames(&baseline, &self.nonce)? {
                 if frame.scene != self.scene {
                     return Err(Error::scenario("PlayerChange scene changed"));
                 }
-                if frame.kind == "DIALOG_CLOSED" {
+                if frame.kind == "DIALOG_CLOSED" || frame.kind == "TURN_READY" {
                     let closed = WitnessSnapshot::parse(&frame.body)?;
-                    if closed.dialog
+                    if frame.step != 0
+                        || closed.dialog
                         || closed.dialog_ready
-                        || closed.paused
-                        || !closed.active
                         || !closed.human
                         || (closed.turn, closed.local) != (opened.turn, opened.local)
                     {
                         return Err(Error::scenario(
-                            "PlayerChange closed without active unpaused human turn",
+                            "PlayerChange close belongs to another turn or dialog",
                         ));
                     }
-                    return Ok(closed);
+                    if frame.kind == "DIALOG_CLOSED" {
+                        saw_closed = true;
+                    } else if !saw_closed {
+                        return Err(Error::scenario("turn ready before witnessed dialog close"));
+                    }
+                    // The official UI broadcasts the pause change separately
+                    // from closing its popup. Only a fresh ready state completes it.
+                    if !closed.paused && closed.active {
+                        return Ok(closed);
+                    }
                 }
                 if frame.kind == "ERROR" || frame.kind == "WITNESS_ERROR" {
                     return Err(Error::scenario(format!(

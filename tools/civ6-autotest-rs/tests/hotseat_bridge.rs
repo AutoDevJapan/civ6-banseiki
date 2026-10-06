@@ -105,7 +105,7 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
     lua.load(&witness).exec().unwrap();
     lua.load("assert(contextHidden == false)").exec().unwrap();
     lua.load(format!("updateHandler(); assert(key(124)); assert(key(125)); assert(key(125)); assert(key(133)); assert(key(133)); localID=1; updateHandler(); assert(key(126)); assert(key(127)); assert(key(134)); assert(savedName=='JAC-Hotseat-Mid-Round-'..runNonce); assert(saveType==1); assert(key(128)); localID=0; turn=1; for uid=1,2 do local r=growthRecords[0][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP={xp}; r.LastXPTurn=1 end; assert(key(129)); assert(key(130)); localID=1; for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end; assert(key(131)); assert(key(134)); assert(savedName=='JAC-Hotseat-Next-Player-'..runNonce); assert(key(132))")).exec().unwrap();
-    lua.load("dialogVisible=true; dialogReady=false; paused=false; updateHandler(); dialogReady=true; paused=true; updateHandler(); dialogVisible=false; dialogReady=false; paused=false; updateHandler()").exec().unwrap();
+    lua.load("dialogVisible=true; dialogReady=false; paused=false; updateHandler(); dialogReady=true; paused=true; updateHandler(); dialogVisible=false; dialogReady=false; updateHandler(); paused=false; updateHandler(); updateHandler()").exec().unwrap();
     let log = lines.lock().unwrap().join("\n");
     (hs::parse_frames(&log, test_nonce()).unwrap(), log)
 }
@@ -131,6 +131,12 @@ fn actual_scenario_lua_runs_in_lua51_and_witness_returns_real_fields() {
     assert!(frames.iter().any(|f| f.kind == "DIALOG_WAIT"));
     assert!(frames.iter().any(|f| f.kind == "DIALOG_OPEN"));
     assert!(frames.iter().any(|f| f.kind == "DIALOG_CLOSED"));
+    let closed = frames.iter().find(|f| f.kind == "DIALOG_CLOSED").unwrap();
+    assert!(hs::WitnessSnapshot::parse(&closed.body).unwrap().paused);
+    let ready: Vec<_> = frames.iter().filter(|f| f.kind == "TURN_READY").collect();
+    assert_eq!(ready.len(), 1);
+    assert!(ready[0].serial > closed.serial);
+    assert!(!hs::WitnessSnapshot::parse(&ready[0].body).unwrap().paused);
     let start = frames
         .iter()
         .find(|f| f.step == 4 && f.kind == "RESULT")
@@ -328,6 +334,7 @@ struct FakeIo {
     responses: Vec<hs::Frame>,
     by_key: std::collections::BTreeMap<u16, Vec<hs::Frame>>,
     loss: bool,
+    delayed: Vec<(f64, hs::Frame)>,
 }
 impl hs::TransportIo for FakeIo {
     fn owner(&mut self) -> Result<hs::WindowOwner> {
@@ -341,7 +348,14 @@ impl hs::TransportIo for FakeIo {
         Ok(json!({"files":{"Lua.log":{"offset":0}}}))
     }
     fn frames(&mut self, _: &Value, _: &str) -> Result<Vec<hs::Frame>> {
-        Ok(self.responses.clone())
+        let mut frames = self.responses.clone();
+        frames.extend(
+            self.delayed
+                .iter()
+                .filter(|(at, _)| self.now >= *at)
+                .map(|(_, frame)| frame.clone()),
+        );
+        Ok(frames)
     }
     fn key(&mut self, key: u16, _: f64) -> Result<()> {
         self.keys.push(key);
@@ -374,6 +388,7 @@ fn controller_spends_key_before_send_and_never_resends_unknown_mutation() {
         responses: vec![],
         by_key: Default::default(),
         loss: false,
+        delayed: vec![],
     };
     let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let mut spent = vec![];
@@ -458,6 +473,7 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
         responses: vec![],
         by_key,
         loss: false,
+        delayed: vec![],
     };
     let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let receipt = controller.step(6, &original(), 3.0, |_| Ok(())).unwrap();
@@ -468,6 +484,110 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
     assert_eq!(controller.io.keys, vec![hs::KEY_END_TURN, 0x0d]);
     assert!(controller.accept_turn(6, &opened, 3.0, |_| Ok(())).is_err());
     assert_eq!(controller.io.keys.len(), 2);
+}
+
+#[test]
+fn player_change_waits_for_delayed_unpause_without_another_return() {
+    let (frames, _) = lua_run();
+    let boot = frames.iter().find(|f| f.kind == "BOOT").unwrap().clone();
+    let open = frames
+        .iter()
+        .find(|f| f.kind == "DIALOG_OPEN")
+        .unwrap()
+        .clone();
+    let closed = frames
+        .iter()
+        .find(|f| f.kind == "DIALOG_CLOSED")
+        .unwrap()
+        .clone();
+    let ready = frames
+        .iter()
+        .find(|f| f.kind == "TURN_READY")
+        .unwrap()
+        .clone();
+    let opened = hs::WitnessSnapshot::parse(&open.body).unwrap();
+    let fake = FakeIo {
+        owner: hs::WindowOwner {
+            pid: 321,
+            started: 10.0,
+            hwnd: 42,
+        },
+        now: 0.0,
+        keys: vec![],
+        responses: vec![],
+        by_key: [(0x0d, vec![closed])].into_iter().collect(),
+        loss: false,
+        delayed: vec![(0.2, ready)],
+    };
+    let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
+    let mut spent = vec![];
+    let accepted = controller
+        .accept_turn(3, &opened, 1.0, |step| {
+            spent.push(step);
+            Ok(())
+        })
+        .unwrap();
+    assert!(accepted.active && accepted.human && !accepted.paused && !accepted.dialog);
+    assert!(controller.io.now >= 0.2);
+    assert_eq!(spent, vec![3]);
+    assert_eq!(controller.io.keys, vec![0x0d]);
+    assert!(controller.accept_turn(3, &opened, 1.0, |_| Ok(())).is_err());
+    assert_eq!(controller.io.keys, vec![0x0d]);
+}
+
+#[test]
+fn player_change_never_accepts_missing_unpause_wrong_turn_or_missing_close() {
+    let (frames, _) = lua_run();
+    let boot = frames.iter().find(|f| f.kind == "BOOT").unwrap().clone();
+    let open = frames.iter().find(|f| f.kind == "DIALOG_OPEN").unwrap();
+    let closed = frames
+        .iter()
+        .find(|f| f.kind == "DIALOG_CLOSED")
+        .unwrap()
+        .clone();
+    let ready = frames
+        .iter()
+        .find(|f| f.kind == "TURN_READY")
+        .unwrap()
+        .clone();
+    let opened = hs::WitnessSnapshot::parse(&open.body).unwrap();
+    for variant in ["no-unpause", "wrong-turn", "no-close"] {
+        let mut response = if variant == "no-close" {
+            vec![]
+        } else {
+            vec![closed.clone()]
+        };
+        if variant != "no-unpause" {
+            let mut candidate = ready.clone();
+            if variant == "wrong-turn" {
+                let mut fields = hs::decode_fields(&candidate.body).unwrap();
+                fields[0] = format!("number:{}", opened.turn + 1);
+                candidate.body = packed(&fields);
+            }
+            response.push(candidate);
+        }
+        let fake = FakeIo {
+            owner: hs::WindowOwner {
+                pid: 321,
+                started: 10.0,
+                hwnd: 42,
+            },
+            now: 0.0,
+            keys: vec![],
+            responses: vec![],
+            by_key: [(0x0d, response)].into_iter().collect(),
+            loss: false,
+            delayed: vec![],
+        };
+        let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
+        let error = controller
+            .accept_turn(3, &opened, 0.3, |_| Ok(()))
+            .unwrap_err();
+        if variant == "no-unpause" {
+            assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+        }
+        assert_eq!(controller.io.keys, vec![0x0d]);
+    }
 }
 
 #[test]
@@ -500,6 +620,7 @@ fn synchronous_save_complete_is_accepted_with_its_real_name() {
         responses: vec![],
         by_key,
         loss: false,
+        delayed: vec![],
     };
     let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let receipt = controller.step(9, &original(), 2.0, |_| Ok(())).unwrap();
