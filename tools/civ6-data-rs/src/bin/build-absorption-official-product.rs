@@ -14,6 +14,13 @@
 //!   update enabled content after the final configuration. Expansion2's
 //!   Maps/Utility/AssignStartingPlots.lua:144-150 reads already alive minor IDs;
 //!   changing a count in Gameplay cannot create the missing engine slot.
+//! - SetupParameters.xml:53 and SetupParameters.lua:Config_WriteAuxParameterValues
+//!   supply LEADER_VALUES. GranColombia_Maya.modinfo:15-18,56-65 gates Vatican
+//!   gameplay data behind LeaderPlayable or a standard ruleset; frontend
+//!   CityStates availability alone is not proof that its gameplay row exists.
+//! - Actual26 established that standard automatic allocation works with two
+//!   majors/one minor. Do not replace it with manual actor creation. The content
+//!   precheck distinguishes configuration catalog rows from loaded gameplay.
 //! - DLC/GranColombia_Maya/Data/GranColombia_Maya_ConfigData.xml:79:
 //!   CIVILIZATION_VATICAN_CITY is in that domain.
 //! - Base/Assets/UI/Tuner/TunerCityPanel.lua:78,103: native district/building
@@ -36,7 +43,8 @@ use civ6_data_rs::{absorption_admission, Repository};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
-const USAGE: &str = "build-absorption-official-product --output <absolute-json-path> [--check]";
+const USAGE: &str =
+    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe]";
 
 const FRONTEND_FILTER: &str = r#"
 -- Use the official configuration table, not guessed city-state slots.
@@ -81,6 +89,20 @@ local function MajorsUnchanged()
   end
 end
 MajorsUnchanged()
+-- Standard PlayerSetupLogic writes LEADER_DOMAIN/LEADER_VALUES auxiliary
+-- data; DLC LeaderPlayable criteria consume it. The diagnostic's two actual
+-- leaders stay fixed, but its selectable pool must expose official content.
+GameConfiguration.SetValue('JAC_BANSEIKI_HUMAN_POOL','JAC_ALL_POOLS')
+MapConfiguration.SetScript('Continents.lua')
+include('PlayerSetupLogic')
+BuildHeadlessGameSetup()
+g_GameParameters:FullRefresh()
+CreatePlayerParameters(0,true)
+CreatePlayerParameters(1,true)
+RefreshPlayerParameters()
+HideGameSetup()
+ReleasePlayerParameters()
+MajorsUnchanged()
 -- Content dependencies must see the selected country pool, not the previous
 -- map's empty pool. This is the normal FrontEnd API, not a manual NPC slot.
 GameConfiguration.UpdateEnabledMods()
@@ -117,7 +139,43 @@ end
 assert(included==1 and excluded==#finalExclude,'final engine pool is not exactly Vatican City')
 print('[JAC_OFFICIAL_SETUP] script=Continents.lua majors=2 hidden='..GameConfiguration.GetHiddenPlayerCount()..
   ' minor-count=1 min-minor='..MapConfiguration.GetMinMinorPlayers()..' max-minor='..MapConfiguration.GetMaxMinorPlayers())
-return 'official DUEL limits and single-country pool committed through standard engine configuration'
+"#;
+
+const FRONTEND_BOOTSTRAP: &str = r#"
+-- A configuration catalog is not a gameplay definition. Standard native
+-- allocation must see the actual official row before exclusive selection.
+local civ=GameInfo and GameInfo.Civilizations and GameInfo.Civilizations['CIVILIZATION_VATICAN_CITY']
+local leader=GameInfo and GameInfo.Leaders and GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']
+print('[Metadata_Boot_PreSnapshot] gameplay-vatican='..tostring(civ~=nil)..' gameplay-leader='..tostring(leader~=nil))
+assert(civ and leader,'Vatican gameplay content absent: configuration CityStates rows alone cannot allocate the engine minor')
+assert(civ.StartingCivilizationLevelType=='CIVILIZATION_LEVEL_CITY_STATE','official Vatican data is not a native city state')
+-- Actual26 proves standard two-major/one-minor allocation works. Keep that
+-- engine route; exclusive selection must first have real loaded gameplay data.
+for actor=0,63 do
+  local config=PlayerConfigurations[actor]
+  if config then print('[Metadata_Boot_PreSnapshot] slot='..actor..' status='..tostring(config:GetSlotStatus())..
+    ' civ='..tostring(config:GetCivilizationTypeName())..' leader='..tostring(config:GetLeaderTypeName())..
+    ' level='..tostring(config:GetCivilizationLevelTypeID())) end
+end
+return 'official Vatican gameplay content validated before standard HostGame; native generation still requires Core roster check'
+"#;
+
+const FRONTEND_PROBE: &str = r#"
+local function Read(label,fn)
+  local ok,v=pcall(fn);print('[Metadata_Boot_PreSnapshot] '..label..'='..(ok and tostring(v) or 'unavailable'))
+end
+Read('rule',function() return GameConfiguration.GetRuleSet() end)
+Read('city-state-count',function() return GameConfiguration.GetValue('CITY_STATE_COUNT') end)
+Read('hidden-count',function() return GameConfiguration.GetHiddenPlayerCount() end)
+Read('participating-ids',function() return table.concat(GameConfiguration.GetParticipatingPlayerIDs(),',') end)
+Read('human-pool',function() return GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL') end)
+Read('gameplay-vatican',function() local row=GameInfo.Civilizations['CIVILIZATION_VATICAN_CITY'];return row and row.StartingCivilizationLevelType end)
+Read('gameplay-vatican-leader',function() return GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']~=nil end)
+for actor=0,63 do local p=PlayerConfigurations[actor];if p then
+  Read('slot-'..actor,function() return tostring(p:GetSlotStatus())..'|'..tostring(p:GetCivilizationTypeName())..'|'..
+    tostring(p:GetLeaderTypeName())..'|'..tostring(p:GetCivilizationLevelTypeID())..'|leader-values='..tostring(p:GetValue('LEADER_VALUES')) end)
+end end
+return 'readonly native frontend metadata captured; no host, no actor creation, no acceptance claim'
 "#;
 
 const CORE_ROSTER: &str = r#"
@@ -966,7 +1024,9 @@ fn scenario(repo: &Repository) -> Result<Value> {
     let (setup, _) = setup
         .rsplit_once("return ")
         .context("official setup return")?;
-    steps[2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FRONTEND_ALLOCATE}"));
+    steps[2]["code"] = json!(format!(
+        "{setup}\n{FRONTEND_FILTER}\n{FRONTEND_ALLOCATE}\n{FRONTEND_BOOTSTRAP}"
+    ));
     steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":CORE_ROSTER}));
     steps.push(active());
     steps.push(core(SELECT_AND_BLOCK));
@@ -1028,6 +1088,7 @@ return v.Status=='AVAILABLE'
 struct Options {
     output: PathBuf,
     check: bool,
+    frontend_probe: bool,
 }
 
 fn options(args: &[String]) -> Result<Option<Options>> {
@@ -1036,6 +1097,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
     }
     let mut output = None;
     let mut check = false;
+    let mut frontend_probe = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -1049,6 +1111,10 @@ fn options(args: &[String]) -> Result<Option<Options>> {
                 ensure!(!check, "--check specified twice; {USAGE}");
                 check = true;
             }
+            "--frontend-probe" => {
+                ensure!(!frontend_probe, "--frontend-probe specified twice");
+                frontend_probe = true;
+            }
             _ => bail!("unknown argument {arg}; {USAGE}"),
         }
     }
@@ -1058,7 +1124,26 @@ fn options(args: &[String]) -> Result<Option<Options>> {
         output.extension().is_some_and(|ext| ext == "json"),
         "--output must end in .json"
     );
-    Ok(Some(Options { output, check }))
+    Ok(Some(Options {
+        output,
+        check,
+        frontend_probe,
+    }))
+}
+
+fn frontend_probe(repo: &Repository) -> Result<Value> {
+    let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
+    let mut steps = base["steps"].as_array().context("official startup steps")?[..3].to_vec();
+    let (setup, _) = steps[2]["code"]
+        .as_str()
+        .context("official setup Lua")?
+        .rsplit_once("return ")
+        .context("setup return")?;
+    steps[2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FRONTEND_PROBE}"));
+    steps.push(json!({"action":"ui_lua","state_name":"FrontEnd","code":format!("{FRONTEND_ALLOCATE}\n{FRONTEND_PROBE}")}));
+    Ok(
+        json!({"name":"Official minor frontend content and native slot metadata diagnostic; no host and no acceptance claim","judge_profile":"generic","steps":steps}),
+    )
 }
 
 fn emit(path: &Path, expected: &str, check: bool) -> Result<()> {
@@ -1088,7 +1173,11 @@ fn main() -> Result<()> {
     };
     let expected = format!(
         "{}\n",
-        serde_json::to_string_pretty(&scenario(&Repository::checked_in())?)?
+        serde_json::to_string_pretty(&if options.frontend_probe {
+            frontend_probe(&Repository::checked_in())?
+        } else {
+            scenario(&Repository::checked_in())?
+        })?
     );
     emit(&options.output, &expected, options.check)?;
     println!(
@@ -1272,6 +1361,12 @@ SIZE={MinPlayers=2,MaxPlayers=4,MinCityStates=0,MaxCityStates=6}
 VALUES={CITY_STATE_COUNT=1};BOUNDS={MinMajor=2,MaxMajor=2,MinMinor=0,MaxMinor=0};CALLS={}
 SlotStatus={SS_COMPUTER=1,SS_TAKEN=2}
 local majors={{Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Slot=1},{Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Slot=2}}
+include=function(name) assert(name=='PlayerSetupLogic') end
+BuildHeadlessGameSetup=function() g_GameParameters={FullRefresh=function() end} end
+CreatePlayerParameters=function(index,headless) assert(index==0 or index==1);assert(headless==true) end
+RefreshPlayerParameters=function() end
+HideGameSetup=function() g_GameParameters=nil end
+ReleasePlayerParameters=function() end
 PlayerConfigurations={}
 for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizationTypeName=function() return row.Civ end,
  GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end} end
@@ -1288,6 +1383,7 @@ GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,IsAny
   CALLS[#CALLS+1]='participating'
  end}
 MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return 'Continents.lua' end,
+ SetScript=function(value) assert(value=='Continents.lua') end,
  GetMapSize=function() return 'MAPSIZE_DUEL' end,
  SetMinMajorPlayers=function(n) BOUNDS.MinMajor=n end,SetMaxMajorPlayers=function(n) BOUNDS.MaxMajor=n end,
  SetMinMinorPlayers=function(n) assert(CALLS[1]=='mods');BOUNDS.MinMinor=n end,
@@ -1384,6 +1480,50 @@ PlayerManager={GetAliveMinors=function() return {Players[62]} end}
         assert_eq!(scene["steps"][6]["code"], CORE_ROSTER);
         assert_eq!(scene["steps"][7]["action"], "wait_for");
         assert!(!CORE_ROSTER.contains("Set"));
+        Ok(())
+    }
+
+    #[test]
+    fn exclusive_content_requires_actual_definition_and_probe_has_no_host() -> Result<()> {
+        const NATIVE_CONFIG: &str = r#"
+SlotStatus={SS_CLOSED=0,SS_COMPUTER=1,SS_TAKEN=2}
+CivilizationLevelTypes={CIVILIZATION_LEVEL_CITY_STATE=3}
+GameInfo={Civilizations={CIVILIZATION_VATICAN_CITY={StartingCivilizationLevelType='CIVILIZATION_LEVEL_CITY_STATE'}},Leaders={LEADER_MINOR_CIV_VATICAN_CITY={}}}
+local rows={[0]={Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Slot=1,Level=0},
+ [1]={Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Slot=2,Level=0},[2]={Slot=0,Level=0}}
+PlayerConfigurations={}
+for id,row in pairs(rows) do
+ PlayerConfigurations[id]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end,
+ GetSlotStatus=function() return row.Slot end,GetCivilizationLevelTypeID=function() return row.Level end}
+end
+"#;
+        for mutation in [
+            "",
+            "GameInfo.Civilizations={}",
+            "GameInfo.Leaders={}",
+            "GameInfo.Civilizations.CIVILIZATION_VATICAN_CITY.StartingCivilizationLevelType='CIVILIZATION_LEVEL_FULL_CIV'",
+        ] {
+            let lua = Lua::new();
+            lua.load(NATIVE_CONFIG).exec()?;
+            lua.load(mutation).exec()?;
+            let result = lua.load(FRONTEND_BOOTSTRAP).exec();
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
+        }
+        let diagnostic = frontend_probe(&Repository::checked_in())?;
+        let lua = Lua::new();
+        for step in diagnostic["steps"].as_array().unwrap() {
+            assert_ne!(step["action"], "start_game");
+            if let Some(code) = step["code"].as_str() {
+                lua.load(code).into_function()?;
+                assert!(!code.contains(FRONTEND_BOOTSTRAP));
+                assert!(!code.contains("SetCivilizationTypeName"));
+            }
+        }
+        assert!(!FRONTEND_PROBE.contains("SetValue"));
         Ok(())
     }
 
@@ -2048,7 +2188,8 @@ STATE.Operations['0:ai-register:2']=QUEUED
             options(&args)?,
             Some(Options {
                 output: output.clone(),
-                check: true
+                check: true,
+                frontend_probe: false
             })
         );
         assert!(options(&[]).is_err());
