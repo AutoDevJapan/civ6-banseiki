@@ -9,6 +9,8 @@ use std::{
 static BOOT_FIXTURE_ORIGINAL_CALLS: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]
 static BOOT_FIXTURE_SET_CALLS: AtomicU64 = AtomicU64::new(0);
+#[unsafe(no_mangle)]
+static BOOT_FIXTURE_LOADER_CALLS: AtomicU64 = AtomicU64::new(0);
 core::arch::global_asm!(
     ".text",
     ".p2align 4",
@@ -37,6 +39,25 @@ core::arch::global_asm!(
     ".rept 16",
     "int3",
     ".endr",
+    ".globl boot_loader_fixture",
+    ".seh_proc boot_loader_fixture",
+    "boot_loader_fixture:",
+    "sub rsp,0x248",
+    ".seh_stackalloc 0x248",
+    ".seh_endprologue",
+    "lock inc qword ptr [rip + BOOT_FIXTURE_LOADER_CALLS]",
+    "test rdx,rdx",
+    "jz 3f",
+    "call boot_fixture_unwind",
+    "3:",
+    "lea rax,[rcx+17]",
+    "add rsp,0x248",
+    "ret",
+    ".seh_endproc",
+    ".p2align 4",
+    ".rept 16",
+    "int3",
+    ".endr",
     ".globl boot_set_fixture",
     ".seh_proc boot_set_fixture",
     "boot_set_fixture:",
@@ -58,6 +79,13 @@ core::arch::global_asm!(
 extern "system-unwind" {
     fn boot_fixture(a: usize, b: usize) -> usize;
     fn boot_set_fixture(a: usize, b: usize) -> usize;
+    fn boot_loader_fixture(a: usize, b: usize) -> usize;
+}
+extern "system-unwind" fn loader_fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
+    assert_ne!(ret, 0);
+    let result = unsafe { boot_loader_original(a, b) };
+    assert!(BOOT_FIXTURE_LOADER_CALLS.load(Ordering::Acquire) > 0);
+    result
 }
 extern "system-unwind" fn set_fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
     assert_ne!(ret, 0);
@@ -85,7 +113,7 @@ fn invalid_prepare_uses_actual_os_identity_and_never_installs() {
         created_filetime: created(),
         bridge_module: 0,
         bridge_sha256: [0; 32],
-        expected_context: 0,
+        expected_menu_context: 0,
     };
     assert_eq!(RustBridgeBootstrapPrepare(&input), 1); // real EXE is test binary
     assert!(STATE.lock().unwrap().is_none());
@@ -137,6 +165,7 @@ fn owned_hotpatch_child() {
     for address in [
         boot_release_original as *const () as u64,
         boot_set_original as *const () as u64,
+        boot_loader_original as *const () as u64,
     ] {
         let mut base = 0;
         assert!(!unsafe {
@@ -148,6 +177,22 @@ fn owned_hotpatch_child() {
         }
         .is_null());
     }
+    let entry = boot_loader_fixture as *const () as usize;
+    BOOT_LOADER_CONTINUE.store(entry + 7, Ordering::Release);
+    let original = read(entry, 7).unwrap();
+    let hook = hotpatch::prepare(
+        entry,
+        &[0x48, 0x81, 0xec, 0x48, 0x02, 0, 0],
+        loader_fixture_wrapper as *const () as usize,
+    )
+    .unwrap();
+    hook.publish().unwrap();
+    assert_eq!(unsafe { boot_loader_fixture(3, 0) }, 20);
+    assert_eq!(unsafe { boot_loader_fixture(239, 0) }, 256); // AL=0 stays AL=0.
+    assert!(std::panic::catch_unwind(|| unsafe { boot_loader_fixture(3, 1) }).is_err());
+    assert_eq!(BOOT_FIXTURE_LOADER_CALLS.load(Ordering::Acquire), 3);
+    hook.restore().unwrap();
+    assert_eq!(read(entry, 7).unwrap(), original);
     println!("owned_hotpatch_original_once=true entry_restored=true unreachable_prefix_retained_until_exit=true runtime_api_calls=0 game_live=false");
 }
 

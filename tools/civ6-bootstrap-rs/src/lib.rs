@@ -3,9 +3,10 @@
 //! Successful preparation is not proof of first-AI or world-reset ordering.
 #![deny(unsafe_op_in_unsafe_fn)]
 
-pub const VERSION: u32 = 0x0880_0001;
+pub const VERSION: u32 = 0x0880_0002;
 pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
 pub const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
+pub const MENU_CORE_SHA: &str = "d7ed520e1334947fc7b3be50b00c78eea55e69eb079583f24d87742e90f2a5c3";
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -18,8 +19,8 @@ pub struct Prepare {
     /// Already-loaded, independently source-hash-pinned Mode6 bridge.
     pub bridge_module: u64,
     pub bridge_sha256: [u8; 32],
-    /// Read immediately before calling Prepare in the same owned MainMenu.
-    pub expected_context: u64,
+    /// Observed Base-menu Context, not an XP2 Context. Target must be absent.
+    pub expected_menu_context: u64,
 }
 
 #[repr(C)]
