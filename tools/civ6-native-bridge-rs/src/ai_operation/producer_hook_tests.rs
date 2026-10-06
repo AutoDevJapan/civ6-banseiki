@@ -10,6 +10,29 @@ fn callers() -> [u64; 2] {
         ai_unwind_return as *const () as u64,
     ]
 }
+
+#[test]
+fn zero_generation_is_rejected_before_any_executable_patch() {
+    if !child(
+        "ai_operation::gateway::producer_hook::tests::zero_generation_is_rejected_before_any_executable_patch",
+        "JAC_ROOT_ZERO_GENERATION_CHILD",
+    ) {
+        return;
+    }
+    let entry = unsafe { image(ai_fixture_target as *const () as usize) };
+    let guard = INSTALL.lock().unwrap();
+    assert_eq!(
+        unsafe { prepare(entry as u64, 0, &guard) },
+        Err(Failure::Lease)
+    );
+    assert!(HOOK.get().is_none());
+    assert_eq!(Memory.copy::<8>(entry as u64 - 8), Some([0xcc; 8]));
+    assert_eq!(Memory.copy::<5>(entry as u64), Some(HEAD));
+    assert_eq!(AI_GATE_TARGETS[4].load(Ordering::Acquire), 0);
+    let mut output = [0u8; 0x160];
+    unsafe { ai_fixture_driver(output.as_mut_ptr(), entry) };
+    assert_eq!(u64::from_le_bytes(output[88..96].try_into().unwrap()), 1);
+}
 unsafe fn prepare(
     entry: u64,
     generation: u32,

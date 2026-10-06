@@ -2,18 +2,53 @@
 //! .text RVA=1000, raw=400 were independently checked with civ6-pe/LLVM.
 //! Full SHA verification precedes use of that pinned mapping. No bootstrap code.
 use civ6_native_bridge_rs::PINNED_GAMECORE_SHA256;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 const BRANCHES: &[(u32, u8, u32, &str)] = &[
-    (0x349cc, 0xe8, 0x5e2d0, "Player producer from request handler"),
-    (0x4b16d, 0xe8, 0x5e2d0, "Player producer from list iteration"),
-    (0x5e37a, 0xe8, 0x401050, "Player producer to AI owner update"),
-    (0x401145, 0xe8, 0x4012f0, "AI owner update to callback dispatcher"),
-    (0x344fb5, 0xe9, 0x4012f0, "alternate callback dispatcher tail path"),
-    (0x5cac8, 0xe8, 0x344a30, "tail-path caller; dispatcher returns to 5CACD"),
+    (
+        0x349cc,
+        0xe8,
+        0x5e2d0,
+        "Player producer from request handler",
+    ),
+    (
+        0x4b16d,
+        0xe8,
+        0x5e2d0,
+        "Player producer from list iteration",
+    ),
+    (
+        0x5e37a,
+        0xe8,
+        0x401050,
+        "Player producer to AI owner update",
+    ),
+    (
+        0x401145,
+        0xe8,
+        0x4012f0,
+        "AI owner update to callback dispatcher",
+    ),
+    (
+        0x344fb5,
+        0xe9,
+        0x4012f0,
+        "alternate callback dispatcher tail path",
+    ),
+    (
+        0x5cac8,
+        0xe8,
+        0x344a30,
+        "tail-path caller; dispatcher returns to 5CACD",
+    ),
     (0x63e2e4, 0xe8, 0x4afc0, "no-argument player-list issuer"),
-    (0x2f55c1, 0xe8, 0x3ffdb0, "AI owner destruction, must follow reader drainage"),
+    (
+        0x2f55c1,
+        0xe8,
+        0x3ffdb0,
+        "AI owner destruction, must follow reader drainage",
+    ),
     (
         0x40263c,
         0xe8,

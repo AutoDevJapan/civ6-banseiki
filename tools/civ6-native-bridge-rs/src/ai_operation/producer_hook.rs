@@ -50,7 +50,11 @@ pub(crate) fn close_producer() -> Result<(), Failure> {
 }
 pub(crate) fn rebuild_producer(generation: u32) -> Result<(), Failure> {
     if HOOK.get().is_none() {
-        return Ok(());
+        return if cfg!(feature = "ai-producer-candidate") {
+            Err(Failure::Lease)
+        } else {
+            Ok(())
+        };
     }
     if !installed() {
         return Err(Failure::CriticalRestore);
@@ -116,6 +120,9 @@ unsafe fn prepare_set(
     generation: u32,
     guard: &std::sync::MutexGuard<'_, ()>,
 ) -> Result<(), Failure> {
+    if generation == 0 || generation >= (1 << 31) {
+        return Err(Failure::Lease);
+    }
     if definitions.is_empty() || definitions.len() > 2 {
         return Err(Failure::Identity);
     }
@@ -192,9 +199,11 @@ unsafe fn prepare_set(
         let _ = registration.close_locked(guard, &SystemApi);
         return Err(Failure::CriticalRestore);
     }
-    AI_ROOT_PRODUCER
-        .rebuild(generation)
-        .map_err(|_| Failure::Lease)
+    if AI_ROOT_PRODUCER.rebuild(generation).is_err() {
+        let _ = registration.close_locked(guard, &SystemApi);
+        return Err(Failure::CriticalRestore);
+    }
+    Ok(())
 }
 
 fn copy_entry(raw: &mut Registers, index: usize) -> Option<u64> {

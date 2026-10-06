@@ -592,11 +592,8 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             return BridgeStatus::HookFailure as u32;
         }
         let trace = allocate_trace();
-        // Preserve a recovery route even if a later installation step fails.
-        // No observation begins and PRODUCT_ACTIVE is not an installation proof.
-        if cfg!(feature = "ai-producer-candidate") {
-            INSTALLED.store(true, Ordering::Release);
-        }
+        // OWNED retains the recovery route on failure. INSTALLED is published
+        // only after all installation steps succeed; it permits Rebuild.
         // Required caller contract: this must precede the first Player producer.
         // Parent load-order calibration is still required to establish that.
         if cfg!(feature = "ai-producer-candidate")
@@ -630,6 +627,34 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_ai_partial_install_can_close_but_cannot_rebuild() {
+        const CHILD: &str = "JAC_RUNTIME_PARTIAL_CLOSE_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_partial_install_can_close_but_cannot_rebuild", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        let trace = allocate_trace();
+        assert!(!trace.is_null());
+        assert!(OWNED.load(Ordering::Acquire));
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        let before = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), before);
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+        assert!(generation() > before);
+        let after = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), after);
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert!(!INSTALLED.load(Ordering::Acquire));
+    }
 
     #[test]
     fn native_ai_public_close_rebuild_use_installed_producer_gate() {
@@ -832,7 +857,7 @@ pub extern "system" fn BridgeRuntimeClose(_: *mut c_void) -> u32 {
 }
 
 fn close() -> u32 {
-    if !INSTALLED.load(Ordering::Acquire) {
+    if !INSTALLED.load(Ordering::Acquire) && !OWNED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput as u32;
     }
     // Invalidate the authority before attempting any restoration. A pending
