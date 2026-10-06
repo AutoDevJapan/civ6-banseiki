@@ -123,6 +123,28 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+### 実機09からのresident接続candidate
+
+09（actual `d6c`、observer `3563d7e3…0fd24b`）の13原ファイルを `D:/CC/Work/todo880/context-binding-09-hashes.json` と照合した。旧／incomingは実vtable Core+0xA101E8・仮想関数に一致し、Coreはbase6113984512・size12976128・disk SHA一致。Releaseの旧object1176373344はEXE caller0x24D1D2、最初のSetContextは0x169982、新ContextのSetContextは0x24B5D5、null Releaseは0x24B51Eだった。09でも同値4回はNoopである。後続DLL-loadのearly snapshot不明を解消済みとはしない。
+
+EXE0xF4990を読むとsingletonのglobalは0x22D6070で、保持slotはそのobject+0x450。0x169973がContext取得を呼び、その戻り値を0x169982でSetContextへ渡す。0x24D1D2のReleaseが戻ると直後0x24D1D7が破棄経路0xF8E30を呼ぶ。新SetContext0x24B5D5の前にもfactoryと仮想+0x60のcallがあるため、初回InstallをSetContextまで遅らせない。
+
+新crate `tools/civ6-bootstrap-rs` はWindows x64 DLLとして、MainMenuで明示的に準備するresident candidateを実装する。324 native/runtime/compositeファイルは編集しない。実export `BridgeRuntimeInstall/Close/Rebuild` を既にロード済みのsource DLLから解決する。通常public ledger・既存原子publicationを利用し、私的Lua flagやLua呼出しは追加しない。
+
+準備は現在PID/FILETIME、固定EXE/Core path+SHA、MainMenuの期待Context表、runtime DLLの保持file SHAとexportの実行module範囲を確認する。Mode6 Installはここで1回実行し、返されたCompositeTraceのaddress/sizeを保持する。EXEのF7110/F7830の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx` または `mov [rsp+8],rbx` を1回実行して残りの原関数へ戻る。Windows unwind情報を付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
+
+接続は単一phaseで管理する。Openの非null旧CoreContextに対して、原Releaseより前にCloseを成功させClosingへ移り、原Releaseが戻った後にだけClosedとする。Closedから、同じtransition thread・singleton・Core表・EXE globalに一致し、caller0x24B5D5、旧slot0、新Context非nullのSetContext入口でRebuildを呼ぶ。その後は原SetContextを1回実行し、ownerの自然RESET/COMMITによる再公開を待つ。allocatorによる旧address再利用は世代判定に使わない。同値SetContextはAPI呼出し0。旧slot非nullから直接異なるContextへ交換する未実証経路は先にCloseし、同じcallの途中へ推測でRebuildを入れず閉鎖を維持する。
+
+ABI不一致やClose不成立のままnative破棄を継続しないため、callbackのcritical失敗はabortとなる。これは正常終了ではなく、親のowned process回収対象である。Prepareの非zero終了（部分公開を含む）も親が所有gameを終了・回収し、同PIDへ再試行しない。入口を外した後にgatewayを解放する契約は追加しない。
+
+親の呼出し契約：既存live_chainとcontrollerのPID/FILETIME/lease/同source所有を検証したfresh MainMenuで、runtime DLLとこのDLLを専用path+SHAでロードする。runtimeのInstallは先に別途呼ばず、`RustBridgeBootstrapPrepare(*const Prepare)->u32` を1回呼ぶ。Prepareは72byte、align8、version0x08800001@0、size@4、pid@8、observation_seconds@12、FILETIME@16、bridge HMODULE@24、bridge SHAの32生byte@32、expected Context@64。結果0は準備完了だけで製品受入ではない。
+
+`BOOTSTRAP_TRACE_POINTER` は固定traceへのpointerを持つdata export（8byteを読む）。headerは9個のu64（version1、capacity128、pid、FILETIME、Core base、runtime trace address、runtime trace size、予約数、dropped）、以後128行。行は13個のu64：commit sequence（最後にRelease store）、kind、tid、receiver、old、incoming、caller、generation、API status、native calibration next/in-flight、property next/in-flight。native countersはpublic CompositeTraceのJACA v4/JACP v3のみを読み、不一致・未読はu64::MAX。counter採取はpublication fenceではない。kind0/1=Install前後、2/3=Close前後、4=Release原関数前、5=Noop、6/7=Rebuild前後、8=Set原関数前、9/10=原関数return（return行callerはVA、未対応generationはu64::MAX）。droppedや未commit行を合格に数えない。
+
+残る1件の必須受入は、親の同一owned PIDでfresh MainMenu準備→最初のworld開始→Exit→同じ保存再Load→Gameplay確認を行い、Installが最初のAI/自然RESETより前、Closeが旧native owner破棄より前、Rebuildが新ownerのRESET/COMMITより前であり、PIN下でも通常world再初期化が成功することを既存Mode6 traceと通常public ledgerで照合すること。Noopの再構築0と旧世代の許可拒否も同じ1件で確認する。workerの実Game実行0、Mode6成功を模擬した検査0。所有OS子の実code patchは2入口の原命令・原関数1回、restore、unwind情報、回収を検査するもので製品成功ではない。
+
+ビルドは共通gate経由 `build --locked --offline --manifest-path tools/Cargo.toml -p civ6-bootstrap-rs`。出力は専用targetの `debug/civ6_bootstrap_rs.dll`。`CARGO_INCREMENTAL=0`、`CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0` を使う。ゲーム・共有DLLへこのworkerが配置することはない。
+
 ### 実機08：保持slotとGameCoreの接続を絞る
 
 実機08（actual `82cfdf9e`、observer `ae8adb06…195f5`）は同PID79976・FILETIME134357969370420525で9/9手順・6判定が成功した。`D:/CC/Work/todo880/order-reload-08-artifacts` の13ファイルを `order-reload-08-hashes.json` と再照合した。context_releaseは2回、context_replaceは6回、Lua closeの2点は0回。stop時の115threadはDR一致、不一致・不明・pending0、復元・回収済みである。

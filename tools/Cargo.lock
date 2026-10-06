@@ -271,6 +271,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "civ6-bootstrap-rs"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "windows-sys",
+]
+
+[[package]]
 name = "civ6-cli-compat-rs"
 version = "0.1.0"
 dependencies = [
