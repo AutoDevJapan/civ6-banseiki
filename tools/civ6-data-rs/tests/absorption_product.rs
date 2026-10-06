@@ -79,6 +79,7 @@ function CANONICAL(value)
   local parts={};for _,k in ipairs(keys(value)) do parts[#parts+1]=CANONICAL(k)..'='..CANONICAL(value[k]) end
   return '{'..table.concat(parts,',')..'}'
 end
+JAC_AbsorptionGameplay.Canonical=CANONICAL
 "#;
 
 fn load(lua: &Lua, area: f64) -> anyhow::Result<()> {
@@ -693,6 +694,46 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
 }
 
 #[test]
+fn same_turn_publication_finishes_observed_currency_receipt_without_recharging(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(r#"
+      REGISTER();READY();UI_FAITH=FAITH[2]
+      JAC_AbsorptionGameplay.PlayerFaithBalance=function(owner) return owner==2 and UI_FAITH or FAITH[owner] end
+      assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
+      assert(STARTS==0 and CHARGES==1 and FAITH[2]<1000)
+      local before=CANONICAL({Gold=GOLD[2],Faith=FAITH[2]})
+      UI_FAITH=FAITH[2]
+      assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
+      assert(STARTS==1 and CHARGES==1 and VIEW().Status=='STARTED')
+      assert(CANONICAL({Gold=GOLD[2],Faith=FAITH[2]})==before,'receipt observation charged again')
+      local property=CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))
+      for i=1,5 do JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN) end
+      assert(CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==property and STARTS==1 and CHARGES==1)
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn publication_reentry_during_phase_one_does_not_reenter_admission() -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(
+        r#"
+      REGISTER();READY()
+      local begin=JAC_AbsorptionFlowGameplay.Begin
+      JAC_AbsorptionFlowGameplay.Begin=function(plan)
+        assert(not JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
+        return begin(plan)
+      end
+      assert(JAC_AbsorptionProductGameplay.RecheckPublished(2,TURN))
+      assert(STARTS==1 and CHARGES==1 and VIEW().Status=='STARTED')
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
 fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> anyhow::Result<()> {
     let lua = world(10000.)?;
     lua.load(r#"
@@ -720,7 +761,7 @@ fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> 
       assert(STARTS==1 and CHARGES==1 and VIEW().Status=='STARTED' and PUBLICATION_SENDS==1)
       SNAPSHOT=CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))
       for i=1,5 do UI_ENV.Events.GameCoreEventPublishComplete.Call();UI_ENV.Events.LocalPlayerTurnBegin.Call() end
-      assert(PUBLICATION_SENDS==1 and STARTS==1 and CHARGES==1 and CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==SNAPSHOT)
+      assert(PUBLICATION_SENDS==2 and STARTS==1 and CHARGES==1 and CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==SNAPSHOT)
     "#).exec()?;
     load(&lua, 10000.)?;
     lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
@@ -729,7 +770,7 @@ fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> 
     lua.load(
         r#"
       UI_ENV.Events.LoadScreenClose.Call()
-      assert(PUBLICATION_SENDS==2 and STARTS==1 and CHARGES==1)
+      assert(PUBLICATION_SENDS==3 and STARTS==1 and CHARGES==1)
       assert(CANONICAL(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))==SNAPSHOT)
     "#,
     )

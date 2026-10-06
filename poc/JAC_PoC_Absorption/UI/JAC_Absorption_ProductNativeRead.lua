@@ -19,18 +19,20 @@ end,GetTurn=function() return Game.GetCurrentGameTurn() end}
 -- through the same synchronized transport after native UI data is current.
 -- This sends identities and a turn only; Gameplay derives every condition.
 if Events and Events.GameCoreEventPublishComplete and UI and PlayerOperations then
-  local sentTurn=nil
+  local sentKey=nil
   local function Published()
     local actor=Game.GetLocalPlayer()
     local player=actor>=0 and Players[actor]
     if not player or not player:IsMajor() or not player:IsHuman() or not player:IsTurnActive()
       or not ExposedMembers.JAC_AbsorptionProduct then return end
     local turn=Game.GetCurrentGameTurn()
-    if sentTurn==turn then return end
-    sentTurn=turn
+    local api=ExposedMembers.JAC_AbsorptionProduct
+    local key=tostring(turn)..':'..api.PublicationKey()
+    if sentKey==key then return end
+    sentKey=key
     local ok=pcall(UI.RequestPlayerOperation,actor,PlayerOperations.EXECUTE_SCRIPT,
       {OnStart='JAC_AbsorptionProduct_Operation',Command='RECHECK_PUBLISHED',Turn=turn})
-    if not ok then sentTurn=nil end
+    if not ok then sentKey=nil end
   end
   Events.GameCoreEventPublishComplete.Add(Published)
   if Events.LocalPlayerTurnBegin then Events.LocalPlayerTurnBegin.Add(Published) end

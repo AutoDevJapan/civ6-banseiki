@@ -463,6 +463,12 @@ for _,player in ipairs(PlayerManager.GetAliveMajors()) do
   if civ=='{from}' then from=player:GetID() elseif civ=='{to}' then to=player:GetID() end
 end
 assert(from and to and not Players[from]:IsHuman(),'ordinary source actor required')
+-- Use an actual bilateral friendship for the fixture, not a forged relation
+-- ledger. This keeps the source from declaring war during the AI envoy turns.
+Players[from]:GetDiplomacy():SetHasMet(to)
+Players[to]:GetDiplomacy():SetHasMet(from)
+Players[from]:GetDiplomacy():SetHasDeclaredFriendship(to,true)
+Players[to]:GetDiplomacy():SetHasDeclaredFriendship(from,true)
 local failures,checked={{}},0
 for _,other in ipairs(PlayerManager.GetAliveMajors()) do
   if other:GetID()~=to and not other:IsHuman() then
@@ -531,13 +537,8 @@ for _,row in ipairs(v.Rows) do if row.Kind=='PRODUCT_METRIC' then minimum=row.Mi
 assert(metric and minimum>0,'ordinary leader demand missing')
 local count=metric=='leader:PEAK_COMBAT' and math.ceil(minimum/kind.Power)+2 or minimum+2
 for i=1,count do UnitManager.InitUnitValidAdjacentHex(t.To,kind.Type,cap:GetX(),cap:GetY(),20) end
-local gold=v.Deposit.Gold+10000;local faith=v.Deposit.Faith+10000
-Players[t.To]:GetTreasury():ChangeGoldBalance(gold-Players[t.To]:GetTreasury():GetGoldBalance())
-Players[t.To]:GetReligion():ChangeFaithBalance(faith-Players[t.To]:GetReligion():GetFaithBalance())
 if v.Envoys then Players[t.To]:GetInfluence():ChangeTokensToGive(v.Envoys.Required+2) end
-t.GoldBefore=Players[t.To]:GetTreasury():GetGoldBalance();t.FaithBefore=Players[t.To]:GetReligion():GetFaithBalance()
-Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
-return 'real troops, currencies and official unassigned envoys prepared for ordinary terms'
+return 'real troops and official envoy pool prepared; actual deposit remains unmet for waiting save'
 "#.into()));
     if human && small {
         steps.push(ui(format!("{ui_actors}\nLuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'")));
@@ -579,7 +580,18 @@ return 'existing screen envoy action advances after each real game-core publicat
         ),
     );
     steps.push(wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()".into()));
-    steps.push(json!({"action":"end_turn","turns":if small&&!human{12}else{1},"timeout":1200}));
+    steps.push(core(r#"
+local t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))
+local v=JAC_AbsorptionProductGameplay.Get(t.From,t.To)
+assert(v.Status~='STARTED','waiting save did not preserve unmet real funds')
+local gold=v.Deposit.Gold+10000;local faith=v.Deposit.Faith+10000
+Players[t.To]:GetTreasury():ChangeGoldBalance(gold-Players[t.To]:GetTreasury():GetGoldBalance())
+Players[t.To]:GetReligion():ChangeFaithBalance(faith-JAC_AbsorptionGameplay.PlayerFaithBalance(t.To))
+t.GoldBefore=Players[t.To]:GetTreasury():GetGoldBalance();t.FaithBefore=JAC_AbsorptionGameplay.PlayerFaithBalance(t.To)
+Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
+return 'waiting save restored; real deposit supplied for ordinary admission'
+"#.into()));
+    steps.push(json!({"action":"end_turn","turns":if small&&!human{20}else{1},"timeout":1200}));
     steps.push(wait(format!(
         "{ui_actors}\n{}",
         r#"
