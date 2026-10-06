@@ -11,9 +11,24 @@ local baseView=ViewCityState
 local baseList=ViewList
 local baseQuests=GetQuests
 local baseRefresh=Refresh
+local baseBackClose=OnBackClose
+local baseClose=Close
+local baseOpenOverview=OpenOverview
+local baseOpenSendEnvoys=OnOpenSendEnvoys
+local baseOpenSingle=OpenSingleViewCityState
 local function IsProductMajor(view)
   local p=view and Players[view.From]
-  return p and p:IsMajor() and view.Envoys and view.Envoys.Route=='PRODUCT'
+  return p and p:IsMajor() and view.Mode=='SMALL_STATE'
+end
+local function RestoreLevyLabel()
+  -- Native ViewCityState restores the callback, but this label is set only
+  -- once by CityStates.xml. Never leave a cancel/register label on a levy.
+  Controls.LevyMilitaryButton:SetText(Locale.Lookup('LOC_CITY_STATES_LEVY_MILITARY_BUTTON'))
+end
+local function ClearSelection()
+  current=-1
+  actionIM:ResetInstances()
+  RestoreLevyLabel()
 end
 function JAC_AbsorptionCityStatesAction(from,command)
   if from~=current then return false end
@@ -75,12 +90,15 @@ function ViewCityState(player)
   actionIM:ResetInstances()
   local view=U.Get(player)
   if not view or view.Status=='UNAVAILABLE' or not IsProductMajor(view) then
+    local actor=Players[player]
+    if not actor or actor:IsMajor() then ViewList();return end
+    RestoreLevyLabel()
     Controls.EnvoysSentButton:RegisterCallback(Mouse.eLClick,OnEnvoySentClick)
     Controls.InfluencedByButton:RegisterCallback(Mouse.eLClick,OnInfluencedByClick)
     Controls.QuestsButton:RegisterCallback(Mouse.eLClick,OnQuestsClick)
     Controls.RelationshipsButton:RegisterCallback(Mouse.eLClick,OnRelationshipsClick)
     baseView(player)
-    if view and view.Status~='UNAVAILABLE' then Actions(view) end
+    if current==player and view and view.Status~='UNAVAILABLE' then Actions(view) end
     return
   end
   -- A FULL_CIV small country has no official CityStates cache entry. Build
@@ -89,7 +107,7 @@ function ViewCityState(player)
   Controls.CityStateName:SetText(Locale.Lookup(view.Country.Name))
   Controls.CityStateTypeIcon:SetIcon('ICON_'..view.Country.Profile.CivilizationType)
   Controls.TypeValue:SetText(U.Text('SMALL_COUNTRY'));Controls.PatronValue:SetText('')
-  Controls.EnvoysSentValue:SetText(tostring(view.Envoys.Envoys))
+  Controls.EnvoysSentValue:SetText(tostring(view.Envoys and view.Envoys.Envoys or 0))
   Controls.QuestsValue:SetText(tostring(#view.Rows))
   Controls.EnvoysSentArea:SetHide(true);Controls.InfluenceArea:SetHide(true)
   Controls.RelationshipsArea:SetHide(true);Controls.QuestsArea:SetHide(false)
@@ -97,12 +115,13 @@ function ViewCityState(player)
   questIM:ResetInstances()
   local item=questIM:GetInstance()
   item.Title:SetString(U.Text('CONDITIONS'));item.Description:SetString(U.Lines(view))
-  item.Reward:SetString(U.Text('REQUIRED_ENVOYS')..' '..view.Envoys.Required);item.Callout:SetString('')
+  item.Reward:SetString(view.Envoys and U.Text('REQUIRED_ENVOYS')..' '..view.Envoys.Required or '');item.Callout:SetString('')
   Controls.QuestsStack:CalculateSize();Controls.QuestsScroll:CalculateSize()
   Controls.ReportArea:DoAutoSize();Controls.SingleViewStack:CalculateSize()
   Actions(view)
   Controls.PeaceWarButton:SetHide(false)
-  local canSend=Players[view.To]:GetInfluence():GetTokensToGive()>0 and Players[view.To]:IsTurnActive()
+  local canSend=view.Envoys and view.Envoys.Route=='PRODUCT'
+    and Players[view.To]:GetInfluence():GetTokensToGive()>0 and Players[view.To]:IsTurnActive()
   Controls.PeaceWarButton:SetText(U.Text('SEND_ENVOY'))
   Controls.PeaceWarButton:SetToolTipString(U.Text('SEND_ENVOY_HELP'))
   Controls.PeaceWarButton:SetDisabled(not canSend)
@@ -114,8 +133,7 @@ function ViewCityState(player)
   end
 end
 function ViewList()
-  current=-1
-  actionIM:ResetInstances()
+  ClearSelection()
   baseList();extraIM:ResetInstances()
   local count=0
   for _,view in ipairs(U.SmallCountries()) do if IsProductMajor(view) then
@@ -125,7 +143,7 @@ function ViewList()
     item.Icon:SetIcon('ICON_'..view.Country.Profile.CivilizationType)
     item.Icon:SetToolTipString(U.Lines(view));item.QuestIcon:SetHide(false)
     item.QuestIcon:SetToolTipString(U.Lines(view))
-    item.EnvoyCount:SetText(tostring(view.Envoys.Envoys)..' / '..view.Envoys.Required)
+    item.EnvoyCount:SetText(view.Envoys and tostring(view.Envoys.Envoys)..' / '..view.Envoys.Required or '')
     for _,control in ipairs({item.BonusImage1,item.BonusImage3,item.BonusImage6,item.Suzerain,
       item.BonusImageSuzerainOff,item.BonusImageSuzerainOn,item.SuzerainLabel,item.EnvoyMoreButton,item.EnvoyLessButton}) do control:SetHide(true) end
     for _,button in ipairs({item.Button,item.NameButton}) do
@@ -143,8 +161,34 @@ function Refresh()
     -- Native influence events refresh the base screen's private mode, which
     -- remains Overview for a major. Retain our selected country instead.
     ViewCityState(current)
+  elseif current>=0 and (not Players[current] or Players[current]:IsMajor()) then
+    -- A vanished pre-P1 source is auto-cancelled/refunded by Gameplay. Its
+    -- unavailable view must release selection and use the living-only list.
+    ViewList()
   else baseRefresh() end
 end
+-- Native callbacks call these global entry points even after Initialize has
+-- captured their caller. Clear only explicit navigation, never influence refresh.
+function Close()
+  ClearSelection();return baseClose()
+end
+function OnBackClose()
+  ClearSelection();return baseBackClose()
+end
+function OpenOverview(...)
+  ClearSelection();return baseOpenOverview(...)
+end
+function OnOpenSendEnvoys(...)
+  ClearSelection();return baseOpenSendEnvoys(...)
+end
+function OpenSingleViewCityState(...)
+  ClearSelection();return baseOpenSingle(...)
+end
+-- The base screen already captured these two handlers before replacement.
+Controls.CloseBackButton:RegisterCallback(Mouse.eLClick,OnBackClose)
+Controls.CloseListButton:RegisterCallback(Mouse.eLClick,OnClose)
+LuaEvents.NotificationPanel_OpenCityStatesSendEnvoys.Remove(baseOpenSendEnvoys)
+LuaEvents.NotificationPanel_OpenCityStatesSendEnvoys.Add(OnOpenSendEnvoys)
 -- The same existing entry event can open both official minors and major
 -- actors classified as small countries by their geographic reference area.
 LuaEvents.CityStates_OpenOverview.Add(function(player)
@@ -155,8 +199,8 @@ LuaEvents.CityStates_OpenOverview.Add(function(player)
 end)
 local function Updated()
   if not ContextPtr:IsHidden() then
-    if current>=0 then local view=U.Get(current)
-      if view and view.Status~='UNAVAILABLE' then ViewCityState(current) end
+    if current>=0 then
+      ViewCityState(current)
     else ViewList() end
   end
 end
