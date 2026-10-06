@@ -592,6 +592,18 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             return BridgeStatus::HookFailure as u32;
         }
         let trace = allocate_trace();
+        // Preserve a recovery route even if a later installation step fails.
+        // No observation begins and PRODUCT_ACTIVE is not an installation proof.
+        if cfg!(feature = "ai-producer-candidate") {
+            INSTALLED.store(true, Ordering::Release);
+        }
+        // Required caller contract: this must precede the first Player producer.
+        // Parent load-order calibration is still required to establish that.
+        if cfg!(feature = "ai-producer-candidate")
+            && unsafe { crate::ai_operation::gateway::install_producer(gamecore as u64, generation()) }.is_err() {
+            product_deactivate();
+            return BridgeStatus::Critical as u32;
+        }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;
@@ -618,6 +630,43 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_ai_public_close_rebuild_use_installed_producer_gate() {
+        const CHILD: &str = "JAC_RUNTIME_PRODUCER_CLOSE_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_public_close_rebuild_use_installed_producer_gate", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        extern "system" fn original() -> u64 { CALLS.fetch_add(1, Ordering::AcqRel); 73 }
+        // Process-owned RX fixture; no GameCore import or invented game API.
+        OWNED.store(true, Ordering::Release);
+        INSTALLED.store(true, Ordering::Release);
+        assert!(product_activate());
+        assert!(advance());
+        let first = generation();
+        let entry = unsafe { crate::ai_operation::gateway::producer_fixture(original as *const () as usize, first) };
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert!(generation() > first);
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 0);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        let closed = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::Ok as u32);
+        assert!(generation() > closed);
+        assert!(PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        assert_eq!(CALLS.load(Ordering::Acquire), 2);
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+    }
 
     #[test]
     fn native_ai_adapter_tracks_real_owner_catalog_transaction_and_load_fence() {
@@ -812,6 +861,10 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
         return BridgeStatus::Critical as u32;
     }
     if !product_activate() {
+        return BridgeStatus::Critical as u32;
+    }
+    if crate::ai_operation::gateway::rebuild_producer(generation()).is_err() {
+        product_deactivate();
         return BridgeStatus::Critical as u32;
     }
     // Each owner enters rebuilding on its own natural reset getter. No

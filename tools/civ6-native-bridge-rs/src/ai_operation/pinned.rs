@@ -6,6 +6,14 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 const BRANCHES: &[(u32, u8, u32, &str)] = &[
+    (0x349cc, 0xe8, 0x5e2d0, "Player producer from request handler"),
+    (0x4b16d, 0xe8, 0x5e2d0, "Player producer from list iteration"),
+    (0x5e37a, 0xe8, 0x401050, "Player producer to AI owner update"),
+    (0x401145, 0xe8, 0x4012f0, "AI owner update to callback dispatcher"),
+    (0x344fb5, 0xe9, 0x4012f0, "alternate callback dispatcher tail path"),
+    (0x5cac8, 0xe8, 0x344a30, "tail-path caller; dispatcher returns to 5CACD"),
+    (0x63e2e4, 0xe8, 0x4afc0, "no-argument player-list issuer"),
+    (0x2f55c1, 0xe8, 0x3ffdb0, "AI owner destruction, must follow reader drainage"),
     (
         0x40263c,
         0xe8,
@@ -109,7 +117,8 @@ pub fn audit(bytes: &[u8]) -> Result<Value, String> {
         "static_witnesses":rows, "argument_witnesses":9,
         "operation_hash":"0x7d3da99d", "governor_parameter_hash":"0xaf5e1625",
         "promotion_parameter_hash":"0x6d4bd4ea",
-        "runtime_adapter":"absent", "execution_enabled":false, "payment_authority":false,
+        "runtime_adapter":"source_candidate_not_registered_by_audit", "producer_gate":"candidate_feature_off_by_default",
+        "execution_enabled":false, "payment_authority":false,
         "ai_acceptance":false, "calibration":calibration_plan(),
         "unproved":["natural AI callback thread and synchronized phase", "safe callback installation and lifetime",
             "complete owner/GameInfo/ledger binding", "load boundary and stale operation drainage", "multiplayer ordering"]}),

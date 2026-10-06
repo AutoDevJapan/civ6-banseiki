@@ -96,12 +96,16 @@ pub(super) fn close() -> bool {
     if !ai_operation::close() {
         return false;
     }
-    let Ok(_guard) = REGISTRATION.lock() else {
+    let Ok(mut guard) = REGISTRATION.lock() else {
         return false;
     };
     // Failed installation may have published only the gateway recovery handle.
     // Closing must restore that state too before the controller can tear down.
-    gateway::close_registered().is_ok()
+    if gateway::close_registered().is_err() {
+        return false;
+    }
+    *guard = None;
+    true
 }
 
 /// Caller supplies only a current AI container found from the native owner.

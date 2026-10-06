@@ -3,3 +3,4 @@ pub mod capture;
 pub mod gateway;
 pub mod pinned;
 pub mod protocol;
+mod producer;

@@ -665,3 +665,19 @@ RuntimeCloseはまず権限と追加OPを無効化し、追加native区間が終
 終了競合を補強した対象検査は39成功・失敗ignored0・68除外・コンパイル警告0（`D:/CC/Work/todo880/ai-runtime-callback-ownership-tests.log`）。共有cargo_gate・専用targetを使い、全workspaceは追加実行していない。元callbackで待機させた実OS子では追加OPがなくてもCloseが待つ。別の子では同じowner/thread/世代のphase1を原calleeへ1回だけ渡し、観測受理0のままCloseが待つ。原calleeから実RtlUnwindExで戻る子では後始末・実行数0を確認してから終了する。実slotを変更し、旧宛先を取得したthreadを入口前で止めて別threadがslotを復元する子では、カウンタ0でもCloseはCallerNotQuiescentを返し、遅れた原callは1回・受理0となる。正常Close成功の子はGameCore bindingを公開していないWin64 fixtureであり、実engineの全停止成功へ読み替えない。途中登録失敗のRX復旧、原GP/XMM/RFLAGSと真caller stack、実runtimeのowner/catalog/generation検査も同じ39件に含む。子試験の内数を重複加算しない。
 
 同じGPT-6-Sol/maxレビューへ`a15d24a5`と`ffa013d8`を戻し、新Must0。前回2件は誤った終了成功を返さない形で解消した判定であり、親producer停止・正常Close・再登録が完成した判定ではない。Suggestionの取得前の入口停止と旧reader排出は未接続として維持する。共有cargo_gateで当該crateのlibだけをビルドし、成功・警告0（`D:/CC/Work/todo880/ai-runtime-owned-lib-build.log`）。専用targetの生成DLLをllvm-readobjで読み、BridgeRuntimeAiObserve/BridgeRuntimeAiQueryと既存Close/Rebuildのexportを確認した。共有・実機用DLLへの配置、ゲーム起動、PID52800への接続、public pushはいずれも0。
+
+## 取得前停止の候補と発行元に残る条件
+
+`producer.rs`、`producer_hook.rs`、`producer_hook_tests.rs`を追加した。実行許可とreader数を同じCAS wordで扱い、機械入口で取得した世代snapshotを後の世代へ読み替えない。閉鎖は入口を閉じてからreaderを待つ。getter内でOPを呼ばず、元callbackの活動中の一回呼出しを保持する。終了時・未知caller・producer外のcallback・teardown再入は拒否する。新しいgame property、常にtrueのRuntimeLease、支払い許可を代用する数値は追加していない。
+
+所有範囲は`0x5E2D0`のPlayer処理全体とした。`0x4012F0`だけでは、戻り先`0x401050`がownerを読む`0x40114A..0x4012B1`を囲えない。外側の原命令は`48 89 5C 24 08`、内側は`48 89 5C 24 20`。両方ともRSP/RBXを変えない5byte MOVをleaf trampolineへ移し、original+5の原命令へ戻る。直前8byteのCC領域へE9を準備し、先頭2byteだけEB F9へ切り替える。通常Closeで入口を外して素通しへ戻すことはせず、閉じた機械入口を残す。GP/XMM/RFLAGS・home・RAXを保持する。
+
+外側入口の既知returnは`0x349D1/0x4B172`。内側は`0x40114A/0x5CACD`で、後者は`0x5CAC8 -> 0x344A30 -> 0x344FB5`のtail経路である。内側は外側のreaderを借り、通常復帰・SEHで先に解放しない。Player引数も保持してAI callbackの本人と照合する。固定DLL全体の逆アセンブルで確認した直接分岐をpinned auditへ追加した。動的に構築される未知の間接callerまで不存在とは主張しない。
+
+復旧状態の幅を2/4/8byteで明示した。PermanentPrefixは入口2byteが復元済みでもE9を保持する。復元前にEB F9を取得した遅延readerの行先をCCへ戻さないためである。原属性とcache完了の検査も保持する。候補を有効にした初期化はproducer入口を先に設置し、途中失敗でもCloseで復旧を試せる状態を残す。旧bindingは最大64件まで保持し、閉鎖・排出済みの登録記録だけを外して新しい登録を受けられるようにした。旧handleの再closeは新bindingを無効化しない。
+
+**未解消のMustは初回設置順序と発行前の保留要求である。** 設置前に原入口を通過済みのframeは新しいreader数に入らない。また、snapshot取得前で停止した旧callerがRebuild後の世代を取得する窓は、入口のCASだけでは解消しない。この点を成功可否フラグで隠さない。自動入口設置は`ai-producer-candidate` featureを明示したビルドに限定し、通常ビルドにはまだ有効化していない。候補を実機用として有効にしてよいという判定、通常AI支払い完成、実Civ6の安全なClose/Rebuild成功は未達である。
+
+親の順序観測と対応させる発行元をさらに遡った。`0x4AFC0`（file `0x4A3C0`）はincoming RCX/RDX/R8/R9やstack引数の旧Playerを使わず、`0x4B06F/0x4B114`で一覧を作り、`0x4B092/0x4B132/0x4B1B2`からIDを解決する。直接callerは`0x63E2E4`の1本で、原関数`0x63E2E0`には複数のcall/tail callerがある。共通global `0xB8AA68`のworld更新・寿命とRebuildの順序は未確定であり、「引数に旧pointerがない」を排出保証へ変換しない。人間側`0x349CC`の実入口は`0x34840`（file `0x33C40`）。要求packet+18のIDを`0x3485A -> 0x44D90`で解決し、既知callerは`0x418599/0x41877E`、packet構築元は`0x4182B0`。`0x9BDCD8`にも入口pointerがあり、この2本だけを全callerとして扱わない。停止はこれらの保留要求を含め、遅くとも`0x2F55B2`のPlayer+6B0取得、`0x2F55C1 -> 0x3FFDB0`、`0x3FFDDF`の集合破棄より前でなければならない。
+
+候補featureを含む限定検査は47成功・68除外・失敗ignored0・警告0（`D:/CC/Work/todo880/ai-producer-candidate-tests.log`）。公開Close/Rebuildが実際のRX入口の閉鎖・再開へつながる子、内側終了後も外側readerを保持する子、取得競合、通常/入れ子SEH、未知caller拒否、旧snapshot拒否、復旧API失敗後もE9が実行可能である子を含む。初回43件・中間46件とは重複しており加算しない。すべて自プロセスの明示fixtureであり、原Civ6の初回設置前・snapshot前の全reader排出を実証した結果ではない。実機操作・PID52800接続・shared DLL配置・public pushは0。

@@ -5,7 +5,28 @@ use super::*;
 use std::sync::{Arc, MutexGuard};
 
 pub(super) static INSTALL: Mutex<()> = Mutex::new(());
-pub(super) static RECOVERY: OnceLock<Registration> = OnceLock::new();
+pub(super) struct Recovery(Mutex<Option<Registration>>);
+impl Recovery {
+    pub(super) fn get(&self) -> Result<Option<Registration>, Failure> {
+        self.0
+            .lock()
+            .map(|slot| slot.clone())
+            .map_err(|_| Failure::Patch)
+    }
+    pub(super) fn set(&self, registration: Registration) -> Result<(), Failure> {
+        let mut slot = self.0.lock().map_err(|_| Failure::Patch)?;
+        if slot.is_some() {
+            return Err(Failure::AlreadyUsed);
+        }
+        *slot = Some(registration);
+        Ok(())
+    }
+    pub(super) fn clear(&self) -> Result<(), Failure> {
+        *self.0.lock().map_err(|_| Failure::Patch)? = None;
+        Ok(())
+    }
+}
+pub(super) static RECOVERY: Recovery = Recovery(Mutex::new(None));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Phase {
@@ -58,21 +79,36 @@ fn protection(address: usize, size: usize) -> Option<u32> {
     .then_some(info.Protect)
 }
 fn bytes(p: &Patch) -> Option<u64> {
-    if p.wide {
-        u64_at(p.address as u64)
-    } else {
-        u32_at(p.address as u64).map(u64::from)
+    match p.width {
+        Width::Half => Memory
+            .copy::<2>(p.address as u64)
+            .map(u16::from_le_bytes)
+            .map(u64::from),
+        Width::Word => u32_at(p.address as u64).map(u64::from),
+        Width::Wide | Width::PermanentPrefix => u64_at(p.address as u64),
     }
 }
 fn size(p: &Patch) -> usize {
-    if p.wide {
-        8
-    } else {
-        4
+    match p.width {
+        Width::Half => 2,
+        Width::Word => 4,
+        Width::Wide | Width::PermanentPrefix => 8,
     }
 }
 
 impl Registration {
+    pub(super) fn verified_installed(&self) -> bool {
+        self.states.lock().is_ok_and(|states| {
+            states.iter().all(|s| {
+                s.phase == Phase::Installed
+                    && !s.bytes_pending
+                    && !s.protection_pending
+                    && !s.cache_pending
+                    && bytes(&s.patch) == Some(s.patch.new)
+                    && protection(s.patch.address, size(&s.patch)) == Some(s.original_protection)
+            })
+        })
+    }
     /// Capture ALL sites' original attributes before the first protection
     /// change. This also handles multiple operands sharing the same RX page.
     pub(super) fn prepare_locked(
@@ -131,8 +167,12 @@ impl Registration {
         _guard: &MutexGuard<'_, ()>,
         api: &impl PatchApi,
     ) -> Result<(), Failure> {
-        ACTIVE.store(false, Ordering::Release);
         let mut states = self.states.lock().map_err(|_| Failure::Patch)?;
+        // A retained, already restored handle cannot close a later binding.
+        if states.iter().all(|s| s.phase == Phase::Restored) {
+            return Ok(());
+        }
+        ACTIVE.store(false, Ordering::Release);
         let mut success = true;
         for state in states.iter_mut().rev() {
             if state.phase != Phase::Restored {
@@ -160,7 +200,9 @@ impl Registration {
 fn transition(state: &mut PatchState, restore: bool, api: &impl PatchApi) -> Result<(), Failure> {
     let p = &state.patch;
     let n = size(p);
-    let (expected, desired) = if restore {
+    // A fetched EB F9 can arrive after entry restoration and cache flushing.
+    // Its published E9 landing pad therefore remains for the process lifetime.
+    let (expected, desired) = if restore && !matches!(p.width, Width::PermanentPrefix) {
         (p.new, p.old)
     } else {
         (p.old, p.new)
@@ -174,19 +216,26 @@ fn transition(state: &mut PatchState, restore: bool, api: &impl PatchApi) -> Res
         }
         state.protection_pending = true;
         api.before_cas();
-        let exchanged = if p.wide {
-            unsafe { &*(p.address as *const AtomicU64) }
+        let exchanged = match p.width {
+            Width::Wide | Width::PermanentPrefix => unsafe { &*(p.address as *const AtomicU64) }
                 .compare_exchange(expected, desired, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
-        } else {
-            unsafe { &*(p.address as *const AtomicU32) }
+                .is_ok(),
+            Width::Word => unsafe { &*(p.address as *const AtomicU32) }
                 .compare_exchange(
                     expected as u32,
                     desired as u32,
                     Ordering::SeqCst,
                     Ordering::SeqCst,
                 )
-                .is_ok()
+                .is_ok(),
+            Width::Half => unsafe { &*(p.address as *const AtomicU16) }
+                .compare_exchange(
+                    expected as u16,
+                    desired as u16,
+                    Ordering::SeqCst,
+                    Ordering::SeqCst,
+                )
+                .is_ok(),
         };
         if exchanged {
             state.bytes_pending = false;
@@ -222,7 +271,7 @@ fn transition(state: &mut PatchState, restore: bool, api: &impl PatchApi) -> Res
 pub fn recover_failed_registration() -> Result<(), Failure> {
     let guard = INSTALL.lock().map_err(|_| Failure::Patch)?;
     RECOVERY
-        .get()
+        .get()?
         .ok_or(Failure::AlreadyUsed)?
         .close_locked(&guard, &SystemApi)
 }

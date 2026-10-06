@@ -97,8 +97,9 @@ core::arch::global_asm!(
     ".seh_endproc"
 );
 unsafe extern "system" {
-    fn ai_fixture_target();
-    fn ai_fixture_driver(output: *mut u8, target: usize);
+    pub(super) fn ai_fixture_target();
+    pub(super) fn ai_fixture_driver(output: *mut u8, target: usize);
+    pub(super) fn ai_fixture_return();
 }
 
 core::arch::global_asm!(
@@ -115,6 +116,8 @@ core::arch::global_asm!(
     "lea rax,[rip+ai_unwind_landed]",
     "mov [rcx+8],rax",
     "call rdx",
+    ".globl ai_unwind_return",
+    "ai_unwind_return:",
     "mov eax,0",
     "jmp 2f",
     ".globl ai_unwind_landed",
@@ -127,7 +130,8 @@ core::arch::global_asm!(
     ".seh_endproc"
 );
 unsafe extern "system" {
-    fn ai_unwind_driver(state: *mut u64, target: usize) -> u64;
+    pub(super) fn ai_unwind_driver(state: *mut u64, target: usize) -> u64;
+    pub(super) fn ai_unwind_return();
 }
 // Windows non-local unwind must not skip a Rust extern-system activation.
 // Use an explicit Win64 frame (including CONTEXT storage) for this fixture.
@@ -152,7 +156,7 @@ extern "system" fn hold_original_unwind() {
     }
 }
 unsafe extern "system-unwind" {
-    fn original_unwinds(state: *const u64);
+    pub(super) fn original_unwinds(state: *const u64);
 }
 
 pub(super) fn child(test: &str, marker: &str) -> bool {
@@ -720,7 +724,7 @@ fn cached_callback_before_entry_prevents_false_close_success() {
             address: page as usize,
             old: original,
             new: gateways()[0] as u64,
-            wide: true,
+            width: Width::Wide,
         }],
         &guard,
     )

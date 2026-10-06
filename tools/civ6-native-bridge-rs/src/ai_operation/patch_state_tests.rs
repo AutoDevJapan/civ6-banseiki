@@ -22,7 +22,7 @@ impl Page {
             address: self.0 + offset,
             old: 0x1234,
             new: 0x5678,
-            wide: true,
+            width: Width::Wide,
         }
     }
     fn execute(&self) -> u32 {
@@ -146,6 +146,69 @@ fn original_bytes_with_failed_cache_flush_retry_flush_before_success() {
     assert_eq!(failures.protect_calls.load(Ordering::SeqCst), 2);
     assert_eq!(failures.flush_calls.load(Ordering::SeqCst), 2);
     assert_eq!(page.execute(), 17);
+}
+
+#[test]
+fn hotpatch_prefix_stays_executable_after_entry_restore_failure_and_retry() {
+    if !super::super::tests::child(
+        "ai_operation::gateway::patch_state::tests::hotpatch_prefix_stays_executable_after_entry_restore_failure_and_retry",
+        "JAC_ROOT_PREFIX_RETAINED_CHILD",
+    ) {
+        return;
+    }
+    for (protect, cache) in [(1, 0), (2, 0), (0, 1)] {
+        let guard = INSTALL.lock().unwrap();
+        let page = Page::new();
+        assert!(SystemApi.protect(page.0, 4096, PAGE_READWRITE));
+        let entry = page.0 + 0x100;
+        unsafe {
+            ptr::write_bytes((entry - 8) as *mut u8, 0xcc, 8);
+            ptr::copy_nonoverlapping([0xb8, 17, 0, 0, 0, 0xc3].as_ptr(), entry as *mut u8, 6);
+        }
+        assert!(SystemApi.protect(page.0, 4096, PAGE_EXECUTE_READ));
+        assert!(SystemApi.flush(page.0, 4096));
+        let mut prefix = [0xcc; 8];
+        prefix[3] = 0xe9;
+        prefix[4..].copy_from_slice(&(-0x100i32).to_le_bytes());
+        let prefix = u64::from_le_bytes(prefix);
+        let registration = Registration::prepare_locked(
+            vec![
+                Patch {
+                    address: entry - 8,
+                    old: u64::from_le_bytes([0xcc; 8]),
+                    new: prefix,
+                    width: Width::PermanentPrefix,
+                },
+                Patch {
+                    address: entry,
+                    old: 0x11b8,
+                    new: 0xf9eb,
+                    width: Width::Half,
+                },
+            ],
+            &guard,
+        )
+        .unwrap();
+        registration.install_locked(&guard, &SystemApi).unwrap();
+        assert_eq!(
+            registration.close_locked(&guard, &Faults::new(protect, cache)),
+            Err(Failure::Patch)
+        );
+        assert_eq!(u64_at((entry - 8) as u64), Some(prefix));
+        let call_entry: extern "system" fn() -> u32 = unsafe { std::mem::transmute(entry) };
+        let fetched_jump: extern "system" fn() -> u32 = unsafe { std::mem::transmute(entry - 5) };
+        assert_eq!(call_entry(), 17);
+        assert_eq!(
+            fetched_jump(),
+            17,
+            "old EB F9 still has an executable landing pad"
+        );
+        registration.close_locked(&guard, &SystemApi).unwrap();
+        assert_eq!(Memory.copy::<2>(entry as u64), Some([0xb8, 17]));
+        assert_eq!(u64_at((entry - 8) as u64), Some(prefix));
+        assert_eq!(fetched_jump(), 17);
+        assert_eq!(protection(entry, 2), Some(PAGE_EXECUTE_READ));
+    }
 }
 
 #[test]

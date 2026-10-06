@@ -14,7 +14,7 @@ use std::{
     ptr,
     sync::{
         Mutex, OnceLock,
-        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicPtr, AtomicU16, AtomicU32, AtomicU64, Ordering},
     },
 };
 use windows_sys::Win32::{
@@ -105,7 +105,36 @@ static ROWS: Mutex<Vec<Observation>> = Mutex::new(Vec::new());
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static DROPPED: AtomicU32 = AtomicU32::new(0);
 static ACTIVE: AtomicBool = AtomicBool::new(false);
-static BINDING: OnceLock<Binding> = OnceLock::new();
+struct BindingStore {
+    current: AtomicPtr<Binding>,
+    used: AtomicU32,
+}
+impl BindingStore {
+    const fn new() -> Self {
+        Self {
+            current: AtomicPtr::new(ptr::null_mut()),
+            used: AtomicU32::new(0),
+        }
+    }
+    fn get(&self) -> Option<&'static Binding> {
+        unsafe { self.current.load(Ordering::Acquire).as_ref() }
+    }
+    // INSTALL serializes publication/retirement. Immutable old bindings remain
+    // allocated for late frames; exhaustion refuses another registration.
+    fn set(&self, binding: Binding) -> Result<(), Failure> {
+        if self.get().is_some() || self.used.load(Ordering::Acquire) >= 64 {
+            return Err(Failure::AlreadyUsed);
+        }
+        self.current
+            .store(Box::into_raw(Box::new(binding)), Ordering::Release);
+        self.used.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+    fn retire(&self) {
+        self.current.store(ptr::null_mut(), Ordering::Release);
+    }
+}
+static BINDING: BindingStore = BindingStore::new();
 static UNWOUND: AtomicU32 = AtomicU32::new(0);
 #[unsafe(no_mangle)]
 static AI_GATE_FLIGHTS: AtomicU64 = AtomicU64::new(0);
@@ -233,6 +262,10 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
         }
         if after == 0 {
             raw.ticket = 0;
+            if raw.site == 0 && producer_hook::installed() && producer_hook::current().is_none() {
+                raw.ticket = 1 << 62;
+                return;
+            }
             // Bounded readable source is the actual caller home/argument span.
             // Never speculatively load 0x60 bytes across an inaccessible page.
             let Some(source) = raw
@@ -252,6 +285,9 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
                 )
             };
             raw.ticket = 1; // stack copied; before any optional observation policy
+        }
+        if raw.ticket & (1 << 62) != 0 {
+            return;
         }
         let Some(binding) = BINDING.get() else { return };
         let thread = unsafe { GetCurrentThreadId() };
@@ -276,6 +312,7 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
                 && raw.return_address == binding.callback_return
                 && raw.rcx == binding.receiver
                 && raw.rdx as u32 == 2
+                && (!producer_hook::installed() || producer_hook::player() == Some(binding.player))
                 && u64_at(raw.rcx + 0x98) == Some(binding.player)
                 && u32_at(binding.player + 0xd8) == Some(binding.owner)
             {
@@ -430,16 +467,20 @@ extern "system-unwind" fn native_action(raw: *const Registers, after: u32) {
 // Every target is published once BEFORE registration and retained permanently.
 // Removing a registration never points a delayed invocation at another target.
 #[unsafe(no_mangle)]
-static AI_GATE_TARGETS: [AtomicU64; 4] = [const { AtomicU64::new(0) }; 4];
+static AI_GATE_TARGETS: [AtomicU64; 6] = [const { AtomicU64::new(0) }; 6];
 macro_rules! gateway {
-    ($name:literal,$site:literal,$offset:literal)=>{core::arch::global_asm!(concat!(
+    ($name:literal,$site:literal,$offset:literal)=>{gateway!($name,$site,$offset,observe,unwind_observer);};
+    ($name:literal,$site:literal,$offset:literal,$record:ident,$handler:ident)=>{core::arch::global_asm!(concat!(
         ".globl ",$name,"\n.seh_proc ",$name,"\n",$name,":\n",
         "pushfq\n.seh_stackalloc 8\nsub rsp,0x1b0\n.seh_stackalloc 0x1b0\n.seh_handler {unwind}, @unwind\n.seh_endprologue\nlock inc qword ptr [rip+AI_GATE_FLIGHTS]\n",
         "mov [rsp+0x60],rcx\nmov [rsp+0x68],rdx\nmov [rsp+0x70],r8\nmov [rsp+0x78],r9\nmov [rsp+0x80],rax\nmov [rsp+0x88],r10\nmov [rsp+0x90],r11\n",
         "mov rax,[rsp+0x1b0]\nmov [rsp+0x98],rax\n",
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
         "lea rax,[rsp+0x1b8]\nmov [rsp+0x100],rax\nmov rax,[rax]\nmov [rsp+0x108],rax\nmov qword ptr [rsp+0x110],",$site,"\n",
+        ".if ",$site," >= 4\nmov rax,[rip+AI_ROOT_PRODUCER]\nmov [rsp+0x118],rax\n.endif\n",
         "lea rcx,[rsp+0x60]\nxor edx,edx\ncall {record}\nlea rcx,[rsp+0x60]\nxor edx,edx\ncall {action}\n",
+        ".if ",$site," >= 4\ncmp qword ptr [rsp+0x118],0\nje 9f\n.endif\n",
+        ".if ",$site," == 0\nbt qword ptr [rsp+0x118],62\njc 9f\n.endif\n",
         // Exactly 0x60 bytes from the TRUE caller's home/stack arguments, not
         // the gateway's saved registers. All reads occur within the copied span.
         "cmp qword ptr [rsp+0x118],0\nje 8f\n",
@@ -452,23 +493,48 @@ macro_rules! gateway {
         "pushfq\npop qword ptr [rsp+0x98]\nmov [rsp+0x60],rcx\nmov [rsp+0x68],rdx\nmov [rsp+0x70],r8\nmov [rsp+0x78],r9\nmov [rsp+0x80],rax\nmov [rsp+0x88],r10\nmov [rsp+0x90],r11\n",
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
         "lea rcx,[rsp+0x60]\nmov edx,1\ncall {action}\nlea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\n",
-        "movdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
+        "7:\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\n",
         "lock dec qword ptr [rip+AI_GATE_FLIGHTS]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\nret\n",
         // Failed frame read: restore and tail-jump with the real original stack.
         "8:\nmov byte ptr [rip+AI_GATE_UNTRACKED],1\nlock dec qword ptr [rip+AI_GATE_FLIGHTS]\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
-        "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\njmp qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n.seh_endproc\n"
-    ),record=sym observe,action=sym native_action,unwind=sym unwind_observer);};
+        "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\njmp qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n",
+        "9:\nlea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\nmov qword ptr [rsp+0x80],0\njmp 7b\n.seh_endproc\n"
+    ),record=sym $record,action=sym native_action,unwind=sym $handler);};
 }
 gateway!("ai_callback_gateway", "0", "0");
 gateway!("ai_checker_gateway", "1", "8");
 gateway!("official_checker_gateway", "2", "16");
 gateway!("spent_gateway", "3", "24");
+gateway!(
+    "ai_producer_gateway",
+    "4",
+    "32",
+    producer_observe,
+    producer_unwind
+);
+gateway!(
+    "ai_producer_inner_gateway",
+    "5",
+    "40",
+    inner_observe,
+    unwind_observer
+);
+#[path = "producer_hook.rs"]
+mod producer_hook;
+#[cfg(test)]
+pub(crate) use producer_hook::{
+    call_fixture as call_producer_fixture, fixture as producer_fixture,
+};
+pub(crate) use producer_hook::{close_producer, install_producer, rebuild_producer};
+use producer_hook::{inner_observe, producer_observe, producer_unwind};
 unsafe extern "system" {
     fn ai_callback_gateway();
     fn ai_checker_gateway();
     fn official_checker_gateway();
     fn spent_gateway();
+    fn ai_producer_gateway();
+    fn ai_producer_inner_gateway();
 }
 fn gateways() -> [usize; 4] {
     [
@@ -506,7 +572,14 @@ struct Patch {
     address: usize,
     old: u64,
     new: u64,
-    wide: bool,
+    width: Width,
+}
+#[derive(Clone, Copy)]
+enum Width {
+    Half,
+    Word,
+    Wide,
+    PermanentPrefix,
 }
 #[path = "patch_state.rs"]
 mod patch_state;
@@ -517,9 +590,10 @@ pub fn recover_failed_registration() -> Result<(), Failure> {
 /// Close both a published registration and an install failure retained only by
 /// recovery. Absence of a public handle does not prove that no patch is live.
 pub fn close_registered() -> Result<(), Failure> {
+    close_producer()?;
     let guard = INSTALL.lock().map_err(|_| Failure::Patch)?;
     ACTIVE.store(false, Ordering::Release);
-    if let Some(registration) = RECOVERY.get() {
+    if let Some(registration) = RECOVERY.get()? {
         registration.close_locked(&guard, &SystemApi)?;
     }
     drop(guard);
@@ -530,8 +604,13 @@ pub fn close_registered() -> Result<(), Failure> {
     // first instruction. Local flight count zero cannot fence that thread.
     // There is currently no genuine upstream dispatcher-stop adapter here;
     // do not mint one from an empty counter, caller boolean or numeric token.
-    if BINDING.get().is_some() {
+    if BINDING.get().is_some() && !producer_hook::stopped() {
         return Err(Failure::CallerNotQuiescent);
+    }
+    if producer_hook::stopped() {
+        let _guard = INSTALL.lock().map_err(|_| Failure::Patch)?;
+        BINDING.retire();
+        RECOVERY.clear()?;
     }
     Ok(())
 }
@@ -687,7 +766,7 @@ pub unsafe fn register(
         address: (callable + 0x10) as usize,
         old: base + 0x4a7ad0,
         new: gateways()[0] as u64,
-        wide: true,
+        width: Width::Wide,
     }];
     for (i, (site, target)) in sites.into_iter().enumerate() {
         let call = base.checked_add(site).ok_or(Failure::Range)? as usize;
@@ -704,7 +783,7 @@ pub unsafe fn register(
             address: call + 1,
             old: u64::from(displacement),
             new: u64::from(operand(call, near)?),
-            wide: false,
+            width: Width::Word,
         });
         AI_GATE_TARGETS[i + 1].store(target as u64, Ordering::Release);
     }
