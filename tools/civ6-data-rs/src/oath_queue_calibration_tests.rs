@@ -46,6 +46,59 @@ if mode=='queue' then JAC_QUEUE_CAL.samples[2].before=12 end
 if mode=='completion' then JAC_QUEUE_CAL.samples[38].after=131072 end
 "#;
 
+#[test]
+fn core_publishes_identity_and_ui_requests_without_a_property_setter() -> Result<()> {
+    for mutation in [
+        "",
+        "owner=1",
+        "cost=110000",
+        "can_start=false",
+        "props.JAC_TODO134_QCAL_ID.city=99",
+    ] {
+        let vm = Lua::new();
+        vm.load(r#"
+props={}; flags={}; requests=0; owner=0; cost=131072; can_start=true
+Game={GetLocalPlayer=function()return 0 end, GetProperty=function(_,key)return props[key] end,
+ SetProperty=function(_,key,value)props[key]=value end}
+GameConfiguration={GetValue=function(key)return key=='JAC_TODO134_QUEUE_CALIBRATION' and 1 or 0 end}
+GameInfo={Units={UNIT_SPEARMAN={Cost=131072,Index=1,Hash=123}},Yields={YIELD_PRODUCTION={Index=0}}}
+local plot={GetOwner=function()return owner end,GetIndex=function()return 22 end,SetProperty=function(_,key,value)flags[key]=value end}
+Map={GetPlot=function()return plot end}
+local queue={GetUnitProgress=function()return 0 end,GetUnitCost=function()return cost end}
+local city={GetID=function()return 3 end,GetOwner=function()return owner end,GetX=function()return 1 end,
+ GetY=function()return 1 end,GetYield=function()return 8 end,GetBuildQueue=function()return queue end}
+local cities={Members=function()local once=false;return function()if not once then once=true;return 3,city end end end,
+ FindID=function(_,id)if id==3 then return city end end}
+Players={[0]={IsHuman=function()return true end,IsTurnActive=function()return true end,
+ GetCities=function()return cities end,AttachModifierByID=function()end}}
+CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,VALUE_REPLACE_AT=3,PARAM_QUEUE_DESTINATION_LOCATION=4,BUILD=5}
+CityManager={CanStartOperation=function()return can_start end,RequestOperation=function(c,op,params)
+ assert(c==city and op==5 and params[1]==123);requests=requests+1 end}
+"#).exec()?;
+        vm.load(format!("{LUA_HELPERS}\n{SETUP}"))
+            .eval::<String>()?;
+        assert_eq!(
+            vm.load("return props.JAC_TODO134_QCAL_ID.city")
+                .eval::<i64>()?,
+            3
+        );
+        // InGame exposes GetProperty but not Game.SetProperty.
+        vm.load("Game.SetProperty=nil").exec()?;
+        vm.load(mutation).exec()?;
+        let result = vm
+            .load(format!("{LUA_HELPERS}\n{REQUEST}"))
+            .eval::<String>();
+        if mutation.is_empty() {
+            assert!(result.is_ok(), "{result:?}");
+            assert_eq!(vm.load("return requests").eval::<i64>()?, 1);
+        } else {
+            assert!(result.is_err(), "{mutation}");
+            assert_eq!(vm.load("return requests").eval::<i64>()?, 0);
+        }
+    }
+    Ok(())
+}
+
 fn verdict(mode: &str) -> Result<serde_json::Value> {
     let vm = Lua::new();
     let lua = format!(

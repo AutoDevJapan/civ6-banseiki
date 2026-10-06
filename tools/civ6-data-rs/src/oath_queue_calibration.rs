@@ -30,6 +30,16 @@ for _,city in player:GetCities():Members() do
  for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_GROWTH_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON'}) do plot:SetProperty(key,0) end
 end
 Game:SetProperty('JAC_TODO134_QCAL_ATTACHED',true)
+-- Game properties are writable only in GameCore. Publish the candidate before
+-- the UI validates its native queue and requests production.
+local chosen=nil; local smallest=math.huge
+for _,city in player:GetCities():Members() do
+ local production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'candidate core production')
+ if production>0 and production<smallest then chosen=city; smallest=production end
+end
+assert(chosen,'no owned city has positive production for calibration')
+local plot=assert(Map.GetPlot(chosen:GetX(),chosen:GetY()))
+Game:SetProperty('JAC_TODO134_QCAL_ID',{city=chosen:GetID(),plot=plot:GetIndex(),owner=0,unit_hash=unit.Hash})
 return 'calibration-only military modifiers attached but off'
 "#;
 
@@ -38,21 +48,17 @@ assert(Game:GetProperty('JAC_TODO134_QCAL_ATTACHED'),'calibration fixture missin
 assert(Players[0]:IsTurnActive() and Game.GetLocalPlayer()==0,'human queue request requires active player 0')
 local def=assert(GameInfo.Units.UNIT_SPEARMAN)
 local params={[CityOperationTypes.PARAM_UNIT_TYPE]=def.Hash,[CityOperationTypes.PARAM_INSERT_MODE]=CityOperationTypes.VALUE_REPLACE_AT,[CityOperationTypes.PARAM_QUEUE_DESTINATION_LOCATION]=0}
-local chosen=nil; local smallest=math.huge
-for _,city in Players[0]:GetCities():Members() do
- local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
- if city:GetOwner()==0 and plot:GetOwner()==0 and CityManager.CanStartOperation(city,CityOperationTypes.BUILD,params,true) then
-  local q=assert(city:GetBuildQueue())
-  local progress=number(q:GetUnitProgress(def.Index),'candidate spear progress')
-  local cost=number(q:GetUnitCost(def.Index),'candidate spear cost')
-  local production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'candidate displayed production')
-  if production>0 and cost-progress>110000 and production<smallest then chosen=city; smallest=production end
- end
-end
-assert(chosen,'no owned city and spear queue have 38-turn completion headroom')
+local id=assert(Game:GetProperty('JAC_TODO134_QCAL_ID'),'core calibration identity missing')
+local chosen=assert(Players[0]:GetCities():FindID(id.city),'core candidate city missing in UI')
 local plot=assert(Map.GetPlot(chosen:GetX(),chosen:GetY()))
-JAC_QUEUE_CAL={city=chosen:GetID(),plot=plot:GetIndex(),owner=0,unit_hash=def.Hash,cost=nil,samples={},diagnostic_only=true}
-Game:SetProperty('JAC_TODO134_QCAL_ID',{city=chosen:GetID(),plot=plot:GetIndex(),owner=0,unit_hash=def.Hash})
+assert(chosen:GetOwner()==id.owner and plot:GetOwner()==id.owner and plot:GetIndex()==id.plot and def.Hash==id.unit_hash,'core/UI candidate identity changed')
+assert(CityManager.CanStartOperation(chosen,CityOperationTypes.BUILD,params,true),'core candidate cannot start a spearman')
+local q=assert(chosen:GetBuildQueue())
+local progress=number(q:GetUnitProgress(def.Index),'candidate spear progress')
+local cost=number(q:GetUnitCost(def.Index),'candidate spear cost')
+local production=number(chosen:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'candidate displayed production')
+assert(production>0 and cost-progress>110000,'core candidate lacks 38-turn completion headroom')
+JAC_QUEUE_CAL={city=id.city,plot=id.plot,owner=id.owner,unit_hash=id.unit_hash,cost=nil,samples={},diagnostic_only=true}
 CityManager.RequestOperation(chosen,CityOperationTypes.BUILD,params)
 return 'single spearman queue requested for city '..chosen:GetID()
 "#;
