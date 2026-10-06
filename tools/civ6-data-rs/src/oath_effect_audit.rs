@@ -198,17 +198,24 @@ end
 -- represented; do not mistake binary floating-point noise for extra precision.
 local function reported_step(values)
  if #values<3 or not finite(values[1]) then return nil end
- local origin=values[1]; local divisor=0
+ local origin=values[1]
  local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end
- for i=2,#values do
-  if not finite(values[i]) then return nil end
-  local difference=values[i]-origin
-  local ticks=math.floor(difference*10000+0.5)
-  if math.abs(difference-ticks/10000)>0.00001 then return nil end
-  divisor=gcd(divisor,math.abs(ticks))
+ for i=2,#values do if not finite(values[i]) then return nil end end
+ -- Live GetYield reports fixed-point binary fractions (including 1/256),
+ -- while queue progress is integral. Use the coarsest supported common
+ -- lattice, never the smallest candidate a floating-point artifact permits.
+ local upper=nil
+ for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do
+  local divisor=0; local represented=true
+  for i=2,#values do
+   local difference=values[i]-origin
+   local ticks=math.floor(difference*scale+0.5)
+   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end
+   divisor=gcd(divisor,math.abs(ticks))
+  end
+  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end
  end
- if divisor==0 then return nil end
- return divisor/10000+0.00002
+ return upper and upper+0.00002 or nil
 end
 "#;
 

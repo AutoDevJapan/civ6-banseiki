@@ -2,6 +2,38 @@
 use super::*;
 use mlua::{Lua, Value as LuaValue};
 
+#[test]
+fn reporting_step_supports_live_binary_yields_without_inventing_subinteger_progress() -> Result<()>
+{
+    let vm = Lua::new();
+    let observed: f64 = vm
+        .load(format!(
+            "{LUA_HELPERS}\nreturn reported_step({{7.8984375,15.796875,7.9765625,8.984375}})"
+        ))
+        .eval()?;
+    assert!((observed - (1.0 / 128.0 + 0.00002)).abs() < 1e-10);
+    let integral: f64 = vm
+        .load(format!(
+            "{LUA_HELPERS}\nreturn reported_step({{0,7,17,26}})"
+        ))
+        .eval()?;
+    assert!(integral >= 1.0, "integer progress must remain coarse");
+    let noise: f64 = vm
+        .load(format!(
+            "{LUA_HELPERS}\nreturn reported_step({{100,110.0000000001,120.0000000002}})"
+        ))
+        .eval()?;
+    assert!(
+        noise >= 10.0,
+        "floating noise must not imply a fine reporting step"
+    );
+    let same: LuaValue = vm
+        .load(format!("{LUA_HELPERS}\nreturn reported_step({{7,7,7}})"))
+        .eval()?;
+    assert!(matches!(same, LuaValue::Nil));
+    Ok(())
+}
+
 fn decode(lua: &Lua, code: &str) -> Result<Value> {
     let LuaValue::String(result) = lua.load(code).eval::<LuaValue>()? else {
         bail!("generated observation must return a JSON string");
