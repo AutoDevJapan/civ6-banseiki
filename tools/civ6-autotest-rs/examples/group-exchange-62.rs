@@ -4,7 +4,7 @@
 mod exchange;
 use serde_json::{json, Value};
 fn ui(code: &str) -> Value {
-    json!({"action":"ui_lua","state_name":"InGame","code":code})
+    json!({"action":"ui_lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true})
 }
 fn core(code: &str) -> Value {
     json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":code})
@@ -43,7 +43,7 @@ fn save() -> Value {
     json!({"action":"save","name":"JAC-Enemy-Neutralization","exact_name":true,"checkpoint":true})
 }
 fn wait(code: &str) -> Value {
-    json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":code}})
+    json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true}})
 }
 const HAS_QUOTE: &str = "local p=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62')); if not (p.quote and p.quote.acceptable==true) then return 'NO_ACCEPTABLE_QUOTE' end; ";
 const EVIDENCE: &str = r#"
@@ -123,4 +123,21 @@ fn terminal_unknowns_are_saved_without_final_submission_or_false_return_claim() 
         .contains("stage~='WAIT_RETURN'"));
     assert_eq!(steps[24]["code"], EVIDENCE);
     assert!(steps[23]["code"].as_str().unwrap().contains("Close()"));
+}
+
+#[test]
+fn owned_native_diplomacy_is_preserved_by_every_ui_read_and_poll() {
+    let scene = scenario();
+    for step in scene["steps"].as_array().unwrap() {
+        match step["action"].as_str().unwrap() {
+            "ui_lua" if step["state_name"] == "InGame" => {
+                assert_eq!(step["preserve_diplomacy_session"], true);
+            }
+            "wait_for" if step["condition"]["state_name"] == "InGame" => {
+                assert_eq!(step["condition"]["preserve_diplomacy_session"], true);
+            }
+            _ => {}
+        }
+    }
+    civ6_autotest_rs::scenario::validate_scenario(&scene).unwrap();
 }
