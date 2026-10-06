@@ -75,6 +75,7 @@ fn verify_order_lock(lock: &Path, chain_pid: u32, chain: &OrderChain) -> Result<
 struct Step {
     site: Site,
     expected: u64,
+    armed_eflags: u32,
     capture: Value,
     phase: Phase,
 }
@@ -224,7 +225,7 @@ fn qualify_exception(
                 return Err("exception register identity differs".into());
             }
             if let Some(step) = steps.get(&tid) {
-                plan::verify_step(step.expected, address, c.Rip, c.Dr6, c.EFlags)?;
+                plan::verify_step(step.expected, address, c.Rip, c.Dr6, c.EFlags, step.armed_eflags)?;
             } else {
                 if c.EFlags & TF != 0
                     || plan::classify_hit(
@@ -257,21 +258,49 @@ fn qualify_exception(
     Ok(())
 }
 
+fn exception_evidence(d: &Debugger, event: &DEBUG_EVENT, steps: &BTreeMap<u32, Step>) -> Value {
+    let info = unsafe { event.u.Exception };
+    let tid = event.dwThreadId;
+    let mut row = json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":info.ExceptionRecord.ExceptionAddress as u64,"first_chance":info.dwFirstChance!=0,"expected_owner_pid":d.pid,"pending_step_count":steps.len()});
+    if let Some(step) = steps.get(&tid) {
+        row["pending_step"] = json!({"capture_seq":step.capture["capture_seq"],"site":step.site.name,"expected_rip":step.expected,"phase":step.phase.name(),"armed_eflags":step.armed_eflags});
+    }
+    match d.threads.get(&tid) {
+        Some(state) => {
+            row["thread_owner_pid"] = json!(unsafe { GetProcessIdOfThread(state.handle.0) });
+            row["armed_sites"] = json!(state.armed_sites);
+            match context(&state.handle) {
+                Ok(c) => row["raw_context"] = json!({"context_flags":c.ContextFlags,"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"eflags":c.EFlags,"dr0":c.Dr0,"dr1":c.Dr1,"dr2":c.Dr2,"dr3":c.Dr3,"dr6":c.Dr6,"dr7":c.Dr7}),
+                Err(error) => row["raw_context_error"] = json!(error),
+            }
+        }
+        None => row["raw_context_error"] = json!("unknown exception thread; no handle reopened"),
+    }
+    row
+}
+
 fn classify_then_record(
     d: &mut Debugger,
     event: &DEBUG_EVENT,
     steps: &BTreeMap<u32, Step>,
     sites: &[u64],
-    record: impl FnOnce(&mut Debugger) -> std::io::Result<()>,
+    record: impl FnOnce(&mut Debugger, Value) -> std::io::Result<()>,
 ) -> Result<(), String> {
-    plan::protocol::classify_then_record(
-        d,
-        |d| {
-            qualify_exception(d, event, steps, sites)?;
-            Ok(d.status_after_error(event))
-        },
-        record,
-    )
+    // Obtain raw evidence without I/O. Decide ownership/continuation before
+    // any fallible write, including when qualification itself fails.
+    let mut row = exception_evidence(d, event, steps);
+    let qualified = qualify_exception(d, event, steps, sites);
+    let status = d.status_after_error(event);
+    d.cleanup_event = Some((*event, status));
+    row["qualification_error"] = json!(qualified.as_ref().err());
+    row["continue_status"] = json!(status);
+    row["qualification_succeeded"] = json!(qualified.is_ok());
+    let fallback = row.clone();
+    let recorded = record(d, row);
+    if let Err(error) = &recorded {
+        let _ = writeln!(std::io::stderr(), "{}", json!({"type":"exception_record_failure","error":error.to_string(),"exception":fallback}));
+    }
+    qualified.and(recorded.map_err(|e| e.to_string()))
 }
 
 fn core_module(pid: u32) -> Result<Option<Module>, String> {
@@ -606,9 +635,8 @@ pub fn observe(req: Request) -> Result<(), String> {
                 EXCEPTION_DEBUG_EVENT => {
                     let info = unsafe { event.u.Exception };
                     let address = info.ExceptionRecord.ExceptionAddress as u64;
-                    let row=json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":address,"first_chance":info.dwFirstChance!=0,"phase":phase.name()});
                     let sites:Vec<_>=plan::prefix(phase,req.count(phase))?.iter().map(|s|exe.base+s.rva).collect();
-                    classify_then_record(&mut d,&event,&steps,&sites,|d|mark(d,row).map_err(std::io::Error::other))?;
+                    classify_then_record(&mut d,&event,&steps,&sites,|d,mut row|{row["phase"]=json!(phase.name());mark(d,row).map_err(std::io::Error::other)})?;
                     if info.ExceptionRecord.ExceptionCode == EXCEPTION_BREAKPOINT {
                         if steps.contains_key(&tid) {
                             d.last_dispatch = DispatchOutcome::Ambiguous(
@@ -644,7 +672,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                                     "second-chance single-step is not owned completion".into()
                                 );
                             }
-                            plan::verify_step(step.expected, address, c.Rip, c.Dr6,c.EFlags)?;
+                            plan::verify_step(step.expected, address, c.Rip, c.Dr6,c.EFlags,step.armed_eflags)?;
                             d.last_dispatch =
                                 DispatchOutcome::OwnedProven(OwnedTrap::PropertyAfter);
                             c.EFlags &= !TF;
@@ -726,6 +754,7 @@ pub fn observe(req: Request) -> Result<(), String> {
                                         Step {
                                             site,
                                             expected,
+                                            armed_eflags: 0,
                                             capture: row,
                                             phase,
                                         },
@@ -733,6 +762,11 @@ pub fn observe(req: Request) -> Result<(), String> {
                                     c.EFlags |= TF | RF;
                                     c.Dr6 &= !((1 << 14) | 15);
                                     set_context(&d.threads[&tid].handle, &c)?;
+                                    let armed = context(&d.threads[&tid].handle)?;
+                                    if armed.EFlags & TF == 0 || armed.Rip != c.Rip || !installed_sites_match_context(&d.threads[&tid].armed_sites, &armed) {
+                                        return Err("original instruction TF arming was not confirmed".into());
+                                    }
+                                    steps.get_mut(&tid).unwrap().armed_eflags = armed.EFlags;
                                 }
                             }
                         }
@@ -985,6 +1019,10 @@ pub fn parent(mut value: Value) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "order_step_tests.rs"]
+mod step_tests;
+
+#[cfg(test)]
 mod tests {
     use super::super::test_support::Fixture;
     use super::*;
@@ -1130,7 +1168,7 @@ mod tests {
                         &event,
                         &BTreeMap::new(),
                         &[base + CAN_EVER_RVA, base + CAN_APPOINT_RVA],
-                        |d| {
+                        |d, _row| {
                             assert_eq!(d.status_after_error(&event), DBG_CONTINUE);
                             readonly.write_all(b"cannot write")
                         }

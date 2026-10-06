@@ -21,6 +21,10 @@ pub fn source_identity() -> Value {
             include_str!("order_analysis.rs"),
         ),
         (
+            "civ6-pe-rs/src/order_step_tests.rs",
+            include_str!("order_step_tests.rs"),
+        ),
+        (
             "civ6-pe-rs/src/order_protocol.rs",
             include_str!("order_protocol.rs"),
         ),
@@ -217,8 +221,16 @@ pub fn verify_step(
     rip: u64,
     dr6: u64,
     eflags: u32,
+    armed_eflags: u32,
 ) -> Result<(), String> {
-    if address != expected || rip != expected || dr6 & 0xe00f != 1 << 14 || eflags & (1 << 8) == 0 {
+    // Owned Windows x64 MOV fixture: TF is set/read back before Continue,
+    // then cleared at first-chance delivery while DR6.BS proves the step.
+    if address != expected
+        || rip != expected
+        || dr6 & 0xe00f != 1 << 14
+        || eflags & (1 << 8) != 0
+        || armed_eflags & (1 << 8) == 0
+    {
         return Err("single original instruction completion is unproven".into());
     }
     Ok(())
@@ -394,11 +406,14 @@ mod tests {
         );
         assert_eq!(successor(LOAD[2], 0x140000000, 0).unwrap(), 0x140dbd83c);
         assert!(successor(FRONT[1], 0, 0).is_err());
-        assert!(verify_step(10, 11, 11, 1 << 14, 1 << 8).is_err());
-        assert!(verify_step(10, 10, 10, 0, 1 << 8).is_err());
-        assert!(verify_step(10, 10, 10, (1 << 14) | 1, 1 << 8).is_err());
-        assert!(verify_step(10, 10, 10, 1 << 14, 0).is_err());
-        verify_step(10, 10, 10, 1 << 14, 1 << 8).unwrap();
+        assert!(verify_step(10, 11, 11, 1 << 14, 0, 1 << 8).is_err());
+        assert!(verify_step(10, 10, 11, 1 << 14, 0, 1 << 8).is_err());
+        assert!(verify_step(10, 11, 10, 1 << 14, 0, 1 << 8).is_err());
+        assert!(verify_step(10, 10, 10, 0, 0, 1 << 8).is_err());
+        assert!(verify_step(10, 10, 10, (1 << 14) | 1, 0, 1 << 8).is_err());
+        assert!(verify_step(10, 10, 10, 1 << 14, 0, 0).is_err());
+        assert!(verify_step(10, 10, 10, 1 << 14, 1 << 8, 1 << 8).is_err());
+        verify_step(10, 10, 10, 0xffff4ff0, 0x202, 0x10302).unwrap();
         assert!(disk_sites(b"bad PE").is_err());
     }
     #[test]
