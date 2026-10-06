@@ -44,7 +44,8 @@ GameEvents={JAC_Absorption_AdmissionRequested=event(),JAC_Absorption_LeaderOffer
 function RESET_EVENTS() for key in pairs(GameEvents) do GameEvents[key]=event() end end
 ExposedMembers={}
 TRANSACTIONS={}
-JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal,Keys=keys},GetRoster=function() return {} end,GetState=function() return {Transactions=copy(TRANSACTIONS)} end}
+JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal,Keys=keys},GetRoster=function() return {} end,
+ PlayerFaithBalance=function(owner) return FAITH[owner] or 0 end,GetState=function() return {Transactions=copy(TRANSACTIONS)} end}
 FLOWS={}
 JAC_AbsorptionFlowGameplay={Begin=function(plan)
   STARTS=STARTS+1;FLOWS[plan.ID]=FLOWS[plan.ID] or {ID=plan.ID,From=plan.From,To=plan.To,Request=copy(plan),Phase='CHOICE',Phase1Complete=true}
@@ -151,6 +152,24 @@ fn product_registration_during_another_flow_does_not_freeze_a_stale_preflight_pl
       Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows=FLOWS})
       JAC_AbsorptionFlowGameplay.Begin=begin;N.Tick();P.Tick()
       assert(not N.Get('leader-offer',VIEW().OfferID).Plan and STARTS==0 and CHARGES==charged)
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn product_faith_charges_and_cancel_returns_use_the_existing_context_aware_reader(
+) -> anyhow::Result<()> {
+    let lua = world(10000.)?;
+    lua.load(r#"
+      for _,actor in ipairs({1,2}) do local religion=Players[actor].GetReligion
+        Players[actor].GetReligion=function() local value=religion();value.GetFaithBalance=nil;return value end end
+      READY();local original=FAITH[2]
+      JAC_AbsorptionFlowGameplay.Begin=function() error('preflight before flow journal') end
+      REGISTER();JAC_AbsorptionProductGameplay.Tick()
+      local view=VIEW();local escrow=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Escrows[view.OfferID]
+      assert(escrow.Faith>0 and FAITH[2]==original-escrow.Faith)
+      CMD('CANCEL','faith-ui-cancel',{OfferID=view.OfferID})
+      assert(FAITH[2]==original and STARTS==0)
     "#).exec()?;
     Ok(())
 }

@@ -17,7 +17,7 @@ fn world() -> mlua::Result<Lua> {
         end
         local function keys(t) local out={}; for k in pairs(t) do out[#out+1]=k end
           table.sort(out); return out end
-        JAC_AbsorptionGameplay={Rules={Copy=copy, Equal=equal, Keys=keys}}
+        JAC_AbsorptionGameplay={Rules={Copy=copy, Equal=equal, Keys=keys},PlayerFaithBalance=function() return FAITH end}
         TURN, GOLD, FAITH, ENVOYS, TILES, BEGIN_COUNT, FAIL_BEGIN = 7, 99, 10, 2, 2, 0, false
         CAN_RECEIVE=true
         local props={}
@@ -86,6 +86,20 @@ fn major_recipient_is_required_for_offers_requests_and_saved_prestart_plans() ->
       assert(N.Get('leader-offer',OFFER.ID).LastError:find('major civilization',1,true))
       assert(N.CanCancelOffer(OFFER.ID));N.CancelOffer(OFFER.ID)
       assert(N.Get('leader-offer',OFFER.ID).Status=='CANCELLED')
+    "#,
+    )
+    .exec()
+}
+
+#[test]
+fn faith_requirements_use_the_existing_context_aware_absorption_reader() -> mlua::Result<()> {
+    let lua = world()?;
+    lua.load(
+        r#"
+      Players[2].GetReligion=function() return {} end
+      GOLD=100;RELEASE=true;FAITH=9
+      N.DefineOffer(OFFER);N.Tick();assert(BEGIN_COUNT==0)
+      FAITH=10;N.Tick();assert(BEGIN_COUNT==1)
     "#,
     )
     .exec()

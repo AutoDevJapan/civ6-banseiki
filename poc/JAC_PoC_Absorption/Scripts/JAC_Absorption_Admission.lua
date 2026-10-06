@@ -348,7 +348,7 @@ N.RegisterRequirement('GOLD_MINIMUM', function(from, to, demand)
 end)
 N.RegisterRequirement('FAITH_MINIMUM', function(from, to, demand)
   assert(Number(demand.Minimum), 'faith demand amount required')
-  return Players[to]:GetReligion():GetFaithBalance() >= demand.Minimum
+  return A.PlayerFaithBalance(to) >= demand.Minimum
 end)
 N.Register('leader-offer', function(id, from, to)
   local offer = assert(State().Offers[id], 'leader offer missing')

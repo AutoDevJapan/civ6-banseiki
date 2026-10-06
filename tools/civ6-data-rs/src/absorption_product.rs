@@ -432,7 +432,7 @@ pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Resul
         json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"InGame","code":code}})
     }
     steps.push(wait(
-        "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil".into(),
+        "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function'".into(),
     ));
     steps.push(core(format!(r#"
 local P=assert(JAC_AbsorptionProductGameplay)

@@ -168,7 +168,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil"
+        "code": "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function'"
       }
     },
     {

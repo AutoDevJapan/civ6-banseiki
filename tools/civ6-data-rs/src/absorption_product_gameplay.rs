@@ -60,7 +60,7 @@ end
 local function Balance(actor,currency)
   local p=assert(Players[actor]);local value
   if currency=='Gold' then value=p:GetTreasury():GetGoldBalance()
-  else value=p:GetReligion():GetFaithBalance() end
+  else value=A.PlayerFaithBalance(actor) end
   assert(Num(value),'live currency balance unavailable');return value
 end
 local function Change(actor,currency,amount)

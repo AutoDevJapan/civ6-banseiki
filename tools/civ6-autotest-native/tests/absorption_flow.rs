@@ -264,6 +264,23 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
 }
 
 #[test]
+fn actual_product_consumes_faith_through_the_existing_ui_balance_bridge() -> mlua::Result<()> {
+    let lua = product_world(true, false)?;
+    lua.load(r#"
+      for _,actor in ipairs({1,2}) do local religion=Players[actor].GetReligion
+        Players[actor].GetReligion=function() local result=religion();result.GetFaithBalance=nil;return result end end
+      ExposedMembers.JAC_HeroReadAPI={ReadPlayer=function(owner,method)
+        assert(method=='FAITH_BALANCE');return FAITH[owner] end}
+      local required=P.Get(1,2).Envoys.Required
+      for i=1,required+2 do GameEvents.OnGameTurnStarted.Emit() end
+      local view=P.Get(1,2);local request=assert(N.Get('leader-offer',view.OfferID))
+      local flow=assert(TEST_FLOW.Get(request.FlowID));assert(flow.Phase=='RESULT' or flow.Phase=='DONE',flow.Error)
+      local escrow=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Escrows[view.OfferID]
+      assert(escrow.Status=='CONSUMED' and escrow.Faith>0 and FAITH[2]==1000-escrow.Faith)
+    "#).exec()
+}
+
+#[test]
 fn actual_busy_flow_blocks_competing_plans_and_rechecks_after_acknowledgment() -> mlua::Result<()> {
     let lua = product_world(true, true)?;
     lua.load(r#"
