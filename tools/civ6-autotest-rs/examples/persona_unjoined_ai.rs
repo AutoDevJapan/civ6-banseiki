@@ -8,6 +8,9 @@ const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-person
 const READ: &str = r#"
 local function integer(v) return type(v)=='number' and v>=0 and v%1==0 end
 assert(Game.GetLocalPlayer()==0 and Players[0]:IsHuman()==true,'human slot differs')
+for _,key in ipairs({'JAC_TEST324_EVENTS_PROBE','JAC_TEST853_ADMISSION_ACTIVE','JAC_TEST853_ADMISSION_MANUAL_APPOINT','JAC_TEST853_PAID_ASSIGNMENT_V1'}) do
+ assert(Game:GetProperty(key)==nil,'private diagnostic flag present: '..key)
+end
 local turn=Game.GetCurrentGameTurn(); assert(integer(turn),'unknown actual turn')
 local people,leaders,hashes={},{},{}
 for row in GameInfo.JAC_LeaderPersonas() do
@@ -160,7 +163,7 @@ mod tests {
 local config={{{identities}}}; local rows={{}}; local defs={{}}
 for id=0,21 do rows[#rows+1]={{LeaderType=config[id+1].leader,GovernorType='G'..id}}; defs['G'..id]={{Hash=id}} end
 local function list(v) return function() local i=0; return function() i=i+1; return v[i] end end end
-BAD_OWNER=21; BAD_PERSON=21; EVER=false; NOW=false; HAS=false; TOTAL=1; SPENT=0; HUMAN=false; UNIT_TYPE=7; PROP=nil
+BAD_OWNER=21; BAD_PERSON=21; EVER=false; NOW=false; HAS=false; TOTAL=1; SPENT=0; HUMAN=false; UNIT_TYPE=7; PROP=nil; DIAGNOSTIC=nil
 local alive={{}}; Players={{}}; PlayerConfigurations={{}}
 for id=0,21 do
  local gs={{HasGovernor=function(_,hash) if id==BAD_OWNER and hash==BAD_PERSON then return HAS end; return false end,
@@ -174,7 +177,7 @@ for id=0,21 do
  PlayerConfigurations[id]={{GetLeaderTypeName=function() return config[id+1].leader end,GetCivilizationTypeName=function() return config[id+1].civ end}}
 end
 PlayerManager={{GetAliveMajors=function() return alive end}}
-Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 10 end,GetProperty=function() return PROP end}}
+Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 10 end,GetProperty=function(_,key) if key:sub(1,8)=='JAC_TEST' then return DIAGNOSTIC end; return PROP end}}
 GameInfo={{JAC_LeaderPersonas=list(rows),Governors=defs,GreatPersonClasses={{GREAT_PERSON_CLASS_JAC_PERSONA={{UnitType='PERSON'}}}},Units={{PERSON={{Index=99}}}}}}
 {mutation}
 "#)).exec().unwrap();
@@ -204,6 +207,8 @@ GameInfo={{JAC_LeaderPersonas=list(rows),Governors=defs,GreatPersonClasses={{GRE
             "HUMAN=true",
             "Players[21]=nil",
             "GameInfo.Governors.G21=nil",
+            "DIAGNOSTIC=true",
+            "DIAGNOSTIC=false",
         ] {
             assert!(
                 fixture(mutation).load(&code).eval::<String>().is_err(),
@@ -256,7 +261,7 @@ GameInfo={{JAC_LeaderPersonas=list(rows),Governors=defs,GreatPersonClasses={{GRE
         for code in codes {
             Lua::new().load(code).into_function().unwrap();
             for forbidden in [
-                "JAC_TEST",
+                "SetProperty('JAC_TEST",
                 "BridgeRuntimeInstall",
                 "JAC_RequestLeaderJoin",
                 "RequestPlayerOperation",
