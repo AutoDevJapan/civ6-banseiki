@@ -774,7 +774,7 @@ function P.PublicationKey()
 end
 function P.RecheckPublished(actor,turn)
   assert(Integer(actor) and Major(actor) and Players[actor]:IsAlive()
-    and Players[actor]:IsHuman() and Players[actor]:IsTurnActive(),'publication actor unavailable')
+    and Players[actor]:IsHuman(),'publication actor unavailable: '..tostring(actor))
   assert(Integer(turn) and turn==Game.GetCurrentGameTurn(),'stale publication turn')
   local reader=assert(ExposedMembers.JAC_AbsorptionProductNativeRead,'native publication reader unavailable')
   local uiTurn=reader.GetTurn()

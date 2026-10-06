@@ -754,6 +754,23 @@ fn publication_reentry_during_phase_one_does_not_reenter_admission() -> anyhow::
 }
 
 #[test]
+fn published_operation_delivered_after_the_ui_turn_releases_still_rechecks_ai() -> anyhow::Result<()>
+{
+    let lua = world(9999.)?;
+    lua.load(r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false;HUMAN[3]=true;ALIVE[3]=true;READY()
+      Players[3].IsTurnActive=function() return false end
+      GameEvents.JAC_AbsorptionProduct_Operation.Call(3,{Command='RECHECK_PUBLISHED',Turn=TURN})
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+      GameEvents.JAC_AbsorptionProduct_Operation.Call(3,{Command='RECHECK_PUBLISHED',Turn=TURN})
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+      assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,2,TURN),'AI forged human publication')
+      HUMAN[3]=false;assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,3,TURN))
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
 fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> anyhow::Result<()> {
     let lua = world(10000.)?;
     lua.load(r#"
