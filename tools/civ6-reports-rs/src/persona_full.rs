@@ -10,7 +10,7 @@ use std::path::Path;
 const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
 const BASELINE: &str =
     include_str!("../../civ6-autotest/scenarios/leader-persona-baseline-15km.json");
-const CHECKS: [&str; 6] = [
+pub(crate) const CHECKS: [&str; 6] = [
     "Generic: JAC Modding.log errors",
     "Generic: JAC Database.log errors",
     "Generic: [JAC_POC] errors",
@@ -58,7 +58,7 @@ struct NativeReceipt {
     created_filetime: u64,
 }
 
-fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
+pub(crate) fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
     let raw = detail
         .strip_prefix(&format!("ran Lua in {state}; return="))
         .ok_or("Lua result has no raw return value")?;
@@ -129,7 +129,7 @@ pub fn verify(steps_text: &str, result_text: &str, lua: &str) -> Result<Report> 
 
 /// Reproduce only ship::live's deterministic preparation. Never copy the
 /// executed code, player configuration, timeout or capture keys into a contract.
-fn prepared_contract(
+pub(crate) fn prepared_contract(
     source: &str,
     steps_text: &str,
     count: u64,

@@ -246,6 +246,14 @@ GameInfo={{JAC_LeaderPersonas=list(rows),Governors=defs,GreatPersonClasses={{GRE
     #[test]
     fn normal_probe_has_no_native_install_join_test_flag_or_title_setter() {
         let data = scenario();
+        let frozen: Value = serde_json::from_str(include_str!(
+            "../../civ6-reports-rs/src/persona_unjoined_fixture.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            data, frozen,
+            "normal probe contract changed; review and regenerate its independent fixture"
+        );
         validate_scenario(&data).unwrap();
         let steps = data["steps"].as_array().unwrap();
         assert_eq!(steps.len(), 21);
