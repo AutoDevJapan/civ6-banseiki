@@ -52,6 +52,11 @@
 //! JoiningRoom.lua:164 uses Modding.GetLastModErrorString on failure;
 //! SetupParameters.lua:26 uses GetTickCount. Missing notifications are not
 //! evidence of success/failure when the FrontEnd context is disposed.
+//! MainMenu.lua:163-169 uses BuildHeadlessGameSetup, RebuildPlayerParameters,
+//! GameSetup_RefreshParameters, then ReleasePlayerParameters before Hide.
+//! PlayerSetupLogic.lua:1396-1449 refreshes game/player dependencies together
+//! and repeats intermediate requests; successful completion clears Stalled to
+//! nil. Parameter error observations use its official error getters.
 
 use anyhow::{bail, ensure, Context, Result};
 use civ6_data_rs::{absorption_admission, Repository};
@@ -116,17 +121,18 @@ assert(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')=='JAC_ALL_POOLS','s
 MapConfiguration.SetScript('Continents.lua')
 include('PlayerSetupLogic')
 BuildHeadlessGameSetup()
-g_GameParameters:FullRefresh()
-CreatePlayerParameters(0,true)
-CreatePlayerParameters(1,true)
-RefreshPlayerParameters()
+RebuildPlayerParameters(true)
+GameSetup_RefreshParameters()
 -- Read the helper's actual parameter and permission contract before releasing
 -- it. Config_CanWriteParameter rejects a nonlocal human slot in non-hotseat;
 -- an absent serialized list is not necessarily an absent calculated domain.
 local function ParameterRead(label,fn)
   local ok,value=pcall(fn)
   print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
+  return ok,value
 end
+local stalledOK,stalled=ParameterRead('game-parameters-stalled',function() return assert(g_GameParameters,'game parameters absent after refresh').Stalled end)
+ParameterRead('game-parameter-error',function() return GetGameParametersError() end)
 ParameterRead('local-player-id',function() return Network.GetLocalPlayerID() end)
 ParameterRead('hotseat',function() return GameConfiguration.IsHotseat() end)
 for actor=0,1 do
@@ -138,6 +144,7 @@ for actor=0,1 do
   ParameterRead('parameter-'..actor..'-selected',function() local v=parameter and parameter.Value;return type(v)=='table' and v.Value or v end)
   ParameterRead('parameter-'..actor..'-can-write',function() return parameter and parameters:Config_CanWriteParameter(parameter) end)
   ParameterRead('player-'..actor..'-human',function() return PlayerConfigurations[actor]:IsHuman() end)
+  ParameterRead('player-'..actor..'-parameter-error',function() return GetPlayerParameterError(actor) end)
   if parameter and type(parameter.Values)=='table' then for _,row in ipairs(parameter.Values) do
     if row.Value=='LEADER_SIMON_BOLIVAR' or row.Value=='LEADER_LADY_SIX_SKY' then
       ParameterRead('parameter-'..actor..'-dlc-domain',function() return row.Domain end)
@@ -145,6 +152,7 @@ for actor=0,1 do
     end
   end end
 end
+assert(stalledOK and (stalled==nil or stalled==false),'official game/player parameter refresh stalled or unavailable')
 -- These are values computed by the official parameter helper, not supplied
 -- by the fixture. They are the inputs to DLC LeaderPlayable activation.
 local dlcPlayable=false
@@ -163,8 +171,8 @@ for actor=0,1 do
   end
 end
 assert(dlcPlayable,'normal helper did not expose a Maya/Gran Colombia LeaderPlayable dependency')
-HideGameSetup()
 ReleasePlayerParameters()
+HideGameSetup()
 MajorsUnchanged()
 -- Content dependencies must see the selected country pool, not the previous
 -- map's empty pool. This is the normal FrontEnd API, not a manual NPC slot.
@@ -1828,15 +1836,53 @@ if LOCAL_SWAP then majors[1],majors[2]=majors[2],majors[1] end
 Network={GetLocalPlayerID=function() return -1 end}
 GetPlayerParameters=function(actor) return {Parameters={PlayerLeader={}},Config_CanWriteParameter=function() return false end} end
 include=function(name) assert(name=='PlayerSetupLogic') end
-BuildHeadlessGameSetup=function() g_GameParameters={FullRefresh=function() end} end
-CreatePlayerParameters=function(index,headless) assert(index==0 or index==1);assert(headless==true) end
-RefreshPlayerParameters=function()
- assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
- LEADER_VALUES=NO_DEPENDENCY and 'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA' or
-  'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA,Players:Expansion2_Players::LEADER_JAC_ODA_NOBUHIDE,Players:Expansion2_Players::LEADER_SIMON_BOLIVAR'
+SEQUENCE={};GAME_PASSES=0;PLAYER_PASSES=0
+BuildHeadlessGameSetup=function()
+ SEQUENCE[#SEQUENCE+1]='build'
+ g_GameParameters={Refresh=function()
+  GAME_PASSES=GAME_PASSES+1;SEQUENCE[#SEQUENCE+1]='game'..GAME_PASSES
+  GAME_DOMAIN_READY=PLAYER_PASSES>0
+ end}
 end
-HideGameSetup=function() g_GameParameters=nil end
-ReleasePlayerParameters=function() end
+RebuildPlayerParameters=function(headless)
+ assert(headless==true and g_GameParameters and #SEQUENCE==1)
+ SEQUENCE[#SEQUENCE+1]='rebuild';REBUILT=true
+end
+RefreshPlayerParameters=function()
+ assert(REBUILT and g_GameParameters)
+ PLAYER_PASSES=PLAYER_PASSES+1;SEQUENCE[#SEQUENCE+1]='player'..PLAYER_PASSES
+ assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS')
+ if GAME_DOMAIN_READY then
+  LEADER_VALUES=NO_DEPENDENCY and 'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA' or
+   'Players:Expansion2_Players::LEADER_JAC_TAKEDA_NOBUTORA,Players:Expansion2_Players::LEADER_JAC_ODA_NOBUHIDE,Players:Expansion2_Players::LEADER_SIMON_BOLIVAR'
+ else GameSetup_RefreshParameters() end -- request game-domain re-evaluation
+end
+local refreshing,additional=false,false
+GameSetup_RefreshParameters=function()
+ if refreshing then additional=true;return end
+ refreshing=true;additional=false
+ g_GameParameters:Refresh();RefreshPlayerParameters()
+ refreshing=false
+ if additional then return GameSetup_RefreshParameters() end
+ g_GameParameters.Stalled=STALL and true or STALLED_VALUE -- nil is official success
+ if LOSE_GAME_PARAMETERS then g_GameParameters=nil end
+end
+GetGameParametersError=function()
+ if GAME_ERROR_GETTER then error('game error getter unavailable') end
+ return g_GameParameters and g_GameParameters.Error
+end
+GetPlayerParameterError=function(actor)
+ if PLAYER_ERROR_GETTER and actor==0 then error('player error getter unavailable') end
+ return nil
+end
+ReleasePlayerParameters=function()
+ assert(g_GameParameters and GAME_PASSES==2 and PLAYER_PASSES==2 and LEADER_VALUES)
+ SEQUENCE[#SEQUENCE+1]='release';REBUILT=false
+end
+HideGameSetup=function()
+ assert(SEQUENCE[#SEQUENCE]=='release' and not REBUILT)
+ SEQUENCE[#SEQUENCE+1]='hide';g_GameParameters=nil
+end
 PlayerConfigurations={}
 for index,row in ipairs(majors) do PlayerConfigurations[index-1]={GetCivilizationTypeName=function() return row.Civ end,
  GetLeaderTypeName=function() return row.Leader end,GetSlotStatus=function() return row.Slot end,
@@ -1882,6 +1928,20 @@ end}
             ("", None),
             ("NIL_LIST_SLOT=1", None),
             ("NIL_LIST_SLOT=0", None),
+            ("STALLED_VALUE=false", None),
+            ("GAME_ERROR_GETTER=true;PLAYER_ERROR_GETTER=true", None),
+            (
+                "STALL=true",
+                Some("official game/player parameter refresh stalled or unavailable"),
+            ),
+            (
+                "LOSE_GAME_PARAMETERS=true",
+                Some("official game/player parameter refresh stalled or unavailable"),
+            ),
+            (
+                "STALLED_VALUE='false'",
+                Some("official game/player parameter refresh stalled or unavailable"),
+            ),
             (
                 "CHANGE_MAJOR=true",
                 Some("standard setup changed an actual major civilization, leader or controller"),
@@ -1929,12 +1989,21 @@ end}
                 );
             } else {
                 lua.load("assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA' and PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(VALUES.JAC_BANSEIKI_HUMAN_POOL=='JAC_ALL_POOLS');assert(CALLS[1]=='mods' and CALLS[2]=='participating');assert(BOUNDS.MaxMinor==6)").exec()?;
+                lua.load("assert(table.concat(SEQUENCE,',')=='build,rebuild,game1,player1,game2,player2,release,hide')").exec()?;
             }
         }
         let probe = local_human_probe(&Repository::checked_in())?;
         let code = probe["steps"][2]["code"].as_str().unwrap();
         for (mutation, reason) in [
             ("", None),
+            (
+                "STALL=true",
+                Some("official game/player parameter refresh stalled or unavailable"),
+            ),
+            (
+                "LOSE_GAME_PARAMETERS=true",
+                Some("official game/player parameter refresh stalled or unavailable"),
+            ),
             (
                 "CHANGE_MAJOR=true",
                 Some("standard setup changed an actual major civilization, leader or controller"),
@@ -1961,6 +2030,7 @@ end}
                 result?;
                 assert_eq!(probe["steps"][4]["action"], "start_game");
                 lua.load("assert(Network.GetLocalPlayerID()==-1);assert(GetPlayerParameters(0):Config_CanWriteParameter()==false);assert(PlayerConfigurations[0]:GetLeaderTypeName()=='LEADER_JAC_ODA_NOBUHIDE');assert(PlayerConfigurations[1]:GetLeaderTypeName()=='LEADER_JAC_TAKEDA_NOBUTORA')").exec()?;
+                lua.load("assert(table.concat(SEQUENCE,',')=='build,rebuild,game1,player1,game2,player2,release,hide')").exec()?;
             }
         }
         Ok(())
@@ -3215,7 +3285,8 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             "GAMEMODE_HEROES",
             "JAC_ALL_POOLS",
             "EXCLUDE_CITY_STATES",
-            "RefreshPlayerParameters()",
+            "RebuildPlayerParameters(true)",
+            "GameSetup_RefreshParameters()",
             "probe-actor-",
             "LEADER_SIMON_BOLIVAR",
             "LEADER_LADY_SIX_SKY",
