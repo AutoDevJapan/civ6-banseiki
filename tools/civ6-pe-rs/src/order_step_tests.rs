@@ -134,7 +134,7 @@ fn order_capture_real_mov_single_step_measurement() {
                     evidence["failed_qualification_raw_context_recorded"] = json!(true);
                     steps.get_mut(&tid).unwrap().expected = mov + 7;
                     let mut second_chance = event;
-                    unsafe { second_chance.u.Exception.dwFirstChance = 0; }
+                    second_chance.u.Exception.dwFirstChance = 0;
                     assert!(classify_then_record(&mut d, &second_chance, &steps, &[mov], |_, row| {
                         assert_eq!(row["qualification_succeeded"], false); Ok(())
                     }).is_err());
