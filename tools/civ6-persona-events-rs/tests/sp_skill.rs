@@ -167,3 +167,51 @@ fn price_check_rejects_no_debit_and_double_debit_mutants() {
         assert!(lua.load(PURCHASE).exec().is_err());
     }
 }
+
+#[test]
+fn purchased_effects_use_original_positive_not_same_named_unpurchased_negative() {
+    let scene = sp_skill::build(&template(), Some("Physical-Save"), Some(2)).unwrap();
+    let code = scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|s| {
+            s["code"].as_str().filter(|c| {
+                c.contains("actual active city effects and gameplay settlement marker verified")
+            })
+        })
+        .unwrap();
+    let world = || {
+        let lua = Lua::new();
+        lua.load(r#"
+cityMarker=1;subjectName='Actual Reassigned City'
+local city={GetName=function() return 'Actual Reassigned City' end,GetProperty=function() return cityMarker end}
+Players={[0]={GetCities=function() return {Members=function() local done=false;return function() if not done then done=true;return 1,city end end end} end}}
+Locale={Lookup=function(v) return v end}; skillActive=true; subjectOwner=0
+GameEffects={GetModifiers=function() return {1,2} end,
+GetModifierDefinition=function(id) return {Id=id==1 and 'JAC_PERSONA_DATE_TANEMUNE_BASE' or 'JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1'} end,
+GetModifierActive=function(id) return id==1 or skillActive end,
+GetModifierSubjects=function(id) return {id} end,
+GetObjectsPlayerId=function() return subjectOwner end,
+GetObjectName=function() return subjectName end}
+"#).exec().unwrap();
+        lua
+    };
+    let lua = world();
+    lua.load(code).exec().unwrap();
+    for mutation in [
+        "skillActive=false",
+        "subjectOwner=1",
+        "subjectName='Different City'",
+        "cityMarker=0",
+    ] {
+        let lua = world();
+        lua.load(mutation).exec().unwrap();
+        assert!(lua.load(code).exec().is_err());
+    }
+    let old_negative = code
+        .replace("BASE']=1", "BASE']=0")
+        .replace("ENVOYS_1']=1", "ENVOYS_1']=0");
+    assert_ne!(old_negative, code);
+    assert!(world().load(old_negative).exec().is_err());
+}

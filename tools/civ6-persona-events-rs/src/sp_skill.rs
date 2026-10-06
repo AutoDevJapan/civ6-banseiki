@@ -151,7 +151,7 @@ return 'one normal negative purchase request; no automatic retry'
     // city from Gameplay's engine marker instead of the old fixture city key.
     let mut effects = original(
         template,
-        "actual active city effects and gameplay settlement marker verified",
+        "local wanted={['JAC_PERSONA_DATE_TANEMUNE_BASE']=1, ['JAC_PERSONA_TREE_LEADER_JAC_DATE_TANEMUNE_ENVOYS_1']=1}",
     )?;
     let old = "local city=CityManager.GetCity(0,Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'));";
     let new="local city; local names={}; for _,c in Players[0]:GetCities():Members() do local n=Locale.Lookup(c:GetName()); assert(not names[n],'ambiguous city name'); names[n]=true; if c:GetProperty('JAC_PERSONA_SETTLED_LEADER_JAC_DATE_TANEMUNE')==1 then assert(not city,'multiple settled markers'); city=c end end;";
