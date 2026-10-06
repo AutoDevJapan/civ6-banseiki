@@ -244,7 +244,50 @@ cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin absorp
 
 mainの宗教持続と同期受領を統合した後、全件検査でシナリオ一覧が118件なのに期待件数が117件のままという不一致を検出した。明示した一覧と実ファイルの一致検査は維持し、上記二つの再現手順を加えて120件に更新する。統合後の検査・別モデルレビュー・実機結果は、完了した候補ごとにPRへ記録する。統合前の成功を新しい候補の成功へ付け替えない。
 
-この接続だけでToDo995全体の完了とは扱わない。通常の指導者別要求一覧と既存都市国家・外交画面からの要求登録は未接続であり、製品側の要求を使う受入が残る。既存の吸収PoCと今回の通常開始接続の実機結果を混同しない。人物化の正式加入接続、宗教の合同検証、作品借用のマルチプレイは、それぞれの担当作業を引き続き保持する。
+この接続だけでToDo995全体の完了とは扱わない。以下の製品バックエンドで通常の指導者要求の生成をつなぐが、UI116は未回答のため画面接続と画面受入は未完了である。既存の吸収PoCと製品条件の受入結果を混同しない。人物化の正式加入接続、宗教の合同検証、作品借用のマルチプレイは、それぞれの担当作業を引き続き保持する。
+
+### 製品の指導者要求・使節・保証金（PR116の専用実装）
+
+`tools/civ6-data-rs/src/absorption_product.rs` が型付きカタログを照合し、`absorption_product_gameplay.rs` から `Scripts/JAC_Absorption_Product.lua` を生成する。既存の一つのGameplay入口でAdmissionの後に読む。仕様と暫定判断はSSOT9.4、数値と人物割当は `documents/spec/data/absorption-product.json` にまとめる。日本22勢力の文明と指導者を両方照合し、`absorption-country-areas.json` の地理積分による参照面積を使う。現在の保有タイル数から面積を推定しない。面積表の生成元は `tools/civ6-assets-rs/src/bin/absorption-area-generate.rs`。世界851主体の地図制作をこの接続の新しいMustにはしない。
+
+`ExposedMembers.JAC_AbsorptionProduct` は `Get`、`GetSmallCountries`、`Country` の読取コピーだけである。同期操作 `JAC_AbsorptionProduct_Operation` は実プレイヤーIDを受入国に使い、登録・使節配属・取消しを受け付ける。UIから渡す条件、面積、達成印、関係確認、計画、保証金は拒否する。通常手番で再判定し、Version 2の取消し・原子的置換、固定した開始意図と一次判定の乱数を保つ。加入する指導者の人物記録にも性格・特性・国を引き継ぐ。
+
+主要文明として配置した小国は本体の受取可否を偽装せず、実際の受入国の `GetTokensToGive` と `ChangeTokensToGive(-1)` を使う。処理前後の残数、配属先の国とプレイヤー、配属人数を保存する。公式の残数変更の一次資料は本体 `Debug/Player.ltp:282`。公式都市国家には通常の使節操作と受取数を使う。AIはその他の要求と資金を満たす一国へ集中して配属し、取込み中の当事者へ別の使節や要求を開始しない。
+
+要求に保証金がある場合だけ実際に金・信仰を引き落とす。備蓄とは別に照合する。通貨ごとの意図と処理前後の残高を先に保存し、変更後に本体APIが例外を返しても二重決済せず再開する。取消し時は支払済みの通貨分だけを返し、未払の残りを追加で払わせない。検証済み結果後の返却も一度だけ行う。別の支出で成否を判断できない残高は、理由を残して停止する。返却先はPR116-Dのa案を暫定実装しており、承認済みではない。
+
+UI116は画像添付済みだが未回答である。最新のオーナー規則に従い、見た目の実装を停止した。先に生成した画面案のコード7ファイルは、専用worktreeの `tools/civ6-autotest/artifacts/pr116-production/unapproved-ui/` に非組込みの調査成果として保全する。既存外交画面は元の差替えコードへ戻し、都市国家画面の差替え登録とUIのImportFilesを外した。調査コードをバックエンドのコミットに含めず、画面承認・画面受入・PR完了とは扱わない。
+
+生成する4シーンは `absorption-product-small-human.json`、`absorption-product-small-ai.json`、`absorption-product-merger-human.json`、`absorption-product-merger-ai.json`。吸収元はAIの織田または武田、受入側は人間またはAIである。通常の国・指導者・実面積・性格・特性から要求を作り、人間は同期操作、AIは通常手番の判断を通す。検査用の軍・残高・公式使節残数を準備するが、診断要求、カタログの差替え、関係の解決済み印、`F.Begin`、テスト専用開始口は使わない。実保存・読込と再送で一次判定と決済を照合する。UI116の見た目と操作箇所の受入は含めない。
+
+専用targetで行う検査:
+
+```text
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin absorption-product-generate
+cargo test --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --test absorption_product --test absorption_admission
+cargo test --locked --manifest-path tools/civ6-autotest-native/Cargo.toml --test absorption_flow
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/absorption-product-small-human.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/absorption-product-small-ai.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/absorption-product-merger-human.json --check
+cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-autotest -- tools/civ6-autotest/scenarios/absorption-product-merger-ai.json --check
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin absorption-product-generate -- --check
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin absorption-admission-generate -- --check
+```
+
+`CARGO_TARGET_DIR=D:/CC/Work/todo995/production-target` を使い、ソース確定後にCargoを一件ずつ直列実行する。待機中のソース変更や別Cargoの同時起動で結果を混ぜない。失敗ログには日時を付けて残す。初期の製品検査は14件中12件成功・2件失敗で、2件は検査用の大域変数Nの未設定だった。Nの初期化を修正した。使節残数が人間8対AI7となった実害には、開始後の別国への配属を防ぐ処理を加えて再検査する。停止した検査を成功とは数えない。旧04/05と基準a8eの全件・CI・診断成功を製品コードの成功へ付け替えない。全件・別モデル・CI・実機の最終受入は主担当が統合後に行う。
+
+専用worktreeの最新focused検査は、以下の4対象で合計222件成功、失敗・ignored・filteredはすべて0件だった。mluaのLua 5.1で実行し、Lua検査を省略していない。三段階結合の1テスト内で小国／合併と人間／AIの4組を実行し、一次判定の保存再送、加入した指導者の性格・特性・国の保持を照合した。相手消滅後の開始前エラーも、保存済み要求から取消しと返却を行える。画面受入や実機受入の成功を意味しない。
+
+| focused対象 | 成功件数 | 原ログ（専用worktree内） |
+|---|---:|---|
+| 要求生成・決済と既存受付 | 18＋20 | `tools/civ6-autotest/artifacts/pr116-production/20261006-084013-focused.log` |
+| 実際のLua三段階処理との結合 | 36 | `tools/civ6-autotest/artifacts/pr116-production/20261006-084727-native-flow.log` |
+| 既存のLua吸収・配布定義 | 125 | `tools/civ6-autotest/artifacts/pr116-production/20261006-090322-lua-absorption.log` |
+| シナリオ明示一覧・判定処理 | 23 | `tools/civ6-autotest/artifacts/pr116-production/20261006-090322-scenario-inventory.log` |
+
+4本の正式JSON検査は小国人間22手順、小国AI20手順、合併人間21手順、合併AI20手順で全てexit0。原ログは同じフォルダーの `20261006-090322-small-human.log`、`small-ai.log`、`merger-human.log`、`merger-ai.log`（後3本も同じ日時接頭辞）に残す。全シナリオの明示一覧は123から127へ更新し、実ファイルとの完全一致を保持した。生成チェックも `20261006-090322-product-check.log` と `20261006-090322-admission-check.log` でexit0。変更したRustファイルの整形と `git diff --check` は成功した。
+
+途中の三段階36件は35件成功・1件失敗で、新しく読み込む操作イベントが入口検査の模擬環境に無かったことが原因だった。登録と読取専用公開口の検査を追加して36件全て通過した。原ログ `20261006-084013-native-flow.log` は保持する。Lua125件の初回124件成功・1件失敗は配布ファイル一覧と必須MOD一覧の未更新であり、実ファイルとの完全一致を保って更新した。原ログ `20261006-090110-lua-absorption.log` は保持する。停止した処理や途中の失敗を成功件数へ加算していない。実機の起動・予約、全workspace検査、別モデル起動、PRマージ、オーナー通知は、この実装担当では行っていない。
 
 ## 三段階吸収バックエンドの実装と検証状況
 

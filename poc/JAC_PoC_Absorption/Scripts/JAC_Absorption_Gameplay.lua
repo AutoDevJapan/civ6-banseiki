@@ -1102,6 +1102,9 @@ local function Prepare(plan, state, sourceReads, sourceReadyToken)
   local capital = source:GetCities():GetCapitalCity()
   local leader = { ID = leaderID, Kind = "GREAT_PERSON", Owner = plan.From,
     LeaderType = PlayerConfigurations[plan.From]:GetLeaderTypeName(), Persistent = true,
+    Personality = plan.LeaderProfile and plan.LeaderProfile.Personality,
+    Trait = plan.LeaderProfile and plan.LeaderProfile.Trait,
+    CountryID = plan.LeaderProfile and plan.LeaderProfile.CountryID,
     Representation = R.LEADER_REPRESENTATION_POC, Unit = { Owner = plan.From, ID = -1 } }
   tx.SourceRoster[leaderID] = leader
   local decision = Decision(plan.Leader)

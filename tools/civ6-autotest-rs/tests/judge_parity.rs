@@ -556,6 +556,10 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-return-boundary.json",
                 "absorption-normal-admission.json",
                 "absorption-envoy-api.json",
+                "absorption-product-small-human.json",
+                "absorption-product-small-ai.json",
+                "absorption-product-merger-human.json",
+                "absorption-product-merger-ai.json",
                 "assassin-actor-eliminated-save-load.json",
                 "assassin-target-eliminated-save-load.json",
                 "mod-selection-rollback.json",
@@ -564,7 +568,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 123);
+    assert_eq!(expected.len(), 127);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "status": "人物割当・数値・保証金返却は暫定案。UI116は回答待ちで、見た目の実装は停止し製品MODへ組み込まない。日本語の性格・特性を正本とする",
+  "balance": {
+    "metric_ratio_bps": 12500,
+    "merger_ratio_bps": 15000,
+    "diplomacy_bps": {"war": 16000, "denounced": 14000, "unfriendly": 12500, "neutral": 10000, "friendly": 9500, "friend": 9000, "allied": 8000},
+    "small_gold_deposit": 100,
+    "merger_gold_deposit": 1000,
+    "small_faith_deposit": 20,
+    "merger_faith_deposit": 100,
+    "deposit_source_share_bps": 2500,
+    "reserve_gold": 50,
+    "free_change_turns": 10,
+    "metric_minima": {"COMBAT_UNITS": 2, "PEAK_COMBAT": 10, "ACCESS": 1, "TECHNOLOGIES": 2, "POPULATION": 3, "FAITH_YIELD": 1, "FOOD_YIELD": 3, "SCIENCE_YIELD": 2}
+  },
+  "personalities": [
+    {"name": "勇敢", "scale_bps": 11000, "deposit": "none", "stability": "situation", "basis": "前線・救援・反撃に必要な余力"},
+    {"name": "冷静", "scale_bps": 10000, "deposit": "gold", "stability": "situation", "basis": "交渉・損失抑制の保証"},
+    {"name": "慎重", "scale_bps": 11500, "deposit": "gold_faith", "stability": "situation", "basis": "保証金と、預託後も維持する金の備蓄"},
+    {"name": "陽気", "scale_bps": 9000, "deposit": "none", "stability": "situation", "basis": "交流・仲間支援を優先"},
+    {"name": "温厚", "scale_bps": 8000, "deposit": "none", "stability": "situation", "basis": "要求を薄くし関係改善を優先"},
+    {"name": "強気", "scale_bps": 14000, "deposit": "gold", "stability": "situation", "basis": "数値を厚くする"},
+    {"name": "自由", "scale_bps": 10000, "deposit": "none", "stability": "changing", "basis": "10手番ごとに数量を0.9/1.0/1.1倍の順に変える暫定表現"},
+    {"name": "忠実", "scale_bps": 10000, "deposit": "none", "stability": "fixed", "basis": "一度出した数量を維持。関係前提は毎回検査"}
+  ],
+  "traits": [
+    {"name": "武人", "metric": "COMBAT_UNITS", "label": "統率する戦闘部隊", "basis": "戦闘・耐久・統率。実際に所有する戦闘Unit数"},
+    {"name": "鬼神", "metric": "PEAK_COMBAT", "label": "決戦部隊の合計戦闘力", "basis": "決戦・破壊力。所有Unitごとの近接/遠隔の大きい戦闘力を合計する暫定表現。昇進補正は含まない"},
+    {"name": "策士", "metric": "ACCESS", "label": "相手への外交アクセス", "basis": "情報戦・調略。公式の対相手アクセス段階"},
+    {"name": "魔神", "metric": "TECHNOLOGIES", "label": "習得した技術", "basis": "変則技術への適性。現製品で習得した技術数を用いる暫定表現"},
+    {"name": "教者", "metric": "POPULATION", "label": "都市の成長", "basis": "教育・統治・成長支援。都市人口合計を用いる暫定表現"},
+    {"name": "霊神", "metric": "FAITH_YIELD", "label": "毎手番の信仰", "basis": "信仰・防護・再興。実際の信仰創出量"},
+    {"name": "凡人", "metric": "FOOD_YIELD", "label": "毎手番の食料", "basis": "食料・低コスト物資。都市の食料産出合計"},
+    {"name": "天才", "metric": "SCIENCE_YIELD", "label": "毎手番の科学", "basis": "科学・発明・研究。実際の科学創出量"}
+  ],
+  "leaders": [
+    ["ODA", "LEADER_JAC_ODA_NOBUHIDE", "強気", "武人", "攻勢を重視するゲーム上の人物案"],
+    ["TAKEDA", "LEADER_JAC_TAKEDA_NOBUTORA", "強気", "鬼神", "攻勢と決戦力を重視する案"],
+    ["DATE", "LEADER_JAC_DATE_TANEMUNE", "冷静", "策士", "外交による勢力拡大を要求へ表す案"],
+    ["ASHINA", "LEADER_JAC_ASHINA_MORIKIYO", "忠実", "凡人", "継続する領国の安定を重視する案"],
+    ["HOJO", "LEADER_JAC_HOJO_UJITSUNA", "慎重", "教者", "領国統治と備蓄を重視する案"],
+    ["YAMANOUCHI_UESUGI", "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA", "忠実", "武人", "統率と家の継承を重視する案"],
+    ["NAGAO", "LEADER_JAC_NAGAO_TAMEKAGE", "勇敢", "武人", "前線の戦力を重視する案"],
+    ["IMAGAWA", "LEADER_JAC_IMAGAWA_UJITERU", "冷静", "教者", "統治と成長を重視する案"],
+    ["MATSUDAIRA", "LEADER_JAC_MATSUDAIRA_KIYOYASU", "勇敢", "武人", "救援と戦力を重視する案"],
+    ["ASAKURA", "LEADER_JAC_ASAKURA_TAKAKAGE", "冷静", "天才", "研究と損失抑制を重視する案"],
+    ["ASHIKAGA", "LEADER_JAC_ASHIKAGA_YOSHIHARU", "忠実", "教者", "継承と統治を重視する案"],
+    ["MIYOSHI", "LEADER_JAC_MIYOSHI_NAGAYOSHI", "自由", "策士", "方針転換と情報を重視する案"],
+    ["ROKKAKU", "LEADER_JAC_ROKKAKU_SADAYORI", "慎重", "武人", "護衛と備蓄を重視する案"],
+    ["HONGANJI", "LEADER_JAC_HONGANJI_SHONYO", "忠実", "霊神", "信仰と継続を重視する案"],
+    ["OUCHI", "LEADER_JAC_OUCHI_YOSHITAKA", "温厚", "天才", "研究と関係改善を重視する案"],
+    ["AMAGO", "LEADER_JAC_AMAGO_TSUNEHISA", "冷静", "策士", "調略と交渉を重視する案"],
+    ["MORI", "LEADER_JAC_MORI_MOTONARI", "慎重", "策士", "情報と保証を重視する案"],
+    ["CHOSOKABE", "LEADER_JAC_CHOSOKABE_KUNICHIKA", "陽気", "凡人", "領国成長と支援を重視する案"],
+    ["OTOMO", "LEADER_JAC_OTOMO_YOSHIAKI", "温厚", "教者", "成長支援を重視する案"],
+    ["SHIMAZU", "LEADER_JAC_SHIMAZU_TAKAHISA", "勇敢", "鬼神", "危機対応の決戦力を重視する案"],
+    ["RYUKYU", "LEADER_JAC_RYUKYU_SHO_SEI", "陽気", "凡人", "交流と食料を重視する案"],
+    ["AINU", "LEADER_JAC_AINU_TARIKONA", "忠実", "霊神", "信仰と継続を重視する案"],
+    ["VATICAN_CITY", "LEADER_MINOR_CIV_VATICAN_CITY", "慎重", "霊神", "公式都市国家の指導者型。現実の教皇への性格付与ではない"],
+    ["SINGAPORE", "LEADER_MINOR_CIV_SINGAPORE", "冷静", "凡人", "公式都市国家の指導者型。現実の個人への性格付与ではない"]
+  ],
+  "minor_countries": [
+    {"id": "VATICAN_CITY", "area_km2": 0.44, "source": "documents/spec/ssot/03-map-and-scale.md（バチカン市国）"},
+    {"id": "SINGAPORE", "area_km2": 728, "source": "documents/spec/ssot/14-4-country-ledger/un-members-o-z.md（SGP、2023年、その他の協定は未検証）"}
+  ],
+  "deposit_policy": "条件を全て満たす直前に受入国から預託。取消し・条件置換で返却。既存三段階処理が検証済み結果になったら受入国へ返却。相手国への譲渡や追加産出はしない。オーナー回答前の暫定案"
+}

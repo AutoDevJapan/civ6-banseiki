@@ -170,8 +170,8 @@ fn admission_world() -> mlua::Result<Lua> {
 }
 
 #[test]
-fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_reload_reroll()
--> mlua::Result<()> {
+fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_reload_reroll(
+) -> mlua::Result<()> {
     let lua = admission_world()?;
     lua.load(
         r#"
@@ -218,9 +218,108 @@ fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_rel
     .exec()
 }
 
+fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
+    let lua = admission_world()?;
+    lua.globals().set("PRODUCT_SMALL", small)?;
+    lua.globals().set("PRODUCT_HUMAN", human)?;
+    lua.load(r#"
+      local function event() local handlers={} return {Add=function(fn) handlers[#handlers+1]=fn end,
+        Emit=function(...) for _,fn in ipairs(handlers) do fn(...) end end} end
+      GameEvents.JAC_AbsorptionProduct_Operation=event()
+      PlayerConfigurations[1].GetCivilizationTypeName=function() return PRODUCT_SMALL and 'CIVILIZATION_JAC_ROKKAKU' or 'CIVILIZATION_JAC_TAKEDA' end
+      PlayerConfigurations[1].GetLeaderTypeName=function() return PRODUCT_SMALL and 'LEADER_JAC_ROKKAKU_SADAYORI' or 'LEADER_JAC_TAKEDA_NOBUTORA' end
+      PlayerConfigurations[2].GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_ODA' end
+      PlayerConfigurations[2].GetLeaderTypeName=function() return 'LEADER_JAC_ODA_NOBUHIDE' end
+      Players[2].IsHuman=function() return PRODUCT_HUMAN end
+      MONEY={[1]=100,[2]=5000};FAITH[1]=20;FAITH[2]=1000;ENVOY_POOL=20
+      for _,actor in ipairs({1,2}) do local id=actor
+        Players[id].GetTreasury=function() return {GetGoldBalance=function() return MONEY[id] end,
+          ChangeGoldBalance=function(_,n) MONEY[id]=MONEY[id]+n end} end
+        Players[id].GetReligion=function() return {GetFaithBalance=function() return FAITH[id] end,
+          ChangeFaithBalance=function(_,n) FAITH[id]=FAITH[id]+n end} end
+        Players[id].GetDiplomacy=function() return {HasMet=function() return true end,
+          IsAtWarWith=function() return false end,IsAlliedWith=function() return false end} end
+        Players[id].GetDiplomaticAI=function() return {GetDiplomaticStateIndex=function() return 0 end} end
+        Players[id].GetInfluence=function() return {CanReceiveInfluence=function() return false end,
+          GetTokensToGive=function() return ENVOY_POOL end,ChangeTokensToGive=function(_,n) ENVOY_POOL=ENVOY_POOL+n end} end
+      end
+      GameInfo.DiplomaticStates={[0]={StateType='DIPLO_STATE_NEUTRAL'}}
+      GameInfo.Units[0].Combat=20
+      GameInfo.Units[4].Combat=30;GameInfo.Units[5].Combat=40
+      for i=1,12 do UNIT(2,200+i,'UNIT_WARRIOR',12) end
+      for i=1,1000 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+    "#).exec()?;
+    load_module(
+        &lua,
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua",
+    )?;
+    lua.load("P=JAC_AbsorptionProductGameplay").exec()?;
+    Ok(lua)
+}
+
 #[test]
-fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating_a_roll()
--> mlua::Result<()> {
+fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_saved_rolls(
+) -> mlua::Result<()> {
+    for small in [true, false] {
+        for human in [true, false] {
+            let lua = product_world(small, human)?;
+            lua.load(r#"
+        local view=P.Get(1,2);assert(view.Status=='AVAILABLE',view.Error)
+        assert(view.Mode==(PRODUCT_SMALL and 'SMALL_STATE' or 'MERGER'))
+        GameEvents.JAC_AbsorptionProduct_Operation.Emit(2,{Command='REGISTER',From=1,Nonce='accept-register'})
+        assert(Players[2]:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1').Accepted)
+        if PRODUCT_SMALL then
+          local envoys=P.Get(1,2).Envoys
+          for i=0,envoys.Required-1 do
+            P.Command(2,{Command='SEND_ENVOY',From=1,Nonce='accept-envoy:'..i,ExpectedEnvoys=i})
+          end
+        end
+        GameEvents.OnGameTurnStarted.Emit()
+        local receipt=assert(N.Get('leader-offer',P.Get(1,2).OfferID))
+        assert(receipt.Status=='STARTED',receipt.LastError)
+        PRODUCT_FLOW_ID=receipt.FlowID
+        local flow=assert(TEST_FLOW.Get(PRODUCT_FLOW_ID))
+        assert(flow.Phase1Complete and #RANDOM_CALLS>0)
+        if PRODUCT_HUMAN then assert(flow.Phase=='CHOICE')
+        else assert(flow.Phase=='RESULT' or flow.Phase=='DONE',flow.Error) end
+        assert(receipt.Plan.LeaderProfile.Personality==(PRODUCT_SMALL and '慎重' or '強気'))
+        assert(receipt.Plan.LeaderProfile.Trait==(PRODUCT_SMALL and '武人' or '鬼神'))
+        local leader
+        for _,entry in ipairs(flow.Entries) do if entry.Leader then leader=entry end end
+        assert(leader and leader.Source.Personality==receipt.Plan.LeaderProfile.Personality)
+        assert(leader.Source.Trait==receipt.Plan.LeaderProfile.Trait and leader.Source.CountryID==receipt.Plan.LeaderProfile.CountryID)
+        if not PRODUCT_HUMAN then
+          local character=assert(TEST_ABSORPTION.GetRoster(2)['leader:1'])
+          assert(character.Owner==2 and character.Persistent and character.Personality==receipt.Plan.LeaderProfile.Personality)
+          assert(character.Trait==receipt.Plan.LeaderProfile.Trait and character.CountryID==receipt.Plan.LeaderProfile.CountryID)
+        end
+        PRODUCT_SNAPSHOT=TEST_ABSORPTION.Canonical(flow);PRODUCT_ROLLS=#RANDOM_CALLS
+      "#).exec()?;
+            load_module(&lua, FLOW)?;
+            load_module(
+                &lua,
+                "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Admission.lua",
+            )?;
+            load_module(
+                &lua,
+                "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Product.lua",
+            )?;
+            lua.load(
+                r#"
+        JAC_AbsorptionAdmissionGameplay.Tick();JAC_AbsorptionProductGameplay.Tick()
+        assert(TEST_ABSORPTION.Canonical(TEST_FLOW.Get(PRODUCT_FLOW_ID))==PRODUCT_SNAPSHOT)
+        assert(#RANDOM_CALLS==PRODUCT_ROLLS,'product save replay rerolled P1')
+      "#,
+            )
+            .exec()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating_a_roll(
+) -> mlua::Result<()> {
     let lua = admission_world()?;
     lua.load(
         r#"
@@ -419,8 +518,8 @@ fn religion_adapter_collision_rejects_before_native_absorption_mutation() -> mlu
 }
 
 #[test]
-fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation()
--> mlua::Result<()> {
+fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation(
+) -> mlua::Result<()> {
     let lua = joint_adapter_world()?;
     lua.load(r#"
       local A=TEST_ABSORPTION
@@ -459,8 +558,8 @@ fn religion_adapter_corrupt_metadata_rejects_before_native_absorption_mutation()
 }
 
 #[test]
-fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment()
--> mlua::Result<()> {
+fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment(
+) -> mlua::Result<()> {
     for revision in [2147483646i64, 2147483647] {
         let lua = joint_adapter_world()?;
         lua.globals().set("REVISION", revision)?;
@@ -484,8 +583,8 @@ fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_incre
 }
 
 #[test]
-fn religion_adapter_failed_property_write_resumes_without_second_native_transfer()
--> mlua::Result<()> {
+fn religion_adapter_failed_property_write_resumes_without_second_native_transfer(
+) -> mlua::Result<()> {
     let lua = joint_adapter_world()?;
     lua.load(r#"
       local A=TEST_ABSORPTION
@@ -905,8 +1004,8 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
 }
 
 #[test]
-fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload()
--> mlua::Result<()> {
+fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload(
+) -> mlua::Result<()> {
     let lua = world()?;
     lua.load(
         r#"
@@ -1224,8 +1323,8 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
 }
 
 #[test]
-fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world()
--> mlua::Result<()> {
+fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
         r#"
@@ -1661,8 +1760,8 @@ fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
-fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected()
--> mlua::Result<()> {
+fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1831,8 +1930,8 @@ fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua:
 }
 
 #[test]
-fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
--> mlua::Result<()> {
+fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state(
+) -> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -2073,9 +2172,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
             1,
         );
     }
-    assert!(
-        manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
-    );
+    assert!(manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>"));
     assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
@@ -2090,6 +2187,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         GameEvents.JAC_Absorption_TestCall=COUNTED_EVENT()
         GameEvents.JAC_Absorption_AdmissionRequested=COUNTED_EVENT()
         GameEvents.JAC_Absorption_LeaderOffer=COUNTED_EVENT()
+        GameEvents.JAC_AbsorptionProduct_Operation=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
         GameEvents.OnGameTurnStarted=COUNTED_EVENT()
     "#,
@@ -2129,7 +2227,11 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
-        assert(GameEvents.OnGameTurnStarted.Count()==3)
+        assert(GameEvents.OnGameTurnStarted.Count()==4)
+        assert(GameEvents.JAC_AbsorptionProduct_Operation.Count()==1)
+        assert(JAC_AbsorptionProductGameplay==nil)
+        assert(ExposedMembers.JAC_AbsorptionProduct.Get and ExposedMembers.JAC_AbsorptionProduct.GetSmallCountries)
+        assert(ExposedMembers.JAC_AbsorptionProduct.Command==nil and ExposedMembers.JAC_AbsorptionProduct.Tick==nil)
         assert(GameEvents.JAC_Absorption_AdmissionRequested.Count()==1)
         assert(GameEvents.JAC_Absorption_LeaderOffer.Count()==1)
         local event=GameEvents.JAC_Absorption_TestCall

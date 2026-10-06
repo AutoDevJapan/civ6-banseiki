@@ -22,3 +22,4 @@ __pycache__/
 # Rust tools and their test artifacts
 /tools/target/
 /tools/civ6-*-rs/target/
+/tools/civ6-autotest/artifacts/pr116-production/
