@@ -437,6 +437,20 @@ pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Resul
         steps.push(json!({"action":"exit_to_menu","timeout":90}));
         steps.push(json!({"action":"load","name":name,"timeout":600}));
     }
+    // UI and Gameplay do not publish Game properties at the same time. UI
+    // needs only native actor identities; obtain them in its own context.
+    // Persistent assertions stay in Gameplay, where the evidence is written.
+    let ui_actors = format!(
+        r#"
+local t={{Mode='{mode}'}}
+for _,player in ipairs(PlayerManager.GetAliveMajors()) do
+  local civ=PlayerConfigurations[player:GetID()]:GetCivilizationTypeName()
+  if civ=='{from}' then t.From=player:GetID() elseif civ=='{to}' then t.To=player:GetID() end
+end
+assert(t.From and t.To,'ordinary UI actors unavailable')
+"#,
+        mode = if small { "SMALL_STATE" } else { "MERGER" }
+    );
     steps.push(wait(
         "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function'".into(),
     ));
@@ -481,9 +495,9 @@ return 'ordinary country, current leader, geographic area, personality and trait
         } else {
             "JAC_AbsorptionDiplomacyAction"
         };
-        steps.push(ui(format!("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');assert(t.To==Game.GetLocalPlayer());LuaEvents.{event}(t.From);return 'ordinary admission screen opened'")));
+        steps.push(ui(format!("{ui_actors}\nassert(t.To==Game.GetLocalPlayer());LuaEvents.{event}(t.From);return 'ordinary admission screen opened'")));
         steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":screen,"code":format!("return not ContextPtr:IsHidden() and type({handler})=='function'")}}));
-        steps.push(json!({"action":"ui_lua","state_name":screen,"code":format!("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert({handler}(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'")}));
+        steps.push(json!({"action":"ui_lua","state_name":screen,"code":format!("{ui_actors}\nlocal v=assert(JAC_AbsorptionAdmissionUI.Get(t.From));assert(v.Mode==t.Mode and #v.Rows>0);assert({handler}(t.From,'REGISTER'),'visible screen registration unavailable');OnClose();return 'existing screen showed product terms and submitted its registration action'")}));
     }
     steps.push(core(
         r#"
@@ -525,11 +539,10 @@ Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
 return 'real troops, currencies and official unassigned envoys prepared for ordinary terms'
 "#.into()));
     if human && small {
-        steps.push(ui("local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');LuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'".into()));
+        steps.push(ui(format!("{ui_actors}\nLuaEvents.CityStates_OpenOverview(t.From);return 'small-country screen reopened for envoy assignment'")));
         steps.push(json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"CityStates","code":"return not ContextPtr:IsHidden() and type(JAC_AbsorptionCityStatesAction)=='function'"}}));
         steps.push(
-            json!({"action":"ui_lua","state_name":"CityStates","code":r#"
-local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
+            json!({"action":"ui_lua","state_name":"CityStates","code":format!("{ui_actors}\n{}",r#"
 local send;local lastSent=-1
 send=function()
   local view=assert(JAC_AbsorptionAdmissionUI.Get(t.From))
@@ -549,7 +562,7 @@ end
 JAC_PRODUCT_ENVOYS_FINISHED=false;JAC_PRODUCT_ENVOYS_ERROR=nil
 Events.GameCoreEventPublishComplete.Add(send);send()
 return 'existing screen envoy action advances after each real game-core publication'
-"#}),
+"#)}),
         );
         steps.push(json!({"action":"wait_for","timeout":180,"condition":{"type":"lua","state_name":"CityStates","code":"assert(not JAC_PRODUCT_ENVOYS_ERROR,JAC_PRODUCT_ENVOYS_ERROR);return JAC_PRODUCT_ENVOYS_FINISHED==true"}}));
         steps.push(json!({"action":"ui_lua","state_name":"CityStates","code":"OnClose();return 'completed envoy screen closed'"}));
@@ -566,21 +579,13 @@ return 'existing screen envoy action advances after each real game-core publicat
     );
     steps.push(wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()".into()));
     steps.push(json!({"action":"end_turn","turns":if small&&!human{12}else{1},"timeout":1200}));
-    steps.push(wait(
+    steps.push(wait(format!(
+        "{ui_actors}\n{}",
         r#"
-local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1')
 local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)
-if v.Status=='STARTED' then return true end
-local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
-local pair=state and state.Pairs[t.From..':'..t.To]
-local admission=Game:GetProperty('JAC_ABSORPTION_ADMISSION_V1')
-if pair and admission then for _,request in pairs(admission.Requests) do
-  if request.ID==pair.ID and request.Status=='STARTED' then return true end
-end end
-return false
+return v.Status=='STARTED'
 "#
-        .into(),
-    ));
+    )));
     steps.push(core(r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
 local pair=assert(state.Pairs[t.From..':'..t.To]);local receipt=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID))

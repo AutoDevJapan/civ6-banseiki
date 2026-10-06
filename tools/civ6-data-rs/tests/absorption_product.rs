@@ -693,6 +693,70 @@ fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() 
 }
 
 #[test]
+fn product_ui_uses_native_actor_identity_when_gameplay_properties_are_unpublished(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    for small in [false, true] {
+        for human in [false, true] {
+            let scene: serde_json::Value =
+                serde_json::from_str(&product::acceptance_scenario(&repo, small, human)?)?;
+            let lua = Lua::new();
+            lua.globals().set("SMALL", small)?;
+            lua.load(r#"
+              Game={GetLocalPlayer=function() return 22 end,
+                GetProperty=function() error('Gameplay properties have not been published to UI') end}
+              PlayerManager={GetAliveMajors=function() return {
+                {GetID=function() return 11 end},{GetID=function() return 22 end}} end}
+              PlayerConfigurations={
+                [11]={GetCivilizationTypeName=function() return SMALL and 'CIVILIZATION_JAC_ODA' or 'CIVILIZATION_JAC_TAKEDA' end},
+                [22]={GetCivilizationTypeName=function() return SMALL and 'CIVILIZATION_JAC_TAKEDA' or 'CIVILIZATION_JAC_ODA' end}}
+              OPENED=0
+              local function open(from) assert(from==11);OPENED=OPENED+1 end
+              LuaEvents={CityStates_OpenOverview=open,TopPanel_OpenDiplomacyActionView=open}
+              ExposedMembers={JAC_AbsorptionProduct={Get=function(from,to)
+                assert(from==11 and to==22);return {Status='STARTED'} end}}
+            "#).exec()?;
+            for step in scene["steps"].as_array().unwrap() {
+                let state = step["state_name"].as_str().unwrap_or("");
+                if let Some(code) = step["code"].as_str() {
+                    if !state.is_empty() && state != "JAC_Absorption_Entry" {
+                        assert!(
+                            !code.contains("Game:GetProperty"),
+                            "UI relies on delayed Gameplay property publication: {code}"
+                        );
+                    }
+                    if code.contains("screen opened") || code.contains("screen reopened") {
+                        lua.load(code).exec()?;
+                    }
+                }
+                if let Some(code) = step["condition"]["code"].as_str() {
+                    assert!(
+                        !code.contains("Game:GetProperty"),
+                        "UI wait relies on Gameplay property publication: {code}"
+                    );
+                    if code.contains("v.Status=='STARTED'") {
+                        assert!(lua.load(code).eval::<bool>()?);
+                    }
+                }
+            }
+            assert_eq!(
+                lua.globals().get::<i32>("OPENED")?,
+                if human {
+                    if small {
+                        2
+                    } else {
+                        1
+                    }
+                } else {
+                    0
+                }
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn every_generated_product_reload_exits_the_running_game_before_loading() -> anyhow::Result<()> {
     let repo = Repository::checked_in();
     for small in [false, true] {
