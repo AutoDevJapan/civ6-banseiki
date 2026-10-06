@@ -391,7 +391,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
     mark(
         &mut d,
-        json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
+        json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"capture_phase":req.phase.name(),"front_prefix":req.front_prefix,"load_prefix":req.load_prefix,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
     let mut phase = req.phase;
     let mut desired = phase;

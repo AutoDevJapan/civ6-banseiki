@@ -9,7 +9,13 @@ fn output(value: &str) -> Result<(), String> {
 fn run() -> Result<(), String> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() != 2 {
-        return Err("usage: civ6-order-observer snapshot|summary <EXE> | validate|observe|parent <request.json>".into());
+        return Err("usage: civ6-order-observer snapshot|summary <EXE> | analyze <capture.jsonl> | validate|observe|parent <request.json>".into());
+    }
+    if args[0] == "analyze" {
+        let file = std::fs::File::open(&args[1]).map_err(|e| e.to_string())?;
+        let report =
+            civ6_native_probe_rs::order_capture::analysis::analyze(std::io::BufReader::new(file))?;
+        return output(&serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?);
     }
     if args[0] == "snapshot" || args[0] == "summary" {
         let bytes = std::fs::read(&args[1]).map_err(|e| e.to_string())?;

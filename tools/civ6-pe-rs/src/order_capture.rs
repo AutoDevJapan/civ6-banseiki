@@ -7,12 +7,19 @@ pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa4
 pub const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const SCHEMA: &str = "todo880-order-v1";
 
+#[path = "order_analysis.rs"]
+pub mod analysis;
+
 #[cfg(windows)]
 #[path = "order_protocol.rs"]
 pub mod protocol;
 
 pub fn source_identity() -> Value {
     let files = [
+        (
+            "civ6-pe-rs/src/order_analysis.rs",
+            include_str!("order_analysis.rs"),
+        ),
         (
             "civ6-pe-rs/src/order_protocol.rs",
             include_str!("order_protocol.rs"),

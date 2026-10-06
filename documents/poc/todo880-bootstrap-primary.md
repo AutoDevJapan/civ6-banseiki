@@ -217,3 +217,41 @@ EDE修正の先行対象検査は18件成功（lib 15件＋実CLI 3件）。GO�
 二段目の`ATTACH_ENTER`／`ENTER_ACK`を追加した。親がENTERを受信して所有状態をAttachedへ進める前に、子はnative APIを呼べない。親がSTOP中ならACKを出さず、Grantedは対象未変更として子だけ回収できる。子がENTERを送った後はNEVER_ATTACHEDを出さず、正しいACK後にnative-call-attempted状態を先に確定してDebuggerへ渡す。ACKとSTOPが同時なら、許可済みattach後の即時STOPとして復元する。ENTER後の失敗を「未attach」と偽って責任解除しない。
 
 `go-stop-tests.log`／`.exit`には、実OS子と本番と同じ一括読取経路によるGO＋STOP、GO後再照合拒否、ENTER後の偽NEVER_ATTACHED拒否を含む対象テストを保存する。Civ6実機観測は0、追加費用0。親レビュー前の成功宣言はしない。
+
+## 統合時点の照合と順序ログ解析
+
+新主担当の再開時に、writerの`c2d6700e`とbootstrap-integrationの`be17406a`で観測器一式の差分0を確認した。レビューセッション`01a10e39-1740-7d62-b952-4ffd4ab569dd`の最後の判定は、この差分のMust/Suggestion/Nit各0。親の `bootstrap-final-be17-focused.log`／`.exit` は対象22件成功（helper subprocess入口を直接実行する1件は除外）。`323613a3/main-integration`にはまだ観測器一式がないため、公開履歴の統合とbootstrap成果の統合を区別する。
+
+次段階として `civ6-order-observer analyze <capture.jsonl>` を追加した。ゲームやDLLに接続せず、取得済みJSONLを読む。source/PE hash、所有PID/FILETIME、連続sequence、時間、phaseと承認prefix、before/completedの対、元命令の到達先、最終counter・復元結果を照合する。factory call/returnは同じphase区間・thread・RSPで対応付け、phase切替を越えて結び付けない。静的snapshot、途中で切れたログ、古いPIDの終了通知、実行回数の自己申告は合格にしない。旧版identityにphase/prefix記録がない場合は明示エラーとなり、推測で補わない。
+
+このコマンドの終了0は**渡されたログ内部の整合性**だけを意味する。実機receiptの出所を認証するものではなく、mock JSONを実測に昇格させない。`runtime_activation_allowed=false`、`common_load_boundary_proven=false`を維持し、Gameplay Luaの同定・全ロード共通境界・runtime設置の不足を出す。テストの手書きJSONも構造検査fixtureとしてのみ扱う。
+
+親が常時接続へ進める順序は、初回Gameplayより前のInstall、旧オブジェクト破棄より前のClose、破棄後かつ新RESETより前のRebuild、その後の既存COMMIT CASによる許可公開である。解析結果から世代境界が実測できた箇所を絞り込み、324 runtimeへの本接続は親側で行う。ここではexport呼出し・自動install・実機操作を追加していない。
+
+### 親runnerへ接続する契約
+
+親の `native_trace::Session` は最初の非ready行を拒否し、旧probe形式を検査するため、observer parentの前置通知をそのまま渡せない。親側でstart/phase/stopの小さいadapterを追加する。既存trace/bridge/runtimeと同時起動しない。
+
+- 起動: `civ6-order-observer.exe parent <absolute input.json>`。CREATE_NO_WINDOW、stdin/stdoutをpipeにし、stderrも排出する。live_chainから継承した `CIV6_LIVE_CHAIN_PID` と `CIV6_LIVE_LOCK_PATH` を維持する。
+- 入力: schema=`todo880-order-v1`、pid/created_filetime、chain_pid/chain_created_filetime、controller_pid/controller_created_filetime、source_dll/source_dll_sha256、output、max_seconds(1..300)、max_hits(1..256)、front_prefix/load_prefix(1..4)、phase(front/load)の15フィールド。ゲームのFILETIMEは既存pin済みhandleから取得する。chainも同一leaseの実値を使う。controllerはrunner自身の実値でよく、parent CLIが自身へ再束縛する。DLLは同sourceビルドの絶対パスと実SHAで、installを要求しない。
+- 入力を `order.input.json`、outputを `order.jsonl` にすれば、parent生成の `order.request.json` と衝突しない。既存outputを使い回さず、1実行1組にする。
+- `attach_ready` / `ATTACH_ENTER` は前置通知。GO/ENTER_ACKはparent内部で処理し、外側runnerから送らない。`{"ready":true,"pid":1234,"phase":"front","capture_only":true}` が初期ready（PIDは説明例）。stdinを開いたまま保持する。
+- `phase load\n` または `phase front\n` を送り、同PIDの `{"phase_ready":"load","pid":1234}` を待ってから操作する。phase切替は最大8回。
+- stopは `stop\n` を1回送り、同game PID/FILETIMEの `order_parent_receipt` を読む。正常観測終了は child_reaped=true、cleanup_confirmed=true、restored=true、child_exit_code=0、error=null。その後parent自体の終了0をwait/reapし、readerを回収する。復元の個別証拠は先行する同identityの `order_stop`。
+- never_attached=trueは未接続での回収であり復元成功にしない。critical_recovery_retainedは回収責任継続。20秒経過だけでparentをkill/dropしない。標準出力断を成功扱いしない。native_order_observedとconsole_lease_generation_verifiedは実測受入前false。
+
+親は既存ビルド対象の `civ6-startup-diagnostics.exe` に `order-parent <input.json>` と `observe <request.json>` を追加する。autotestのnative-probe依存でbootstrap-orderを有効にし、parentはJSON Valueを `windows::order_capture::parent`、observeは `Request::parse` の結果を `windows::order_capture::observe` へ渡す。parentの関数引数はRequestではなくValue。同一EXEを `observe <generated request.json>` で起動するため、子側の入口名を変えない。GO/ACKをadapterで再実装しない。
+
+この方法ならlive_chainの `driver::prepare` が必ずビルドするdiagnosticsを再利用でき、live toolingへの追加build処理は不要。compiler-artifactのmanifest_path、target.name、executableの既存確認を維持する。worker検査用の別名 `civ6-order-observer` は引き続き共有cargo_gate経由でbuildできる。
+
+```text
+D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manifest-path <worktree>/tools/Cargo.toml --target-dir <dedicated target> -p civ6-native-probe-rs --features bootstrap-order --bin civ6-order-observer
+<worktree>/tools/target/release/civ6-startup-diagnostics.exe order-parent <absolute order.input.json>
+```
+
+親の実行記録には実際に起動したdiagnosticsのSHAとcheckout HEADも保存する。observerのcompiled_source_sha256は共有capture実装を束縛するが、diagnostics wrapper/runner全体を束縛しない。Steamフォルダへの配置や共有DLLの置換は不要。
+次の1実機は、同じowned lease下でfront ready後に初回factory/Lua初期化を取り、load phase_ready後に旧context/Lua破棄を取る。既にfactoryが通過した状態なら初回未観測と記録する。4slotの非選択phaseは欠測であり呼出し0としない。初期receipt前に解析器や自動Installを追加しない。
+
+### 324 ABIの後続接続条件
+
+`D:/CC/Work/todo324/runtime-bootstrap-abi.json`（source `7d6a1628`、2026-10-06 09:43:37）を参照する。Install configは40byte・align8・version `0x03240001`・mode6、入力trace address/sizeは0。Closeは旧native object/Lua破棄前、Rebuildは破棄後かつ新RESET前。COMMIT後Rebuildは状態を消すので行わない。未接続のABIラッパーは今回追加せず、最初の実機順序receiptから親のnative境界実装を進める。
