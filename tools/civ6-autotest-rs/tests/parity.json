@@ -1296,7 +1296,7 @@
     "source": "tools/civ6-autotest/tests/test_safety.py",
     "class": "ScenarioSafetyTests",
     "test": "test_transition_pre_send_failure_is_logged_without_waiting",
-    "rust_test": "test_transition_pre_send_failure_is_logged_without_waiting",
+    "rust_test": "test_transition_pre_send_failure_is_bounded_by_the_step_deadline",
     "assertions": "Start and load mutations each send once; connection error logged; no transition key.",
     "rust_target": "driver_safety"
   },
