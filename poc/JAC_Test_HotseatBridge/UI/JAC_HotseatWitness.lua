@@ -18,6 +18,7 @@ local lastError = nil
 local awaitingTurnReady = nil
 local NIL = {}
 local serial = 0
+local inputSamples = 0
 
 local function value(v)
   if v == nil or v == NIL then return "nil" end
@@ -116,6 +117,10 @@ local function observe()
   if not booted then
     booted = true
     emit("BOOT", 0, observed)
+    -- Diagnostics never acknowledge a step or include text typed by a player.
+    print("JAC_HS_KEYS|1|" .. nonce .. "|" .. scene .. "|" ..
+      tostring(KeyEvents.KeyDown) .. "|" .. tostring(KeyEvents.KeyUp) .. "|" ..
+      tostring(Keys and Keys.F13) .. "|" .. tostring(Keys and Keys.VK_F13))
   end
   if shown and not ready and (lastShown ~= true or lastReady == true) then
     emit("DIALOG_WAIT", 0, observed)
@@ -189,9 +194,17 @@ local function execute(step, action)
 end
 
 local function onInput(input)
-  if input:GetMessageType() ~= KeyEvents.KeyUp then return false end
   if not booted then return false end
+  local message = input:GetMessageType()
   local key = input:GetKey()
+  if (message == KeyEvents.KeyDown or message == KeyEvents.KeyUp) and
+      (key == 0 or key == 13 or plan.query_keys[key] or plan.action_keys[key]) and
+      inputSamples < 32 then
+    inputSamples = inputSamples + 1
+    print("JAC_HS_INPUT|1|" .. nonce .. "|" .. scene .. "|" ..
+      tostring(message) .. "|" .. tostring(key))
+  end
+  if message ~= KeyEvents.KeyUp then return false end
   local step = plan.query_keys[key]
   if step then execute(step, "ui_lua"); return true end
   local action = plan.action_keys[key]
