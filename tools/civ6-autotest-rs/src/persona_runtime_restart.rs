@@ -429,6 +429,9 @@ mod tests {
     struct LostStateRead {
         calls: Arc<Mutex<usize>>,
         change_identity: bool,
+        change_after_read: bool,
+        always_unknown: bool,
+        expected_code: String,
     }
     impl Backend for LostStateRead {
         fn require_single_process(&mut self) -> Result<()> {
@@ -438,26 +441,30 @@ mod tests {
             Ok(vec!["InGame".into()])
         }
         fn run_lua(&mut self, _: &str, code: &str, _: f64) -> Result<String> {
-            assert_eq!(
-                code,
-                "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"
-            );
+            assert_eq!(code, self.expected_code);
             let mut n = self.calls.lock().unwrap();
             *n += 1;
-            if *n == 1 {
+            if *n == 1 || self.always_unknown {
                 Err(Error::unknown("lost readonly acknowledgment"))
             } else {
                 Ok("true".into())
             }
         }
         fn validate_native_bridge_target(&mut self) -> Result<Option<(u32, u64)>> {
-            Ok(Some((7, if self.change_identity { 124 } else { 123 })))
+            let changed = self.change_identity
+                || (self.change_after_read && *self.calls.lock().unwrap() >= 2);
+            Ok(Some((7, if changed { 124 } else { 123 })))
         }
     }
 
     #[test]
     fn runner_wait_reconciles_a_lost_pure_state_read_without_replaying_evolution() {
-        for changed in [false, true] {
+        for (changed, after, unknown) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
             let dir = tempfile::tempdir().unwrap();
             let reads = Arc::new(Mutex::new(0));
             let mut r = Runner::with_backend(
@@ -469,6 +476,9 @@ mod tests {
                 Box::new(LostStateRead {
                     calls: Arc::clone(&reads),
                     change_identity: changed,
+                    change_after_read: after,
+                    always_unknown: unknown,
+                    expected_code:"return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'".into(),
                 }),
                 Arc::new(SystemClock),
             );
@@ -478,12 +488,53 @@ mod tests {
             let result = r.wait(&c, 5.0, false);
             if changed {
                 assert!(result.is_err());
-                assert_eq!(*reads.lock().unwrap(), 1);
+                assert_eq!(*reads.lock().unwrap(), 0);
+            } else if after {
+                assert!(result.unwrap_err().message.contains("after read"));
+                assert_eq!(*reads.lock().unwrap(), 2);
+            } else if unknown {
+                assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
+                assert_eq!(*reads.lock().unwrap(), 4);
             } else {
                 result.unwrap();
                 assert_eq!(*reads.lock().unwrap(), 2);
             }
         }
+    }
+
+    #[test]
+    fn non_allowlisted_unknown_wait_never_closes_screens_or_resends_lua() {
+        let dir = tempfile::tempdir().unwrap();
+        let reads = Arc::new(Mutex::new(0));
+        let code = "return Game:GetProperty('SOME_OTHER_STATE')==true";
+        let mut r = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            dir.path().into(),
+            dir.path().into(),
+            dir.path().into(),
+            4318,
+            Box::new(LostStateRead {
+                calls: Arc::clone(&reads),
+                change_identity: false,
+                change_after_read: false,
+                always_unknown: true,
+                expected_code: code.into(),
+            }),
+            Arc::new(SystemClock),
+        );
+        r.persona_runtime_restart = true;
+        r.resident_runtime_identity = Some((7, 123));
+        assert_eq!(
+            r.wait(
+                &json!({"type":"lua","state_name":"InGame","code":code}),
+                5.0,
+                false
+            )
+            .unwrap_err()
+            .kind,
+            ErrorKind::LuaResponseUnknown
+        );
+        assert_eq!(*reads.lock().unwrap(), 1);
     }
 
     fn log_runner(dir: &Path) -> Runner {
