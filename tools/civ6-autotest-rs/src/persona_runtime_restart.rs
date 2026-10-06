@@ -166,11 +166,10 @@ impl Runner {
         }
         self.baseline = Some(baseline);
         self.persona_current_log_prefix = prefix;
-        self.write_baseline()?;
+        self.persona_current_logs_archived = false;
         self.log_step_baseline = None;
         self.log_matches_consumed.clear();
-        self.persona_current_logs_archived = false;
-        Ok(())
+        self.write_baseline()
     }
     pub(super) fn validate_persona_runtime_mode(&self) -> Result<()> {
         if !self.persona_runtime_restart {
@@ -458,6 +457,37 @@ mod tests {
         assert!(r.read_run_logs().is_err());
         fs::remove_file(r.logs.join("Database.log")).unwrap();
         assert!(r.begin_persona_log_generation().is_err());
+    }
+
+    #[test]
+    fn baseline_write_failure_keeps_replacement_logs_in_the_final_aggregate() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = log_runner(dir.path());
+        for name in judge::LOG_NAMES {
+            fs::write(r.logs.join(name), format!("initial prefix\nfirst {name}\n")).unwrap();
+        }
+        r.archive_persona_log_generation().unwrap();
+        assert!(r.persona_current_logs_archived);
+        for name in judge::LOG_NAMES {
+            fs::write(r.logs.join(name), format!("replacement {name}\n")).unwrap();
+        }
+        fs::create_dir(dir.path().join("baseline.json")).unwrap();
+        assert!(r.begin_persona_log_generation().is_err());
+        assert!(!r.persona_current_logs_archived);
+        let logs = r.read_run_logs().unwrap();
+        for name in judge::LOG_NAMES {
+            assert!(logs[name].contains("first") && logs[name].contains("replacement"));
+        }
+        let mut f = OpenOptions::new()
+            .append(true)
+            .open(r.logs.join("Lua.log"))
+            .unwrap();
+        writeln!(f, "Runtime Error: late JAC_PoC_LeaderPersona/script.lua").unwrap();
+        drop(f);
+        let logs = r.read_run_logs().unwrap();
+        assert!(judge::judge(&logs, "generic", None, true)
+            .iter()
+            .any(|c| !c.passed));
     }
 
     #[test]
