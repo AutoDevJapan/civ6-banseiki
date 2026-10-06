@@ -4,8 +4,8 @@
 //! never enables or bootstraps normal accounting. Neither path proves that a
 //! native runtime is installed: Rust still checks the current native Governor.
 //! The output cache lives only in this Lua context. A native-only session
-//! rebuild must also arrange Lua reinitialization/publication; no native epoch
-//! can be inferred from saved properties or claimed observed by this glue.
+//! rebuild must request canonical republication or reload Lua. No native epoch
+//! is inferred from saved properties or claimed observed by this glue.
 use crate::paid_catalog::{BITS, COMMIT_KEY, COUNT, EXPERIMENT, SCHEMA, WIDTH};
 
 pub fn source() -> String {
@@ -41,6 +41,8 @@ local function ClosePaidAdmissionOwners()
 end
 local function NormalPaidPublicationActive(ids, rows)
     if not PersonaEvents or PersonaEvents.Enabled() or
+       Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+       Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil or
        type(PersonaEvents.NormalStatus) ~= 'function' or
        type(PersonaEvents.NormalPaid) ~= 'function' then return false; end
     local view = PersonaEvents.NormalStatus(ids[1], rows[1].row.LeaderType);
@@ -68,6 +70,21 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     if not rows or #rows ~= @COUNT@ then close(); return; end
     if not diagnostic then
+        -- A private appointment experiment cannot reuse normal paid authority,
+        -- including a previously cached true from before that flag appeared.
+        if Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+           Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil then
+            -- Normal mode closes even a schemaless old native generation.
+            -- Only the independently opted-in event diagnostic with no paid
+            -- namespace/cache uses its existing appointment reset transaction.
+            if not PersonaEvents.Enabled() or schema ~= nil or normalPaidPublished then
+                if not close() then return; end
+            end
+            -- Preserve the separately opted-in event diagnostic's appointment
+            -- publication, without publishing any paid catalog or permission.
+            if PersonaEvents.Enabled() and SyncAppointmentAdmission(forceClosed, onlyOwner) ~= true then close(); end
+            return;
+        end
         -- Bootstrap the normal event store only at the existing all-closed
         -- appointment boundary. Never set the experiment flag to get there.
         -- On reload, close the previous paid generation before opening cells.
@@ -217,6 +234,17 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         ClosePaidAdmissionOwners();
     end
 end
+-- Explicit synchronized refresh after a controller install/rebuild. The caller
+-- supplies no eligibility, payment, flag or native-generation authority.
+GameEvents.JAC_LeaderPersonaRepublish.Add(function(owner, params)
+    if type(owner) ~= 'number' or owner % 1 ~= 0 or owner < 0 or owner >= 64 or
+       type(params) ~= 'table' or not Player(owner, true) or
+       Game:GetProperty("@EXPERIMENT@") == true or PersonaEvents.Enabled() then return; end
+    if not ClosePaidAdmissionOwners() then return; end
+    if Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+       Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil then return; end
+    SyncProductionAdmission(false, nil);
+end);
 -- A diagnostic projection is a synchronized script operation. It never
 -- reconciles persons, finalizes evolution or sends a native title operation.
 GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
@@ -260,8 +288,19 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua");
         let file = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
-        assert!(
-            file.contains(&super::source()),
+        let begin = "-- BEGIN RUST GENERATED PAID ASSIGNMENT GLUE\n";
+        let end = "-- END RUST GENERATED PAID ASSIGNMENT GLUE\n";
+        assert_eq!(file.matches(begin).count(), 1, "paid block must be unique");
+        assert_eq!(
+            file.matches(end).count(),
+            1,
+            "paid block end must be unique"
+        );
+        let first = file.find(begin).unwrap();
+        let last = file[first..].find(end).unwrap() + first + end.len();
+        assert_eq!(
+            &file[first..last],
+            super::source(),
             "run generate-paid-glue before testing"
         );
     }

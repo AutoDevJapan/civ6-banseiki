@@ -45,6 +45,62 @@ end
 "#;
 
 #[test]
+fn normal_paid_publication_explicit_refresh_replays_canonical_data_without_flags_or_payments() {
+    let lua=normal_context(PAID_OBSERVER);
+    run(&lua,r#"
+local l,row=normalJoin(0,1); used[0]=2; success(0,row,0); appointed(0,row); success(0,row,1); finalize(0,l)
+assert(paidVisible[0][14]==true)
+local seq=properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.sequence; local count=paidCommitEvents
+-- Simulate a newly attached consumer, keeping the Lua output cache intact.
+for owner=0,21 do paidVisible[owner]={}; paidCommits[owner]=nil end
+ExposedMembers.JAC_LeaderPersona.Reconcile(); assert(paidVisible[0][14]==nil)
+emit(GameEvents,'JAC_LeaderPersonaRepublish',0,{})
+assert(paidVisible[0][14]==true and paidCommitEvents==count+22)
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.sequence==seq and used[0]==2 and #unitLists[0]==0)
+assert(properties.JAC_TEST853_PAID_ASSIGNMENT_V1==nil and properties.JAC_TEST324_EVENTS_PROBE==nil and operations==0)
+properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.version=2
+emit(GameEvents,'JAC_LeaderPersonaRepublish',0,{}); noPaidTrue()
+"#);
+}
+
+#[test]
+fn normal_paid_publication_closes_cached_true_when_private_appointment_flags_appear() {
+    for flag in ["JAC_TEST853_ADMISSION_ACTIVE", "JAC_TEST853_ADMISSION_MANUAL_APPOINT"] {
+        for value in ["true", "false"] {
+            for refresh in [false, true] {
+                let lua=normal_context(PAID_OBSERVER);
+                run(&lua,"local l,row=normalJoin(0,1); used[0]=2; success(0,row,0); appointed(0,row); success(0,row,1); finalize(0,l); assert(paidVisible[0][14]==true)");
+                run(&lua,&format!("commitsBeforePrivate=paidCommitEvents; properties['{flag}']={value}"));
+                run(&lua, if refresh { "emit(GameEvents,'JAC_LeaderPersonaRepublish',0,{})" } else { "ExposedMembers.JAC_LeaderPersona.Reconcile()" });
+                run(&lua,"noPaidTrue(); assert(paidCommitEvents==commitsBeforePrivate,'private rejection republished a paid catalog'); assert(used[0]==2 and operations==0 and properties.JAC_TEST853_PAID_ASSIGNMENT_V1==nil)");
+            }
+        }
+    }
+}
+
+#[test]
+fn normal_paid_publication_private_flags_close_schemaless_saved_permissions() {
+    for flag in ["JAC_TEST853_ADMISSION_ACTIVE", "JAC_TEST853_ADMISSION_MANUAL_APPOINT"] {
+        let setup=format!(r#"{PAID_OBSERVER}
+properties['{flag}']=false
+for owner=0,21 do paidVisible[owner][14]=true end
+"#);
+        let lua=normal_context(&setup);
+        run(&lua,"noPaidTrue(); assert(properties.JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA==nil and paidCommitEvents==0); for owner=0,21 do assert(paidResets[owner]>0) end");
+    }
+}
+
+#[test]
+fn normal_paid_publication_false_private_flag_preserves_explicit_event_diagnostic_only() {
+    for flag in ["JAC_TEST853_ADMISSION_ACTIVE", "JAC_TEST853_ADMISSION_MANUAL_APPOINT"] {
+        let lua=normal_context(PAID_OBSERVER);
+        run(&lua,"emit(GameEvents,'JAC_LeaderPersonaEventsProbe',0,{Source=1}); normalJoin(0,1); assert(playerProps[0][901014]==true)");
+        run(&lua,&format!("properties['{flag}']=false; commitsBeforePrivate=paidCommitEvents; ExposedMembers.JAC_LeaderPersona.Reconcile()"));
+        run(&lua,"noPaidTrue(); assert(playerProps[0][901014]==true and paidCommitEvents==commitsBeforePrivate and operations==0 and used[0]==0)");
+    }
+}
+
+#[test]
 fn normal_paid_publication_rechecks_a_cached_true_after_receipt_loss() {
     let lua=normal_context(PAID_OBSERVER);
     run(&lua,r#"

@@ -1396,6 +1396,8 @@ local function ClosePaidAdmissionOwners()
 end
 local function NormalPaidPublicationActive(ids, rows)
     if not PersonaEvents or PersonaEvents.Enabled() or
+       Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+       Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil or
        type(PersonaEvents.NormalStatus) ~= 'function' or
        type(PersonaEvents.NormalPaid) ~= 'function' then return false; end
     local view = PersonaEvents.NormalStatus(ids[1], rows[1].row.LeaderType);
@@ -1423,6 +1425,21 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     local rows = AdmissionRows();
     if not rows or #rows ~= 22 then close(); return; end
     if not diagnostic then
+        -- A private appointment experiment cannot reuse normal paid authority,
+        -- including a previously cached true from before that flag appeared.
+        if Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+           Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil then
+            -- Normal mode closes even a schemaless old native generation.
+            -- Only the independently opted-in event diagnostic with no paid
+            -- namespace/cache uses its existing appointment reset transaction.
+            if not PersonaEvents.Enabled() or schema ~= nil or normalPaidPublished then
+                if not close() then return; end
+            end
+            -- Preserve the separately opted-in event diagnostic's appointment
+            -- publication, without publishing any paid catalog or permission.
+            if PersonaEvents.Enabled() and SyncAppointmentAdmission(forceClosed, onlyOwner) ~= true then close(); end
+            return;
+        end
         -- Bootstrap the normal event store only at the existing all-closed
         -- appointment boundary. Never set the experiment flag to get there.
         -- On reload, close the previous paid generation before opening cells.
@@ -1572,6 +1589,17 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         ClosePaidAdmissionOwners();
     end
 end
+-- Explicit synchronized refresh after a controller install/rebuild. The caller
+-- supplies no eligibility, payment, flag or native-generation authority.
+GameEvents.JAC_LeaderPersonaRepublish.Add(function(owner, params)
+    if type(owner) ~= 'number' or owner % 1 ~= 0 or owner < 0 or owner >= 64 or
+       type(params) ~= 'table' or not Player(owner, true) or
+       Game:GetProperty("JAC_TEST853_PAID_ASSIGNMENT_V1") == true or PersonaEvents.Enabled() then return; end
+    if not ClosePaidAdmissionOwners() then return; end
+    if Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE') ~= nil or
+       Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT') ~= nil then return; end
+    SyncProductionAdmission(false, nil);
+end);
 -- A diagnostic projection is a synchronized script operation. It never
 -- reconciles persons, finalizes evolution or sends a native title operation.
 GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
