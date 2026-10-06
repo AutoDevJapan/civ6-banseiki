@@ -18,7 +18,8 @@ local function EmptyLand(p)
   -- Use the same pre-mutation asset check as the city-origin scenario.
   if not pcall(AssetFree,p) then return false end
   for id=0,63 do local player=Players[id]
-    if player then for _,u in player:GetUnits():Members() do
+    local units=player and player:GetUnits()
+    if units then for _,u in units:Members() do
       if u:GetX()==p:GetX() and u:GetY()==p:GetY() then return false end
     end end
   end

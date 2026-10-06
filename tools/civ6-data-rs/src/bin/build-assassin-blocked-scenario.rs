@@ -422,6 +422,8 @@ mod tests {
         let setup = data["steps"][4]["code"].as_str().unwrap();
         for mode in [
             "safe",
+            "inactive_slot",
+            "other_city",
             "resource",
             "improvement",
             "district",
@@ -440,7 +442,7 @@ Game={{GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() retu
   GetProperty=function(_,k) return props[k] end,SetProperty=function(_,k,v) props[k]=v end}}
 local plots={{}}
 for x=0,36 do local px=x; plots[x]={{GetX=function() return px end,GetY=function() return 0 end,
-  IsCity=function() return px==0 end,IsWater=function() return mode=='water' and px==31 end,
+  IsCity=function() return px==0 or (mode=='other_city' and px==31) end,IsWater=function() return mode=='water' and px==31 end,
   IsImpassable=function() return terrain[px]==9 end,GetOwner=function() return mode=='foreign' and px==31 and 1 or -1 end,
   GetTerrainType=function() return terrain[px] or 1 end,GetFeatureType=function() return feature[px] or -1 end,
   IsNaturalWonder=function() return mode=='wonder' and px==31 end,
@@ -456,6 +458,8 @@ local blocker={{GetX=function() return 31 end,GetY=function() return 0 end,GetID
 local units={{Members=function() local done=false; return function()
   if mode=='occupied' and not done then done=true; return 7,blocker end end end}}
 Players={{[0]={{IsHuman=function() return true end,GetCities=function() return cities end,GetUnits=function() return units end}}}}
+-- An unused engine slot can have a Player object and no unit collection.
+Players[22]={{GetUnits=function() return nil end}}
 Map={{GetPlotCount=function() return 1 end,GetPlotByIndex=function() return plots[30] end,
   GetPlot=function(x) return plots[x] end,GetPlotDistance=function() return 5 end,
   GetAdjacentPlots=function() local rows={{}}; for x=31,36 do rows[#rows+1]=plots[x] end; return rows end}}
@@ -475,8 +479,9 @@ function Verify(safe)
 end
 "#)).exec()?;
             let result = lua.load(setup).exec();
-            assert_eq!(result.is_ok(), mode == "safe", "{mode}: {result:?}");
-            lua.load(format!("Verify({})", mode == "safe")).exec()?;
+            let safe = matches!(mode, "safe" | "inactive_slot");
+            assert_eq!(result.is_ok(), safe, "{mode}: {result:?}");
+            lua.load(format!("Verify({safe})")).exec()?;
         }
         Ok(())
     }
