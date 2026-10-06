@@ -1074,7 +1074,14 @@ mod platform {
             name: &str,
             seconds: u64,
             mode: &str,
-            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        ) -> Result<Self> {
+            Self::start_selected(pid,started,output,name,seconds,mode,close_game,None)
+        }
+        pub fn start_selected(
+            pid:u32,started:f64,output:&Path,name:&str,seconds:u64,mode:&str,
+            mut close_game:Box<dyn FnMut(u32,f64)->Result<()>+Send>,
+            selection:Option<&crate::native_bridge_assets::Selection>,
         ) -> Result<Self> {
             let resident_runtime = mode == "paid-assignment-runtime";
             let mode = match mode {
@@ -1099,7 +1106,8 @@ mod platform {
             let (created, target) = pinned_created(pid, started)?;
             let runner = std::env::current_exe()?;
             let executable =
-                if let Some(directory) = std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY") {
+                if let Some(selection)=selection {selection.directory.join("civ6-native-bridge.exe")}
+                else if let Some(directory) = std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY") {
                     let directory = PathBuf::from(directory);
                     if !directory.is_absolute() {
                         return Err(Error::input("native bridge directory must be absolute"));
@@ -1126,7 +1134,9 @@ mod platform {
                 .open(&dll)?;
             let controller_sha = format!("{:x}", Sha256::digest(std::fs::read(&executable)?));
             let dll_sha = format!("{:x}", Sha256::digest(std::fs::read(&dll)?));
-            if std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY").is_some() {
+            if let Some(selection)=selection {
+                selection.verify(&controller_sha,&dll_sha)?;
+            } else if std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY").is_some() {
                 for (key, actual) in [
                     ("CIV6_NATIVE_BRIDGE_CONTROLLER_SHA256", &controller_sha),
                     ("CIV6_NATIVE_BRIDGE_DLL_SHA256", &dll_sha),
@@ -2330,6 +2340,9 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn start_selected(_:u32,_:f64,_:&Path,_:&str,_:u64,_:&str,_:Box<dyn FnMut(u32,f64)->Result<()>+Send>,_:Option<&crate::native_bridge_assets::Selection>)->Result<Self> {
+        Err(Error::input("native bridge requires Windows x64"))
+    }
     pub fn ai_diagnostic(&mut self, _: &Value) -> Result<Value> {
         Err(Error::input("AI diagnostics require Windows"))
     }

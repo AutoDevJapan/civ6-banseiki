@@ -825,6 +825,20 @@ readerは支払い用の一操作許可と区別する。通常paid経路の世�
 共有3calleeは全ownerが通るため、選択したcallback外の呼出しでは原ABIをそのまま通し、対象の128行枠を消費しない。対象callback内の別Index等は拒否記録として残す。OS子では対象外150呼出し後にも対象callbackの2行を採取できることを検査した。ここで確認するのは一callbackの復帰であり、world全体の排出ではない。
 
 統合の限定結果はnative AI対象62成功、controller3成功、driver native対象56成功、最終gateway差分14成功、最終reader driver差分3成功。後二者は前の対象と重複するので合計へ加算しない。全て失敗ignored0・警告0、`CARGO_PROFILE_DEV_DEBUG=0 / CARGO_PROFILE_TEST_DEBUG=0 / CARGO_INCREMENTAL=0`、共有cargo_gateと専用targetを使用した。通常Gameplay/rowcatalog/order本体はd21からの差分なし。Lunaの統合・最終限定レビューは新Must0で、ABI文書v2残存のSuggestionをv3へ修正した（`ai-d21-luna-review.txt / ai-d21-luna-final-review.txt`）。検査とレビューは実Civ6の支払い受入ではない。
+
+## game/lease 0からの共通live_chain用SP05 scene
+
+親の `D:/CC/Work/todo880/sp-reassign-05-proof.json` を一次の保存証跡として選んだ。source `6eba1e5d`、実機32手順/6判定成功、T8、Date所有者0、功績2、再配置後の追加支払い0。物理保存 `JAC-SP-Reassigned-Preserved-ed4b6d5031724956b78502760cc78dc4-0000000000000001.Civ6Save` のSHA-256は `0e7ad9105948f3cd767f78dfefa3fd903ba34a159d2139bc19504d864e94ca51` で、今回実ファイルを読み証跡と一致した。AI他ownerの加入を準備せず、当該runのnormal ledgerとnative queryからreader対象を選ぶ。ledgerが復元されなければ拒否し、補完しない。
+
+`civ6-ai-readonly --prepare-only --output <新dir> --source-save <このSP05実保存> --native-from <feature有効ビルドdir>` はゲームやleaseへ接続せず、従来の8step `reader-one.json` と、起動/読込を含む13step `reader-live.json` を生成する。後者は明示restart、必要mods（元113の既存enable_modsを再利用）、mods反映restart、exact_nameとsave_sha256付きload、InGame待機、その後に従来8stepを接続する。shipは先頭restartを重複追加せず、exact_nameにより保存名をsuffix変更しない。latest/checkpoint pointerは使わず、既存loadの保存ハンドルpinを保持する。新gameは作らない。
+
+shipがdefault featuresでdriverをbuildしても、sceneの `native_bridge_assets` が専用directory、controller_sha256、dll_sha256を明示する。runnerはそれをBackend経由でSessionへ渡し、親の既存ファイル共有制限付きread handle、両hash検査、capabilities照合、process identityとassets receiptをそのまま使う。scene指定が優先で、scene指定なしの場合は既存 `CIV6_NATIVE_BRIDGE_DIRECTORY` と両SHA環境変数の契約を保持する。wrapperがこれらを消して隣接DLLへ戻す処理は撤去した。lease環境を手動で作らず、live_chain自身が設定するものを使う。
+
+生成済みsceneは `D:/CC/Work/todo880/ai-reader-sp05-frozen/reader-live.json`（default features版driverの `--check` で13step VALID）。専用assetsは同dirの `native/`。controller SHAは `6fe79b5753f21300ac3f21470b9577d89c728e9f9663f7b567051576b58a7ae6`、DLL SHAは `7193c237132a25d84cc96729c95da85c93836dacb9c697482a9ccbb869d80a96`。feature有効版を専用targetでbuildし、両入力ファイルを読取pinしたまま新規directoryへコピーして固定した。以後のdefault buildはこのdirectoryを変更しない。共有隣接DLLはこのsceneでは選ばない。
+
+親が固定候補SHAを `feat/todo880-ai-reader-sp05` として登録/公開した後の共通コマンドは `D:/CC/Tools/civ6-live/live_chain.exe todo880-ai-reader-sp05:D:/CC/Work/todo880/ai-reader-sp05-frozen/reader-live.json`。共通shipはslash入りnameを一時出力pathにも使うため、worker branchの `agent/...` を直接渡さず、このslash無し登録名を用いる。branch/sceneの準備は完了したが、workerはこのコマンドを実行しておらず、main変更・public push・ship登録・game/lease取得は0。親の実機枠で一回の自然ターンを観測し、actual-requestと空でないcallback pairを当該artifactへ生成する。phase/install/drain/world世代の未証明と正式AI支払い未達は維持する。
+
+限定検査はnative bridge関連18成功、その後のassets小集合3成功（うち誤ったSP05 bytesの拒否1件が追加）、失敗ignored0・警告0。全件matrixは再実行せず、debug0/incremental0の共有cargo_gateを使用した。Lunaの限定レビューはMust0（`D:/CC/Work/todo880/ai-load-scene-review.txt`）。staging CLI単体では入力素材がfeature有効かを判定しないという非阻害Suggestionは、今回は明示feature build log `ai-load-feature-build.log` と上記既知SHAの組を固定して対応範囲を限定した。任意の別素材を同じ受入結果として扱わない。生成scene自体のSHAは `0ee3b0756e724fb893ee499d175a01882240d52cc57f898f371af01e7529a9a8`。
 ### Root324: 通常Gameplay成功通知を使う有限会計
 
 基点0051068eの費用2診断は、実機agent-todo-324-a39639587c09-01で39/39手順、6/6判定が成功した。原steps.jsonl、result.jsonとtodo324-events-cost2.jsonlを照合した。所有者0・伊達稙宗Index6ではBASE成功seq1/Spent1、任命成功seq2/Spent1、TITLE_1成功seq3/Spent2となり、保存再読込で取得集合・定義・本人支払数・Spent・確定後Spentが一致した。功績・全通知履歴・保存前の確定列番号の完全比較は未達である。判定対象のRuntime Error等は0件だが、ログには公式Mods検索のcontext作成失敗と翻訳重複がある。再読込後の正式操作再送は0である。この事実は同診断だけの証明で、通常22人の実機受入ではない。

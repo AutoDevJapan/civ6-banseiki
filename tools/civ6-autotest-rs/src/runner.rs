@@ -22,6 +22,9 @@ mod persona_runtime_restart;
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
+    fn select_native_bridge_assets(&mut self,_selection:crate::native_bridge_assets::Selection)->Result<()> {
+        Err(Error::input("backend cannot select pinned native assets"))
+    }
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         Ok(None)
     }
@@ -703,10 +706,15 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
     native_trace: Option<crate::native_trace::Session>,
     native_bridge: Option<crate::native_bridge::Session>,
+    native_bridge_assets:Option<crate::native_bridge_assets::Selection>,
     native_runtime: Option<crate::native_bridge::Session>,
     native_order: Option<crate::native_order::Session>,
 }
 impl Backend for SystemBackend {
+    fn select_native_bridge_assets(&mut self,selection:crate::native_bridge_assets::Selection)->Result<()> {
+        if self.native_bridge.is_some() || self.native_runtime.is_some() {return Err(Error::input("native assets already in use"));}
+        self.native_bridge_assets=Some(selection);Ok(())
+    }
     fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
             .launch_floor
@@ -887,7 +895,7 @@ impl Backend for SystemBackend {
         let (pid, start) = self
             .single_process(0.0)?
             .ok_or_else(|| Error::input("Civ6 is absent"))?;
-        self.native_bridge = Some(crate::native_bridge::Session::start(
+        self.native_bridge = Some(crate::native_bridge::Session::start_selected(
             pid,
             start,
             output,
@@ -895,6 +903,7 @@ impl Backend for SystemBackend {
             seconds,
             mode,
             Box::new(crate::native_bridge::close_pinned_game),
+            self.native_bridge_assets.as_ref(),
         )?);
         Ok(())
     }
@@ -4262,6 +4271,9 @@ impl Runner {
         }
     }
     fn run_inner(&mut self) -> Result<i32> {
+        if let Some(selection)=crate::native_bridge_assets::Selection::from_scene(&self.scenario)? {
+            self.backend.select_native_bridge_assets(selection)?;
+        }
         let mut frontend_ready = false;
         if self.auto_restart {
             let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;

@@ -10,6 +10,11 @@ struct Args {
     /// Offline only: write/check the common case, never open a process.
     #[arg(long)]
     prepare_only: bool,
+    /// Add exact-hash SP05 load and freeze both native assets for live_chain.
+    #[arg(long, requires = "native_from", requires = "prepare_only")]
+    source_save: Option<PathBuf>,
+    #[arg(long, requires = "source_save")]
+    native_from: Option<PathBuf>,
 }
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -35,6 +40,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         .open(&scenario)?;
     writeln!(file, "{}", serde_json::to_string_pretty(&case)?)?;
     if args.prepare_only {
+        if let (Some(save), Some(native)) = (&args.source_save, &args.native_from) {
+            let live =
+                civ6_autotest_rs::ai_reader_case::prepare_load_scene(save, native, &args.output)?;
+            let path = args.output.join("reader-live.json");
+            let mut file = std::fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&path)?;
+            writeln!(file, "{}", serde_json::to_string_pretty(&live)?)?;
+            println!(
+                "{}; exact SP05 and both native hashes frozen; no game opened",
+                path.display()
+            );
+        }
         println!("{}; no game opened", scenario.display());
         return Ok(0);
     }
@@ -50,15 +69,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         .arg(args.output.join("run"))
         .arg(&scenario)
         .env("CIV6_PERSONA_RUNTIME_RESTART", "0");
-    // Keep the selected candidate trio adjacent; do not inherit another lane's
-    // controller override. Parent/live-chain owns the actual game and lease.
-    for key in [
-        "CIV6_NATIVE_BRIDGE_DIRECTORY",
-        "CIV6_NATIVE_BRIDGE_CONTROLLER_SHA256",
-        "CIV6_NATIVE_BRIDGE_DLL_SHA256",
-    ] {
-        command.env_remove(key);
-    }
+    // Preserve explicit native directory+hash overrides. Standalone live_chain
+    // scenes select their frozen assets in native_bridge_assets instead.
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
