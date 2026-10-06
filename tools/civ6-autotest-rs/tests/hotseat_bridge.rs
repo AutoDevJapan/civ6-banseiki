@@ -20,6 +20,25 @@ fn original() -> Value {
     .unwrap()
 }
 
+#[test]
+fn persisted_process_creation_time_preserves_every_bit() {
+    for bits in [0x41dab117910d2b48_u64, 0x41dab117910d2b49_u64] {
+        let owner = hs::WindowOwner {
+            pid: 57148,
+            started: f64::from_bits(bits),
+            hwnd: 2625186,
+        };
+        let stored = serde_json::to_string(&owner).unwrap();
+        let restored: hs::WindowOwner = serde_json::from_str(&stored).unwrap();
+        assert_eq!(restored.started.to_bits(), bits);
+        assert_eq!(restored, owner);
+    }
+    let saved: hs::WindowOwner =
+        serde_json::from_str(r#"{"pid":57148,"started":1791254084.2057667,"hwnd":2625186}"#)
+            .unwrap();
+    assert_eq!(saved.started.to_bits(), 0x41dab117910d2b48);
+}
+
 fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
     let nonce = test_nonce();
     let output = tempfile::tempdir().unwrap();
