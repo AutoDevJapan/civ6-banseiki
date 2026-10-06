@@ -139,7 +139,11 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
                 if row["old"] != phase.name() {
                     return Err("phase history mismatch".into());
                 }
-                phase = Phase::parse(row["new"].as_str().ok_or("new phase missing")?)?;
+                let next = Phase::parse(row["new"].as_str().ok_or("new phase missing")?)?;
+                if next == phase || window >= 8 {
+                    return Err("phase transition is unchanged or exceeds eight switches".into());
+                }
+                phase = next;
                 window += 1;
                 for site in crate::order_capture::prefix(phase, prefix_len(phase))? {
                     *armed.entry(site.name.into()).or_default() += 1;
@@ -370,21 +374,43 @@ mod tests {
     #[test]
     fn phase_gap_never_pairs_old_factory_with_new_return() {
         let mut rows = fixture();
-        let gap = json!({"type":"phase_gap","old":"front","new":"front"});
-        rows.insert(3, gap);
+        rows.insert(3, json!({"type":"phase_gap","old":"front","new":"load"}));
+        rows.insert(4, json!({"type":"phase_gap","old":"load","new":"front"}));
         for site in rows.last_mut().unwrap()["sites"]
             .as_array_mut()
             .unwrap()
             .iter_mut()
-            .take(4)
         {
-            site["armed_windows"] = json!(2);
+            site["armed_windows"] = json!(site["armed_windows"].as_u64().unwrap() + 1);
         }
         for (i, r) in rows.iter_mut().enumerate() {
             r["sequence"] = json!(i + 1);
             r["elapsed_ms"] = json!(i);
         }
         assert_eq!(read(&rows).unwrap()["factory_pairs"], json!([]));
+    }
+    #[test]
+    fn impossible_phase_switches_are_rejected() {
+        for count in [1, 9] {
+            let mut rows = fixture();
+            for i in 0..count {
+                let old = if i % 2 == 0 { "front" } else { "load" };
+                let new = if count == 1 || i % 2 == 1 {
+                    "front"
+                } else {
+                    "load"
+                };
+                rows.insert(3 + i, json!({"type":"phase_gap","old":old,"new":new}));
+            }
+            for (i, row) in rows.iter_mut().enumerate() {
+                row["sequence"] = json!(i + 1);
+                row["elapsed_ms"] = json!(i);
+            }
+            assert_eq!(
+                read(&rows).unwrap_err(),
+                "phase transition is unchanged or exceeds eight switches"
+            );
+        }
     }
     #[test]
     fn snapshot_booleans_are_not_live_receipts() {
