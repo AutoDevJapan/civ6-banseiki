@@ -142,7 +142,9 @@ GameCoreの直接importに `lua_close` / `lua_newstate` はない。これは間
 
 所有OS子の既存lifecycle検査を共用し、停止した所有threadのDRを実際に0へ消去する否定ケースを追加した。実読取で不一致1件を検出し、採取後も0のまま（再armなし）、既存cleanupで原DRへ復元・子回収する。これは故障注入であり、Civ6のDR消失原因を再現したとの主張ではない。
 
-次の1シナリオは同じ `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-leave.json` の7手順を使い、source固定したhelperだけ更新する。新しいsiteやphase切替は足さない。不一致ならstop時の観測装置の欠測を実証したものとして保持し、自動再armやhit0からの未到達判定をしない。全一致かつhit0でも「未到達確定」とせず、この4点の再試行を繰り返さずCore側native owner破棄への静的call連鎖同定へ戻る。hitが得られた場合だけ、そのRCX・時系列を324の旧native objectと照合する。通常Install/Close/Rebuildの製品接続は引き続き未達である。
+次の1シナリオは `tools/civ6-pe-rs/tests/fixtures/order-fixed-load-reload.json` の9手順に絞る。07と同じrestart→保存load→Gameplay読取→load固定observer開始→退出前読取→LeaveGameに続け、同じ物理保存を再Load→Gameplay読取→stopを行う。元7手順のfixtureは変更しない。EXE0x24B51E/0x24B523→loader→factory→0x24B5D5の置換という静的順序は、Exit後に保持したContextを次Loadで交換する仮説と整合する。ただしその経路を実操作へ同定したわけではない。2回目のrestart・phase切替・新site・installは追加せず、既存同一PID/FILETIME・lease照合と上限300秒を維持する。native observer中の同process loadは親の既存capture-only入口で実行し、製品runtimeの拒否条件を迂回しない。
+
+DR不一致ならstop時の観測装置の欠測を実証したものとして保持し、自動再armやhit0からの未到達判定をしない。全一致かつhit0でも「未到達確定」とせず、この4点の再試行を繰り返さずCore側native ownerのworld load開始/終了への静的call連鎖同定へ戻る。Lua VMがprocess-lifetimeである可能性を残し、VM破棄をClose/Rebuild境界と決めつけない。hitが得られた場合だけ、そのRCX・時系列を324の旧native objectと照合する。通常Install/Close/Rebuildの製品接続は引き続き未達である。
 
 ### 実機04のdumpで確認した6語通知
 
