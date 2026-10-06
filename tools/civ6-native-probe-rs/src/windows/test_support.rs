@@ -31,6 +31,11 @@ pub(super) struct AttachReadyBarrier {
 }
 impl AttachReadyBarrier {
     pub(super) fn advance(&mut self, debugger: &mut Debugger, event: &DEBUG_EVENT) -> bool {
+        if self.complete {
+            // Windows may reuse the retired attach TID for later fixture
+            // workers. Completed setup must not classify their exit events.
+            return false;
+        }
         if debugger.ready {
             assert!(debugger.attach_origin.accepted);
             assert_eq!(
