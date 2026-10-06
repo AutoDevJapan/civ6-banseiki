@@ -465,6 +465,20 @@ fn prepare(input: Prepare) -> Result<(), String> {
     let install = api(bridge, b"BridgeRuntimeInstall\0")?;
     let close = api(bridge, b"BridgeRuntimeClose\0")?;
     let rebuild = api(bridge, b"BridgeRuntimeRebuild\0")?;
+    // Own the lifetime of saved API addresses before any runtime invocation.
+    // Mode6 also pins itself, but a file handle alone is not a module reference.
+    let mut runtime_module = std::ptr::null_mut();
+    if unsafe {
+        GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+            install as *const () as _,
+            &mut runtime_module,
+        )
+    } == 0
+        || runtime_module as usize != bridge
+    {
+        return Err("runtime module lifetime could not be retained".into());
+    }
     let mut pinned = std::ptr::null_mut();
     if unsafe {
         GetModuleHandleExW(

@@ -131,7 +131,7 @@ EXE0xF4990を読むとsingletonのglobalは0x22D6070で、保持slotはそのobj
 
 新crate `tools/civ6-bootstrap-rs` はWindows x64 DLLとして、MainMenuで明示的に準備するresident candidateを実装する。324 native/runtime/compositeファイルは編集しない。実export `BridgeRuntimeInstall/Close/Rebuild` を既にロード済みのsource DLLから解決する。通常public ledger・既存原子publicationを利用し、私的Lua flagやLua呼出しは追加しない。
 
-準備は現在PID/FILETIME、固定EXE/Core path+SHA、MainMenuの期待Context表、runtime DLLの保持file SHAとexportの実行module範囲を確認する。Mode6 Installはここで1回実行し、返されたCompositeTraceのaddress/sizeを保持する。EXEのF7110/F7830の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx` または `mov [rsp+8],rbx` を1回実行して残りの原関数へ戻る。Windows unwind情報と原C++呼出しのsystem-unwind ABIを付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
+準備は現在PID/FILETIME、固定EXE/Core path+SHA、MainMenuの期待Context表、runtime DLLの保持file SHAとexportの実行module範囲を確認し、保存するAPI addressの属するruntime moduleも呼出し前にPINする。Mode6 Installはここで1回実行し、返されたCompositeTraceのaddress/sizeを保持する。EXEのF7110/F7830の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx` または `mov [rsp+8],rbx` を1回実行して残りの原関数へ戻る。Windows unwind情報と原C++呼出しのsystem-unwind ABIを付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
 
 接続は単一phaseで管理する。Openの非null旧CoreContextに対して、原Releaseより前にCloseを成功させClosingへ移り、原Releaseが戻った後にだけClosedとする。Closedから、同じtransition thread・singleton・Core表・EXE globalに一致し、caller0x24B5D5、旧slot0、新Context非nullのSetContext入口でRebuildを呼ぶ。その後は原SetContextを1回実行し、ownerの自然RESET/COMMITによる再公開を待つ。allocatorによる旧address再利用は世代判定に使わない。同値SetContextはAPI呼出し0。旧slot非nullから直接異なるContextへ交換する未実証経路は先にCloseし、同じcallの途中へ推測でRebuildを入れず閉鎖を維持する。
 
