@@ -645,16 +645,26 @@ end
 -- Capture freshness before the existing admission initializer claims schema 3.
 -- Settings and a later ready state cannot recreate this lexical candidate.
 local candidate
+local initialization={stage='candidate',turn=Game.GetCurrentGameTurn()}
+if GameConfiguration and type(GameConfiguration.GetStartTurn)=='function' then
+    local ok,value=pcall(GameConfiguration.GetStartTurn)
+    initialization.startTurnReadable=ok; if ok then initialization.startTurn=value end
+end
 local function fresh()
+    initialization.stage='fresh_preconditions'
     if Game:GetProperty(STORE)~=nil or Game.GetCurrentGameTurn()~=0 or
        Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=nil or
        Game:GetProperty('JAC_PERSONA_PAID_ASSIGNMENT_SCHEMA')~=nil or
        Game:GetProperty('JAC_TEST853_ADMISSION_ACTIVE')~=nil or
        Game:GetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT')~=nil or
        Game:GetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1')~=nil or E.Enabled() then return nil end
-    local c=catalog(); local ids=PlayerManager.GetAliveMajorIDs(); local seen,sources={},{}
+    initialization.stage='fresh_catalog'
+    local c=catalog(); initialization.catalogValid=c~=nil
+    local ids=PlayerManager.GetAliveMajorIDs(); local seen,sources={},{}
+    initialization.ownerCount=type(ids)=='table' and #ids or -1
     if not c or type(ids)~='table' or #ids~=22 then return nil end
     for _,id in ipairs(ids) do
+        initialization.stage='fresh_owner'; initialization.owner=id
         if not integer(id,64) or seen[id] or not Player(id,true) or spent(id)~=0 then return nil end
         seen[id]=true
         local cfg=PlayerConfigurations[id]; local d=cfg and c.leaders[cfg:GetLeaderTypeName()]
@@ -662,19 +672,24 @@ local function fresh()
         sources[d.leader]=id
     end
     for owner=0,63 do
+        initialization.stage='fresh_other_owner'; initialization.owner=owner
         if Player(owner,false) and (not seen[owner] or spent(owner)~=0) then return nil end
     end
     for _,d in ipairs(c.rows) do
+        initialization.stage='fresh_person'; initialization.leader=d.leader
         for _,field in ipairs({'OWNER','SOURCE','STATE','UNIT','EVOLUTION_COST','EVOLUTION_SURCHARGE'}) do
             if Get(d.leader,field)~=nil then return nil end
         end
     end
     local accounts={}
+    initialization.stage='candidate_ready'; initialization.owner=nil; initialization.leader=nil
     for _,owner in ipairs(ids) do accounts[owner]={floor=0,floorSerial=0,expected=0,serial=0,debits={},byKey={},tainted=false} end
     return {version=3,source=SOURCE,binding=c.binding,baseline=0,turn=0,continuityTainted=false,
         sequence=0,owners=copy(ids),sources=sources,accounts=accounts,people={},receipts={}}
 end
-local freshOK,result=pcall(fresh); if freshOK then candidate=result end
+local freshOK,result=pcall(fresh); initialization.candidateCallOK=freshOK
+if freshOK then candidate=result else initialization.error=tostring(result) end
+initialization.candidate=candidate~=nil
 local admissionReads={}
 function E.NormalAdmissionRead(p,key,value)
     if candidate then
@@ -684,11 +699,14 @@ function E.NormalAdmissionRead(p,key,value)
 end
 function E.NormalCommit(ok,forceClosed)
     if not candidate then return end
+    initialization.stage='commit_preconditions'; initialization.commitOK=ok; initialization.forceClosed=forceClosed
     local s=candidate; candidate=nil -- one initialization boundary only
     if ok~=true or forceClosed~=true or not subscribed() or E.Enabled() or Game:GetProperty(STORE)~=nil or
        Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=3 then return end
+    initialization.stage='commit_catalog'
     local c=catalog(); if not c or c.binding~=s.binding or Game.GetCurrentGameTurn()~=0 then return end
     for _,owner in ipairs(s.owners) do
+        initialization.stage='commit_owner'; initialization.owner=owner
         local reads=admissionReads[owner] or {}
         local cfg=PlayerConfigurations[owner]; local d=cfg and c.leaders[cfg:GetLeaderTypeName()]
         if not d or s.sources[d.leader]~=owner or cfg:GetCivilizationTypeName()~=d.civilization then return end
@@ -704,6 +722,7 @@ function E.NormalCommit(ok,forceClosed)
     end
     s.commit={nativeClosedAll22=true,schema=3,binding=s.binding,context='Gameplay',turn=0}
     Game:SetProperty(STORE,s)
+    initialization.stage='committed'; initialization.owner=nil
 end
 -- Only a live lexical Gameplay getter can create a durable debit confirmation.
 -- Unexpected excess spending cannot settle earlier pending records.
@@ -925,7 +944,7 @@ if not subscribed() then
 end
 function E.NormalStatus(owner,leader)
     local s,c=state(); local raw=readState(); local d=c and c.leaders[leader]
-    return {source=SOURCE,active=s~=nil,sequence=s and s.sequence,commit=s and copy(s.commit),
+    return {source=SOURCE,active=s~=nil,initialization=copy(initialization),sequence=s and s.sequence,commit=s and copy(s.commit),
         acquired=s and s.people[leader] and copy(s.people[leader].acquired),receipts=s and copy(s.receipts),
         paid=d and E.NormalPaid(owner,Definition(leader),d.cost),reserved=E.Reserved(owner),spent=spent(owner),
         registrations=copy(registrations),continuityTainted=raw and raw.continuityTainted,
