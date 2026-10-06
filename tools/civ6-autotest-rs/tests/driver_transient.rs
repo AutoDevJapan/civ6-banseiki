@@ -104,6 +104,31 @@ fn test_status_query_retries_after_timeout() {
 }
 
 #[test]
+fn human_alive_read_retries_a_lost_reply_but_not_a_lua_error() {
+    let mut h = Harness::new(
+        json!({}),
+        timeout_backend(1, Error::unknown("alive reply lost"), "1|true"),
+    );
+    assert_eq!(h.runner.human_alive(0, 60.0).unwrap(), (1, true));
+    assert_eq!(h.calls().len(), 2);
+    assert!(h.calls().iter().all(|(state, code)| {
+        state == "InGame"
+            && code
+                == "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Players[0]:IsAlive())"
+    }));
+
+    let mut h = Harness::new(
+        json!({}),
+        timeout_backend(1, Error::lua("alive script failed"), "1|true"),
+    );
+    assert_eq!(
+        h.runner.human_alive(0, 60.0).unwrap_err().kind,
+        ErrorKind::LuaExecution
+    );
+    assert_eq!(h.calls().len(), 1);
+}
+
+#[test]
 fn test_advisor_dismissal_retries_after_timeout() {
     let mut h = Harness::new(
         json!({}),
@@ -217,6 +242,7 @@ fn options_state_lookup_recovers_after_both_socket_attempts_fail() {
 #[test]
 fn recovered_options_state_is_closed_once_and_verified_hidden() {
     let mut attempts = 0;
+    let mut visibility_reads = 0;
     let fake = FakeBackend::new()
         .states(move || {
             attempts += 1;
@@ -226,16 +252,49 @@ fn recovered_options_state_is_closed_once_and_verified_hidden() {
                 Ok(vec!["InGameTopOptionsMenu".into()])
             }
         })
-        .lua(|_, _| Ok("true".into()));
+        .lua(move |_, code| {
+            if code == "return ContextPtr:IsHidden()" {
+                visibility_reads += 1;
+                Ok(if visibility_reads == 1 {
+                    "false"
+                } else {
+                    "true"
+                }
+                .into())
+            } else {
+                Ok("true".into())
+            }
+        });
     let mut h = Harness::new(json!({}), fake);
     assert!(h.runner.close_options_menu(60.0).unwrap());
     let calls = h.calls();
-    assert_eq!(calls.len(), 2);
+    assert_eq!(calls.len(), 3);
     assert_eq!(calls[0].0, "InGameTopOptionsMenu");
-    assert!(calls[0].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(calls[0].1, "return ContextPtr:IsHidden()");
     assert_eq!(calls[1].0, "InGameTopOptionsMenu");
-    assert_eq!(calls[1].1, "return ContextPtr:IsHidden()");
+    assert!(calls[1].1.contains("OnReturn(); CloseImmediately()"));
+    assert_eq!(calls[2].1, "return ContextPtr:IsHidden()");
     assert_eq!(h.clock.at(), 0.5);
+}
+
+#[test]
+fn hidden_options_menu_retries_a_lost_read_without_sending_on_return() {
+    let mut first = true;
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGameTopOptionsMenu".into()]))
+        .lua(move |_, code| {
+            assert_eq!(code, "return ContextPtr:IsHidden()");
+            if first {
+                first = false;
+                Err(Error::unknown("visibility reply lost"))
+            } else {
+                Ok("true".into())
+            }
+        });
+    let mut h = Harness::new(json!({}), fake);
+    assert!(!h.runner.close_options_menu(60.0).unwrap());
+    assert_eq!(h.calls().len(), 2);
+    assert!(h.events().iter().any(|event| event == "disconnect"));
 }
 
 #[test]
@@ -264,17 +323,58 @@ fn options_state_lookup_is_bounded_even_in_a_three_hour_step() {
 
 #[test]
 fn options_close_with_lost_acknowledgement_is_not_replayed() {
+    let mut calls = 0;
     let fake = FakeBackend::new()
         .states(|| Ok(vec!["InGameTopOptionsMenu".into()]))
-        .lua(|_, _| Err(Error::unknown("OnReturn acknowledgement lost")));
+        .lua(move |_, code| {
+            calls += 1;
+            if calls == 1 {
+                Ok("false".into())
+            } else if code.contains("OnReturn()") {
+                Err(Error::unknown("OnReturn acknowledgement lost"))
+            } else {
+                Ok("false".into())
+            }
+        });
     let mut h = Harness::new(json!({}), fake);
     assert_eq!(
-        h.runner.close_options_menu(60.0).unwrap_err().kind,
+        h.runner.close_options_menu(2.0).unwrap_err().kind,
         ErrorKind::LuaResponseUnknown
     );
-    assert_eq!(h.calls().len(), 1);
-    assert!(h.calls()[0].1.contains("OnReturn(); CloseImmediately()"));
-    assert_eq!(h.clock.at(), 0.0);
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, code)| code.contains("OnReturn()"))
+            .count(),
+        1
+    );
+    assert_eq!(h.clock.at(), 2.0);
+}
+
+#[test]
+fn options_close_with_lost_acknowledgement_reconciles_a_hidden_menu() {
+    let mut calls = 0;
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGameTopOptionsMenu".into()]))
+        .lua(move |_, code| {
+            calls += 1;
+            match calls {
+                1 => Ok("false".into()),
+                2 if code.contains("OnReturn()") => Err(Error::unknown("close reply lost")),
+                3 => Ok("true".into()),
+                _ => panic!("unexpected menu command"),
+            }
+        });
+    let mut h = Harness::new(json!({}), fake);
+    assert!(h.runner.close_options_menu(60.0).unwrap());
+    assert_eq!(h.calls().len(), 3);
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, code)| code.contains("OnReturn()"))
+            .count(),
+        1
+    );
 }
 
 fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
@@ -287,7 +387,10 @@ fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
     use std::{
         io,
         net::TcpListener,
-        sync::Arc,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
         thread,
         time::{Duration, Instant},
     };
@@ -323,21 +426,29 @@ fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
+    let stop = Arc::new(AtomicBool::new(false));
+    let server_stop = stop.clone();
     let server = thread::spawn(move || {
         let mut queries = 0;
         let mut commands = Vec::new();
-        let limit = Instant::now() + Duration::from_secs(12);
-        for connection_index in 0..2 {
+        let mut menu_hidden = false;
+        let mut connections = 0;
+        let limit = Instant::now() + Duration::from_secs(20);
+        while !server_stop.load(Ordering::SeqCst) {
             let (mut connection, _) = loop {
                 match listener.accept() {
                     Ok(pair) => break pair,
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        if server_stop.load(Ordering::SeqCst) {
+                            return (commands, queries, connections);
+                        }
                         assert!(Instant::now() < limit, "missing retry connection");
                         thread::sleep(Duration::from_millis(10));
                     }
                     Err(e) => panic!("accept failed: {e}"),
                 }
             };
+            connections += 1;
             connection.set_nonblocking(false).unwrap();
             while let Ok(frame) = recv_frame(
                 &mut connection,
@@ -356,20 +467,27 @@ fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
                         assert_eq!(frame.tag, COMMAND);
                         let start = frame.payload.find("JAC_AUTOTEST_").unwrap();
                         let token = &frame.payload[start..start + "JAC_AUTOTEST_".len() + 32];
-                        let ack = format!("{token}|OK|true");
+                        let close = frame.payload.contains("OnReturn(); CloseImmediately()");
+                        let visibility = frame.payload.contains("return ContextPtr:IsHidden()");
+                        let value = if close {
+                            menu_hidden = true;
+                            "true"
+                        } else if visibility && !menu_hidden {
+                            "false"
+                        } else {
+                            "true"
+                        };
+                        let ack = format!("{token}|OK|{value}");
                         commands.push(frame.payload);
-                        if lose_ack {
+                        if lose_ack && close {
                             break;
                         }
                         send_frame(&mut connection, COMMAND, &ack).unwrap();
                     }
                 }
             }
-            if connection_index == 1 {
-                break;
-            }
         }
-        commands
+        (commands, queries, connections)
     });
     let root = tempfile::tempdir().unwrap();
     let clock = Arc::new(SystemClock);
@@ -384,19 +502,19 @@ fn close_options_over_socket(fail_query: usize, lose_ack: bool) {
     );
     let result = runner.close_options_menu(clock.now() + 10.0);
     runner.disconnect();
-    let commands = server.join().unwrap();
+    stop.store(true, Ordering::SeqCst);
+    let (commands, queries, connections) = server.join().unwrap();
+    assert!(queries >= fail_query);
+    assert!(connections >= if lose_ack { 3 } else { 2 });
     assert_eq!(
         commands.iter().filter(|c| c.contains("OnReturn()")).count(),
         1
     );
-    if lose_ack {
-        assert_eq!(result.unwrap_err().kind, ErrorKind::LuaResponseUnknown);
-        assert_eq!(commands.len(), 1);
-    } else {
-        assert!(result.unwrap());
-        assert_eq!(commands.len(), 2);
-        assert!(commands[1].contains("return ContextPtr:IsHidden()"));
-    }
+    assert!(result.unwrap());
+    assert_eq!(commands.len(), 3);
+    assert!(commands[0].contains("return ContextPtr:IsHidden()"));
+    assert!(commands[1].contains("OnReturn(); CloseImmediately()"));
+    assert!(commands[2].contains("return ContextPtr:IsHidden()"));
 }
 
 #[test]

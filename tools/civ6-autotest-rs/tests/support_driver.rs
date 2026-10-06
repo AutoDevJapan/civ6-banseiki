@@ -84,7 +84,7 @@ impl FakeBackend {
                 if code.contains("return tostring(startTurn)") {
                     Ok("1|0".into())
                 } else if code.contains("IsAlive()") {
-                    Ok("true".into())
+                    Ok("1|true".into())
                 } else if code.contains("Game.GetCurrentGameTurn()") {
                     Ok("1".into())
                 } else {
@@ -267,15 +267,18 @@ impl Harness {
 }
 
 pub fn sequence(mut values: VecDeque<String>) -> impl FnMut(&str, &str) -> Result<String> + Send {
+    let mut observed_turn = 1_i64;
     move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            values
+            let status = values
                 .pop_front()
-                .ok_or_else(|| Error::scenario("status sequence exhausted"))
+                .ok_or_else(|| Error::scenario("status sequence exhausted"))?;
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            Ok(status)
         } else if code.contains("return tostring(startTurn)") {
             Ok("1|0".into())
         } else if code.contains("IsAlive()") {
-            Ok("true".into())
+            Ok(format!("{observed_turn}|true"))
         } else {
             Ok("true".into())
         }
