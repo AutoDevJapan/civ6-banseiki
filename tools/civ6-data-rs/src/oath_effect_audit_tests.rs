@@ -3,6 +3,45 @@ use super::*;
 use mlua::{Lua, Value as LuaValue};
 
 #[test]
+fn every_native_production_snapshot_waits_for_the_shared_core_and_ui_contract() -> Result<()> {
+    let repo = Repository::checked_in();
+    let base = repo.json(BASE)?;
+    let mut checked = 0;
+    for case in cases(&repo)? {
+        let data = selected_scenario(&base, &case)?;
+        let steps = data["steps"].as_array().unwrap();
+        for (index, step) in steps.iter().enumerate() {
+            if step["state_name"] == "GameCore_Tuner"
+                && step["code"]
+                    .as_str()
+                    .is_some_and(|c| c.contains("Game:SetProperty('JAC_TODO134_QUEUE_CORE'"))
+            {
+                assert!(index >= 2);
+                for (gate, context, code) in [
+                    (
+                        &steps[index - 2],
+                        "GameCore_Tuner",
+                        civ6_autotest_rs::runner::CORE_PLAYER0_READY,
+                    ),
+                    (
+                        &steps[index - 1],
+                        "InGame",
+                        civ6_autotest_rs::runner::HUMAN_TURN_READY_UI,
+                    ),
+                ] {
+                    assert_eq!(gate["action"], "wait_for");
+                    assert_eq!(gate["condition"]["state_name"], context);
+                    assert_eq!(gate["condition"]["code"], code);
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 0);
+    Ok(())
+}
+
+#[test]
 fn reporting_step_supports_live_binary_yields_without_inventing_subinteger_progress() -> Result<()>
 {
     let vm = Lua::new();

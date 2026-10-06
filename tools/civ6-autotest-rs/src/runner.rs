@@ -16,6 +16,12 @@ use std::{
 
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
+/// Official ActionPanel treats activation, message processing, and an end-turn
+/// request as distinct states. Generators and the runner share these predicates.
+pub const CORE_PLAYER0_READY: &str =
+    "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()";
+pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
+
 pub trait Backend: Send {
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
@@ -1539,7 +1545,11 @@ impl Runner {
             self.accept_hotseat_turn(deadline, true)?;
         } else {
             self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":format!("local turn=Game.GetCurrentGameTurn(); if turn>{} then error('end_turn advanced past its single-turn target') end; return turn == {}",start+1,start+1)}),self.remaining(deadline)?,true)?;
-            self.wait(&json!({"type":"lua","state_name":"InGame","code":"local p=Game.GetLocalPlayer(); if p>=0 and Players[p]:IsTurnActive() then return true end; return 'human inactive local='..tostring(p)..' uiTurn='..tostring(Game.GetCurrentGameTurn())..' p0Active='..tostring(Players[0]:IsTurnActive())..' p0Human='..tostring(Players[0]:IsHuman())"}),self.remaining(deadline)?,true)?;
+            self.wait(
+                &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                self.remaining(deadline)?,
+                true,
+            )?;
         }
         self.dismiss_advisor(deadline)?;
         let finish = parse_integer(&self.lua(

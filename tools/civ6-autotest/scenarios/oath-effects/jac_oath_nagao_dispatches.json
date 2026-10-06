@@ -296,6 +296,26 @@
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_SPEARMAN\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"warmup\"..' oath flag='..value\n"
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_SPEARMAN\"; local phase=\"warmup\"; local stage='before'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -321,6 +341,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_SPEARMAN\"; local phase=\"warmup\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -334,6 +374,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_SPEARMAN\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"off_first\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -361,6 +421,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_SPEARMAN\"; local phase=\"off_first\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -374,6 +454,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_SPEARMAN\"; local value=1\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"on\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -401,6 +501,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_SPEARMAN\"; local phase=\"on\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -414,6 +534,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_SPEARMAN\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"off_last\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -438,6 +578,26 @@
         "type": "lua",
         "state_name": "InGame",
         "code": "local a=JAC_OATH_AUDIT; local r=a and a.production[\"UNIT_SPEARMAN\"][\"off_last\"].samples[1]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -485,6 +645,26 @@
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_BUILDER\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"warmup\"..' oath flag='..value\n"
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_BUILDER\"; local phase=\"warmup\"; local stage='before'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -510,6 +690,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_BUILDER\"; local phase=\"warmup\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -523,6 +723,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_BUILDER\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"off_first\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -550,6 +770,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_BUILDER\"; local phase=\"off_first\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -563,6 +803,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_BUILDER\"; local value=1\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"on\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -590,6 +850,26 @@
       }
     },
     {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
+    },
+    {
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal target=\"UNIT_BUILDER\"; local phase=\"on\"; local stage='after'; local sample=1\nassert(assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST')).Target==target,'core production target changed')\nlocal rows={}\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'core production city owner changed')\n rows[#rows+1]={city=city:GetID(),plot=plot:GetIndex(),owner=0,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core production')}\nend\nassert(#rows>0,'core production cities missing')\nGame:SetProperty('JAC_TODO134_QUEUE_CORE',{target=target,phase=phase,stage=stage,sample=sample,turn=Game.GetCurrentGameTurn(),cities=rows})\nreturn 'core production snapshot '..target..'/'..phase..'/'..stage\n"
@@ -603,6 +883,26 @@
       "action": "ui_lua",
       "state_name": "GameCore_Tuner",
       "code": "\nlocal function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end\nlocal function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end\nlocal function jstr(v)\n return '\"'..tostring(v):gsub('[%z\\1-\\31\\\\\"]',function(c)\n  if c=='\"' then return '\\\\\"' elseif c=='\\\\' then return '\\\\\\\\' else return string.format('\\\\u%04x',string.byte(c)) end\n end)..'\"'\nend\n-- Infer a conservative common reporting step from controlled perturbations.\n-- Differences remove a fixed offset. Reject values that cannot be canonically\n-- represented; do not mistake binary floating-point noise for extra precision.\nlocal function reported_step(values)\n if #values<3 or not finite(values[1]) then return nil end\n local origin=values[1]\n local function gcd(a,b) while b~=0 do a,b=b,a%b end return a end\n for i=2,#values do if not finite(values[i]) then return nil end end\n -- Live GetYield reports fixed-point binary fractions (including 1/256),\n -- while queue progress is integral. Use the coarsest supported common\n -- lattice, never the smallest candidate a floating-point artifact permits.\n local upper=nil\n for _,scale in ipairs({1,2,4,8,16,32,64,128,256,512,1024,2048,4096,10,100,1000,10000}) do\n  local divisor=0; local represented=true\n  for i=2,#values do\n   local difference=values[i]-origin\n   local ticks=math.floor(difference*scale+0.5)\n   if math.abs(ticks)>9007199254740991 or math.abs(difference-ticks/scale)>0.00001 then represented=false; break end\n   divisor=gcd(divisor,math.abs(ticks))\n  end\n  if represented and divisor>0 then upper=math.max(upper or 0,divisor/scale) end\n end\n return upper and upper+0.00002 or nil\nend\n\n\nlocal oath=\"JAC_OATH_NAGAO_DISPATCHES\"; local target=\"UNIT_BUILDER\"; local value=0\nlocal t=assert(Game:GetProperty('JAC_OATH_PRODUCTION_TEST'))\nassert(t.Target==target and t.Oath==oath,'production target changed')\nlocal l=assert(Game:GetProperty('JAC_AGES_LEDGER')); local h=assert(l.houses.p0)\nassert(l.reign==1 and h.oathChosen==1 and h.civ==\"CIVILIZATION_JAC_NAGAO\",'real UI selection no longer recorded')\nh.oaths=value==1 and {[oath]=true} or {}\nGame:SetProperty('JAC_AGES_LEDGER',l)\nfor _,city in Players[0]:GetCities():Members() do\n local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))\n assert(city:GetOwner()==0 and plot:GetOwner()==0,'production city owner changed')\nplot:SetProperty(oath..'_ON',value)\nend\nfor _,city in Players[0]:GetCities():Members() do\n local p=assert(Map.GetPlot(city:GetX(),city:GetY()))\n p:SetProperty('JAC_TODO134_HEADROOM_ON',1)\n p:SetProperty('JAC_TODO134_FINE_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_ON',0)\n p:SetProperty('JAC_TODO134_SHIFT_TWO_ON',0)\nend\nreturn 'production turn '..\"off_last\"..' oath flag='..value\n"
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
+      }
     },
     {
       "action": "ui_lua",
@@ -627,6 +927,26 @@
         "type": "lua",
         "state_name": "InGame",
         "code": "local a=JAC_OATH_AUDIT; local r=a and a.production[\"UNIT_BUILDER\"][\"off_last\"].samples[1]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "GameCore_Tuner",
+        "code": "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()"
+      }
+    },
+    {
+      "action": "wait_for",
+      "timeout": 180,
+      "close_diplomacy": true,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {

@@ -1131,6 +1131,7 @@ fn production_steps(
                 .replace("__PROBE_SECOND__", "0"),
         ));
         for sample in 1..=PRODUCTION_SAMPLES {
+            queue_calibration::ready_steps(steps);
             steps.push(ui(
                 "GameCore_Tuner",
                 production_code(PRODUCTION_CORE, case, effect, target, phase, flag)
@@ -1145,6 +1146,7 @@ fn production_steps(
                 ));
             }
             steps.push(json!({"action":"wait_for","timeout":180,"close_diplomacy":true,"condition":{"type":"lua","state_name":"InGame","code":format!("local a=JAC_OATH_AUDIT; local r=a and a.production[{}][{}].samples[{}]; if not r then return false end; local turn=Game.GetCurrentGameTurn(); assert(turn<=r.turn+1,'native request advanced more than one turn'); return turn==r.turn+1 and Players[0]:IsTurnActive()",lua_string(target),lua_string(phase),sample)}}));
+            queue_calibration::ready_steps(steps);
             steps.push(ui(
                 "GameCore_Tuner",
                 production_code(PRODUCTION_CORE, case, effect, target, phase, flag)

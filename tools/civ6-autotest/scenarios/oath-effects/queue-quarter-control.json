@@ -214,7 +214,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -259,7 +259,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -294,7 +294,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -339,7 +339,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -374,7 +374,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -419,7 +419,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -454,7 +454,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -499,7 +499,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -534,7 +534,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -579,7 +579,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -614,7 +614,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -659,7 +659,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -694,7 +694,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -739,7 +739,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -774,7 +774,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -819,7 +819,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -854,7 +854,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -899,7 +899,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -934,7 +934,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -979,7 +979,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1014,7 +1014,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1059,7 +1059,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1094,7 +1094,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1139,7 +1139,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1174,7 +1174,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1219,7 +1219,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1254,7 +1254,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1299,7 +1299,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1334,7 +1334,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1379,7 +1379,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1414,7 +1414,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1459,7 +1459,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1494,7 +1494,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1539,7 +1539,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1574,7 +1574,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1619,7 +1619,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1654,7 +1654,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1699,7 +1699,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1734,7 +1734,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1779,7 +1779,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1814,7 +1814,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1859,7 +1859,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1894,7 +1894,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1939,7 +1939,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -1974,7 +1974,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2019,7 +2019,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2054,7 +2054,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2099,7 +2099,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2134,7 +2134,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2179,7 +2179,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2214,7 +2214,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2259,7 +2259,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2294,7 +2294,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2339,7 +2339,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2374,7 +2374,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2419,7 +2419,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2454,7 +2454,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2499,7 +2499,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2534,7 +2534,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2579,7 +2579,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2614,7 +2614,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2659,7 +2659,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2694,7 +2694,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2739,7 +2739,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2774,7 +2774,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2819,7 +2819,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2854,7 +2854,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2899,7 +2899,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2934,7 +2934,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -2979,7 +2979,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3014,7 +3014,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3059,7 +3059,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3094,7 +3094,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3139,7 +3139,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3174,7 +3174,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {
@@ -3219,7 +3219,7 @@
       "condition": {
         "type": "lua",
         "state_name": "InGame",
-        "code": "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()"
+        "code": "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false"
       }
     },
     {

@@ -1,6 +1,10 @@
 mod support_driver;
 
-use civ6_autotest_rs::{runner::AutoplayOptions, scenario, Error};
+use civ6_autotest_rs::{
+    runner::{AutoplayOptions, HUMAN_TURN_READY_UI},
+    scenario, Error,
+};
+use mlua::Lua;
 use serde_json::json;
 use std::{
     collections::VecDeque,
@@ -264,6 +268,7 @@ fn end_turn_waits_for_human_control_after_gameplay_advances_without_resending() 
             *game.lock().unwrap() = 67;
         }
         if state == "InGame" && code.contains("Players[p]:IsTurnActive()") {
+            assert_eq!(code, HUMAN_TURN_READY_UI);
             let mut n = polls.lock().unwrap();
             *n += 1;
             return Ok((*n >= 3).to_string());
@@ -280,6 +285,36 @@ fn end_turn_waits_for_human_control_after_gameplay_advances_without_resending() 
         h.count_code("UI.RequestAction(ActionTypes.ACTION_ENDTURN)"),
         1
     );
+}
+
+#[test]
+fn shared_human_readiness_rejects_incomplete_sent_processing_and_missing_players() {
+    let vm = Lua::new();
+    let reset = r#"
+active=true;complete=true;can_end=true;sent=false;processing=false;local_id=0;requests=0
+Game={GetLocalPlayer=function()return local_id end}
+Players={[0]={IsTurnActive=function()return active end,IsTurnActiveComplete=function()return complete end}}
+UI={CanEndTurn=function()return can_end end,HasSentTurnComplete=function()return sent end,IsProcessingMessages=function()return processing end,RequestAction=function()requests=requests+1 end}
+"#;
+    vm.load(reset).exec().unwrap();
+    assert!(vm.load(HUMAN_TURN_READY_UI).eval::<bool>().unwrap());
+    for mutation in [
+        "active=false",
+        "complete=false",
+        "can_end=false",
+        "sent=true",
+        "processing=true",
+        "local_id=-1",
+        "local_id=7",
+    ] {
+        vm.load(reset).exec().unwrap();
+        vm.load(mutation).exec().unwrap();
+        assert!(
+            !vm.load(HUMAN_TURN_READY_UI).eval::<bool>().unwrap(),
+            "{mutation}"
+        );
+        assert_eq!(vm.load("return requests").eval::<i64>().unwrap(), 0);
+    }
 }
 
 #[test]

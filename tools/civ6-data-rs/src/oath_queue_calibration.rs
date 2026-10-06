@@ -160,11 +160,10 @@ return 'one native human end-turn requested for calibration sample '..__INDEX__
 
 // Official ActionPanel distinguishes activation completion from an end-turn
 // request. An active player alone is insufficient for a production snapshot.
-const READY_CORE: &str =
-    "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()";
-const READY_UI: &str = "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()";
+const READY_CORE: &str = civ6_autotest_rs::runner::CORE_PLAYER0_READY;
+const READY_UI: &str = civ6_autotest_rs::runner::HUMAN_TURN_READY_UI;
 
-fn ready_steps(steps: &mut Vec<Value>) {
+pub(super) fn ready_steps(steps: &mut Vec<Value>) {
     for (context, code) in [("GameCore_Tuner", READY_CORE), ("InGame", READY_UI)] {
         steps.push(json!({"action":"wait_for","timeout":180,"close_diplomacy":true,"condition":{"type":"lua","state_name":context,"code":code}}));
     }
