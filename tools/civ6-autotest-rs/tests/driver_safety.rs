@@ -222,6 +222,103 @@ fn confirmed_begin_game_lua_error_still_fails_without_readiness_or_resend() {
 }
 
 #[test]
+fn unknown_readiness_reply_is_rechecked_without_repeating_begin_game() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    let mut reads = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("Game.GetLocalPlayer") {
+            reads += 1;
+            if reads == 1 {
+                return Err(Error::unknown("readiness reply lost"));
+            }
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    runner
+        .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+        .unwrap();
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    assert!(f.trace().presses.is_empty());
+    let evidence = transition_observations(&f);
+    assert!(evidence.iter().any(|row| row["observation"]["last_error"]
+        .as_str()
+        .is_some_and(|error| error.contains("readiness reply lost"))));
+    assert_eq!(evidence.last().unwrap()["phase"], "ingame_ready");
+}
+
+#[test]
+fn permanently_unknown_readiness_reply_times_out_without_repeating_activation() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        if code.contains("Game.GetLocalPlayer") {
+            Err(Error::unknown("readiness reply lost"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    let error = runner
+        .enter_game_after_loadscreen(0, 600.0, Some(3.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error.message.contains("readiness reply lost"), "{error}");
+    assert_eq!(f.clock.now(), 3.0);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert!(f.trace().presses.is_empty());
+    assert_eq!(
+        transition_observations(&f).last().unwrap()["phase"],
+        "timeout"
+    );
+}
+
+#[test]
+fn confirmed_advisor_error_still_fails_once_after_readiness_confirmation() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "LoadScreen".into(),
+            "InGame".into(),
+            "AdvisorPopup".into(),
+        ])
+    });
+    backend.on_lua = Box::new(|state, _, _| {
+        if state == "AdvisorPopup" {
+            Err(Error::lua("advisor dismissal failed"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::LuaExecution,
+        "advisor dismissal failed",
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+    assert_eq!(
+        f.trace()
+            .lua
+            .iter()
+            .filter(|call| call.0 == "AdvisorPopup")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn test_load_wait_never_sends_escape_before_load_complete_log() {
     let f = Fixture::new();
     let mut runner = f.direct_runner(json!({}), f.backend());

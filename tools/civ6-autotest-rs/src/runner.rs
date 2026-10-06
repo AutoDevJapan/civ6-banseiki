@@ -1563,9 +1563,6 @@ impl Runner {
                     )?;
                     snapshot["game_ready"] = ready.clone().into();
                     if ready == "true" {
-                        self.close_options_menu(end)?;
-                        self.dismiss_advisor(end)?;
-                        self.remaining(end)?;
                         return Ok(true);
                     }
                     last =
@@ -1578,16 +1575,31 @@ impl Runner {
             })();
             match check {
                 Ok(true) => {
+                    // This probe only reads state. Keep UI operations outside
+                    // its retry boundary so an operation failure cannot make
+                    // us restart the preparation or readiness checks.
+                    let cleanup: Result<()> = (|| {
+                        self.close_options_menu(end)?;
+                        self.dismiss_advisor(end)?;
+                        self.remaining(end)?;
+                        Ok(())
+                    })();
+                    if let Err(error) = cleanup {
+                        snapshot["last_error"] = error.to_string().into();
+                        self.transition_observation("error", end, &snapshot)?;
+                        return Err(error);
+                    }
                     self.transition_observation("ingame_ready", end, &snapshot)?;
                     return Ok(());
                 }
                 Ok(false) => {}
-                Err(e)
-                    if matches!(
-                        e.kind,
-                        ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
-                    ) =>
-                {
+                Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    last = e.to_string();
+                    snapshot["last_error"] = last.clone().into();
+                    snapshot["game_ready"] = Value::Null;
+                    self.disconnect();
+                }
+                Err(e) if e.kind == ErrorKind::LuaExecution => {
                     snapshot["last_error"] = e.to_string().into();
                     self.transition_observation("error", end, &snapshot)?;
                     return Err(e);
