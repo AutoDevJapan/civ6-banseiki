@@ -107,6 +107,31 @@ g_GameParameters:FullRefresh()
 CreatePlayerParameters(0,true)
 CreatePlayerParameters(1,true)
 RefreshPlayerParameters()
+-- Read the helper's actual parameter and permission contract before releasing
+-- it. Config_CanWriteParameter rejects a nonlocal human slot in non-hotseat;
+-- an absent serialized list is not necessarily an absent calculated domain.
+local function ParameterRead(label,fn)
+  local ok,value=pcall(fn)
+  print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(value) or 'error')..' value='..tostring(value))
+end
+ParameterRead('local-player-id',function() return Network.GetLocalPlayerID() end)
+ParameterRead('hotseat',function() return GameConfiguration.IsHotseat() end)
+for actor=0,1 do
+  local lookup,parameters=pcall(function() return GetPlayerParameters(actor) end)
+  if not lookup then parameters=nil end
+  local parameter=parameters and parameters.Parameters and parameters.Parameters.PlayerLeader
+  ParameterRead('parameter-'..actor..'-present',function() return parameter~=nil end)
+  ParameterRead('parameter-'..actor..'-values-type',function() return parameter and type(parameter.Values) end)
+  ParameterRead('parameter-'..actor..'-selected',function() local v=parameter and parameter.Value;return type(v)=='table' and v.Value or v end)
+  ParameterRead('parameter-'..actor..'-can-write',function() return parameter and parameters:Config_CanWriteParameter(parameter) end)
+  ParameterRead('player-'..actor..'-human',function() return PlayerConfigurations[actor]:IsHuman() end)
+  if parameter and type(parameter.Values)=='table' then for _,row in ipairs(parameter.Values) do
+    if row.Value=='LEADER_SIMON_BOLIVAR' or row.Value=='LEADER_LADY_SIX_SKY' then
+      ParameterRead('parameter-'..actor..'-dlc-domain',function() return row.Domain end)
+      ParameterRead('parameter-'..actor..'-dlc-invalid',function() return row.Invalid end)
+    end
+  end end
+end
 -- These are values computed by the official parameter helper, not supplied
 -- by the fixture. They are the inputs to DLC LeaderPlayable activation.
 local dlcPlayable=false
@@ -180,7 +205,7 @@ return 'stock-inclusive selectable dependency and unchanged major slots prepared
 
 const FRONTEND_PROBE: &str = r#"
 local function Read(label,fn)
-  local ok,v=pcall(fn);print('[Metadata_Boot_PreSnapshot] '..label..'='..(ok and tostring(v) or 'unavailable'))
+  local ok,v=pcall(fn);print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(v) or 'error')..' value='..tostring(v))
 end
 Read('rule',function() return GameConfiguration.GetRuleSet() end)
 Read('city-state-count',function() return GameConfiguration.GetValue('CITY_STATE_COUNT') end)
@@ -190,8 +215,15 @@ Read('human-pool',function() return GameConfiguration.GetValue('JAC_BANSEIKI_HUM
 Read('gameplay-vatican',function() local row=GameInfo.Civilizations['CIVILIZATION_VATICAN_CITY'];return row and row.StartingCivilizationLevelType end)
 Read('gameplay-vatican-leader',function() return GameInfo.Leaders['LEADER_MINOR_CIV_VATICAN_CITY']~=nil end)
 for actor=0,63 do local p=PlayerConfigurations[actor];if p then
-  Read('slot-'..actor,function() return tostring(p:GetSlotStatus())..'|'..tostring(p:GetCivilizationTypeName())..'|'..
-    tostring(p:GetLeaderTypeName())..'|'..tostring(p:GetCivilizationLevelTypeID())..'|leader-values-type='..type(p:GetValue('LEADER_VALUES'))..'|leader-values='..tostring(p:GetValue('LEADER_VALUES')) end)
+  -- One unsupported getter cannot discard the other independent facts.
+  Read('slot-'..actor..'-status',function() return p:GetSlotStatus() end)
+  Read('slot-'..actor..'-civilization',function() return p:GetCivilizationTypeName() end)
+  Read('slot-'..actor..'-leader',function() return p:GetLeaderTypeName() end)
+  Read('slot-'..actor..'-level',function() return p:GetCivilizationLevelTypeID() end)
+  Read('slot-'..actor..'-leader-values',function() return p:GetValue('LEADER_VALUES') end)
+  Read('slot-'..actor..'-leader-domain',function() return p:GetValue('LEADER_DOMAIN') end)
+  Read('slot-'..actor..'-leader-value-domain',function() return p:GetValue('LEADER_VALUE_DOMAIN') end)
+  Read('slot-'..actor..'-human',function() return p:IsHuman() end)
 end end
 return 'readonly native frontend metadata captured; no host, no actor creation, no acceptance claim'
 "#;
@@ -1165,7 +1197,9 @@ fn frontend_probe(repo: &Repository) -> Result<Value> {
         .rsplit_once("return ")
         .context("setup return")?;
     steps[2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FRONTEND_PROBE}"));
-    steps.push(json!({"action":"ui_lua","state_name":"FrontEnd","code":format!("{FRONTEND_ALLOCATE}\n{FRONTEND_PROBE}")}));
+    steps.push(json!({"action":"ui_lua","state_name":"FrontEnd","code":format!(
+        "local function Prepare()\n{FRONTEND_ALLOCATE}\nend\nlocal ok,why=pcall(Prepare)\nprint('[Metadata_Boot_PreSnapshot] preparation-ok='..tostring(ok)..' reason='..tostring(why))\nlocal function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\nassert(ok,why)\nreturn 'current native preparation executed and independently diagnosed'"
+    )}));
     Ok(
         json!({"name":"Official minor frontend content and native slot metadata diagnostic; no host and no acceptance claim","judge_profile":"generic","steps":steps}),
     )
@@ -1612,6 +1646,47 @@ end
             .any(|n| n.attribute("Domain") == Some("JAC_BanseikiHumanPools")
                 && n.attribute("Value") == Some("JAC_ALL_POOLS")));
         assert!(config.contains("?3 = 'JAC_BANSEIKI_ONLY'"));
+        Ok(())
+    }
+
+    #[test]
+    fn diagnostics_keep_independent_getters_and_execute_current_preparation_on_failure(
+    ) -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+MESSAGES={}
+print=function(message) MESSAGES[#MESSAGES+1]=message end
+GameConfiguration={GetRuleSet=function() return 'RULESET_JAC_BANSEIKI' end,
+ GetValue=function(key) return key=='CITY_STATE_COUNT' and 1 or 'JAC_ALL_POOLS' end,
+ GetHiddenPlayerCount=function() return 0 end,GetParticipatingPlayerIDs=function() return {0,1} end}
+PlayerConfigurations={[0]={GetSlotStatus=function() error('status getter unavailable') end,
+ GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_TAKEDA' end,
+ GetLeaderTypeName=function() return 'LEADER_JAC_TAKEDA_NOBUTORA' end,
+ GetValue=function(_,key) return key=='LEADER_VALUES' and 'Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or nil end}}
+function HasMessage(text) for _,message in ipairs(MESSAGES) do if message:find(text,1,true) then return true end end;return false end
+"#).exec()?;
+        lua.load(FRONTEND_PROBE).exec()?;
+        lua.load(r#"
+assert(HasMessage('slot-0-status ok=false type=error'))
+assert(HasMessage('slot-0-civilization ok=true type=string value=CIVILIZATION_JAC_TAKEDA'))
+assert(HasMessage('slot-0-leader ok=true type=string value=LEADER_JAC_TAKEDA_NOBUTORA'))
+assert(HasMessage('slot-0-level ok=false type=error'))
+assert(HasMessage('slot-0-leader-values ok=true type=string value=Players:Expansion2_Players::LEADER_SIMON_BOLIVAR'))
+assert(HasMessage('gameplay-vatican ok=false type=error'))
+"#).exec()?;
+        let scene = frontend_probe(&Repository::checked_in())?;
+        let preparation = scene["steps"][3]["code"]
+            .as_str()
+            .context("current prepare/probe Lua")?;
+        assert!(preparation.contains(FRONTEND_ALLOCATE));
+        lua.load("MESSAGES={};GameConfiguration.IsAnyMultiplayer=function() return true end")
+            .exec()?;
+        let result = lua.load(preparation).exec();
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("single-player official acceptance required"));
+        lua.load("assert(HasMessage('preparation-ok=false'));assert(HasMessage('slot-0-civilization ok=true type=string value=CIVILIZATION_JAC_TAKEDA'));assert(HasMessage('slot-0-leader-values ok=true type=string'))").exec()?;
         Ok(())
     }
 
