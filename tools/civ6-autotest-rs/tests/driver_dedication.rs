@@ -16,16 +16,19 @@ fn run_case(statuses: &[&str], pending: &[&str]) -> (Harness, civ6_autotest_rs::
     let pending = Arc::new(Mutex::new(VecDeque::from(
         pending.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
     )));
+    let mut observed_turn = 30_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("return tostring(startTurn)") {
             return Ok("30|14".into());
         }
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            return Ok(statuses
+            let status = statuses
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or_else(|| last.clone()));
+                .unwrap_or_else(|| last.clone());
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status);
         }
         if code.contains("GetPlayerCommemorateChoices") {
             return Ok(pending
@@ -35,7 +38,7 @@ fn run_case(statuses: &[&str], pending: &[&str]) -> (Harness, civ6_autotest_rs::
                 .unwrap_or_else(|| "none".into()));
         }
         if code.contains("IsAlive()") {
-            return Ok("true".into());
+            return Ok(format!("{observed_turn}|true"));
         }
         Ok("true".into())
     });
