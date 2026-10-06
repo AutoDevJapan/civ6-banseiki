@@ -534,6 +534,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
     for hook in &s._hooks {
         hook.publish()?;
     }
+    record(11, 0, 0, 0, 0, 0, 0); // Both EXE entries published; still no product proof.
     Ok(())
 }
 

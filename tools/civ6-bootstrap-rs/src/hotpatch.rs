@@ -47,7 +47,7 @@ fn write_unreachable(address: usize, expected: &[u8], bytes: &[u8]) -> Result<()
 }
 
 pub(super) fn prepare(entry: usize, original: &[u8], callback: usize) -> Result<Hook, String> {
-    if entry % 2 != 0
+    if !entry.is_multiple_of(2)
         || original.len() < 2
         || entry < 5
         || read(entry, original.len())? != original

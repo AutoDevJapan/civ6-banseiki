@@ -137,7 +137,7 @@ fn owned_hotpatch_child() {
         }
         .is_null());
     }
-    println!("owned_hotpatch_original_once=true restored=true runtime_api_calls=0 game_live=false");
+    println!("owned_hotpatch_original_once=true entry_restored=true unreachable_prefix_retained_until_exit=true runtime_api_calls=0 game_live=false");
 }
 
 struct OwnedChild(Child);
