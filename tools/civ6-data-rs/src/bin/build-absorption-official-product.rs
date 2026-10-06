@@ -194,11 +194,17 @@ print('[JAC_OFFICIAL_SETUP] script=Continents.lua majors=2 hidden='..GameConfigu
 const FRONTEND_BOOTSTRAP: &str = r#"
 -- FrontEnd GameInfo may not yet be configured for the game being hosted.
 -- Its absence is not a failed content load. Core validates the real data.
+local function Read(label,fn)
+  local ok,v=pcall(fn);print('[Metadata_Boot_PreSnapshot] '..label..' ok='..tostring(ok)..' type='..(ok and type(v) or 'error')..' value='..tostring(v))
+end
 for actor=0,63 do
   local config=PlayerConfigurations[actor]
-  if config then print('[Metadata_Boot_PreSnapshot] slot='..actor..' status='..tostring(config:GetSlotStatus())..
-    ' civ='..tostring(config:GetCivilizationTypeName())..' leader='..tostring(config:GetLeaderTypeName())..
-    ' level='..tostring(config:GetCivilizationLevelTypeID())) end
+  if config then
+    Read('slot-'..actor..'-status',function() return config:GetSlotStatus() end)
+    Read('slot-'..actor..'-civilization',function() return config:GetCivilizationTypeName() end)
+    Read('slot-'..actor..'-leader',function() return config:GetLeaderTypeName() end)
+    Read('slot-'..actor..'-level',function() return config:GetCivilizationLevelTypeID() end)
+  end
 end
 return 'stock-inclusive selectable dependency and unchanged major slots prepared; loaded Core must verify native Vatican content and allocation'
 "#;
@@ -1665,12 +1671,20 @@ PlayerConfigurations={[0]={GetSlotStatus=function() error('status getter unavail
  GetValue=function(_,key) return key=='LEADER_VALUES' and 'Players:Expansion2_Players::LEADER_SIMON_BOLIVAR' or nil end}}
 function HasMessage(text) for _,message in ipairs(MESSAGES) do if message:find(text,1,true) then return true end end;return false end
 "#).exec()?;
-        lua.load(FRONTEND_PROBE).exec()?;
-        lua.load(r#"
+        for source in [FRONTEND_BOOTSTRAP, FRONTEND_PROBE] {
+            lua.load("MESSAGES={}").exec()?;
+            lua.load(source).exec()?;
+            lua.load(
+                r#"
 assert(HasMessage('slot-0-status ok=false type=error'))
 assert(HasMessage('slot-0-civilization ok=true type=string value=CIVILIZATION_JAC_TAKEDA'))
 assert(HasMessage('slot-0-leader ok=true type=string value=LEADER_JAC_TAKEDA_NOBUTORA'))
 assert(HasMessage('slot-0-level ok=false type=error'))
+"#,
+            )
+            .exec()?;
+        }
+        lua.load(r#"
 assert(HasMessage('slot-0-leader-values ok=true type=string value=Players:Expansion2_Players::LEADER_SIMON_BOLIVAR'))
 assert(HasMessage('gameplay-vatican ok=false type=error'))
 "#).exec()?;
