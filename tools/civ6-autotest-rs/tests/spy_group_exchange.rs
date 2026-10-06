@@ -10,6 +10,8 @@ use mlua::Lua;
 mod host;
 
 const NATIVE: &str = r#"
+-- The actual InGame Tuner environment in native08 has no _G alias.
+_G=nil;
 TIME=10; PROPERTIES={}; SESSION=nil; CLOSED=0; SENDS={}; NEXT_ID=2;
 REPLY_KIND='GOOD'; AUTO_RETURN=true; REPLY_SESSION=7; REPLY_INITIATOR=0;
 CAPTIVE_COUNT=3; MAP_COUNT=0; ACTIVE_COUNT=0; GOLD_BALANCE=50;
@@ -448,7 +450,7 @@ fn saved_intent_duplicate_calls_reload_and_owned_tooltip() {
         "saved Core reservation missing",
     );
     c.0.load(spy_group_exchange::RESERVE_CORE).exec().unwrap();
-    c.run("_G.JAC_GroupExchange548=nil");
+    c.run("JAC_GroupExchange548=nil");
     c.0.load(spy_group_exchange::UI_SETUP).exec().unwrap();
     c.rejects("JAC_GroupExchange548.Prepare()", "already reserved");
 

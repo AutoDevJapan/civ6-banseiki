@@ -3,14 +3,14 @@
 //! No script grants a unit, edits a mission, or equates ForType with a spy ID.
 
 pub const UI_SETUP: &str = r#"
-assert(_G.JAC_GroupExchange548==nil,'group exchange UI instance already installed');
+assert(JAC_GroupExchange548==nil,'group exchange UI instance already installed');
 local B=assert(ExposedMembers.JAC_PersonaBoundary,'Boundary UI reader missing');
 assert(type(B.ReadEnemy)=='function','Boundary UI reader missing');
 local KEY='JAC_BOUNDARY_GROUP_EXCHANGE_62';
 local WKEY='JAC_GroupExchange548Witness';
 local previousTooltip=ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey;
 local x=nil;
-local G={}; _G.JAC_GroupExchange548=G;
+local G={}; JAC_GroupExchange548=G;
 local function integer(v,min)
  return type(v)=='number' and v==v and v>=min and v<9007199254740992 and v==math.floor(v)
 end
