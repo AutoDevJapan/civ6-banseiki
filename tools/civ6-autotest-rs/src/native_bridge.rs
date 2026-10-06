@@ -179,16 +179,42 @@ mod platform {
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()?;
         let status = wait_capability_child(&mut child, Duration::from_secs(3))?;
-        let mut bytes = Vec::new();
-        if let Some(stdout) = child.stdout.take() {
-            stdout.take(16_385).read_to_end(&mut bytes)?;
+        let bytes = match child.stdout.take() {
+            Some(mut stdout) => read_capability_response(&mut stdout)?,
+            None => Vec::new(),
+        };
+        verify_controller_capabilities(status.success(), &bytes)
+    }
+
+    /// The controller has exited. Consume only bytes already queued, never EOF:
+    /// an inherited writer can stay open without delaying this negotiation.
+    fn read_capability_response(pipe: &mut (impl Read + AsRawHandle)) -> Result<Vec<u8>> {
+        let mut available = 0;
+        let ok = unsafe {
+            windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                pipe.as_raw_handle().cast(),
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut available,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(109) {
+                return Ok(Vec::new());
+            }
+            return Err(error.into());
         }
-        if bytes.len() > 16_384 {
+        if available > 16_384 {
             return Err(Error::input(
                 "native bridge capability response is too large",
             ));
         }
-        verify_controller_capabilities(status.success(), &bytes)
+        let mut bytes = vec![0; available as usize];
+        pipe.read_exact(&mut bytes)?;
+        Ok(bytes)
     }
 
     fn hex_address(value: &Value) -> Option<u64> {
@@ -1326,6 +1352,38 @@ mod platform {
     mod tests {
         use super::*;
         use serde_json::json;
+
+        #[test]
+        fn capability_response_never_waits_for_an_open_writer_to_close() {
+            use std::os::windows::io::FromRawHandle;
+            let mut read = std::ptr::null_mut();
+            let mut write = std::ptr::null_mut();
+            assert_ne!(
+                unsafe {
+                    windows_sys::Win32::System::Pipes::CreatePipe(
+                        &mut read,
+                        &mut write,
+                        std::ptr::null(),
+                        0,
+                    )
+                },
+                0
+            );
+            let mut reader = unsafe { std::fs::File::from_raw_handle(read.cast()) };
+            let mut writer = unsafe { std::fs::File::from_raw_handle(write.cast()) };
+            let started = std::time::Instant::now();
+            assert!(read_capability_response(&mut reader).unwrap().is_empty());
+            let expected =
+                serde_json::to_vec(&civ6_native_bridge_rs::controller_capabilities()).unwrap();
+            writer.write_all(&expected).unwrap();
+            assert_eq!(read_capability_response(&mut reader).unwrap(), expected);
+            assert!(read_capability_response(&mut reader).unwrap().is_empty());
+            assert!(started.elapsed() < Duration::from_secs(1));
+            // The same writer is still live: EOF would block, while our read
+            // already returned and left it usable for a later observation.
+            writer.write_all(b"later").unwrap();
+            assert_eq!(read_capability_response(&mut reader).unwrap(), b"later");
+        }
 
         #[test]
         fn stopped_capability_query_reaps_its_child_and_preserves_peer() {
