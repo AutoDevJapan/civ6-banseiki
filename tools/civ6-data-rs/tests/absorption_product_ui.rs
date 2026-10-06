@@ -10,7 +10,7 @@ local function event()
     Call=function(...) local snapshot={};for i,fn in ipairs(handlers) do snapshot[i]=fn end;for _,fn in ipairs(snapshot) do fn(...) end end}
 end
 local function control(name)
-  return {Name=name,Text='',Hidden=false,Disabled=false,Callback=nil,
+  return {Name=name,Text='',Hidden=false,Disabled=false,Callback=nil,Children={},
     SetText=function(s,t) s.Text=t end,SetString=function(s,t) s.Text=t end,
     SetHide=function(s,v) s.Hidden=v end,SetDisabled=function(s,v) s.Disabled=v end,
     SetSelected=function() end,SetIcon=function() end,SetToolTipString=function(s,v) s.Tooltip=v end,
@@ -27,18 +27,36 @@ end
 Controls.LevyMilitaryButton.Text='LOC_CITY_STATES_LEVY_MILITARY_BUTTON'
 Controls.CityStateScroll={GetSizeX=function() return 500 end}
 UIManager={GetScreenSizeVal=function() return 1600,900 end}
-INSTANCES={}
+INSTANCES={};ALL_MANAGERS={}
 InstanceManager={new=function(_,template,root,parent)
   assert(template=='QuestInstance' and root=='Top' or template=='CityStateRowInstance' and root=='CityStateBase','official instance root required')
-  local im={Rows={}}
+  local im=setmetatable({Rows={},Available={},m_InstanceName=template,m_RootControlName=root,m_ParentControl=parent},{__index=InstanceManager})
   INSTANCES[template=='CityStateRowInstance' and parent==Controls.QuestsStack and 'MinorActions' or template]=im
-  return {ResetInstances=function() im.Rows={} end,GetInstance=function()
-    local names=template=='QuestInstance' and {'Title','Description','Reward','Callout'} or
+  ALL_MANAGERS[#ALL_MANAGERS+1]=im
+  return im
+end,
+ResetInstances=function(im)
+  -- Real ResetInstances hides allocated roots and pools their unchanged tables;
+  -- another manager's rows in the same parent remain allocated and visible.
+  for _,row in ipairs(im.Rows) do row[im.m_RootControlName]:SetHide(true);im.Available[#im.Available+1]=row end
+  im.Rows={}
+end,
+GetInstance=function(im)
+  local item=table.remove(im.Available)
+  if not item then
+    local names=im.m_InstanceName=='QuestInstance' and {'Title','Description','Reward','Callout','Top'} or
       {'NameLabel','Icon','QuestIcon','Envoy','EnvoyCount','BonusImage1','BonusImage3','BonusImage6','Suzerain','BonusImageSuzerainOff','BonusImageSuzerainOn','SuzerainLabel','EnvoyMoreButton','EnvoyLessButton','Button','NameButton','LookAtButton'}
-    local item={};for _,name in ipairs(names) do item[name]=control(name) end
-    im.Rows[#im.Rows+1]=item;return item
-  end}
+    item={};for _,name in ipairs(names) do item[name]=control(name) end
+    item[im.m_RootControlName]=item[im.m_RootControlName] or control(im.m_RootControlName)
+    item.m_InstanceManager=im
+    local top=item[im.m_RootControlName];top.Row=item;top.Parent=im.m_ParentControl
+    im.m_ParentControl.Children[#im.m_ParentControl.Children+1]=top
+    item.GetTopControl=function() return top end
+  end
+  item[im.m_RootControlName]:SetHide(false)
+  im.Rows[#im.Rows+1]=item;return item
 end}
+local IM_DEFINITION={new=InstanceManager.new,ResetInstances=InstanceManager.ResetInstances,GetInstance=InstanceManager.GetInstance}
 Mouse={eLClick=1};PlayerOperations={EXECUTE_SCRIPT=13}
 REQUESTS={};BASE_LIST,BASE_VIEW,BASE_NAME,BASE_SELECT,BASE_REFRESH=0,0,0,0,0
 VIEW={From=1,To=2,Status='AVAILABLE',Mode='SMALL_STATE',Country={Name='六角',Profile={Personality='慎重',Trait='武人',CivilizationType='CIVILIZATION_JAC_ROKKAKU'}},
@@ -66,9 +84,26 @@ InterfaceModeTypes={VIEW_MODAL_LENS=9}
 function JAC_InstallCivNameOverride(name) BASE_NAME=BASE_NAME+1 end
 function include(name)
   if name=='CityStates_Expansion2' then
+    include('InstanceManager')
     -- Match Base/Assets/UI/PartialScreens/CityStates.lua: private mode, global
     -- Refresh calls, and callbacks captured by Initialize before replacement.
     local mode,selected='Overview',-1
+    local nativeQuestIM=InstanceManager:new('QuestInstance','Top',Controls.QuestsStack)
+    INSTANCES.NativeQuests=nativeQuestIM
+    NATIVE_QUESTS={}
+    function GetQuests(player)
+      -- Base GetQuests keys by questInfo.Index (including zero and holes),
+      -- and preserves all five native quest fields without a dense-array promise.
+      if not NATIVE_QUESTS[player] then
+        NATIVE_QUESTS[player]={}
+        for _,id in ipairs({0,4,12}) do
+          NATIVE_QUESTS[player][id]={Name='native quest '..player..'/'..id,
+            Description='native description '..player..'/'..id,Reward='native reward '..id,
+            Type='QUEST_NATIVE_'..id,Callout='[ICON_Native'..id..']'}
+        end
+      end
+      return NATIVE_QUESTS[player]
+    end
     NATIVE_GOLD=1000
     function ViewList()
       BASE_LIST=BASE_LIST+1
@@ -92,8 +127,17 @@ function include(name)
       Controls.PeaceWarButton:SetHide(false);Controls.PeaceWarButton:SetText('native war/peace');Controls.PeaceWarButton:SetDisabled(false)
       Controls.PeaceWarButton:SetToolTipString('native war/peace details')
       Controls.PeaceWarButton:RegisterCallback(Mouse.eLClick,function() NATIVE_WAR_PEACE=(NATIVE_WAR_PEACE or 0)+1 end)
+      Controls.QuestsArea:SetHide(mode~='Quests')
+      if mode=='Quests' then
+        nativeQuestIM:ResetInstances()
+        for _,quest in pairs(GetQuests(player)) do
+          local row=nativeQuestIM:GetInstance()
+          row.Title:SetString(quest.Name);row.Description:SetString(quest.Description)
+          row.Reward:SetString(quest.Reward);row.Callout:SetString(quest.Callout)
+        end
+        Controls.QuestsStack:CalculateSize();Controls.QuestsScroll:CalculateSize()
+      end
     end
-    function GetQuests() return {{Name='ordinary quest'}} end
     function Close() SCREEN_HIDDEN=true end
     function OnClose() Close() end
     function OnBackClose()
@@ -132,6 +176,10 @@ function include(name)
   elseif name=='DiplomacyActionView_Expansion2' then
     function SelectPlayer() BASE_SELECT=BASE_SELECT+1 end
     function GetInitialStatementOptions() return {{Text='original diplomacy'}} end
+  elseif name=='InstanceManager' then
+    -- Including the real module defines a fresh class before native managers
+    -- are constructed; hooks installed only on the old class cannot reach them.
+    InstanceManager={new=IM_DEFINITION.new,ResetInstances=IM_DEFINITION.ResetInstances,GetInstance=IM_DEFINITION.GetInstance}
   elseif name=='JAC_CivNameOverride' or name=='JAC_Absorption_AdmissionUI' then
   else error('unexpected screen include '..name) end
 end
@@ -286,7 +334,8 @@ fn existing_small_country_controls_display_conditions_and_send_authenticated_com
       Controls.LevyMilitaryButton.Callback();Controls.PeaceWarButton.Callback()
       assert(NATIVE_LEVY==1 and NATIVE_WAR_PEACE==1 and #REQUESTS==3)
       assert(Controls.LevyMilitaryButton.Text==Locale.Lookup('LOC_CITY_STATES_LEVY_MILITARY_BUTTON'))
-      local quests=GetQuests(1);assert(#quests==2 and quests[1].Name=='ordinary quest')
+      local quests=GetQuests(1)
+      assert(quests[0] and quests[4] and quests[12] and quests[0].Name=='native quest 1/0')
       assert(#INSTANCES.MinorActions.Rows==1)
       VIEW.CanCancel=false;ViewCityState(1)
       INSTANCES.MinorActions.Rows[1].NameButton.Callback()
@@ -413,7 +462,8 @@ fn frozen_small_country_keeps_conditions_and_preflight_cancel_without_sending_en
       assert(BASE_VIEW==1 and Controls.CityStateName.Text=='native minor 1','frozen official minor lost its native detail')
       assert(Controls.LevyMilitaryButton.Text==Locale.Lookup('LOC_CITY_STATES_LEVY_MILITARY_BUTTON'))
       assert(Controls.PeaceWarButton.Text=='native war/peace' and not Controls.PeaceWarButton.Disabled)
-      assert(#INSTANCES.MinorActions.Rows==1 and #GetQuests(1)==2)
+      local quests=GetQuests(1)
+      assert(#INSTANCES.MinorActions.Rows==1 and quests[0] and quests[4] and quests[12])
       INSTANCES.MinorActions.Rows[1].NameButton.Callback();assert(#REQUESTS==2 and REQUESTS[2].Command=='CANCEL')
     "#).exec()?;
     Ok(())
@@ -452,6 +502,137 @@ fn eliminated_preflight_source_returns_to_the_living_list_after_automatic_refund
         event.Call();assert(Controls.SingleCityState.Hidden,'later refresh resurrected the eliminated country')
       end end end
     "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn native_sparse_quest_ids_and_fields_survive_product_conditions_without_mutating_native_data(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    lua.load("InstanceManager=nil").exec()?;
+    lua.load(repo.read(absorption_product::UI)?).exec()?;
+    load_city_states(&lua, &repo)?;
+    lua.load(r#"
+      OFFICIAL=true
+      local quests=GetQuests(1);local native=NATIVE_QUESTS[1];local count,conditions=0,0
+      for key,quest in pairs(native) do
+        assert(quests[key]==quest,'native sparse quest ID '..key..' was dropped or changed')
+        for _,field in ipairs({'Name','Description','Reward','Type','Callout'}) do
+          assert(quests[key][field]==native[key][field],'native quest field changed: '..field)
+        end
+      end
+      for key,quest in pairs(quests) do
+        count=count+1
+        if not native[key] then
+          conditions=conditions+1
+          assert(quest.Name==JAC_AbsorptionAdmissionUI.Text('CONDITIONS'))
+          assert(quest.Description:find('六角',1,true))
+        end
+      end
+      assert(count==4 and conditions==1 and native[1]==nil,'synthetic conditions changed the native sparse map')
+      assert(GetQuests(3)==NATIVE_QUESTS[3],'unmapped official minor must retain the native table')
+      assert(NATIVE_QUESTS[1]==native and GetQuests(1)[12]==native[12])
+      native[1]={Name='occupied quest 1',Description='description 1',Reward='reward 1',Type='QUEST_NATIVE_1',Callout='[ICON_Native1]'}
+      native[2]={Name='occupied quest 2',Description='description 2',Reward='reward 2',Type='QUEST_NATIVE_2',Callout='[ICON_Native2]'}
+      local expanded=GetQuests(1);local expandedCount=0
+      for key,quest in pairs(native) do assert(expanded[key]==quest,'conditions overwrote an occupied native quest ID') end
+      for _ in pairs(expanded) do expandedCount=expandedCount+1 end
+      assert(expandedCount==6 and native[3]==nil,'conditions modified the native source table while finding a free key')
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn quest_rows_and_action_buttons_belong_to_the_selected_country_across_seven_native_paths(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let mut failures = Vec::new();
+    for (name, path) in [
+        ("major to major", "ViewCityState(1);ASSERT_ROWS(1);ViewCityState(4);ASSERT_ROWS(4);Controls.LevyMilitaryButton.Callback();ASSERT_COMMAND(4,'CANCEL')"),
+        ("major to official", "ViewCityState(1);ASSERT_ROWS(1);OFFICIAL_DETAIL();ASSERT_ROWS(3);INSTANCES.MinorActions.Rows[1].NameButton.Callback();ASSERT_COMMAND(3,'CANCEL')"),
+        ("official to major", "OFFICIAL_DETAIL();ViewCityState(4);ASSERT_ROWS(4);Controls.LevyMilitaryButton.Callback();ASSERT_COMMAND(4,'CANCEL')"),
+        ("captured Back", "OFFICIAL_DETAIL();Controls.CloseBackButton.Callback();ASSERT_EMPTY();ViewCityState(1);ASSERT_ROWS(1);Controls.LevyMilitaryButton.Callback();ASSERT_COMMAND(1,'REGISTER')"),
+        ("captured Close", "OFFICIAL_DETAIL();Controls.CloseListButton.Callback();ASSERT_EMPTY();Events.GameCoreEventPublishComplete.Call();ASSERT_EMPTY();LuaEvents.CityStates_OpenOverview.Call(1);ASSERT_ROWS(1);Controls.LevyMilitaryButton.Callback();ASSERT_COMMAND(1,'REGISTER')"),
+        ("major InfluenceRefresh", "OFFICIAL_DETAIL();ViewCityState(4);COUNTRIES[4].Envoys.Envoys=1;Events.InfluenceChanged.Call();ASSERT_ROWS(4);assert(Controls.EnvoysSentValue.Text=='1');Controls.PeaceWarButton.Callback();ASSERT_COMMAND(4,'SEND_ENVOY')"),
+        ("official InfluenceRefresh", "ViewCityState(1);OFFICIAL_DETAIL();Events.InfluenceChanged.Call();ASSERT_ROWS(3);INSTANCES.MinorActions.Rows[1].NameButton.Callback();ASSERT_COMMAND(3,'CANCEL')"),
+    ] {
+        let lua = screen(&repo)?;
+        lua.load(repo.read(absorption_product::UI)?).exec()?;
+        lua.load(r#"
+          local function copy(value)
+            if type(value)~='table' then return value end
+            local out={};for key,item in pairs(value) do out[key]=copy(item) end;return out
+          end
+          local other=copy(VIEW);other.From=4;other.Country.Name='三好'
+          other.Country.Profile.CivilizationType='CIVILIZATION_JAC_MIYOSHI'
+          other.CanCancel=true;other.OfferID='product:4:2:1'
+          local minor=copy(VIEW);minor.From=3;minor.Country.Name='Vatican'
+          minor.Envoys.Route='OFFICIAL';minor.CanCancel=true;minor.OfferID='product:3:2:1'
+          COUNTRIES={[1]=VIEW,[3]=minor,[4]=other}
+          Players[4]={IsMajor=function() return true end,GetCities=Players[1].GetCities}
+          ExposedMembers.JAC_AbsorptionProduct.Get=function(from,to)
+            assert(to==2);return COUNTRIES[from] or {Status='UNAVAILABLE'}
+          end
+          ExposedMembers.JAC_AbsorptionProduct.GetSmallCountries=function() return {VIEW,other} end
+          function OFFICIAL_DETAIL()
+            OpenSingleViewCityState(3);Controls.QuestsButton.Callback()
+          end
+          function ASSERT_EMPTY()
+            for _,root in ipairs(Controls.QuestsStack.Children) do
+              assert(root.Hidden,'Back/Close retained an allocated quest/action root')
+            end
+            for _,manager in ipairs(ALL_MANAGERS) do
+              if manager.m_ParentControl==Controls.QuestsStack then
+                assert(#manager.Rows==0,'hidden native/product rows were not released to their owning pool')
+              end
+            end
+          end
+          function ASSERT_ROWS(actor)
+            local country=COUNTRIES[actor];local native,conditions,actions,visible=0,0,0,0
+            assert(not Controls.SingleCityState.Hidden and not Controls.QuestsArea.Hidden)
+            for _,root in ipairs(Controls.QuestsStack.Children) do if not root.Hidden then
+              visible=visible+1;local row=root.Row
+              if row.Title then
+                if row.Title.Text==JAC_AbsorptionAdmissionUI.Text('CONDITIONS') then
+                  conditions=conditions+1
+                  assert(row.Description.Text:find(country.Country.Name,1,true),'conditions retained a different country')
+                else
+                  local expected
+                  for _,quest in pairs(NATIVE_QUESTS[actor] or {}) do if quest.Name==row.Title.Text then expected=quest end end
+                  assert(expected,'native quest retained a different country')
+                  assert(row.Description.Text==expected.Description and row.Reward.Text==expected.Reward and row.Callout.Text==expected.Callout)
+                  native=native+1
+                end
+              else
+                actions=actions+1
+                assert(row.NameButton.Tooltip:find(country.Country.Name,1,true),'product action retained a different country')
+                assert(not row.NameButton.Disabled)
+              end
+            end end
+            assert(conditions==1,'previous native/product conditions remain allocated')
+            local official=not Players[actor]:IsMajor()
+            assert(native==(official and 3 or 0) and actions==(official and 1 or 0),'missing or stale native quests/action rows')
+            local allocated=0
+            for _,manager in ipairs(ALL_MANAGERS) do if manager.m_ParentControl==Controls.QuestsStack then
+              for _,row in ipairs(manager.Rows) do
+                assert(row.m_InstanceManager==manager and not row.GetTopControl().Hidden,'row belongs to the wrong manager pool')
+                allocated=allocated+1
+              end
+            end end
+            assert(allocated==visible,'row hiding left another manager allocation behind')
+          end
+          function ASSERT_COMMAND(actor,command)
+            assert(#REQUESTS==1 and REQUESTS[1].From==actor and REQUESTS[1].Command==command,'visible action submitted for the wrong country')
+            assert(not NATIVE_CACHE_MISS)
+          end
+        "#).exec()?;
+        load_city_states(&lua, &repo)?;
+        if let Err(error) = lua.load(path).set_name(name).exec() {
+            failures.push(format!("{name}: {error}"));
+        }
+    }
+    anyhow::ensure!(failures.is_empty(), "{}", failures.join("\n"));
     Ok(())
 }
 
