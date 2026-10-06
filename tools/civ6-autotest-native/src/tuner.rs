@@ -584,11 +584,9 @@ mod tests {
         drop(client);
         let received = server.join().unwrap();
         assert_eq!(count_commands(&received), 1);
-        assert!(
-            received
-                .iter()
-                .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:"))
-        );
+        assert!(received
+            .iter()
+            .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:")));
     }
 
     #[test]
@@ -772,19 +770,21 @@ mod tests {
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
             stream
-                .set_read_timeout(Some(Duration::from_secs(1)))
+                .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
             assert_eq!(
                 fixture_read(&mut stream).unwrap(),
                 (HANDSHAKE, "APP:".into())
             );
-            thread::sleep(Duration::from_millis(100));
+            // Leave scheduling margin before LSQ on a loaded Windows runner.
+            // Each delay fits the 2s budget; their sum does not.
+            thread::sleep(Duration::from_millis(500));
             fixture_frame(&mut stream, HANDSHAKE, "Civilization VI");
             assert_eq!(
                 fixture_read(&mut stream).unwrap(),
                 (HANDSHAKE, "LSQ:".into())
             );
-            thread::sleep(Duration::from_millis(150));
+            thread::sleep(Duration::from_millis(1750));
             // A client that grants LSQ a new timeout would incorrectly succeed.
             // The correct client may already have closed the connection.
             let body = format!("{STATES}\0").into_bytes();
@@ -798,10 +798,15 @@ mod tests {
         });
         let started = Instant::now();
         assert!(matches!(
-            TunerClient::connect(port, Duration::from_millis(200)),
+            TunerClient::connect(port, Duration::from_secs(2)),
             Err(TunerError::Preflight(_))
         ));
-        assert!(started.elapsed() < Duration::from_millis(350));
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_millis(1900),
+            "early handshake failure: {elapsed:?}"
+        );
+        assert!(elapsed < Duration::from_millis(3500));
         server.join().unwrap();
     }
 
