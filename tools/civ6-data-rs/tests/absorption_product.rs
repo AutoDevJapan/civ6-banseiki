@@ -713,6 +713,7 @@ fn published_native_turn_retries_saved_admission_once_and_preserves_reload() -> 
     lua.load(r#"
       GameEvents.OnGameTurnStarted.Call();assert(STARTS==0 and CHARGES==0)
       assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,2,TURN-1))
+      assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,2,TURN))
       assert(not pcall(JAC_AbsorptionProductGameplay.RecheckPublished,1,TURN))
       assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').PublicationTurns['2']==nil)
       UI_TURN=TURN;UI_ENV.Events.GameCoreEventPublishComplete.Call()

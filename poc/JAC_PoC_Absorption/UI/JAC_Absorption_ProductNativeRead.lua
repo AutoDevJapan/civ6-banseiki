@@ -14,7 +14,7 @@ end,GetEnvoyEligibility=function(from,to)
   local canGive,canGiveTo=influence:CanGiveInfluence(),influence:CanGiveTokensToPlayer(from)
   assert(type(canGive)=='boolean' and type(canGiveTo)=='boolean','native envoy eligibility unavailable')
   return {From=from,To=to,Turn=Game.GetCurrentGameTurn(),CanGive=canGive,CanGiveTo=canGiveTo}
-end}
+end,GetTurn=function() return Game.GetCurrentGameTurn() end}
 -- Turn-start Gameplay can precede the UI's current-turn publication. Retry
 -- through the same synchronized transport after native UI data is current.
 -- This sends identities and a turn only; Gameplay derives every condition.
