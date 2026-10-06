@@ -584,9 +584,11 @@ mod tests {
         drop(client);
         let received = server.join().unwrap();
         assert_eq!(count_commands(&received), 1);
-        assert!(received
-            .iter()
-            .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:")));
+        assert!(
+            received
+                .iter()
+                .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:"))
+        );
     }
 
     #[test]
