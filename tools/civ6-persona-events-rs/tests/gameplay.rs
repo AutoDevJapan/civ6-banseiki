@@ -2,6 +2,7 @@ use civ6_persona_events_rs::{adapter, BEGIN, END, GAMEPLAY};
 use mlua::Lua;
 use std::{fs, path::PathBuf};
 include!("support/normal_cases.rs");
+include!("support/spending_continuity_cases.rs");
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

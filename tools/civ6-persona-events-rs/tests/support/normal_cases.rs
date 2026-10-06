@@ -92,12 +92,13 @@ for paid=1,row.EvolutionCost do
 end
 -- An extra promotion is not a title or a merit deed.
 local merit=properties['JAC_PERSONA_'..l..'_MERIT']
-if row.EvolutionCost<3 then success(owner,row,row.EvolutionCost) end
+local extra=0
+if row.EvolutionCost<3 then extra=1; used[owner]=used[owner]+1; success(owner,row,row.EvolutionCost) end
 finalize(owner,l)
 assert(playerProps[owner].JAC_PERSONA_RESULT=='EVOLVED' and #unitLists[owner]==0)
 assert(properties['JAC_PERSONA_'..l..'_STATE']=='GOVERNOR' and playerProps[owner][901000+gov]==true)
 assert(properties['JAC_PERSONA_'..l..'_MERIT']==merit)
-assert(uiReads==0 and operations==0 and used[owner]==row.EvolutionCost)
+assert(uiReads==0 and operations==0 and used[owner]==row.EvolutionCost+extra)
 "#));
         }
     }
@@ -216,7 +217,7 @@ emit(Events,'GovernorAppointed',0,23,99)
 Players[0].IsAlive=function() return false end
 success(0,row,0); appointed(0,row)
 Players[0].IsAlive=function() return true end
-assert(not select(2,normalStatus(0,l)))
+assert(next(select(2,normalStatus(0,l)))==nil)
 success(0,row,0); appointed(0,row); success(0,row,2)
 finalize(0,l); ExposedMembers.JAC_LeaderPersona.Reconcile()
 assert(#unitLists[0]==1 and playerProps[0][901023]==false)
@@ -307,7 +308,7 @@ fn public_signed_hashes_are_valid_definitions() {
 #[test]
 fn public_saved_definition_hash_and_receipt_binding_corruption_keep_gp() {
     for corrupt in [
-        "properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.version=2",
+        "properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.version=77",
         "properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.commit.nativeClosedAll22=false",
         "properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.people[l].acquired[1].raw[3].value=70",
         "properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.people[l].acquired[1].owner=1",

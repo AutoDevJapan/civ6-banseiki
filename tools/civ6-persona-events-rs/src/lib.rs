@@ -409,6 +409,10 @@ pub fn embed(source: &str) -> Result<String, String> {
         "Rules.ReservedAppointments(owner)",
         "PersonaEvents.Reserved(owner, Rules.ReservedAppointments)",
     );
+    let evolution_hook="    if not PersonaEvents.BeforeEvolution(owner, row) then return Finish(owner, \"NATIVE_UNAVAILABLE\"); end;\n";
+    let source = source.replace(evolution_hook, "");
+    let budget_check="    if AvailableTitles(p) - PersonaEvents.Reserved(owner, Rules.ReservedAppointments) < cost then";
+    let source = source.replace(budget_check, &format!("{evolution_hook}{budget_check}"));
     // Export a detached read-only snapshot through the existing Gameplay table.
     let source = source.replace(
         "    EventsGameplayStatus = PersonaEvents.NormalStatus,\n",
