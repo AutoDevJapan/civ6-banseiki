@@ -58,9 +58,24 @@ local function ClearQuestRows()
   questIM:ResetInstances()
   actionIM:ResetInstances()
 end
+local function NativeReport(hidden)
+  -- Expansion2 XML puts these controls outside the subsection containers.
+  -- They describe official influence/cache data, which product majors lack.
+  -- Restore them before native rendering and on every explicit exit/list path.
+  for _,control in ipairs({Controls.InfluencedByButton,Controls.InfluencedByValue,
+    Controls.RelationshipsButton,Controls.RelationshipsButtonStack,Controls.DiplomacyPip,
+    Controls.CityStateIconStack}) do control:SetHide(hidden) end
+end
+local function ProductRow(row)
+  -- The reused Expansion2 row defaults to showing a diplomacy pip and a
+  -- governor ambassador. Neither has native data for a product list/action.
+  row.DiplomacyPip:SetHide(true)
+  row.AmbassadorButton:SetHide(true)
+end
 local function ClearSelection()
   current=-1
   ClearQuestRows()
+  NativeReport(false)
   RestoreLevyLabel()
 end
 function JAC_AbsorptionCityStatesAction(from,command)
@@ -107,6 +122,7 @@ local function Actions(view)
     -- Reuse an existing row inside the quest area; preserve native levy,
     -- war/peace, envoy controls and the original quest rows of real minors.
     local row=actionIM:GetInstance()
+    ProductRow(row)
     for _,control in ipairs({row.Button,row.Envoy,row.BonusImage1,row.BonusImage3,row.BonusImage6,
       row.Suzerain,row.BonusImageSuzerainOff,row.BonusImageSuzerainOn,row.SuzerainLabel,row.LookAtButton}) do control:SetHide(true) end
     row.NameLabel:SetText(text)
@@ -129,6 +145,7 @@ function ViewCityState(player)
   if not view or view.Status=='UNAVAILABLE' or not IsProductMajor(view) then
     local actor=Players[player]
     if not actor or actor:IsMajor() then ViewList();return end
+    NativeReport(false)
     RestoreLevyLabel()
     Controls.EnvoysSentButton:RegisterCallback(Mouse.eLClick,OnEnvoySentClick)
     Controls.InfluencedByButton:RegisterCallback(Mouse.eLClick,OnInfluencedByClick)
@@ -140,15 +157,22 @@ function ViewCityState(player)
   end
   -- A FULL_CIV small country has no official CityStates cache entry. Build
   -- the same existing detail controls directly without faking influence.
+  NativeReport(true)
   Controls.ListOfCityStates:SetHide(true);Controls.SingleCityState:SetHide(false)
   Controls.CityStateName:SetText(Locale.Lookup(view.Country.Name))
   Controls.CityStateTypeIcon:SetIcon('ICON_'..view.Country.Profile.CivilizationType)
+  local _,secondary=UI.GetPlayerColors(player)
+  Controls.CityStateTypeIcon:SetColor(secondary)
+  Controls.CityStateTypeIcon:SetToolTipString(U.Text('SMALL_COUNTRY'))
   Controls.TypeValue:SetText(U.Text('SMALL_COUNTRY'));Controls.PatronValue:SetText('')
+  Controls.PatronValue:SetToolTipString('')
+  Controls.InfluencedByValue:SetText('')
   Controls.EnvoysSentValue:SetText(tostring(view.Envoys and view.Envoys.Envoys or 0))
   Controls.QuestsValue:SetText(tostring(#view.Rows))
   Controls.EnvoysSentArea:SetHide(true);Controls.InfluenceArea:SetHide(true)
   Controls.RelationshipsArea:SetHide(true);Controls.QuestsArea:SetHide(false)
-  Controls.QuestsButton:SetSelected(true)
+  Controls.EnvoysSentButton:SetSelected(false);Controls.InfluencedByButton:SetSelected(false)
+  Controls.RelationshipsButton:SetSelected(false);Controls.QuestsButton:SetSelected(true)
   local item=questIM:GetInstance()
   item.Title:SetString(U.Text('CONDITIONS'));item.Description:SetString(U.Lines(view))
   item.Reward:SetString(view.Envoys and U.Text('REQUIRED_ENVOYS')..' '..view.Envoys.Required or '');item.Callout:SetString('')
@@ -175,6 +199,7 @@ function ViewList()
   for _,view in ipairs(U.SmallCountries()) do if IsProductMajor(view) then
     count=count+1
     local item=extraIM:GetInstance()
+    ProductRow(item)
     item.NameLabel:SetText(Locale.Lookup(view.Country.Name))
     item.Icon:SetIcon('ICON_'..view.Country.Profile.CivilizationType)
     item.Icon:SetToolTipString(U.Lines(view));item.QuestIcon:SetHide(false)
@@ -185,6 +210,7 @@ function ViewList()
     for _,button in ipairs({item.Button,item.NameButton}) do
       button:RegisterCallback(Mouse.eLClick,function() ViewCityState(view.From) end)
     end
+    item.LookAtButton:SetHide(false)
     item.LookAtButton:SetDisabled(Capital(view.From)==nil)
     item.LookAtButton:RegisterCallback(Mouse.eLClick,function() LookAtCountry(view.From) end)
   end end

@@ -22,6 +22,7 @@ function U.Send(view,command)
   local player=Game.GetLocalPlayer()
   if not view or player<0 or view.To~=player or not Players[player] then return false end
   if command~='CANCEL' and not Players[player]:IsMajor() then return false end
+  if command=='REGISTER' and view.CanRegister==false then return false end
   local params={OnStart='JAC_AbsorptionProduct_Operation',Command=command,From=view.From,
     Nonce=command..':'..view.From..':'..(view.OfferID or 'new')..':'..(view.Envoys and view.Envoys.Envoys or 0),
     OfferID=view.OfferID,ExpectedEnvoys=view.Envoys and view.Envoys.Envoys}
@@ -60,6 +61,7 @@ end
 function U.Action(view)
   if view.CanCancel then return Text('CANCEL'),'CANCEL' end
   if view.Status=='STARTED' then return Text('STARTED'),nil end
+  if view.CanRegister==false then return Text('RETURNING'),nil end
   return Text(view.Mode=='SMALL_STATE' and 'REGISTER_SMALL' or 'REGISTER_MERGER'),'REGISTER'
 end
 JAC_AbsorptionAdmissionUI=U

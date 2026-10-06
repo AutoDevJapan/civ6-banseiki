@@ -472,6 +472,15 @@ local function CanPrepare(offer,ignoreEnvoys)
   end
   return true
 end
+local function RegistrationReady(pair)
+  if not pair then return true end
+  local request=N.Get('leader-offer',pair.ID)
+  if pair.Cancelled then
+    local escrow=State().Escrows[pair.ID]
+    return not escrow or escrow.Status=='RETURNED'
+  end
+  return not request or request.Status~='CANCELLED'
+end
 function P.Get(from,to)
   local ok,value=pcall(function()
     local s=State();local pair=s.Pairs[Pair(from,to)]
@@ -509,6 +518,7 @@ function P.Get(from,to)
     return {From=from,To=to,Country=R.Copy(input.Country),Mode=input.Country.AreaKm2<10000 and 'SMALL_STATE' or 'MERGER',
       Rows=rows,Envoys=envoys,Deposit=R.Copy(terms.Deposit),Status=request and request.Status or pair and pair.Cancelled and 'CANCELLED' or 'AVAILABLE',
       OfferID=pair and pair.ID,Input=R.Copy(terms.Input),LiveInput=input,
+      CanRegister=RegistrationReady(pair),
       CanCancel=pair~=nil and not pair.Cancelled and N.CanCancelOffer(pair.ID),
       Ready=met and relations.Met and input.Situation~='war',Error=pair and pair.LastError}
   end)
@@ -616,6 +626,12 @@ function P.Command(actor,params)
     -- or lost contact must not strand an unstarted escrow after preflight fails.
     input=offer.ProductTerms.Input
   else input=Input(from,actor) end
+  if params.Command=='REGISTER' then
+    -- An admission cancellation can be persisted before its native refund
+    -- is observed. Do not acknowledge a registration against that cancelled
+    -- request, nor consume its operation nonce before a new offer can exist.
+    assert(RegistrationReady(State().Pairs[Pair(from,actor)]),'previous admission cancellation awaits refund')
+  end
   if not previous then
     if params.Command=='CANCEL' then
       local pair=assert(s.Pairs[Pair(from,actor)],'no registered admission')

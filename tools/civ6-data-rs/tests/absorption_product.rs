@@ -334,6 +334,59 @@ fn human_and_ai_recipients_use_identical_demands_envoy_cost_and_deposit() -> any
 }
 
 #[test]
+fn registration_nonce_remains_available_until_cancel_refund_is_observed() -> anyhow::Result<()> {
+    for currency in ["Gold", "Faith"] {
+        let lua = world(10000.)?;
+        lua.globals().set("PENDING_CURRENCY", currency)?;
+        lua.load(r#"
+          JAC_AbsorptionFlowGameplay.Begin=function() error('preflight before native journal') end
+          REGISTER();READY();GameEvents.OnGameTurnStarted.Call()
+          OLD=VIEW().OfferID;assert(CHARGES==1 and VIEW().CanCancel)
+          local gold=Players[2].GetTreasury
+          local faith=JAC_AbsorptionGameplay.PlayerFaithBalance
+          REPORTED_GOLD,REPORTED_FAITH=GOLD[2],FAITH[2]
+          Players[2].GetTreasury=function()
+            local treasury=gold()
+            treasury.GetGoldBalance=function() return PENDING_CURRENCY=='Gold' and REPORTED_GOLD or GOLD[2] end
+            return treasury
+          end
+          JAC_AbsorptionGameplay.PlayerFaithBalance=function(owner)
+            return owner==2 and PENDING_CURRENCY=='Faith' and REPORTED_FAITH or faith(owner)
+          end
+          assert(not pcall(CMD,'CANCEL','pending-cancel',{OfferID=OLD}))
+          local view=VIEW();assert(view.Status=='CANCELLED' and view.CanRegister==false)
+          for i=1,3 do
+            local ok,why=pcall(CMD,'REGISTER','same-register',{OfferID=OLD})
+            assert(not ok and tostring(why):find('awaits refund',1,true))
+            local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+            assert(state.Operations['2:same-register']==nil and state.Pairs['1:2'].ID==OLD)
+          end
+          REFUND_COUNT=REFUNDS
+        "#).exec()?;
+        load(&lua, 10000.)?;
+        lua.load(
+            r#"
+          assert(not VIEW().CanRegister and not pcall(CMD,'REGISTER','same-register',{OfferID=OLD}))
+          REPORTED_GOLD,REPORTED_FAITH=GOLD[2],FAITH[2]
+          COMBAT=0
+          GameEvents.OnGameTurnStarted.Call()
+          assert(VIEW().Status=='CANCELLED' and VIEW().CanRegister and REFUNDS==REFUND_COUNT)
+          assert(GOLD[2]==5000 and FAITH[2]==1000)
+          local view=CMD('REGISTER','same-register',{OfferID=OLD})
+          assert(view.OfferID~=OLD and view.Status=='WAITING')
+          local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+          assert(state.Operations['2:same-register'].Done and state.Pairs['1:2'].Sequence==2)
+          NEW=view.OfferID
+          CMD('REGISTER','same-register',{OfferID=OLD})
+          assert(VIEW().OfferID==NEW and GOLD[2]==5000 and FAITH[2]==1000 and CHARGES==1)
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn cancellation_refunds_partly_collected_deposit_and_reload_does_not_refund_twice(
 ) -> anyhow::Result<()> {
     let lua = world(10000.)?;
@@ -722,19 +775,27 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
     let lua = world(10000.)?;
     lua.load(format!("{}\n{}", product::P1_EVIDENCE, r#"
       local original={ID='original',From=1,To=2,Mode='MERGER',Turn=7,
-        Request={ID='offer',LeaderProfile={LeaderType='original-leader'}},
+        Request={ID='original',From=1,To=2,Mode='MERGER',LeaderProfile={LeaderType='LEADER_JAC_ROKKAKU_SADAYORI'}},
         RosterAtBegin={person={Owner=1}},Inventory={UnitIDs={11}},Phase1Complete=true,
         Entries={{ID='person',Kind='UNIT',Name='original name',Portrait='portrait',Source={Owner=1},
-          UnitID=11,UnitType='UNIT_WARRIOR',AllowedActions={'KEEP'},Abilities={'ability'},
-          Leader=true,NativeWork={Index=4},DormantClass=3,
-          EscapeOutcome='STAY',P1Chance=0.5,
+          UnitID=11,UnitType='UNIT_WARRIOR',AllowedActions={'SURRENDER','INCORPORATE','DISSOLVE'},Abilities={},
+          EscapeOutcome='ESCAPE',P1Chance=3200,
           Rolls={P1_ESCAPE={Raw=22,Used=22,Label='escape',Debug=false,Turn=7},
-                 P1_BRANCH={Raw=44,Used=44,Label='branch',Debug=false,Turn=7}}}},Phase='APPLYING'}
+                 P1_BRANCH={Raw=44,Used=44,Label='branch',Debug=false,Turn=7}}},
+          {ID='leader:1',Kind='GREAT_PERSON',Leader=true,AllowedActions={'RECRUIT'},Source={Owner=1,Loyalty=50},
+            SelectedAction='RECRUIT',FinalOutcome='RECRUIT',P1Chance=800,
+            Rolls={P1_ESCAPE={Raw=8000,Used=8000,Label='leader escape',Debug=false,Turn=7},
+              P3_SUCCESS={Raw=91,Used=91,Label='action',Debug=false,Turn=7}}},
+          {ID='native-work:4',Kind='ITEM',NativeWork={Index=4},AllowedActions={'TRANSFER','LOOT','SEIZE','RETURN'},Source={Owner=1,NativeWork={Index=4}},
+            P1Chance=1600,Rolls={P1_ESCAPE={Raw=9000,Used=9000,Label='item escape',Debug=false,Turn=7}}},
+          {ID='native-hero:1:HEROCLASS_JAC_NOBUTORA',Kind='HERO',DormantClass=3,AllowedActions={'RECRUIT','PROTECT','RECONTRACT','SUICIDE'},Source={Owner=1,HeroClassType='HEROCLASS_JAC_NOBUTORA'},
+            P1Chance=2000,Rolls={P1_ESCAPE={Raw=7000,Used=7000,Label='hero escape',Debug=false,Turn=7}}}},Phase='APPLYING',
+        FinalRollsComplete=true,AppliedPlan={ID='original',From=1,To=2,Mode='MERGER',Assets={},Units={}}}
       local baseline=CANONICAL(P1Evidence(original))
       local advanced=JAC_AbsorptionGameplay.Rules.Copy(original)
       advanced.Phase='DONE';advanced.AcknowledgedTurn=8;advanced.CompletedTurn=8
-      advanced.AppliedPlan={Status='COMPLETE'};advanced.FinalRollsComplete=true
-      advanced.Entries[1].Rolls.P3_RESULT={Raw=91};advanced.Entries[1].Applied=true
+      advanced.AppliedPlan={ID='original',From=1,To=2,Mode='MERGER',Assets={},Units={}};advanced.FinalRollsComplete=true
+      advanced.Entries[1].FinalOutcome='ESCAPE'
       assert(CANONICAL(P1Evidence(advanced))==baseline)
       local mutations={
         function(f) f.ID='different' end,function(f) f.From=3 end,function(f) f.To=3 end,
@@ -747,10 +808,10 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
         function(f) f.Entries[1].UnitType='UNIT_SCOUT' end,
         function(f) f.Entries[1].AllowedActions[1]='ESCAPE' end,
         function(f) f.Entries[1].Abilities[1]='different' end,
-        function(f) f.Entries[1].Leader=false end,
-        function(f) f.Entries[1].NativeWork.Index=5 end,
-        function(f) f.Entries[1].DormantClass=4 end,
-        function(f) f.Entries[1].EscapeOutcome='ESCAPE' end,
+        function(f) f.Entries[2].Leader=false end,
+        function(f) f.Entries[3].NativeWork.Index=5 end,
+        function(f) f.Entries[4].DormantClass=4 end,
+        function(f) f.Entries[1].EscapeOutcome=nil end,
         function(f) f.Entries[1].P1Chance=0.9 end,
         function(f) f.Entries[1].Rolls.P1_ESCAPE.Raw=23 end,
         function(f) f.Entries[1].Rolls.P1_BRANCH.Used=45 end,
