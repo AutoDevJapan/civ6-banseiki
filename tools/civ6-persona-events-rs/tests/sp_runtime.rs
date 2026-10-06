@@ -25,7 +25,13 @@ fn generated_cli_file_exactly_matches_current_scenario_source() {
     ));
     let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../civ6-autotest/scenarios/leader-persona-15km.json");
-    let status = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"))
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let status = command
         .arg("generate-sp-runtime")
         .arg(input)
         .arg(&output)
