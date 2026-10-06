@@ -699,8 +699,9 @@ impl Runner {
         Ok(!closed.is_empty())
     }
     pub fn close_options_menu(&mut self, deadline: f64) -> Result<bool> {
-        // A busy AI turn can outlive one five-second state lookup. Keep all
-        // pre-send lookups in one budget; never replay an uncertain OnReturn.
+        // The menu context remains listed even while hidden. Check visibility
+        // with a read-only Lua call before sending OnReturn, so a lost reply
+        // during ordinary autoplay can be retried without replaying a close.
         let query_deadline = deadline.min(self.clock.now() + 30.0);
         let states =
             self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
@@ -710,7 +711,10 @@ impl Runner {
         {
             return Ok(false);
         }
-        let closed = self.retry_when(
+        if self.options_menu_hidden(query_deadline)? {
+            return Ok(false);
+        }
+        let close = self.retry_when(
             query_deadline,
             |r| r.lua(
                 "InGameTopOptionsMenu",
@@ -718,12 +722,72 @@ impl Runner {
                 r.budget(query_deadline, 5.0)?,
             ),
             |e| e.kind == ErrorKind::Tuner,
-        )? == "true";
+        );
+        let closed = match close {
+            Ok(value) => match value.as_str() {
+                "true" => true,
+                "false" => false,
+                _ => {
+                    return Err(Error::scenario(format!(
+                        "Unexpected options menu close response: {value:?}"
+                    )))
+                }
+            },
+            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                // The close may have run. Reconcile only by reading visibility;
+                // do not send OnReturn again when its acknowledgement is lost.
+                self.disconnect();
+                let verify_end = deadline.min(self.clock.now() + 30.0);
+                match self.wait_options_menu_hidden(verify_end) {
+                    Ok(()) => {
+                        self.log(
+                            "options_menu_reconcile",
+                            "OK",
+                            "close reply lost; menu verified hidden",
+                        )?;
+                        return Ok(true);
+                    }
+                    Err(read_error) if read_error.kind == ErrorKind::LuaExecution => {
+                        return Err(read_error);
+                    }
+                    Err(_) => {}
+                }
+                return Err(e);
+            }
+            Err(e) => return Err(e),
+        };
         if closed {
-            self.wait(&json!({"type":"lua","state_name":"InGameTopOptionsMenu","code":"return ContextPtr:IsHidden()"}),self.budget(deadline,5.0)?,false)?;
+            self.wait_options_menu_hidden(deadline.min(self.clock.now() + 5.0))?;
             println!("Closed in-game options menu");
         }
         Ok(closed)
+    }
+    fn options_menu_hidden(&mut self, deadline: f64) -> Result<bool> {
+        let value = self.retry_idempotent(deadline, |r| {
+            r.lua(
+                "InGameTopOptionsMenu",
+                "return ContextPtr:IsHidden()",
+                r.budget(deadline, 5.0)?,
+            )
+        })?;
+        match value.as_str() {
+            "true" => Ok(true),
+            "false" => Ok(false),
+            _ => Err(Error::scenario(format!(
+                "Unexpected options menu visibility: {value:?}"
+            ))),
+        }
+    }
+    fn wait_options_menu_hidden(&mut self, deadline: f64) -> Result<()> {
+        while self.clock.now() < deadline {
+            if self.options_menu_hidden(deadline)? {
+                return Ok(());
+            }
+            self.sleep_until(deadline, 0.5);
+        }
+        Err(Error::scenario(
+            "Timed out waiting for options menu to close",
+        ))
     }
     pub fn dismiss_advisor(&mut self, deadline: f64) -> Result<bool> {
         self.retry_idempotent(deadline, |r| r.dismiss_advisor_once(deadline))
