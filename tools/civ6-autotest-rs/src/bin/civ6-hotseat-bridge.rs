@@ -1,5 +1,5 @@
 //! Explicitly bounded hotseat test transport. Never starts a game or Steam.
-use civ6_autotest_rs::{hotseat_bridge as hs, judge, runner::Runner, scenario, Error, Result};
+use civ6_autotest_rs::{Error, Result, hotseat_bridge as hs, judge, runner::Runner, scenario};
 use clap::{Parser, Subcommand};
 use hs::TransportIo;
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,8 @@ enum Command {
         scenario: PathBuf,
         #[arg(long)]
         output: PathBuf,
+        #[arg(long)]
+        input_diagnostic: bool,
     },
     Pregame {
         bundle: PathBuf,
@@ -38,6 +40,11 @@ enum Command {
         port: u16,
     },
     Init {
+        bundle: PathBuf,
+        #[arg(long)]
+        logs: PathBuf,
+    },
+    ProbeInput {
         bundle: PathBuf,
         #[arg(long)]
         logs: PathBuf,
@@ -131,7 +138,9 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
     runner.disconnect();
     result?;
     validate_runtime_logs(logs, &audit_baseline)?;
-    println!("HostGame sent once. Verify StagingRoom ReadyButton geometry before one click; then wait for the nonce-matched InGame BOOT and DIALOG_OPEN.");
+    println!(
+        "HostGame sent once. Verify StagingRoom ReadyButton geometry before one click; then wait for the nonce-matched InGame BOOT and DIALOG_OPEN."
+    );
     Ok(())
 }
 
@@ -318,7 +327,13 @@ fn init(bundle_path: &Path, logs: &Path) -> Result<()> {
     state.accepted_turns.insert(3);
     append_journal(&path, &state)?;
     validate_runtime_logs(logs, &state.audit_baseline)?;
-    println!("initial PlayerChange accepted once; next step 4");
+    if bundle.input_diagnostic {
+        println!(
+            "initial PlayerChange accepted once; next command is probe-input; acceptance steps are disabled"
+        );
+    } else {
+        println!("initial PlayerChange accepted once; next step 4");
+    }
     Ok(())
 }
 
@@ -327,6 +342,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
         return Err(Error::scenario("timeout must be 0.1..600 seconds"));
     }
     let (bundle, scenario, path) = bundle_data(bundle_path)?;
+    require_acceptance_bundle(&bundle)?;
     let mut state = journal(&path)?;
     validate_runtime_logs(logs, &state.audit_baseline)?;
     if state.nonce != bundle.nonce || state.next != number {
@@ -453,6 +469,7 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
 
 fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
     let (bundle, _, path) = bundle_data(bundle_path)?;
+    require_acceptance_bundle(&bundle)?;
     let mut state = journal(&path)?;
     let (load_step, save_step, next) = match state.next {
         11 => (11, 9, 12),
@@ -506,6 +523,7 @@ fn adopt_load(bundle_path: &Path, logs: &Path) -> Result<()> {
 
 fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
     let (bundle, scenario_data, path) = bundle_data(bundle_path)?;
+    require_acceptance_bundle(&bundle)?;
     let mut state = journal(&path)?;
     validate_runtime_logs(logs, &state.audit_baseline)?;
     let number = state.next;
@@ -562,7 +580,9 @@ fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result
     });
     runner.disconnect();
     result?;
-    println!("official LeaveGame and LoadGame sent once. Verify any StagingRoom Ready geometry and wait for a fresh InGame BOOT.");
+    println!(
+        "official LeaveGame and LoadGame sent once. Verify any StagingRoom Ready geometry and wait for a fresh InGame BOOT."
+    );
     Ok(())
 }
 
@@ -581,6 +601,67 @@ fn lock_bundle(path: &Path) -> Result<std::fs::File> {
     Ok(file)
 }
 
+fn require_acceptance_bundle(bundle: &hs::Bundle) -> Result<()> {
+    if bundle.input_diagnostic {
+        return Err(Error::scenario(
+            "input-only bundle cannot run acceptance steps",
+        ));
+    }
+    Ok(())
+}
+
+fn probe_input(bundle_path: &Path, logs: &Path) -> Result<()> {
+    let (bundle, _, path) = bundle_data(bundle_path)?;
+    if !bundle.input_diagnostic {
+        return Err(Error::scenario("input-only diagnostic bundle required"));
+    }
+    let state = journal(&path)?;
+    if state.nonce != bundle.nonce || state.next != 4 || !state.accepted_turns.contains(&3) {
+        return Err(Error::scenario(
+            "initial human handoff must finish before the input probe",
+        ));
+    }
+    validate_runtime_logs(logs, &state.audit_baseline)?;
+    let (frames, _) = current_frames(logs, &bundle.nonce)?;
+    let boot = last_boot(&frames)?;
+    let mut controller = hs::Controller::new(hs::SystemTransport { logs }, &bundle.nonce, boot)?;
+    if controller.owner != state.owner || boot.scene != state.scene {
+        return Err(Error::input("input probe owner or scene changed"));
+    }
+    let baseline = controller.io.baseline()?;
+    let mut sent = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(path.with_file_name("input-probe-sent.json"))?;
+    sent.write_all(&serde_json::to_vec(&serde_json::json!({
+        "nonce": bundle.nonce, "owner": state.owner, "key": 124
+    }))?)?;
+    sent.sync_all()?;
+    let deadline = controller.io.now() + 30.0;
+    verify_owner(&mut controller.io, &state.owner)?;
+    controller.io.key(124, deadline)?;
+    while controller.io.now() < deadline {
+        verify_owner(&mut controller.io, &state.owner)?;
+        let fresh = controller.io.frames(&baseline, &bundle.nonce)?;
+        for frame in fresh {
+            if frame.scene != state.scene {
+                return Err(Error::scenario("input probe scene changed"));
+            }
+            if frame.kind == "INPUT_PROBE" && frame.step == 0 && frame.body == "key_up|124" {
+                validate_runtime_logs(logs, &state.audit_baseline)?;
+                println!(
+                    "F13 KeyUp reached the input-only witness. No original scenario step was executed."
+                );
+                return Ok(());
+            }
+        }
+        controller.io.sleep(0.1);
+    }
+    Err(Error::scenario(
+        "input probe outcome unknown; input will not be resent",
+    ))
+}
+
 fn run(args: Args) -> Result<()> {
     // Hold one OS file lock across each state transition. The journal alone
     // cannot prevent two commands from reading the same `next` concurrently.
@@ -588,18 +669,24 @@ fn run(args: Args) -> Result<()> {
         Command::Prepare { .. } => None,
         Command::Pregame { bundle, .. }
         | Command::Init { bundle, .. }
+        | Command::ProbeInput { bundle, .. }
         | Command::Step { bundle, .. }
         | Command::MenuLoad { bundle, .. }
         | Command::AdoptLoad { bundle, .. } => Some(lock_bundle(bundle)?),
     };
     match args.command {
-        Command::Prepare { scenario, output } => {
+        Command::Prepare {
+            scenario,
+            output,
+            input_diagnostic,
+        } => {
             let data: Value = serde_json::from_slice(&fs::read(scenario)?)?;
-            let bundle = hs::prepare(
+            let bundle = hs::prepare_mode(
                 &data,
                 &output,
                 &uuid::Uuid::new_v4().simple().to_string(),
                 &uuid::Uuid::new_v4().to_string(),
+                input_diagnostic,
             )?;
             println!("{}", serde_json::to_string_pretty(&bundle)?);
             Ok(())
@@ -612,6 +699,7 @@ fn run(args: Args) -> Result<()> {
             port,
         } => pregame(&bundle, &logs, &saves, &mods, port),
         Command::Init { bundle, logs } => init(&bundle, &logs),
+        Command::ProbeInput { bundle, logs } => probe_input(&bundle, &logs),
         Command::Step {
             bundle,
             logs,

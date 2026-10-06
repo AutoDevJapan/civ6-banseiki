@@ -1,6 +1,6 @@
 //! Test-only hotseat witness bundle and strict Lua.log transport.
 //! No FireTuner command is sent from this module while a game is running.
-use crate::{judge, scenario, Error, Result};
+use crate::{Error, Result, judge, scenario};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -94,15 +94,20 @@ pub fn nonce_valid(run_id: &str) -> bool {
     run_id.len() == 32 && run_id.bytes().all(|c| c.is_ascii_hexdigit())
 }
 
-fn plan(data: &Value, run_id: &str) -> String {
-    let mut lua = format!("JAC_HOTSEAT_PLAN = {{nonce={}, queries={{}}, query_keys={{}}, action_keys={{[133]='end_turn',[134]='save',[135]='exit_to_menu'}}, action_steps={{end_turn={{['0:0']=6,['0:1']=13,['1:0']=16}}, save={{['0:1']=9,['1:1']=18}}, exit_to_menu={{['0:1']=10,['1:1']=19}}}}, save_names={{[9]={},[18]={}}}}}\n",
+fn plan(data: &Value, run_id: &str, input_diagnostic: bool) -> String {
+    let mut lua = format!(
+        "JAC_HOTSEAT_PLAN = {{nonce={}, queries={{}}, query_keys={{}}, action_keys={{[133]='end_turn',[134]='save',[135]='exit_to_menu'}}, action_steps={{end_turn={{['0:0']=6,['0:1']=13,['1:0']=16}}, save={{['0:1']=9,['1:1']=18}}, exit_to_menu={{['0:1']=10,['1:1']=19}}}}, save_names={{[9]={},[18]={}}}}}\n",
         scenario::lua_string(run_id),
         scenario::lua_string(&format!("JAC-Hotseat-Mid-Round-{run_id}")),
-        scenario::lua_string(&format!("JAC-Hotseat-Next-Player-{run_id}")));
+        scenario::lua_string(&format!("JAC-Hotseat-Next-Player-{run_id}"))
+    );
     for (i, step) in QUERY_STEPS.iter().enumerate() {
         let key = 0x7c + i; // F13..F21
         let code = data["steps"][step - 1]["code"].as_str().unwrap();
         lua.push_str(&format!("JAC_HOTSEAT_PLAN.query_keys[{key}]={step}\nJAC_HOTSEAT_PLAN.queries[{step}]=function()\n{code}\nend\n"));
+    }
+    if input_diagnostic {
+        lua.push_str("JAC_HOTSEAT_PLAN.input_diagnostic=true\n");
     }
     lua
 }
@@ -113,6 +118,8 @@ pub struct Bundle {
     pub mod_id: String,
     pub mod_folder: String,
     pub scenario: String,
+    #[serde(default)]
+    pub input_diagnostic: bool,
 }
 
 fn manifest_text(mod_id: &str, run_id: &str) -> String {
@@ -132,6 +139,16 @@ fn manifest_text(mod_id: &str, run_id: &str) -> String {
 
 /// Build an installable, per-run MOD beside a scenario copy; never touch the user's Mods folder.
 pub fn prepare(data: &Value, output: &Path, run_id: &str, mod_id: &str) -> Result<Bundle> {
+    prepare_mode(data, output, run_id, mod_id, false)
+}
+
+pub fn prepare_mode(
+    data: &Value,
+    output: &Path,
+    run_id: &str,
+    mod_id: &str,
+    input_diagnostic: bool,
+) -> Result<Bundle> {
     check_scenario(data)?;
     if !nonce_valid(run_id) || uuid::Uuid::parse_str(mod_id).is_err() {
         return Err(Error::scenario("invalid hotseat nonce or MOD UUID"));
@@ -151,7 +168,7 @@ pub fn prepare(data: &Value, output: &Path, run_id: &str, mod_id: &str) -> Resul
     fs::write(mod_folder.join("UI/JAC_HotseatWitness.lua"), WITNESS)?;
     fs::write(
         mod_folder.join("UI/JAC_HotseatPlan.lua"),
-        plan(data, run_id),
+        plan(data, run_id, input_diagnostic),
     )?;
     let mut scenario = data.clone();
     scenario["steps"][0]["ids"]
@@ -167,6 +184,7 @@ pub fn prepare(data: &Value, output: &Path, run_id: &str, mod_id: &str) -> Resul
         mod_id: mod_id.into(),
         mod_folder: mod_folder.display().to_string(),
         scenario: scenario_path.display().to_string(),
+        input_diagnostic,
     };
     fs::write(
         output.join("bundle.json"),
@@ -194,7 +212,10 @@ pub fn verify_installed(bundle: &Bundle, data: &Value, mods: &Path) -> Result<()
         ),
         ("UI/JAC_HotseatWitness.xml", XML.to_owned()),
         ("UI/JAC_HotseatWitness.lua", WITNESS.to_owned()),
-        ("UI/JAC_HotseatPlan.lua", plan(data, &bundle.nonce)),
+        (
+            "UI/JAC_HotseatPlan.lua",
+            plan(data, &bundle.nonce, bundle.input_diagnostic),
+        ),
     ] {
         if fs::read(root.join(relative))? != expected.as_bytes() {
             return Err(Error::scenario(format!(
@@ -639,7 +660,9 @@ impl<I: TransportIo> Controller<I> {
             6 | 13 | 16 => Ok(("end_turn", KEY_END_TURN)),
             9 | 18 => Ok(("save", KEY_SAVE)),
             10 | 19 => Ok(("exit_to_menu", KEY_EXIT)),
-            _ => Err(Error::scenario(format!("hotseat bridge cannot send step {step}; setup/load needs a separately verified route"))),
+            _ => Err(Error::scenario(format!(
+                "hotseat bridge cannot send step {step}; setup/load needs a separately verified route"
+            ))),
         }
     }
 

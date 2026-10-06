@@ -19,6 +19,7 @@ local awaitingTurnReady = nil
 local NIL = {}
 local serial = 0
 local inputSamples = 0
+local inputProbeSeen = false
 
 local function value(v)
   if v == nil or v == NIL then return "nil" end
@@ -198,11 +199,22 @@ local function onInput(input)
   local message = input:GetMessageType()
   local key = input:GetKey()
   if (message == KeyEvents.KeyDown or message == KeyEvents.KeyUp) and
-      (key == 0 or key == 13 or plan.query_keys[key] or plan.action_keys[key]) and
+      (plan.input_diagnostic or key == 0 or key == 13 or plan.query_keys[key] or plan.action_keys[key]) and
       inputSamples < 32 then
     inputSamples = inputSamples + 1
     print("JAC_HS_INPUT|1|" .. nonce .. "|" .. scene .. "|" ..
       tostring(message) .. "|" .. tostring(key))
+  end
+  if plan.input_diagnostic then
+    -- Never run queries, turns, saves or exit requests in an input-only probe.
+    if key == 124 then
+      if message == KeyEvents.KeyUp and not inputProbeSeen then
+        inputProbeSeen = true
+        emit("INPUT_PROBE", 0, "key_up|" .. tostring(key))
+      end
+      return true
+    end
+    return plan.query_keys[key] ~= nil or plan.action_keys[key] ~= nil
   end
   if message ~= KeyEvents.KeyUp then return false end
   local step = plan.query_keys[key]
