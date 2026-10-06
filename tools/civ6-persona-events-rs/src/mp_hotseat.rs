@@ -312,3 +312,70 @@ end;return 'reconnected own paid permits and cross-owner denial'
  "session_type":"hotseat","judge_profile":"generic","strict_lua_errors":true,"steps":steps}),
     )
 }
+
+/// MP10 hit the stock StagingRoom twelve-slot limit before Ready. Isolate
+/// startup at that limit with the same six MODs and an ordinary generated map.
+/// This never opens normal persona accounting (which still requires 22).
+pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, String> {
+    let payment = build(normal, hotseat)?;
+    let mut config = payment["steps"][2].clone();
+    config["players"]
+        .as_array_mut()
+        .ok_or("players absent")?
+        .truncate(12);
+    config.as_object_mut().unwrap().remove("map_file");
+    let roster = config["players"].as_array().unwrap();
+    let mut expected = String::from("local expected={\n");
+    for p in roster {
+        expected.push_str(&format!(
+            "{{leader='{}',civ='{}'}},\n",
+            p["leader"].as_str().unwrap(),
+            p["civ"].as_str().unwrap()
+        ));
+    }
+    expected.push_str("}\n");
+    let preflight = format!(
+        r#"{expected}
+assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat FrontEnd required')
+assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI')
+assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua','ordinary generated Continents map required')
+assert(MapConfiguration.GetMaxMajorPlayers()==12,'map maximum differs from stock staging limit')
+assert(GameConfiguration.GetParticipatingPlayerCount()==12+GameConfiguration.GetHiddenPlayerCount())
+assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==0)
+for id=0,11 do local p=assert(PlayerConfigurations[id]);local e=expected[id+1]
+ assert(p:GetLeaderTypeName()==e.leader and p:GetCivilizationTypeName()==e.civ)
+ assert(p:GetSlotStatus()==(id<2 and SlotStatus.SS_TAKEN or SlotStatus.SS_COMPUTER),'human/AI slot mismatch')
+end
+return 'MP_SETUP12 PREFLIGHT map=Continents.lua max=12 majors=12 humans=0,1 ai=2..11; no Host sent by this read'
+"#
+    );
+    let arrived = format!(
+        r#"{expected}
+assert(GameConfiguration.IsHotseat() and Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive())
+assert(Game.GetCurrentGameTurn()==GameConfiguration.GetStartTurn(),'unexpected starting turn')
+assert(MapConfiguration.GetValue('MAP_SCRIPT')=='Continents.lua')
+local ids=PlayerManager.GetAliveMajorIDs();assert(#ids==12,'actual major count differs');local seen={{}}
+for _,id in ipairs(ids)do assert(type(id)=='number' and id>=0 and id<12 and not seen[id]);seen[id]=true
+ local p=assert(Players[id]);local cfg=assert(PlayerConfigurations[id]);local e=expected[id+1]
+ assert(p:IsAlive() and p:IsMajor() and p:IsHuman()==(id<2))
+ assert(cfg:GetLeaderTypeName()==e.leader and cfg:GetCivilizationTypeName()==e.civ)
+end
+assert(seen[0] and seen[1] and not GameConfiguration.IsPaused())
+local api=assert(ExposedMembers.JAC_LeaderPersona,'persona MOD not loaded')
+local status=api.EventsGameplayStatus(0,'LEADER_JAC_DATE_TANEMUNE')
+assert(status.active==false and Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')==nil,'12-major probe must not bootstrap normal22 accounting')
+return 'MP_SETUP12 STARTED actual12majors human0,1 ai10; player0 active; persona accounting remains unavailable; no payment acceptance'
+"#
+    );
+    Ok(
+        json!({"name":"MP setup-only12: two humans ten AI, six persona MODs, generated Continents; preflight and actual game start, no native runtime/payment/22-major acceptance",
+        "session_type":"hotseat","judge_profile":"generic","strict_lua_errors":true,"steps":[
+         payment["steps"][0],{"action":"restart_game"},config,
+         {"action":"ui_lua","state_name":"FrontEnd","code":preflight},
+         hotseat["steps"][2],
+         {"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return GameConfiguration.IsHotseat() and Game.GetLocalPlayer()==0 and Players[0] and Players[0]:IsTurnActive()"}},
+         {"action":"ui_lua","state_name":"InGame","code":arrived},
+         {"action":"exit_to_menu","timeout":90}
+        ]}),
+    )
+}

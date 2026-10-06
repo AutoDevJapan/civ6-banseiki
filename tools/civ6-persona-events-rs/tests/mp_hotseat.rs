@@ -286,3 +286,111 @@ fn cli_generates_exact_hotseat_scene_in_hidden_child() {
     std::fs::remove_file(path).unwrap();
     assert_eq!(generated, serde_json::to_string_pretty(&scene()).unwrap());
 }
+
+fn setup_probe() -> Value {
+    mp::build_setup_probe(
+        &template("leader-persona-15km.json"),
+        &template("multiplayer-banseiki-hotseat-growth.json"),
+    )
+    .unwrap()
+}
+#[test]
+fn setup_probe_is_one_bounded_start_without_persona_runtime_or_payment() {
+    let probe = setup_probe();
+    civ6_autotest_rs::scenario::validate_scenario(&probe).unwrap();
+    let steps = probe["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 8);
+    assert_eq!(steps[2]["players"].as_array().unwrap().len(), 12);
+    assert_eq!(
+        steps[2]["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["human"] == true)
+            .count(),
+        2
+    );
+    assert!(steps[2].get("map_file").is_none());
+    assert_eq!(steps[0], scene()["steps"][0]);
+    assert_eq!(
+        steps.iter().filter(|s| s["action"] == "start_game").count(),
+        1
+    );
+    let lua = Lua::new();
+    for s in steps {
+        assert!(!matches!(
+            s["action"].as_str(),
+            Some("save" | "load" | "end_turn" | "start_native_paid_runtime")
+        ));
+        let code = s["code"]
+            .as_str()
+            .or(s["condition"]["code"].as_str())
+            .unwrap_or("");
+        lua.load(code).into_function().unwrap();
+        for forbidden in [
+            "SetProperty",
+            "JAC_RequestLeaderJoin",
+            "JAC_EvolveLeader",
+            "RequestPlayerOperation",
+            "HostGame(",
+            "DoLeftClick(",
+        ] {
+            assert!(!code.contains(forbidden), "{forbidden}");
+        }
+    }
+}
+fn setup_world() -> Lua {
+    let lua = Lua::new();
+    let probe = setup_probe();
+    lua.load(r#"
+map='Continents.lua';maximum=12;count=12;humans=2;active=0;turn=1;accounting=false
+UI={IsInFrontEnd=function()return true end}
+GameConfiguration={IsHotseat=function()return true end,GetRuleSet=function()return 'RULESET_JAC_BANSEIKI' end,
+GetParticipatingPlayerCount=function()return count+2 end,GetHiddenPlayerCount=function()return 2 end,GetValue=function()return 0 end,GetStartTurn=function()return 1 end,IsPaused=function()return false end}
+MapConfiguration={GetValue=function()return map end,GetMaxMajorPlayers=function()return maximum end}
+Game={GetLocalPlayer=function()return active end,GetCurrentGameTurn=function()return turn end,GetProperty=function()return accounting and {} or nil end}
+SlotStatus={SS_TAKEN=3,SS_COMPUTER=1};PlayerConfigurations={};Players={}
+PlayerManager={GetAliveMajorIDs=function()local t={};for i=0,count-1 do t[#t+1]=i end;return t end}
+ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function()return {active=accounting} end}}
+"#).exec().unwrap();
+    for (id, p) in probe["steps"][2]["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        lua.load(format!("do local id={id};PlayerConfigurations[id]={{GetLeaderTypeName=function()return '{}' end,GetCivilizationTypeName=function()return '{}' end,GetSlotStatus=function()return id<humans and 3 or 1 end}};Players[id]={{IsAlive=function()return true end,IsMajor=function()return true end,IsHuman=function()return id<humans end,IsTurnActive=function()return id==active end}} end",p["leader"].as_str().unwrap(),p["civ"].as_str().unwrap())).exec().unwrap();
+    }
+    lua
+}
+#[test]
+fn setup_proofs_reject_wrong_map_roster_activeplayer_and_accidental_normal_bootstrap() {
+    let probe = setup_probe();
+    let pre = probe["steps"][3]["code"].as_str().unwrap();
+    let post = probe["steps"][6]["code"].as_str().unwrap();
+    let lua = setup_world();
+    lua.load(pre).exec().unwrap();
+    lua.load(post).exec().unwrap();
+    for fault in [
+        "map='JAC_Japan_15km.Civ6Map'",
+        "maximum=22",
+        "count=22",
+        "humans=3",
+    ] {
+        let lua = setup_world();
+        lua.load(fault).exec().unwrap();
+        assert!(lua.load(pre).exec().is_err(), "{fault}");
+    }
+    for fault in [
+        "count=2",
+        "humans=3",
+        "active=1",
+        "turn=2",
+        "accounting=true",
+        "map='JAC_Japan_15km.Civ6Map'",
+    ] {
+        let lua = setup_world();
+        lua.load(fault).exec().unwrap();
+        assert!(lua.load(post).exec().is_err(), "{fault}");
+    }
+}

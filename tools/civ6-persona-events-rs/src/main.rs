@@ -4,10 +4,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     match args.first().map(String::as_str) {
-        Some("generate-mp-hotseat") if args.len()==4 => {
+        Some("generate-mp-hotseat" | "generate-mp-setup") if args.len()==4 => {
             let normal=serde_json::from_slice(&fs::read(&args[1])?)?;
             let hotseat=serde_json::from_slice(&fs::read(&args[2])?)?;
-            let scenario=civ6_persona_events_rs::mp_hotseat::build(&normal,&hotseat)?;
+            let scenario=if args[0]=="generate-mp-setup" {
+                civ6_persona_events_rs::mp_hotseat::build_setup_probe(&normal,&hotseat)?
+            } else {civ6_persona_events_rs::mp_hotseat::build(&normal,&hotseat)?};
             fs::write(&args[3],serde_json::to_string_pretty(&scenario)?)?;
         }
         Some("embed") if args.len() == 1 => {
