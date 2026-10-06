@@ -31,12 +31,21 @@ fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
     }
     // Keep the approved on-disk image immutable through GO, observation and
     // recovery. Hash once while denying writes/deletes, not on every event.
-    let pin = fs::OpenOptions::new()
+    let mut pin = fs::OpenOptions::new()
         .read(true)
         .share_mode(1)
         .open(image)
         .map_err(|e| format!("AMD chain image pin failed: {e}"))?;
-    verify_amd_chain_hash(&sha256(Path::new(image))?)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 65536];
+    loop {
+        let n = pin.read(&mut buffer).map_err(|e| format!("AMD chain image read failed: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    verify_amd_chain_hash(&format!("{:x}", hasher.finalize()))?;
     Ok(Some(pin))
 }
 struct OrderChain {
