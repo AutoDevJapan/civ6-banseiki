@@ -372,6 +372,7 @@ fn malformed_catalog_identity_missing_capital_and_unknown_projection_reject() {
         "Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)",
         "Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',false)",
         "Game:SetProperty('JAC_TEST324_EVENTS_PROBE',1)",
+        "Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',1)",
         "LOCAL=1",
     ] {
         let lua = model();
