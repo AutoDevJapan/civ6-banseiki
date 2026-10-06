@@ -319,6 +319,49 @@ fn confirmed_advisor_error_still_fails_once_after_readiness_confirmation() {
 }
 
 #[test]
+fn confirmed_readiness_lua_error_is_recorded_once_without_ui_cleanup() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "LoadScreen".into(),
+            "InGame".into(),
+            "AdvisorPopup".into(),
+        ])
+    });
+    backend.on_lua = Box::new(|state, code, _| {
+        assert_ne!(
+            state, "AdvisorPopup",
+            "cleanup must not run after a failed readiness probe"
+        );
+        if code.contains("Game.GetLocalPlayer") {
+            Err(Error::lua("readiness predicate failed"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::LuaExecution,
+        "readiness predicate failed",
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+    assert!(f.trace().presses.is_empty());
+    let evidence = transition_observations(&f);
+    let last = evidence.last().unwrap();
+    assert_eq!(last["phase"], "error");
+    assert!(last["observation"]["last_error"]
+        .as_str()
+        .unwrap()
+        .contains("readiness predicate failed"));
+}
+
+#[test]
 fn test_load_wait_never_sends_escape_before_load_complete_log() {
     let f = Fixture::new();
     let mut runner = f.direct_runner(json!({}), f.backend());
