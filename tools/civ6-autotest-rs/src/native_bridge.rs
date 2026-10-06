@@ -148,9 +148,9 @@ mod platform {
         if count == 0
             || row["promotion_owner"] != row["player_id"]
             || row["promotion_index"] != row["governor_index"]
-            || !row["promotion_owner"].as_u64().is_some_and(|n| n < 64)
-            || !row["promotion_index"].as_u64().is_some_and(|n| n < 256)
-            || !row["read_flags"].as_u64().is_some_and(|n| n & 3 == 3)
+            || row["promotion_owner"].as_u64().is_none_or(|n| n >= 64)
+            || row["promotion_index"].as_u64().is_none_or(|n| n >= 256)
+            || row["read_flags"].as_u64().is_none_or(|n| n & 3 != 3)
         {
             return false;
         }
@@ -516,13 +516,12 @@ mod platform {
                         }
                     } else if row["read_state"] == 1 {
                         if returned == "0x0000000000000000"
-                            || !row["tag"].as_u64().is_some_and(|n| n <= u16::MAX as u64)
+                            || row["tag"].as_u64().is_none_or(|n| n > u16::MAX as u64)
                             || !row["payload8"]
                                 .as_str()
                                 .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
-                            || !row["flags14"]
-                                .as_u64()
-                                .is_some_and(|n| n <= u32::MAX as u64)
+                            || row["flags14"]
+                                .as_u64().is_none_or(|n| n > u32::MAX as u64)
                         {
                             return Err(Error::input("invalid copied property row"));
                         }

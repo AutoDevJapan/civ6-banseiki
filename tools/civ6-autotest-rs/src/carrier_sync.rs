@@ -130,7 +130,7 @@ impl Checkpoint {
             ));
         }
         if !self.city["Name"].is_string()
-            || !self.city["Population"].as_i64().is_some_and(|n| n > 0)
+            || self.city["Population"].as_i64().is_none_or(|n| n <= 0)
             || !self.city["Loyalty"]
                 .as_f64()
                 .is_some_and(|n| (0.0..=100.0).contains(&n))
@@ -151,7 +151,7 @@ impl Checkpoint {
         }
         let before = &self.carrier["Before"];
         if !before["Name"].is_string()
-            || !before["Population"].as_i64().is_some_and(|n| n > 0)
+            || before["Population"].as_i64().is_none_or(|n| n <= 0)
             || !before["Loyalty"]
                 .as_f64()
                 .is_some_and(|n| (0.0..=100.0).contains(&n))
@@ -171,7 +171,7 @@ impl Checkpoint {
             "Borrower",
             "OriginalCity",
         ] {
-            if !self.carrier[key].as_i64().is_some_and(|n| n >= 0) {
+            if self.carrier[key].as_i64().is_none_or(|n| n < 0) {
                 return Err(invalid(format!("saved carrier lacks {key}")));
             }
         }
@@ -193,7 +193,7 @@ impl Checkpoint {
             }
         }
         for key in ["Owner", "CityID", "X", "Y", "Building", "Slot"] {
-            if !work[key].as_i64().is_some_and(|n| n >= 0) {
+            if work[key].as_i64().is_none_or(|n| n < 0) {
                 return Err(invalid(format!("observed work lacks {key}")));
             }
         }

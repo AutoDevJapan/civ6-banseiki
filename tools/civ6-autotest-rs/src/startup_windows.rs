@@ -75,8 +75,10 @@ fn process_rows() -> Result<Vec<crate::restart::ProcessRow>> {
         return Err(Error::input("process snapshot unavailable"));
     }
     let _handle = Handle(handle);
-    let mut row = PROCESSENTRY32W::default();
-    row.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut row = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
     let mut more = unsafe { Process32FirstW(handle, &mut row) } != 0;
     let mut rows = Vec::new();
     while more {

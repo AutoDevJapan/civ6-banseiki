@@ -3261,7 +3261,8 @@ impl Runner {
             .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
         let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
         let mut autoplay_started = false;
-        let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
+        type AutoplayOutcome = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
+        let execution = (|| -> Result<AutoplayOutcome> {
             let (pid, initial_memory, started) = if options.record_metrics {
                 let process = self.backend.single_process(30.0)?.ok_or_else(|| {
                     Error::scenario("Civ VI process disappeared before metrics sampling")
@@ -3670,7 +3671,9 @@ impl Runner {
             fs::create_dir_all(parent)?;
         }
         fs::create_dir(&self.output)?;
-        self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
+        // Logging mutably borrows the runner, so detach its name first.
+        let scenario_name = text(&self.scenario, "name").to_string();
+        self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
         let mut code = match self.run_inner() {
             Ok(v) => v,
@@ -3781,8 +3784,7 @@ impl Runner {
                 frontend_ready = true;
             }
             self.backend.require_single_process()?;
-            if !frontend_ready && !(first["action"] == "ui_lua" && first["state_name"] == "InGame")
-            {
+            if !(frontend_ready || first["action"] == "ui_lua" && first["state_name"] == "InGame") {
                 self.wait(&json!({"type":"lua","state_name":"FrontEnd","code":"return UI.IsInFrontEnd()"}),10.0,false)?;
             }
         }

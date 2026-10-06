@@ -204,7 +204,7 @@ mod platform {
                 .collect();
             if stable_ids.len() != 1
                 || observed_values.len() < 2
-                || !events.last().is_some_and(|(_, _, pointer)| !pointer)
+                || events.last().is_none_or(|(_, _, pointer)| *pointer)
             {
                 return Err(Error::input(format!(
                     "property trace lacks stable read/update/delete evidence for {name}"
@@ -277,11 +277,11 @@ mod platform {
             || row["hardware_breakpoints_installed"] != 0
             || row["debug_register_writes"] != 0
             || row["future_exception_delivery"] != "unknown"
-            || !row["thread_events"].as_u64().is_some_and(|count| count > 0)
-            || !row["exception_events"]
+            || row["thread_events"].as_u64().is_none_or(|count| count == 0)
+            || row["exception_events"]
                 .as_u64()
-                .is_some_and(|count| count > 0)
-            || !row["application_exception_events"].as_u64().is_some()
+                .is_none_or(|count| count == 0)
+            || row["application_exception_events"].as_u64().is_none()
         {
             return Err(Error::input(
                 "lifecycle trace does not prove a no-breakpoint run",
@@ -357,11 +357,10 @@ mod platform {
             let lock = PathBuf::from(std::env::var_os(crate::startup::LOCK_PATH_ENV).ok_or_else(
                 || Error::input("live_chain lock path is required for native trace"),
             )?);
-            if lock
+            if !lock
                 .to_string_lossy()
                 .replace('\\', "/")
-                .to_ascii_lowercase()
-                != LOCK.to_ascii_lowercase()
+                .eq_ignore_ascii_case(LOCK)
             {
                 return Err(Error::input(
                     "standard live_chain lock path required for native trace",
@@ -482,41 +481,41 @@ mod platform {
             }
         }
         fn wait_ready(&mut self, ready_deadline: Instant) -> Result<()> {
-            loop {
-                let left = ready_deadline.saturating_duration_since(Instant::now());
-                if left.is_zero() {
+            let left = ready_deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(Error::input("native observer ready handshake timed out"));
+            }
+            // The first message must already be a matching ready handshake.
+            // The former loop returned from every arm and never retried.
+            let raw = match self.messages.recv_timeout(left) {
+                Ok(raw) => raw,
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    self.reader_closed = true;
+                    return Err(Error::input(
+                        "native observer exited before ready handshake",
+                    ));
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
                     return Err(Error::input("native observer ready handshake timed out"));
                 }
-                match self.messages.recv_timeout(left) {
-                    Ok(raw) => {
-                        let Some(message) = self.process_message(raw)? else {
-                            return Err(Error::input("native observer output closed before ready"));
-                        };
-                        if message["critical_cleanup"] == true {
-                            return Err(Error::input(
-                                "native observer attach failed in critical_cleanup",
-                            ));
-                        }
-                        if message["ready"] == true
-                            && message["pid"].as_u64() == Some(u64::from(self.identity.pid))
-                            && Instant::now() < ready_deadline
-                        {
-                            return Ok(());
-                        }
-                        return Err(Error::input(
-                            "native observer ready handshake was late or did not match game PID",
-                        ));
-                    }
-                    Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        self.reader_closed = true;
-                        return Err(Error::input(
-                            "native observer exited before ready handshake",
-                        ));
-                    }
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                        return Err(Error::input("native observer ready handshake timed out"))
-                    }
-                }
+            };
+            let Some(message) = self.process_message(raw)? else {
+                return Err(Error::input("native observer output closed before ready"));
+            };
+            if message["critical_cleanup"] == true {
+                return Err(Error::input(
+                    "native observer attach failed in critical_cleanup",
+                ));
+            }
+            if message["ready"] == true
+                && message["pid"].as_u64() == Some(u64::from(self.identity.pid))
+                && Instant::now() < ready_deadline
+            {
+                Ok(())
+            } else {
+                Err(Error::input(
+                    "native observer ready handshake was late or did not match game PID",
+                ))
             }
         }
         fn abort_start(&mut self, reason: &str) -> Error {
