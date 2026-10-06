@@ -1676,6 +1676,22 @@ fn unfiltered_startup_probe(repo: &Repository) -> Result<Value> {
     )
 }
 
+const FILTER_SETUP_OBSERVATION: &str = r#"
+assert(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')=='JAC_ALL_POOLS','stock-inclusive option did not survive native setup')
+local function Read(fn)
+  local ok,value=pcall(fn)
+  if not ok then return 'unavailable:'..tostring(value) end
+  return tostring(value)
+end
+for actor=0,1 do
+  local p=PlayerConfigurations[actor]
+  print('[JAC_OFFICIAL_FILTER_SETUP] actor='..actor..
+    ' pool='..Read(function() return GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL') end)..
+    ' script='..Read(function() return MapConfiguration.GetValue('MAP_SCRIPT') end)..
+    ' values='..Read(function() return p:GetValue('LEADER_VALUES') end))
+end
+"#;
+
 // Compare the proven native two-major/one-minor setup with the extra frontend
 // allocation writes. Keep every Core roster and product acceptance assertion.
 fn filter_only_scenario(repo: &Repository) -> Result<Value> {
@@ -1689,7 +1705,7 @@ fn filter_only_scenario(repo: &Repository) -> Result<Value> {
     let (setup, _) = setup
         .rsplit_once("return ")
         .context("native setup return")?;
-    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\nassert(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL')=='JAC_ALL_POOLS','stock-inclusive option did not survive native setup')\nfor actor=0,1 do local p=PlayerConfigurations[actor];print('[JAC_OFFICIAL_FILTER_SETUP] actor='..actor..' pool='..tostring(GameConfiguration.GetValue('JAC_BANSEIKI_HUMAN_POOL'))..' script='..tostring(MapConfiguration.GetValue('MAP_SCRIPT'))..' values='..tostring(p:GetValue('LEADER_VALUES'))) end\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
+    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\n{FILTER_SETUP_OBSERVATION}\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
     Ok(product)
 }
 
@@ -1854,6 +1870,25 @@ mod tests {
     use super::*;
     use civ6_data_rs::absorption_product;
     use mlua::Lua;
+
+    #[test]
+    fn native_setup_observation_accepts_zero_results_and_optional_getter_errors() -> Result<()> {
+        let lua = Lua::new();
+        lua.load(r#"
+MESSAGES={};print=function(s) MESSAGES[#MESSAGES+1]=s end
+GameConfiguration={GetValue=function() return 'JAC_ALL_POOLS' end,SetValue=function() error('observation wrote configuration') end}
+MapConfiguration={GetValue=function() return 'Continents.lua' end,SetValue=function() error('observation wrote map') end}
+PlayerConfigurations={ [0]={GetValue=function() end},[1]={GetValue=function() error('auxiliary getter unavailable') end} }
+"#).exec()?;
+        lua.load(FILTER_SETUP_OBSERVATION).exec()?;
+        lua.load(r#"assert(#MESSAGES==2);assert(MESSAGES[1]:find('values=nil',1,true));assert(MESSAGES[2]:find('values=unavailable:',1,true))
+GameConfiguration.GetValue=function() return 'JAC_BANSEIKI_ONLY' end"#).exec()?;
+        assert!(
+            lua.load(FILTER_SETUP_OBSERVATION).exec().is_err(),
+            "required setup option must not be masked as optional metadata"
+        );
+        Ok(())
+    }
 
     #[test]
     fn filter_only_startup_keeps_the_native_roster_and_all_product_checks() -> Result<()> {
