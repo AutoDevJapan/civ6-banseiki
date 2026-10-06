@@ -13,23 +13,31 @@ local function control(name)
   return {Name=name,Text='',Hidden=false,Disabled=false,Callback=nil,Children={},
     SetText=function(s,t) s.Text=t end,SetString=function(s,t) s.Text=t end,
     SetHide=function(s,v) s.Hidden=v end,SetDisabled=function(s,v) s.Disabled=v end,
-    SetSelected=function() end,SetIcon=function() end,SetToolTipString=function(s,v) s.Tooltip=v end,
+    SetSelected=function(s,v) s.Selected=v end,SetIcon=function(s,v) s.Icon=v end,
+    SetColor=function(s,v) s.Color=v end,SetTexture=function(s,...) s.Texture={...} end,
+    SetToolTipString=function(s,v) s.Tooltip=v end,
     CalculateSize=function() end,DoAutoSize=function() end,
     RegisterCallback=function(s,_,fn) s.Callback=fn end}
 end
 Controls={}
 for _,name in ipairs({'CityStateStack','QuestsStack','NoneMet','ListOfCityStates','SingleCityState','CityStateName','CityStateTypeIcon',
   'TypeValue','PatronValue','EnvoysSentValue','QuestsValue','EnvoysSentArea','InfluenceArea','RelationshipsArea','QuestsArea',
-  'QuestsButton','QuestsScroll','ReportArea','SingleViewStack','LevyMilitaryButton','PeaceWarButton','EnvoysSentButton','InfluencedByButton','RelationshipsButton','CloseListButton','CloseBackButton'}) do
+  'QuestsButton','QuestsScroll','ReportArea','SingleViewStack','LevyMilitaryButton','PeaceWarButton','EnvoysSentButton','InfluencedByButton','RelationshipsButton','CloseListButton','CloseBackButton',
+  'InfluencedByValue','RelationshipsButtonStack','DiplomacyPip','CityStateIconStack'}) do
   Controls[name]=control(name)
 end
+-- Expansion2 CityStates.xml gives these tab areas Hidden=1, but the report
+-- fields, relationship icons, diplomacy pip and sidebar have no Hidden flag.
+for _,name in ipairs({'InfluenceArea','RelationshipsArea','QuestsArea'}) do Controls[name].Hidden=true end
+Controls.DiplomacyPip.Texture={'Diplomacy_RelationshipPips'}
 -- CityStates.xml initializes this label once; native ViewCityState never resets it.
 Controls.LevyMilitaryButton.Text='LOC_CITY_STATES_LEVY_MILITARY_BUTTON'
 Controls.CityStateScroll={GetSizeX=function() return 500 end}
 UIManager={GetScreenSizeVal=function() return 1600,900 end}
 INSTANCES={};ALL_MANAGERS={}
 InstanceManager={new=function(_,template,root,parent)
-  assert(template=='QuestInstance' and root=='Top' or template=='CityStateRowInstance' and root=='CityStateBase','official instance root required')
+  assert(template=='QuestInstance' and root=='Top' or template=='CityStateRowInstance' and root=='CityStateBase'
+    or template=='RelationshipIcon' and root=='Background' or template=='CityStateIconInstance' and root=='Top','official instance root required')
   local im=setmetatable({Rows={},Available={},m_InstanceName=template,m_RootControlName=root,m_ParentControl=parent},{__index=InstanceManager})
   INSTANCES[template=='CityStateRowInstance' and parent==Controls.QuestsStack and 'MinorActions' or template]=im
   ALL_MANAGERS[#ALL_MANAGERS+1]=im
@@ -44,9 +52,12 @@ end,
 GetInstance=function(im)
   local item=table.remove(im.Available)
   if not item then
-    local names=im.m_InstanceName=='QuestInstance' and {'Title','Description','Reward','Callout','Top'} or
-      {'NameLabel','Icon','QuestIcon','Envoy','EnvoyCount','BonusImage1','BonusImage3','BonusImage6','Suzerain','BonusImageSuzerainOff','BonusImageSuzerainOn','SuzerainLabel','EnvoyMoreButton','EnvoyLessButton','Button','NameButton','LookAtButton'}
+    local names=im.m_InstanceName=='QuestInstance' and {'Title','Description','Reward','Callout','Top'}
+      or im.m_InstanceName=='RelationshipIcon' and {'Icon','TeamRibbon','DiplomacyPip','Background'}
+      or im.m_InstanceName=='CityStateIconInstance' and {'IconButton','Icon','DiplomacyPip','Top'}
+      or {'NameLabel','Icon','QuestIcon','Envoy','EnvoyCount','BonusImage1','BonusImage3','BonusImage6','Suzerain','BonusImageSuzerainOff','BonusImageSuzerainOn','SuzerainLabel','EnvoyMoreButton','EnvoyLessButton','Button','NameButton','LookAtButton','DiplomacyPip','AmbassadorButton'}
     item={};for _,name in ipairs(names) do item[name]=control(name) end
+    if item.LookAtButton then item.LookAtButton.Hidden=true end
     item[im.m_RootControlName]=item[im.m_RootControlName] or control(im.m_RootControlName)
     item.m_InstanceManager=im
     local top=item[im.m_RootControlName];top.Row=item;top.Parent=im.m_ParentControl
@@ -66,11 +77,12 @@ ExposedMembers={JAC_AbsorptionProduct={Get=function(from,to) assert(to==2);if fr
  GetSmallCountries=function(to) assert(to==2);return {VIEW} end}}
 Players={[1]={IsMajor=function() return not OFFICIAL end,GetInfluence=function() return {CanReceiveInfluence=function() return OFFICIAL==true end} end},
  [2]={IsMajor=function() return true end,IsTurnActive=function() return true end,GetInfluence=function() return {GetTokensToGive=function() return 2 end} end},
- [3]={IsMajor=function() return false end}}
+ [3]={IsMajor=function() return false end},[5]={IsMajor=function() return false end}}
 Game={GetLocalPlayer=function() return 2 end,GetCurrentGameTurn=function() return 7 end}
 SCREEN_HIDDEN=false
 Locale={Lookup=function(s) return s end};ContextPtr={GetID=function() return 'CityStates' end,IsHidden=function() return SCREEN_HIDDEN end}
 UI={RequestPlayerOperation=function(actor,op,params) assert(actor==2 and op==13);REQUESTS[#REQUESTS+1]=params end}
+UI.GetPlayerColors=function(actor) return 'primary '..actor,'secondary '..actor end
 CAMERAS={}
 UI.LookAtPlotScreenPosition=function(x,y,horizontal,vertical)
   CAMERAS[#CAMERAS+1]={X=x,Y=y,Horizontal=horizontal,Vertical=vertical}
@@ -90,6 +102,10 @@ function include(name)
     local mode,selected='Overview',-1
     local nativeQuestIM=InstanceManager:new('QuestInstance','Top',Controls.QuestsStack)
     INSTANCES.NativeQuests=nativeQuestIM
+    local nativeRowsIM=InstanceManager:new('CityStateRowInstance','CityStateBase',Controls.CityStateStack)
+    local nativeIconsIM=InstanceManager:new('CityStateIconInstance','Top',Controls.CityStateIconStack)
+    local nativeRelationsIM=InstanceManager:new('RelationshipIcon','Background',Controls.RelationshipsButtonStack)
+    INSTANCES.NativeRows=nativeRowsIM;INSTANCES.NativeIcons=nativeIconsIM;INSTANCES.NativeRelationships=nativeRelationsIM
     NATIVE_QUESTS={}
     function GetQuests(player)
       -- Base GetQuests keys by questInfo.Index (including zero and holes),
@@ -108,6 +124,16 @@ function include(name)
     function ViewList()
       BASE_LIST=BASE_LIST+1
       Controls.ListOfCityStates:SetHide(false);Controls.SingleCityState:SetHide(true)
+      nativeRowsIM:ResetInstances()
+      for _,actor in ipairs({3,5}) do
+        local row=nativeRowsIM:GetInstance();row.NameLabel:SetText('native minor '..actor)
+        row.DiplomacyPip:SetTexture('native list diplomacy '..actor)
+        row.DiplomacyPip:SetToolTipString('native list state '..actor)
+        row.AmbassadorButton:SetHide(actor~=3)
+        row.AmbassadorButton:SetToolTipString('native ambassador '..actor)
+        row.Button:RegisterCallback(Mouse.eLClick,function() OpenSingleViewCityState(actor) end)
+        row.AmbassadorButton:RegisterCallback(Mouse.eLClick,function() OpenSingleViewCityState(actor);OnInfluencedByClick() end)
+      end
     end
     function Refresh()
       BASE_REFRESH=BASE_REFRESH+1
@@ -121,6 +147,23 @@ function include(name)
       end
       Controls.ListOfCityStates:SetHide(true);Controls.SingleCityState:SetHide(false)
       Controls.CityStateName:SetText('native minor '..player)
+      Controls.TypeValue:SetText('native type '..player);Controls.PatronValue:SetText('native patron '..player)
+      Controls.CityStateTypeIcon:SetIcon('ICON_NATIVE_'..player)
+      Controls.CityStateTypeIcon:SetColor('secondary '..player)
+      Controls.CityStateTypeIcon:SetToolTipString('native type tooltip '..player)
+      Controls.InfluencedByValue:SetText('native civilizations '..player)
+      Controls.DiplomacyPip:SetTexture('native diplomacy '..player)
+      Controls.DiplomacyPip:SetToolTipString('native diplomatic state '..player)
+      nativeRelationsIM:ResetInstances()
+      local relationship=nativeRelationsIM:GetInstance()
+      relationship.Icon:SetIcon('ICON_NATIVE_RELATION_'..player)
+      relationship.Icon:SetToolTipString('native relation '..player)
+      nativeIconsIM:ResetInstances()
+      for _,actor in ipairs({3,5}) do
+        local row=nativeIconsIM:GetInstance();row.Icon:SetIcon('ICON_NATIVE_'..actor)
+        row.Icon:SetToolTipString('native minor '..actor)
+        row.IconButton:RegisterCallback(Mouse.eLClick,function() OpenSingleViewCityState(actor) end)
+      end
       Controls.LevyMilitaryButton:SetHide(false);Controls.LevyMilitaryButton:SetDisabled(false)
       Controls.LevyMilitaryButton:SetToolTipString('native levy details')
       Controls.LevyMilitaryButton:RegisterCallback(Mouse.eLClick,function() NATIVE_LEVY=(NATIVE_LEVY or 0)+1;NATIVE_GOLD=NATIVE_GOLD-100 end)
@@ -128,6 +171,8 @@ function include(name)
       Controls.PeaceWarButton:SetToolTipString('native war/peace details')
       Controls.PeaceWarButton:RegisterCallback(Mouse.eLClick,function() NATIVE_WAR_PEACE=(NATIVE_WAR_PEACE or 0)+1 end)
       Controls.QuestsArea:SetHide(mode~='Quests')
+      for _,entry in ipairs({{Controls.EnvoysSentButton,'EnvoySent'},{Controls.InfluencedByButton,'InfluencedBy'},
+        {Controls.QuestsButton,'Quests'},{Controls.RelationshipsButton,'Relationships'}}) do entry[1]:SetSelected(mode==entry[2]) end
       if mode=='Quests' then
         nativeQuestIM:ResetInstances()
         for _,quest in pairs(GetQuests(player)) do
@@ -633,6 +678,105 @@ fn quest_rows_and_action_buttons_belong_to_the_selected_country_across_seven_nat
         }
     }
     anyhow::ensure!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn native_report_xml_fields_never_describe_the_previous_minor_after_product_navigation(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let mut failures = Vec::new();
+    for (name, path) in [
+        ("native to product", "OpenSingleViewCityState(3);ASSERT_NATIVE(3);ViewCityState(1);ASSERT_PRODUCT();Events.InfluenceChanged.Call();ASSERT_PRODUCT()"),
+        ("product to native", "ViewCityState(1);ASSERT_PRODUCT();OpenSingleViewCityState(5);ASSERT_NATIVE(5);Controls.InfluencedByButton.Callback();ASSERT_NATIVE(5)"),
+        ("product to list", "OpenSingleViewCityState(3);ViewCityState(1);ViewList();ASSERT_LIST();INSTANCES.NativeRows.Rows[2].Button.Callback();ASSERT_NATIVE(5)"),
+        ("captured Back", "OpenSingleViewCityState(3);ViewCityState(1);Controls.CloseBackButton.Callback();ASSERT_LIST();LuaEvents.CityBannerManager_RaiseMinorCivPanel.Call(5);ASSERT_NATIVE(5)"),
+        ("captured Close", "OpenSingleViewCityState(3);ViewCityState(1);Controls.CloseListButton.Callback();assert(SCREEN_HIDDEN);LuaEvents.PartialScreenHooks_OpenCityStates.Call();ASSERT_LIST();INSTANCES.NativeRows.Rows[1].AmbassadorButton.Callback();ASSERT_NATIVE(3)"),
+        ("frozen product to unmapped native", "OpenSingleViewCityState(3);VIEW.Envoys.Route='FROZEN';VIEW.Status='STARTED';ViewCityState(1);ASSERT_PRODUCT();ExposedMembers.JAC_AbsorptionProduct=nil;OpenSingleViewCityState(5);ASSERT_NATIVE(5)"),
+    ] {
+        let lua = screen(&repo)?;
+        lua.load(repo.read(absorption_product::UI)?).exec()?;
+        lua.load(r#"
+          -- These fields are outside the hidden Influence/Relationships tabs
+          -- in the installed Expansion2 XML. Their default visibility matters.
+          assert(not Controls.InfluencedByValue.Hidden and not Controls.RelationshipsButtonStack.Hidden)
+          assert(not Controls.DiplomacyPip.Hidden and not Controls.CityStateIconStack.Hidden)
+          function ASSERT_NATIVE(actor)
+            assert(not Controls.SingleCityState.Hidden and Controls.ListOfCityStates.Hidden)
+            assert(Controls.CityStateName.Text=='native minor '..actor)
+            assert(not Controls.InfluencedByButton.Hidden and not Controls.InfluencedByValue.Hidden)
+            assert(Controls.InfluencedByValue.Text=='native civilizations '..actor)
+            assert(not Controls.RelationshipsButton.Hidden and not Controls.RelationshipsButtonStack.Hidden)
+            assert(#INSTANCES.NativeRelationships.Rows==1 and INSTANCES.NativeRelationships.Rows[1].Icon.Tooltip=='native relation '..actor)
+            assert(not Controls.DiplomacyPip.Hidden and Controls.DiplomacyPip.Texture[1]=='native diplomacy '..actor)
+            assert(Controls.DiplomacyPip.Tooltip=='native diplomatic state '..actor)
+            assert(not Controls.CityStateIconStack.Hidden and #INSTANCES.NativeIcons.Rows==2)
+            assert(Controls.CityStateTypeIcon.Tooltip=='native type tooltip '..actor and Controls.CityStateTypeIcon.Color=='secondary '..actor)
+            assert(Controls.PatronValue.Text=='native patron '..actor)
+            assert(Controls.LevyMilitaryButton.Text==Locale.Lookup('LOC_CITY_STATES_LEVY_MILITARY_BUTTON'))
+          end
+          function ASSERT_PRODUCT()
+            assert(not Controls.SingleCityState.Hidden and Controls.CityStateName.Text=='六角')
+            assert(Controls.InfluencedByValue.Hidden or Controls.InfluencedByValue.Text=='',
+              'always-visible civilizations still describe the previous minor')
+            assert(Controls.RelationshipsButtonStack.Hidden or #INSTANCES.NativeRelationships.Rows==0,
+              'always-visible relationship icons still describe the previous minor')
+            assert(Controls.DiplomacyPip.Hidden,'native diplomatic state still appears on a product country')
+            assert(Controls.CityStateIconStack.Hidden,'native sidebar still appears as this product country data')
+            assert(Controls.CityStateTypeIcon.Tooltip==JAC_AbsorptionAdmissionUI.Text('SMALL_COUNTRY'))
+            assert(Controls.CityStateTypeIcon.Color=='secondary 1','country icon retained native color')
+            assert(Controls.PatronValue.Text=='' and Controls.PatronValue.Tooltip=='')
+            assert(Controls.QuestsButton.Selected and not Controls.EnvoysSentButton.Selected
+              and not Controls.InfluencedByButton.Selected and not Controls.RelationshipsButton.Selected,
+              'native subsection selection remained selected with product conditions')
+            assert(not Controls.QuestsArea.Hidden and Controls.InfluenceArea.Hidden and Controls.RelationshipsArea.Hidden)
+            assert(#INSTANCES.QuestInstance.Rows==1 and INSTANCES.QuestInstance.Rows[1].Description.Text:find('六角',1,true))
+          end
+          function ASSERT_LIST()
+            assert(Controls.SingleCityState.Hidden and not Controls.ListOfCityStates.Hidden)
+            assert(not Controls.InfluencedByButton.Hidden and not Controls.InfluencedByValue.Hidden)
+            assert(not Controls.RelationshipsButton.Hidden and not Controls.RelationshipsButtonStack.Hidden)
+            assert(not Controls.DiplomacyPip.Hidden and not Controls.CityStateIconStack.Hidden,
+              'returning to the native list did not restore XML visibility')
+            assert(#INSTANCES.NativeRows.Rows==2 and #REQUESTS==0 and not NATIVE_CACHE_MISS)
+          end
+        "#).exec()?;
+        load_city_states(&lua, &repo)?;
+        if let Err(error) = lua.load(path).set_name(name).exec() {
+            failures.push(format!("{name}: {error}"));
+        }
+    }
+    anyhow::ensure!(failures.is_empty(), "{}", failures.join("\n"));
+    Ok(())
+}
+
+#[test]
+fn product_reused_native_rows_hide_default_diplomacy_and_ambassador_without_hiding_native_rows(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    lua.load(repo.read(absorption_product::UI)?).exec()?;
+    load_city_states(&lua, &repo)?;
+    lua.load(r#"
+      ViewList()
+      for _,row in ipairs(INSTANCES.NativeRows.Rows) do assert(not row.DiplomacyPip.Hidden) end
+      assert(not INSTANCES.NativeRows.Rows[1].AmbassadorButton.Hidden)
+      local row=INSTANCES.CityStateRowInstance.Rows[1]
+      assert(row.DiplomacyPip.Hidden,'product list row displays an uninitialized native diplomacy pip')
+      assert(row.AmbassadorButton.Hidden,'product list row claims a native ambassador')
+      assert(not row.QuestIcon.Hidden and not row.Icon.Hidden and not row.NameButton.Hidden)
+      assert(not row.LookAtButton.Hidden,'real XML hides LookAt by default; product map action must explicitly show it')
+      row.LookAtButton.Callback();assert(#CAMERAS==1 and #REQUESTS==0)
+      OFFICIAL=true;OpenSingleViewCityState(1)
+      local action=INSTANCES.MinorActions.Rows[1]
+      assert(action.DiplomacyPip.Hidden and action.AmbassadorButton.Hidden,
+        'product admission action row includes unrelated native diplomacy/ambassador decorations')
+      assert(not action.NameButton.Hidden and not action.NameButton.Disabled)
+      action.NameButton.Callback();assert(#REQUESTS==1 and REQUESTS[1].From==1 and REQUESTS[1].Command=='REGISTER')
+      ViewList()
+      assert(not INSTANCES.NativeRows.Rows[1].DiplomacyPip.Hidden and not INSTANCES.NativeRows.Rows[1].AmbassadorButton.Hidden,
+        'product row cleanup modified the native pool')
+    "#).exec()?;
     Ok(())
 }
 
