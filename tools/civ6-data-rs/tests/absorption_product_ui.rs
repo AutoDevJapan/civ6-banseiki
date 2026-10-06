@@ -277,6 +277,81 @@ fn load_city_states(lua: &Lua, repo: &Repository) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn load_registration_ui(lua: &Lua, repo: &Repository) -> anyhow::Result<()> {
+    // A separate worker owns the adapter. Normally test the generated checkout
+    // artifact; an explicit read-only source lets this worker verify that
+    // parent's uncommitted artifact without copying it into the checkout.
+    let source = match std::env::var_os("JAC_ADMISSION_UI_TEST_SOURCE") {
+        Some(path) => {
+            std::fs::read_to_string(path).context("read parent admission UI test source")?
+        }
+        None => repo.read(absorption_product::UI)?,
+    };
+    lua.load(source).set_name(absorption_product::UI).exec()?;
+    Ok(())
+}
+
+#[test]
+fn refund_observation_wait_disables_registration_and_sends_no_native_operation(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    load_registration_ui(&lua, &repo)?;
+    load_city_states(&lua, &repo)?;
+    lua.load(r#"
+      local U=JAC_AbsorptionAdmissionUI
+      VIEW.Status='CANCELLED';VIEW.CanCancel=false;VIEW.CanRegister=false;VIEW.OfferID='product:1:2:1'
+      VIEW.Rows[2].Settlement='RETURNING'
+      for _,currency in ipairs({'Gold','Faith'}) do
+        VIEW.Error='awaiting '..currency..' refund observation'
+        local text,command=U.Action(VIEW)
+        assert(text==U.Text('RETURNING') and command==nil,'refund observation wait still offers registration')
+        assert(not U.Send(VIEW,'REGISTER') and #REQUESTS==0,'blocked registration reached a native operation')
+        ViewCityState(1)
+        assert(Controls.LevyMilitaryButton.Disabled and Controls.LevyMilitaryButton.Text==U.Text('RETURNING'))
+        Controls.LevyMilitaryButton.Callback()
+        assert(not JAC_AbsorptionCityStatesAction(1,'REGISTER') and #REQUESTS==0)
+        Events.InfluenceChanged.Call();Events.GameCoreEventPublishComplete.Call()
+        assert(Controls.LevyMilitaryButton.Disabled and #REQUESTS==0,'screen refresh re-enabled registration before refund observation')
+      end
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn observed_cancelled_refund_and_legacy_views_keep_authenticated_registration_available(
+) -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    let lua = screen(&repo)?;
+    load_registration_ui(&lua, &repo)?;
+    load_city_states(&lua, &repo)?;
+    lua.load(r#"
+      local U=JAC_AbsorptionAdmissionUI
+      VIEW.Status='CANCELLED';VIEW.CanCancel=false;VIEW.CanRegister=true;VIEW.OfferID='product:1:2:1'
+      VIEW.Rows[2].Settlement='RETURNED'
+      local text,command=U.Action(VIEW)
+      assert(text==U.Text('REGISTER_SMALL') and command=='REGISTER','observed refund did not restore registration')
+      ViewCityState(1);assert(not Controls.LevyMilitaryButton.Disabled)
+      Controls.LevyMilitaryButton.Callback()
+      assert(#REQUESTS==1 and REQUESTS[1].Command=='REGISTER' and REQUESTS[1].From==1
+        and REQUESTS[1].OfferID==VIEW.OfferID and REQUESTS[1].OnStart=='JAC_AbsorptionProduct_Operation')
+      VIEW.CanRegister=nil;VIEW.Status='AVAILABLE';VIEW.OfferID=nil
+      for _,mode in ipairs({'SMALL_STATE','MERGER'}) do
+        VIEW.Mode=mode
+        local label,action=U.Action(VIEW)
+        assert(action=='REGISTER' and label==U.Text(mode=='SMALL_STATE' and 'REGISTER_SMALL' or 'REGISTER_MERGER'),
+          'older views without CanRegister lost registration')
+        assert(U.Send(VIEW,'REGISTER'))
+      end
+      assert(#REQUESTS==3 and REQUESTS[2].Command=='REGISTER' and REQUESTS[3].Command=='REGISTER')
+      VIEW.CanRegister=false;VIEW.CanCancel=true;VIEW.OfferID='product:1:2:2'
+      local _,cancel=U.Action(VIEW)
+      assert(cancel=='CANCEL' and U.Send(VIEW,'CANCEL'),'registration gate blocked an existing cancellation')
+      assert(#REQUESTS==4 and REQUESTS[4].Command=='CANCEL' and REQUESTS[4].OfferID==VIEW.OfferID)
+    "#).exec()?;
+    Ok(())
+}
+
 #[test]
 fn native_influence_refresh_keeps_the_product_country_and_its_next_envoy_action(
 ) -> anyhow::Result<()> {
