@@ -23,8 +23,9 @@ local function encode(v,depth)
  local function keyText(k)
   return type(k)=='number' and string.format('%.17g',k) or k
  end
- local keys,seen,collision={},{},false; for k in pairs(v) do
+ local keys,seen,collision,numericKeys={},{},false,false; for k in pairs(v) do
   assert(type(k)=='string' or type(k)=='number','unsupported raw key');
+  if type(k)=='number' then numericKeys=true end
   local text=keyText(k); if seen[text] then collision=true end; seen[text]=true;
   keys[#keys+1]=k
  end
@@ -32,7 +33,7 @@ local function encode(v,depth)
   local x,y=keyText(a),keyText(b);
   return x<y or (x==y and type(a)<type(b))
  end);
- if collision then
+ if collision or numericKeys then
   local entries={}; for _,k in ipairs(keys) do
    entries[#entries+1]='{"key":{"kind":'..encode(type(k),depth+1)..
     ',"value":'..encode(k,depth+1)..'},"value":'..encode(v[k],depth+1)..'}'

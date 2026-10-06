@@ -146,8 +146,8 @@ fn reads_ui_roster_in_its_own_context_without_publishing_or_pairing() {
     assert_eq!(v["context"], "InGame");
     assert_eq!(v["boundary"]["read"]["status"], "OK");
     assert_eq!(
-        v["boundary"]["roster"]["captured"]
-            .as_object()
+        v["boundary"]["roster"]["captured"]["entries"]
+            .as_array()
             .unwrap()
             .len(),
         3
@@ -224,8 +224,7 @@ fn rust_refuses_fractional_counts_partial_enumeration_and_wrong_turns() {
     }
 }
 
-#[test]
-fn transcript_requires_exact_script_provenance_and_unique_returns() {
+fn complete_records() -> Vec<Value> {
     let (_, ui) = read("", true);
     let (_, core) = read("", false);
     let mut records = Vec::new();
@@ -247,6 +246,12 @@ fn transcript_requires_exact_script_provenance_and_unique_returns() {
             .push(serde_json::json!({"action":action,"status":"START","detail":step.to_string()}));
         records.push(serde_json::json!({"action":action,"status":"OK","detail":detail}));
     }
+    records
+}
+
+#[test]
+fn transcript_requires_exact_script_provenance_and_unique_returns() {
+    let records = complete_records();
     let text = records
         .iter()
         .map(Value::to_string)
@@ -318,4 +323,93 @@ fn partial_ui_read_is_explicit_in_the_independent_report() {
     assert_eq!(report["partial"], true);
     assert_eq!(report["exchangeAuthorized"], false);
     assert_eq!(report["uiRaw"], ui);
+}
+
+#[test]
+fn real_runner_startup_records_are_paired_once_before_the_pinned_load() {
+    let records = complete_records();
+    let text = |rows: &[Value]| {
+        rows.iter()
+            .map(Value::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    for (action, detail) in [
+        ("launch", "Civ VI is not running"),
+        ("auto_restart", "Civ6 is not running"),
+        (
+            "auto_restart",
+            "mod file newer than Civ6 process: owned/modinfo (mtime=1.000, started=0.000)",
+        ),
+        (
+            "1/6 restart_game",
+            "{\"action\":\"restart_game\",\"timeout\":420}",
+        ),
+    ] {
+        let start = serde_json::json!({"action":action,"status":"START","detail":detail});
+        let ok = serde_json::json!({"action":action,"status":"OK","detail":"Civ VI relaunched via Steam; main menu visible and ready"});
+        assert!(host::observations(&text(
+            &[vec![start.clone(), ok.clone()], records.clone()].concat()
+        ))
+        .is_ok());
+        for prefix in [
+            vec![start.clone()],
+            vec![ok.clone()],
+            vec![start.clone(), ok.clone(), start.clone(), ok.clone()],
+            vec![
+                start.clone(),
+                serde_json::json!({"action":action,"status":"FAIL","detail":"failed"}),
+            ],
+        ] {
+            assert!(host::observations(&text(&[prefix, records.clone()].concat())).is_err());
+        }
+        assert!(host::observations(&text(
+            &[
+                records[0..2].to_vec(),
+                vec![start, ok],
+                records[2..].to_vec()
+            ]
+            .concat()
+        ))
+        .is_err());
+    }
+    let skipped = serde_json::json!({"action":"auto_restart","status":"SKIP","detail":"Civ VI process is newer than all scenario mod files"});
+    assert!(host::observations(&text(&[vec![skipped.clone()], records.clone()].concat())).is_ok());
+    assert!(host::observations(&text(
+        &[vec![skipped.clone(), skipped], records.clone()].concat()
+    ))
+    .is_err());
+    assert!(host::observations(&text(
+        &[
+            vec![
+                serde_json::json!({"action":"unknown_startup","status":"START","detail":"not JSON"})
+            ],
+            records
+        ]
+        .concat()
+    ))
+    .is_err());
+}
+
+#[test]
+fn numeric_only_tables_preserve_key_types_and_fractional_keys() {
+    let (_, v) = read(
+        "PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.fractions={[1.25]='quarter',[2.5]='half'}",
+        false,
+    );
+    let rows = &v["properties"]["JAC_BOUNDARY_THIRD_SPY_ARCHIVE"]["value"]["fractions"];
+    assert_eq!(
+        rows["entries"][0]["key"],
+        serde_json::json!({"kind":"number","value":1.25})
+    );
+    assert_eq!(
+        rows["entries"][1]["key"],
+        serde_json::json!({"kind":"number","value":2.5})
+    );
+    let histories = &v["properties"]["JAC_BOUNDARY_THIRD_SPY_ARCHIVE"]["value"]["histories"];
+    assert_eq!(
+        histories["entries"][0]["key"],
+        serde_json::json!({"kind":"number","value":1})
+    );
+    assert_eq!(histories["entries"][0]["value"]["turn"], 23);
 }

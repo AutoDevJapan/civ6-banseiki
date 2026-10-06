@@ -35,27 +35,108 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
     let expected = scene["steps"].as_array().unwrap();
     let mut completed = 0;
     let mut pending: Option<String> = None;
+    let mut startup_pending: Option<String> = None;
+    let mut startup_seen = false;
+    let mut startup_skip_seen = false;
+    let mut header_seen = false;
+    let mut judge_seen = false;
     let mut outputs = std::collections::BTreeMap::new();
     for line in transcript.lines() {
         let row: Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
         let action = row["action"].as_str().ok_or("missing action")?;
+        if action == "launch" || action == "auto_restart" {
+            if completed != 0 || pending.is_some() {
+                return Err("startup after pinned observation began".into());
+            }
+            let detail = row["detail"].as_str().ok_or("missing startup detail")?;
+            match row["status"].as_str() {
+                Some("START") => {
+                    if startup_seen
+                        || startup_pending.is_some()
+                        || (action == "launch" && detail != "Civ VI is not running")
+                        || (action == "auto_restart"
+                            && (startup_skip_seen
+                                || (detail != "Civ6 is not running"
+                                    && !detail.starts_with("mod file newer than Civ6 process: "))))
+                    {
+                        return Err("duplicate or unknown startup".into());
+                    }
+                    startup_pending = Some(action.to_string());
+                }
+                Some("OK")
+                    if startup_pending.as_deref() == Some(action)
+                        && detail.starts_with("Civ VI relaunched via Steam") =>
+                {
+                    startup_pending = None;
+                    startup_seen = true;
+                }
+                Some("SKIP")
+                    if action == "auto_restart"
+                        && !startup_seen
+                        && !startup_skip_seen
+                        && startup_pending.is_none()
+                        && detail == "Civ VI process is newer than all scenario mod files" =>
+                {
+                    startup_skip_seen = true;
+                }
+                _ => return Err("failed or unpaired startup".into()),
+            }
+            continue;
+        }
         if row["status"] == "START" {
             let detail: Value =
                 serde_json::from_str(row["detail"].as_str().ok_or("missing START detail")?)
                     .map_err(|e| e.to_string())?;
             if completed == 0 && detail["action"] == "restart_game" {
+                if pending.is_some() || startup_seen || startup_pending.is_some() {
+                    return Err("duplicate explicit restart".into());
+                }
+                startup_pending = Some(action.to_string());
                 continue;
             }
-            if pending.is_some() || expected.get(completed) != Some(&detail) {
+            if startup_pending.is_some()
+                || pending.is_some()
+                || expected.get(completed) != Some(&detail)
+            {
                 return Err("unexpected step or changed pinned load/read sequence".into());
             }
             pending = Some(action.to_string());
         } else if row["status"] == "OK" {
-            if pending.as_deref() != Some(action) {
-                if completed > 0 && action.contains('/') {
-                    return Err("unpaired or duplicate observation result".into());
+            if startup_pending.as_deref() == Some(action) {
+                if !row["detail"]
+                    .as_str()
+                    .is_some_and(|d| d.starts_with("Civ VI relaunched via Steam"))
+                {
+                    return Err("explicit restart did not complete".into());
                 }
+                startup_pending = None;
+                startup_seen = true;
                 continue;
+            }
+            if pending.as_deref() != Some(action) {
+                if action == "start"
+                    && completed == 0
+                    && !header_seen
+                    && row["detail"] == scene["name"]
+                {
+                    header_seen = true;
+                    continue;
+                }
+                if action == "judge" && completed == expected.len() && !judge_seen {
+                    let detail = row["detail"].as_str().ok_or("missing judge result")?;
+                    let counts = detail
+                        .strip_suffix(" checks passed")
+                        .and_then(|s| s.split_once('/'))
+                        .ok_or("unknown judge result")?;
+                    let passed: usize = counts.0.parse().map_err(|_| "invalid judge count")?;
+                    let total: usize = counts.1.parse().map_err(|_| "invalid judge total")?;
+                    if passed != total {
+                        return Err("incomplete judge result".into());
+                    }
+                    judge_seen = true;
+                    continue;
+                }
+                return Err("unpaired or duplicate observation result".into());
             }
             let step = &expected[completed];
             if step["action"] == "load" {
@@ -93,7 +174,7 @@ pub(crate) fn observations(transcript: &str) -> Result<(Value, Value), String> {
             return Err("failed pinned observation run".into());
         }
     }
-    if completed != expected.len() || pending.is_some() {
+    if completed != expected.len() || pending.is_some() || startup_pending.is_some() {
         return Err("pinned load/wait/UI/Core/exit run incomplete".into());
     }
     Ok((
