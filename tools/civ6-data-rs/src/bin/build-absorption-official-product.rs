@@ -64,7 +64,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 
 const USAGE: &str =
-    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe | --local-human-probe | --unfiltered-startup-probe]";
+    "build-absorption-official-product --output <absolute-json-path> [--check] [--frontend-probe | --local-human-probe | --unfiltered-startup-probe | --filter-only-startup]";
 
 const P1: &str = civ6_data_rs::absorption_product::P1_EVIDENCE;
 
@@ -1676,6 +1676,21 @@ fn unfiltered_startup_probe(repo: &Repository) -> Result<Value> {
     )
 }
 
+// Compare the proven native two-major/one-minor setup with the extra frontend
+// allocation writes. Keep every Core roster and product acceptance assertion.
+fn filter_only_scenario(repo: &Repository) -> Result<Value> {
+    let mut product = scenario(repo)?;
+    let base: Value = serde_json::from_str(&absorption_admission::envoy_probe_scenario(repo)?)?;
+    let setup = base["steps"][2]["code"]
+        .as_str()
+        .context("native setup Lua")?;
+    let (setup, _) = setup
+        .rsplit_once("return ")
+        .context("native setup return")?;
+    product["steps"][2]["code"] = json!(format!("{setup}\n{FRONTEND_FILTER}\nreturn 'native setup with official Vatican filter; no allocation rewrites'"));
+    Ok(product)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct Options {
     output: PathBuf,
@@ -1683,6 +1698,7 @@ struct Options {
     frontend_probe: bool,
     local_human_probe: bool,
     unfiltered_startup_probe: bool,
+    filter_only_startup: bool,
 }
 
 fn options(args: &[String]) -> Result<Option<Options>> {
@@ -1694,6 +1710,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
     let mut frontend_probe = false;
     let mut local_human_probe = false;
     let mut unfiltered_startup_probe = false;
+    let mut filter_only_startup = false;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -1722,15 +1739,27 @@ fn options(args: &[String]) -> Result<Option<Options>> {
                 );
                 unfiltered_startup_probe = true;
             }
+            "--filter-only-startup" => {
+                ensure!(
+                    !filter_only_startup,
+                    "--filter-only-startup specified twice"
+                );
+                filter_only_startup = true;
+            }
             _ => bail!("unknown argument {arg}; {USAGE}"),
         }
     }
     let output = output.context(USAGE)?;
     ensure!(
-        [frontend_probe, local_human_probe, unfiltered_startup_probe]
-            .iter()
-            .filter(|&&v| v)
-            .count()
+        [
+            frontend_probe,
+            local_human_probe,
+            unfiltered_startup_probe,
+            filter_only_startup
+        ]
+        .iter()
+        .filter(|&&v| v)
+        .count()
             <= 1,
         "choose one probe mode; {USAGE}"
     );
@@ -1745,6 +1774,7 @@ fn options(args: &[String]) -> Result<Option<Options>> {
         frontend_probe,
         local_human_probe,
         unfiltered_startup_probe,
+        filter_only_startup,
     }))
 }
 
@@ -1798,6 +1828,8 @@ fn main() -> Result<()> {
             local_human_probe(&Repository::checked_in())?
         } else if options.unfiltered_startup_probe {
             unfiltered_startup_probe(&Repository::checked_in())?
+        } else if options.filter_only_startup {
+            filter_only_scenario(&Repository::checked_in())?
         } else {
             scenario(&Repository::checked_in())?
         })?
@@ -1820,6 +1852,42 @@ mod tests {
     use super::*;
     use civ6_data_rs::absorption_product;
     use mlua::Lua;
+
+    #[test]
+    fn filter_only_startup_keeps_the_native_roster_and_all_product_checks() -> Result<()> {
+        let repo = Repository::checked_in();
+        let original = scenario(&repo)?;
+        let comparison = filter_only_scenario(&repo)?;
+        let original_steps = original["steps"].as_array().unwrap();
+        let compared_steps = comparison["steps"].as_array().unwrap();
+        assert_eq!(original_steps.len(), compared_steps.len());
+        for (index, (before, after)) in original_steps.iter().zip(compared_steps).enumerate() {
+            if index != 2 {
+                assert_eq!(before, after, "acceptance step {index} changed");
+            }
+        }
+        let code = compared_steps[2]["code"].as_str().unwrap();
+        assert!(code.contains("EXCLUDE_CITY_STATES") && code.contains("CIVILIZATION_VATICAN_CITY"));
+        assert!(
+            !code.contains("SetParticipatingPlayerCount") && !code.contains("SetMaxMajorPlayers")
+        );
+        let args = vec![
+            "--output".into(),
+            repo.root
+                .join("tools/civ6-autotest/scenarios/absorption-official-product.json")
+                .to_string_lossy()
+                .into_owned(),
+            "--filter-only-startup".into(),
+        ];
+        assert!(options(&args)?.unwrap().filter_only_startup);
+        let mut incompatible = args.clone();
+        incompatible.push("--frontend-probe".into());
+        assert!(options(&incompatible).is_err());
+        let mut duplicate = args;
+        duplicate.push("--filter-only-startup".into());
+        assert!(options(&duplicate).is_err());
+        Ok(())
+    }
 
     // Independent evidence fixtures test the emitted *assertions*. Deliberate
     // corruptions must fail, including valid receipts with wrong native counts.
@@ -3843,7 +3911,8 @@ Modding={{GetModHandle=function(id) assert(id=='9DE86512-DE1A-400D-8C0A-AB46EBBF
                 check: true,
                 frontend_probe: false,
                 local_human_probe: false,
-                unfiltered_startup_probe: false
+                unfiltered_startup_probe: false,
+                filter_only_startup: false
             })
         );
         assert!(options(&[]).is_err());

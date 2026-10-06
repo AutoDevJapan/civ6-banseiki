@@ -1517,8 +1517,10 @@ impl Runner {
                 if self.clock.now() >= end {
                     break;
                 }
+                // Use the official keyboard path outside a FireTuner Lua call.
+                // Keep direct Lua activation as an explicit diagnostic only.
                 if states.iter().any(|s| state_name_eq(s, "LoadScreen"))
-                    && self.scenario["loadscreen_input"] != "escape"
+                    && self.scenario["loadscreen_input"] == "lua"
                 {
                     let response = self.lua(
                         "LoadScreen",

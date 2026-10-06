@@ -118,7 +118,7 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
     let f = Fixture::new();
     let mut backend = f.backend();
     backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
-    let mut runner = f.direct_runner(json!({}), backend);
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
     ready(&f, &mut runner);
     runner
         .enter_game_after_loadscreen(0, 1.0, None, false)
@@ -143,7 +143,7 @@ fn escape_activation_uses_native_input_once_and_waits_for_readiness() {
         }
         Ok("true".into())
     });
-    let mut runner = f.direct_runner(json!({"loadscreen_input":"escape"}), backend);
+    let mut runner = f.direct_runner(json!({}), backend);
     ready(&f, &mut runner);
     runner
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
@@ -173,6 +173,30 @@ fn loadscreen_input_rejects_unknown_methods() {
 }
 
 #[test]
+fn failed_native_activation_is_not_retried_or_replaced_by_lua() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_press = Some(Box::new(|_, _| {
+        Err(Error::input("native activation failed"))
+    }));
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    error_has(
+        runner
+            .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
+            .unwrap_err(),
+        ErrorKind::Input,
+        "native activation failed",
+    );
+    assert_eq!(
+        f.trace().presses,
+        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
+    );
+    assert!(f.trace().lua.is_empty());
+}
+
+#[test]
 fn unknown_begin_game_reply_waits_for_readiness_without_resending_activation() {
     let f = Fixture::new();
     let mut backend = f.backend();
@@ -188,7 +212,7 @@ fn unknown_begin_game_reply_waits_for_readiness_without_resending_activation() {
             Ok("true".into())
         }
     });
-    let mut runner = f.direct_runner(json!({}), backend);
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
     ready(&f, &mut runner);
     runner
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
@@ -221,7 +245,7 @@ fn unknown_begin_game_reply_without_readiness_keeps_original_deadline_and_failur
             Ok("false".into())
         }
     });
-    let mut runner = f.direct_runner(json!({}), backend);
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
     ready(&f, &mut runner);
     let error = runner
         .enter_game_after_loadscreen(0, 600.0, Some(3.0), false)
@@ -250,7 +274,7 @@ fn confirmed_begin_game_lua_error_still_fails_without_readiness_or_resend() {
         assert!(code.contains("OnActivateButtonClicked()"));
         Err(Error::lua("begin game callback failed"))
     });
-    let mut runner = f.direct_runner(json!({}), backend);
+    let mut runner = f.direct_runner(json!({"loadscreen_input":"lua"}), backend);
     ready(&f, &mut runner);
     error_has(
         runner
@@ -284,9 +308,9 @@ fn unknown_readiness_reply_is_rechecked_without_repeating_begin_game() {
     runner
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
         .unwrap();
-    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
-    assert!(f.trace().presses.is_empty());
+    assert_eq!(f.trace().presses.len(), 1);
     let evidence = transition_observations(&f);
     assert!(evidence.iter().any(|row| row["observation"]["last_error"]
         .as_str()
@@ -314,8 +338,8 @@ fn permanently_unknown_readiness_reply_times_out_without_repeating_activation() 
     assert_eq!(error.kind, ErrorKind::Scenario);
     assert!(error.message.contains("readiness reply lost"), "{error}");
     assert_eq!(f.clock.now(), 3.0);
-    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
-    assert!(f.trace().presses.is_empty());
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
+    assert_eq!(f.trace().presses.len(), 1);
     assert_eq!(
         transition_observations(&f).last().unwrap()["phase"],
         "timeout"
@@ -349,7 +373,7 @@ fn confirmed_advisor_error_still_fails_once_after_readiness_confirmation() {
         ErrorKind::LuaExecution,
         "advisor dismissal failed",
     );
-    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
     assert_eq!(
         f.trace()
@@ -392,9 +416,9 @@ fn confirmed_readiness_lua_error_is_recorded_once_without_ui_cleanup() {
         ErrorKind::LuaExecution,
         "readiness predicate failed",
     );
-    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 1);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked()"), 0);
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
-    assert!(f.trace().presses.is_empty());
+    assert_eq!(f.trace().presses.len(), 1);
     let evidence = transition_observations(&f);
     let last = evidence.last().unwrap();
     assert_eq!(last["phase"], "error");
@@ -673,7 +697,7 @@ fn post_marker_timeout_retains_last_game_predicate_and_does_not_reactivate_loads
         error.message.contains("local player") && error.message.contains("false"),
         "{error}"
     );
-    assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
     let rows = transition_observations(&f);
     assert!(rows

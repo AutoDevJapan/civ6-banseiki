@@ -93,7 +93,7 @@ fn test_save_load_measure_actual_file_and_wait_until_ready() {
                     clock.advance(0.5);
                     fs::write(&log, "LoadScreen: OnLoadGameViewStateDone\n").unwrap();
                 }
-                if code.contains("OnActivateButtonClicked()") {
+                if code.contains("return Game ~= nil and Game.GetLocalPlayer() >= 0") {
                     clock.advance(2.0);
                 }
                 Ok("true".into())
