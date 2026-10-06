@@ -134,3 +134,50 @@ fn branch_built_existing_helper_exposes_order_identity_without_game_access() {
         native_order::identity()
     );
 }
+
+#[test]
+fn interrupted_observer_aborts_the_existing_step_budget_before_a_long_load_timeout() {
+    use civ6_autotest_rs::{
+        runner::{Backend, Runner},
+        time::SystemClock,
+        Error, Result,
+    };
+    struct Ended;
+    impl Backend for Ended {
+        fn check_native_order(&self) -> Result<()> {
+            Err(Error::input("owned observer exited"))
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Runner::with_backend(
+        json!({"name":"health","steps":[]}),
+        temp.path().into(),
+        temp.path().into(),
+        temp.path().into(),
+        4318,
+        Box::new(Ended),
+        std::sync::Arc::new(SystemClock),
+    );
+    assert!(runner
+        .remaining(f64::MAX)
+        .unwrap_err()
+        .message
+        .contains("owned observer exited"));
+}
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+#[test]
+fn actual_completed_helper_is_not_reported_as_a_live_observer() {
+    use std::os::windows::process::CommandExt;
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-startup-diagnostics"))
+        .arg("order-identity")
+        .stdout(std::process::Stdio::null())
+        .creation_flags(0x08000000)
+        .spawn()
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+    assert!(native_order::check_parent_active(&child)
+        .unwrap_err()
+        .message
+        .contains("parent ended"));
+}
