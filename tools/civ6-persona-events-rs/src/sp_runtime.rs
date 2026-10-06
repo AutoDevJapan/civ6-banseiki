@@ -262,7 +262,7 @@ return 'full permit remains after observation stop; own observer detached'
     ));
     steps.push(ui("JAC_LeaderPersona_View",format!(r#"local cities={{}}; for _,c in Players[0]:GetCities():Members() do cities[#cities+1]=c end
 table.sort(cities,function(a,b) return a:GetID()<b:GetID() end)
-assert(JAC_AssignLeader('{LEADER}',assert(cities[1]):GetID())); return 'one normal assignment requested'
+JAC_AssignLeader('{LEADER}',assert(cities[1]):GetID()); return 'one normal assignment requested'
 "#)));
     steps.push(wait(format!(r#"local r=GameInfo.JAC_LeaderPersonas['{LEADER}']; local g=Players[0]:GetGovernors():GetGovernor(GameInfo.Governors[r.GovernorType].Hash)
 local city=g and g:GetAssignedCity(); local q=assert(JAC_NORMAL_SP_AUDIT)

@@ -14,6 +14,60 @@ fn template() -> Value {
 }
 
 #[test]
+fn assignment_step_uses_shipped_void_api_once_then_waits_for_real_state() {
+    let scene = sp_runtime::build(&template()).unwrap();
+    let steps = scene["steps"].as_array().unwrap();
+    let at = steps
+        .iter()
+        .position(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("one normal assignment requested"))
+        })
+        .unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let view = std::fs::read_to_string(
+        root.join("poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua"),
+    )
+    .unwrap();
+    let begin = view.find("function JAC_AssignLeader(").unwrap();
+    let end = begin + view[begin..].find("function JAC_PromoteLeader(").unwrap();
+    let lua = Lua::new();
+    lua.load(r#"
+calls=0; allowed=true
+Active=function() return true end
+Get=function(_,key) if key=='OWNER' then return 0 else return 'GOVERNOR' end end
+Game={GetLocalPlayer=function() return 0 end}
+GameInfo={JAC_LeaderPersonas={LEADER_JAC_DATE_TANEMUNE={GovernorType='DATE'}},Governors={DATE={Hash=1006,Index=6}}}
+city={GetID=function() return 65536 end}
+CityManager={GetCity=function(owner,id) assert(owner==0 and id==65536); return city end}
+Players={[0]={GetGovernors=function() return {CanAssignGovernor=function(_,hash,c) assert(hash==1006 and c==city);return allowed end} end,
+GetCities=function() return {Members=function() local n=0;return function() n=n+1;if n==1 then return 1,city end end end} end}}
+PlayerOperations={ASSIGN_GOVERNOR=3,PARAM_GOVERNOR_TYPE='governor',PARAM_PLAYER_ONE='owner',PARAM_CITY_DEST='city'}
+UI={RequestPlayerOperation=function(owner,operation,args) assert(owner==0 and operation==3 and args.governor==6 and args.owner==0 and args.city==65536);calls=calls+1 end}
+"#).exec().unwrap();
+    lua.load(&view[begin..end]).exec().unwrap();
+    let result: String = lua
+        .load(steps[at]["code"].as_str().unwrap())
+        .eval()
+        .unwrap();
+    assert_eq!(result, "one normal assignment requested");
+    lua.load("assert(calls==1);allowed=false").exec().unwrap();
+    assert!(lua
+        .load(steps[at]["code"].as_str().unwrap())
+        .exec()
+        .unwrap_err()
+        .to_string()
+        .contains("city not assignable"));
+    lua.load("assert(calls==1)").exec().unwrap();
+    assert_eq!(steps[at + 1]["action"], "wait_for");
+    assert!(steps[at + 1]["condition"]["code"]
+        .as_str()
+        .unwrap()
+        .contains("GetAssignedCity"));
+}
+
+#[test]
 fn generated_cli_file_exactly_matches_current_scenario_source() {
     let output = std::env::temp_dir().join(format!(
         "todo324-sp-runtime-{}-{}.json",
