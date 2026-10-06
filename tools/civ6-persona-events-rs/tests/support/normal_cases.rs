@@ -303,6 +303,28 @@ assert(ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,l).paid==1,"parti
 }
 
 #[test]
+fn public_start_boundary_change_during_closed_publication_consumes_the_candidate() {
+    for change in ["GameConfiguration.GetStartTurn=function() return 1 end",
+        "Game.GetCurrentGameTurn=function() return 1 end"] {
+        let lua=normal_context(&format!(r#"
+local getter=Players[0].GetProperty
+Players[0].GetProperty=function(self,key)
+ local value=getter(self,key)
+ if key==902000 and value==true then {change} end
+ return value
+end
+"#));
+        run(&lua,r#"
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil,'changed boundary committed')
+GameConfiguration.GetStartTurn=function() return 0 end
+Game.GetCurrentGameTurn=function() return 0 end
+ExposedMembers.JAC_LeaderPersona.Reconcile()
+assert(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1==nil,'consumed candidate recreated')
+"#);
+    }
+}
+
+#[test]
 fn public_fixture_uses_the_shipped_22_person_definitions() {
     let lua=normal_context("");
     let sql=fs::read_to_string(root().join("poc/JAC_PoC_LeaderPersona/Data/JAC_LeaderPersona.sql")).unwrap();
