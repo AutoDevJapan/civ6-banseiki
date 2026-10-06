@@ -243,6 +243,7 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
           GetVisibilityOn=function() return 1 end} end
         Players[id].GetDiplomaticAI=function() return {GetDiplomaticStateIndex=function() return 0 end} end
         Players[id].GetInfluence=function() return {CanReceiveInfluence=function() return false end,
+          CanGiveInfluence=function() return true end,CanGiveTokensToPlayer=function() return true end,
           GetTokensToGive=function() return ENVOY_POOL end,ChangeTokensToGive=function(_,n) ENVOY_POOL=ENVOY_POOL+n end} end
       end
       GameInfo.DiplomaticStates={[0]={StateType='DIPLO_STATE_NEUTRAL'}}
@@ -349,6 +350,7 @@ fn actual_official_minor_ai_spends_pool_reads_native_recipient_and_enters_verifi
       Players[1].GetInfluence=function() return {CanReceiveInfluence=function() return true end,
         GetTokensReceived=function(_,sender) assert(sender==2);OFFICIAL_READS=OFFICIAL_READS+1;return OFFICIAL_RECEIVED end} end
       Players[2].GetInfluence=function() return {CanReceiveInfluence=function() return false end,
+        CanGiveInfluence=function() return true end,CanGiveTokensToPlayer=function() return true end,
         GetTokensToGive=function() return ENVOY_POOL end,
         ChangeTokensToGive=function(_,n) assert(n==-1);ENVOY_POOL=ENVOY_POOL+n;OFFICIAL_SPENDS=OFFICIAL_SPENDS+1 end,
         GiveFreeTokenToPlayer=function(_,recipient) assert(recipient==1);OFFICIAL_RECEIVED=OFFICIAL_RECEIVED+1;OFFICIAL_GRANTS=OFFICIAL_GRANTS+1 end} end

@@ -220,6 +220,10 @@
       "name": "JAC-product-merger-human-waiting"
     },
     {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
       "action": "load",
       "name": "JAC-product-merger-human-waiting",
       "timeout": 600
@@ -255,6 +259,10 @@
     {
       "action": "save",
       "name": "JAC-product-merger-human-choice"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
     },
     {
       "action": "load",

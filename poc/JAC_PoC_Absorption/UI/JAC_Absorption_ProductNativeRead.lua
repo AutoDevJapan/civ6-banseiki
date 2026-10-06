@@ -8,4 +8,10 @@ ExposedMembers.JAC_AbsorptionProductNativeRead={GetDiplomacy=function(from,to)
   local visibility=Players[from]:GetDiplomacy():GetVisibilityOn(to)
   assert(type(visibility)=='number' and visibility>=0,'native diplomatic visibility unavailable')
   return {From=from,To=to,Turn=Game.GetCurrentGameTurn(),StateType=info.StateType,Visibility=visibility}
+end,GetEnvoyEligibility=function(from,to)
+  assert(Players[from] and Players[to],'native envoy actors unavailable')
+  local influence=assert(Players[to]:GetInfluence(),'native sender influence unavailable')
+  local canGive,canGiveTo=influence:CanGiveInfluence(),influence:CanGiveTokensToPlayer(from)
+  assert(type(canGive)=='boolean' and type(canGiveTo)=='boolean','native envoy eligibility unavailable')
+  return {From=from,To=to,Turn=Game.GetCurrentGameTurn(),CanGive=canGive,CanGiveTo=canGiveTo}
 end}

@@ -201,6 +201,10 @@
       "name": "JAC-product-small-ai-waiting"
     },
     {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
       "action": "load",
       "name": "JAC-product-small-ai-waiting",
       "timeout": 600
@@ -236,6 +240,10 @@
     {
       "action": "save",
       "name": "JAC-product-small-ai-choice"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
     },
     {
       "action": "load",

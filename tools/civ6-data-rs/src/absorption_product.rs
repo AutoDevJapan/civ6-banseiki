@@ -432,6 +432,11 @@ pub fn acceptance_scenario(repo: &Repository, small: bool, human: bool) -> Resul
     fn wait(code: String) -> Value {
         json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"InGame","code":code}})
     }
+    fn save_reload(steps: &mut Vec<Value>, name: String) {
+        steps.push(json!({"action":"save","name":name}));
+        steps.push(json!({"action":"exit_to_menu","timeout":90}));
+        steps.push(json!({"action":"load","name":name,"timeout":600}));
+    }
     steps.push(wait(
         "return ExposedMembers.JAC_AbsorptionProductNativeRead~=nil and ExposedMembers.JAC_HeroReadAPI and type(ExposedMembers.JAC_HeroReadAPI.ReadPlayer)=='function'".into(),
     ));
@@ -551,8 +556,14 @@ return 'existing screen envoy action advances after each real game-core publicat
     }
     // AI sends at most one envoy to a given country per normal turn. These
     // scenes use real turn advancement, with a bound from the real territory.
-    steps.push(json!({"action":"save","name":format!("JAC-product-{}-{}-waiting",if small{"small"}else{"merger"},if human{"human"}else{"ai"})}));
-    steps.push(json!({"action":"load","name":format!("JAC-product-{}-{}-waiting",if small{"small"}else{"merger"},if human{"human"}else{"ai"}),"timeout":600}));
+    save_reload(
+        &mut steps,
+        format!(
+            "JAC-product-{}-{}-waiting",
+            if small { "small" } else { "merger" },
+            if human { "human" } else { "ai" }
+        ),
+    );
     steps.push(wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()".into()));
     steps.push(json!({"action":"end_turn","turns":if small&&!human{12}else{1},"timeout":1200}));
     steps.push(wait(
@@ -587,8 +598,7 @@ return 'ordinary product requirements, actual deposit, and normal three-stage fl
         if small { "small" } else { "merger" },
         if human { "human" } else { "ai" }
     );
-    steps.push(json!({"action":"save","name":save}));
-    steps.push(json!({"action":"load","name":save,"timeout":600}));
+    save_reload(&mut steps, save);
     steps.push(wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and ExposedMembers.JAC_AbsorptionFlow~=nil".into()));
     steps.push(core(r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local flow=JAC_AbsorptionFlowGameplay.Get(t.FlowID)

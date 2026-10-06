@@ -179,6 +179,13 @@ end
 local function Occupied(actor,ownID)
   return N.IsOccupied(actor,ownID)
 end
+local function OfficialEnvoyEligible(from,to)
+  local api=assert(ExposedMembers.JAC_AbsorptionProductNativeRead,'native envoy UI reader unavailable')
+  local data=R.Copy(api.GetEnvoyEligibility(from,to))
+  assert(data and data.From==from and data.To==to and data.Turn==Game.GetCurrentGameTurn()
+    and type(data.CanGive)=='boolean' and type(data.CanGiveTo)=='boolean','stale or invalid native envoy read')
+  return data.CanGive and data.CanGiveTo
+end
 local function Envoys(from,to)
   local country=assert(P.Country(from),'envoy target not mapped')
   assert(country.AreaKm2<10000,'envoys are for small countries')
@@ -186,7 +193,7 @@ local function Envoys(from,to)
   if not Major(from) then
     assert(influence and influence:CanReceiveInfluence(),'official minor cannot receive influence')
     local count=influence:GetTokensReceived(to);assert(Integer(count),'official envoy count unavailable')
-    return {Envoys=count,Eligible=true,Route='OFFICIAL'}
+    return {Envoys=count,Eligible=OfficialEnvoyEligible(from,to),Route='OFFICIAL'}
   end
   -- FULL_CIV never claims to receive official influence. It uses its own
   -- synchronized assignments, paid from the same official sender token pool.
@@ -519,6 +526,7 @@ local function SendEnvoy(from,to,opkey,expected)
   assert(R.Equal(operation.EnvoyIdentity,identity),'envoy sender, recipient or route changed')
   local receipt=operation.EnvoyReceipt
   if receipt and receipt.Done then return end
+  assert(envoys.Eligible,'official envoy sender or recipient is not eligible')
   assert(not PendingEnvoy(to,opkey),'another envoy assignment is unsettled')
   if not Players[to]:IsHuman() then
     assert(not AiEnvoyUsed(to,opkey),'AI already assigned an envoy this turn')
@@ -605,6 +613,7 @@ function P.Command(actor,params)
     elseif params.Command=='SEND_ENVOY' then
       assert(not Occupied(from) and not Occupied(actor),'cannot send envoys during absorption')
       local envoys=Envoys(from,actor)
+      assert(envoys.Eligible,'official envoy sender or recipient is not eligible')
       assert((envoys.Route=='PRODUCT' or not Players[actor]:IsHuman()) and params.ExpectedEnvoys==envoys.Envoys,'stale or unofficial envoy assignment')
       assert(not PendingEnvoy(actor),'another envoy assignment is unsettled')
       assert(Players[actor]:IsHuman() or not AiEnvoyUsed(actor),'AI already assigned an envoy this turn')
@@ -703,9 +712,11 @@ function P.Tick()
         local pair=State().Pairs[Pair(from,to)]
         local offer=pair and N.GetOffer(pair.ID) or NextOffer({},Terms(Input(from,to)))
         if not CanPrepare(offer,true) then return end
-        if view.Envoys and view.Envoys.Envoys<view.Envoys.Required
-          and Players[to]:GetInfluence():GetTokensToGive()>0 then
-          P.Command(to,{Command='SEND_ENVOY',From=from,Nonce='ai-envoy:'..from..':'..view.Envoys.Envoys,ExpectedEnvoys=view.Envoys.Envoys})
+        if view.Envoys and view.Envoys.Envoys<view.Envoys.Required then
+          if not view.Envoys.Eligible then return end
+          if Players[to]:GetInfluence():GetTokensToGive()>0 then
+            P.Command(to,{Command='SEND_ENVOY',From=from,Nonce='ai-envoy:'..from..':'..view.Envoys.Envoys,ExpectedEnvoys=view.Envoys.Envoys})
+          end
         end
         if not pair then
           if CanPrepare(offer) then P.Command(to,{Command='REGISTER',From=from,Nonce='ai-register:'..from}) end

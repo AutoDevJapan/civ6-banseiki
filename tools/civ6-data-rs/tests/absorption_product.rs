@@ -13,6 +13,7 @@ MAJOR={true,true,true}
 FAIL_CHARGE,FAIL_REFUND,FAIL_ENVOY,FAIL_BEGIN=false,false,false,false
 CHARGES,REFUNDS,SENDS,STARTS=0,0,0,0
 GRANTS,FAIL_GRANT,GRANT_DELTA=0,false,1
+CAN_GIVE,CAN_GIVE_TO=true,true
 local props={}
 Game={GetProperty=function(_,k) return copy(props[k]) end,SetProperty=function(_,k,v) props[k]=copy(v) end,GetCurrentGameTurn=function() return TURN end}
 Players,PlayerConfigurations={},{}
@@ -30,6 +31,7 @@ for actor=1,3 do local id=actor
       HasAllied=function(_,other) return ALLIES[id..':'..other]==true end,GetVisibilityOn=function() return id==1 and 1 or ACCESS end} end,
     GetDiplomaticAI=function() return {GetDiplomaticStateIndex=function() return STATES[id] or 0 end} end,
     GetInfluence=function() return {CanReceiveInfluence=function() return id==1 and OFFICIAL end,GetTokensReceived=function(_,sender) assert(id==1 and sender==2);return OFFICIAL_ENVOYS end,
+      CanGiveInfluence=function() return CAN_GIVE end,CanGiveTokensToPlayer=function() return CAN_GIVE_TO end,
       GetTokensToGive=function() return POOL end,ChangeTokensToGive=function(_,n) POOL=POOL+n;SENDS=SENDS+1;if FAIL_ENVOY then FAIL_ENVOY=false;error('envoy spent then threw') end end,
       GiveFreeTokenToPlayer=function(_,recipient) assert(id==2 and recipient==1);OFFICIAL_ENVOYS=OFFICIAL_ENVOYS+GRANT_DELTA;GRANTS=GRANTS+1;if FAIL_GRANT then FAIL_GRANT=false;error('grant mutated then threw') end end} end}
 end
@@ -667,6 +669,78 @@ fn official_envoy_mutate_then_throw_reloads_without_second_debit_or_grant() -> a
 }
 
 #[test]
+fn official_sender_native_permissions_are_checked_before_any_journal_or_debit() -> anyhow::Result<()>
+{
+    for permission in ["sender", "recipient", "stale", "identity"] {
+        let lua = world(9999.)?;
+        lua.globals().set("PERMISSION", permission)?;
+        lua.load(r#"
+          OFFICIAL_SOURCE();HUMAN[2]=false;READY()
+          if PERMISSION=='sender' then CAN_GIVE=false
+          elseif PERMISSION=='recipient' then CAN_GIVE_TO=false
+          else local api=ExposedMembers.JAC_AbsorptionProductNativeRead;local read=api.GetEnvoyEligibility
+            api.GetEnvoyEligibility=function(from,to) local result=read(from,to)
+              if PERMISSION=='stale' then result.Turn=TURN-1 else result.From=3 end;return result end
+          end
+          assert(not pcall(ENVOY,0),'official native restriction was bypassed')
+          JAC_AbsorptionProductGameplay.Tick()
+          assert(SENDS==0 and GRANTS==0 and POOL==10 and STARTS==0 and CHARGES==0)
+          local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+          assert(not state or next(state.Operations)==nil,'rejected permission left a pending operation')
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn every_generated_product_reload_exits_the_running_game_before_loading() -> anyhow::Result<()> {
+    let repo = Repository::checked_in();
+    for small in [false, true] {
+        for human in [false, true] {
+            let scene: serde_json::Value =
+                serde_json::from_str(&product::acceptance_scenario(&repo, small, human)?)?;
+            let steps = scene["steps"].as_array().unwrap();
+            let mut count = 0;
+            for (index, step) in steps.iter().enumerate() {
+                if step["action"] == "load" {
+                    count += 1;
+                    assert_eq!(steps[index - 1]["action"], "exit_to_menu");
+                    assert_eq!(steps[index - 2]["action"], "save");
+                    assert_eq!(steps[index - 2]["name"], step["name"]);
+                }
+            }
+            assert_eq!(count, 2);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn official_envoy_permissions_are_read_in_ui_context_and_not_from_gameplay_getters(
+) -> anyhow::Result<()> {
+    let lua = world(9999.)?;
+    lua.load(r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false
+      ENVOY_UI_CONTEXT=setmetatable({Players={}}, {__index=_G})
+      for id,player in pairs(Players) do
+        ENVOY_UI_CONTEXT.Players[id]={GetInfluence=player.GetInfluence,GetDiplomacy=player.GetDiplomacy,GetDiplomaticAI=player.GetDiplomaticAI}
+        local influence=player.GetInfluence
+        player.GetInfluence=function() local value=influence()
+          value.CanGiveInfluence=function() error('UI sender eligibility called in Gameplay') end
+          value.CanGiveTokensToPlayer=function() error('UI recipient eligibility called in Gameplay') end
+          return value end
+      end
+    "#).exec()?;
+    let context: mlua::Table = lua.globals().get("ENVOY_UI_CONTEXT")?;
+    lua.load(Repository::checked_in().read(product::NATIVE_READ_UI)?)
+        .set_environment(context)
+        .exec()?;
+    lua.load("ENVOY(0);assert(POOL==9 and SENDS==1 and GRANTS==1 and OFFICIAL_ENVOYS==1)")
+        .exec()?;
+    Ok(())
+}
+
+#[test]
 fn ai_envoy_budget_survives_exceptions_repeated_ticks_and_reload() -> anyhow::Result<()> {
     for failure in ["none", "charge", "grant", "saved-grant"] {
         let lua = world(9999.)?;
@@ -684,6 +758,7 @@ fn ai_envoy_budget_survives_exceptions_repeated_ticks_and_reload() -> anyhow::Re
               GetTokensReceived=function(_,sender) assert(sender==2);return RECEIVED[id] end} end
           end
           Players[2].GetInfluence=function() return {GetTokensToGive=function() return POOL end,
+            CanGiveInfluence=function() return true end,CanGiveTokensToPlayer=function() return true end,
             ChangeTokensToGive=function(_,n) POOL=POOL+n;SENDS=SENDS+1
               if FAILURE=='charge' then FAILURE='none';error('charge changed then threw') end end,
             GiveFreeTokenToPlayer=function(_,recipient) RECEIVED[recipient]=RECEIVED[recipient]+1;GRANTS=GRANTS+1
