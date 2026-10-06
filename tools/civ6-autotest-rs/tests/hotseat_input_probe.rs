@@ -58,7 +58,9 @@ fn input_only_probe_never_runs_original_queries_or_game_actions() {
         ContextPtr={LookUpControl=function() return {IsHidden=function() return true end} end,
           SetHide=function() end, SetInputHandler=function(_,f) handler=f end,
           SetUpdate=function(_,f) update=f end}
-        KeyEvents={KeyDown=2,KeyUp=1}
+        KeyEvents={KeyDown=0,KeyUp=1}
+        Keys={VK_RETURN=38}
+        for f=13,24 do Keys['VK_F'..f]=f+52 end
         Events={SaveComplete={Add=function() end}, ExitToMainMenu=function() error('unexpected exit') end}
         UI={RequestAction=function() error('unexpected turn') end}
         Network={SaveGame=function() error('unexpected save') end}
@@ -82,10 +84,10 @@ fn input_only_probe_never_runs_original_queries_or_game_actions() {
         .unwrap();
     lua.load(
         r#"
-        assert(not input(124,1)); update()
-        assert(input(124,2)); assert(input(124,1)); assert(input(124,1))
-        for key=125,135 do assert(input(key,2)); assert(input(key,1)) end
-        assert(not input(13,1))
+        assert(not input(65,1)); update()
+        assert(input(65,0)); assert(input(65,1)); assert(input(65,1))
+        for key=66,76 do assert(input(key,0)); assert(input(key,1)) end
+        assert(not input(Keys.VK_RETURN,1))
         for i=1,40 do assert(not input(999,1)) end
         assert(queries==0)
     "#,
@@ -95,16 +97,12 @@ fn input_only_probe_never_runs_original_queries_or_game_actions() {
     let lines = lines.lock().unwrap();
     let frames = hs::parse_frames(&lines.join("\n"), &nonce).unwrap();
     assert_eq!(frames.iter().filter(|f| f.kind == "INPUT_PROBE").count(), 1);
-    assert!(
-        frames
-            .iter()
-            .any(|f| f.kind == "INPUT_PROBE" && f.step == 0 && f.body == "key_up|124")
-    );
-    assert!(
-        frames
-            .iter()
-            .all(|f| f.step == 0 && ["BOOT", "INPUT_PROBE"].contains(&f.kind.as_str()))
-    );
+    assert!(frames
+        .iter()
+        .any(|f| f.kind == "INPUT_PROBE" && f.step == 0 && f.body == "key_up|F13|65"));
+    assert!(frames
+        .iter()
+        .all(|f| f.step == 0 && ["BOOT", "INPUT_PROBE"].contains(&f.kind.as_str())));
     assert_eq!(
         lines
             .iter()

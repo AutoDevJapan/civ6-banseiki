@@ -199,7 +199,7 @@ local function onInput(input)
   local message = input:GetMessageType()
   local key = input:GetKey()
   if (message == KeyEvents.KeyDown or message == KeyEvents.KeyUp) and
-      (plan.input_diagnostic or key == 0 or key == 13 or plan.query_keys[key] or plan.action_keys[key]) and
+      (plan.input_diagnostic or key == 0 or key == Keys.VK_RETURN or plan.query_keys[key] or plan.action_keys[key]) and
       inputSamples < 32 then
     inputSamples = inputSamples + 1
     print("JAC_HS_INPUT|1|" .. nonce .. "|" .. scene .. "|" ..
@@ -207,10 +207,10 @@ local function onInput(input)
   end
   if plan.input_diagnostic then
     -- Never run queries, turns, saves or exit requests in an input-only probe.
-    if key == 124 then
+    if key == plan.input_probe_key then
       if message == KeyEvents.KeyUp and not inputProbeSeen then
         inputProbeSeen = true
-        emit("INPUT_PROBE", 0, "key_up|" .. tostring(key))
+        emit("INPUT_PROBE", 0, "key_up|F13|" .. tostring(key))
       end
       return true
     end

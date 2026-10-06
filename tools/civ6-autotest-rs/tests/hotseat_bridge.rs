@@ -110,6 +110,9 @@ fn lua_run_with_growth(xp: u32, before_next_round_capture: &str) -> (Vec<hs::Fra
         SetHide=function(_, hidden) contextHidden=hidden end,
         SetInputHandler=function(_, f) inputHandler=f end, SetUpdate=function(_, f) updateHandler=f end}}
       KeyEvents = {{KeyUp=1}}
+      -- F13=65 was measured in Civ6; the remaining distinct values are test fixtures.
+      Keys = {{VK_RETURN=38}}
+      for f=13,24 do Keys['VK_F'..f]=f+52 end
       ActionTypes = {{ACTION_ENDTURN=5}}; actions=0
       UI = {{RequestAction=function(id) assert(id==5); actions=actions+1; return true end}}
       SaveLocations={{LOCAL_STORAGE=8}}; saveType=0; savedName=nil
@@ -118,7 +121,7 @@ fn lua_run_with_growth(xp: u32, before_next_round_capture: &str) -> (Vec<hs::Fra
       Network = {{GetGameConfigurationSaveType=function() saveType=saveType+1; return 23 end,
         SaveGame=function(opts) assert(opts.Type==23 and opts.Location==8); savedName=opts.Name; if saveCallback then saveCallback() end; return true end}}
       include=function(name) assert(name=='JAC_HotseatPlan') end
-      function key(v) local input={{GetMessageType=function() return 1 end, GetKey=function() return v end}}; return inputHandler(input) end
+      function key(v) local mapped=Keys['VK_F'..tostring(v-111)]; assert(mapped); local input={{GetMessageType=function() return 1 end, GetKey=function() return mapped end}}; return inputHandler(input) end
     "#)).exec().unwrap();
     lua.load(&plan).exec().unwrap();
     lua.load(&witness).exec().unwrap();

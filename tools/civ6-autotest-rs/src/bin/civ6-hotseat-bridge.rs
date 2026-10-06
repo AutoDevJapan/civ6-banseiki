@@ -1,5 +1,5 @@
 //! Explicitly bounded hotseat test transport. Never starts a game or Steam.
-use civ6_autotest_rs::{Error, Result, hotseat_bridge as hs, judge, runner::Runner, scenario};
+use civ6_autotest_rs::{hotseat_bridge as hs, judge, runner::Runner, scenario, Error, Result};
 use clap::{Parser, Subcommand};
 use hs::TransportIo;
 use serde::{Deserialize, Serialize};
@@ -647,7 +647,14 @@ fn probe_input(bundle_path: &Path, logs: &Path) -> Result<()> {
             if frame.scene != state.scene {
                 return Err(Error::scenario("input probe scene changed"));
             }
-            if frame.kind == "INPUT_PROBE" && frame.step == 0 && frame.body == "key_up|124" {
+            if frame.kind == "INPUT_PROBE"
+                && frame.step == 0
+                && frame
+                    .body
+                    .strip_prefix("key_up|F13|")
+                    .and_then(|key| key.parse::<u16>().ok())
+                    .is_some()
+            {
                 validate_runtime_logs(logs, &state.audit_baseline)?;
                 println!(
                     "F13 KeyUp reached the input-only witness. No original scenario step was executed."
@@ -730,6 +737,38 @@ fn main() -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_only_bundles_reject_all_acceptance_commands_before_game_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let data: Value = serde_json::from_str(include_str!(
+            "../../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json"
+        ))
+        .unwrap();
+        hs::prepare_mode(
+            &data,
+            dir.path(),
+            &uuid::Uuid::new_v4().simple().to_string(),
+            &uuid::Uuid::new_v4().to_string(),
+            true,
+        )
+        .unwrap();
+        let bundle = dir.path().join("bundle.json");
+        let absent_logs = dir.path().join("no-game-logs");
+        let absent_saves = dir.path().join("no-game-saves");
+        for result in [
+            step(&bundle, &absent_logs, &absent_saves, 4, 1.0),
+            menu_load(&bundle, &absent_logs, &absent_saves, 4318),
+            adopt_load(&bundle, &absent_logs),
+        ] {
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("input-only bundle cannot run acceptance steps"));
+        }
+        assert!(!dir.path().join("bridge-journal.jsonl").exists());
+        assert!(!dir.path().join("input-probe-sent.json").exists());
+    }
 
     #[test]
     fn bundle_is_readable_while_other_commands_are_excluded() {

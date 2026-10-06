@@ -1,6 +1,6 @@
 //! Test-only hotseat witness bundle and strict Lua.log transport.
 //! No FireTuner command is sent from this module while a game is running.
-use crate::{Error, Result, judge, scenario};
+use crate::{judge, scenario, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -10,6 +10,7 @@ use std::{
 };
 
 pub const QUERY_STEPS: [usize; 9] = [4, 5, 7, 8, 12, 14, 15, 17, 21];
+// Native Windows keys; Lua binds the separate Keys.VK_F* constants from the game.
 pub const KEY_END_TURN: u16 = 0x85; // F22
 pub const KEY_SAVE: u16 = 0x86; // F23
 pub const KEY_EXIT: u16 = 0x87; // F24
@@ -95,16 +96,27 @@ pub fn nonce_valid(run_id: &str) -> bool {
 }
 
 fn plan(data: &Value, run_id: &str, input_diagnostic: bool) -> String {
-    let mut lua = format!(
-        "JAC_HOTSEAT_PLAN = {{nonce={}, queries={{}}, query_keys={{}}, action_keys={{[133]='end_turn',[134]='save',[135]='exit_to_menu'}}, action_steps={{end_turn={{['0:0']=6,['0:1']=13,['1:0']=16}}, save={{['0:1']=9,['1:1']=18}}, exit_to_menu={{['0:1']=10,['1:1']=19}}}}, save_names={{[9]={},[18]={}}}}}\n",
+    let mut lua = String::from(
+        "local used_sdk_keys={}\nlocal function sdk_key(name)\n  local key=Keys and Keys[name]\n  if type(key)~='number' or used_sdk_keys[key] then error('distinct game key required: '..name) end\n  used_sdk_keys[key]=true\n  return key\nend\n",
+    );
+    lua.push_str(&format!(
+        "JAC_HOTSEAT_PLAN = {{nonce={}, queries={{}}, query_keys={{}}, action_keys={{[sdk_key('VK_F22')]='end_turn',[sdk_key('VK_F23')]='save',[sdk_key('VK_F24')]='exit_to_menu'}}, action_steps={{end_turn={{['0:0']=6,['0:1']=13,['1:0']=16}}, save={{['0:1']=9,['1:1']=18}}, exit_to_menu={{['0:1']=10,['1:1']=19}}}}, save_names={{[9]={},[18]={}}}}}\n",
         scenario::lua_string(run_id),
         scenario::lua_string(&format!("JAC-Hotseat-Mid-Round-{run_id}")),
         scenario::lua_string(&format!("JAC-Hotseat-Next-Player-{run_id}"))
-    );
+    ));
     for (i, step) in QUERY_STEPS.iter().enumerate() {
-        let key = 0x7c + i; // F13..F21
         let code = data["steps"][step - 1]["code"].as_str().unwrap();
-        lua.push_str(&format!("JAC_HOTSEAT_PLAN.query_keys[{key}]={step}\nJAC_HOTSEAT_PLAN.queries[{step}]=function()\n{code}\nend\n"));
+        lua.push_str(&format!(
+            "local key=sdk_key('VK_F{}')\nJAC_HOTSEAT_PLAN.query_keys[key]={step}\n",
+            13 + i
+        ));
+        if i == 0 {
+            lua.push_str("JAC_HOTSEAT_PLAN.input_probe_key=key\n");
+        }
+        lua.push_str(&format!(
+            "JAC_HOTSEAT_PLAN.queries[{step}]=function()\n{code}\nend\n"
+        ));
     }
     if input_diagnostic {
         lua.push_str("JAC_HOTSEAT_PLAN.input_diagnostic=true\n");
