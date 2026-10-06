@@ -655,13 +655,22 @@ impl Runner {
         &mut self,
         code: &str,
         deadline: f64,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        self.send_frontend_request_checked(code, deadline, 5.0, check_owner)
+    }
+    fn send_frontend_request_checked(
+        &mut self,
+        code: &str,
+        deadline: f64,
+        request_seconds: f64,
         mut check_owner: impl FnMut() -> Result<()>,
     ) -> Result<String> {
         self.retry_when(
             deadline,
             |this| {
                 check_owner()?;
-                this.lua("FrontEnd", code, this.budget(deadline, 5.0)?)
+                this.lua("FrontEnd", code, this.budget(deadline, request_seconds)?)
             },
             |error| error.kind == ErrorKind::Tuner,
         )
@@ -1596,13 +1605,14 @@ impl Runner {
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
-                let disabled = self.send_frontend_transition_checked(
+                let disabled = self.send_frontend_request_checked(
                     &scenario::enable_mods_code_with_scope(
                         &ids,
                         &strings(&step["disable_ids"]),
                         step["exclusive_user_mods"] == true,
                     ),
                     deadline,
+                    timeout,
                     &mut check_owner,
                 )?;
                 Ok(format!(
