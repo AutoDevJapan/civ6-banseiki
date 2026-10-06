@@ -301,6 +301,8 @@ cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin absorp
 
 この修正候補の指定Cargo全workspaceは105対象1408件が成功し、失敗・ignored・filteredは0件で、Lua 5.1を省略していない。原ログは `D:/CC/Work/todo995/continuation-load-eligibility-workspace.log`。ネイティブ全検査180件・実Flow42件、全対象Clippy、両Rust版の書式と差分検査も成功した。原ログは `continuation-load-eligibility-native-all.log` と `continuation-load-eligibility-native-clippy.log`。Luaの除外は0件、成功保存と出力引数を必要とする明示的な出力生成器1件だけがignoredである。補助の既存Rust実行器による6形式検査と製品生成一致は成功したが、正式Cargoの6形式・3種類の生成チェックは共有枠待ちとして区別する。原ログは `continuation-load-eligibility-direct-checks.log` と `continuation-load-eligibility-scenes-checks.log`。製品4本は退出を2回加え、手順数32/24/27/24、正常受付25・使節診断20を保持した。旧e7ec1006のCI6件は全て成功したが、この修正後のCI・実機・最終レビューの証拠には転用しない。実機受入・公式小国AIのMust、マルチプレイ、300手番の測定は未完了を保持する。
 
+実機09はa3f896a7で10/33手順まで成功し、次のUI手順でGameplayの準備プロパティが未配信のため停止した。画面の当事者はUIの公式構成情報から取得し、過去に存在した国も含めて、AIの取込みで消滅した元の国を保持する設計に変更した。UIの開始待ちは製品の共通読取だけを使い、保存・支払い・乱数の照合はGameplayに保持する。5992a822はmain dca3874aを統合し、双方の配布シナリオと重複検査を保持した候補である。修正後の製品・画面48件、ネイティブ全180件・実Flow42件、正式Cargoの6形式検査と製品生成一致は成功した。原ログは `D:/CC/Work/todo995/orch-af0-focused-2.log`、`orch-af0-native.log`、`orch-af0-checks.log`。Lua除外0件、ネイティブのignoredは成功保存と出力引数を要する明示生成器1件だけである。初回全workspaceのUI模擬構成不足1件失敗は `orch-af0-workspace.log` に保持し、修正後の指定Cargo全workspaceは `orch-af0-workspace-2.log` で108対象・1421件が成功し、失敗・ignored・filteredは0件、終了コード0である。Lua 5.1を全件実行した。有限差分の再レビューはMust・Suggestion・Nitが0件。最新CIと6実機、公式都市国家AIの製品受入は未完了を保持する。元のToDo995で同じ担当が続け、引き継ぎ用ToDoを増やさない。
+
 旧候補b073a875の専用worktreeでは、以下の4対象で合計222件成功、失敗・ignored・filteredはすべて0件だった。mluaのLua 5.1で実行し、Lua検査を省略していない。三段階結合の1テスト内で小国／合併と人間／AIの4組を実行し、一次判定の保存再送、加入した指導者の性格・特性・国の保持を照合した。相手消滅後の開始前エラーも、保存済み要求から取消しと返却を行える。画面受入や実機受入の成功を意味しない。
 
 | focused対象 | 成功件数 | 原ログ（専用worktree内） |
