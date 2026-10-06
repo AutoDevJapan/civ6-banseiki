@@ -166,7 +166,8 @@ core::arch::global_asm!(
     "jmp qword ptr [rip + BOOT_SET_CONTINUE]",
     ".seh_endproc",
 );
-extern "system" {
+// Native callees are not proven noexcept; their unwind may cross this wrapper.
+extern "system-unwind" {
     fn boot_release_original(a: usize, b: usize) -> usize;
     fn boot_set_original(a: usize, b: usize) -> usize;
 }
@@ -390,7 +391,7 @@ fn guarded_event(receiver: usize, incoming: usize, ret: usize, is_set: bool) -> 
         }
     }
 }
-extern "system" fn release_entry(receiver: usize, unused: usize, ret: usize) -> usize {
+extern "system-unwind" fn release_entry(receiver: usize, unused: usize, ret: usize) -> usize {
     let error = unsafe { GetLastError() };
     let token = guarded_event(receiver, 0, ret, false);
     unsafe { SetLastError(error) };
@@ -408,7 +409,7 @@ extern "system" fn release_entry(receiver: usize, unused: usize, ret: usize) -> 
     unsafe { SetLastError(error) };
     result
 }
-extern "system" fn set_entry(receiver: usize, incoming: usize, ret: usize) -> usize {
+extern "system-unwind" fn set_entry(receiver: usize, incoming: usize, ret: usize) -> usize {
     let error = unsafe { GetLastError() };
     let _ = guarded_event(receiver, incoming, ret, true);
     unsafe { SetLastError(error) };

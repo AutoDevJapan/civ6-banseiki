@@ -131,7 +131,7 @@ EXE0xF4990を読むとsingletonのglobalは0x22D6070で、保持slotはそのobj
 
 新crate `tools/civ6-bootstrap-rs` はWindows x64 DLLとして、MainMenuで明示的に準備するresident candidateを実装する。324 native/runtime/compositeファイルは編集しない。実export `BridgeRuntimeInstall/Close/Rebuild` を既にロード済みのsource DLLから解決する。通常public ledger・既存原子publicationを利用し、私的Lua flagやLua呼出しは追加しない。
 
-準備は現在PID/FILETIME、固定EXE/Core path+SHA、MainMenuの期待Context表、runtime DLLの保持file SHAとexportの実行module範囲を確認する。Mode6 Installはここで1回実行し、返されたCompositeTraceのaddress/sizeを保持する。EXEのF7110/F7830の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx` または `mov [rsp+8],rbx` を1回実行して残りの原関数へ戻る。Windows unwind情報を付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
+準備は現在PID/FILETIME、固定EXE/Core path+SHA、MainMenuの期待Context表、runtime DLLの保持file SHAとexportの実行module範囲を確認する。Mode6 Installはここで1回実行し、返されたCompositeTraceのaddress/sizeを保持する。EXEのF7110/F7830の先頭と直前5byteのCC paddingを固定byte照合し、近傍relayと元命令continuationを準備して2byte CASで入口を公開する。bootstrap/Core/runtimeとrelayはprocess終了まで保持し、毎回のfree/unpinはない。continuationは既知の `push rbx` または `mov [rsp+8],rbx` を1回実行して残りの原関数へ戻る。Windows unwind情報と原C++呼出しのsystem-unwind ABIを付け、RCX/RDX・RAX戻り値・非volatile register・LastErrorを維持する。
 
 接続は単一phaseで管理する。Openの非null旧CoreContextに対して、原Releaseより前にCloseを成功させClosingへ移り、原Releaseが戻った後にだけClosedとする。Closedから、同じtransition thread・singleton・Core表・EXE globalに一致し、caller0x24B5D5、旧slot0、新Context非nullのSetContext入口でRebuildを呼ぶ。その後は原SetContextを1回実行し、ownerの自然RESET/COMMITによる再公開を待つ。allocatorによる旧address再利用は世代判定に使わない。同値SetContextはAPI呼出し0。旧slot非nullから直接異なるContextへ交換する未実証経路は先にCloseし、同じcallの途中へ推測でRebuildを入れず閉鎖を維持する。
 
@@ -141,7 +141,7 @@ ABI不一致やClose不成立のままnative破棄を継続しないため、cal
 
 `BOOTSTRAP_TRACE_POINTER` は固定traceへのpointerを持つdata export（8byteを読む）。headerは9個のu64（version1、capacity128、pid、FILETIME、Core base、runtime trace address、runtime trace size、予約数、dropped）、以後128行。行は13個のu64：commit sequence（最後にRelease store）、kind、tid、receiver、old、incoming、caller、generation、API status、native calibration next/in-flight、property next/in-flight。native countersはpublic CompositeTraceのJACA v4/JACP v3のみを読み、不一致・未読はu64::MAX。counter採取はpublication fenceではない。kind11=両EXE入口の公開完了、kind0/1=Install前後、2/3=Close前後、4=Release原関数前、5=Noop、6/7=Rebuild前後、8=Set原関数前、9/10=原関数return（return行callerはVA、未対応generationはu64::MAX）。droppedや未commit行を合格に数えない。
 
-残る1件の必須受入は、親の同一owned PIDでfresh MainMenu準備→最初のworld開始→Exit→同じ保存再Load→Gameplay確認を行い、Installが最初のAI/自然RESETより前、Closeが旧native owner破棄より前、Rebuildが新ownerのRESET/COMMITより前であり、PIN下でも通常world再初期化が成功することを既存Mode6 traceと通常public ledgerで照合すること。Noopの再構築0と旧世代の許可拒否も同じ1件で確認する。workerの実Game実行0、Mode6成功を模擬した検査0。所有OS子の実code patchは2入口の原命令・原関数1回、入口のrestore（到達不能prefix/relayは終了まで保持）、unwind情報、回収を検査するもので製品成功ではない。
+残る1件の必須受入は、親の同一owned PIDでfresh MainMenu準備→最初のworld開始→Exit→同じ保存再Load→Gameplay確認を行い、Installが最初のAI/自然RESETより前、Closeが旧native owner破棄より前、Rebuildが新ownerのRESET/COMMITより前であり、PIN下でも通常world再初期化が成功することを既存Mode6 traceと通常public ledgerで照合すること。Noopの再構築0と旧世代の許可拒否も同じ1件で確認する。workerの実Game実行0、Mode6成功を模擬した検査0。所有OS子の実code patchは2入口の原命令・原関数1回、入口のrestore（到達不能prefix/relayは終了まで保持）、原関数からの実unwindとunwind情報、回収を検査するもので製品成功ではない。
 
 ビルドは共通gate経由 `build --locked --offline --manifest-path tools/Cargo.toml -p civ6-bootstrap-rs`。出力は専用targetの `debug/civ6_bootstrap_rs.dll`。`CARGO_INCREMENTAL=0`、`CARGO_PROFILE_DEV_DEBUG=0`、`CARGO_PROFILE_TEST_DEBUG=0` を使う。ゲーム・共有DLLへこのworkerが配置することはない。
 

@@ -24,6 +24,10 @@ core::arch::global_asm!(
     ".seh_stackalloc 32",
     ".seh_endprologue",
     "lock inc qword ptr [rip + BOOT_FIXTURE_ORIGINAL_CALLS]",
+    "test rdx,rdx",
+    "jz 2f",
+    "call boot_fixture_unwind",
+    "2:",
     "lea rax,[rcx+7]",
     "add rsp,32",
     "pop rbx",
@@ -51,16 +55,20 @@ core::arch::global_asm!(
     "ret",
     ".seh_endproc",
 );
-extern "system" {
+extern "system-unwind" {
     fn boot_fixture(a: usize, b: usize) -> usize;
     fn boot_set_fixture(a: usize, b: usize) -> usize;
 }
-extern "system" fn set_fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
+extern "system-unwind" fn set_fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
     assert_ne!(ret, 0);
     (unsafe { boot_set_original(a, b) }) + 1
 }
+#[unsafe(no_mangle)]
+extern "system-unwind" fn boot_fixture_unwind() {
+    panic!("owned original unwind probe");
+}
 static WRAPPER_CALLS: AtomicU64 = AtomicU64::new(0);
-extern "system" fn fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
+extern "system-unwind" fn fixture_wrapper(a: usize, b: usize, ret: usize) -> usize {
     assert_ne!(ret, 0);
     WRAPPER_CALLS.fetch_add(1, Ordering::Relaxed);
     (unsafe { boot_release_original(a, b) }) + 1
@@ -104,10 +112,13 @@ fn owned_hotpatch_child() {
     assert_eq!(unsafe { boot_fixture(3, 0) }, 11);
     assert_eq!(BOOT_FIXTURE_ORIGINAL_CALLS.load(Ordering::Acquire), 2);
     assert_eq!(WRAPPER_CALLS.load(Ordering::Acquire), 1);
+    assert!(std::panic::catch_unwind(|| unsafe { boot_fixture(3, 1) }).is_err());
+    assert_eq!(BOOT_FIXTURE_ORIGINAL_CALLS.load(Ordering::Acquire), 3);
+    assert_eq!(WRAPPER_CALLS.load(Ordering::Acquire), 2);
     hook.restore().unwrap();
     assert_eq!(read(entry, 6).unwrap(), bytes);
     assert_eq!(unsafe { boot_fixture(3, 0) }, 10);
-    assert_eq!(BOOT_FIXTURE_ORIGINAL_CALLS.load(Ordering::Acquire), 3);
+    assert_eq!(BOOT_FIXTURE_ORIGINAL_CALLS.load(Ordering::Acquire), 4);
     let entry = boot_set_fixture as *const () as usize;
     BOOT_SET_CONTINUE.store(entry + 5, Ordering::Release);
     let bytes = read(entry, 10).unwrap();
