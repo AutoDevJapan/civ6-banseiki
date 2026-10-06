@@ -104,6 +104,31 @@ fn test_status_query_retries_after_timeout() {
 }
 
 #[test]
+fn human_alive_read_retries_a_lost_reply_but_not_a_lua_error() {
+    let mut h = Harness::new(
+        json!({}),
+        timeout_backend(1, Error::unknown("alive reply lost"), "1|true"),
+    );
+    assert_eq!(h.runner.human_alive(0, 60.0).unwrap(), (1, true));
+    assert_eq!(h.calls().len(), 2);
+    assert!(h.calls().iter().all(|(state, code)| {
+        state == "InGame"
+            && code
+                == "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Players[0]:IsAlive())"
+    }));
+
+    let mut h = Harness::new(
+        json!({}),
+        timeout_backend(1, Error::lua("alive script failed"), "1|true"),
+    );
+    assert_eq!(
+        h.runner.human_alive(0, 60.0).unwrap_err().kind,
+        ErrorKind::LuaExecution
+    );
+    assert_eq!(h.calls().len(), 1);
+}
+
+#[test]
 fn test_advisor_dismissal_retries_after_timeout() {
     let mut h = Harness::new(
         json!({}),
