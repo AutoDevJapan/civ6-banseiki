@@ -5,6 +5,7 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     let valid = [
         serde_json::json!({"action":"ui_lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":true}),
         serde_json::json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":false}}),
+        serde_json::json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":true}),
     ];
     for step in valid {
         validate_scenario(&json!({"name":"preserved session","steps":[step]})).unwrap();
@@ -14,6 +15,7 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
         json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":1}}),
         json!({"action":"wait_for","preserve_diplomacy_session":true,"condition":{"type":"lua","state_name":"InGame","code":"return true"}}),
         json!({"action":"pause","seconds":1,"preserve_diplomacy_session":true}),
+        json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":"true"}),
         json!({"action":"wait_for","condition":{"type":"state","name":"InGame","preserve_diplomacy_session":true}}),
     ];
     for step in invalid {
@@ -26,10 +28,68 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     }
 }
 
+#[test]
+fn a_save_callback_retry_keeps_owned_diplomacy_and_never_resends_the_save() {
+    let f = Fixture::new();
+    let target = f.saves.join("OwnedDiplomacySave.Civ6Save");
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "InGame".into(),
+            "DiplomacyActionView".into(),
+            "DiplomacyDealView".into(),
+        ])
+    });
+    let mut polls = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("Network.SaveGame") {
+            fs::write(&target, b"owned save bytes").unwrap();
+        }
+        if code.contains("JAC_AUTOTEST_SAVE_DONE == true") {
+            polls += 1;
+            if polls == 1 {
+                return Err(Error::new(
+                    ErrorKind::LuaResponseUnknown,
+                    "callback response may have arrived",
+                ));
+            }
+        }
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok("false".into());
+        }
+        Ok("true".into())
+    });
+    let mut r = f.runner(json!({"name":"preserved save","steps":[]}), backend);
+    r.run_step(&json!({"action":"save","name":"OwnedDiplomacySave","exact_name":true,"preserve_diplomacy_session":true})).unwrap();
+    let trace = f.trace();
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("Network.SaveGame"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("JAC_AUTOTEST_SAVE_DONE == true"))
+            .count(),
+        2
+    );
+    assert!(
+        trace.lua.iter().all(|(state, _, _)| state == "InGame"),
+        "{:?}",
+        trace.lua
+    );
+}
+
 use civ6_autotest_rs::{
     judge,
     runner::{AutoplayOptions, Runner, LOADSCREEN_READY},
     scenario::{safe_relative_path, validate_scenario},
+    time::Clock,
     Error, ErrorKind,
 };
 use serde_json::{json, Value};
@@ -169,11 +229,23 @@ fn test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game() {
     });
     let busy_reads = Arc::new(Mutex::new(0_usize));
     let reads = busy_reads.clone();
+    let mut menu_hidden = false;
     backend.on_lua = Box::new(move |_, code, _| {
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok(menu_hidden.to_string());
+        }
+        if code.contains("CloseImmediately()") {
+            menu_hidden = true;
+        }
         if code.contains("UI.IsGameCoreBusy") {
             assert_eq!(code, "return not UI.IsGameCoreBusy()");
             let mut count = reads.lock().unwrap();
             *count += 1;
+            // Model a newly visible options menu on each still-busy poll.
+            // A default "true" response means hidden under main's new read-first contract.
+            if *count < 3 {
+                menu_hidden = false;
+            }
             return Ok((*count >= 3).to_string());
         }
         Ok("true".into())
@@ -278,7 +350,9 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
         let mut backend = f.backend();
         backend.on_states = Box::new(|_| Ok(vec!["InGame".into(), "InGameTopOptionsMenu".into()]));
         backend.on_lua = Box::new(move |_, code, _| {
-            if code.contains("CloseImmediately") {
+            if code == "return ContextPtr:IsHidden()" {
+                Ok("false".into())
+            } else if code.contains("CloseImmediately") {
                 Err(Error::new(kind, "menu command failed"))
             } else {
                 Ok("true".into())
@@ -293,10 +367,23 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
             kind,
             "menu command failed",
         );
-        assert_eq!(f.trace().lua.len(), 2);
+        let trace = f.trace();
+        let close = trace
+            .lua
+            .iter()
+            .position(|(_, code, _)| code.contains("CloseImmediately"))
+            .unwrap();
+        assert!(trace.lua[..close]
+            .iter()
+            .any(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
+        assert!(trace.lua[close + 1..]
+            .iter()
+            .all(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
         assert_eq!(lua_count(&f, "CloseImmediately"), 1);
         assert_eq!(f.trace().presses.len(), 1);
-        assert!(f.clock.sleeps().is_empty());
+        if kind == ErrorKind::LuaExecution {
+            assert!(f.clock.sleeps().is_empty());
+        }
     }
 }
 
@@ -743,7 +830,7 @@ fn test_pre_send_framing_error_is_logged_as_step_failure() {
 }
 
 #[test]
-fn test_transition_pre_send_failure_is_logged_without_waiting() {
+fn test_transition_pre_send_failure_is_bounded_by_the_step_deadline() {
     for action in ["start_game", "load"] {
         let f = Fixture::new();
         let mut backend = f.backend();
@@ -756,9 +843,9 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         });
         let step = if action == "load" {
             fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
-            json!({"action":"load","name":"existing","exact_name":true})
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":2})
         } else {
-            json!({"action":"start_game"})
+            json!({"action":"start_game","timeout":2})
         };
         let mut runner = f.runner(scenario(step), backend);
         runner.auto_restart = false;
@@ -768,11 +855,52 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         } else {
             "Network.HostGame"
         };
-        assert_eq!(lua_count(&f, needle), 1);
+        assert!(lua_count(&f, needle) > 1);
+        assert!(f.clock.now() <= 2.0);
         assert!(f.trace().presses.is_empty());
         let last = f.records().pop().unwrap();
         assert_eq!(last["status"], "FAIL");
         assert_eq!(last["detail"], "pre-send connection failed");
+    }
+}
+
+#[test]
+fn test_transition_reconnects_before_send_and_sends_once_after_recovery() {
+    for action in ["start_game", "load"] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let mut connects = 0;
+        backend.on_connect = Some(Box::new(move |_, _| {
+            connects += 1;
+            if connects <= 2 {
+                Err(Error::tuner("connection refused before send"))
+            } else {
+                Ok(())
+            }
+        }));
+        let lua = f.logs.join("Lua.log");
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("Network.HostGame") || code.contains("Network.LoadGame") {
+                append(&lua, &format!("{LOADSCREEN_READY}\n"));
+            }
+            Ok("true".into())
+        });
+        let step = if action == "load" {
+            fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":5})
+        } else {
+            json!({"action":"start_game","timeout":5})
+        };
+        let mut runner = f.direct_runner(json!({}), backend);
+        runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+        runner.run_step(&step).unwrap();
+        let needle = if action == "load" {
+            "Network.LoadGame"
+        } else {
+            "Network.HostGame"
+        };
+        assert_eq!(lua_count(&f, needle), 1);
+        assert!(f.clock.now() > 0.0 && f.clock.now() < 5.0);
     }
 }
 
@@ -1008,11 +1136,14 @@ fn test_oserror_after_autoplay_start_attempts_cleanup_without_replay() {
 }
 
 #[test]
-fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
+fn interrupted_autoplay_reconciles_the_owner_after_a_start_attempt() {
     for after_start in [true, false] {
         let f = Fixture::new();
         let mut backend = f.backend();
         backend.on_lua = Box::new(move |_, code, _| {
+            if code.starts_with("return JAC_AUTOTEST_AUTO_OWNER ==") {
+                return Ok(after_start.to_string());
+            }
             if code.contains("return tostring(startTurn)") {
                 return if after_start {
                     Ok("1|0".into())
@@ -1039,7 +1170,7 @@ fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
 }
 
 #[test]
-fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
+fn autoplay_lua_errors_reconcile_attempted_start_and_stop_once() {
     for fail_at in ["start", "status"] {
         for kind in [ErrorKind::LuaResponseUnknown, ErrorKind::LuaExecution] {
             let f = Fixture::new();
@@ -1065,9 +1196,149 @@ fn test_autoplay_lua_error_stops_without_cleanup_or_resend() {
                 "may have run",
             );
             assert_eq!(lua_count(&f, "SetActive(true)"), 1);
-            assert_eq!(lua_count(&f, "SetActive(false)"), 0);
+            assert_eq!(lua_count(&f, "SetActive(false)"), 1);
         }
     }
+}
+
+fn check_autoplay_start_cleanup(
+    start_error: ErrorKind,
+    foreign_active: bool,
+    lose_owner_reply: bool,
+    lose_stop_reply: bool,
+) {
+    #[derive(Default)]
+    struct State {
+        active: bool,
+        owner: Option<String>,
+        handler: bool,
+        starts: i64,
+        stops: i64,
+        removals: i64,
+    }
+    let state = Arc::new(Mutex::new(State {
+        active: foreign_active,
+        owner: foreign_active.then(|| "another-run".into()),
+        handler: foreign_active,
+        ..State::default()
+    }));
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    let observed = state.clone();
+    let clock = f.clock.clone();
+    backend.on_lua = Box::new(move |_, code, timeout| {
+        if !code.contains("JAC_AUTOTEST_AUTO_OWNER") {
+            return Ok("true".into());
+        }
+        let mut s = observed.lock().unwrap();
+        let lua = mlua::Lua::new();
+        let g = lua.globals();
+        g.set("active", s.active).unwrap();
+        g.set("JAC_AUTOTEST_AUTO_OWNER", s.owner.clone()).unwrap();
+        g.set("has_handler", s.handler).unwrap();
+        g.set("starts", s.starts).unwrap();
+        g.set("stops", s.stops).unwrap();
+        g.set("removals", s.removals).unwrap();
+        lua.load(
+            r#"
+Game = {GetCurrentGameTurn=function() return 1 end, GetLocalPlayer=function() return 0 end}
+PlayerTypes = {NONE=-1}
+LuaEvents = {AutoPlayEnd={Add=function(_) end, Remove=function(_) removals=removals+1 end}}
+AutoplayManager = {
+ IsActive=function() return active end,
+ SetTurns=function(_) end, SetReturnAsPlayer=function(_) end, SetObserveAsPlayer=function(_) end,
+ SetActive=function(v) active=v; if v then starts=starts+1 else stops=stops+1 end end
+}
+if has_handler then JAC_AUTOTEST_AUTO_HANDLER=function() end end
+"#,
+        )
+        .exec()
+        .unwrap();
+        // Execute the runner's actual command before dropping its reply. The
+        // game-side changes survive even when Rust never acknowledges them.
+        let result = lua.load(code).eval::<mlua::Value>();
+        s.active = g.get("active").unwrap();
+        s.owner = g.get("JAC_AUTOTEST_AUTO_OWNER").unwrap();
+        s.handler = matches!(
+            g.get::<mlua::Value>("JAC_AUTOTEST_AUTO_HANDLER").unwrap(),
+            mlua::Value::Function(_)
+        );
+        s.starts = g.get("starts").unwrap();
+        s.stops = g.get("stops").unwrap();
+        s.removals = g.get("removals").unwrap();
+        let value = result.map_err(|e| Error::new(ErrorKind::LuaExecution, e.to_string()))?;
+        if code.contains("return tostring(startTurn)") {
+            return Err(Error::new(start_error, "start reply lost after execution"));
+        }
+        if (lose_owner_reply && code.starts_with("return JAC_AUTOTEST_AUTO_OWNER =="))
+            || (lose_stop_reply && code.contains("SetActive(false)"))
+        {
+            clock.advance(timeout);
+            return Err(Error::unknown("cleanup reply lost after execution"));
+        }
+        Ok(match value {
+            mlua::Value::Boolean(v) => v.to_string(),
+            mlua::Value::String(v) => v.to_str().unwrap().to_string(),
+            other => panic!("unexpected Lua result: {other:?}"),
+        })
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    let error = runner
+        .autoplay(3, 10.0, AutoplayOptions::default())
+        .unwrap_err();
+    assert_eq!(
+        error.kind,
+        if foreign_active {
+            ErrorKind::LuaExecution
+        } else {
+            start_error
+        }
+    );
+    if !foreign_active {
+        assert!(error.message.contains("start reply lost after execution"));
+    }
+    let s = state.lock().unwrap();
+    assert_eq!(s.active, foreign_active);
+    assert_eq!(s.starts, i64::from(!foreign_active));
+    assert_eq!(s.stops, i64::from(!foreign_active));
+    assert_eq!(s.removals, i64::from(!foreign_active));
+    assert_eq!(s.handler, foreign_active);
+    assert_eq!(s.owner.as_deref(), foreign_active.then_some("another-run"));
+    assert_eq!(lua_count(&f, "SetActive(true)"), 1);
+    assert_eq!(
+        lua_count(&f, "SetActive(false)"),
+        usize::from(!foreign_active)
+    );
+}
+
+#[test]
+fn lost_autoplay_start_reply_stops_the_executed_lua_once() {
+    for kind in [
+        ErrorKind::LuaResponseUnknown,
+        ErrorKind::LuaExecution,
+        ErrorKind::Interrupted,
+    ] {
+        check_autoplay_start_cleanup(kind, false, false, false);
+    }
+}
+
+#[test]
+fn autoplay_cleanup_lost_replies_do_not_replay_start_or_stop() {
+    for lose_owner in [false, true] {
+        for lose_stop in [false, true] {
+            check_autoplay_start_cleanup(
+                ErrorKind::LuaResponseUnknown,
+                false,
+                lose_owner,
+                lose_stop,
+            );
+        }
+    }
+}
+
+#[test]
+fn rejected_autoplay_start_preserves_another_runs_active_game_and_handler() {
+    check_autoplay_start_cleanup(ErrorKind::LuaExecution, true, false, false);
 }
 
 #[test]

@@ -47,6 +47,8 @@ use windows_sys::Win32::System::Threading::{
 
 const LOCK: &str = "D:/CC/Tools/civ6-live/civ6.lock";
 const CHAIN: &str = "D:/CC/Tools/civ6-live/live_chain.exe";
+const AMD_CHAIN: &str = "D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe";
+const AMD_CHAIN_SHA: &str = "267ee55fdbe47e507bbefcbb8154780bb2a4070412802f923e0762764d7dc82b";
 const BRIDGE_DLL: &str = "civ6_native_bridge_rs.dll";
 const REMOTE_CALL_SECONDS: u32 = 8;
 const RECOVERY_SECONDS: u32 = 30;
@@ -380,7 +382,7 @@ fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), Str
         || value["chain_pid"].as_u64() != Some(u64::from(chain_pid))
         || value["pid"].as_u64() != Some(u64::from(chain_pid))
         || !alive(chain)
-        || !same_path(&process_path(chain)?, Path::new(CHAIN))
+        || !approved_chain(&process_path(chain)?)
     {
         return Err("live_chain lock owner changed".into());
     }
@@ -397,6 +399,45 @@ fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), Str
         return Err("live_chain lease cannot cover the bounded bridge run".into());
     }
     Ok(())
+}
+
+fn approved_chain(path: &Path) -> bool {
+    let path = path.to_string_lossy().replace('\\', "/");
+    path.eq_ignore_ascii_case(CHAIN) || path.eq_ignore_ascii_case(AMD_CHAIN)
+}
+fn pin_chain_image(path: &Path) -> Result<Option<File>, String> {
+    if !approved_chain(path) {
+        return Err("unapproved bridge chain image".into());
+    }
+    if path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .eq_ignore_ascii_case(CHAIN)
+    {
+        return Ok(None);
+    }
+    pin_hashed_chain_file(path, AMD_CHAIN_SHA).map(Some)
+}
+fn pin_hashed_chain_file(path: &Path, expected: &str) -> Result<File, String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let mut file = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(path)
+        .map_err(|e| e.to_string())?;
+    let mut digest = Sha256::new();
+    let mut bytes = [0u8; 65536];
+    loop {
+        let count = file.read(&mut bytes).map_err(|e| e.to_string())?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&bytes[..count]);
+    }
+    if format!("{:x}", digest.finalize()) != expected {
+        return Err("bridge AMD chain SHA mismatch".into());
+    }
+    Ok(file)
 }
 
 struct Module {
@@ -885,9 +926,20 @@ pub fn run() -> Result<(), String> {
         controller_pid,
         PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
     )?;
-    let expected_runner = std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .with_file_name("civ6-autotest.exe");
+    let expected_runner = std::env::var_os("CIV6_AUTOTEST_RUNNER_PATH")
+        .map(PathBuf::from)
+        .unwrap_or(
+            std::env::current_exe()
+                .map_err(|e| e.to_string())?
+                .with_file_name("civ6-autotest.exe"),
+        );
+    if !expected_runner.is_absolute()
+        || expected_runner
+            .file_name()
+            .is_none_or(|n| n != "civ6-autotest.exe")
+    {
+        return Err("invalid pinned runner image path".into());
+    }
     if !alive(&runner) || !same_path(&process_path(&runner)?, &expected_runner) {
         return Err("pinned runner process identity changed".into());
     }
@@ -895,6 +947,7 @@ pub fn run() -> Result<(), String> {
         chain_pid,
         PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
     )?;
+    let _chain_image = pin_chain_image(&process_path(&chain)?)?;
     verify_lease(chain_pid, &chain, parsed.duration)?;
     let game = open_process(
         parsed.pid,
@@ -1573,6 +1626,46 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn chain_override_is_limited_to_the_installed_shared_amd_wrapper() {
+        use super::*;
+        assert!(approved_chain(Path::new(CHAIN)));
+        assert!(approved_chain(Path::new(AMD_CHAIN)));
+        for path in [
+            "D:/CC/Work/live_chain_pr86_amd.exe",
+            "D:/CC/Tools/civ6-live/live_chain_pr86_amd.exe.other",
+            "live_chain.exe",
+        ] {
+            assert!(!approved_chain(Path::new(path)));
+            assert!(pin_chain_image(Path::new(path)).is_err());
+        }
+        assert!(pin_chain_image(Path::new(CHAIN)).unwrap().is_none());
+    }
+    #[test]
+    fn chain_hash_pin_uses_owned_bytes_and_prevents_replacement_until_drop() {
+        use super::*;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fixture.exe");
+        fs::write(&path, b"abc").unwrap();
+        assert!(pin_hashed_chain_file(&path, AMD_CHAIN_SHA).is_err());
+        let pin = pin_hashed_chain_file(
+            &path,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+        .unwrap();
+        assert_eq!(
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .unwrap_err()
+                .raw_os_error(),
+            Some(32)
+        );
+        assert_eq!(fs::remove_file(&path).unwrap_err().raw_os_error(), Some(32));
+        drop(pin);
+        fs::write(&path, b"released").unwrap();
+        fs::remove_file(&path).unwrap();
+    }
     use super::*;
     use std::cell::Cell;
     use std::os::windows::process::CommandExt;

@@ -12,6 +12,19 @@ pub mod ai_operation;
 /// Portable scenario limit; only the Windows module implements execution.
 pub const MAX_ACTIVE_SECONDS: u32 = 300;
 
+/// Offline protocol negotiation; this does not open or modify a game process.
+pub fn controller_capabilities() -> serde_json::Value {
+    serde_json::json!({
+        "schema": "civ6-native-controller-capabilities-v1",
+        "gamecore_sha256": PINNED_GAMECORE_SHA256,
+        "runtime_config_version": 0x0324_0001u32,
+        "modes": ["can-ever", "property", "property-scoped", "can-ever-calibration",
+            "property-admission-scoped", "assign-calibration", "joined-admission",
+            "production-admission", "paid-assignment-experimental",
+            "paid-assignment-runtime", "promotion-call"]
+    })
+}
+
 /// Identity used by both the Windows bridge and portable artifact validators.
 pub const PINNED_GAMECORE_SHA256: &str =
     "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";

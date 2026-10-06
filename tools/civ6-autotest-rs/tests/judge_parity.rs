@@ -503,8 +503,8 @@ fn malformed_huge_turn_counters_fail_closed() {
 #[test]
 fn shipped_scenario_inventory_and_json_are_intact() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
-    let expected:BTreeSet<_>="assassin-leader-save-load.json banseiki-ruleset.json bundle0-load-save.json clans-notebooks.json clans-house-names.json clans-both-ai.json custom-clans.json leader-portraits.json growth-notebooks.json sengoku-trees.json sengoku-starting-knowledge.json sengoku-calendar.json unification-victory.json unification-registry-15km.json unification-pact.json sengoku-house-names-oda.json sengoku-house-names-takeda.json sengoku-alliances.json ages-probe.json sengoku-ages.json sengoku-dark-policy.json sengoku-ages-screens.json historical-events-15km.json religion-persistence.json religion-pressure-probe.json religion-hero-delay.json house-crests.json japan-map-20km.json japan-map-15km.json japan-map-20km-takeda.json japan-map-15km-takeda.json japan-1534-relations.json probe-ally-vision.json probe-alliance-type.json probe-alliance-expiry.json probe-end-alliance.json japan-1534-relations-settlers.json japan-1534-feud-ui.json japan-resources.json japan-no-world-congress.json japan-city-names.json japan-house-city-names.json japan-map-setup-screen.json japan-map-15km-settlers.json japan-map-15km-200turn.json japan-15km-200turn-full.json japan-15km-200turn-tuning.json japan-prosperous-15km.json court-arbitration.json court-arbitration-human.json court-arbitration-ai.json probe-make-peace.json probe-era-timing-standard.json probe-era-timing-quick.json sengoku-era-reigns.json sengoku-oaths-oda.json japan-15km-20turn-full-metrics.json japan-15km-300turn-full-metrics.json sengoku-era-reigns-epic.json sengoku-era-reigns-marathon.json sengoku-era-reigns-beyond-nine.json great-people-zero-musicians.json resources-calendar-epic.json".split_whitespace().map(str::to_string).collect();
-    let expected: BTreeSet<_> = expected
+    let expected:Vec<_>="assassin-leader-save-load.json banseiki-ruleset.json bundle0-load-save.json clans-notebooks.json clans-house-names.json clans-both-ai.json custom-clans.json leader-portraits.json growth-notebooks.json sengoku-trees.json sengoku-starting-knowledge.json sengoku-calendar.json unification-victory.json unification-registry-15km.json unification-pact.json sengoku-house-names-oda.json sengoku-house-names-takeda.json sengoku-alliances.json ages-probe.json sengoku-ages.json sengoku-dark-policy.json sengoku-ages-screens.json historical-events-15km.json religion-persistence.json religion-pressure-probe.json religion-hero-delay.json house-crests.json japan-map-20km.json japan-map-15km.json japan-map-20km-takeda.json japan-map-15km-takeda.json japan-1534-relations.json probe-ally-vision.json probe-alliance-type.json probe-alliance-expiry.json probe-end-alliance.json japan-1534-relations-settlers.json japan-1534-feud-ui.json japan-resources.json japan-no-world-congress.json japan-city-names.json japan-house-city-names.json japan-map-setup-screen.json japan-map-15km-settlers.json japan-map-15km-200turn.json japan-15km-200turn-full.json japan-15km-200turn-tuning.json japan-prosperous-15km.json court-arbitration.json court-arbitration-human.json court-arbitration-ai.json probe-make-peace.json probe-era-timing-standard.json probe-era-timing-quick.json sengoku-era-reigns.json sengoku-oaths-oda.json japan-15km-20turn-full-metrics.json japan-15km-300turn-full-metrics.json sengoku-era-reigns-epic.json sengoku-era-reigns-marathon.json sengoku-era-reigns-beyond-nine.json great-people-zero-musicians.json resources-calendar-epic.json".split_whitespace().map(str::to_string).collect();
+    let expected_names: Vec<_> = expected
         .into_iter()
         .chain(
             [
@@ -531,6 +531,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "leader-persona-spy-neutralization-recovery-tick.json",
                 "leader-persona-spy-neutralization-reassign.json",
                 "leader-persona-spy-neutralization-reassign-tick.json",
+                "assassin-blocked-recovery.json",
                 "absorption-japan.json",
                 "absorption-japan-recall-continuation.json",
                 "absorption-japan-owner-turn-diagnostic.json",
@@ -588,13 +589,23 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-return-boundary.json",
                 "assassin-actor-eliminated-save-load.json",
                 "assassin-target-eliminated-save-load.json",
+                "hotseat-bridge-live-hold.json",
+                "multiplayer-banseiki-hotseat-growth.json",
+                "multiplayer-hotseat-growth.json",
                 "mod-selection-rollback.json",
             ]
             .into_iter()
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 144);
+    let expected: BTreeSet<_> = expected_names.iter().cloned().collect();
+    // The explicit filenames and exact remaining-name set below define the
+    // inventory. A second numeric total becomes stale when branches add names.
+    assert_eq!(
+        expected.len(),
+        expected_names.len(),
+        "scenario inventory must not repeat a filename"
+    );
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
@@ -615,6 +626,15 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-property-abi-15km.json".to_string(),
             "leader-persona-spy-result-diagnostic.json".to_string(),
             "leader-persona-spy-neutralization-multi-failure-diagnose.json".to_string(),
+            "leader-persona-spy-third-capacity-probe.json".to_string(),
+            "leader-persona-spy-third-civic-request.json".to_string(),
+            "leader-persona-spy-third-civic-tick.json".to_string(),
+            "leader-persona-spy-third-civic-ready.json".to_string(),
+            "leader-persona-spy-neutralization-third-produce.json".to_string(),
+            "leader-persona-spy-neutralization-third-production-bind.json".to_string(),
+            "leader-persona-spy-neutralization-third-production-tick.json".to_string(),
+            "leader-persona-spy-neutralization-third-travel.json".to_string(),
+            "leader-persona-spy-neutralization-third-mission.json".to_string(),
             "leader-persona-spy-neutralization-retry-diagnose.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange-probe.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange.json".to_string(),

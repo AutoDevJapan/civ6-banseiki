@@ -73,6 +73,45 @@ pub struct GameProcess {
     /// The creation time returned by the lifecycle backend, not a later PID lookup.
     pub started: f64,
 }
+
+/// The launcher can associate only an immediately observed process with its
+/// Steam request. A later game is not adopted merely for being newer.
+pub fn validate_launch_binding(floor: f64, observed: f64, started: f64) -> Result<()> {
+    if !floor.is_finite()
+        || !observed.is_finite()
+        || !started.is_finite()
+        || observed < floor
+        || observed - floor > 30.0
+        || started < floor
+        || started > observed
+    {
+        return Err(Error::input(
+            "Steam launch process association expired or ambiguous",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod launch_binding_tests {
+    #[test]
+    fn only_processes_observed_within_the_launch_window_can_be_associated() {
+        use super::validate_launch_binding;
+        assert!(validate_launch_binding(100.0, 102.0, 101.0).is_ok());
+        assert!(validate_launch_binding(100.0, 130.0, 130.0).is_ok());
+        for (observed, started) in [
+            (102.0, 99.0),
+            (102.0, 103.0),
+            (99.0, 101.0),
+            (130.01, 101.0),
+            (600.0, 599.0),
+            (f64::NAN, 101.0),
+            (102.0, f64::NAN),
+        ] {
+            assert!(validate_launch_binding(100.0, observed, started).is_err());
+        }
+    }
+}
 impl From<(u32, f64)> for GameProcess {
     fn from((pid, started): (u32, f64)) -> Self {
         Self { pid, started }
@@ -261,8 +300,8 @@ pub fn verify_lock_record(record: &Value, chain_pid: u32) -> Result<()> {
 mod platform;
 #[cfg(windows)]
 pub use platform::{
-    collect_diagnostics, diagnostic_worker, loading_evidence, pin_window_process, reset_display,
-    DiagnosticSession, PinnedGame, RecoveryLease,
+    collect_diagnostics, diagnostic_worker, loading_evidence, pin_launched_process,
+    pin_window_process, reset_display, DiagnosticSession, PinnedGame, RecoveryLease,
 };
 #[cfg(not(windows))]
 #[derive(Default)]
@@ -272,6 +311,10 @@ impl DiagnosticSession {
     pub fn finish(&mut self) -> Result<Value> {
         Ok(json!({"status":"all_exited"}))
     }
+}
+#[cfg(not(windows))]
+pub fn pin_launched_process(_: f64) -> Result<Option<PinnedGame>> {
+    Err(Error::input("startup process identity requires Windows"))
 }
 #[cfg(not(windows))]
 pub fn pin_window_process(_: isize, _: f64) -> Result<PinnedGame> {

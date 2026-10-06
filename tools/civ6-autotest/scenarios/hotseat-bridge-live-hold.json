@@ -1,0 +1,37 @@
+{
+  "name": "Hotseat witness transport live hold for the original 21-step scenario",
+  "strict_lua_errors": true,
+  "session_type": "hotseat",
+  "steps": [
+    {
+      "action": "restart_game",
+      "timeout": 420
+    },
+    {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "|21|RESULT|1/"
+      },
+      "timeout": 1200
+    },
+    {
+      "action": "pause",
+      "seconds": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 10
+    },
+    {
+      "action": "pause",
+      "seconds": 10
+    }
+  ],
+  "judge_profile": "generic"
+}

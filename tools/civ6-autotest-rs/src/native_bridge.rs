@@ -3,6 +3,41 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 
+pub fn verify_controller_capabilities(success: bool, bytes: &[u8]) -> Result<()> {
+    let actual = serde_json::from_slice::<serde_json::Value>(bytes).ok();
+    if !success || actual != Some(civ6_native_bridge_rs::controller_capabilities()) {
+        return Err(Error::input(
+            "native bridge controller protocol differs from this runner; rebuild and pin the controller and DLL before another live run",
+        ));
+    }
+    Ok(())
+}
+
+pub fn verify_override_hash(expected: Option<&str>, actual: &str) -> Result<()> {
+    if actual.len() != 64
+        || !actual.bytes().all(|b| b.is_ascii_hexdigit())
+        || expected != Some(actual)
+    {
+        return Err(Error::input(
+            "native bridge override does not match its frozen hashes",
+        ));
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod asset_contract_tests {
+    #[test]
+    fn override_requires_both_an_explicit_and_matching_sha() {
+        let sha = "a".repeat(64);
+        super::verify_override_hash(Some(&sha), &sha).unwrap();
+        for expected in [None, Some(""), Some("abc")] {
+            assert!(super::verify_override_hash(expected, &sha).is_err());
+        }
+        assert!(super::verify_override_hash(Some(&"b".repeat(64)), &sha).is_err());
+        assert!(super::verify_override_hash(Some(""), "").is_err());
+    }
+}
+
 /// Installation/observation receipt only. It does not establish appointment,
 /// payment, load safety or any successful gameplay decision.
 pub fn validate_runtime_receipt(text: &str, pid: u32, created: u64) -> Result<()> {
@@ -113,6 +148,75 @@ mod platform {
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+    fn wait_capability_child(
+        child: &mut Child,
+        budget: Duration,
+    ) -> Result<std::process::ExitStatus> {
+        let started = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return Ok(status),
+                Ok(None) if started.elapsed() < budget => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                outcome => {
+                    let killed = child.kill();
+                    let reaped = child.wait();
+                    return Err(Error::input(format!(
+                        "native bridge capability query did not finish within its budget: {outcome:?}; child kill={killed:?}; child reap={reaped:?}"
+                    )));
+                }
+            }
+        }
+    }
+
+    fn query_capabilities(executable: &Path) -> Result<()> {
+        let mut child = Command::new(executable)
+            .arg("--capabilities")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()?;
+        let status = wait_capability_child(&mut child, Duration::from_secs(3))?;
+        let bytes = match child.stdout.take() {
+            Some(mut stdout) => read_capability_response(&mut stdout)?,
+            None => Vec::new(),
+        };
+        verify_controller_capabilities(status.success(), &bytes)
+    }
+
+    /// The controller has exited. Consume only bytes already queued, never EOF:
+    /// an inherited writer can stay open without delaying this negotiation.
+    fn read_capability_response(pipe: &mut (impl Read + AsRawHandle)) -> Result<Vec<u8>> {
+        let mut available = 0;
+        let ok = unsafe {
+            windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                pipe.as_raw_handle().cast(),
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut available,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(109) {
+                return Ok(Vec::new());
+            }
+            return Err(error.into());
+        }
+        if available > 16_384 {
+            return Err(Error::input(
+                "native bridge capability response is too large",
+            ));
+        }
+        let mut bytes = vec![0; available as usize];
+        pipe.read_exact(&mut bytes)?;
+        Ok(bytes)
+    }
+
     fn hex_address(value: &Value) -> Option<u64> {
         let raw = value.as_str()?.strip_prefix("0x")?;
         (raw.len() == 16)
@@ -148,9 +252,9 @@ mod platform {
         if count == 0
             || row["promotion_owner"] != row["player_id"]
             || row["promotion_index"] != row["governor_index"]
-            || !row["promotion_owner"].as_u64().is_some_and(|n| n < 64)
-            || !row["promotion_index"].as_u64().is_some_and(|n| n < 256)
-            || !row["read_flags"].as_u64().is_some_and(|n| n & 3 == 3)
+            || row["promotion_owner"].as_u64().is_none_or(|n| n >= 64)
+            || row["promotion_index"].as_u64().is_none_or(|n| n >= 256)
+            || row["read_flags"].as_u64().is_none_or(|n| n & 3 != 3)
         {
             return false;
         }
@@ -516,13 +620,12 @@ mod platform {
                         }
                     } else if row["read_state"] == 1 {
                         if returned == "0x0000000000000000"
-                            || !row["tag"].as_u64().is_some_and(|n| n <= u16::MAX as u64)
+                            || row["tag"].as_u64().is_none_or(|n| n > u16::MAX as u64)
                             || !row["payload8"]
                                 .as_str()
                                 .is_some_and(|s| s.starts_with("0x") && s.len() == 18)
-                            || !row["flags14"]
-                                .as_u64()
-                                .is_some_and(|n| n <= u32::MAX as u64)
+                            || row["flags14"]
+                                .as_u64().is_none_or(|n| n > u32::MAX as u64)
                         {
                             return Err(Error::input("invalid copied property row"));
                         }
@@ -898,6 +1001,7 @@ mod platform {
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
         ai_diagnostic: civ6_native_bridge_rs::ai_diagnostic::Session,
+        _binary_pins: (std::fs::File, std::fs::File),
     }
 
     impl Session {
@@ -969,7 +1073,17 @@ mod platform {
                 ));
             }
             let (created, target) = pinned_created(pid, started)?;
-            let executable = std::env::current_exe()?.with_file_name("civ6-native-bridge.exe");
+            let runner = std::env::current_exe()?;
+            let executable =
+                if let Some(directory) = std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY") {
+                    let directory = PathBuf::from(directory);
+                    if !directory.is_absolute() {
+                        return Err(Error::input("native bridge directory must be absolute"));
+                    }
+                    directory.join("civ6-native-bridge.exe")
+                } else {
+                    runner.with_file_name("civ6-native-bridge.exe")
+                };
             let dll = executable.with_file_name("civ6_native_bridge_rs.dll");
             if !executable.is_file() || !dll.is_file() {
                 return Err(Error::input(
@@ -977,9 +1091,39 @@ mod platform {
                 ));
             }
             let artifact = output.join(format!("{name}.jsonl"));
+            use std::os::windows::fs::OpenOptionsExt;
+            let controller_pin = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&executable)?;
+            let dll_pin = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(&dll)?;
+            let controller_sha = format!("{:x}", Sha256::digest(std::fs::read(&executable)?));
+            let dll_sha = format!("{:x}", Sha256::digest(std::fs::read(&dll)?));
+            if std::env::var_os("CIV6_NATIVE_BRIDGE_DIRECTORY").is_some() {
+                for (key, actual) in [
+                    ("CIV6_NATIVE_BRIDGE_CONTROLLER_SHA256", &controller_sha),
+                    ("CIV6_NATIVE_BRIDGE_DLL_SHA256", &dll_sha),
+                ] {
+                    verify_override_hash(std::env::var(key).ok().as_deref(), actual)?;
+                }
+            }
+            // The shared release folder can contain a controller from an older
+            // branch. Reject its parser before sending PID or installing a DLL.
+            query_capabilities(&executable)?;
             if artifact.exists() {
                 return Err(Error::scenario("native bridge artifact already exists"));
             }
+            let mut manifest = std::fs::File::create_new(artifact.with_extension("assets.json"))?;
+            serde_json::to_writer_pretty(
+                &mut manifest,
+                &serde_json::json!({"runner":runner,
+                "controller":executable,"controller_sha256":controller_sha,"dll":dll,"dll_sha256":dll_sha,
+                "process_pid":pid,"process_created_filetime":created,"product_acceptance":false}),
+            )?;
+            manifest.flush()?;
             let mut child = Command::new(executable)
                 .args([
                     "--pid",
@@ -1013,6 +1157,7 @@ mod platform {
                     "CIV6_AUTOTEST_CONTROLLER_PID",
                     std::process::id().to_string(),
                 )
+                .env("CIV6_AUTOTEST_RUNNER_PATH", &runner)
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
             let input = child.stdin.take();
@@ -1062,6 +1207,7 @@ mod platform {
                 assignment_subject: None,
                 resident_runtime,
                 ai_diagnostic: Default::default(),
+                _binary_pins: (controller_pin, dll_pin),
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
                 Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
@@ -1072,8 +1218,15 @@ mod platform {
                         let _ = session.child.wait();
                         session.finished = true;
                     }
+                    let mut diagnostic = String::new();
+                    if session.finished {
+                        if let Some(stderr) = session.child.stderr.take() {
+                            let _ = stderr.take(16_384).read_to_string(&mut diagnostic);
+                        }
+                    }
                     Err(Error::input(format!(
-                        "native bridge did not prove bounded readiness; pinned game close={close:?}"
+                        "native bridge did not prove bounded readiness; pinned game close={close:?}; controller diagnostic={}",
+                        diagnostic.trim()
                     )))
                 }
             }
@@ -1219,6 +1372,51 @@ mod platform {
         use super::*;
         use serde_json::json;
 
+        #[test]
+        fn capability_response_never_waits_for_an_open_writer_to_close() {
+            use std::os::windows::io::FromRawHandle;
+            let mut read = std::ptr::null_mut();
+            let mut write = std::ptr::null_mut();
+            assert_ne!(
+                unsafe {
+                    windows_sys::Win32::System::Pipes::CreatePipe(
+                        &mut read,
+                        &mut write,
+                        std::ptr::null(),
+                        0,
+                    )
+                },
+                0
+            );
+            let mut reader = unsafe { std::fs::File::from_raw_handle(read.cast()) };
+            let mut writer = unsafe { std::fs::File::from_raw_handle(write.cast()) };
+            let started = std::time::Instant::now();
+            assert!(read_capability_response(&mut reader).unwrap().is_empty());
+            let expected =
+                serde_json::to_vec(&civ6_native_bridge_rs::controller_capabilities()).unwrap();
+            writer.write_all(&expected).unwrap();
+            assert_eq!(read_capability_response(&mut reader).unwrap(), expected);
+            assert!(read_capability_response(&mut reader).unwrap().is_empty());
+            assert!(started.elapsed() < Duration::from_secs(1));
+            // The same writer is still live: EOF would block, while our read
+            // already returned and left it usable for a later observation.
+            writer.write_all(b"later").unwrap();
+            assert_eq!(read_capability_response(&mut reader).unwrap(), b"later");
+        }
+
+        #[test]
+        fn stopped_capability_query_reaps_its_child_and_preserves_peer() {
+            let mut child = sleeping_child();
+            let mut peer = sleeping_child();
+            let started = std::time::Instant::now();
+            assert!(wait_capability_child(&mut child, Duration::from_millis(50)).is_err());
+            assert!(started.elapsed() < Duration::from_secs(3));
+            assert!(child.try_wait().unwrap().is_some());
+            assert!(peer.try_wait().unwrap().is_none());
+            peer.kill().unwrap();
+            peer.wait().unwrap();
+        }
+
         fn sleeping_child() -> Child {
             Command::new("powershell.exe")
                 .args([
@@ -1291,6 +1489,10 @@ mod platform {
                 assignment_subject: None,
                 resident_runtime: true,
                 ai_diagnostic: Default::default(),
+                _binary_pins: (
+                    std::fs::File::open(&artifact).unwrap(),
+                    std::fs::File::open(&artifact).unwrap(),
+                ),
             };
             let outcome = session.stop_inner();
             session.finished = true;

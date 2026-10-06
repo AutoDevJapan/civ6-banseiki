@@ -444,7 +444,7 @@ fn test_waiter_appearing_during_a_multi_turn_step_is_seen_before_its_end() {
 #[test]
 fn test_build_setup_checks_every_player_after_refresh() {
     let players = json!([{"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}, {"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false}]);
-    let code = scenario::build_setup_code(players.as_array().unwrap());
+    let code = scenario::build_setup_code(&json!({"players":players}));
     let order = [
         "BuildHeadlessGameSetup()",
         "g_GameParameters:FullRefresh()",
@@ -593,6 +593,127 @@ fn install_checkpoint_backend(h: &mut Harness, fail_save: bool) {
 fn prepare_checkpoint_load(h: &mut Harness) {
     fs::write(h.runner.logs.join("Lua.log"), b"").unwrap();
     h.runner.baseline = Some(judge::snapshot_logs(&h.runner.logs).unwrap());
+}
+
+#[test]
+fn hash_pinned_resume_sends_load_once_and_keeps_a_durable_consumption_receipt() {
+    use sha2::{Digest, Sha256};
+    let bytes = b"original reserved save";
+    let sha = format!("{:x}", Sha256::digest(bytes));
+    let step = json!({"action":"load","name":"reserved","exact_name":true,"save_sha256":sha,"resume_once":true});
+    scenario::validate_scenario(&json!({"name":"pinned resume","steps":[step]})).unwrap();
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    install_checkpoint_backend(&mut h, false);
+    prepare_checkpoint_load(&mut h);
+    let file = h.runner.save_path("reserved");
+    fs::write(&file, b"different save").unwrap();
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("mismatch"));
+    assert_eq!(h.count_code("Network.LoadGame"), 0);
+    fs::write(&file, bytes).unwrap();
+    h.runner.run_step(&step).unwrap();
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    let receipt = h.runner.saves.join(format!("resume-once-{sha}.json"));
+    let original = fs::read(&receipt).unwrap();
+    assert!(h
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("one-shot resume"));
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    assert_eq!(fs::read(receipt).unwrap(), original);
+}
+
+#[test]
+fn invalid_resume_hashes_and_unpinned_claims_are_rejected() {
+    for step in [
+        json!({"action":"load","name":"x","save_sha256":null}),
+        json!({"action":"load","name":"x","save_sha256":"../path"}),
+        json!({"action":"load","name":"x","resume_once":true}),
+        json!({"action":"save","name":"x","save_sha256":"0".repeat(64)}),
+    ] {
+        assert!(scenario::validate_scenario(&json!({"name":"bad","steps":[step]})).is_err());
+    }
+}
+
+#[test]
+fn unknown_load_keeps_resume_claim_and_pins_the_save_until_error_return() {
+    use sha2::{Digest, Sha256};
+    let bytes = b"reserved save before unknown load";
+    let sha = format!("{:x}", Sha256::digest(bytes));
+    let step = json!({"action":"load","name":"reserved","exact_name":true,
+        "timeout":2,"save_sha256":sha,"resume_once":true});
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    prepare_checkpoint_load(&mut h);
+    let file = h.runner.save_path("reserved");
+    fs::write(&file, bytes).unwrap();
+    let mut fake = checkpoint_backend(h.runner.saves.clone(), h.runner.logs.clone(), false);
+    let mut normal = fake.on_lua;
+    let pinned = file.clone();
+    let receipt = h.runner.saves.join(format!("resume-once-{sha}.json"));
+    let claim = receipt.clone();
+    let after_load = Arc::new(Mutex::new(false));
+    let observed = after_load.clone();
+    let mut sent = false;
+    let assert_pin = move || {
+        assert_eq!(fs::read(&pinned).unwrap(), bytes);
+        #[cfg(windows)]
+        {
+            assert!(OpenOptions::new().write(true).open(&pinned).is_err());
+            assert!(fs::rename(&pinned, pinned.with_extension("replacement")).is_err());
+        }
+    };
+    fake.on_lua = Box::new(move |state, code| {
+        if code.contains("Network.LoadGame") {
+            assert_pin();
+            let proof: serde_json::Value =
+                serde_json::from_slice(&fs::read(&claim).unwrap()).unwrap();
+            assert_eq!(
+                proof["save"], "reserved",
+                "claim must precede the first send"
+            );
+            // The engine completes loading even though the response is lost.
+            normal(state, code)?;
+            sent = true;
+            return Err(Error::unknown("load may have started"));
+        }
+        if sent && state == "InGame" {
+            assert_pin();
+            *observed.lock().unwrap() = true;
+            return Err(Error::lua("injected post-load validation failure"));
+        }
+        normal(state, code)
+    });
+    h.calls = fake.calls.clone();
+    h.runner.backend = Box::new(fake);
+    assert!(h.runner.run_step(&step).is_err());
+    assert!(
+        *after_load.lock().unwrap(),
+        "must check the pin after LoadGame returned"
+    );
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    let recorded = fs::read(&receipt).unwrap();
+    let mut next = Harness::new(json!({}), FakeBackend::new());
+    next.runner.saves = h.runner.saves.clone();
+    install_checkpoint_backend(&mut next, false);
+    prepare_checkpoint_load(&mut next);
+    assert!(next
+        .runner
+        .run_step(&step)
+        .unwrap_err()
+        .to_string()
+        .contains("one-shot resume"));
+    assert_eq!(h.count_code("Network.LoadGame"), 1);
+    assert_eq!(next.count_code("Network.LoadGame"), 0);
+    assert_eq!(fs::read(receipt).unwrap(), recorded);
+    // The pin is released after the failed call, but the receipt is retained.
+    assert!(OpenOptions::new().write(true).open(&file).is_ok());
+    assert_eq!(fs::read(&file).unwrap(), bytes);
 }
 
 fn saved_name(result: &str) -> String {
@@ -850,15 +971,18 @@ fn test_allow_elimination_observes_target_and_records_turn() {
         "2|true|false|1|-1",
         "3|false|true|0|-1",
     ])));
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
-            return Ok(statuses.lock().unwrap().pop_front().unwrap().into());
+            let status = statuses.lock().unwrap().pop_front().unwrap();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status.into());
         }
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
         }
         if code.contains("IsAlive()") {
-            return Ok("false".into());
+            return Ok(format!("{observed_turn}|false"));
         }
         Ok("true".into())
     });
@@ -955,21 +1079,27 @@ fn test_early_stop_resume_clears_done_flag_and_waits_for_new_end_event() {
     let clock = Arc::new(ManualClock::default());
     let clock_for_lua = clock.clone();
     let mut status_calls = 0;
+    let mut observed_turn = 1_i64;
     let fake = FakeBackend::new().lua(move |_, code| {
         if code.contains("tostring(AutoplayManager.IsActive())") {
             status_calls += 1;
             if status_calls == 2 {
                 clock_for_lua.advance(6.0);
             }
-            return Ok(statuses
+            let status = statuses
                 .lock()
                 .unwrap()
                 .pop_front()
                 .unwrap_or("4|false|true|0|0")
-                .into());
+                .to_string();
+            observed_turn = status.split('|').next().unwrap().parse().unwrap();
+            return Ok(status);
         }
         if code.contains("return tostring(startTurn)") {
             return Ok("1|0".into());
+        }
+        if code.contains("IsAlive()") {
+            return Ok(format!("{observed_turn}|true"));
         }
         Ok("true".into())
     });

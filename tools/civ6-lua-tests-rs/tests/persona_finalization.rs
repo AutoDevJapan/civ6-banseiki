@@ -1,12 +1,15 @@
 //! Payment completion through shipped Gameplay and UI in Lua 5.1.
 //! The engine fixture executes queued APPOINT/PROMOTE; no synthetic paid governor.
-use civ6_lua_tests_rs::{new_lua, read_repo};
+use civ6_lua_tests_rs::read_repo;
 use mlua::Lua;
 
 const GAMEPLAY: &str = "poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua";
 
 fn scene(cost: u8) -> Lua {
-    let lua = new_lua();
+    // Trusted repository fixtures only. Debug upvalues let faults target the
+    // real Gameplay reader dependency, without replacing any shipped logic.
+    let lua = unsafe { Lua::unsafe_new() };
+    lua.globals().set("COST", cost).unwrap();
     for path in [
         "tools/civ6-lua-tests-rs/fixtures/persona/stubs.lua",
         "tools/civ6-lua-tests-rs/fixtures/persona/admission_engine.lua",
@@ -15,7 +18,17 @@ fn scene(cost: u8) -> Lua {
         GAMEPLAY,
         "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
     ] {
+        if path == GAMEPLAY {
+            exec(
+                &lua,
+                "GameInfo.JAC_LeaderPersonas.LEADER_JAC_DATE_TANEMUNE.EvolutionCost=COST",
+            );
+            civ6_lua_tests_rs::persona_engine::prepare(&lua).unwrap();
+        }
         lua.load(read_repo(path)).set_name(path).exec().unwrap();
+        if path == GAMEPLAY {
+            civ6_lua_tests_rs::persona_engine::finish_startup(&lua).unwrap();
+        }
     }
     lua.globals().set("COST", cost).unwrap();
     lua.globals()
@@ -29,6 +42,29 @@ fn scene(cost: u8) -> Lua {
         ROW=GameInfo.JAC_LeaderPersonas[LEADER]
         ROW.EvolutionCost=COST
         KEY='JAC_PERSONA_'..LEADER..'_'
+        function NATIVE_READER(replacement)
+            local found
+            local targets={}
+            local api=ExposedMembers.JAC_LeaderPersona
+            for _,fn in ipairs({api.CompleteEvolution,api.Reconcile}) do
+                local matched=false
+                for index=1,64 do
+                    local name,value=debug.getupvalue(fn,index)
+                    if not name then break end
+                    if name=='NativeGovernor' then
+                        assert(not found or found==value,'Gameplay reader dependencies diverged')
+                        found=found or value; matched=true
+                        targets[#targets+1]={fn=fn,index=index}
+                        break
+                    end
+                end
+                assert(matched,'real Gameplay reader dependency was not found')
+            end
+            if replacement then
+                for _,target in ipairs(targets) do debug.setupvalue(target.fn,target.index,replacement) end
+            end
+            return assert(found)
+        end
         -- Deliver each queued operation after the local turn has become inactive,
         -- so the shipped UI does not immediately submit the next payment step.
         -- This captures the real partial-save boundary without editing callbacks.
@@ -135,7 +171,7 @@ fn invalid_saved_surcharge_rejects_even_after_full_native_payment() {
 }
 
 #[test]
-fn saved_cost_must_match_current_valid_definition_before_ui_read() {
+fn saved_cost_must_match_current_valid_definition_before_gameplay_read() {
     for cost in 1..=3 {
         for bad in ["nil", "0", "-1", "'2'", "1.5", "4", "false", "0/0"] {
             let lua = scene(cost);
@@ -174,10 +210,10 @@ fn unknown_or_invalid_native_payment_is_not_zero() {
                 &lua,
                 &format!(
                     r#"
-                local read=ExposedMembers.JAC_LeaderPersonaNativeRead
-                ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
-                    local result=read(owner,leader); result.surchargePaid={bad}; return result
-                end
+                local read=NATIVE_READER()
+                NATIVE_READER(function(owner,row)
+                    local result=read(owner,row); result.surchargePaid={bad}; return result
+                end)
                 finalize(); retain(COST)
             "#
                 ),
@@ -325,15 +361,15 @@ fn valid_receipt_consumes_only_the_matching_person_found_by_engine_identity() {
 }
 
 #[test]
-fn invalid_receipt_is_rejected_before_a_native_read_using_saved_cost() {
+fn invalid_receipt_is_rejected_before_gameplay_payment_read() {
     let lua = scene(2);
     exec(
         &lua,
         r#"
         Game:SetProperty(KEY..'EVOLUTION_COST','2')
-        ExposedMembers.JAC_LeaderPersonaNativeRead=function()
+        NATIVE_READER(function()
             error('invalid receipt reached saved-cost native reader')
-        end
+        end)
         finalize(); retain(1)
         assert(Game:GetProperty(KEY..'EVOLUTION_COST')=='2')
     "#,
@@ -378,12 +414,12 @@ fn both_completion_entries_reject_bad_receipts_before_any_native_read() {
                     r#"
                     local savedCost=Game:GetProperty(KEY..'EVOLUTION_COST')
                     local savedSurcharge=Game:GetProperty(KEY..'EVOLUTION_SURCHARGE')
-                    local read=ExposedMembers.JAC_LeaderPersonaNativeRead
+                    local read=NATIVE_READER()
                     READ_CALLS=0
-                    ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
+                    NATIVE_READER(function(owner,row)
                         READ_CALLS=READ_CALLS+1
                         error('bad receipt reached native reader')
-                    end
+                    end)
                     finalize(); retain(1)
                     assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='TITLE_PAYMENT_PENDING')
                     ExposedMembers.JAC_LeaderPersona.Reconcile(); retain(1)
@@ -394,7 +430,7 @@ fn both_completion_entries_reject_bad_receipts_before_any_native_read() {
                     end
                     assert(unchanged(savedCost,Game:GetProperty(KEY..'EVOLUTION_COST')))
                     assert(unchanged(savedSurcharge,Game:GetProperty(KEY..'EVOLUTION_SURCHARGE')))
-                    ExposedMembers.JAC_LeaderPersonaNativeRead=read
+                    NATIVE_READER(read)
                 "#,
                 );
             }
@@ -430,16 +466,16 @@ fn bad_receipt_does_not_abort_later_owners_reconciliation_or_admission() {
             exec(
                 &lua,
                 r#"
-                local read=ExposedMembers.JAC_LeaderPersonaNativeRead
+                local read=NATIVE_READER()
                 BAD_READS,OTHER_READS=0,0
-                ExposedMembers.JAC_LeaderPersonaNativeRead=function(owner,leader)
-                    if leader==LEADER then
+                NATIVE_READER(function(owner,row)
+                    if row.LeaderType==LEADER then
                         BAD_READS=BAD_READS+1
                         error('invalid owner must not interrupt another owner')
                     end
-                    if owner==1 and leader==ASHINA then OTHER_READS=OTHER_READS+1 end
-                    return read(owner,leader)
-                end
+                    if owner==1 and row.LeaderType==ASHINA then OTHER_READS=OTHER_READS+1 end
+                    return read(owner,row)
+                end)
                 ExposedMembers.JAC_LeaderPersona.Reconcile()
                 assert(BAD_READS==0 and OTHER_READS>=2)
                 assert(Game:GetProperty(KEY..'STATE')=='EVOLVING')

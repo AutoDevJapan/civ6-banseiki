@@ -2,6 +2,12 @@
 //! bytes are written. The only target changes are per-thread debug registers,
 //! which are snapshotted and restored before detach.
 use crate::return_correlation::{EntryInput, EntryKind, Incomplete, ReturnCorrelation};
+
+// Reuse this debugger's private attach identity, pinned handles and cleanup gate.
+// Existing governor/property entry points remain withheld.
+#[cfg(feature = "bootstrap-order")]
+#[path = "../../civ6-pe-rs/src/order_windows.rs"]
+pub mod order_capture;
 use crate::startup_contract::{
     CHILD_READY as ATTACH_READY_BUDGET, CRITICAL_WAIT as CRITICAL_CLOSE_BUDGET,
     RESTORE as RESTORE_BUDGET,
@@ -421,6 +427,22 @@ fn filetime_as_unix(v: u64) -> f64 {
 }
 
 fn verify_lock(lock: &Path, chain_pid: u32, chain: &Handle) -> Result<(), String> {
+    verify_lock_for_image(
+        lock,
+        chain_pid,
+        chain,
+        Path::new("D:/CC/Tools/civ6-live/live_chain.exe"),
+    )
+}
+
+// The default observer keeps its original image contract. The order observer
+// supplies only an image selected and pinned by its fixed allowlist.
+fn verify_lock_for_image(
+    lock: &Path,
+    chain_pid: u32,
+    chain: &Handle,
+    image: &Path,
+) -> Result<(), String> {
     let expected = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
     if !same_path(lock, expected) {
         return Err("standard live_chain lock path required".into());
@@ -449,12 +471,7 @@ fn verify_lock(lock: &Path, chain_pid: u32, chain: &Handle) -> Result<(), String
     {
         return Err("live_chain 30 minute lease or identity is invalid".into());
     }
-    if !alive(chain)?
-        || !same_path(
-            &process_path(chain)?,
-            Path::new("D:/CC/Tools/civ6-live/live_chain.exe"),
-        )
-    {
+    if !alive(chain)? || !same_path(&process_path(chain)?, image) {
         return Err("live_chain process identity changed".into());
     }
     Ok(())

@@ -17,6 +17,32 @@ pub fn reporter_finished(wait_result: u32) -> bool {
     wait_result == 0
 }
 
+fn lifecycle_delay(remaining: f64) -> f64 {
+    // Preserve max(0).min(0.5): NaN becomes zero instead of reaching sleep.
+    if remaining.is_nan() {
+        0.0
+    } else {
+        remaining.clamp(0.0, 0.5)
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_delay_tests {
+    #[test]
+    fn invalid_clock_delta_never_reaches_sleep_as_nan_or_out_of_range() {
+        for (delta, expected) in [
+            (f64::NAN, 0.0),
+            (f64::NEG_INFINITY, 0.0),
+            (-1.0, 0.0),
+            (0.25, 0.25),
+            (1.0, 0.5),
+            (f64::INFINITY, 0.5),
+        ] {
+            assert_eq!(super::lifecycle_delay(delta), expected);
+        }
+    }
+}
+
 pub fn default_mods_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
@@ -285,7 +311,7 @@ pub fn single_civ_process_with<B: LifecycleBackend>(
     let mut ids = backend.civ_ids()?;
     let end = backend.now() + settle.max(0.0);
     while ids.len() > 1 && backend.now() < end {
-        let wait = (end - backend.now()).max(0.0).min(0.5);
+        let wait = lifecycle_delay(end - backend.now());
         backend.sleep(wait);
         ids = backend.civ_ids()?;
     }
@@ -319,7 +345,7 @@ pub fn wait_for_exit_with<B: LifecycleBackend>(
         if !backend.civ_ids()?.contains(&pid) {
             return Ok(true);
         }
-        let remaining = (end - backend.now()).max(0.0).min(0.5);
+        let remaining = lifecycle_delay(end - backend.now());
         backend.sleep(remaining);
     }
     Ok(!backend.civ_ids()?.contains(&pid))
@@ -462,7 +488,7 @@ pub fn wait_for_civ_window_with<B: LifecycleBackend>(backend: &mut B, end: f64) 
                 Err(e) => last = e.message,
             }
         }
-        let remaining = (end - backend.now()).max(0.0).min(0.5);
+        let remaining = lifecycle_delay(end - backend.now());
         backend.sleep(remaining);
     }
     Err(Error::input(format!(

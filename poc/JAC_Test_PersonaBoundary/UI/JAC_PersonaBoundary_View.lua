@@ -5,6 +5,7 @@ local B = {};
 ExposedMembers.JAC_PersonaBoundary = B;
 local RETRY = "JAC_BOUNDARY_ENEMY_SPY_RETRY";
 local RETRY_PENDING = "JAC_BOUNDARY_ENEMY_SPY_RETRY_PENDING";
+local THIRD_CIVIC_INTENT = "JAC_BOUNDARY_THIRD_CIVIC_INTENT";
 local function Config() return assert(Game:GetProperty("JAC_BOUNDARY_CONFIG"), "fixture not prepared"); end
 local function EnemyConfig()
     local c=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG"),"enemy fixture not prepared");
@@ -40,6 +41,9 @@ end
 local ReadSpyRoster, InTargetCity;
 local captiveExchange;
 local emptyRosterObservation;
+local thirdCivicRequested=false;
+local thirdCivicArmedToken=nil;
+local thirdCivicIntentSaved=false;
 
 local function Missions(c)
     local result, success = {}, false;
@@ -95,6 +99,7 @@ end
 local function CheckArchivedMission(c)
     local retry=Game:GetProperty(RETRY);
     if not retry then return nil; end
+    if R.Third and R.Third.IsThird(retry) then return R.Third.CheckHistory(c,retry); end
     local a=assert(retry.archive,"retry has no archived native failure");
     assert(retry.current==2 and a.eventID>=0 and a.spyID>=0 and
         a.targetOwner==c.owner and a.targetID==c.cityID and
@@ -1807,7 +1812,9 @@ function B.RetryLivingSpy()
     R.Check(state,"SETTLED");
     local roster=ReadSpyRoster(c.attacker);
     Log("ENEMY_SPY_RETRY_LIVING",{retry=retry,roster=roster});
-    if retry.mode=="CAPACITY_MAP" then
+    if R.Third and R.Third.IsThird(retry) then
+        R.Third.CheckRoster(roster);
+    elseif retry.mode=="CAPACITY_MAP" then
         local captive=roster.captured[1];
         local old=retry.archive;
         assert(#roster.captured==1 and captive and
@@ -2105,7 +2112,7 @@ function B.EnemyProgress()
         for node in pairs(baseline.nodesOwned) do
             assert(s.nodesOwned[node]==1,"purchased native persona skill was lost");
         end
-        if not s.native.established then
+        if s.native.neutralized>0 or not s.native.established then
             local purchased=0;
             for node in GameInfo.JAC_PersonaTreeNodes() do
                 if node.LeaderType==c.leader and s.nodesOwned[node.NodeType]==1 and
@@ -2126,13 +2133,16 @@ function B.EnemyProgress()
         R.Check(s,"NEUTRALIZED");
         stage="NEUTRALIZED";
     elseif baseline then
-        local assignment=Game:GetProperty("JAC_BOUNDARY_ENEMY_BARRIER");
-        if not assignment or assignment.action~="REASSIGN" or s.native.cityOwner==-1 then
+        if s.native.cityOwner==-1 then
             R.Check(s,"RECOVERED"); stage="RECOVERED";
-        elseif s.native.established then
-            R.Check(s,"SETTLED"); stage="SETTLED";
         else
-            R.Check(s,"ESTABLISHING"); stage="ESTABLISHING";
+            assert(baseline.unassignedAtCapture==1,
+                "native assignment has no prior unassigned observation");
+            if s.native.established then
+                R.Check(s,"SETTLED"); stage="SETTLED";
+            else
+                R.Check(s,"ESTABLISHING"); stage="ESTABLISHING";
+            end
         end
     elseif receipt then
         stage="FAILED"; -- also covers a successful mission with no native neutralization
@@ -2223,7 +2233,8 @@ function B.SpyPrerequisitesReady()
     Log("SPY_PRODUCTION_PREREQUISITES", {civic=unit.PrereqCivic, capacity=capacity, existing=existing});
     local retry=Game:GetProperty(RETRY);
     if retry then
-        assert(retry.current==2 and retry.mode=="PRODUCE" and retry.archive and
+        assert(R.IsCurrentSpyGeneration(retry) and
+            (retry.mode=="PRODUCE" or (R.Third and R.Third.IsThird(retry))) and retry.archive and
             #roster.map==0 and #roster.activeOffMap==0 and existing==#roster.captured,
             "retry production requires a proven free native spy slot");
     else
@@ -2289,11 +2300,79 @@ function B.ReadCapacityQueue(owner,cityID)
     return result;
 end
 ExposedMembers.JAC_PersonaBoundaryCapacityQueueRead=B.ReadCapacityQueue;
+
+-- The extra grant exists only in the opt-in 15km test MOD. Read the native
+-- research queue and capacity; the fixture never sets either value.
+function B.ThirdSpyCivicStatus()
+    local c=EnemyConfig();
+    local s=B.ReadEnemy();
+    local retry=assert(s.retry,"first failed mission archive missing");
+    local event=assert(Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
+        "second failed mission event missing");
+    local latest=s.missions[c.attacker.."/"..event.id];
+    local roster=assert(s.spyRoster,"native spy roster unavailable");
+    assert(c.attacker==0 and c.owner==1 and retry.current==2 and
+        retry.archive.eventID==0 and retry.archive.eventTurn==23 and
+        R.CompletedNativeFailure(retry.archive.initial,retry.archive.escape) and
+        event.attacker==0 and event.id==1 and event.turn==45 and
+        latest and R.CompletedNativeFailure(latest.initial,latest.escape) and
+        s.spy and s.spy.id==851976 and not s.spy.present and
+        s.native.cityOwner==c.owner and s.native.cityID==c.cityID and
+        s.native.neutralized==0 and s.native.established and
+        #roster.map==0 and #roster.captured==2 and #roster.offMap==2 and
+        #roster.activeOffMap==0 and roster.physicalCount==2,
+        "two failed native attempts or captive roster changed");
+    local civic=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_NANBAN_ENVOYS"],
+        "test-only native spy grant Civic missing");
+    local prereq=assert(GameInfo.Civics["CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS"],
+        "Nanban Civic prerequisite missing");
+    local grants=0;
+    for row in GameInfo.CivicModifiers() do
+        if row.CivicType==civic.CivicType and row.ModifierId=="CIVIC_GRANT_SPY" then
+            grants=grants+1;
+        end
+    end
+    assert(grants==1,"test-only native spy capacity grant was not loaded exactly once");
+    local player=Players[c.attacker];
+    local culture=player:GetCulture();
+    assert(type(culture.GetProgressingCivic)=="function",
+        "native UI Civic research getter unavailable");
+    local owned=culture:HasCivic(civic.Index);
+    local progressing=culture:GetProgressingCivic();
+    local capacity=player:GetDiplomacy():GetSpyCapacity();
+    local intent=Game:GetProperty(THIRD_CIVIC_INTENT);
+    if intent then
+        assert(intent.owner==c.attacker and intent.civicIndex==civic.Index and
+            intent.civicHash==civic.Hash and intent.eventID==event.id and
+            intent.eventTurn==event.turn and intent.spyID==s.spy.id and
+            intent.status=="RESERVED",
+            "saved third spy Civic intent differs from the native failed attempt");
+    end
+    assert((capacity==2 or capacity==3) and type(owned)=="boolean" and
+        type(progressing)=="number","native spy capacity or Civic observation unavailable");
+    local stage=owned and (capacity==3 and "CAPACITY_READY" or "EFFECT_PENDING") or
+        progressing==civic.Index and "RESEARCHING" or
+        intent and "RESERVED" or "NOT_REQUESTED";
+    local canProgress=type(culture.CanProgress)=="function" and
+        culture:CanProgress(civic.Index) or false;
+    local strategic=type(Game.IsAllowStrategicCommands)=="function" and
+        Game.IsAllowStrategicCommands(c.attacker)==true;
+    local result={stage=stage,turn=s.turn,civic=civic.CivicType,
+        civicIndex=civic.Index,civicHash=civic.Hash,
+        prerequisiteOwned=culture:HasCivic(prereq.Index),owned=owned,
+        canProgress=canProgress,strategic=strategic,
+        progressing=progressing,capacity=capacity,captured=#roster.captured,
+        intentToken=intent and intent.token or nil};
+    Log("THIRD_SPY_CIVIC",result);
+    return result;
+end
+
 function B.Queue(action, params)
     assert(not pending and not verification and not buildPending and not enemyPending and not enemyVerification,
         "a boundary frame request is already pending");
     assert(not Game:GetProperty(RETRY_PENDING),"capacity retry attestation pending");
     assert(Players[Game.GetLocalPlayer()]:IsTurnActive(), "boundary request needs the local active turn");
+    if R.Third then R.Third.BeforeQueue(action); end
     assert(action == "PREPARE" or action == "PREPARE_ENEMY" or action == "EVOLVE_ENEMY" or
         action == "CONFIRM_ENEMY" or action == "BEGIN_SPY_RETRY" or
         action == "MARK_CAPTIVE_EXCHANGE" or
@@ -2312,11 +2391,31 @@ function B.Queue(action, params)
         action == "BUILD_CAPACITY" or action == "PROGRESS_CAPACITY" or
         action == "BUILD_CAPACITY_DISTRICT" or action == "PROGRESS_CAPACITY_DISTRICT" or
         action == "PROGRESS_SPY" or action == "BIND_SPY" or action == "ADOPT_SPY" or action == "SPY_TRAVEL" or
-        action == "SPY_MISSION" or action == "RETRY_ADOPT", "unknown boundary action");
+        action == "SPY_MISSION" or action == "RETRY_ADOPT" or
+        action == "THIRD_SPY_CIVIC" or
+        action == "THIRD_SPY_CIVIC_INTENT", "unknown boundary action");
+    if action=="THIRD_SPY_CIVIC_INTENT" then
+        local state=B.ThirdSpyCivicStatus();
+        assert(state.stage=="NOT_REQUESTED" and state.prerequisiteOwned and
+            state.canProgress and state.strategic and state.capacity==2 and
+            not Game:GetProperty(THIRD_CIVIC_INTENT),
+            "native third spy Civic intent is not eligible");
+    end
+    if action=="THIRD_SPY_CIVIC" then
+        local state=B.ThirdSpyCivicStatus();
+        local intent=Game:GetProperty(THIRD_CIVIC_INTENT);
+        assert(not thirdCivicRequested and thirdCivicIntentSaved and
+            intent and thirdCivicArmedToken==intent.token and
+            intent.turn==Game.GetCurrentGameTurn() and state.stage=="RESERVED" and
+            state.prerequisiteOwned and state.canProgress and state.strategic and
+            state.capacity==2,
+            "native third spy Civic is not eligible for a single research request");
+        thirdCivicRequested=true;
+    end
     local retry=Game:GetProperty(RETRY);
     if retry and action=="SPY_MISSION" then
         local spy=assert(Game:GetProperty("JAC_BOUNDARY_SPY"),"retry spy missing");
-        assert(retry.current==2 and retry.spyID==spy.id and not retry.missionRequested and
+        assert(R.IsCurrentSpyGeneration(retry) and retry.spyID==spy.id and not retry.missionRequested and
             not Game:GetProperty("JAC_BOUNDARY_ENEMY_MISSION"),
             "retry native mission has already been requested or completed");
     end
@@ -2597,7 +2696,8 @@ local function EnemySyncRequest(action,observed)
         classify={barrierSerial=priorBarrier and priorBarrier.serial or 0,
             read=action=="READ_CAPACITY_GOVERNMENT_CLASSIFICATION"};
     end
-    if action=="BEGIN_SPY_RETRY" or action=="FINALIZE_SPY_RETRY" then
+    if action=="BEGIN_SPY_RETRY" or action=="FINALIZE_SPY_RETRY" or
+        action=="THIRD_SPY_CIVIC_INTENT" then
         local barrier=Game:GetProperty("JAC_BOUNDARY_ENEMY_FIXTURE_BARRIER");
         barrierToken=math.max(barrierToken,barrier and barrier.token or 0);
     end
@@ -2639,7 +2739,8 @@ local function EnemySyncRequest(action,observed)
         READ_CAPACITY_GOVERNMENT_CLASSIFICATION="JAC_BoundaryReadCapacityGovernmentClassification",
         PROBE_CAPACITY_GOVERNMENT_API="JAC_BoundaryCapacityGovernmentProbe",
         PROGRESS_CAPACITY_DISTRICT="JAC_BoundaryProgressCapacityDistrict",
-        PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding"};
+        PROGRESS_CAPACITY="JAC_BoundaryProgressCapacityBuilding",
+        THIRD_SPY_CIVIC_INTENT="JAC_BoundaryThirdSpyCivicIntent"};
     payload.OnStart=assert(onStart[action],"unknown enemy fixture operation");
     if capacity and capacity.resume then payload.Phase="RESUME_READ"; end
     UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,payload);
@@ -2921,6 +3022,34 @@ local function Submit(command)
     local action, params = command.action, command.params;
     if action == "PREPARE" then
         UI.RequestPlayerOperation(owner, PlayerOperations.EXECUTE_SCRIPT, {OnStart="JAC_BoundaryPrepare"}); return;
+    elseif action == "THIRD_SPY_CIVIC_INTENT" then
+        local state=B.ThirdSpyCivicStatus();
+        assert(state.stage=="NOT_REQUESTED" and state.canProgress and
+            state.strategic and state.prerequisiteOwned,
+            "official Nanban Civic intent prerequisites changed");
+        return EnemySyncRequest(action,{CivicIndex=state.civicIndex,
+            CivicHash=state.civicHash,BeforeCapacity=state.capacity,
+            EventID=1,EventTurn=45,SpyID=851976});
+    elseif action == "THIRD_SPY_CIVIC" then
+        local state=B.ThirdSpyCivicStatus();
+        local intent=assert(Game:GetProperty(THIRD_CIVIC_INTENT),
+            "saved native third spy Civic intent missing");
+        assert(state.stage=="RESERVED" and state.prerequisiteOwned and
+            state.canProgress and state.strategic and thirdCivicIntentSaved and
+            thirdCivicArmedToken==intent.token and
+            type(state.civicHash)=="number" and
+            type(PlayerOperations.PROGRESS_CIVIC)=="number" and
+            type(PlayerOperations.VALUE_EXCLUSIVE)=="number",
+            "official Nanban Civic research request is unavailable");
+        local started=UI.GetElapsedTime();
+        thirdCivicArmedToken=nil;
+        UI.RequestPlayerOperation(owner,PlayerOperations.PROGRESS_CIVIC,
+            {[PlayerOperations.PARAM_CIVIC_TYPE]=state.civicHash,
+             [PlayerOperations.PARAM_INSERT_MODE]=PlayerOperations.VALUE_EXCLUSIVE});
+        Log("THIRD_SPY_CIVIC_REQUEST",{owner=owner,turn=state.turn,
+            civic=state.civic,hash=state.civicHash});
+        return {kind="THIRD_CIVIC",action=action,target=state.civicIndex,
+            turn=state.turn,started=started};
     elseif action == "MARK_CAPTIVE_EXCHANGE" then
         local x=assert(captiveExchange,"native captive exchange session missing");
         assert(not x.proposed and CaptiveExchangeSession(),
@@ -3125,7 +3254,8 @@ local function Submit(command)
         B.CheckEnemy("NEUTRALIZED");
         local native=B.EnemyState();
         assert(native.neutralized>0,"UI native neutralization missing at capture");
-        return EnemySyncRequest(action,{Neutralized=native.neutralized,CityID=c.cityID});
+        return EnemySyncRequest(action,{Neutralized=native.neutralized,CityID=c.cityID,
+            Unassigned=native.cityOwner==-1 and 1 or 0});
     elseif action == "SAVE_TRAVEL" then
         local receipt=assert(travelReference,"accepted travel receipt missing");
         UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
@@ -3135,7 +3265,8 @@ local function Submit(command)
         if action == "LOSE_CITY" then B.Check("SETTLED"); end
         local events={LOSE_CITY="JAC_BoundaryLoseCity",SPAWN_SPY="JAC_BoundarySpawnSpy",
             PROGRESS_SPY="JAC_BoundaryProgressSpy",BIND_SPY="JAC_BoundaryBindSpy"};
-        UI.RequestPlayerOperation(owner,PlayerOperations.EXECUTE_SCRIPT,
+        local sender=R.Third and R.Third.SendOwnedRequest or UI.RequestPlayerOperation;
+        sender(owner,PlayerOperations.EXECUTE_SCRIPT,
             {OnStart=events[action]});
     elseif action == "BUILD_SPY" then
         local prepared=B.SpyPrerequisitesReady();
@@ -3244,6 +3375,7 @@ local function Submit(command)
             newID=arrived:GetID(),targetOwner=city:GetOwner(),targetID=city:GetID()};
     else
         local spy=LocalSpy(); local city=assert(CityManager.GetCity(params.owner,params.city), "spy target missing");
+        if R.Third then R.Third.BeforeNativeDispatch(action,spy); end
         assert(city:GetOwner() ~= owner, "spy target must be foreign");
         local plot=Map.GetPlot(city:GetX(),city:GetY());
         if action == "SPY_TRAVEL" then
@@ -3350,11 +3482,13 @@ ContextPtr:SetHide(false);
 ContextPtr:SetUpdate(function()
     frameSerial=frameSerial+1;
     if UI.IsGameCoreBusy() then return; end
+    if R.Third and R.Third.UpdateUI and R.Third.UpdateUI() then return; end
     if missionEventPending then
         local receipt=missionEventPending;
         if not receipt.sent then
             receipt.sent=true; B.enemyMissionStatus="SENT";
-            local ok,err=pcall(UI.RequestPlayerOperation,receipt.attacker,
+            local sender=R.Third and R.Third.SendOwnedRequest or UI.RequestPlayerOperation;
+            local ok,err=pcall(sender,receipt.attacker,
                 PlayerOperations.EXECUTE_SCRIPT,
                 {OnStart="JAC_BoundaryRecordEnemyMission",Attacker=receipt.attacker,
                  MissionID=receipt.id});
@@ -3405,6 +3539,24 @@ ContextPtr:SetUpdate(function()
     end
     if verification then
         local request=verification;
+        if request.kind=="THIRD_CIVIC" then
+            local ok,state=pcall(B.ThirdSpyCivicStatus);
+            if not ok then
+                B.lastAction="UNKNOWN_"..request.action;
+                Log("THIRD_SPY_CIVIC_READ_UNAVAILABLE",tostring(state));
+                verification=nil;
+            elseif state.owned or state.progressing==request.target then
+                B.lastAction="ACCEPTED_"..request.action;
+                Log("THIRD_SPY_CIVIC_ACCEPTANCE",state);
+                verification=nil;
+            elseif Game.GetCurrentGameTurn()~=request.turn or
+                UI.GetElapsedTime()-request.started>=10 then
+                B.lastAction="UNKNOWN_"..request.action;
+                Log("THIRD_SPY_CIVIC_ACCEPTANCE_UNOBSERVED",state);
+                verification=nil;
+            end
+            return;
+        end
         if request.kind=="GOV_CHANGE" then
             if request.stage=="WAIT_REAL_TURN" then
                 if Game.GetCurrentGameTurn()>request.turn+1 then
@@ -3683,7 +3835,21 @@ ContextPtr:SetUpdate(function()
                     R.Property(c.leader,"STATE")=="GOVERNOR";
             elseif request.action=="CAPTURE_ENEMY" then
                 local baseline=Game:GetProperty("JAC_BOUNDARY_ENEMY_RECOVERY");
-                accepted=baseline and c and baseline.remaining==request.payload.Neutralized;
+                accepted=baseline and c and baseline.remaining==request.payload.Neutralized and
+                    baseline.unassignedAtCapture==request.payload.Unassigned;
+            elseif request.action=="THIRD_SPY_CIVIC_INTENT" then
+                local intent=Game:GetProperty(THIRD_CIVIC_INTENT);
+                accepted=intent and intent.status=="RESERVED" and
+                    intent.owner==request.payload.Attacker and
+                    intent.token==request.token and intent.turn==request.turn and
+                    intent.civicIndex==request.payload.CivicIndex and
+                    intent.civicHash==request.payload.CivicHash and
+                    intent.eventID==request.payload.EventID and
+                    intent.spyID==request.payload.SpyID;
+                if accepted then
+                    thirdCivicArmedToken=intent.token;
+                    thirdCivicIntentSaved=false;
+                end
             elseif request.action=="BEGIN_SPY_RETRY" or
                 request.action=="FINALIZE_SPY_RETRY" then
                 local retry=Game:GetProperty(RETRY);
@@ -3926,19 +4092,40 @@ Events.GameCoreEventPublishComplete.Add(function()
     Observe("PUBLISH");
 end);
 Events.LocalPlayerTurnBegin.Add(function() Observe("TURN"); end);
+Events.SaveComplete.Add(function()
+    local intent=Game:GetProperty(THIRD_CIVIC_INTENT);
+    if thirdCivicArmedToken and intent and
+        intent.token==thirdCivicArmedToken and
+        intent.turn==Game.GetCurrentGameTurn() then
+        thirdCivicIntentSaved=true;
+    end
+end);
 Events.LoadScreenClose.Add(function()
+    if B.ReturnedPreparation then B.ReturnedPreparation.InvalidateOnLoad(); end
+    if B.PreparedMission then B.PreparedMission.InvalidateOnLoad(); end
     emptyRosterObservation=nil;
+    thirdCivicArmedToken=nil;
+    thirdCivicIntentSaved=false;
     last=nil;
     Observe("LOAD");
 end);
+include("JAC_ReturnedPreparation548");
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
+    if Game:GetProperty("JAC_BOUNDARY_PREPARED_MISSION") then
+        local prepared=assert(B.PreparedMission,"prepared mission UI module missing");
+        if prepared.RouteEvent(attacker,missionID)~='UNOWNED' then return; end
+    end
+    if Game:GetProperty("JAC_BOUNDARY_RETURNED_PREPARATION") then
+        local preparation=assert(B.ReturnedPreparation,"returned preparation UI module missing");
+        if preparation.RouteEvent(attacker,missionID)~='UNOWNED' then return; end
+    end
     -- The event's player is the attacker, not the governor owner.
     Log("MISSION_EVENT", {attacker=attacker, mission=missionID, turn=Game.GetCurrentGameTurn()});
     local c=Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG");
     if c and attacker==c.attacker and c.cityID then
         local retry=Game:GetProperty(RETRY);
         if retry then
-            if missionID==retry.archive.eventID then
+            if R.IsArchivedSpyEvent(retry,missionID) then
                 Log("ARCHIVED_MISSION_EVENT_IGNORED",{attacker=attacker,id=missionID});
                 return;
             end
@@ -3962,3 +4149,9 @@ Events.SpyMissionCompleted.Add(function(attacker, missionID)
     end
     Observe("MISSION_SNAPSHOT");
 end);
+if R.Third then
+    R.Third.InstallUI({boundary=B,config=EnemyConfig,readEnemy=B.ReadEnemy,roster=ReadSpyRoster,
+        frame=function() return frameSerial; end,epoch=function() return publishEpoch; end,
+        busy=function() return pending or verification or buildPending or enemyPending or enemyVerification; end,
+        buildReady=function() return B.lastAction=="READY_BUILD_SPY"; end});
+end

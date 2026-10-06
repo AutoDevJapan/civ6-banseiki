@@ -16,6 +16,10 @@ fn run(lua: &Lua, code: &str) -> String {
 }
 
 fn model() -> Lua {
+    model_with_startup_mutation("").unwrap()
+}
+
+fn model_with_startup_mutation(mutation: &str) -> mlua::Result<Lua> {
     let lua = Lua::new();
     let normal = template();
     let players = normal["steps"][1]["players"].as_array().unwrap();
@@ -44,9 +48,26 @@ fn model() -> Lua {
         &format!("local civs = {{{}}}", list("civ", "CIVILIZATION_JAC_")),
     );
     lua.load(stub).exec().unwrap();
+    lua.load("GameConfiguration=GameConfiguration or {}; GameConfiguration.GetStartTurn=function() return 0 end").exec().unwrap();
     lua.load(r#"
 IDS={}; DELAY=false; UNKNOWN=false; WRITES={}; CIVIC_COMPLETIONS=0; UI_EVER_CALLS={}
 RAW={}; print=function(value) RAW[#RAW+1]=tostring(value) end
+-- Extend the archived three-person definitions before the shipped normal
+-- initializer runs. The old Index ranges collide when expanded to 22 people.
+TURN=0
+local sets={}
+for index,promotion in ipairs(PROMOS) do
+ promotion.Index=500+index
+ for _,row in ipairs(ROWS) do
+  if promotion.GovernorPromotionType==row.BasePromotionType or
+     promotion.GovernorPromotionType:sub(1,#row.BasePromotionType+7)==row.BasePromotionType..'_TITLE_' then
+   promotion.BaseAbility=promotion.GovernorPromotionType==row.BasePromotionType and 1 or 0
+   sets[#sets+1]={GovernorType=row.GovernorType,GovernorPromotion=promotion.GovernorPromotionType}
+  end
+ end
+end
+GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')
+GameInfo.GovernorPromotionSets=setmetatable({},{__call=function() local n=0; return function() n=n+1; return sets[n] end end})
 for id=0,21 do
  IDS[#IDS+1]=id
  local row=ROWS[id+1]; row.EvolutionCost=id%3+1
@@ -75,7 +96,14 @@ for id=0,21 do
    local owner=Game:GetProperty(prefix..'OWNER')
    if owner~=id or Game:GetProperty(prefix..'SOURCE')==id or Game:GetProperty(prefix..'STATE')~='EVOLVING' then return false end
    local unit=NATIVE_UNITS[id][Game:GetProperty(prefix..'UNIT')]
-   return unit~=nil and player.points-player.spent>=selected.EvolutionCost
+   local reserved=0
+   for _,other in ipairs(ROWS) do
+    local key='JAC_PERSONA_'..other.LeaderType..'_'
+    if Game:GetProperty(key..'OWNER')==id and Game:GetProperty(key..'STATE')=='EVOLVING' then
+     reserved=reserved+other.EvolutionCost
+    end
+   end
+   return unit~=nil and player.points-player.spent>=reserved
   end
   g.CanEverAppointGovernor=function(_,hash)
    local value=allowed(hash); UI_EVER_CALLS[#UI_EVER_CALLS+1]={owner=id,hash=hash,value=value}; return value
@@ -96,6 +124,9 @@ for n=1,15 do civicRows[n]={CivicType='CIVIC_TEST_'..n}; official[n]={CivicType=
 GameInfo.JAC_PersonaTitleCivics=collection(civicRows,'CivicType')
 GameInfo.Civics=collection(official,'CivicType')
 "#).exec().unwrap();
+    // Negative setup mutations run before the shipped initializer; no receipt,
+    // admission bit or success return is supplied by this fixture.
+    lua.load(mutation).exec()?;
     for path in [
         "poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua",
         "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
@@ -110,6 +141,10 @@ GameInfo.Civics=collection(official,'CivicType')
     // fixture intentionally has no CanEver/CanAppoint bindings.
     lua.load(
         r#"
+local normal=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(0,ROWS[1].LeaderType)
+assert(normal.active and normal.source=='civ6-persona-events-rs/v3/normal-Gameplay','normal fixture initialization failed')
+assert(normal.registrations.GovernorAppointed and normal.registrations.GovernorPromoted,'normal callback registration failed')
+TURN=1
 local uiRead=ExposedMembers.JAC_LeaderPersonaNativeRead
 ExposedMembers.JAC_LeaderPersonaNativeRead=function(...)
  local prior=CORE_CONTEXT; CORE_CONTEXT=false
@@ -118,13 +153,29 @@ ExposedMembers.JAC_LeaderPersonaNativeRead=function(...)
 end
 "#,
     )
-    .exec()
-    .unwrap();
-    lua
+    .exec()?;
+    Ok(lua)
 }
 
 #[test]
 fn generated_normal_setup_mode_and_zero_operation_contract_validate() {
+    // Prove each repaired startup precondition matters, with a working control.
+    model();
+    for mutation in [
+        "TURN=1",
+        "PROMOS[2].Index=PROMOS[1].Index; GameInfo.GovernorPromotions=collection(PROMOS,'GovernorPromotionType')",
+        "GameInfo.GovernorPromotionSets=nil",
+        "PROMOS[1].BaseAbility=0",
+    ] {
+        let error = match model_with_startup_mutation(mutation) {
+            Ok(_) => panic!("invalid normal fixture was accepted: {mutation}"),
+            Err(error) => error.to_string(),
+        };
+        assert!(
+            error.contains("normal fixture initialization failed"),
+            "{mutation}: {error}"
+        );
+    }
     let data = catalog::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&data).unwrap();
     let steps = data["steps"].as_array().unwrap();
@@ -166,19 +217,16 @@ fn generated_normal_setup_mode_and_zero_operation_contract_validate() {
                 "853304",
                 "CreatePerson(",
                 "Reconcile(",
+                ":SetProperty(",
+                ".Remove(",
             ] {
                 assert!(!code.contains(forbidden), "{forbidden}");
-            }
-            // Generator writes only the two existing UI pause flags.
-            for line in code.lines().filter(|l| l.contains(":SetProperty(")) {
-                assert!(
-                    line == "Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)"
-                        || line == "Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',1)"
-                );
             }
         }
     }
     assert_eq!((joins, evolves), (22, 22));
+    assert!(!data.to_string().contains("CATALOG880"));
+    assert!(data.to_string().contains("CATALOG_NORMAL_AI_V1"));
 }
 
 #[test]
@@ -188,7 +236,7 @@ fn all_22_cyclic_owners_costs_and_receipts_execute_with_shipped_gameplay() {
     let mut captures = BTreeMap::new();
     for step in data["steps"].as_array().unwrap() {
         if let Some(code) = step["code"].as_str() {
-            if step["capture_as"] == "CATALOG880_FINAL" {
+            if step["capture_as"] == "CATALOG_NORMAL_AI_V1_FINAL" {
                 // Scheduling evidence only, never actual native acceptance.
                 lua.load("assert(#UI_EVER_CALLS==22); local seen={}; for _,v in ipairs(UI_EVER_CALLS) do assert(v.value==true and not seen[v.hash]); seen[v.hash]=true end").exec().unwrap();
             }
@@ -210,12 +258,17 @@ fn all_22_cyclic_owners_costs_and_receipts_execute_with_shipped_gameplay() {
             .unwrap();
         }
     }
-    assert!(captures["CATALOG880_CLOSED"].contains("MATRIX identities=22"));
-    assert!(captures["CATALOG880_FINAL"].contains("MATRIX identities=22"));
-    assert!(captures["CATALOG880_20_EVOLVE"].contains("21:0:164:LEADER_JAC_AINU_TARIKONA:1:"));
+    assert!(captures["CATALOG_NORMAL_AI_V1_CLOSED"].contains("MATRIX identities=22"));
+    assert!(captures["CATALOG_NORMAL_AI_V1_FINAL"].contains("MATRIX identities=22"));
+    assert!(
+        captures["CATALOG_NORMAL_AI_V1_20_EVOLVE"].contains("21:1:164:LEADER_JAC_AINU_TARIKONA:1:")
+    );
     lua.load(
         r#"
 assert(SPAWNS==22 and DESTROYS==0 and TURN==1 and #REQUESTS==0)
+assert(Players[0].active and Players[0].human)
+for _,row in ipairs(ROWS) do assert(Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_OWNER')~=0) end
+for _,key in ipairs({'JAC_TEST853_ADMISSION_ACTIVE','JAC_TEST853_ADMISSION_MANUAL_APPOINT','JAC_TEST853_PAID_ASSIGNMENT_V1','JAC_TEST324_EVENTS_PROBE'}) do assert(Game:GetProperty(key)==nil) end
 local raw=table.concat(RAW,'\n')
 assert(raw:find('GAMEPLAY_PROJECTION MATRIX positive=22 negative=462',1,true))
 assert(raw:find('UI_NATIVE_QUALIFICATION MATRIX positive=22 negative=462',1,true))
@@ -223,7 +276,7 @@ assert(raw:find('GAMEPLAY_PROJECTION MATRIX positive=0 negative=484',1,true))
 assert(not raw:find('UI_NATIVE_QUALIFICATION MATRIX positive=0 negative=484',1,true))
 local costs={}
 for source=0,21 do
- local row=ROWS[source+1]; local owner=(source+1)%22; costs[row.EvolutionCost]=true
+ local row=ROWS[source+1]; local owner=source==21 and 1 or source+1; costs[row.EvolutionCost]=true
  local prefix='JAC_PERSONA_'..row.LeaderType..'_'
  assert(Game:GetProperty(prefix..'OWNER')==owner and Game:GetProperty(prefix..'SOURCE')==source)
  assert(Game:GetProperty(prefix..'EVOLUTION_COST')==row.EvolutionCost)
@@ -278,10 +331,18 @@ fn shipped_join_rejects_same_owner_and_world_duplicate_for_every_person() {
         .exec()
         .unwrap();
         run(&lua, &catalog::pair_code(source, false, true).unwrap());
+        let recipient = if source == 21 { 1 } else { source + 1 };
+        let other = (source + 2) % 22;
+        let other = if other == recipient {
+            (other + 1) % 22
+        } else {
+            other
+        };
+        assert_ne!(other, recipient);
+        assert_ne!(other, source);
         lua.load(format!(
             "assert(ExposedMembers.JAC_LeaderPersona.Join({}, {})=='OTHER_OWNER')",
-            (source + 2) % 22,
-            source
+            other, source
         ))
         .exec()
         .unwrap();
@@ -292,7 +353,7 @@ fn shipped_join_rejects_same_owner_and_world_duplicate_for_every_person() {
     assert!(catalog::pair_code(22, false, true).is_err());
     let changed = catalog::pair_code(0, false, true)
         .unwrap()
-        .replace("owner=(source+1)%22", "owner=source");
+        .replace("owner=source==21 and 1 or source+1", "owner=source");
     assert!(model().load(changed).eval::<String>().is_err());
 }
 
@@ -312,6 +373,11 @@ fn malformed_catalog_identity_missing_capital_and_unknown_projection_reject() {
         "IDS[22]=IDS[21]",
         "CITIES[21]={}",
         "Players[21]:SetProperty(901164,nil)",
+        "Game:SetProperty('JAC_TEST853_ADMISSION_ACTIVE',1)",
+        "Game:SetProperty('JAC_TEST853_ADMISSION_MANUAL_APPOINT',false)",
+        "Game:SetProperty('JAC_TEST324_EVENTS_PROBE',1)",
+        "Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',1)",
+        "LOCAL=1",
     ] {
         let lua = model();
         lua.load(mutation).exec().unwrap();
@@ -358,13 +424,22 @@ fn game_cost_owner_source_and_boolean_result_tampering_rejects() {
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_SOURCE',1)",
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_EVOLUTION_COST',3)",
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_EVOLUTION_SURCHARGE',1)",
-        "Players[1].points=0", "Players[1].spent=1", "UNKNOWN=true",
+        "Players[1].points=0",
+        "Players[1].spent=1",
+        "UNKNOWN=true",
         "local g=Players[1].GetGovernors; Players[1].GetGovernors=function() local v=g(); v.CanEverAppointGovernor=function() return 1 end; return v end",
     ] {
-        let lua=model(); run(&lua,&catalog::prepare_code());
-        run(&lua,&catalog::pair_code(0,false,true).unwrap()); run(&lua,&catalog::pair_code(0,true,true).unwrap());
+        let lua = model();
+        run(&lua, &catalog::prepare_code());
+        run(&lua, &catalog::pair_code(0, false, true).unwrap());
+        run(&lua, &catalog::pair_code(0, true, true).unwrap());
         lua.load(mutation).exec().unwrap();
-        assert!(lua.load(catalog::pair_code(0,true,false).unwrap()).eval::<String>().is_err(),"{mutation}");
+        assert!(
+            lua.load(catalog::pair_code(0, true, false).unwrap())
+                .eval::<String>()
+                .is_err(),
+            "{mutation}"
+        );
     }
 }
 
@@ -385,6 +460,21 @@ fn every_cost_requires_all_official_titles_before_the_single_reservation() {
             "assert(Players[{}]:GetProperty('JAC_PERSONA_RESULT')=='NO_TITLE'); assert(SPAWNS==1 and DESTROYS==0 and #REQUESTS==0)", source+1
         )).exec().unwrap();
     }
+    // Slot one receives both source zero and source 21. Funding each price
+    // separately must not overbook their shared native title balance.
+    let lua = model();
+    run(&lua, &catalog::prepare_code());
+    run(&lua, &catalog::pair_code(0, false, true).unwrap());
+    run(&lua, &catalog::pair_code(0, true, true).unwrap());
+    run(&lua, &catalog::pair_code(21, false, true).unwrap());
+    lua.load("assert(Players[1].points==2); Players[1].points=1")
+        .exec()
+        .unwrap();
+    assert!(lua
+        .load(catalog::pair_code(21, true, true).unwrap())
+        .eval::<String>()
+        .is_err());
+    lua.load("assert(Players[1]:GetProperty('JAC_PERSONA_RESULT')=='NO_TITLE' and SPAWNS==2 and DESTROYS==0 and #REQUESTS==0)").exec().unwrap();
 }
 
 #[test]

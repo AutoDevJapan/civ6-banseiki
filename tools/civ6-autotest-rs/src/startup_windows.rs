@@ -75,8 +75,10 @@ fn process_rows() -> Result<Vec<crate::restart::ProcessRow>> {
         return Err(Error::input("process snapshot unavailable"));
     }
     let _handle = Handle(handle);
-    let mut row = PROCESSENTRY32W::default();
-    row.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut row = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
     let mut more = unsafe { Process32FirstW(handle, &mut row) } != 0;
     let mut rows = Vec::new();
     while more {
@@ -238,6 +240,22 @@ impl PinnedGame {
         Ok(())
     }
 }
+pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
+    let Some((pid, started)) = crate::restart::single_civ_process(0.0)? else {
+        return Ok(None);
+    };
+    let observed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| Error::input(e.to_string()))?
+        .as_secs_f64();
+    super::validate_launch_binding(floor, observed, started)?;
+    let game = GameProcess { pid, started };
+    let handle = pinned(game, 0x1000)?;
+    let raw = handle.0 as isize;
+    std::mem::forget(handle);
+    Ok(Some(PinnedGame { game, handle: raw }))
+}
+
 pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
     let mut pid = 0;
     unsafe {

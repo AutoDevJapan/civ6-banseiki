@@ -18,10 +18,15 @@ fn run_case(source: &str, name: &str) -> mlua::Result<()> {
         "admission_engine.lua",
     )?;
     load(&lua, &read_repo(RULES), "JAC_PersonaTreeRules.lua")?;
+    civ6_lua_tests_rs::persona_engine::prepare(&lua)?;
     load(&lua, source, "JAC_LeaderPersona_Gameplay.lua")?;
+    civ6_lua_tests_rs::persona_engine::finish_startup(&lua)?;
     load(
         &lua,
-        include_str!("../fixtures/persona/admission_cases.lua"),
+        &include_str!("../fixtures/persona/admission_cases.lua").replace(
+            "expect('EVOLVING', prepare(0), 'preparation with wrong Index')",
+            "expect('NATIVE_UNAVAILABLE', prepare(0), 'changed Index invalidates the saved definition before reservation')",
+        ),
         "admission_cases.lua",
     )?;
     let cases: Table = lua.globals().get("ADMISSION_CASES")?;

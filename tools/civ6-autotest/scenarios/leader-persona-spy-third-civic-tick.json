@@ -1,0 +1,44 @@
+{
+  "name": "Advance one real turn of native third-spy Civic research and preserve the result",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "load",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true,
+      "timeout": 300
+    },
+    {
+      "action": "pause",
+      "seconds": 2
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "timeout": 60,
+      "lua_timeout": 20,
+      "code": "local s=ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus(); assert(s.stage=='RESEARCHING' or s.stage=='EFFECT_PENDING','third spy Civic is already complete or native research stopped'); return s.stage"
+    },
+    {
+      "action": "end_turn",
+      "turns": 1,
+      "timeout": 600
+    },
+    {
+      "action": "save",
+      "name": "JAC-Enemy-Neutralization",
+      "exact_name": true,
+      "checkpoint": true
+    },
+    {
+      "action": "inspect_native_spy_research",
+      "phase": "after_turn",
+      "timeout": 60
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

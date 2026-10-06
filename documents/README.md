@@ -51,6 +51,7 @@
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方、時間・メモリ・保存容量・ロード時間のCSVと集計、実機シナリオとログ判定 |
 | [`poc/autotest-native.md`](poc/autotest-native.md) | PR87のPythonを実行しないRust検証ドライバー、標準の待ち列との接続、対応範囲と検査結果 |
+| [`poc/hotseat-log-bridge.md`](poc/hotseat-log-bridge.md) | PR100の検証専用MODによるLua.log通信、元21手順と2回の保存・再読込の実機結果 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
 | [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |
@@ -136,6 +137,10 @@ ID が分かっているときは検索が速い。
 ```bash
 grep -rn '^| CYP-N |' documents/spec/ssot/
 ```
+
+## 起動・ロード境界の調査
+
+- [通常起動とロード前閉鎖のPE一次資料、Rust候補照合と不足条件](poc/todo880-bootstrap-primary.md)
 
 ## 現在の状態（2026-09-28 時点）
 

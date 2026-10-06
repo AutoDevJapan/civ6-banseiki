@@ -28,7 +28,13 @@ fn opt_in_capacity_fixture_changes_only_four_internal_flags_after_sengoku() {
     let doc = Document::parse(&modinfo).unwrap();
     let actions: Vec<_> = doc
         .descendants()
-        .filter(|n| n.has_tag_name("UpdateDatabase"))
+        .filter(|n| {
+            n.has_tag_name("UpdateDatabase")
+                && n.children()
+                    .find(|child| child.has_tag_name("File"))
+                    .and_then(|file| file.text())
+                    == Some(sql_path)
+        })
         .collect();
     assert_eq!(actions.len(), 4);
     let maps: BTreeSet<_> = actions
@@ -155,4 +161,83 @@ fn opt_in_capacity_fixture_changes_only_four_internal_flags_after_sengoku() {
         expected,
         "costs, prerequisites, effects and other buildings must stay intact"
     );
+}
+
+#[test]
+fn opt_in_third_spy_civic_adds_one_native_grant_only_on_the_15km_fixture() {
+    let repo = Repository::checked_in();
+    let official = cascade::official_db_for(&repo).unwrap();
+    let db = cascade::run_sengoku(&repo, &official, true).unwrap();
+    let mod_root = "poc/JAC_Test_PersonaBoundary";
+    let sql_path = "Data/JAC_PersonaBoundary_ThirdSpy.sql";
+    let modinfo = repo
+        .read(format!("{mod_root}/JAC_Test_PersonaBoundary.modinfo"))
+        .unwrap();
+    let doc = Document::parse(&modinfo).unwrap();
+    let actions: Vec<_> = doc
+        .descendants()
+        .filter(|node| {
+            node.has_tag_name("UpdateDatabase")
+                && node
+                    .children()
+                    .find(|child| child.has_tag_name("File"))
+                    .and_then(|file| file.text())
+                    == Some(sql_path)
+        })
+        .collect();
+    assert_eq!(actions.len(), 1);
+    assert_eq!(actions[0].attribute("criteria"), Some("Boundary15"));
+    assert_eq!(
+        actions[0]
+            .descendants()
+            .find(|node| node.has_tag_name("LoadOrder"))
+            .unwrap()
+            .text(),
+        Some("902")
+    );
+    assert!(doc
+        .descendants()
+        .find(|node| node.has_tag_name("Files"))
+        .unwrap()
+        .children()
+        .any(|node| node.has_tag_name("File") && node.text() == Some(sql_path)));
+    let spy_grants = || {
+        let mut query = db
+            .prepare(
+                "SELECT CivicType, ModifierId FROM CivicModifiers WHERE ModifierId='CIVIC_GRANT_SPY' ORDER BY CivicType",
+            )
+            .unwrap();
+        query
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    };
+    assert_eq!(
+        spy_grants(),
+        vec![(
+            "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE".to_owned(),
+            "CIVIC_GRANT_SPY".to_owned()
+        )]
+    );
+    let sql = repo.read(format!("{mod_root}/{sql_path}")).unwrap();
+    db.execute_batch(&sql).unwrap();
+    let granted = spy_grants();
+    assert_eq!(
+        granted,
+        vec![
+            (
+                "CIVIC_JAC_SENGOKU_LOCAL_LEAGUES_AND_INTELLIGENCE".to_owned(),
+                "CIVIC_GRANT_SPY".to_owned()
+            ),
+            (
+                "CIVIC_JAC_SENGOKU_NANBAN_ENVOYS".to_owned(),
+                "CIVIC_GRANT_SPY".to_owned()
+            )
+        ]
+    );
+    db.execute_batch(&sql).unwrap();
+    assert_eq!(spy_grants(), granted);
 }

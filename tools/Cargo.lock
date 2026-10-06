@@ -352,6 +352,9 @@ dependencies = [
 [[package]]
 name = "civ6-pe-rs"
 version = "0.1.0"
+dependencies = [
+ "sha2",
+]
 
 [[package]]
 name = "civ6-persona-events-rs"
@@ -375,6 +378,7 @@ dependencies = [
 name = "civ6-reports-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-autotest-rs",
  "civ6-cli-compat-rs",
  "clap",
  "mlua",

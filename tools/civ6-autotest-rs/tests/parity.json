@@ -1296,7 +1296,7 @@
     "source": "tools/civ6-autotest/tests/test_safety.py",
     "class": "ScenarioSafetyTests",
     "test": "test_transition_pre_send_failure_is_logged_without_waiting",
-    "rust_test": "test_transition_pre_send_failure_is_logged_without_waiting",
+    "rust_test": "test_transition_pre_send_failure_is_bounded_by_the_step_deadline",
     "assertions": "Start and load mutations each send once; connection error logged; no transition key.",
     "rust_target": "driver_safety"
   },
@@ -1368,8 +1368,8 @@
     "source": "tools/civ6-autotest/tests/test_safety.py",
     "class": "ScenarioSafetyTests",
     "test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
-    "rust_test": "test_autoplay_lua_error_stops_without_cleanup_or_resend",
-    "assertions": "Unknown/confirmed errors at start/status each preserve one start mutation and no cleanup mutation.",
+    "rust_test": "autoplay_lua_errors_reconcile_attempted_start_and_stop_once",
+    "assertions": "Unknown/confirmed errors preserve one start mutation; cleanup reads the per-attempt Lua owner and stops only that run once, even when the start acknowledgment is lost.",
     "rust_target": "driver_safety"
   },
   {

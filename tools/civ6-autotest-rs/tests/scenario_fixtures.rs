@@ -187,6 +187,153 @@ fn multi_failure_inspection_preserves_the_latest_checkpoint_without_mutation() {
 }
 
 #[test]
+fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() {
+    let data = scenario("leader-persona-spy-third-capacity-probe.json");
+    validate_scenario(&data).unwrap();
+    let actions = steps(&data);
+    assert_eq!(actions.len(), 4);
+    assert_eq!(
+        actions[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert_eq!(actions[0]["exact_name"], true);
+    assert!(actions[0].get("checkpoint").is_none());
+    assert!(action(&actions[1], "pause") && actions[1]["seconds"] == 2);
+    assert_eq!(actions[2]["lua_timeout"], 20);
+    assert!(actions.iter().all(|step| ![
+        "save",
+        "end_turn",
+        "configure",
+        "start_game",
+        "enable_mods",
+        "autoplay"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    assert!(action(&actions[3], "exit_to_menu"));
+    assert!(code(&actions[2]).contains("CIVIC_GRANT_SPY"));
+    let lua = Lua::new();
+    for step in actions {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
+fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it() {
+    let request = scenario("leader-persona-spy-third-civic-request.json");
+    let tick = scenario("leader-persona-spy-third-civic-tick.json");
+    let ready = scenario("leader-persona-spy-third-civic-ready.json");
+    validate_scenario(&request).unwrap();
+    validate_scenario(&tick).unwrap();
+    validate_scenario(&ready).unwrap();
+    let request_steps = steps(&request);
+    let tick_steps = steps(&tick);
+    assert_eq!(
+        request_steps[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert!(request_steps[0].get("checkpoint").is_none());
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC')"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC_INTENT')"))
+            .count(),
+        1
+    );
+    assert!(request_steps.iter().all(|step| !action(step, "end_turn")));
+    let intent_index = request_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC_INTENT')")
+        })
+        .unwrap();
+    let request_index = request_steps
+        .iter()
+        .position(|step| action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC')"))
+        .unwrap();
+    let saves: Vec<_> = request_steps
+        .iter()
+        .enumerate()
+        .filter_map(|(i, step)| action(step, "save").then_some(i))
+        .collect();
+    assert_eq!(saves.len(), 2);
+    let reload = request_steps
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, step)| action(step, "load").then_some(i))
+        .unwrap();
+    assert!(intent_index < saves[0] && saves[0] < request_index);
+    assert!(request_index < saves[1] && saves[1] < reload);
+    assert!(saves
+        .iter()
+        .all(|&i| request_steps[i]["checkpoint"] == true));
+    assert_eq!(request_steps[reload]["checkpoint"], true);
+    assert_eq!(request_steps[8]["action"], "inspect_native_spy_research");
+    assert_eq!(request_steps[8]["phase"], "after_acceptance");
+    assert_eq!(
+        request_steps[reload + 2]["action"],
+        "inspect_native_spy_research"
+    );
+    assert_eq!(request_steps[reload + 2]["phase"], "after_reload");
+    assert_eq!(tick_steps[0]["checkpoint"], true);
+    assert_eq!(
+        tick_steps
+            .iter()
+            .filter(|step| action(step, "end_turn"))
+            .count(),
+        1
+    );
+    let turn = tick_steps
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    let save = tick_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(turn < save && save < tick_steps.len() - 2);
+    assert_eq!(tick_steps[turn]["turns"], 1);
+    let ready_steps = steps(&ready);
+    assert_eq!(ready_steps.len(), 4);
+    assert_eq!(ready_steps[0]["checkpoint"], true);
+    assert_eq!(ready_steps[2]["action"], "inspect_native_spy_research");
+    assert_eq!(ready_steps[2]["phase"], "capacity_ready");
+    assert_eq!(tick_steps[5]["action"], "inspect_native_spy_research");
+    assert_eq!(tick_steps[5]["phase"], "after_turn");
+    assert!(ready_steps
+        .iter()
+        .all(|step| !action(step, "save") && !action(step, "end_turn")));
+    for data in [&request, &tick, &ready] {
+        assert_eq!(data["strict_lua_errors"], true);
+        assert!(steps(data)
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "start_game")));
+        let lua = Lua::new();
+        for step in steps(data) {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+    }
+    compile_lua(&Lua::new(), &civ6_autotest_rs::spy_research::read());
+    let mut bad = request.clone();
+    bad["steps"][8]["phase"] = json!("../escape");
+    assert!(validate_scenario(&bad).is_err());
+    bad["steps"][8]["phase"] = json!("after_acceptance");
+    bad["steps"][8]["code"] = json!("UI.RequestPlayerOperation(0,1,{})");
+    assert!(validate_scenario(&bad).is_err());
+}
+
+#[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
     let mut checkpoint_count = 0;
@@ -1239,6 +1386,9 @@ fn six_standalone_persona_scenarios_disable_both_diagnostic_mods() {
 fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_boundary() {
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
+    let mut blocked_recovery_seen = false;
+    let mut hotseat_growth_seen = false;
+    let mut banseiki_hotseat_growth_seen = false;
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1254,6 +1404,9 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
             count += 1;
+            blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
+            hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
+            banseiki_hotseat_growth_seen |= name == "multiplayer-banseiki-hotseat-growth.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1318,9 +1471,12 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Includes the four main-branch carrier/religion/spent-spread scenes,
-    // alongside the isolated promotion-call and assignment calibration games.
-    assert_eq!(count, 141);
+    // Preserve all prior 143 scenes and apply the same isolation assertions
+    // to the new Banseiki Hotseat game. The witness hold starts no new game.
+    assert!(blocked_recovery_seen);
+    assert!(hotseat_growth_seen);
+    assert!(banseiki_hotseat_growth_seen);
+    assert_eq!(count, 144);
 }
 
 #[test]
@@ -1577,6 +1733,42 @@ fn ui_lua_comparison_requires_a_recorded_value() {
 
     data["steps"][0]["capture_as"] = json!("BEFORE");
     validate_scenario(&data).unwrap();
+}
+
+#[test]
+fn carrier_exchange_rejects_unimplemented_comparisons_but_checkpoint_retains_them() {
+    let base = json!({
+        "name": "carrier comparison scope",
+        "steps": [{"action": "carrier_exchange", "token": "saved_boundary", "candidate": "candidate"}]
+    });
+    validate_scenario(&base).unwrap();
+    for key in ["capture_as", "equals_capture"] {
+        for value in [json!("BEFORE"), Value::Null] {
+            let mut data = base.clone();
+            data["steps"][0][key] = value;
+            let error = validate_scenario(&data).unwrap_err();
+            assert!(error.message.contains(&format!("does not support {key}")));
+        }
+    }
+    let mut checkpoint = base;
+    checkpoint["steps"][0]["action"] = json!("carrier_checkpoint");
+    checkpoint["steps"][0]["path"] = json!("carrier/before.json");
+    checkpoint["steps"][0]["capture_as"] = json!("BEFORE");
+    checkpoint["steps"][0]["equals_capture"] = json!("BEFORE");
+    assert!(validate_scenario(&checkpoint)
+        .unwrap_err()
+        .message
+        .contains("earlier capture_as"));
+    checkpoint["steps"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("equals_capture");
+    let mut after = checkpoint["steps"][0].clone();
+    after["path"] = json!("carrier/after.json");
+    after.as_object_mut().unwrap().remove("capture_as");
+    after["equals_capture"] = json!("BEFORE");
+    checkpoint["steps"].as_array_mut().unwrap().push(after);
+    validate_scenario(&checkpoint).unwrap();
 }
 
 #[test]
@@ -2718,7 +2910,7 @@ fn driver_build_setup_checks_every_player_after_refresh() {
         json!({"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}),
         json!({"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false}),
     ];
-    let generated = build_setup_code(&players);
+    let generated = build_setup_code(&json!({"players":players}));
     assert!(
         generated.find("BuildHeadlessGameSetup()").unwrap()
             < generated.find("g_GameParameters:FullRefresh()").unwrap()
@@ -2753,6 +2945,80 @@ fn driver_build_setup_defaults_on_for_banseiki_only() {
             step["build_setup"] = json!(value);
         }
         assert_eq!(builds_setup(&step), expected, "{ruleset}, {explicit:?}");
+    }
+}
+
+#[test]
+fn setup_refresh_restores_requested_counts_and_rejects_ignored_settings() {
+    let mut step = json!({"players":[
+        {"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true},
+        {"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":true}
+    ],"city_states":0});
+    for (keep_players, keep_cities, cities_requested) in [
+        (false, false, true),
+        (true, false, true),
+        (false, true, true),
+        (false, false, false),
+    ] {
+        if cities_requested {
+            step["city_states"] = json!(0);
+        } else {
+            step.as_object_mut().unwrap().remove("city_states");
+        }
+        let lua = Lua::new();
+        lua.globals().set("KEEP_PLAYERS", keep_players).unwrap();
+        lua.globals().set("KEEP_CITIES", keep_cities).unwrap();
+        lua.load(r#"
+            count, cities, maximum, hidden = 4, 0, 2, 2
+            SlotStatus = {SS_TAKEN=3, SS_COMPUTER=1}
+            GameConfiguration = {
+                GetHiddenPlayerCount=function() return hidden end,
+                GetParticipatingPlayerCount=function() return count end,
+                SetParticipatingPlayerCount=function(v) if not KEEP_PLAYERS then count=v end end,
+                SetValue=function(k,v) assert(k=='CITY_STATE_COUNT'); if not KEEP_CITIES then cities=v end end,
+                GetValue=function(k) assert(k=='CITY_STATE_COUNT'); return cities end
+            }
+            MapConfiguration = {
+                SetMaxMajorPlayers=function(v) maximum=v end,
+                GetMaxMajorPlayers=function() return maximum end
+            }
+            g_GameParameters = {FullRefresh=function()
+                count, cities, maximum = 6 + hidden, 12, 10
+            end}
+            function BuildHeadlessGameSetup() end
+            function HideGameSetup() end
+            PlayerConfigurations = {}
+            for i,n in ipairs({'ODA_NOBUHIDE','TAKEDA_NOBUTORA'}) do
+                local name, civ = n, (i==1 and 'ODA' or 'TAKEDA')
+                PlayerConfigurations[i-1] = {
+                    GetLeaderTypeName=function() return 'LEADER_JAC_'..name end,
+                    GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_'..civ end,
+                    GetSlotStatus=function() return SlotStatus.SS_TAKEN end
+                }
+            end
+        "#).exec().unwrap();
+        let result = lua.load(build_setup_code(&step)).exec();
+        if keep_players || keep_cities {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains(if keep_players {
+                    "participating player count"
+                } else {
+                    "city-state count"
+                }),
+                "{error}"
+            );
+        } else {
+            result.unwrap();
+            assert_eq!(lua.globals().get::<i64>("count").unwrap(), 4);
+            // Keep the map's supported limit. Replacing it with the requested
+            // count would make MapSize_ValueNeedsChanging trigger another reset.
+            assert_eq!(lua.globals().get::<i64>("maximum").unwrap(), 10);
+            assert_eq!(
+                lua.globals().get::<i64>("cities").unwrap(),
+                if cities_requested { 0 } else { 12 }
+            );
+        }
     }
 }
 

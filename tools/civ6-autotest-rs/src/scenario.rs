@@ -1,12 +1,16 @@
+pub use crate::session::SessionType;
 use crate::{Error, Result};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 39] = [
+pub const ACTIONS: [&str; 43] = [
     "start_native_ai_observation",
     "stop_native_ai_observation",
+    "start_native_order_capture",
+    "set_native_order_phase",
+    "stop_native_order_capture",
     "restart_game",
     "enable_mods",
     "configure",
@@ -24,6 +28,7 @@ pub const ACTIONS: [&str; 39] = [
     "wait_for",
     "observe_captive_session",
     "inspect_native_spy_failures",
+    "inspect_native_spy_research",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -58,7 +63,7 @@ pub fn type_id(value: &Value) -> bool {
 }
 pub fn validate_test_mode(mode: &Value) -> Result<()> {
     if !mode.is_object()
-        || !mode["skipped_turns"].as_i64().is_some_and(|n| n >= 0)
+        || mode["skipped_turns"].as_i64().is_none_or(|n| n < 0)
         || mode["continuous_performance_valid"] != false
     {
         return Err(Error::scenario("test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false"));
@@ -84,6 +89,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
     }
+    let session = SessionType::from_scenario(data)?;
+    if let Some(nonce) = data.get("hotseat_bridge_nonce") {
+        if session != SessionType::Hotseat
+            || !nonce
+                .as_str()
+                .is_some_and(crate::hotseat_bridge::nonce_valid)
+        {
+            return Err(Error::scenario(
+                "hotseat_bridge_nonce needs a 32-digit nonce and hotseat session",
+            ));
+        }
+    }
     if let Some(mode) = data.get("test_mode") {
         validate_test_mode(mode)?;
     }
@@ -98,7 +115,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "judge_profile must be bundle0, generic, growth or japan_map",
         ));
     }
-    if profile == "growth" && !data["expected_units"].as_i64().is_some_and(|n| n > 0) {
+    if profile == "growth" && data["expected_units"].as_i64().is_none_or(|n| n <= 0) {
         return Err(Error::scenario(
             "growth scenario needs a positive expected_units count",
         ));
@@ -130,12 +147,24 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
+    let mut carrier_captures = BTreeSet::new();
+    let mut order_open = false;
+    let mut order_changes = 0;
+    let mut order_phase = None;
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
             .as_str()
             .filter(|s| ACTIONS.contains(s))
             .ok_or_else(|| fail("unknown action".into()))?;
+        if order_open
+            && (action == "restart_game"
+                || (action.starts_with("start_native_") && action != "start_native_order_capture"))
+        {
+            return Err(fail(
+                "stop native order capture before restart or another observer".into(),
+            ));
+        }
         let bool_flags = |names: &[&str]| -> Result<()> {
             for name in names {
                 if step.get(*name).is_some_and(|v| !v.is_boolean()) {
@@ -145,9 +174,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         if let Some(flag) = step.get("preserve_diplomacy_session") {
-            if action != "ui_lua" || !flag.is_boolean() {
+            if !matches!(action, "ui_lua" | "save") || !flag.is_boolean() {
                 return Err(fail(
-                    "preserve_diplomacy_session needs a boolean ui_lua flag".into(),
+                    "preserve_diplomacy_session needs a boolean ui_lua or save flag".into(),
                 ));
             }
         }
@@ -218,6 +247,44 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 ai_session.reserve(command).map_err(fail)?;
                 ai_open=!command.stop;
             }
+            "start_native_order_capture" => {
+                crate::native_order::validate_options(step)?;
+                if order_open || trace_open || bridge_open || runtime_used {
+                    return Err(fail("another native observation is active".into()));
+                }
+                if !trace_names.insert(step["name"].as_str().unwrap().to_owned()) {
+                    return Err(fail("native capture names must be unique".into()));
+                }
+                order_open = true;
+                order_changes = 0;
+                order_phase = step["phase"].as_str();
+            }
+            "set_native_order_phase" | "stop_native_order_capture" => {
+                if !order_open {
+                    return Err(fail("native order capture is not active".into()));
+                }
+                let phase_change = action == "set_native_order_phase";
+                if step.as_object().unwrap().keys().any(|key| {
+                    !(["action", "timeout"].contains(&key.as_str())
+                        || phase_change && key == "phase")
+                }) {
+                    return Err(fail("unexpected native order option".into()));
+                }
+                if phase_change {
+                    if !matches!(step["phase"].as_str(), Some("front" | "load"))
+                        || order_changes >= 8
+                        || order_phase == step["phase"].as_str()
+                    {
+                        return Err(fail(
+                            "native order requires a known phase and at most eight changes".into(),
+                        ));
+                    }
+                    order_changes += 1;
+                    order_phase = step["phase"].as_str();
+                } else {
+                    order_open = false;
+                }
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"
@@ -266,7 +333,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     || (action != "start_native_property_trace" && step.get("scope").is_some())
                     || ((step.get("owner").is_some() || step.get("leader").is_some())
                         && (action != "start_native_assign_calibration"
-                            || !step["owner"].as_u64().is_some_and(|n| n < 64)
+                            || step["owner"].as_u64().is_none_or(|n| n >= 64)
                             || !type_id(&step["leader"])))
                     || (action == "start_native_property_trace"
                         && step.get("scope").is_some_and(|v| {
@@ -422,9 +489,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         return Err(fail(format!("invalid {key}")));
                     }
                 }
-                if !step["seed"]
+                if step["seed"]
                     .as_i64()
-                    .is_some_and(|v| i32::try_from(v).is_ok())
+                    .is_none_or(|v| i32::try_from(v).is_err())
                 {
                     return Err(fail("seed must be a signed 32-bit integer".into()));
                 }
@@ -442,10 +509,23 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 let players = step["players"]
                     .as_array()
                     .filter(|a| {
-                        a.len() >= 2 && a.iter().filter(|p| p["human"] == true).count() == 1
+                        let humans = a.iter().filter(|p| p["human"] == true).count();
+                        a.len() >= 2
+                            && match session {
+                                SessionType::SinglePlayer => humans == 1,
+                                SessionType::Hotseat => humans >= 2,
+                            }
                     })
                     .ok_or_else(|| {
-                        fail("specify at least two players and exactly one human".into())
+                        fail(
+                            match session {
+                                SessionType::SinglePlayer => {
+                                    "specify at least two players and exactly one human"
+                                }
+                                SessionType::Hotseat => "hotseat needs at least two human players",
+                            }
+                            .into(),
+                        )
                     })?;
                 if players.iter().any(|p| {
                     !p.is_object()
@@ -457,7 +537,12 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "autoplay" => {
-                if !step["turns"].as_i64().is_some_and(|n| n > 0) {
+                if session == SessionType::Hotseat {
+                    return Err(fail(
+                        "autoplay does not support hotseat; use end_turn".into(),
+                    ));
+                }
+                if step["turns"].as_i64().is_none_or(|n| n <= 0) {
                     return Err(fail("turns must be positive".into()));
                 }
                 bool_flags(&[
@@ -482,29 +567,42 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 for key in ["turns", "test_turns"] {
                     if step
                         .get(key)
-                        .is_some_and(|v| !v.as_i64().is_some_and(|n| n > 0))
+                        .is_some_and(|v| v.as_i64().is_none_or(|n| n <= 0))
                     {
                         return Err(fail(format!("{key} must be positive")));
                     }
                 }
             }
-            "inspect_native_spy_failures" => {
+            "inspect_native_spy_failures"
                 if step.as_object().is_none_or(|object| {
                     object
                         .keys()
                         .any(|key| !["action", "timeout"].contains(&key.as_str()))
-                }) {
-                    return Err(fail(
-                        "native spy failure inspection only accepts timeout".into(),
-                    ));
-                }
+                }) =>
+            {
+                return Err(fail(
+                    "native spy failure inspection only accepts timeout".into(),
+                ));
             }
-            "choose_dedication" => {
-                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
-                    return Err(fail(
-                        "choose_dedication human must be an integer in [0, 63]".into(),
-                    ));
-                }
+            "choose_dedication"
+                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) =>
+            {
+                return Err(fail(
+                    "choose_dedication human must be an integer in [0, 63]".into(),
+                ));
+            }
+            "inspect_native_spy_research"
+                if (step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout", "phase"].contains(&key.as_str()))
+                }) || !crate::spy_research::PHASES
+                    .contains(&step["phase"].as_str().unwrap_or_default())) =>
+            {
+                return Err(fail(
+                    "native spy research inspection needs a known phase and only accepts timeout"
+                        .into(),
+                ));
             }
             "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
@@ -523,11 +621,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     )?;
                 }
                 for key in ["capture_as", "equals_capture"] {
-                    if action == "carrier_exchange" && step.get(key).is_some() {
-                        return Err(fail(format!("carrier_exchange does not support {key}")));
+                    if let Some(value) = step.get(key) {
+                        if action == "carrier_exchange" {
+                            return Err(fail(format!("carrier_exchange does not support {key}")));
+                        }
+                        if !type_id(value) {
+                            return Err(fail(format!("invalid {key}")));
+                        }
                     }
-                    if step.get(key).is_some_and(|v| !type_id(v)) {
-                        return Err(fail(format!("invalid {key}")));
+                }
+                if action == "carrier_checkpoint" {
+                    if let Some(key) = step["equals_capture"].as_str() {
+                        if !carrier_captures.contains(key) {
+                            return Err(fail(
+                                "carrier equals_capture needs an earlier capture_as".into(),
+                            ));
+                        }
+                    }
+                    if let Some(key) = step["capture_as"].as_str() {
+                        carrier_captures.insert(key.to_owned());
                     }
                 }
             }
@@ -541,7 +653,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     ));
                 }
                 if !step["state_name"].is_string()
-                    || !step["code"].as_str().is_some_and(|s| !s.trim().is_empty())
+                    || step["code"].as_str().is_none_or(|s| s.trim().is_empty())
                 {
                     return Err(fail("ui_lua needs state_name and code".into()));
                 }
@@ -584,10 +696,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "save" | "load" => {
+                if step.get("save_sha256").is_some()
+                    && (action != "load"
+                        || !step["save_sha256"].as_str().is_some_and(|s| {
+                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                        }))
+                {
+                    return Err(fail(
+                        "save_sha256 requires load and 64 hexadecimal characters".into(),
+                    ));
+                }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
                     return Err(fail("invalid save name".into()));
                 }
-                bool_flags(&["exact_name", "metrics", "checkpoint"])?;
+                bool_flags(&["exact_name", "metrics", "checkpoint", "resume_once"])?;
+                if step.get("resume_once").is_some()
+                    && (action != "load" || step.get("save_sha256").is_none())
+                {
+                    return Err(fail("resume_once requires load with save_sha256".into()));
+                }
                 if step["checkpoint"] == true && step["exact_name"] != true {
                     return Err(fail("checkpoint requires exact_name: true".into()));
                 }
@@ -597,7 +724,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 match c["type"].as_str() {
                     Some("lua") => {
                         if !c["state_name"].is_string()
-                            || !c["code"].as_str().is_some_and(|s| !s.trim().is_empty())
+                            || c["code"].as_str().is_none_or(|s| s.trim().is_empty())
                         {
                             return Err(fail("Lua wait needs state_name and code".into()));
                         }
@@ -612,7 +739,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     Some("log_line") => {
                         if !c["log"].as_str().is_some_and(|s| {
                             ["Lua.log", "Database.log", "Modding.log"].contains(&s)
-                        }) || !c["contains"].as_str().is_some_and(|s| !s.is_empty())
+                        }) || c["contains"].as_str().is_none_or(|s| s.is_empty())
                         {
                             return Err(fail("log wait needs log and contains".into()));
                         }
@@ -627,8 +754,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "observe_captive_session" => {
                 let attacker = step["attacker"].as_u64();
                 let captor = step["captor"].as_u64();
-                if !attacker.is_some_and(|n| n <= 63)
-                    || !captor.is_some_and(|n| n <= 63)
+                if attacker.is_none_or(|n| n > 63)
+                    || captor.is_none_or(|n| n > 63)
                     || attacker == captor
                 {
                     return Err(fail(
@@ -648,19 +775,15 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     ));
                 }
             }
-            "pause" => {
+            "pause"
                 if !step["seconds"]
                     .as_f64()
-                    .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0)
-                {
-                    return Err(fail("pause seconds must be in (0, 10]".into()));
-                }
+                    .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0) =>
+            {
+                return Err(fail("pause seconds must be in (0, 10]".into()));
             }
             "manual" => {
-                if !step["prompt"]
-                    .as_str()
-                    .is_some_and(|s| !s.trim().is_empty())
-                {
+                if step["prompt"].as_str().is_none_or(|s| s.trim().is_empty()) {
                     return Err(fail("manual step needs prompt".into()));
                 }
                 if step.get("timeout").is_some() {
@@ -678,7 +801,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             return Err(fail("timeout must be a finite positive number".into()));
         }
     }
-    if trace_open || bridge_open {
+    if trace_open || bridge_open || order_open {
         return Err(Error::scenario("native governor trace has no stop step"));
     }
     Ok(())
@@ -709,11 +832,28 @@ pub fn builds_setup(step: &Value) -> bool {
         .as_bool()
         .unwrap_or(step["ruleset"] == BANSEIKI_RULESET)
 }
+pub fn load_code(name: &str, session: SessionType) -> String {
+    let (defaults, save_type) = match session {
+        SessionType::SinglePlayer => ("", "SaveTypes.SINGLE_PLAYER"),
+        SessionType::Hotseat => (
+            "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)\n",
+            "Network.GetGameConfigurationSaveType()",
+        ),
+    };
+    format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{defaults}local ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type={save_type}, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.{})\nif ok == false then error('Network.LoadGame returned false') end\nreturn true", lua_string(name), session.server_type())
+}
 pub fn configure_code(step: &Value) -> String {
+    configure_code_for_session(step, SessionType::SinglePlayer)
+}
+pub fn configure_code_for_session(step: &Value, session: SessionType) -> String {
     let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "if not UI.IsInFrontEnd() then error('main menu required') end".into(),
-        "GameConfiguration.SetToDefaults()".into(),
+        match session {
+            SessionType::SinglePlayer => "GameConfiguration.SetToDefaults()",
+            SessionType::Hotseat => "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)",
+        }
+        .into(),
         format!(
             "GameConfiguration.SetRuleSet({})",
             lua_string(step["ruleset"].as_str().unwrap())
@@ -740,14 +880,32 @@ pub fn configure_code(step: &Value) -> String {
         };
         lines.extend([format!("local p = PlayerConfigurations[{i}]"),format!("if not p then error('player slot {i} unavailable') end"),format!("p:SetSlotStatus(SlotStatus.{slot})"),format!("p:SetLeaderTypeName({leader})"),format!("p:SetCivilizationTypeName({civ})"),format!("if p:GetLeaderTypeName() ~= {leader} then error('leader mismatch in slot {i}') end"),format!("if p:GetCivilizationTypeName() ~= {civ} then error('civilization mismatch in slot {i}') end")]);
     }
+    if session == SessionType::Hotseat {
+        lines.push(session.guard_code().into());
+    }
     lines.push("return true".into());
     lines.join("\n")
 }
-pub fn build_setup_code(players: &[Value]) -> String {
+pub fn build_setup_code(step: &Value) -> String {
+    let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "BuildHeadlessGameSetup()".to_string(),
         "g_GameParameters:FullRefresh()".into(),
+        // MapSize_ValueChanged resets participant and city-state counts during
+        // FullRefresh. Restore requested settings before checking the players.
+        format!(
+            "local participatingCount = {} + GameConfiguration.GetHiddenPlayerCount()",
+            players.len()
+        ),
+        "GameConfiguration.SetParticipatingPlayerCount(participatingCount)".into(),
+        "if GameConfiguration.GetParticipatingPlayerCount() ~= participatingCount then error('setup changed participating player count') end".into(),
     ];
+    if let Some(count) = step.get("city_states") {
+        lines.extend([
+            format!("GameConfiguration.SetValue('CITY_STATE_COUNT', {count})"),
+            format!("if GameConfiguration.GetValue('CITY_STATE_COUNT') ~= {count} then error('setup changed city-state count') end"),
+        ]);
+    }
     for (i, p) in players.iter().enumerate() {
         let slot = if p["human"] == true {
             "SS_TAKEN"

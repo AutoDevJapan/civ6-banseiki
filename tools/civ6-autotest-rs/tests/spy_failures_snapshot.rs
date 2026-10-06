@@ -1,4 +1,4 @@
-use civ6_autotest_rs::{repo_root, spy_failures};
+use civ6_autotest_rs::{repo_root, spy_failures, spy_research};
 use mlua::Lua;
 
 fn run(lua: &Lua, code: &str) {
@@ -16,6 +16,7 @@ fn real_observer_and_rust_diagnosis_keep_both_failures_without_any_write() {
         include_str!("../../civ6-lua-tests-rs/fixtures/persona/boundary_engine.lua"),
     );
     for path in [
+        "Shared/JAC_PersonaCompletedFailure.lua",
         "Shared/JAC_PersonaBoundaryRules.lua",
         "UI/JAC_PersonaBoundary_View.lua",
         "Scripts/JAC_PersonaBoundary_Fixture.lua",
@@ -80,4 +81,80 @@ fn real_observer_and_rust_diagnosis_keep_both_failures_without_any_write() {
     let raw: String = lua.load(spy_failures::READ).eval().unwrap();
     assert_eq!(spy_failures::diagnose(&raw).unwrap().physical_count, 2);
     assert_eq!(lua.load("return #WRITES").eval::<usize>().unwrap(), before);
+
+    run(
+        &lua,
+        r#"
+      GameInfo.Civics['CIVIC_JAC_SENGOKU_NANBAN_ENVOYS']={Index=20,Hash=2020,CivicType='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS'}
+      GameInfo.Civics['CIVIC_JAC_SENGOKU_PORT_MERCHANT_COUNCILS']={Index=19}
+      GameInfo.CivicModifiers=function()
+        local done=false
+        return function() if not done then done=true; return {CivicType='CIVIC_JAC_SENGOKU_NANBAN_ENVOYS',ModifierId='CIVIC_GRANT_SPY'} end end
+      end
+      THIRD_OWNED=true; THIRD_PROGRESS=-1
+      local oldCulture=Players[0].GetCulture
+      Players[0].GetCulture=function(self)
+        local culture=oldCulture(self); local oldHas= culture.HasCivic
+        culture.HasCivic=function(this,index) if index==19 then return true elseif index==20 then return THIRD_OWNED end; return oldHas(this,index) end
+        culture.GetProgressingCivic=function() return THIRD_PROGRESS end
+        return culture
+      end
+      Game:SetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT',{owner=0,status='RESERVED',token=501,civicIndex=20,civicHash=2020,eventID=1,eventTurn=45,spyID=851976,turn=45})
+    "#,
+    );
+    let writes_before_research_read: usize = lua.load("return #WRITES").eval().unwrap();
+    let read_research = || {
+        let raw: String = lua.load(spy_research::read()).eval().unwrap();
+        spy_research::diagnose(&raw)
+    };
+    let pending = read_research().unwrap();
+    assert_eq!(pending.stage, spy_research::Stage::EffectPending);
+    let saved = serde_json::to_value(&pending).unwrap();
+    run(&lua, "SPY_CAPACITY=3");
+    let ready = read_research().unwrap();
+    assert_eq!(ready.stage, spy_research::Stage::CapacityReady);
+    spy_research::check_reload(&saved, &ready).unwrap();
+    let mut wrong_save = saved.clone();
+    wrong_save["civic"]["intentToken"] = serde_json::json!(502);
+    assert!(spy_research::check_reload(&wrong_save, &ready).is_err());
+    let mut wrong_mission = saved.clone();
+    wrong_mission["failures"]["raw"]["failures"][1]["turn"] = serde_json::json!(44);
+    assert!(spy_research::check_reload(&wrong_mission, &ready).is_err());
+    run(&lua, "THIRD_OWNED=false; THIRD_PROGRESS=20; SPY_CAPACITY=2");
+    assert_eq!(
+        read_research().unwrap().stage,
+        spy_research::Stage::Researching
+    );
+    run(&lua, "THIRD_PROGRESS=-1");
+    assert!(read_research().is_err());
+    run(
+        &lua,
+        "THIRD_OWNED=true; Game:GetProperty('JAC_BOUNDARY_THIRD_CIVIC_INTENT').token=nil",
+    );
+    let missing: String = lua.load(spy_research::read()).eval().unwrap();
+    let observed: serde_json::Value = serde_json::from_str(&missing).unwrap();
+    assert!(observed["civic"]["intentToken"].is_null());
+    assert_eq!(observed["failures"]["failures"][1]["turn"], 45);
+    let output = tempfile::tempdir().unwrap();
+    spy_research::preserve_raw(output.path(), "after_reload", &missing).unwrap();
+    assert!(spy_research::diagnose(&missing).is_err());
+    let raw_path = output.path().join("native-spy-civic-after_reload-raw.json");
+    assert_eq!(std::fs::read_to_string(&raw_path).unwrap(), missing);
+    assert!(spy_research::preserve_raw(output.path(), "after_reload", "replacement").is_err());
+    assert_eq!(std::fs::read_to_string(&raw_path).unwrap(), missing);
+    run(&lua, "ExposedMembers.JAC_PersonaBoundary.ThirdSpyCivicStatus=function() error('native observer unavailable') end");
+    let unavailable: String = lua.load(spy_research::read()).eval().unwrap();
+    let observed: serde_json::Value = serde_json::from_str(&unavailable).unwrap();
+    assert_eq!(observed["failures"]["failures"][0]["turn"], 23);
+    assert!(observed["observationErrors"][0]
+        .as_str()
+        .unwrap()
+        .contains("native observer unavailable"));
+    spy_research::preserve_raw(output.path(), "after_acceptance", &unavailable).unwrap();
+    assert!(spy_research::diagnose(&unavailable).is_err());
+    assert!(spy_research::preserve_raw(output.path(), "../outside", &unavailable).is_err());
+    assert_eq!(
+        lua.load("return #WRITES").eval::<usize>().unwrap(),
+        writes_before_research_read
+    );
 }

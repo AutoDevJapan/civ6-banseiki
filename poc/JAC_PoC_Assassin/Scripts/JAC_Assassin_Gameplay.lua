@@ -96,6 +96,61 @@ function R.TestAdvanceDeadlines(id,clocks)
   Save(id,s) -- no Tick / grant / resolution here: the real next turn processes the saved clocks
   return true,due
 end
+-- BEGIN RUST GENERATED TRAINING ORIGIN FIXTURE
+local ORIGIN_TEST_KEY="JAC_ASN_DIAGNOSTIC_ORIGIN_"
+function R.TestTrainingOrigin(id,cityID,x,y)
+  if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
+  local player=Players[id]
+  local city=player and player:IsAlive() and player:GetCities():FindID(cityID)
+  if not city or city:GetOwner()~=id then return false,"CITY_GONE" end
+  local key=ORIGIN_TEST_KEY..tostring(id)
+  if x==nil and y==nil then Game:SetProperty(key,nil); return true end
+  if type(x)~="number" or type(y)~="number" or x~=math.floor(x) or y~=math.floor(y) then
+    return false,"TEST_ORIGIN_INVALID"
+  end
+  local plot=Map.GetPlot(x,y)
+  if not plot or plot:IsCity() then return false,"TEST_ORIGIN_INVALID" end
+  local production=R.State(id).Production
+  if production and production.City~=cityID then return false,"TEST_ORIGIN_WRONG_CITY" end
+  Game:SetProperty(key,{City=cityID,X=x,Y=y})
+  return true
+end
+function R.TrainingOrigin(id,city)
+  -- Ordinary production ignores even a stale diagnostic property.
+  if Game:GetProperty(R.TEST)==1 then
+    local origin=Game:GetProperty(ORIGIN_TEST_KEY..tostring(id))
+    if origin then
+      assert(type(origin)=="table" and origin.City==city:GetID() and
+        type(origin.X)=="number" and type(origin.Y)=="number" and
+        origin.X==math.floor(origin.X) and origin.Y==math.floor(origin.Y),"invalid diagnostic origin")
+      local plot=Map.GetPlot(origin.X,origin.Y)
+      assert(plot and not plot:IsCity(),"diagnostic origin no longer valid")
+      return origin.X,origin.Y
+    end
+  end
+  return city:GetX(),city:GetY()
+end
+function R.TestAbortOriginFixture(id)
+  if Game:GetProperty(R.TEST)~=1 then return false,"TEST_MODE_OFF" end
+  local snapshot=Game:GetProperty("JAC_ASN_BLOCKED_TEST")
+  local errors={}
+  if snapshot and snapshot.Actor==id then
+    for _,row in ipairs(snapshot.Plots or {}) do
+      local ok,why=pcall(function()
+        local plot=Map.GetPlot(row.X,row.Y)
+        assert(plot and not plot:IsCity(),"rollback plot is missing or became a city")
+        TerrainBuilder.SetTerrainType(plot,row.Terrain)
+        TerrainBuilder.SetFeatureType(plot,row.Feature)
+        assert(plot:GetTerrainType()==row.Terrain and plot:GetFeatureType()==row.Feature,"rollback terrain differs")
+      end)
+      if not ok then errors[#errors+1]=tostring(why) end
+    end
+  end
+  Game:SetProperty(ORIGIN_TEST_KEY..tostring(id),nil)
+  Game:SetProperty(R.TEST,nil)
+  return #errors==0,table.concat(errors,"; ")
+end
+-- END RUST GENERATED TRAINING ORIGIN FIXTURE
 local function Copy(v)
   if type(v)~="table" then return v end
   local t={}; for k,x in pairs(v) do t[k]=Copy(x) end; return t
@@ -528,7 +583,8 @@ function R.Tick()
         -- DLC/AlexanderScenario/Scripts/AlexanderScenario.lua:193 ignores its result), so find the new unit.
         local had={}
         for _,u in Players[id]:GetUnits():Members() do had[u:GetID()]=true end
-        UnitManager.InitUnitValidAdjacentHex(id,R.UnitForPlayer(id),city:GetX(),city:GetY(),1)
+        local spawnX,spawnY=R.TrainingOrigin(id,city)
+        UnitManager.InitUnitValidAdjacentHex(id,R.UnitForPlayer(id),spawnX,spawnY,1)
         local unit
         local want=GameInfo.Units[R.UnitForPlayer(id)]
         for _,u in Players[id]:GetUnits():Members() do
