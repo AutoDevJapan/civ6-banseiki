@@ -380,6 +380,7 @@ pub struct Runner {
     pub ruleset: Option<String>,
     pub backend: Box<dyn Backend>,
     pub clock: Arc<dyn Clock>,
+    transition_response: Value,
 }
 impl Runner {
     pub fn new(scenario: Value, output: PathBuf, logs: PathBuf, saves: PathBuf, port: u16) -> Self {
@@ -429,6 +430,7 @@ impl Runner {
             ruleset: None,
             backend,
             clock,
+            transition_response: Value::Null,
         }
     }
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
@@ -482,6 +484,12 @@ impl Runner {
         match fetch(self) {
             Err(e) if retryable(&e) => {
                 self.disconnect();
+                // Keep the backend's actual last error when it exhausted the
+                // query budget; a second fetch would only replace it with a
+                // generic expired-deadline message without observing anything.
+                if self.clock.now() >= deadline {
+                    return Err(e);
+                }
                 fetch(self)
             }
             other => other,
@@ -1378,6 +1386,106 @@ impl Runner {
             .matches(LOADSCREEN_READY)
             .count())
     }
+    fn transition_observation(
+        &self,
+        phase: &str,
+        deadline: f64,
+        observation: &Value,
+    ) -> Result<()> {
+        // The existing output directory is this run's identity. Do not start a
+        // second diagnostic session or infer game success from these records.
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.output.join("transition-observations.jsonl"))?;
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "session_id":self.output.to_string_lossy(),
+                "monotonic_seconds":self.clock.now(),"deadline":deadline,
+                "phase":phase,"observation":observation
+            })
+        )?;
+        Ok(())
+    }
+    fn transition_reply(
+        &mut self,
+        operation: &str,
+        deadline: f64,
+        reply: &Result<String>,
+    ) -> Result<()> {
+        self.transition_response = match reply {
+            Ok(value) => json!({"operation":operation,"status":"acknowledged","reply":value}),
+            Err(error) => {
+                json!({"operation":operation,"status":if error.kind==ErrorKind::LuaResponseUnknown {"unknown"} else {"error"},
+                "error":error.to_string(),"error_kind":format!("{:?}",error.kind)})
+            }
+        };
+        self.transition_observation(
+            &format!("{operation}_response"),
+            deadline,
+            &self.transition_response,
+        )
+    }
+    fn loading_log_observation(&self, snapshot: &mut Value) -> Result<usize> {
+        let content = self.log_since_same_generation(
+            "Lua.log",
+            self.baseline
+                .as_ref()
+                .ok_or_else(|| Error::scenario("No log baseline for transition"))?,
+        )?;
+        let count = content.matches(LOADSCREEN_READY).count();
+        // Bounded last lines carry native Host markers and Lua exceptions; the
+        // generation guard remains the same one used by the readiness test.
+        let mut lines: Vec<_> = content.lines().rev().take(5).collect();
+        lines.reverse();
+        let tail: String = lines
+            .join("\n")
+            .chars()
+            .rev()
+            .take(4096)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        snapshot["lua_log_bytes"] = content.len().into();
+        snapshot["lua_tail"] = tail.into();
+        snapshot["loadscreen_markers"] = count.into();
+        Ok(count)
+    }
+    fn loading_states(&mut self, end: f64, snapshot: &mut Value) -> Result<Vec<String>> {
+        let result = self.states(self.budget(end, 5.0)?);
+        match result {
+            Ok(states) => {
+                snapshot["states"] = json!(states);
+                snapshot["state_error"] = Value::Null;
+                Ok(states)
+            }
+            Err(error)
+                if retryable(&error)
+                    || (error.kind == ErrorKind::Scenario && self.clock.now() >= end) =>
+            {
+                snapshot["state_error"] = error.to_string().into();
+                snapshot["last_error"] = error.to_string().into();
+                self.disconnect();
+                Ok(vec![])
+            }
+            Err(error) => Err(error),
+        }
+    }
+    fn changed_loading_observation(
+        &self,
+        end: f64,
+        snapshot: &Value,
+        reported: &mut Value,
+    ) -> Result<()> {
+        if snapshot != reported {
+            self.transition_observation("loading", end, snapshot)?;
+            *reported = snapshot.clone();
+        }
+        Ok(())
+    }
     pub fn enter_game_after_loadscreen(
         &mut self,
         before: usize,
@@ -1388,19 +1496,26 @@ impl Runner {
         let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
         let mut sent = false;
         let mut last = "loading screen not ready".to_string();
+        let mut snapshot = json!({"transition_response":self.transition_response,"states":[],"state_error":null,
+            "last_error":null,"game_ready":null,"begin_game_sent":false});
+        let mut reported = Value::Null;
         while self.clock.now() < end {
-            let count = self.loadscreen_count()?;
+            let count = self.loading_log_observation(&mut snapshot)?;
             if !sent {
                 if count <= before {
+                    // Before the native completion marker, observe only. Even
+                    // an InGame state is not permission to activate or succeed.
+                    self.loading_states(end, &mut snapshot)?;
+                    self.changed_loading_observation(end, &snapshot, &mut reported)?;
                     self.sleep_until(end, 0.5);
                     continue;
                 }
                 self.remaining(end)?;
-                let states = match self.states(self.budget(end, 5.0)?) {
-                    Ok(v) => v,
-                    Err(e) if retryable(&e) => vec![],
-                    Err(e) => return Err(e),
-                };
+                let states = self.loading_states(end, &mut snapshot)?;
+                self.changed_loading_observation(end, &snapshot, &mut reported)?;
+                if self.clock.now() >= end {
+                    break;
+                }
                 if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
                     self.lua(
                         "LoadScreen",
@@ -1414,26 +1529,29 @@ impl Runner {
                     last = "Esc sent on loading screen".into();
                 }
                 sent = true;
+                snapshot["begin_game_sent"] = true.into();
                 self.disconnect();
             }
             let check = (|| -> Result<bool> {
                 if self
-                    .states(self.budget(end, 5.0)?)?
+                    .loading_states(end, &mut snapshot)?
                     .iter()
                     .any(|s| state_name_eq(s, "InGame"))
                 {
-                    if self.lua(
+                    let ready = self.lua(
                         "InGame",
                         "return Game ~= nil and Game.GetLocalPlayer() >= 0",
                         self.budget(end, 5.0)?,
-                    )? == "true"
-                    {
+                    )?;
+                    snapshot["game_ready"] = ready.clone().into();
+                    if ready == "true" {
                         self.close_options_menu(end)?;
                         self.dismiss_advisor(end)?;
                         self.remaining(end)?;
                         return Ok(true);
                     }
-                    last = "InGame exists; waiting for the local player".into();
+                    last =
+                        format!("InGame exists; waiting for the local player; predicate={ready:?}");
                 } else {
                     last = "InGame state not available yet".into();
                     self.disconnect();
@@ -1441,7 +1559,10 @@ impl Runner {
                 Ok(false)
             })();
             match check {
-                Ok(true) => return Ok(()),
+                Ok(true) => {
+                    self.transition_observation("ingame_ready", end, &snapshot)?;
+                    return Ok(());
+                }
                 Ok(false) => {}
                 Err(e)
                     if matches!(
@@ -1449,23 +1570,29 @@ impl Runner {
                         ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
                     ) =>
                 {
-                    return Err(e)
+                    snapshot["last_error"] = e.to_string().into();
+                    self.transition_observation("error", end, &snapshot)?;
+                    return Err(e);
                 }
                 Err(e) if retryable(&e) => {
                     last = e.to_string();
+                    snapshot["last_error"] = last.clone().into();
                     self.disconnect();
                 }
                 Err(e) => return Err(e),
             }
+            self.changed_loading_observation(end, &snapshot, &mut reported)?;
             self.sleep_until(end, 2.0);
         }
+        self.loading_log_observation(&mut snapshot)?;
+        self.transition_observation("timeout", end, &snapshot)?;
         let uncertain = if response_unknown {
             "; outcome undecidable after unknown Lua response"
         } else {
             ""
         };
         Err(Error::scenario(format!(
-            "Timed out after {timeout}s entering the game; last: {last}{uncertain}"
+            "Timed out after {timeout}s entering the game; last: {last}; observation: {snapshot}{uncertain}"
         )))
     }
     pub fn save_path(&self, name: &str) -> PathBuf {
@@ -1794,6 +1921,7 @@ impl Runner {
                 ))
             }
             "start_game" => {
+                self.transition_response = Value::Null;
                 let session = scenario::SessionType::from_scenario(&self.scenario)?;
                 if self.owner_start && session == scenario::SessionType::Hotseat {
                     return Err(Error::scenario("owner_start only supports single-player"));
@@ -1810,8 +1938,17 @@ impl Runner {
                         "owner pressed Start Game; single-player game reached InGame".into(),
                     );
                 }
-                let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nNetwork.HostGame(ServerType.{})\nreturn true", session.guard_code(), session.server_type());
-                let mut unknown = match self.send_frontend_transition(&code, deadline) {
+                let marker = scenario::lua_string(&format!(
+                    "JAC_AUTOTEST_HOST|session={}|monotonic={}",
+                    self.output.to_string_lossy(),
+                    self.clock.now()
+                ));
+                // The official HostGame call runs once. Its returned value is
+                // not a readiness proof, and Lua exceptions are never retried.
+                let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nlocal marker={marker}\nprint(marker .. '|phase=before')\nlocal ok,err=pcall(function() Network.HostGame(ServerType.{}) end)\nif not ok then print(marker .. '|phase=exception|' .. tostring(err));error(err) end\nprint(marker .. '|phase=after')\nreturn true", session.guard_code(), session.server_type());
+                let response = self.send_frontend_transition(&code, deadline);
+                self.transition_reply("host", deadline, &response)?;
+                let mut unknown = match response {
                     Ok(_) => false,
                     Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                         println!("HostGame response interrupted during transition: {e}");
@@ -2132,7 +2269,9 @@ impl Runner {
         let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
-        let mut unknown = match self.send_frontend_transition(&code, deadline) {
+        let response = self.send_frontend_transition(&code, deadline);
+        self.transition_reply("load", deadline, &response)?;
+        let mut unknown = match response {
             Ok(_) => false,
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                 println!("LoadGame response interrupted during transition: {e}");

@@ -141,8 +141,270 @@ fn test_load_wait_never_sends_escape_before_load_complete_log() {
         ErrorKind::Scenario,
         "entering the game",
     );
-    assert!(f.trace().state_queries.is_empty());
+    assert!(!f.trace().state_queries.is_empty());
+    assert!(
+        f.trace().lua.is_empty(),
+        "pre-marker observation must be read-only"
+    );
     assert!(f.trace().presses.is_empty());
+}
+
+fn transition_observations(f: &Fixture) -> Vec<Value> {
+    fs::read_to_string(f.output.join("transition-observations.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+#[test]
+fn pre_marker_wait_records_changed_states_and_lua_errors_without_treating_ingame_as_success() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    let clock = f.clock.clone();
+    backend.on_states = Box::new(move |_| {
+        Ok(if clock.now() < 1.0 {
+            vec!["FrontEnd".into(), "AdvancedSetup".into()]
+        } else {
+            vec!["InGame".into(), "LoadScreen".into()]
+        })
+    });
+    let lua = f.logs.join("Lua.log");
+    f.clock.on_sleep(move |_| {
+        if !fs::read_to_string(&lua)
+            .unwrap()
+            .contains("host observer exception")
+        {
+            append(&lua, "FrontEnd: host observer exception\n");
+        }
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .enter_game_after_loadscreen(0, 3.0, Some(3.0), true)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    for expected in [
+        "LoadScreen",
+        "InGame",
+        "host observer exception",
+        "outcome undecidable",
+    ] {
+        assert!(error.message.contains(expected), "{error}");
+    }
+    let evidence = transition_observations(&f);
+    let changed: Vec<_> = evidence
+        .iter()
+        .filter(|v| v["phase"] == "loading")
+        .collect();
+    assert_eq!(
+        changed.len(),
+        3,
+        "stable polls must not append duplicate observations: {evidence:?}"
+    );
+    assert!(changed[0]["observation"]["states"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|v| v == "FrontEnd"));
+    assert_eq!(evidence.last().unwrap()["phase"], "timeout");
+    for row in &evidence {
+        assert_eq!(row["session_id"], f.output.to_string_lossy().as_ref());
+        assert!(row["monotonic_seconds"].as_f64().unwrap() <= 3.0);
+        assert_eq!(row["deadline"], 3.0);
+    }
+    assert!(f.trace().lua.is_empty() && f.trace().presses.is_empty());
+    assert_eq!(f.clock.now(), 3.0);
+}
+
+#[test]
+fn pre_marker_state_query_consumes_only_original_deadline_and_reports_its_last_error() {
+    let f = Fixture::new();
+    f.clock.set(10.0);
+    let clock = f.clock.clone();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(move |budget| {
+        assert!(budget > 0.0 && budget <= 2.0);
+        clock.advance(budget);
+        Err(Error::tuner("last native state query failed"))
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .enter_game_after_loadscreen(0, 600.0, Some(12.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(
+        error.message.contains("last native state query failed"),
+        "{error}"
+    );
+    assert_eq!(f.clock.now(), 12.0);
+    assert_eq!(f.trace().state_queries, vec![2.0]);
+    assert!(f.trace().lua.is_empty() && f.trace().presses.is_empty());
+    assert_eq!(
+        transition_observations(&f).last().unwrap()["deadline"],
+        12.0
+    );
+}
+
+#[test]
+fn host_unknown_is_sent_once_and_its_error_reaches_loading_timeout_evidence() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["FrontEnd".into(), "AdvancedSetup".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        assert!(code.contains("Network.HostGame"));
+        Err(Error::unknown("Host outcome unknown after command send"))
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+    let error = runner
+        .run_step(&json!({"action":"start_game","timeout":3}))
+        .unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("Host outcome unknown after command send"),
+        "{error}"
+    );
+    assert!(
+        error.message.contains("AdvancedSetup") && error.message.contains("outcome undecidable"),
+        "{error}"
+    );
+    assert_eq!(lua_count(&f, "Network.HostGame"), 1);
+    assert!(f.trace().presses.is_empty());
+    assert_eq!(f.clock.now(), 3.0);
+    let rows = transition_observations(&f);
+    assert!(rows.iter().any(|v| v["phase"] == "host_response"
+        && v["observation"]["error"] == "Host outcome unknown after command send"));
+}
+
+#[test]
+fn official_host_lua_marks_before_after_and_exception_with_the_same_session_and_clock() {
+    for fail in [false, true] {
+        let f = Fixture::new();
+        f.clock.set(7.0);
+        let output = f.output.to_string_lossy().into_owned();
+        let executed = Arc::new(Mutex::new((0_usize, Vec::<String>::new())));
+        let observed = executed.clone();
+        let path = f.logs.join("Lua.log");
+        let mut backend = f.backend();
+        backend.on_lua = Box::new(move |_, code, _| {
+            if !code.contains("Network.HostGame") {
+                return Ok("true".into());
+            }
+            let lua = mlua::Lua::new();
+            lua.load("UI={IsInFrontEnd=function() return true end};GameConfiguration={IsAnyMultiplayer=function() return false end};ServerType={SERVER_TYPE_NONE=0}").exec().unwrap();
+            let host = observed.clone();
+            let network = lua.create_table().unwrap();
+            network
+                .set(
+                    "HostGame",
+                    lua.create_function(move |_, _: i64| {
+                        host.lock().unwrap().0 += 1;
+                        if fail {
+                            Err(mlua::Error::RuntimeError("official Host exception".into()))
+                        } else {
+                            Ok(())
+                        }
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            lua.globals().set("Network", network).unwrap();
+            let prints = observed.clone();
+            lua.globals()
+                .set(
+                    "print",
+                    lua.create_function(move |_, text: String| {
+                        prints.lock().unwrap().1.push(text);
+                        Ok(())
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let response = lua.load(code).eval::<bool>();
+            for text in &observed.lock().unwrap().1 {
+                append(&path, &format!("{text}\n"));
+            }
+            if fail {
+                Err(Error::lua(response.unwrap_err().to_string()))
+            } else {
+                response.unwrap();
+                Err(Error::unknown("after host response disappeared"))
+            }
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+        let error = runner
+            .run_step(&json!({"action":"start_game","timeout":1}))
+            .unwrap_err();
+        let observed = executed.lock().unwrap();
+        assert_eq!(observed.0, 1);
+        assert_eq!(
+            observed.1.len(),
+            2,
+            "missing official FrontEnd markers: {:?}",
+            observed.1
+        );
+        assert!(observed.1[0].contains("phase=before"));
+        assert!(observed.1[1].contains(if fail {
+            "phase=exception"
+        } else {
+            "phase=after"
+        }));
+        for marker in &observed.1 {
+            assert!(
+                marker.contains(&output) && marker.contains("monotonic=7"),
+                "{marker}"
+            );
+        }
+        assert_eq!(
+            error.kind,
+            if fail {
+                ErrorKind::LuaExecution
+            } else {
+                ErrorKind::Scenario
+            }
+        );
+        if fail {
+            assert!(error.message.contains("official Host exception"));
+        }
+        assert_eq!(lua_count(&f, "Network.HostGame"), 1);
+        assert!(f.trace().presses.is_empty());
+    }
+}
+
+#[test]
+fn post_marker_timeout_retains_last_game_predicate_and_does_not_reactivate_loadscreen() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+    backend.on_lua = Box::new(|_, code, _| {
+        Ok(if code.contains("Game.GetLocalPlayer") {
+            "false"
+        } else {
+            "true"
+        }
+        .into())
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    ready(&f, &mut runner);
+    let error = runner
+        .enter_game_after_loadscreen(0, 3.0, Some(3.0), false)
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(
+        error.message.contains("local player") && error.message.contains("false"),
+        "{error}"
+    );
+    assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+    assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
+    let rows = transition_observations(&f);
+    assert!(rows
+        .iter()
+        .any(|v| v["observation"]["game_ready"] == "false"));
+    assert_eq!(f.clock.now(), 3.0);
 }
 
 #[test]
@@ -271,7 +533,11 @@ fn test_transition_detects_lua_log_rotation_and_truncation_before_input() {
                 .unwrap_err(),
         );
         assert!(f.trace().presses.is_empty());
-        assert!(f.trace().state_queries.is_empty());
+        assert!(!f.trace().state_queries.is_empty());
+        assert!(
+            f.trace().lua.is_empty(),
+            "rotation must still stop before mutating input"
+        );
     }
 }
 
