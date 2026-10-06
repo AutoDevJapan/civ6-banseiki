@@ -14,6 +14,9 @@ use std::{
     sync::Arc,
 };
 
+#[path = "persona_runtime_restart.rs"]
+mod persona_runtime_restart;
+
 pub trait Backend: Send {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         Ok(None)
@@ -1075,6 +1078,10 @@ pub struct Runner {
     pub mods_dir: PathBuf,
     pub owner_start: bool,
     pub test_mode: bool,
+    /// Explicit diagnostic: rebuild the resident runtime in a fresh owned
+    /// process for each saved-game load. This does not prove in-process reload.
+    pub persona_runtime_restart: bool,
+    persona_runtime_generation: u32,
     pub baseline: Option<Value>,
     pub log_step_baseline: Option<Value>,
     pub log_matches_consumed: BTreeMap<(String, String), usize>,
@@ -1139,6 +1146,8 @@ impl Runner {
             failure: None,
             lua_captures: BTreeMap::new(),
             resident_runtime_identity: None,
+            persona_runtime_restart: false,
+            persona_runtime_generation: 0,
             carrier_captures: BTreeMap::new(),
             ruleset: None,
             checkpoint_run_id: uuid::Uuid::new_v4().simple().to_string(),
@@ -1281,7 +1290,7 @@ impl Runner {
             deadline,
             per_lua,
         )?;
-        let snapshot_code="local b=ExposedMembers.JAC_PersonaBoundary; return b and b.CaptiveExchangeSessionReadOnly() or 'NONE'";
+        let snapshot_code = "local b=ExposedMembers.JAC_PersonaBoundary; return b and b.CaptiveExchangeSessionReadOnly() or 'NONE'";
         let in_game_snapshot = self.captive_session_read(
             "ingame_snapshot",
             "InGame",
@@ -1296,7 +1305,9 @@ impl Runner {
             deadline,
             per_lua,
         )?;
-        let id_code=format!("local id=DiplomacyManager.FindOpenSessionID({attacker},{captor}); if id==nil then return 'nil' end; return type(id)=='number' and tostring(id) or 'TYPE:'..type(id)");
+        let id_code = format!(
+            "local id=DiplomacyManager.FindOpenSessionID({attacker},{captor}); if id==nil then return 'nil' end; return type(id)=='number' and tostring(id) or 'TYPE:'..type(id)"
+        );
         let in_game_id =
             self.captive_session_read("ingame_session_id", "InGame", &id_code, deadline, per_lua)?;
         let deal_id = self.captive_session_read(
@@ -1310,7 +1321,9 @@ impl Runner {
             |value: &Option<String>| value.as_deref().and_then(|s| s.parse::<u64>().ok());
         let id_for_info = parsed_id(&in_game_id).or_else(|| parsed_id(&deal_id));
         let (in_game_from, deal_from) = if let Some(id) = id_for_info {
-            let code=format!("local info=DiplomacyManager.GetSessionInfo({id}); if info==nil then return 'nil' end; return type(info.FromPlayer)=='number' and tostring(info.FromPlayer) or 'TYPE:'..type(info.FromPlayer)");
+            let code = format!(
+                "local info=DiplomacyManager.GetSessionInfo({id}); if info==nil then return 'nil' end; return type(info.FromPlayer)=='number' and tostring(info.FromPlayer) or 'TYPE:'..type(info.FromPlayer)"
+            );
             (
                 self.captive_session_read(
                     "ingame_from_player",
@@ -1371,7 +1384,9 @@ impl Runner {
             && deal_from.as_deref() == Some(expected_from.as_str())
         {
             let observed_id = parsed_id(&in_game_id).unwrap();
-            let code=format!("return ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession({observed_id})");
+            let code = format!(
+                "return ExposedMembers.JAC_PersonaBoundary.PinObservedCaptiveExchangeSession({observed_id})"
+            );
             let ack = match self.lua("InGame", &code, self.budget(deadline, per_lua)?) {
                 Ok(value) => value,
                 Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
@@ -1400,7 +1415,9 @@ impl Runner {
                 "native captive diplomacy session {observed_id} observed and bound",
             ));
         }
-        Err(Error::scenario(format!("captive session observation incomplete: visible={hidden:?}, native_ids={in_game_id:?}/{deal_id:?}, from={in_game_from:?}/{deal_from:?}, snapshots={in_game_snapshot:?}/{deal_snapshot:?}; observation made no proposal")))
+        Err(Error::scenario(format!(
+            "captive session observation incomplete: visible={hidden:?}, native_ids={in_game_id:?}/{deal_id:?}, from={in_game_from:?}/{deal_from:?}, snapshots={in_game_snapshot:?}/{deal_snapshot:?}; observation made no proposal"
+        )))
     }
     pub fn log_since_same_generation(&self, name: &str, baseline: &Value) -> Result<String> {
         let path = self.logs.join(name);
@@ -1622,7 +1639,7 @@ impl Runner {
                 _ => {
                     return Err(Error::scenario(format!(
                         "Unexpected options menu close response: {value:?}"
-                    )))
+                    )));
                 }
             },
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
@@ -1736,7 +1753,9 @@ impl Runner {
         // This is a read-only probe. A lost FireTuner acknowledgement may be
         // retried without replaying the command that started autoplay.
         let end = deadline.min(self.clock.now() + 30.0);
-        let code = format!("return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Players[{human}]:IsAlive())");
+        let code = format!(
+            "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Players[{human}]:IsAlive())"
+        );
         let value = self.retry_idempotent(end, |r| r.lua("InGame", &code, r.budget(end, 5.0)?))?;
         let (turn, alive) = value
             .split_once('|')
@@ -1835,7 +1854,7 @@ pub const POPUP_CLOSERS: [(&str, &str, &str); 6] = [
         "natural disaster report",
     ),
 ];
-pub const AUTOPLAY_STATUS_CODE:&str="return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
+pub const AUTOPLAY_STATUS_CODE: &str = "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(AutoplayManager.IsActive()) .. '|' .. tostring(JAC_AUTOTEST_AUTO_DONE == true) .. '|' .. tostring(AutoplayManager.GetTurns()) .. '|' .. tostring(Game.GetLocalPlayer())";
 const HUMAN_TURN_READY: &str = "Game.GetLocalPlayer() >= 0 and Game.GetLocalPlayer() ~= PlayerTypes.OBSERVER and Players[Game.GetLocalPlayer()] ~= nil and Players[Game.GetLocalPlayer()]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages()";
 fn ready_turn_code(turn: i64) -> String {
     format!("return Game.GetCurrentGameTurn() == {turn} and {HUMAN_TURN_READY}")
@@ -1914,7 +1933,9 @@ impl Runner {
         }
         self.backend.startup_cancel_check()?;
         attempt.loading_timeout = !attempt.frontend_seen;
-        Err(Error::scenario(format!("Main menu did not become ready after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
+        Err(Error::scenario(format!(
+            "Main menu did not become ready after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}"
+        )))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
         self.launch_startup_and_wait(deadline, false, false, &mut StartupAttempt::default())
@@ -1956,7 +1977,7 @@ impl Runner {
                             if e.kind == ErrorKind::Input
                                 && e.message.starts_with("Multiple Civ VI processes found") =>
                         {
-                            continue
+                            continue;
                         }
                         Err(e) => return Err(e),
                         Ok(None) => {}
@@ -2061,7 +2082,9 @@ impl Runner {
             self.backend.check_startup_lock()?;
             report["helpers"] = self.backend.startup_finish_diagnostics()?;
             if !self.backend.wait_exit(game.pid, self.clock.now() + 30.0)? {
-                return Err(Error::scenario("pinned startup process remains after display recovery; refusing another launch"));
+                return Err(Error::scenario(
+                    "pinned startup process remains after display recovery; refusing another launch",
+                ));
             }
             if self.backend.single_process(0.0)?.is_some() {
                 return Err(Error::input(
@@ -2359,7 +2382,7 @@ impl Runner {
                         ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
                     ) =>
                 {
-                    return Err(e)
+                    return Err(e);
                 }
                 Err(e) if retryable(&e) => {
                     last = e.to_string();
@@ -2434,7 +2457,10 @@ impl Runner {
             self.budget(deadline, 5.0)?,
         )?;
         if value.trim().trim_matches('"') != "1" {
-            return Err(Error::scenario(format!("{} start turn is {value}, expected 1: the calendar override was not applied (configure without build_setup?)",scenario::BANSEIKI_RULESET)));
+            return Err(Error::scenario(format!(
+                "{} start turn is {value}, expected 1: the calendar override was not applied (configure without build_setup?)",
+                scenario::BANSEIKI_RULESET
+            )));
         }
         Ok(())
     }
@@ -2602,9 +2628,15 @@ impl Runner {
                     })
                     .unwrap_or_default();
                 Ok(if mode == "paid-assignment-runtime" {
-                    format!("game-owned three-entry native runtime installed; observation bounded; artifact {}.jsonl{process}", text(step, "name"))
+                    format!(
+                        "game-owned three-entry native runtime installed; observation bounded; artifact {}.jsonl{process}",
+                        text(step, "name")
+                    )
                 } else if mode == "promotion-call" {
-                    format!("one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl", text(step, "name"))
+                    format!(
+                        "one official PROMOTE call entry observer ready; raw registers only; artifact {}.jsonl",
+                        text(step, "name")
+                    )
                 } else {
                     format!(
                         "native {mode} original-return telemetry ready; artifact {}.jsonl{process}",
@@ -2626,7 +2658,10 @@ impl Runner {
                     .stop_native_bridge()?
                     .ok_or_else(|| Error::scenario("native bridge was not active"))?;
                 if action == "stop_native_paid_runtime_observation" {
-                    Ok(format!("runtime observation stopped; native decisions retained until game exit; artifact {}", artifact.display()))
+                    Ok(format!(
+                        "runtime observation stopped; native decisions retained until game exit; artifact {}",
+                        artifact.display()
+                    ))
                 } else if action == "stop_native_property_trace" {
                     Ok(format!(
                         "native property entry restored; prefix retained until game exit; raw rows collected, key and value mapping unverified; artifact {}",
@@ -2760,6 +2795,7 @@ impl Runner {
                 let unknown=match self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true",self.budget(deadline,5.0)?) {Ok(_)=>false,Err(e) if e.kind==ErrorKind::LuaResponseUnknown=>{println!("HostGame response interrupted during transition: {e}");true},Err(e)=>return Err(e)};
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
+                self.activate_persona_runtime(deadline)?;
                 Ok("single-player game reached InGame".into())
             }
             "autoplay" => {
@@ -2813,7 +2849,10 @@ impl Runner {
                 let json = serde_json::to_string_pretty(&report)
                     .map_err(|e| Error::scenario(e.to_string()))?;
                 fs::write(self.output.join("native-spy-failures-report.json"), json)?;
-                Ok(format!("native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",report.physical_count,report.discounted_sentinels,report.next))
+                Ok(format!(
+                    "native failures retained; physical={} placeholders={} next={:?}; neutralization success=false; captive identity resolved=false",
+                    report.physical_count, report.discounted_sentinels, report.next
+                ))
             }
             "inspect_native_spy_research" => {
                 let phase = text(step, "phase");
@@ -2851,7 +2890,13 @@ impl Runner {
                 let json = serde_json::to_string_pretty(&report)
                     .map_err(|e| Error::scenario(e.to_string()))?;
                 fs::write(report_path, json)?;
-                Ok(format!("native Civic accepted; stage={:?} capacity={} captiveCount={} intent={}; old failures preserved; neutralization success=false", report.stage, report.civic.capacity, report.civic.captured, report.civic.intent_token))
+                Ok(format!(
+                    "native Civic accepted; stage={:?} capacity={} captiveCount={} intent={}; old failures preserved; neutralization success=false",
+                    report.stage,
+                    report.civic.capacity,
+                    report.civic.captured,
+                    report.civic.intent_token
+                ))
             }
             "carrier_exchange" => {
                 let token = text(step, "token");
@@ -2961,7 +3006,7 @@ impl Runner {
                                 ErrorKind::LuaResponseUnknown | ErrorKind::LuaExecution
                             ) =>
                         {
-                            return Err(e)
+                            return Err(e);
                         }
                         Err(e) if retryable(&e) => {
                             if !self.unblock_ingame(
@@ -3048,6 +3093,11 @@ impl Runner {
             "save" => self.save_step(step, deadline),
             "load" => self.load_step(step, timeout, deadline),
             "exit_to_menu" => {
+                if self.persona_runtime_restart && self.resident_runtime_identity.is_some() {
+                    self.retire_persona_process(deadline)?;
+                    self.restart_game(self.remaining(deadline)?)?;
+                    return Ok("main menu reached in fresh process; diagnostic resident runtime retired with previous game".into());
+                }
                 self.lua(
                     "InGame",
                     "Events.ExitToMainMenu()\nreturn true",
@@ -3102,7 +3152,10 @@ impl Runner {
         }
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
-        let code=format!("JAC_AUTOTEST_SAVE_DONE = false\nif JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\nJAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\nEvents.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\nlocal result = Network.SaveGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false}})\nif result == false then error('Network.SaveGame returned false') end\nreturn true",scenario::lua_string(&name));
+        let code = format!(
+            "JAC_AUTOTEST_SAVE_DONE = false\nif JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\nJAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\nEvents.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\nlocal result = Network.SaveGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false}})\nif result == false then error('Network.SaveGame returned false') end\nreturn true",
+            scenario::lua_string(&name)
+        );
         let recorded = step["metrics"] == true;
         let saved_turn = if recorded {
             parse_integer(&self.lua(
@@ -3162,7 +3215,10 @@ impl Runner {
                 path.display()
             )));
         }
-        let code=format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=SaveTypes.SINGLE_PLAYER, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.SERVER_TYPE_NONE)\nif ok == false then error('Network.LoadGame returned false') end\nreturn true",scenario::lua_string(&name));
+        let code = format!(
+            "if not UI.IsInFrontEnd() then error('main menu required') end\nlocal ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=SaveTypes.SINGLE_PLAYER, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.SERVER_TYPE_NONE)\nif ok == false then error('Network.LoadGame returned false') end\nreturn true",
+            scenario::lua_string(&name)
+        );
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
         let unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
@@ -3174,6 +3230,7 @@ impl Runner {
             Err(e) => return Err(e),
         };
         self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        self.activate_persona_runtime(deadline)?;
         if step["metrics"] == true {
             let seconds = self.clock.now() - started;
             let turn = parse_integer(&self.lua(
@@ -3308,7 +3365,7 @@ fn python_value_repr(v: &Value) -> String {
 }
 const CLOSE_NOTEBOOKS: &str =
     "if LuaEvents.JAC_Notebooks_Close then LuaEvents.JAC_Notebooks_Close() end\nreturn true";
-const DEDICATION_CODE:&str="if not (Game.GetEras and PlayerOperations and PlayerOperations.COMMEMORATE) then return 'none' end\nlocal eras = Game.GetEras()\nlocal n = eras:GetPlayerNumAllowedCommemorations(h)\nlocal choices = eras:GetPlayerCommemorateChoices(h)\nif n <= 0 or #choices == 0 then return 'none' end\nlocal picked = {}\nfor i = 1, math.min(n, #choices) do\n  local p = {}\n  p[PlayerOperations.PARAM_COMMEMORATION_TYPE] = choices[i]\n  UI.RequestPlayerOperation(h, PlayerOperations.COMMEMORATE, p)\n  table.insert(picked, tostring(choices[i]))\nend\nreturn table.concat(picked, ',')";
+const DEDICATION_CODE: &str = "if not (Game.GetEras and PlayerOperations and PlayerOperations.COMMEMORATE) then return 'none' end\nlocal eras = Game.GetEras()\nlocal n = eras:GetPlayerNumAllowedCommemorations(h)\nlocal choices = eras:GetPlayerCommemorateChoices(h)\nif n <= 0 or #choices == 0 then return 'none' end\nlocal picked = {}\nfor i = 1, math.min(n, #choices) do\n  local p = {}\n  p[PlayerOperations.PARAM_COMMEMORATION_TYPE] = choices[i]\n  UI.RequestPlayerOperation(h, PlayerOperations.COMMEMORATE, p)\n  table.insert(picked, tostring(choices[i]))\nend\nreturn table.concat(picked, ',')";
 
 impl Runner {
     pub fn autoplay(
@@ -3341,7 +3398,9 @@ impl Runner {
         let start_line = core_start
             .map(|v| format!("local startTurn = {v}\n"))
             .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
-        let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
+        let start_code = format!(
+            "if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)"
+        );
         let mut autoplay_started = false;
         type AutoplayOutcome = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
         let execution = (|| -> Result<AutoplayOutcome> {
@@ -3431,7 +3490,9 @@ impl Runner {
                         ),
                     )?;
                     if diplomacy_closes as i64 > 20 + 5 * turns {
-                        return Err(Error::scenario(format!("Closed {diplomacy_closes} AI diplomacy screens in one autoplay step; the game keeps reopening them")));
+                        return Err(Error::scenario(format!(
+                            "Closed {diplomacy_closes} AI diplomacy screens in one autoplay step; the game keeps reopening them"
+                        )));
                     }
                 } else if let Some(error) = status_failure.take() {
                     return Err(error);
@@ -3520,7 +3581,10 @@ impl Runner {
                             ),
                         )?;
                         if !options.allow_human_elimination {
-                            return Err(Error::scenario(format!("Human player {human} was eliminated during autoplay (first observed at turn {}, target {target})",current.turn)));
+                            return Err(Error::scenario(format!(
+                                "Human player {human} was eliminated during autoplay (first observed at turn {}, target {target})",
+                                current.turn
+                            )));
                         }
                     }
                 }
@@ -3635,7 +3699,7 @@ impl Runner {
                         ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
                     ) =>
             {
-                return Err(e)
+                return Err(e);
             }
             Err(e) => {
                 if let Err(cleanup) = self.stop_autoplay() {
@@ -3716,7 +3780,9 @@ impl Runner {
                 (target - 2).min(boundary - 2)
             };
             if limit > current {
-                let code=format!("local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\nif not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\nif Game.GetCurrentGameTurn() ~= {current} then error('turn changed before fast-forward') end\nlocal target = {limit}\nGame.SetCurrentGameTurn(target)\nif Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\nreturn tostring(target)");
+                let code = format!(
+                    "local ok, setter = pcall(function() return Game.SetCurrentGameTurn end)\nif not ok or type(setter) ~= 'function' then error('engine fast-forward unavailable') end\nif Game.GetCurrentGameTurn() ~= {current} then error('turn changed before fast-forward') end\nlocal target = {limit}\nGame.SetCurrentGameTurn(target)\nif Game.GetCurrentGameTurn() ~= target then error('engine fast-forward failed') end\nreturn tostring(target)"
+                );
                 if let Err(e) = self.lua("GameCore_Tuner", &code, self.budget(deadline, 5.0)?) {
                     if e.kind == ErrorKind::LuaResponseUnknown {
                         let mode = &mut self.scenario["test_mode"];
@@ -3740,13 +3806,18 @@ impl Runner {
             self.autoplay(2.min(target - current), timeout, suboptions)?;
             (current, minimum, maximum, countdown) = self.era_state(deadline)?;
             if current <= before || current > target {
-                return Err(Error::scenario(format!("Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}")));
+                return Err(Error::scenario(format!(
+                    "Fast-forward autoplay advanced unexpectedly: {before}->{current}, target={target}"
+                )));
             }
         }
-        Ok(format!("TEST MODE: reached turn {target}; skipped {skipped} turns; era boundaries processed normally"))
+        Ok(format!(
+            "TEST MODE: reached turn {target}; skipped {skipped} turns; era boundaries processed normally"
+        ))
     }
     pub fn run(&mut self) -> Result<i32> {
         scenario::validate_scenario(&self.scenario)?;
+        self.validate_persona_runtime_mode()?;
         // create_dir rejects an existing leaf while create_dir_all only prepares parents.
         if let Some(parent) = self.output.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent)?;
@@ -3824,7 +3895,10 @@ impl Runner {
             let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
             let stale = self.backend.stale_art(&folders)?;
             if !stale.is_empty() {
-                return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
+                return Err(Error::scenario(format!(
+                    "Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",
+                    stale.join(", ")
+                )));
             }
             let newest = self.backend.newest_mod(&folders)?;
             let process = self.backend.single_process(30.0)?;
@@ -3962,7 +4036,12 @@ impl Runner {
             .into_iter()
             .map(|(name, rows)| (name, metrics::summarize_turns(&rows)))
             .collect();
-        let result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        let mut result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        if self.persona_runtime_restart {
+            result["persona_runtime"] = json!({"mode":"explicit-diagnostic-process-renewal",
+                "installed_generations":self.persona_runtime_generation,
+                "same_process_reload":false,"product_autostart":false});
+        }
         fs::write(
             self.output.join("result.json"),
             format!("{}\n", serde_json::to_string_pretty(&result)?),
