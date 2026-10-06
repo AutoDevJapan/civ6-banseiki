@@ -60,6 +60,13 @@ fn same_registration(now: LeaseStamp, installed: LeaseStamp) -> bool {
 pub unsafe trait RuntimeLease: Sync {
     fn begin(&self, owner: u32, player: u64) -> Option<LeaseStamp>;
     fn current(&self, stamp: LeaseStamp, player: u64) -> bool;
+    fn accepts_entry(&self, installed: LeaseStamp, current: LeaseStamp, _player: u64) -> bool {
+        same_registration(current, installed)
+    }
+    /// Only the natural stage-2 callback invokes these; never a property hook.
+    fn before_original(&self, _stamp: LeaseStamp, _player: u64, _definition: PaymentDefinition) {}
+    fn after_original(&self, _stamp: LeaseStamp, _player: u64, _definition: PaymentDefinition) {}
+    fn on_unwind(&self) {}
 }
 
 #[repr(C)]
@@ -176,6 +183,9 @@ unsafe extern "system" fn unwind_observer(
     _dispatcher: *mut std::ffi::c_void,
 ) -> i32 {
     if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
+        if let Some(binding) = BINDING.get() {
+            binding.lease.on_unwind();
+        }
         let _ = INVOCATION.try_with(|c| c.set(None));
         let _ = DEPTH.try_with(|d| d.set(0));
         let _ = CAPTURE.try_with(|c| {
@@ -247,7 +257,9 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
                     .filter(|s| {
                         identity(*s)
                             && s.owner == binding.owner
-                            && same_registration(*s, binding.installed)
+                            && binding
+                                .lease
+                                .accepts_entry(binding.installed, *s, binding.player)
                     })
                     .map(|stamp| Invocation {
                         stamp,
@@ -358,6 +370,35 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
     });
 }
 
+// Engine exceptions are allowed through this frame and are handled by the
+// gateway's SEH boundary; never route them into observe's catch_unwind.
+extern "system-unwind" fn native_action(raw: *const Registers, after: u32) {
+    let Some(binding) = BINDING.get() else { return };
+    let raw = unsafe { &*raw };
+    if raw.site != 0
+        || raw.ticket & (1u64 << 63) == 0
+        || !ACTIVE.load(Ordering::Acquire)
+        || DEPTH.with(Cell::get) != 1
+    {
+        return;
+    }
+    let Some(i) = INVOCATION.with(Cell::get) else {
+        return;
+    };
+    if !binding.lease.current(i.stamp, i.player) {
+        return;
+    }
+    if after == 0 {
+        binding
+            .lease
+            .before_original(i.stamp, i.player, binding.definition)
+    } else {
+        binding
+            .lease
+            .after_original(i.stamp, i.player, binding.definition)
+    }
+}
+
 // Every target is published once BEFORE registration and retained permanently.
 // Removing a registration never points a delayed invocation at another target.
 #[unsafe(no_mangle)]
@@ -370,7 +411,7 @@ macro_rules! gateway {
         "mov rax,[rsp+0x1b0]\nmov [rsp+0x98],rax\n",
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
         "lea rax,[rsp+0x1b8]\nmov [rsp+0x100],rax\nmov rax,[rax]\nmov [rsp+0x108],rax\nmov qword ptr [rsp+0x110],",$site,"\n",
-        "lea rcx,[rsp+0x60]\nxor edx,edx\ncall {record}\n",
+        "lea rcx,[rsp+0x60]\nxor edx,edx\ncall {record}\nlea rcx,[rsp+0x60]\nxor edx,edx\ncall {action}\n",
         // Exactly 0x60 bytes from the TRUE caller's home/stack arguments, not
         // the gateway's saved registers. All reads occur within the copied span.
         "cmp qword ptr [rsp+0x118],0\nje 8f\n",
@@ -382,14 +423,14 @@ macro_rules! gateway {
         "call qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n",
         "pushfq\npop qword ptr [rsp+0x98]\nmov [rsp+0x60],rcx\nmov [rsp+0x68],rdx\nmov [rsp+0x70],r8\nmov [rsp+0x78],r9\nmov [rsp+0x80],rax\nmov [rsp+0x88],r10\nmov [rsp+0x90],r11\n",
         "movdqu [rsp+0xa0],xmm0\nmovdqu [rsp+0xb0],xmm1\nmovdqu [rsp+0xc0],xmm2\nmovdqu [rsp+0xd0],xmm3\nmovdqu [rsp+0xe0],xmm4\nmovdqu [rsp+0xf0],xmm5\n",
-        "lea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\n",
+        "lea rcx,[rsp+0x60]\nmov edx,1\ncall {action}\nlea rcx,[rsp+0x60]\nmov edx,1\ncall {record}\n",
         "movdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\n",
         "push qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\nret\n",
         // Failed frame read: restore and tail-jump with the real original stack.
         "8:\nmovdqu xmm0,[rsp+0xa0]\nmovdqu xmm1,[rsp+0xb0]\nmovdqu xmm2,[rsp+0xc0]\nmovdqu xmm3,[rsp+0xd0]\nmovdqu xmm4,[rsp+0xe0]\nmovdqu xmm5,[rsp+0xf0]\n",
         "mov rcx,[rsp+0x60]\nmov rdx,[rsp+0x68]\nmov r8,[rsp+0x70]\nmov r9,[rsp+0x78]\nmov rax,[rsp+0x80]\nmov r10,[rsp+0x88]\nmov r11,[rsp+0x90]\npush qword ptr [rsp+0x98]\npopfq\nlea rsp,[rsp+0x1b8]\njmp qword ptr [rip+AI_GATE_TARGETS+",$offset,"]\n.seh_endproc\n"
-    ),record=sym observe,unwind=sym unwind_observer);};
+    ),record=sym observe,action=sym native_action,unwind=sym unwind_observer);};
 }
 gateway!("ai_callback_gateway", "0", "0");
 gateway!("ai_checker_gateway", "1", "8");

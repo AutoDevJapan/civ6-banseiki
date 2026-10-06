@@ -30,6 +30,11 @@ mod composite;
 pub use composite::CompositeTrace;
 #[path = "windows/runtime.rs"]
 mod runtime;
+#[path = "windows/ai_runtime.rs"]
+mod ai_runtime;
+#[path = "windows/ai_operation.rs"]
+mod ai_operation;
+pub use ai_runtime::{AiObservationConfig,AiRuntimeState,AI_OBSERVATION_VERSION};
 pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;

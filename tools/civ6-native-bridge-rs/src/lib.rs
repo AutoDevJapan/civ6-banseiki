@@ -5,6 +5,10 @@
 //! raw value bytes after it returns. Private and keyed admission modes read
 //! only that natural getter result. No mode enters Lua.
 
+extern crate self as civ6_native_bridge_rs;
+#[cfg(all(windows, target_arch = "x86_64"))]
+pub mod ai_operation;
+
 /// Portable scenario limit; only the Windows module implements execution.
 pub const MAX_ACTIVE_SECONDS: u32 = 300;
 
@@ -24,6 +28,7 @@ mod windows;
 
 #[cfg(windows)]
 pub use windows::{
+    AiObservationConfig,AiRuntimeState,AI_OBSERVATION_VERSION,
     supports_atomic_promotion_fetch, AssignCalibrationObservation, AssignCalibrationTrace,
     BridgeConfig, BridgeMode, BridgeStatus, BridgeTrace, CalibrationObservation, CalibrationTrace,
     CompositeTrace, JoinedTrace, PaidAssignmentConsumer, PaidAssignmentRead, PromotionObservation,

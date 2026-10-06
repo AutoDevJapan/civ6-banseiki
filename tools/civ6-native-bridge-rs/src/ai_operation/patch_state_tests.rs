@@ -183,7 +183,7 @@ impl PatchApi for Pause {
 
 #[test]
 fn concurrent_close_and_recovery_cannot_restore_rx_before_other_cas() {
-    if !super::super::tests::child("gateway::patch_state::tests::concurrent_close_and_recovery_cannot_restore_rx_before_other_cas","CIV6_CLOSE_RACE_CHILD"){return}
+    if !super::super::tests::child("ai_operation::gateway::patch_state::tests::concurrent_close_and_recovery_cannot_restore_rx_before_other_cas","CIV6_CLOSE_RACE_CHILD"){return}
     let page = Page::new();
     let r = {
         let guard = INSTALL.lock().unwrap();

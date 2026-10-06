@@ -130,6 +130,10 @@ pub(super) fn call_current(fence: CallFence, governors: u64) -> bool {
     {
         return false;
     }
+    fence_current(fence)
+}
+
+fn fence_current(fence: CallFence) -> bool {
     let owner = fence.owner as usize;
     let binding = PRODUCT_OWNERS[owner].load();
     let snapshot = STATE[owner].load();
@@ -143,6 +147,46 @@ pub(super) fn call_current(fence: CallFence, governors: u64) -> bool {
         && STATE[owner].load() == snapshot
         && PRODUCT_OWNERS[owner].load() == binding
         && live_session(fence.session)
+}
+
+/// Uses the same transaction fence as ordinary native calls, from a current
+/// Player binding. No numeric property can manufacture this authority.
+pub(super) fn player_call_begin(player: u64) -> Option<CallFence> {
+    if !INSTALLED.load(Ordering::Acquire) || !owned() {
+        return None;
+    }
+    let owner = u32::from_le_bytes(copy_current::<4>(player.checked_add(0xd8)?)?);
+    let receiver = player.checked_add(0x528)?;
+    if owner as usize >= PRODUCTION_OWNER_LIMIT || receiver & 7 != 0 {
+        return None;
+    }
+    let session = PRODUCT_SESSION.load(Ordering::Acquire);
+    if !live_session(session) {
+        return None;
+    }
+    let fence = CallFence {
+        owner,
+        receiver,
+        session,
+        ticket: product_next_ticket()?,
+        read_state: 1,
+    };
+    player_call_current(fence, player).then_some(fence)
+}
+pub(super) fn player_call_current(fence: CallFence, player: u64) -> bool {
+    INSTALLED.load(Ordering::Acquire)
+        && owned()
+        && fence.read_state == 1
+        && fence.ticket != 0
+        && (fence.owner as usize) < PRODUCTION_OWNER_LIMIT
+        && live_session(fence.session)
+        && player.checked_add(0x528) == Some(fence.receiver)
+        && copy_current::<4>(player.checked_add(0xd8).unwrap_or(0)).map(u32::from_le_bytes)
+            == Some(fence.owner)
+        && fence_current(fence)
+}
+pub(super) fn ai_installed() -> bool {
+    INSTALLED.load(Ordering::Acquire) && owned()
 }
 
 #[derive(Clone, Copy)]
@@ -576,6 +620,111 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_ai_adapter_tracks_real_owner_catalog_transaction_and_load_fence() {
+        const CHILD: &str = "JAC_REAL_AI_ADAPTER_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result=std::process::Command::new(std::env::current_exe().unwrap()).creation_flags(0x08000000)
+                .env(CHILD,"1").args(["--exact","windows::runtime::tests::native_ai_adapter_tracks_real_owner_catalog_transaction_and_load_fence","--nocapture"])
+                .output().unwrap();
+            assert!(
+                result.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            return;
+        }
+        let mut player = [0u64; 192];
+        player[0xd8 / 8] = 2;
+        let address = player.as_ptr() as u64;
+        let receiver = address + 0x528;
+        let lease = ai_runtime::lease_for_test();
+        assert!(lease.begin(2, address).is_none());
+        assert!(product_activate());
+        OWNED.store(true, Ordering::Release);
+        INSTALLED.store(true, Ordering::Release);
+        composite::ENABLED.store(true, Ordering::Release);
+        let session = PRODUCT_SESSION.load(Ordering::Acquire);
+        assert!(reset_owner(
+            2,
+            receiver,
+            session,
+            product_next_ticket().unwrap()
+        ));
+        assert!(
+            lease.begin(2, address).is_none(),
+            "reset is not a ready catalog"
+        );
+        let publish = |key, value: bool| {
+            let token = composite::begin(receiver, key);
+            assert_ne!(token, 0);
+            composite::observe(receiver, key, token, 1, 1, u64::from(value), 0);
+        };
+        publish(crate::paid_catalog::COMMIT_KEY, false);
+        let words = std::array::from_fn::<_, { crate::paid_catalog::COUNT }, _>(|i| {
+            i as u64 | 256 | ((100 + i as u64) << 10)
+        });
+        for bit in 0..crate::paid_catalog::BITS {
+            publish(
+                crate::paid_catalog::bit_key(bit),
+                words[bit / crate::paid_catalog::WIDTH] & (1 << (bit % crate::paid_catalog::WIDTH))
+                    != 0,
+            );
+        }
+        publish(crate::paid_catalog::COMMIT_KEY, true);
+        let stamp = lease
+            .begin(2, address)
+            .expect("real committed receiver permits a call fence");
+        assert!(lease.current(stamp, address));
+        assert!(lease.begin(3, address).is_none());
+        for change in 0..7 {
+            let mut stale = stamp;
+            match change {
+                0 => stale.pid += 1,
+                1 => stale.created += 1,
+                2 => stale.owner = 3,
+                3 => stale.generation += 1,
+                4 => stale.session += 1,
+                5 => stale.begin_ticket = 1,
+                _ => stale.arm_token ^= 1,
+            };
+            assert!(!lease.current(stale, address), "field {change}");
+        }
+        assert!(!lease.current(stamp, address + 8));
+        // Begin the NEXT actual catalog transaction. Epoch need not have moved
+        // yet; the existing CallFence still rejects the old in-flight capture.
+        publish(crate::paid_catalog::COMMIT_KEY, false);
+        assert!(!lease.current(stamp, address));
+        assert!(lease.begin(2, address).is_none());
+        assert!(reset_owner(
+            2,
+            receiver,
+            session,
+            product_next_ticket().unwrap()
+        ));
+        publish(crate::paid_catalog::COMMIT_KEY, false);
+        for bit in 0..crate::paid_catalog::BITS {
+            publish(
+                crate::paid_catalog::bit_key(bit),
+                words[bit / crate::paid_catalog::WIDTH] & (1 << (bit % crate::paid_catalog::WIDTH))
+                    != 0,
+            );
+        }
+        publish(crate::paid_catalog::COMMIT_KEY, true);
+        let next = lease.begin(2, address).unwrap();
+        assert!(next.generation > stamp.generation);
+        assert!(
+            lease.accepts_entry(stamp, next, address),
+            "fresh natural call uses the newly committed owner, not an old entry token"
+        );
+        assert!(!lease.current(stamp, address));
+        assert_eq!(close(), BridgeStatus::Ok as u32);
+        assert!(!lease.current(stamp, address));
+        assert!(lease.begin(2, address).is_none());
+    }
+
+    #[test]
     fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
         let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
         let before = (
@@ -637,11 +786,14 @@ fn close() -> u32 {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput as u32;
     }
+    // Invalidate the authority before attempting any restoration. A pending
+    // cleanup must not leave AI captures active under the old transaction.
     product_deactivate();
+    let ai_restored = ai_runtime::close();
     for state in &STATE {
         state.store(0);
     }
-    if advance() {
+    if advance() && ai_restored {
         BridgeStatus::Ok as u32
     } else {
         BridgeStatus::Critical as u32

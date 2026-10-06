@@ -99,7 +99,6 @@ core::arch::global_asm!(
 unsafe extern "system" {
     fn ai_fixture_target();
     fn ai_fixture_driver(output: *mut u8, target: usize);
-    fn ai_fixture_return();
 }
 
 core::arch::global_asm!(
@@ -141,8 +140,8 @@ core::arch::global_asm!(
     "xor r8d,r8d","xor r9d,r9d","call {unwind}","add rsp,0x518","ret",".seh_endproc",
     unwind=sym RtlUnwindEx
 );
-unsafe extern "system" {
-    fn original_unwinds();
+unsafe extern "system-unwind" {
+    fn original_unwinds(state: *const u64);
 }
 
 pub(super) fn child(test: &str, marker: &str) -> bool {
@@ -181,7 +180,7 @@ pub(super) fn child(test: &str, marker: &str) -> bool {
 #[test]
 fn seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return() {
     if !child(
-        "gateway::tests::seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return",
+        "ai_operation::gateway::tests::seh_actual_unwind_cleans_thread_capture_and_preserves_outer_return",
         "CIV6_AI_UNWIND_CHILD",
     ) {
         return;
@@ -278,7 +277,7 @@ fn gateway_child_preserves_original_once_registers_flags_and_true_stack() {
         let mut command = std::process::Command::new(std::env::current_exe().unwrap());
         use std::os::windows::process::CommandExt;
         let output=command.creation_flags(0x08000000).env(ENV,"1")
-            .args(["--exact","gateway::tests::gateway_child_preserves_original_once_registers_flags_and_true_stack","--nocapture"])
+            .args(["--exact","ai_operation::gateway::tests::gateway_child_preserves_original_once_registers_flags_and_true_stack","--nocapture"])
             .output().unwrap();
         assert!(
             output.status.success(),
@@ -481,7 +480,7 @@ unsafe extern "system" fn accepted_original(receiver: u64, phase: u32) -> u64 {
 
 #[test]
 fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() {
-    if !child("gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection","CIV6_ACCEPTED_GATEWAY_CHILD"){return}
+    if !child("ai_operation::gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection","CIV6_ACCEPTED_GATEWAY_CHILD"){return}
     let mut memory = vec![0u8; 0x600];
     let receiver = memory.as_ptr() as u64;
     let player = receiver + 0x300;
