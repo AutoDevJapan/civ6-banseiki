@@ -1,3 +1,4 @@
+pub use crate::session::SessionType;
 use crate::{Error, Result};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -61,6 +62,18 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
 pub fn validate_scenario(data: &Value) -> Result<()> {
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
+    }
+    let session = SessionType::from_scenario(data)?;
+    if let Some(nonce) = data.get("hotseat_bridge_nonce") {
+        if session != SessionType::Hotseat
+            || !nonce
+                .as_str()
+                .is_some_and(crate::hotseat_bridge::nonce_valid)
+        {
+            return Err(Error::scenario(
+                "hotseat_bridge_nonce needs a 32-digit nonce and hotseat session",
+            ));
+        }
     }
     if let Some(mode) = data.get("test_mode") {
         validate_test_mode(mode)?;
@@ -167,10 +180,23 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 let players = step["players"]
                     .as_array()
                     .filter(|a| {
-                        a.len() >= 2 && a.iter().filter(|p| p["human"] == true).count() == 1
+                        let humans = a.iter().filter(|p| p["human"] == true).count();
+                        a.len() >= 2
+                            && match session {
+                                SessionType::SinglePlayer => humans == 1,
+                                SessionType::Hotseat => humans >= 2,
+                            }
                     })
                     .ok_or_else(|| {
-                        fail("specify at least two players and exactly one human".into())
+                        fail(
+                            match session {
+                                SessionType::SinglePlayer => {
+                                    "specify at least two players and exactly one human"
+                                }
+                                SessionType::Hotseat => "hotseat needs at least two human players",
+                            }
+                            .into(),
+                        )
                     })?;
                 if players.iter().any(|p| {
                     !p.is_object()
@@ -182,6 +208,11 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "autoplay" => {
+                if session == SessionType::Hotseat {
+                    return Err(fail(
+                        "autoplay does not support hotseat; use end_turn".into(),
+                    ));
+                }
                 if !step["turns"].as_i64().is_some_and(|n| n > 0) {
                     return Err(fail("turns must be positive".into()));
                 }
@@ -382,11 +413,28 @@ pub fn builds_setup(step: &Value) -> bool {
         .as_bool()
         .unwrap_or(step["ruleset"] == BANSEIKI_RULESET)
 }
+pub fn load_code(name: &str, session: SessionType) -> String {
+    let (defaults, save_type) = match session {
+        SessionType::SinglePlayer => ("", "SaveTypes.SINGLE_PLAYER"),
+        SessionType::Hotseat => (
+            "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)\n",
+            "Network.GetGameConfigurationSaveType()",
+        ),
+    };
+    format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{defaults}local ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type={save_type}, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.{})\nif ok == false then error('Network.LoadGame returned false') end\nreturn true", lua_string(name), session.server_type())
+}
 pub fn configure_code(step: &Value) -> String {
+    configure_code_for_session(step, SessionType::SinglePlayer)
+}
+pub fn configure_code_for_session(step: &Value, session: SessionType) -> String {
     let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "if not UI.IsInFrontEnd() then error('main menu required') end".into(),
-        "GameConfiguration.SetToDefaults()".into(),
+        match session {
+            SessionType::SinglePlayer => "GameConfiguration.SetToDefaults()",
+            SessionType::Hotseat => "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)",
+        }
+        .into(),
         format!(
             "GameConfiguration.SetRuleSet({})",
             lua_string(step["ruleset"].as_str().unwrap())
@@ -412,6 +460,9 @@ pub fn configure_code(step: &Value) -> String {
             "SS_COMPUTER"
         };
         lines.extend([format!("local p = PlayerConfigurations[{i}]"),format!("if not p then error('player slot {i} unavailable') end"),format!("p:SetSlotStatus(SlotStatus.{slot})"),format!("p:SetLeaderTypeName({leader})"),format!("p:SetCivilizationTypeName({civ})"),format!("if p:GetLeaderTypeName() ~= {leader} then error('leader mismatch in slot {i}') end"),format!("if p:GetCivilizationTypeName() ~= {civ} then error('civilization mismatch in slot {i}') end")]);
+    }
+    if session == SessionType::Hotseat {
+        lines.push(session.guard_code().into());
     }
     lines.push("return true".into());
     lines.join("\n")

@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
 };
 
+pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
+
 pub trait Backend: Send {
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
@@ -465,8 +467,8 @@ impl Runner {
         self.backend.disconnect();
     }
     pub fn states(&mut self, timeout: f64) -> Result<Vec<String>> {
-        self.backend.require_single_process()?;
         let deadline = self.clock.now() + timeout;
+        self.backend.require_single_process()?;
         let fetch = |this: &mut Self| -> Result<Vec<String>> {
             let remaining = this.remaining(deadline).map_err(|_| {
                 Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
@@ -643,6 +645,35 @@ impl Runner {
                 value => return value,
             }
         }
+    }
+    /// Only Tuner errors precede the mutating send; unknown replies must escape.
+    fn send_frontend_transition(&mut self, code: &str, deadline: f64) -> Result<String> {
+        self.send_frontend_transition_checked(code, deadline, || Ok(()))
+    }
+    /// Recheck a caller's pinned owner on every pre-send reconnect attempt.
+    pub fn send_frontend_transition_checked(
+        &mut self,
+        code: &str,
+        deadline: f64,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        self.send_frontend_request_checked(code, deadline, 5.0, check_owner)
+    }
+    fn send_frontend_request_checked(
+        &mut self,
+        code: &str,
+        deadline: f64,
+        request_seconds: f64,
+        mut check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        self.retry_when(
+            deadline,
+            |this| {
+                check_owner()?;
+                this.lua("FrontEnd", code, this.budget(deadline, request_seconds)?)
+            },
+            |error| error.kind == ErrorKind::Tuner,
+        )
     }
     pub fn unblock_ingame(&mut self, state: &str, deadline: f64, attempts: usize) -> Result<bool> {
         if !state_name_eq(state, "InGame") || attempts >= 3 {
@@ -1483,6 +1514,8 @@ impl Runner {
     }
     pub fn end_turn(&mut self, timeout: f64, deadline: Option<f64>) -> Result<String> {
         let deadline = deadline.unwrap_or_else(|| self.clock.now() + timeout);
+        let session = scenario::SessionType::from_scenario(&self.scenario)?;
+        self.accept_hotseat_turn(deadline, false)?;
         self.lua("InGame", CLOSE_NOTEBOOKS, self.budget(deadline, 5.0)?)?;
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
@@ -1491,16 +1524,135 @@ impl Runner {
             "return Game.GetCurrentGameTurn()",
             self.budget(deadline, 5.0)?,
         )?)?;
+        let human = if session == scenario::SessionType::Hotseat {
+            Some(parse_integer(&self.lua(
+                "InGame",
+                "return Game.GetLocalPlayer()",
+                self.budget(deadline, 5.0)?,
+            )?)?)
+        } else {
+            None
+        };
         self.close_diplomacy(deadline)?;
         self.lua(
             "InGame",
             "UI.RequestAction(ActionTypes.ACTION_ENDTURN)\nreturn true",
             self.budget(deadline, 5.0)?,
         )?;
-        self.wait(&json!({"type":"lua","state_name":"InGame","code":format!("return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",start+1)}),self.remaining(deadline)?,true)?;
+        let condition = if let Some(human) = human {
+            format!("local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nlocal turn = Game.GetCurrentGameTurn()\nif turn > {} then error('hotseat skipped more than one round') end\nreturn turn >= {start} and id >= 0 and (id ~= {human} or turn > {start}) and p ~= nil and p:IsHuman() and p:IsTurnActive()", start + 1)
+        } else {
+            format!(
+                "return Game.GetCurrentGameTurn() == {} and Game.GetLocalPlayer() >= 0",
+                start + 1
+            )
+        };
+        self.wait(
+            &json!({"type":"lua","state_name":"InGame","code":condition}),
+            self.remaining(deadline)?,
+            true,
+        )?;
+        self.accept_hotseat_turn(deadline, true)?;
         self.dismiss_advisor(deadline)?;
         self.remaining(deadline)?;
-        Ok(format!("human turn {start}->{}", start + 1))
+        if let Some(human) = human {
+            let next = self.lua("InGame", "return tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(Game.GetLocalPlayer())", self.budget(deadline, 5.0)?)?;
+            Ok(format!("hotseat turn/player {start}|{human}->{next}"))
+        } else {
+            Ok(format!("human turn {start}->{}", start + 1))
+        }
+    }
+    /// Use the official start-turn button handler, which also respects passwords.
+    fn accept_hotseat_turn(&mut self, deadline: f64, require_dialog: bool) -> Result<()> {
+        if scenario::SessionType::from_scenario(&self.scenario)? != scenario::SessionType::Hotseat {
+            return Ok(());
+        }
+        self.lua(
+            "InGame",
+            scenario::SessionType::Hotseat.guard_code(),
+            self.budget(deadline, 5.0)?,
+        )?;
+        if require_dialog {
+            self.lua(
+                "PlayerChange",
+                "JAC_AUTOTEST_HOTSEAT_CONFIRMATION = nil\nreturn true",
+                self.budget(deadline, 5.0)?,
+            )?;
+        }
+        let code = format!("local requireDialog = {require_dialog}\n{HOTSEAT_START_TURN_CODE}");
+        self.wait(
+            &json!({"type":"lua","state_name":"PlayerChange","code":code}),
+            self.remaining(deadline)?,
+            false,
+        )
+    }
+    /// Hosting/loading hotseat opens StagingRoom; its official Ready button launches it.
+    pub fn launch_hotseat_staging(&mut self, before: usize, deadline: f64) -> Result<bool> {
+        let mut last = "StagingRoom not available yet".to_string();
+        let mut reported = String::new();
+        while self.clock.now() < deadline {
+            if self.loadscreen_count()? > before {
+                return Ok(false);
+            }
+            let states = match self.states(self.budget(deadline, 5.0)?) {
+                Ok(states) => states,
+                Err(e) if e.kind == ErrorKind::Tuner => {
+                    last = e.to_string();
+                    if reported != last {
+                        self.log("hotseat_staging_states", "WAIT", &last)?;
+                        reported = last.clone();
+                    }
+                    self.disconnect();
+                    self.sleep_until(deadline, 0.2);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+            let observed = format!("Lua states after hosting/loading: {}", states.join(", "));
+            if reported != observed {
+                self.log("hotseat_staging_states", "OBSERVED", &observed)?;
+                reported = observed;
+            }
+            if states.iter().any(|s| state_name_eq(s, "StagingRoom")) {
+                let ready = self.lua("StagingRoom", "return not ContextPtr:IsHidden() and Controls.ReadyButton ~= nil and not Controls.ReadyButton:IsDisabled()", self.budget(deadline, 5.0)?);
+                match ready {
+                    Ok(v) if v == "true" => {
+                        let launched = self.lua("StagingRoom", "if not GameConfiguration.IsHotseat() or not Network.IsGameHost() then error('hotseat host required') end\nif ContextPtr:IsHidden() or Controls.ReadyButton:IsDisabled() then error('hotseat staging not ready') end\nControls.ReadyButton:DoLeftClick()\nreturn true", self.budget(deadline, 5.0)?);
+                        match launched {
+                            Ok(_) => {
+                                self.log(
+                                    "hotseat_staging",
+                                    "OK",
+                                    "official Ready button acknowledged",
+                                )?;
+                                return Ok(false);
+                            }
+                            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                                self.log("hotseat_staging", "UNKNOWN", &e.to_string())?;
+                                return Ok(true);
+                            }
+                            // Tuner errors precede the mutating Lua send. Once sent,
+                            // an uncertain result is LuaResponseUnknown, handled above.
+                            Err(e) if e.kind == ErrorKind::Tuner => {
+                                last = e.to_string();
+                                self.disconnect();
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    Ok(_) => last = "StagingRoom Ready button is hidden or disabled".into(),
+                    Err(e) if retryable(&e) => {
+                        last = e.to_string();
+                        self.disconnect();
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            self.sleep_until(deadline, 0.2);
+        }
+        Err(Error::scenario(format!(
+            "Timed out waiting for the hotseat StagingRoom Ready button; last: {last}"
+        )))
     }
     pub fn choose_dedication(&mut self, human: i64, deadline: f64) -> Result<Option<String>> {
         let code = format!("local h = {human}\n{DEDICATION_CODE}");
@@ -1519,6 +1671,23 @@ impl Runner {
         Ok(Some(value))
     }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
+        self.run_step_with_frontend_check(step, || Ok(()))
+    }
+    pub fn run_frontend_setup_step_checked(
+        &mut self,
+        step: &Value,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        if !matches!(text(step, "action"), "enable_mods" | "configure") {
+            return Err(Error::scenario("frontend setup step required"));
+        }
+        self.run_step_with_frontend_check(step, check_owner)
+    }
+    fn run_step_with_frontend_check(
+        &mut self,
+        step: &Value,
+        mut check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
         let action = text(step, "action");
         if action == "manual" {
             self.backend.manual(text(step, "prompt"))?;
@@ -1536,14 +1705,15 @@ impl Runner {
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
-                let disabled = self.lua(
-                    "FrontEnd",
+                let disabled = self.send_frontend_request_checked(
                     &scenario::enable_mods_code_with_scope(
                         &ids,
                         &strings(&step["disable_ids"]),
                         step["exclusive_user_mods"] == true,
                     ),
-                    self.remaining(deadline)?,
+                    deadline,
+                    timeout,
+                    &mut check_owner,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
@@ -1556,10 +1726,11 @@ impl Runner {
                 ))
             }
             "configure" => {
-                self.lua(
-                    "FrontEnd",
-                    &scenario::configure_code(step),
-                    self.budget(deadline, 5.0)?,
+                let session = scenario::SessionType::from_scenario(&self.scenario)?;
+                self.send_frontend_transition_checked(
+                    &scenario::configure_code_for_session(step, session),
+                    deadline,
+                    &mut check_owner,
                 )?;
                 self.ruleset = Some(text(step, "ruleset").into());
                 let build = scenario::builds_setup(step);
@@ -1570,7 +1741,20 @@ impl Runner {
                         self.budget(deadline, 30.0)?,
                     )?;
                 }
-                self.lua("FrontEnd",&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),self.budget(deadline,5.0)?)?;
+                self.send_frontend_transition_checked(&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),deadline,&mut check_owner)?;
+                if let Some(nonce) = self.scenario["hotseat_bridge_nonce"]
+                    .as_str()
+                    .map(str::to_string)
+                {
+                    let code = format!("GameConfiguration.SetValue('JAC_HOTSEAT_BRIDGE_NONCE', {})\nreturn GameConfiguration.GetValue('JAC_HOTSEAT_BRIDGE_NONCE')", scenario::lua_string(&nonce));
+                    let observed =
+                        self.send_frontend_transition_checked(&code, deadline, &mut check_owner)?;
+                    if observed.trim().trim_matches('"') != nonce {
+                        return Err(Error::scenario(
+                            "hotseat test nonce did not persist in GameConfiguration",
+                        ));
+                    }
+                }
                 Ok(format!(
                     "{}, {}, {}, seed={}, players={}{}",
                     text(step, "ruleset"),
@@ -1607,6 +1791,10 @@ impl Runner {
                 ))
             }
             "start_game" => {
+                let session = scenario::SessionType::from_scenario(&self.scenario)?;
+                if self.owner_start && session == scenario::SessionType::Hotseat {
+                    return Err(Error::scenario("owner_start only supports single-player"));
+                }
                 let before = self.loadscreen_count()?;
                 if self.owner_start {
                     self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
@@ -1619,10 +1807,33 @@ impl Runner {
                         "owner pressed Start Game; single-player game reached InGame".into(),
                     );
                 }
-                let unknown=match self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_NONE)\nreturn true",self.budget(deadline,5.0)?) {Ok(_)=>false,Err(e) if e.kind==ErrorKind::LuaResponseUnknown=>{println!("HostGame response interrupted during transition: {e}");true},Err(e)=>return Err(e)};
+                let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nNetwork.HostGame(ServerType.{})\nreturn true", session.guard_code(), session.server_type());
+                let mut unknown = match self.send_frontend_transition(&code, deadline) {
+                    Ok(_) => false,
+                    Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                        println!("HostGame response interrupted during transition: {e}");
+                        true
+                    }
+                    Err(e) => return Err(e),
+                };
+                if session == scenario::SessionType::Hotseat {
+                    self.log(
+                        "hotseat_host",
+                        if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
+                        "HostGame sent once; preparing to query the staging Lua states",
+                    )?;
+                    unknown |= self.launch_hotseat_staging(before, deadline)?;
+                }
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
-                Ok("single-player game reached InGame".into())
+                self.accept_hotseat_turn(deadline, true)?;
+                Ok(match session {
+                    scenario::SessionType::SinglePlayer => "single-player game reached InGame",
+                    scenario::SessionType::Hotseat => {
+                        "hotseat game reached InGame; start-turn accepted"
+                    }
+                }
+                .into())
             }
             "autoplay" => {
                 let options = AutoplayOptions {
@@ -1858,6 +2069,7 @@ impl Runner {
                 target.display()
             )));
         }
+        self.accept_hotseat_turn(deadline, false)?;
         self.close_options_menu(deadline)?;
         self.dismiss_advisor(deadline)?;
         let code=format!("JAC_AUTOTEST_SAVE_DONE = false\nif JAC_AUTOTEST_SAVE_HANDLER then Events.SaveComplete.Remove(JAC_AUTOTEST_SAVE_HANDLER) end\nJAC_AUTOTEST_SAVE_HANDLER = function() JAC_AUTOTEST_SAVE_DONE = true end\nEvents.SaveComplete.Add(JAC_AUTOTEST_SAVE_HANDLER)\nlocal result = Network.SaveGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=Network.GetGameConfigurationSaveType(), IsAutosave=false, IsQuicksave=false}})\nif result == false then error('Network.SaveGame returned false') end\nreturn true",scenario::lua_string(&name));
@@ -1913,10 +2125,11 @@ impl Runner {
                 path.display()
             )));
         }
-        let code=format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type=SaveTypes.SINGLE_PLAYER, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.SERVER_TYPE_NONE)\nif ok == false then error('Network.LoadGame returned false') end\nreturn true",scenario::lua_string(&name));
+        let session = scenario::SessionType::from_scenario(&self.scenario)?;
+        let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
         let started = self.clock.now();
-        let unknown = match self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?) {
+        let mut unknown = match self.send_frontend_transition(&code, deadline) {
             Ok(_) => false,
             Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
                 println!("LoadGame response interrupted during transition: {e}");
@@ -1924,7 +2137,11 @@ impl Runner {
             }
             Err(e) => return Err(e),
         };
+        if session == scenario::SessionType::Hotseat {
+            unknown |= self.launch_hotseat_staging(before, deadline)?;
+        }
         self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        self.accept_hotseat_turn(deadline, true)?;
         if step["metrics"] == true {
             let seconds = self.clock.now() - started;
             let turn = parse_integer(&self.lua(
