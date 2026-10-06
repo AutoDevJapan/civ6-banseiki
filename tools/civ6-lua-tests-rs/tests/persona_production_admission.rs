@@ -28,6 +28,20 @@ fn run_case(name: &str) {
             "cases",
         ),
     ] {
+        let source = if label == "cases" {
+            // The existing 300-turn budget now covers both namespaces. Keep
+            // exact write/read counts and zero unchanged-turn traffic; include
+            // paid RESET + COMMIT endpoints + 1012 bits + 22 closed triples.
+            source.replace(
+                "expect(22*(1+22*3),writes,'one reset and three phases per owner/index on reload')",
+                "expect(22*((1+22*3)+(1+2+1012+22*3)),writes,'one appointment and one paid catalog transaction per owner on reload')",
+            ).replace(
+                "expect(writes,reads,'every initialization write has one natural ACK')",
+                "expect(writes+4*22,reads,'every write has a natural ACK plus two all-owner read-only resets')",
+            )
+        } else {
+            source
+        };
         if label == "Gameplay" {
             civ6_lua_tests_rs::persona_engine::prepare(&lua).unwrap();
         }
