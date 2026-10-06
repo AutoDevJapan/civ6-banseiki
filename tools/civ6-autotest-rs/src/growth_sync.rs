@@ -40,7 +40,7 @@ impl fmt::Display for UnitKey {
 pub struct GrowthRecord {
     pub key: UnitKey,
     pub level: u8,
-    /// Finite, nonnegative Lua number. Comparison uses exact numeric equality.
+    /// Finite, nonnegative integer-valued Lua number. Comparison uses exact numeric equality.
     pub xp: f64,
     pub personality: String,
     pub trait_name: String,
@@ -164,12 +164,12 @@ impl Checkpoint {
             let xp = fields[3]
                 .parse::<f64>()
                 .ok()
-                .filter(|n| n.is_finite() && *n >= 0.0)
+                .filter(|n| n.is_finite() && *n >= 0.0 && n.fract() == 0.0)
                 .ok_or_else(|| {
                     invalid(
                         endpoint,
                         &format!("{key}.XP"),
-                        format!("expected finite nonnegative number, got {:?}", fields[3]),
+                        format!("expected finite nonnegative integer, got {:?}", fields[3]),
                     )
                 })?;
             for (field, value, allow_empty) in [
