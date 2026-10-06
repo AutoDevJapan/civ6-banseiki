@@ -478,7 +478,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
     db.execute_batch(sql)?;
     let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
-    assert_eq!(count, 32);
+    assert_eq!(count, 33);
     for (id, amount, kind, property) in [
         (
             "JAC_TODO134_QCAL_INPUT_512",
@@ -509,6 +509,12 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
             "15",
             "MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION",
             "JAC_TODO134_QCAL_P15_ON",
+        ),
+        (
+            "JAC_TODO134_QCAL_P25",
+            "25",
+            "MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION",
+            "JAC_TODO134_QCAL_P25_ON",
         ),
     ] {
         let (actual_kind, actual_amount, actual_property): (String, String, String) = db.query_row(

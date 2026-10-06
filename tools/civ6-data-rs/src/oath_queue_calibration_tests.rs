@@ -102,8 +102,9 @@ CityManager={CanStartOperation=function()return can_start end,RequestOperation=f
 fn verdict(mode: &str) -> Result<serde_json::Value> {
     let vm = Lua::new();
     let lua = format!(
-        "{LUA_HELPERS}\n{}\n{COMPARE}",
-        OBSERVATIONS.replace("__MODE__", &serde_json::to_string(mode)?)
+        "{LUA_HELPERS}\n{}\n{}",
+        OBSERVATIONS.replace("__MODE__", &serde_json::to_string(mode)?),
+        compare_code(1)
     );
     let LuaValue::String(value) = vm.load(lua).eval::<LuaValue>()? else {
         anyhow::bail!("calibration verdict is not JSON");
@@ -123,6 +124,30 @@ fn real_progress_establishes_a_diagnostic_verdict_without_using_displayed_yield(
     assert!(result["inputs"][0]["two_step_width"].as_f64().unwrap() < 0.005);
     assert!(!COMPARE.contains("GetYield"));
     assert!(!COMPARE.contains("city_yield"));
+    Ok(())
+}
+
+#[test]
+fn quarter_control_keeps_its_phase_identity_and_cannot_accept_the_one_percent_data() -> Result<()> {
+    let vm = Lua::new();
+    vm.load(
+        OBSERVATIONS
+            .replace("__MODE__", "'ok'")
+            .replace("{100,1,15}", "{100,25,15}")
+            .replace("and 520 or 4103", "and 519 or 4103"),
+    )
+    .exec()?;
+    let value = vm
+        .load(format!("{LUA_HELPERS}\n{}", compare_code(25)))
+        .eval::<String>()?;
+    let value: serde_json::Value = serde_json::from_str(&value)?;
+    assert_eq!(value["accepted"], false);
+    assert_eq!(value["calibration_established"], true, "{value}");
+    assert_eq!(value["inputs"][0]["proportional_25_and_15"], true);
+    assert!(vm
+        .load(format!("{LUA_HELPERS}\n{}", compare_code(1)))
+        .exec()
+        .is_err());
     Ok(())
 }
 
@@ -184,15 +209,15 @@ fn generated_observation_rejects_changed_queue_cost_owner_and_skipped_or_duplica
     vm.load(r#"
 current_turn=7; progress=100; cost=131072; current_hash=123; current_owner=0; requests=0
 props={JAC_TODO134_QCAL_STATE={index=1,input=512,percent=0,rep=0,slot='warmup'},JAC_TODO134_QCAL_CORE={index=1,stage='before',turn=7,city=3,plot=22,owner=0,production=520}}
-Game={GetCurrentGameTurn=function()return current_turn end,GetProperty=function(_,key)return props[key] end}
+Game={GetLocalPlayer=function()return 0 end,GetCurrentGameTurn=function()return current_turn end,GetProperty=function(_,key)return props[key] end}
 local plot={GetOwner=function()return current_owner end,GetIndex=function()return 22 end}
 Map={GetPlotByIndex=function()return plot end,GetPlot=function()return plot end}
 local queue={GetCurrentProductionTypeHash=function()return current_hash end,GetUnitProgress=function()return progress end,GetUnitCost=function()return cost end}
 local growth={GetHappinessNonFoodYieldModifier=function()return 0 end}
 local city={GetOwner=function()return current_owner end,GetX=function()return 1 end,GetY=function()return 1 end,GetBuildQueue=function()return queue end,GetYield=function()return 4103 end,GetGrowth=function()return growth end}
-Players={[0]={GetCities=function()return {FindID=function()return city end} end,IsTurnActive=function()return true end}}
+Players={[0]={GetCities=function()return {FindID=function()return city end} end,IsTurnActive=function()return true end,IsTurnActiveComplete=function()return true end}}
 GameInfo={Units={UNIT_SPEARMAN={Index=1}},Yields={YIELD_PRODUCTION={Index=0}}}
-ActionTypes={ACTION_ENDTURN=1}; UI={RequestAction=function()requests=requests+1 end}
+ActionTypes={ACTION_ENDTURN=1}; UI={RequestAction=function()requests=requests+1 end,CanEndTurn=function()return true end,HasSentTurnComplete=function()return false end,IsProcessingMessages=function()return false end}
 JAC_QUEUE_CAL={city=3,plot=22,owner=0,unit_hash=123,cost=nil,samples={}}
 "#).exec()?;
     let before = format!(
@@ -251,13 +276,75 @@ fn generated_diagnostic_is_finite_and_keeps_every_native_turn_in_one_save() -> R
     assert_eq!(
         steps
             .iter()
-            .filter(|s| s["action"] == "wait_for" && s["close_diplomacy"] == true)
+            .filter(|s| s["action"] == "wait_for"
+                && s["close_diplomacy"] == true
+                && s["condition"]["code"]
+                    .as_str()
+                    .is_some_and(|c| c.contains("JAC_QUEUE_CAL")))
             .count(),
         38
     );
     assert!(steps.iter().all(|s| s["action"] != "autoplay"));
     for step in steps.iter().filter_map(|s| s["code"].as_str()) {
         Lua::new().load(step).into_function()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn generated_quarter_control_retains_all_native_requests_and_has_no_placeholders() -> Result<()> {
+    let repo = Repository::checked_in();
+    let data = quarter_control_scenario(&repo.json(super::super::BASE)?)?;
+    assert_eq!(data["diagnostic_only"], true);
+    assert_eq!(data["control_percent"], 25);
+    assert_eq!(data["finite_turns"], 38);
+    let steps = data["steps"].as_array().unwrap();
+    assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 1);
+    assert_eq!(
+        steps
+            .iter()
+            .filter(|s| s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,")))
+            .count(),
+        38
+    );
+    let mut quarter_on = 0;
+    for step in steps.iter().filter_map(|s| s["code"].as_str()) {
+        assert!(!step.contains("__CONTROL_PERCENT__"));
+        Lua::new().load(step).into_function()?;
+        if step.contains("percent=25") && step.contains("slot=\"on\"") {
+            quarter_on += 1;
+        }
+    }
+    assert_eq!(quarter_on, 4);
+    Ok(())
+}
+
+#[test]
+fn activation_gates_reject_pending_messages_and_sent_or_incomplete_turns() -> Result<()> {
+    let vm = Lua::new();
+    let reset = r#"
+active=true;complete=true;can_end=true;sent=false;processing=false;local_id=0;requests=0
+Game={GetLocalPlayer=function()return local_id end}
+Players={[0]={IsTurnActive=function()return active end,IsTurnActiveComplete=function()return complete end}}
+UI={CanEndTurn=function()return can_end end,HasSentTurnComplete=function()return sent end,IsProcessingMessages=function()return processing end,RequestAction=function()requests=requests+1 end}
+"#;
+    vm.load(reset).exec()?;
+    assert!(vm.load(READY_CORE).eval::<bool>()?);
+    assert!(vm.load(READY_UI).eval::<bool>()?);
+    for mutation in [
+        "active=false",
+        "complete=false",
+        "can_end=false",
+        "sent=true",
+        "processing=true",
+        "local_id=1",
+    ] {
+        vm.load(reset).exec()?;
+        vm.load(mutation).exec()?;
+        assert!(!vm.load(READY_UI).eval::<bool>()?, "{mutation}");
+        assert_eq!(vm.load("return requests").eval::<i64>()?, 0);
     }
     Ok(())
 }

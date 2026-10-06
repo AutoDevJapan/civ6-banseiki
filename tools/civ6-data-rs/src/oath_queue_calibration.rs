@@ -12,7 +12,14 @@ INSERT INTO RequirementArguments (RequirementId,Name,Value) VALUES ('JAC_TODO134
 INSERT INTO RequirementSets (RequirementSetId,RequirementSetType) VALUES ('JAC_TODO134_QCAL_INPUT_512_SET','REQUIREMENTSET_TEST_ALL'),('JAC_TODO134_QCAL_GROWTH_SET','REQUIREMENTSET_TEST_ALL'),('JAC_TODO134_QCAL_P100_SET','REQUIREMENTSET_TEST_ALL'),('JAC_TODO134_QCAL_P1_SET','REQUIREMENTSET_TEST_ALL'),('JAC_TODO134_QCAL_P15_SET','REQUIREMENTSET_TEST_ALL');\n\
 INSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_QCAL_INPUT_512_SET','JAC_TODO134_QCAL_INPUT_512_REQ'),('JAC_TODO134_QCAL_GROWTH_SET','JAC_TODO134_QCAL_GROWTH_REQ'),('JAC_TODO134_QCAL_P100_SET','JAC_TODO134_QCAL_P100_REQ'),('JAC_TODO134_QCAL_P1_SET','JAC_TODO134_QCAL_P1_REQ'),('JAC_TODO134_QCAL_P15_SET','JAC_TODO134_QCAL_P15_REQ');\n\
 INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) VALUES ('JAC_TODO134_QCAL_INPUT_512','MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE','JAC_TODO134_QCAL_INPUT_512_SET'),('JAC_TODO134_QCAL_GROWTH','MODIFIER_PLAYER_CITIES_ADJUST_CITY_GROWTH','JAC_TODO134_QCAL_GROWTH_SET'),('JAC_TODO134_QCAL_P100','MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION','JAC_TODO134_QCAL_P100_SET'),('JAC_TODO134_QCAL_P1','MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION','JAC_TODO134_QCAL_P1_SET'),('JAC_TODO134_QCAL_P15','MODIFIER_PLAYER_CITIES_ADJUST_MILITARY_UNITS_PRODUCTION','JAC_TODO134_QCAL_P15_SET');\n\
-INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_INPUT_512','YieldType','YIELD_PRODUCTION'),('JAC_TODO134_QCAL_INPUT_512','Amount','512'),('JAC_TODO134_QCAL_GROWTH','Amount','-1000'),('JAC_TODO134_QCAL_P100','Amount','100'),('JAC_TODO134_QCAL_P1','Amount','1'),('JAC_TODO134_QCAL_P15','Amount','15');\n"
+INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_INPUT_512','YieldType','YIELD_PRODUCTION'),('JAC_TODO134_QCAL_INPUT_512','Amount','512'),('JAC_TODO134_QCAL_GROWTH','Amount','-1000'),('JAC_TODO134_QCAL_P100','Amount','100'),('JAC_TODO134_QCAL_P1','Amount','1'),('JAC_TODO134_QCAL_P15','Amount','15');\n\
+-- Exact-quarter control uses the same modifier family and independent flag.\n\
+INSERT INTO Requirements (RequirementId,RequirementType) SELECT 'JAC_TODO134_QCAL_P25_REQ',RequirementType FROM Requirements WHERE RequirementId='JAC_TODO134_QCAL_P1_REQ';\n\
+INSERT INTO RequirementArguments (RequirementId,Name,Value) SELECT 'JAC_TODO134_QCAL_P25_REQ',Name,REPLACE(Value,'JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P25_ON') FROM RequirementArguments WHERE RequirementId='JAC_TODO134_QCAL_P1_REQ';\n\
+INSERT INTO RequirementSets (RequirementSetId,RequirementSetType) SELECT 'JAC_TODO134_QCAL_P25_SET',RequirementSetType FROM RequirementSets WHERE RequirementSetId='JAC_TODO134_QCAL_P1_SET';\n\
+INSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_QCAL_P25_SET','JAC_TODO134_QCAL_P25_REQ');\n\
+INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) SELECT 'JAC_TODO134_QCAL_P25',ModifierType,'JAC_TODO134_QCAL_P25_SET' FROM Modifiers WHERE ModifierId='JAC_TODO134_QCAL_P1';\n\
+INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_P25','Amount','25');\n"
 }
 
 const SETUP: &str = r#"
@@ -23,11 +30,11 @@ assert(unit.Cost==131072,'calibration-only spear cost was not loaded')
 if unit.PrereqTech then Players[0]:GetTechs():SetTech(assert(GameInfo.Technologies[unit.PrereqTech]).Index,true) end
 local player=assert(Players[0]); assert(player:IsHuman() and player:IsTurnActive(),'human player is not active')
 assert(not Game:GetProperty('JAC_TODO134_QCAL_ATTACHED'),'calibration already attached')
-for _,id in ipairs({'JAC_TODO134_HEADROOM_PRODUCTION','JAC_TODO134_QCAL_INPUT_512','JAC_TODO134_QCAL_GROWTH','JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15'}) do player:AttachModifierByID(id) end
+for _,id in ipairs({'JAC_TODO134_HEADROOM_PRODUCTION','JAC_TODO134_QCAL_INPUT_512','JAC_TODO134_QCAL_GROWTH','JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15','JAC_TODO134_QCAL_P25'}) do player:AttachModifierByID(id) end
 for _,city in player:GetCities():Members() do
  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
  assert(city:GetOwner()==0 and plot:GetOwner()==0,'calibration owner changed')
- for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_GROWTH_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON'}) do plot:SetProperty(key,0) end
+ for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_GROWTH_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON','JAC_TODO134_QCAL_P25_ON'}) do plot:SetProperty(key,0) end
 end
 Game:SetProperty('JAC_TODO134_QCAL_ATTACHED',true)
 -- Game properties are writable only in GameCore. Publish the candidate before
@@ -70,8 +77,8 @@ local city=assert(Players[0]:GetCities():FindID(id.city),'calibration city missi
 local plot=assert(Map.GetPlotByIndex(id.plot),'calibration plot missing')
 assert(city:GetOwner()==0 and plot:GetOwner()==0 and Map.GetPlot(city:GetX(),city:GetY()):GetIndex()==id.plot,'calibration city/owner/plot changed')
 assert((state.input==512 or state.input==4096) and (state.slot=='warmup' or state.slot=='off_before' or state.slot=='on' or state.slot=='off_after'),'invalid finite phase')
-assert(state.slot=='warmup' or state.percent==100 or state.percent==1 or state.percent==15,'invalid military percent')
-for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON'}) do plot:SetProperty(key,0) end
+assert(state.slot=='warmup' or state.percent==100 or state.percent==1 or state.percent==15 or state.percent==25,'invalid military percent')
+for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON','JAC_TODO134_QCAL_P25_ON'}) do plot:SetProperty(key,0) end
 plot:SetProperty('JAC_TODO134_QCAL_GROWTH_ON',1)
 plot:SetProperty(state.input==512 and 'JAC_TODO134_QCAL_INPUT_512_ON' or 'JAC_TODO134_HEADROOM_ON',1)
 if state.slot=='on' then plot:SetProperty('JAC_TODO134_QCAL_P'..state.percent..'_ON',1) end
@@ -80,6 +87,7 @@ return string.format('calibration phase %d input=%d percent=%d rep=%d %s',state.
 "#;
 
 const CORE: &str = r#"
+assert(Players[0]:IsTurnActive() and Players[0]:IsTurnActiveComplete(),'core turn activation is not complete')
 local state=assert(Game:GetProperty('JAC_TODO134_QCAL_STATE'),'phase missing')
 assert(state.index==__INDEX__,'core phase index changed')
 local id=assert(Game:GetProperty('JAC_TODO134_QCAL_ID'))
@@ -92,7 +100,7 @@ local queue_ok,q=pcall(function()return city:GetBuildQueue() end)
 if not queue_ok then q=nil end
 local unit=assert(GameInfo.Units.UNIT_SPEARMAN)
 local ok,nonfood=pcall(function()return city:GetGrowth():GetHappinessNonFoodYieldModifier() end)
-local row={index=state.index,stage=__STAGE__,turn=Game.GetCurrentGameTurn(),city=id.city,plot=id.plot,owner=id.owner,production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core displayed production'),nonfood_ok=ok and finite(nonfood),nonfood=ok and finite(nonfood) and nonfood or nil}
+local row={index=state.index,stage=__STAGE__,turn=Game.GetCurrentGameTurn(),city=id.city,plot=id.plot,owner=id.owner,activation_complete=Players[0]:IsTurnActiveComplete(),production=number(city:GetYield(GameInfo.Yields.YIELD_PRODUCTION.Index),'core displayed production'),nonfood_ok=ok and finite(nonfood),nonfood=ok and finite(nonfood) and nonfood or nil}
 local hash_ok,hash=pcall(function()return q:GetCurrentProductionTypeHash() end)
 local progress_ok,progress=pcall(function()return q:GetUnitProgress(unit.Index) end)
 local cost_ok,cost=pcall(function()return q:GetUnitCost(unit.Index) end)
@@ -100,10 +108,11 @@ row.queue_hash=hash_ok and type(hash)=='number' and hash or nil
 row.queue_progress=progress_ok and finite(progress) and progress or nil
 row.queue_cost=cost_ok and finite(cost) and cost or nil
 Game:SetProperty('JAC_TODO134_QCAL_CORE',row)
-return string.format('{"context":"GameCore_Tuner","index":%d,"stage":%s,"turn":%d,"city":%d,"plot":%d,"production":%.9f,"happiness_nonfood":%s,"queue_hash":%s,"queue_progress":%s,"queue_cost":%s}',row.index,jstr(row.stage),row.turn,row.city,row.plot,row.production,row.nonfood and string.format('%.9f',row.nonfood) or 'null',row.queue_hash and string.format('%.0f',row.queue_hash) or 'null',row.queue_progress and string.format('%.9f',row.queue_progress) or 'null',row.queue_cost and string.format('%.9f',row.queue_cost) or 'null')
+return string.format('{"context":"GameCore_Tuner","index":%d,"stage":%s,"turn":%d,"city":%d,"plot":%d,"activation_complete":%s,"production":%.9f,"happiness_nonfood":%s,"queue_hash":%s,"queue_progress":%s,"queue_cost":%s}',row.index,jstr(row.stage),row.turn,row.city,row.plot,tostring(row.activation_complete),row.production,row.nonfood and string.format('%.9f',row.nonfood) or 'null',row.queue_hash and string.format('%.0f',row.queue_hash) or 'null',row.queue_progress and string.format('%.9f',row.queue_progress) or 'null',row.queue_cost and string.format('%.9f',row.queue_cost) or 'null')
 "#;
 
 const OBSERVE: &str = r#"
+assert(Players[0]:IsTurnActive() and Players[0]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages(),'UI turn activation is not complete')
 local data=assert(JAC_QUEUE_CAL,'calibration UI state missing')
 local state=assert(Game:GetProperty('JAC_TODO134_QCAL_STATE'),'phase missing')
 assert(state.index==__INDEX__,'UI phase index changed')
@@ -137,7 +146,7 @@ else
  assert(cost==row.cost and progress>row.before and progress<cost,'actual progress missing or queue completed')
  row.after=progress; row.delta=progress-row.before; row.after_diagnostic=diagnostic
 end
-return string.format('{"context":"InGame","index":%d,"stage":%s,"turn":%d,"input":%d,"percent":%d,"rep":%d,"slot":%s,"city":%d,"plot":%d,"progress":%.9f,"cost":%.9f,"ui_production":%.9f,"core_production":%.9f,"ui_happiness_nonfood":%s,"core_happiness_nonfood":%s}',state.index,jstr(stage),Game.GetCurrentGameTurn(),state.input,state.percent,state.rep,jstr(state.slot),data.city,data.plot,progress,cost,yield,core.production,diagnostic.nonfood and string.format('%.9f',diagnostic.nonfood) or 'null',core.nonfood and string.format('%.9f',core.nonfood) or 'null')
+return string.format('{"context":"InGame","index":%d,"stage":%s,"turn":%d,"input":%d,"percent":%d,"rep":%d,"slot":%s,"city":%d,"plot":%d,"activation_complete":true,"can_end":true,"turn_sent":false,"processing":false,"progress":%.9f,"cost":%.9f,"ui_production":%.9f,"core_production":%.9f,"ui_happiness_nonfood":%s,"core_happiness_nonfood":%s}',state.index,jstr(stage),Game.GetCurrentGameTurn(),state.input,state.percent,state.rep,jstr(state.slot),data.city,data.plot,progress,cost,yield,core.production,diagnostic.nonfood and string.format('%.9f',diagnostic.nonfood) or 'null',core.nonfood and string.format('%.9f',core.nonfood) or 'null')
 "#;
 
 const END_TURN: &str = r#"
@@ -149,13 +158,25 @@ UI.RequestAction(ActionTypes.ACTION_ENDTURN,{REASON='UserForced'})
 return 'one native human end-turn requested for calibration sample '..__INDEX__
 "#;
 
+// Official ActionPanel distinguishes activation completion from an end-turn
+// request. An active player alone is insufficient for a production snapshot.
+const READY_CORE: &str =
+    "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()";
+const READY_UI: &str = "local p=Players[0]; return Game.GetLocalPlayer()==0 and p and p:IsTurnActive() and p:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages()";
+
+fn ready_steps(steps: &mut Vec<Value>) {
+    for (context, code) in [("GameCore_Tuner", READY_CORE), ("InGame", READY_UI)] {
+        steps.push(json!({"action":"wait_for","timeout":180,"close_diplomacy":true,"condition":{"type":"lua","state_name":context,"code":code}}));
+    }
+}
+
 // The verdict reads only GetUnitProgress before/after differences. GetYield and
 // happiness snapshots remain evidence, never a denominator or expected delta.
 const COMPARE: &str = r#"
 local data=assert(JAC_QUEUE_CAL,'calibration samples missing')
 assert(#data.samples==38,'every bounded calibration turn is required')
 local previous=nil; local buckets={[512]={},[4096]={}}; local readings={[512]={},[4096]={}}
-local percent_order={100,1,15}; local slot_order={'off_before','on','off_after'}
+local percent_order={100,__CONTROL_PERCENT__,15}; local slot_order={'off_before','on','off_after'}
 for index,row in ipairs(data.samples) do
  number(row.before,'progress before'); number(row.after,'progress after'); number(row.delta,'progress delta'); number(row.cost,'queue cost')
  assert(row.index==index and row.requested and row.city==data.city and row.plot==data.plot and row.owner==data.owner,'calibration identity or request changed')
@@ -182,9 +203,9 @@ for index,row in ipairs(data.samples) do
 end
 local outcomes={}; local established=true
 for _,input in ipairs({512,4096}) do
- local step=reported_step(readings[input]); local off={}; local effects={[100]={},[1]={},[15]={}}
+ local step=reported_step(readings[input]); local off={}; local effects={[100]={},[__CONTROL_PERCENT__]={},[15]={}}
  local complete=step~=nil and finite(step) and step>0
- for _,percent in ipairs({100,1,15}) do
+ for _,percent in ipairs({100,__CONTROL_PERCENT__,15}) do
   local reps=buckets[input][percent]
   for rep=1,2 do
    local group=reps and reps[rep]
@@ -198,7 +219,7 @@ for _,input in ipairs({512,4096}) do
  local restored=complete; local repeated=complete; local proportional=complete
  if complete then
   for _,delta in ipairs(off) do if math.abs(delta-off[1])>step+0.00002 then restored=false end end
-  for _,percent in ipairs({100,1,15}) do
+  for _,percent in ipairs({100,__CONTROL_PERCENT__,15}) do
    if math.abs(effects[percent][1]-effects[percent][2])>2*step+0.00002 then repeated=false end
   end
  end
@@ -206,13 +227,13 @@ for _,input in ipairs({512,4096}) do
  local width=reference and reference>0 and 2*step/reference or nil
  local precise=width~=nil and width<0.005
  if precise then
-  for _,percent in ipairs({1,15}) do
+  for _,percent in ipairs({__CONTROL_PERCENT__,15}) do
    for rep=1,2 do if math.abs(effects[percent][rep]/reference-percent/100)>width+0.00000001 then proportional=false end end
   end
  else proportional=false end
  local valid=complete and restored and repeated and precise and proportional
  established=established and valid
- outcomes[#outcomes+1]=string.format('{"input":%d,"reference_delta":%s,"reported_step_upper_bound":%s,"two_step_width":%s,"off_restored":%s,"repeats_consistent":%s,"proportional_1_and_15":%s,"calibration_established":%s}',input,reference and string.format('%.9f',reference) or 'null',step and string.format('%.9f',step) or 'null',width and string.format('%.9f',width) or 'null',tostring(restored),tostring(repeated),tostring(proportional),tostring(valid))
+ outcomes[#outcomes+1]=string.format('{"input":%d,"reference_delta":%s,"reported_step_upper_bound":%s,"two_step_width":%s,"off_restored":%s,"repeats_consistent":%s,"proportional___CONTROL_PERCENT___and_15":%s,"calibration_established":%s}',input,reference and string.format('%.9f',reference) or 'null',step and string.format('%.9f',step) or 'null',width and string.format('%.9f',width) or 'null',tostring(restored),tostring(repeated),tostring(proportional),tostring(valid))
 end
 data.calibration_established=established
 return '{"diagnostic_only":true,"accepted":false,"calibration_established":'..tostring(established)..',"source":"GetUnitProgress before/after only","same_city":'..data.city..',"same_plot":'..data.plot..',"samples":38,"inputs":['..table.concat(outcomes,',')..']}'
@@ -223,7 +244,7 @@ local id=assert(Game:GetProperty('JAC_TODO134_QCAL_ID'))
 local city=assert(Players[0]:GetCities():FindID(id.city))
 local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
 assert(plot:GetIndex()==id.plot and city:GetOwner()==0 and plot:GetOwner()==0,'cleanup owner/plot changed')
-for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_GROWTH_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON'}) do plot:SetProperty(key,0) end
+for _,key in ipairs({'JAC_TODO134_HEADROOM_ON','JAC_TODO134_QCAL_INPUT_512_ON','JAC_TODO134_QCAL_GROWTH_ON','JAC_TODO134_QCAL_P100_ON','JAC_TODO134_QCAL_P1_ON','JAC_TODO134_QCAL_P15_ON','JAC_TODO134_QCAL_P25_ON'}) do plot:SetProperty(key,0) end
 return 'calibration flags restored to zero; diagnostic verdict remains observation only'
 "#;
 
@@ -252,6 +273,7 @@ fn observation_steps(
         phase_code(index, input, percent, rep, slot),
     ));
     for stage in ["before", "after"] {
+        ready_steps(steps);
         let core = CORE.replace("__INDEX__", &index.to_string()).replace(
             "__STAGE__",
             &serde_json::to_string(stage).expect("stage serializes"),
@@ -276,6 +298,19 @@ fn observation_steps(
 }
 
 pub(super) fn scenario(base: &Value) -> Result<Value> {
+    scenario_with_control(base, 1)
+}
+
+pub(super) fn quarter_control_scenario(base: &Value) -> Result<Value> {
+    scenario_with_control(base, 25)
+}
+
+fn compare_code(control: i64) -> String {
+    COMPARE.replace("__CONTROL_PERCENT__", &control.to_string())
+}
+
+fn scenario_with_control(base: &Value, control: i64) -> Result<Value> {
+    assert!(control == 1 || control == 25);
     let mut steps = first_steps(base, "CIVILIZATION_JAC_ODA")?;
     let setup = steps[2]["code"]
         .as_str()
@@ -291,7 +326,7 @@ pub(super) fn scenario(base: &Value) -> Result<Value> {
     for input in [512, 4096] {
         index += 1;
         observation_steps(&mut steps, index, input, 0, 0, "warmup");
-        for percent in [100, 1, 15] {
+        for percent in [100, control, 15] {
             for rep in 1..=2 {
                 for slot in ["off_before", "on", "off_after"] {
                     index += 1;
@@ -301,10 +336,10 @@ pub(super) fn scenario(base: &Value) -> Result<Value> {
         }
     }
     assert_eq!(index, 38);
-    steps.push(ui("InGame", COMPARE.to_owned()));
+    steps.push(ui("InGame", compare_code(control)));
     steps.push(ui("GameCore_Tuner", CLEANUP.to_owned()));
     Ok(
-        json!({"name":"軍事建造の実進捗校正：同じ保存・都市・槍兵キューで512/4096、100%/1%/15%を反復","judge_profile":"generic","diagnostic_only":true,"finite_turns":38,"steps":steps}),
+        json!({"name":format!("軍事建造の実進捗校正：同じ保存・都市・槍兵キューで512/4096、100%/{control}%/15%を反復"),"judge_profile":"generic","diagnostic_only":true,"finite_turns":38,"control_percent":control,"steps":steps}),
     )
 }
 
