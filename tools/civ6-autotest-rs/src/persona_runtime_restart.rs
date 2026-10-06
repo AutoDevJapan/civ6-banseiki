@@ -23,6 +23,7 @@ return 'normal-v3-ready'
 "#;
 
 const REFRESH: &str = "UI.RequestPlayerOperation(0,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_LeaderPersonaRepublish'}); return 'one normal refresh requested'";
+const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
 
 // Independent native UI getters, not the producer's 901xxx property cache.
 // Joined positives are subsequently required by the unmodified scenario.
@@ -69,7 +70,51 @@ impl Runner {
                 "resident restart diagnostic cannot overlap explicit native observations",
             ));
         }
-        Ok(())
+        let original: Value = serde_json::from_str(ORIGINAL)?;
+        // Match the complete frozen JSON, allowing only ship's preparation
+        // restart and its deterministic save namespace. No observed code is
+        // used to manufacture the expected contract.
+        let run_id = self
+            .output
+            .file_name()
+            .and_then(|v| v.to_str())
+            .unwrap_or("");
+        for namespace in [false, true] {
+            if namespace
+                && (run_id.is_empty()
+                    || run_id.len() > 240
+                    || !run_id
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_')))
+            {
+                continue;
+            }
+            for restart in [false, true] {
+                let mut expected = original.clone();
+                let steps = expected["steps"]
+                    .as_array_mut()
+                    .ok_or_else(|| Error::scenario("original persona steps missing"))?;
+                if namespace {
+                    for step in steps.iter_mut() {
+                        if matches!(step["action"].as_str(), Some("save" | "load"))
+                            && step["exact_name"] != true
+                        {
+                            let name = step["name"]
+                                .as_str()
+                                .ok_or_else(|| Error::scenario("original save name missing"))?;
+                            step["name"] = format!("{name}-{run_id}").into();
+                        }
+                    }
+                }
+                if restart {
+                    steps.insert(0, json!({"action":"restart_game","timeout":420}));
+                }
+                if self.scenario == expected {
+                    return Ok(());
+                }
+            }
+        }
+        Err(Error::scenario("resident restart diagnostic accepts only the unchanged original113 contract and ship preparation"))
     }
     fn persona_transition(&self, row: Value) -> Result<()> {
         let mut file = OpenOptions::new()
@@ -147,17 +192,51 @@ impl Runner {
     }
 
     pub(super) fn retire_persona_process(&mut self, deadline: f64) -> Result<()> {
+        self.retire_persona_process_inner(deadline, false)
+    }
+
+    pub(super) fn cleanup_persona_process(&mut self) -> Result<()> {
+        if !self.persona_runtime_restart || self.resident_runtime_identity.is_none() {
+            return Ok(());
+        }
+        self.retire_persona_process_inner(self.clock.now() + 15.0, true)
+    }
+
+    fn retirement_authorized(&self, deadline: f64, cleanup: bool) -> Result<()> {
+        if !cleanup {
+            self.remaining(deadline)?;
+            return Ok(());
+        }
+        // An expired lease still requires closing our pinned game before
+        // yielding. Ownership changes do not authorize any further operation.
+        match self.backend.live_lease_budget() {
+            Err(e)
+                if e.kind == ErrorKind::LiveLease && e.message.starts_with("CIV6_LEASE_YIELD:") =>
+            {
+                Ok(())
+            }
+            Err(e) => Err(e),
+            Ok(_) => Ok(()),
+        }
+    }
+
+    fn retire_persona_process_inner(&mut self, deadline: f64, cleanup: bool) -> Result<()> {
         let identity = self
             .resident_runtime_identity
             .ok_or_else(|| Error::input("resident process identity missing"))?;
-        let (pid, started) = self
-            .backend
-            .single_process(self.budget(deadline, 5.0)?)?
-            .ok_or_else(|| Error::input("resident process disappeared before renewal"))?;
+        let inspected = self.backend.single_process(5.0)?;
+        if inspected.is_none() && cleanup {
+            self.backend.finish_native_process_exit()?;
+            self.resident_runtime_identity = None;
+            return self.persona_transition(json!({"kind":"process_exit","pid":identity.0,"created_filetime":identity.1,"confirmed":true,"already_exited":true,"same_process_reload":false}));
+        }
+        let (pid, started) =
+            inspected.ok_or_else(|| Error::input("resident process disappeared before renewal"))?;
         if pid != identity.0 || self.backend.validate_native_bridge_target()? != Some(identity) {
             return Err(Error::input("resident process changed before renewal"));
         }
         self.disconnect();
+        self.retirement_authorized(deadline, cleanup)?;
         // Direct termination avoids invoking an unverified GameCore teardown
         // callback while the resident entries are live. Backend rechecks the
         // process creation identity, and only this live_chain owner's target.
@@ -177,6 +256,9 @@ impl Runner {
             "pid":identity.0,"created_filetime":identity.1,"confirmed":true,
             "same_process_reload":false}),
         )?;
+        if !cleanup {
+            self.remaining(deadline)?;
+        }
         Ok(())
     }
 }
@@ -280,8 +362,24 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         exited: bool,
         ready: bool,
         calls: Arc<Mutex<Vec<String>>>,
+        lease_failure: Option<(usize, bool)>,
     }
     impl Backend for LifecycleBackend {
+        fn live_lease_budget(&self) -> Result<Option<f64>> {
+            if let Some((after, changed)) = self.lease_failure {
+                if self.calls.lock().unwrap().len() >= after {
+                    return Err(Error::new(
+                        ErrorKind::LiveLease,
+                        if changed {
+                            "ownership changed"
+                        } else {
+                            "CIV6_LEASE_YIELD: expired"
+                        },
+                    ));
+                }
+            }
+            Ok(None)
+        }
         fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
             Ok(Some((7, 1.0)))
         }
@@ -347,6 +445,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
                 exited,
                 ready,
                 calls,
+                lease_failure: None,
             }),
             Arc::new(SystemClock),
         )
@@ -369,6 +468,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         let calls = Arc::new(Mutex::new(vec![]));
         let mut r = runner(dir.path(), Some((7, 123)), true, true, Arc::clone(&calls));
         r.persona_runtime_restart = true;
+        r.scenario = serde_json::from_str(ORIGINAL).unwrap();
         r.validate_persona_runtime_mode().unwrap();
         r.test_mode = true;
         assert!(r.validate_persona_runtime_mode().is_err());
@@ -386,6 +486,37 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         r.scenario["steps"] = json!([{"action":"start_native_paid_runtime"}]);
         assert!(r.validate_persona_runtime_mode().is_err());
         assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn only_original113_and_exact_ship_namespace_can_enable_restart_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(Mutex::new(vec![]));
+        let mut r = runner(dir.path(), Some((7, 123)), true, true, calls);
+        r.persona_runtime_restart = true;
+        assert!(r.validate_persona_runtime_mode().is_err());
+        r.scenario = serde_json::from_str(ORIGINAL).unwrap();
+        r.validate_persona_runtime_mode().unwrap();
+        let original = r.scenario.clone();
+        r.scenario["steps"][8]["code"] = "return true".into();
+        assert!(r.validate_persona_runtime_mode().is_err());
+        r.scenario = original.clone();
+        r.output = dir.path().join("run-407");
+        for step in r.scenario["steps"].as_array_mut().unwrap() {
+            if matches!(step["action"].as_str(), Some("save" | "load")) {
+                step["name"] = format!("{}-run-407", step["name"].as_str().unwrap()).into();
+            }
+        }
+        r.scenario["steps"]
+            .as_array_mut()
+            .unwrap()
+            .insert(0, json!({"action":"restart_game","timeout":420}));
+        r.validate_persona_runtime_mode().unwrap();
+        r.output = dir.path().join("other-run");
+        assert!(r.validate_persona_runtime_mode().is_err());
+        r.scenario = original;
+        r.scenario["name"] = "different scenario".into();
+        assert!(r.validate_persona_runtime_mode().is_err());
     }
 
     #[test]
@@ -427,5 +558,55 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         assert_eq!(v["created_filetime"], 123);
         assert_eq!(v["confirmed"], true);
         assert_eq!(v["same_process_reload"], false);
+    }
+
+    #[test]
+    fn expired_lease_prevents_renewal_but_pinned_cleanup_yields_the_game() {
+        for (after, cleanup, changed) in [
+            (0, false, false),
+            (2, false, false),
+            (0, true, false),
+            (0, true, true),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let calls = Arc::new(Mutex::new(vec![]));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(LifecycleBackend {
+                    identity: Some((7, 123)),
+                    exited: true,
+                    ready: true,
+                    calls: Arc::clone(&calls),
+                    lease_failure: Some((after, changed)),
+                }),
+                Arc::new(SystemClock),
+            );
+            r.persona_runtime_restart = true;
+            r.resident_runtime_identity = Some((7, 123));
+            let result = if cleanup {
+                r.cleanup_persona_process()
+            } else {
+                r.retire_persona_process(r.clock.now() + 30.0)
+            };
+            if cleanup && !changed {
+                result.unwrap();
+            } else {
+                assert!(result.is_err());
+            }
+            if changed || (!cleanup && after == 0) {
+                assert!(calls.lock().unwrap().is_empty());
+                assert_eq!(r.resident_runtime_identity, Some((7, 123)));
+            } else {
+                assert_eq!(
+                    *calls.lock().unwrap(),
+                    ["terminate", "wait_exit", "release"]
+                );
+                assert_eq!(r.resident_runtime_identity, None);
+            }
+        }
     }
 }
