@@ -17,6 +17,67 @@ use std::{
 fn normalized_xml(e: &xmltree::Element) -> serde_json::Value {
     json!({"tag":e.name,"attrs":e.attributes.iter().collect::<BTreeMap<_,_>>(),"text":e.get_text().filter(|s|!s.trim().is_empty()).map(|s|s.into_owned()),"children":civ6_assets_rs::elements(e).map(normalized_xml).collect::<Vec<_>>()})
 }
+
+#[test]
+fn all_22_civilizations_have_official_name_candidates_without_rebinding_existing_rows() {
+    use civ6_data_rs::{cascade, Repository};
+    let repo = Repository::checked_in();
+    let db = cascade::official_db_for(&repo).unwrap();
+    let rows = |civ: &str| -> Vec<(i64, String, i64, i64)> {
+        db.prepare("SELECT rowid,CitizenName,Female,Modern FROM CivilizationCitizenNames WHERE CivilizationType=? ORDER BY CitizenName").unwrap()
+            .query_map([civ],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).unwrap()
+            .collect::<rusqlite::Result<_>>().unwrap()
+    };
+    let japanese = rows("CIVILIZATION_JAPAN");
+    assert_eq!(japanese.len(), 40);
+    let expected: Vec<_> = japanese
+        .iter()
+        .map(|(_, name, female, modern)| (name.clone(), *female, *modern))
+        .collect();
+    db.execute_batch(
+        &repo
+            .read("poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(rows("CIVILIZATION_JAC_ODA").is_empty());
+    db.execute_batch(&cc::gameplay()).unwrap();
+    let seats = &civ6_assets_rs::constants::SEATS;
+    assert_eq!(seats.len(), 22);
+    for seat in seats.iter() {
+        let actual = rows(&seat.civ);
+        assert_eq!(
+            actual
+                .iter()
+                .map(|(_, name, f, m)| (name.clone(), *f, *m))
+                .collect::<Vec<_>>(),
+            expected,
+            "{}",
+            seat.civ
+        );
+        let ids = actual;
+        db.execute_batch(&cc::citizen_names_sql()).unwrap();
+        assert_eq!(
+            rows(&seat.civ),
+            ids,
+            "existing citizen indices changed: {}",
+            seat.civ
+        );
+    }
+    assert_eq!(
+        rows("CIVILIZATION_JAPAN"),
+        japanese,
+        "official source changed"
+    );
+    db.execute("INSERT INTO CivilizationCitizenNames(CivilizationType,CitizenName,Female,Modern) VALUES('CIVILIZATION_JAC_ODA','LOC_EXISTING_CUSTOM_NAME',1,0)",[]).unwrap();
+    let existing = rows("CIVILIZATION_JAC_ODA");
+    db.execute_batch(&cc::citizen_names_sql()).unwrap();
+    assert_eq!(
+        rows("CIVILIZATION_JAC_ODA"),
+        existing,
+        "custom row was replaced"
+    );
+}
 #[test]
 fn city_name_romanization_and_generated_files() {
     for (kana, en, ru) in [
