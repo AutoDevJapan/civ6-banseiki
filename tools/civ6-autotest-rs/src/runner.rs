@@ -2295,11 +2295,13 @@ impl Runner {
                     Error::interrupted(format!("Interrupted while autoplay failed: {e}"))
                 });
             }
+            // A confirmed start must be stopped even if a later read loses its reply.
             Err(e)
-                if matches!(
-                    e.kind,
-                    ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
-                ) =>
+                if !autoplay_started
+                    && matches!(
+                        e.kind,
+                        ErrorKind::LuaExecution | ErrorKind::LuaResponseUnknown
+                    ) =>
             {
                 return Err(e)
             }

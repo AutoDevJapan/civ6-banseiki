@@ -24,8 +24,11 @@ struct Game {
     cleanup_fail_once: bool,
     cleanup_calls: usize,
     alive_ack_lost_once: bool,
+    alive_ack_always_lost: bool,
     dies_after_lost_ack: bool,
     alive: bool,
+    stop_calls: usize,
+    stop_ack_lost: bool,
     next_screen: Option<String>,
 }
 impl Game {
@@ -72,6 +75,14 @@ impl Game {
                 ));
             }
         }
+        if code.contains("AutoplayManager.SetActive(false)") {
+            self.stop_calls += 1;
+            self.active = false;
+            if self.stop_ack_lost {
+                return Err(Error::unknown("stop acknowledgement lost"));
+            }
+            return Ok("true".into());
+        }
         if let Some(start) = code.find("SetTurns(") {
             let rest = &code[start + "SetTurns(".len()..];
             self.left = rest.split(')').next().unwrap().parse().unwrap();
@@ -97,6 +108,9 @@ impl Game {
             return Ok("none".into());
         }
         if code.contains("IsAlive()") {
+            if self.alive_ack_always_lost {
+                return Err(Error::unknown("alive read acknowledgement never arrived"));
+            }
             if self.alive_ack_lost_once {
                 self.alive_ack_lost_once = false;
                 self.advance();
@@ -185,6 +199,27 @@ fn autoplay_retries_only_the_alive_read_after_lost_acknowledgement() {
     assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
     assert_eq!(count(&h, "InGame", "Players[0]:IsAlive()"), 3);
     assert!(h.events().iter().any(|event| event == "disconnect"));
+}
+
+#[test]
+fn exhausted_alive_read_stops_autoplay_once_and_preserves_the_failure() {
+    for stop_ack_lost in [false, true] {
+        let mut game = Game::new(&[]);
+        game.alive_ack_always_lost = true;
+        game.stop_ack_lost = stop_ack_lost;
+        let (h, game, result) = autoplay(game, 2);
+        let error = result.unwrap_err();
+        assert_eq!(error.kind, ErrorKind::LuaResponseUnknown);
+        assert!(error
+            .to_string()
+            .contains("alive read acknowledgement never arrived"));
+        let game = game.lock().unwrap();
+        assert_eq!(game.stop_calls, 1);
+        assert!(!game.active);
+        assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(true)"), 1);
+        assert_eq!(count(&h, "InGame", "AutoplayManager.SetActive(false)"), 1);
+        assert!(count(&h, "InGame", "Players[0]:IsAlive()") >= 2);
+    }
 }
 
 #[test]
