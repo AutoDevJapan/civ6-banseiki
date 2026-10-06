@@ -1,6 +1,8 @@
 //! Capture-only adapter over the existing observer's attach/cleanup machinery.
 use super::*;
 use crate::order_capture::{self as plan, Phase, Request, Site};
+#[path = "order_context.rs"]
+mod context_facts;
 use windows_sys::Win32::System::Memory::{
     VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE, PAGE_EXECUTE,
     PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD,
@@ -861,6 +863,10 @@ pub fn observe(req: Request) -> Result<(), String> {
         return Err("initial GameCore path differs".into());
     }
     let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
+    let mut module_identities = BTreeMap::new();
+    if let Some(core) = &initial_core {
+        module_identities.insert(core.base, context_facts::module_row(core));
+    }
     mark(
         &mut d,
         json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"capture_phase":req.phase.name(),"front_prefix":req.front_prefix,"load_prefix":req.load_prefix,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
@@ -959,9 +965,18 @@ pub fn observe(req: Request) -> Result<(), String> {
                         }
                     }
                     let attach_snapshot = !d.attach_origin.accepted;
+                    let module_base = info.lpBaseOfDll as u64;
+                    // At attach only the known Core identity is needed. For
+                    // real reloads retain the module identity BEFORE unload.
+                    if !attach_snapshot {
+                        let identity = context_facts::module_at(req.pid, module_base)
+                            .map(|m| context_facts::module_row(&m))
+                            .unwrap_or_else(|e| json!({"base":module_base,"identity":"unknown","error":e}));
+                        module_identities.insert(module_base, identity);
+                    }
                     mark(
                         &mut d,
-                        json!({"type":if attach_snapshot {"module_attach_snapshot"}else{"module_load"},"tid":tid,"base":info.lpBaseOfDll as u64,"source":"real_debug_event","load_since_ready":!attach_snapshot}),
+                        json!({"type":if attach_snapshot {"module_attach_snapshot"}else{"module_load"},"tid":tid,"base":module_base,"module_identity":module_identities.get(&module_base),"source":"real_debug_event","load_since_ready":!attach_snapshot}),
                     )?;
                     if let Some(core) = core_module(req.pid)? {
                         if !same_path(&core.path, &core_path)
@@ -972,9 +987,11 @@ pub fn observe(req: Request) -> Result<(), String> {
                     }
                 }
                 UNLOAD_DLL_DEBUG_EVENT => {
+                    let module_base=unsafe {event.u.UnloadDll.lpBaseOfDll} as u64;
+                    let prior_identity=module_identities.remove(&module_base);
                     mark(
                         &mut d,
-                        json!({"type":"module_unload","tid":tid,"base":unsafe {event.u.UnloadDll.lpBaseOfDll} as u64,"source":"real_debug_event"}),
+                        json!({"type":"module_unload","tid":tid,"base":module_base,"prior_module_identity":prior_identity,"identity_source":"last_observed_load_or_initial_core","source":"real_debug_event"}),
                     )?;
                 }
                 EXIT_PROCESS_DEBUG_EVENT => {
@@ -1096,7 +1113,10 @@ pub fn observe(req: Request) -> Result<(), String> {
                                         _ => None,
                                     };
                                     hits += 1;
-                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"pointer_candidate":pointer,"gameplay_owner":"unknown","original_instruction_executions":null});
+                                    let context_slot = if matches!(site.name,"context_release"|"context_replace") {
+                                        context_facts::capture(&d,&exe,site,&c,pointer.unwrap_or(0))
+                                    } else {Value::Null};
+                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
                                     mark(&mut d, row.clone())?;
                                     steps.insert(
                                         tid,

@@ -123,6 +123,38 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+### 実機08：保持slotとGameCoreの接続を絞る
+
+実機08（actual `82cfdf9e`、observer `ae8adb06…195f5`）は同PID79976・FILETIME134357969370420525で9/9手順・6判定が成功した。`D:/CC/Work/todo880/order-reload-08-artifacts` の13ファイルを `order-reload-08-hashes.json` と再照合した。context_releaseは2回、context_replaceは6回、Lua closeの2点は0回。stop時の115threadはDR一致、不一致・不明・pending0、復元・回収済みである。
+
+生記録を分けると、TID35064、保持側RCX448805568（slotはその+0x450）で次の順序となる。
+
+| sequence / 開始後ms | 実観測 |
+|---|---|
+| 122 / 15932 | replace入口：slot0、incoming120916064。開始時EXE global Contextも120916064 |
+| 126 / 16385 | release入口：slot120916064 |
+| 129 / 16388 | base6316163072のunload。これは開始時に同定したGameCore baseと一致する |
+| 131 / 16389 | release入口：slot0 |
+| 134〜136 / 16389〜16391 | 同baseへload→unload→load。後続loadのmodule名は旧rawにないので、同addressだけで同一DLLとしない |
+| 138 / 16395 | replace入口：slot0、incoming1368721504 |
+| 142,146,150,154 | replace入口：slotとincomingが共に1368721504。PE0xF7847/0xF784Aは同値なら0xF78C9へ分岐し、置換本体を通らない |
+
+8件のoriginal instruction完了は各1回。ただし入口の第一命令完了はcallee全体の完了やobject破棄ではない。Releaseという候補名も参照数減算や破棄の実証ではない。Core仮想+8の固定実装はretである。
+
+GameCore factoryのconstructor0x58FB40を再読し、0x58FB46/0x58FB55で仮想表0xA101E8をobject+0へ、0x58FB96で別objectを+8へ保存する命令を確認した。仮想表+8はCore0x8972D0、+0x1A0はCore0x58FF70。08にはその実vtableがないため、旧／新pointerをこのfactory型と断定しない。仮想表前のwordから有効なRTTI locatorは得られず、C++型名も付けない。
+
+追加するRust `order_context.rs` は既存F7110/F7830ヒット中だけ、保持側vtable、旧／新objectのvtable・+8・仮想+8/+0x1A0、現在GameCoreのpath/base/size/disk SHA、EXE global Contextを読む。固定GameCoreの表・2関数が全て一致した場合だけ `matches_static_gamecore_context` を立てるが、world identityや破棄済みを意味しない。読取不能は診断のunknownとして残し、新たなメモリ書込やguard緩和はしない。
+
+[Windows x64 ABI](https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170)に従う入口の[RSP]を採り、EXE内の直前E8の5byteと相対targetを照合する。これは直接caller1段でありstack walkではない。F7110の既知caller245CEA/24B51E/24CAB6/24D1D2、F7830の24B5D5等と結ぶためのrawで、未知callerも成功した既知経路へ読み替えない。module load時には現在のmodule snapshotを記録し、unload時には保持した直前identityを記録する。OSの[unload通知](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-unload_dll_debug_info)のbaseだけから名前を推測しない。
+
+次の1ケースは既存 `order-fixed-load-reload.json` の9手順をそのまま使い、typed読取付きhelperだけ更新する。判定は(1)旧／新が固定CoreContext表に一致するか、(2)旧globalとの一致と直接caller、(3)同値no-opと実交換の区別、(4)Core unload/load identity、(5)stop DRと原命令完了。UI等の別型なら接続候補から除外する。同値pointer・同baseを世代には使わない。
+
+実接続候補はresident bootstrapのまま、Installを最初のAI/Gameplay初期化前、Closeを型とcallerが確定した旧world交換経路の本体前、Rebuildを旧world終了後かつ新worldの自然RESET/COMMIT前へ置く。F7110入口は0x159390より前、F7830入口は不一致時の解除本体より前という静的候補だが、Exit時に既にPlayerGovernorsが破棄されていれば遅い。その場合はCore側Init/Reset等の実world境界へ移す。InstallのF8577候補はfactoryより前だが最初のAIより前との実証は別に必要である。
+
+324 ABIはconfig40byte/version0x03240001/mode6、Close/Rebuildは自然owner RESET/COMMITで再公開する。親main-integrationの `tools/civ6-native-bridge-rs/src/windows/runtime.rs:525` でもGameCoreのPINを確認した。Close（:636）は許可を閉じowner状態を消して世代を進め、Rebuild（:652）は再Close後にproduct_activateする。Rebuildには新base引数もgatewayの付替えもない。従って現Mode6の最小接続は「固定Core imageをresident保持→旧world破棄より前にClose→同image上の新world初期化前にRebuild→自然RESET/COMMIT」の1案であり、「unloadした新baseへ現在のRebuildを呼ぶ」は未実装である。
+
+08のCore base unloadとresident PINによる寿命変更の整合は未実測。PINを外すだけでは実行中gatewayの復帰先を解放し得るため、このworkerで変更しない。新baseを許す必要が実証された場合だけ、324担当の回収・再配置契約が必要になる。次のtyped 9手順でCoreContext/callerを限定し、Closeが旧PlayerGovernorsより前という残条件を満たしてから、親のMode6導入1件へ進む。Install/Close/Rebuildの自動呼出し・製品成功はこのcapture-only差分には含めない。
+
 ### 実機07後の4候補再点検とstop時の記録
 
 親の実機07（actual `d21`、observer source `d8591f10…1fb0`）は7/7手順と6判定が成功した。Binkの6語通知はfirst-chanceでDBG_CONTINUEとなり、second-chanceは0。原コピー `D:/CC/Work/todo880/order-fixed-07-artifacts` の13ファイルを `order-fixed-07-hashes.json` と再照合した。ただしloadの4候補は全hit0で、製品Close/Rebuild境界は未証明である。

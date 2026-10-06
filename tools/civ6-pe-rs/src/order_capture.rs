@@ -45,6 +45,10 @@ pub fn source_identity() -> Value {
             include_str!("order_windows.rs"),
         ),
         (
+            "civ6-pe-rs/src/order_context.rs",
+            include_str!("order_context.rs"),
+        ),
+        (
             "civ6-pe-rs/src/bin/civ6-order-observer.rs",
             include_str!("bin/civ6-order-observer.rs"),
         ),
