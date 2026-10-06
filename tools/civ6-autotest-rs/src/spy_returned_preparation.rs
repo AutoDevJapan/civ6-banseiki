@@ -2,15 +2,22 @@
 //! event gate before the old neutralization handler and owns all saves/turns.
 //! These Lua 5.1 scripts neither create spies nor edit native mission history.
 
+/// Initial observations have no saved operation intent. Keep their failures
+/// separate so a diagnostic failure can never manufacture a travel permission.
+pub const UNKNOWN_PROPERTY: &str = "JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN";
+
 pub const UI_SETUP: &str = r#"
 assert(JAC_ReturnedPreparation548==nil,'returned preparation already installed');
 local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
+local FKEY='JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN';
 local EXCHANGE='JAC_BOUNDARY_GROUP_EXCHANGE_62';
 local WKEY='JAC_ReturnedPreparation548Witness';
 local B=assert(ExposedMembers.JAC_PersonaBoundary,'boundary UI reader missing');
 assert(type(B.ReadEnemy)=='function','boundary UI reader missing');
 local P={}; JAC_ReturnedPreparation548=P;
 local x=nil;
+local nativeRead=nil;
+local failed=false;
 local function integer(v,min)
  return type(v)=='number' and v==v and v>=min and v<9007199254740992 and v==math.floor(v)
 end
@@ -35,6 +42,18 @@ end
 local function sameHistory(a,b)
  return a and b and a.id==b.id and a.turn==b.turn and a.operation==b.operation and
   a.plot==b.plot and a.initial==b.initial and a.escape==b.escape
+end
+local function readSourceMission()
+ local getterType='unobserved';
+ local ok,value=pcall(function()
+  local d=assert(Players[0]:GetDiplomacy(),'native diplomacy missing');
+  getterType=type(d.GetMission);
+  assert(type(d.GetMission)=='function','native mission getter missing');
+  return d:GetMission(0,3)
+ end);
+ nativeRead={id=3,owner=0,getterType=getterType,ok=ok,rawType=type(value),raw=scalar(value)};
+ assert(ok,'native Sources history read failed: '..tostring(value));
+ return value
 end
 local function lineage(e)
  local a=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'),'old archive missing');
@@ -136,6 +155,7 @@ local function stillOwned()
  return e,p
 end
 function P.Setup()
+ assert(not failed and not Game:GetProperty(FKEY),'initial observation failed; no new intent');
  assert(not x and not Game:GetProperty(KEY),'returned preparation already reserved');
  role(); local e=exchange(); local r=roster(e);
  assert(#r.map==1 and #r.activeOffMap==0 and r.map[1].id==e.returnEvidence.returned.id and
@@ -154,6 +174,7 @@ function P.HasState() return x~=nil end
 -- returned stages describe native evidence, not a reconstructed dispatch.
 function P.Resume()
  assert(not x,'returned preparation UI state already installed');
+ if Game:GetProperty(FKEY) then failed=true; return 'INITIAL_UNKNOWN' end
  local p=assert(Game:GetProperty(KEY),'saved preparation missing');
  local e=exchange(); local r=e.returnEvidence;
  assert(type(p.nonce)=='string' and p.nonce~='' and
@@ -252,7 +273,7 @@ function P.Resume()
   q.sourceTurns==0 and q.canStart==true,
   'saved sources identity or native operation changed');
  x.ready=scalar(q); x.sourcesSentTurn=q.turn;
- local native=Players[0]:GetDiplomacy():GetMission(0,3);
+ local native=readSourceMission();
  local found=Players[0]:GetUnits():FindID(arrival.unit.id);
  if found then
   assert(found:GetID()==arrival.unit.id and found:GetOwner()==0 and
@@ -348,6 +369,7 @@ function P.Observe()
  return scalar(out)
 end
 function P.PrepareTravel(owner,cityID)
+ assert(not failed and not Game:GetProperty(FKEY),'initial observation failed; no travel intent');
  role(); local e,p=stillOwned(); assert(not x.unknown and not p and not x.targetCity,
   'travel already prepared');
  local before=P.Observe(); local u=unit(x.returnedID);
@@ -372,6 +394,7 @@ function P.PrepareTravel(owner,cityID)
  return 'TRAVEL_READY'
 end
 function P.ArmAfterSave(action)
+ assert(not failed and not Game:GetProperty(FKEY),'initial observation failed; no send arm');
  role(); local _,p=stillOwned();
  if action=='TRAVEL' then
  assert(not x.resumed and not x.unknown and x.targetCity and
@@ -507,8 +530,8 @@ function P.SourcesOnce()
  UnitManager.RequestOperation(u,q.gainOperation.hash);
  return 'SOURCES_SENT'
 end
--- Host calls this before the existing SpyMissionCompleted handler. Return true
--- only for the one owned Gain Sources event; false passes all others through.
+-- Poll for matching native completion. False may mean pending or unreadable;
+-- only RouteEvent decides whether a notification may reach the old handler.
 function P.OwnedAuxiliaryEvent(attacker,missionID)
  if attacker~=0 or missionID~=3 then return false end
  local p=Game:GetProperty(KEY);
@@ -518,7 +541,7 @@ function P.OwnedAuxiliaryEvent(attacker,missionID)
  if p.nonce~=x.nonce then return false end
  if p.stage=='SOURCES_RECEIPT' and not x.ownedEvent then return false end
  exchange();
- local n=Players[0]:GetDiplomacy():GetMission(0,missionID);
+ local n=readSourceMission();
  if type(n)~='table' then return false end
  local op=x.ready.gainOperation;
  if (n.Operation~=op.index and n.Operation~=op.hash) or
@@ -556,7 +579,7 @@ function P.SourceResult()
  assert(x.sourcesSent and x.ownedEvent and p and p.stage=='SOURCES_INTENT',
   'owned native sources event missing');
  lineage(e);
- local n=Players[0]:GetDiplomacy():GetMission(0,x.ownedEvent.id);
+ local n=readSourceMission();
  assert(type(n)=='table' and n.Operation==x.ownedEvent.operation and
   n.PlotIndex==x.ownedEvent.plot and n.CompletionTurn==x.ownedEvent.turn and
   n.InitialResult==x.ownedEvent.initial and n.EscapeResult==x.ownedEvent.escape,
@@ -614,21 +637,43 @@ function P.SourceResult()
    after.sourceTurns-x.ready.sourceTurns or nil};
  publish('SOURCES_RESULT',result); return scalar(result)
 end
-function P.CaptureUnknown(step,raw)
- local p=assert(Game:GetProperty(KEY),'saved preparation missing for unknown record');
- local e=assert(Game:GetProperty(EXCHANGE),'exchange evidence missing');
- assert(type(step)=='string' and step~='' and p.exchangeNonce==e.nonce,
-  'unknown observation is not for this return');
- if x then assert(x.nonce==p.nonce,'unknown observation nonce differs'); x.unknown=true end
- ExposedMembers[WKEY]=scalar({phase='UNKNOWN',nonce=p.nonce,
-  exchangeNonce=e.nonce,observation={step=step,raw=scalar(raw),
-  turn=Game.GetCurrentGameTurn()}});
+-- All observer failures use one envelope. Ownership is the saved intent, not
+-- whether the native observation succeeded. Initial failure has no intent.
+function P.CaptureUnknown(step,raw,previous)
+ local p=Game:GetProperty(KEY); local e=Game:GetProperty(EXCHANGE);
+ local observedExchangeNonce=type(e)=='table' and e.nonce or nil;
+ assert(type(step)=='string' and step~='','unknown observation phase missing');
+ if p and x then assert(x.nonce==p.nonce,'unknown observation nonce differs') end
+ previous=previous or ExposedMembers[WKEY];
+ if previous and previous.phase=='UNKNOWN' then
+  previous=previous.observation and previous.observation.previousWitness
+ end
+ failed=true; if x then x.unknown=true end
+ local nonce=p and p.nonce or 'initial:'..tostring(observedExchangeNonce)..':'..tostring(Game.GetCurrentGameTurn());
+ ExposedMembers[WKEY]=scalar({phase='UNKNOWN',nonce=nonce,
+  exchangeNonce=p and p.exchangeNonce or observedExchangeNonce,intentSaved=p~=nil,
+  observation={step=step,raw=scalar(raw),previousWitness=scalar(previous),
+   nativeRead=scalar(nativeRead),turn=Game.GetCurrentGameTurn(),
+   observer={localPlayer=Game.GetLocalPlayer(),requestedAttacker=0,requestedTargetOwner=1},
+   initialProvenance=not p and {exchange=scalar(e),
+    archive=scalar(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE')),
+    state=scalar(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE')),
+    ack=scalar(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK')),
+    event=scalar(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'))} or nil}});
  return 'UNKNOWN_RECORDED_UI'
+end
+function P.ObserveStep(step,observe)
+ assert(type(observe)=='function','observation callback missing');
+ nativeRead=nil;
+ local ok,result=pcall(observe);
+ if not ok then return P.CaptureUnknown(step,{error=tostring(result)}) end
+ return result
 end
 function P.InvalidateOnLoad()
  x=nil;
  ExposedMembers[WKEY]=nil;
  ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil;
+ nativeRead=nil; failed=false;
  return 'UI_STATE_INVALIDATED'
 end
 -- Routing ownership is separate from native outcome verification. An
@@ -637,14 +682,24 @@ end
 function P.RouteEvent(attacker,missionID)
  local p=Game:GetProperty(KEY);
  if attacker~=0 or missionID~=3 or not p or not p.sources or
-  (p.stage~='SOURCES_INTENT' and p.stage~='SOURCES_RECEIPT') then return 'UNOWNED' end
- local ok,owned=pcall(P.OwnedAuxiliaryEvent,attacker,missionID);
- if ok then return owned and 'OWNED' or 'UNOWNED' end
- P.CaptureUnknown('EVENT_GATE',{attacker=attacker,missionID=missionID,error=tostring(owned)});
+   not p.sources.spy or p.sources.spy.owner~=0 or not p.sources.target or
+   p.sources.target.owner~=1 or
+   (p.stage~='SOURCES_INTENT' and p.stage~='SOURCES_RECEIPT') then return 'UNOWNED' end
+ nativeRead=nil;
+ local ok,owned=pcall(function()
+  readSourceMission();
+  return P.OwnedAuxiliaryEvent(attacker,missionID)
+ end);
+ if ok and owned then return 'OWNED' end
+ -- A real notification for this saved ID belongs here even if its getter
+ -- returns nil/0/a scalar or its history fails validation. Polling may still
+ -- return false while the operation is running; notification routing may not.
+ P.CaptureUnknown('EVENT_GATE',{attacker=attacker,missionID=missionID,
+  error=ok and 'owned Sources notification lacks matching native history' or tostring(owned)});
  return 'OWNED_UNKNOWN'
 end
 function P.Evidence()
- return scalar({ui=x,core=Game:GetProperty(KEY),witness=ExposedMembers[WKEY]})
+ return scalar({ui=x,core=Game:GetProperty(KEY),initialUnknown=Game:GetProperty(FKEY),witness=ExposedMembers[WKEY]})
 end
 return 'RETURNED_PREPARATION_UI_READY'
 "#;
@@ -664,7 +719,8 @@ pub const UI_RESUME_IF_SAVED: &str = r#"
 local p=Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION');
 local preparation=assert(JAC_ReturnedPreparation548,
  'returned preparation UI module missing');
-if p and not preparation.HasState() then return preparation.Resume() end
+if (p or Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN')) and
+ not preparation.HasState() then return preparation.Resume() end
 return p and 'ALREADY_OBSERVING' or 'NO_SAVED_PREPARATION'
 "#;
 
@@ -712,19 +768,29 @@ Game:SetProperty(KEY,next); return 'TRAVEL_CHECKPOINT'
 /// retry or converts a missing receipt into success.
 pub const UNKNOWN_CORE: &str = r#"
 local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
-local p=assert(Game:GetProperty(KEY),'saved preparation missing');
-local e=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62'));
+local FKEY='JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN';
+local p=Game:GetProperty(KEY);
 local w=assert(ExposedMembers.JAC_ReturnedPreparation548Witness,
  'UI unknown witness missing');
-assert(p.exchangeNonce==e.nonce and
- w.phase=='UNKNOWN' and w.nonce==p.nonce and
- w.exchangeNonce==p.exchangeNonce and w.observation and
+assert(w.phase=='UNKNOWN' and type(w.nonce)=='string' and w.observation and
  type(w.observation.step)=='string' and
  w.observation.turn==Game.GetCurrentGameTurn(),
- 'unknown observation does not belong to saved return');
+ 'unknown observer envelope missing');
+if not p then
+ assert(w.intentSaved==false and w.observation.initialProvenance and
+  w.observation.observer,'initial failure cannot create an operation intent');
+ local previous=Game:GetProperty(FKEY);
+ assert(not previous or previous.nonce==w.nonce,'initial failure nonce changed');
+ Game:SetProperty(FKEY,{stage='INITIAL_UNKNOWN',observerOutcome='UNKNOWN',
+  nonce=w.nonce,exchangeNonce=w.exchangeNonce,observation=w.observation});
+ return 'INITIAL_UNKNOWN_CORE'
+end
+assert(w.intentSaved==true and w.nonce==p.nonce and
+ w.exchangeNonce==p.exchangeNonce,'unknown observation belongs to another intent');
 local previous=p.unknowns or {};
 assert(#previous<16,'finite unknown observation bound exceeded');
 local next={}; for k,v in pairs(p) do next[k]=v end
+next.observerOutcome='UNKNOWN';
 next.unknowns={}; for i,v in ipairs(previous) do next.unknowns[i]=v end
 next.unknowns[#next.unknowns+1]=w.observation;
 Game:SetProperty(KEY,next); return 'UNKNOWN_RECORDED_CORE'
@@ -732,6 +798,8 @@ Game:SetProperty(KEY,next); return 'UNKNOWN_RECORDED_CORE'
 
 pub const TRAVEL_INTENT_CORE: &str = r#"
 local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
+assert(not Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN'),
+ 'initial observation failed; stale witness cannot create travel intent');
 local e=assert(Game:GetProperty('JAC_BOUNDARY_GROUP_EXCHANGE_62'),'exchange missing');
 local w=assert(ExposedMembers.JAC_ReturnedPreparation548Witness,'UI travel witness missing');
 local r=assert(e.returnEvidence,'native return missing');

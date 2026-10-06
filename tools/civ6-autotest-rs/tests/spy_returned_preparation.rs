@@ -46,11 +46,16 @@ function PROTECTED_SNAPSHOT()
   ack=PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK,
   event=PROPERTIES.JAC_BOUNDARY_ENEMY_MISSION})
 end
+function SAVE_FAILURE_SNAPSHOT()
+ return serialize({intent=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION,
+  initial=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN})
+end
 BASELINE_PROTECTED=PROTECTED_SNAPSHOT();
 Game={}; function Game:GetProperty(k) return PROPERTIES[k] end
 function Game:SetProperty(k,v)
  assert(CONTEXT=='CORE','UI attempted Game:SetProperty');
- assert(k=='JAC_BOUNDARY_RETURNED_PREPARATION','foreign property write');
+ assert(k=='JAC_BOUNDARY_RETURNED_PREPARATION' or
+  k=='JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN','foreign property write');
  WRITES[#WRITES+1]=k; PROPERTIES[k]=v
 end
 function Game.GetCurrentGameTurn() return TURN end
@@ -273,7 +278,7 @@ fn host_stages_resume_each_turn_without_resending_and_record_native_success_or_f
                         lua.load("ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation=JAC_ReturnedPreparation548").exec().unwrap();
                     }
                     "save" => lua
-                        .load("SAVE_STAGE=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage")
+                        .load("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; SAVE_STAGE=p and p.stage")
                         .exec()
                         .unwrap(),
                     "ui_lua" => {
@@ -525,12 +530,11 @@ fn old_history_change_after_owned_sources_event_blocks_receipt() {
     c.arrive(700);
     c.sources_intent();
     c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(); assert(JAC_ReturnedPreparation548.OwnedAuxiliaryEvent(0,3)); JAC_ReturnedPreparation548.SourceResult(); H[1].turn=24; CONTEXT='CORE'");
-    assert!(
-        c.lua
-            .load(preparation::SOURCES_RECEIPT_CORE)
-            .exec()
-            .is_err()
-    );
+    assert!(c
+        .lua
+        .load(preparation::SOURCES_RECEIPT_CORE)
+        .exec()
+        .is_err());
     c.run("CONTEXT='UI'; assert(#WRITES==3 and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='SOURCES_INTENT')");
 }
 
@@ -714,4 +718,201 @@ fn core_observation_error_keeps_raw_and_saved_intent() {
     c.run("CONTEXT='UI'; JAC_ReturnedPreparation548.CaptureUnknown('TRAVEL_CORE_RECEIPT',{error='Core mission getter ABI failure',spyID=701})");
     c.core(preparation::UNKNOWN_CORE);
     c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.stage=='TRAVEL_INTENT' and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].raw.spyID==701 and PROPERTIES.JAC_BOUNDARY_THIRD_SPY_ARCHIVE.histories[1]==H[1] and PROPERTIES.JAC_BOUNDARY_THIRD_MISSION_ACK.observed.mission==H[3])");
+}
+
+// Execute the generated host through its terminal guard. Saving copies the
+// evidence here; no tests manufacture an intent or native result to recover.
+fn host_failure(c: &Case, phase: &str) -> usize {
+    c.run("ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation=JAC_ReturnedPreparation548; PROPERTIES.JAC_BOUNDARY_ENEMY_CONFIG={owner=1,cityID=20}");
+    let scenario = host::scenario("JAC-Enemy-Neutralization-failure-checkpoint", phase).unwrap();
+    let mut saves = 0;
+    for step in scenario["steps"].as_array().unwrap() {
+        match step["action"].as_str().unwrap() {
+            "load" | "wait_for" => {}
+            "ui_lua" => {
+                c.run(if step["state_name"] == "GameCore_Tuner" {
+                    "CONTEXT='CORE'"
+                } else {
+                    "CONTEXT='UI'"
+                });
+                if let Err(error) = c.lua.load(step["code"].as_str().unwrap()).exec() {
+                    assert!(
+                        error.to_string().contains("saved unresolved preparation"),
+                        "{error}"
+                    );
+                    assert!(saves > 0, "failure escaped before physical checkpoint");
+                    c.run("assert(PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
+                    return saves;
+                }
+            }
+            "save" => {
+                assert_eq!(step["checkpoint"], true);
+                assert_eq!(step["name"], "JAC-Enemy-Neutralization");
+                saves += 1;
+                c.run("SAVED_EVIDENCE=SAVE_FAILURE_SNAPSHOT()");
+            }
+            other => panic!("unexpected action after unknown: {other}"),
+        }
+    }
+    panic!("host did not stop after unknown")
+}
+
+#[test]
+fn owned_notifications_with_missing_nil_or_scalar_history_are_saved_unknown() {
+    for change in [
+        "NEW_MISSION=nil",
+        "NEW_MISSION=0",
+        "NEW_MISSION='unreadable-native-row'",
+        "NEW_MISSION=false",
+        "Players[0]:GetDiplomacy().GetMission=nil",
+        "Players[0]:GetDiplomacy().GetMission=17",
+    ] {
+        let c = Case::new();
+        c.travel_intent();
+        c.arrive(700);
+        c.sources_intent();
+        c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES()");
+        c.run(change);
+        c.run("assert(JAC_ReturnedPreparation548.RouteEvent(1,3)=='UNOWNED' and JAC_ReturnedPreparation548.RouteEvent(0,2)=='UNOWNED'); assert(JAC_ReturnedPreparation548.RouteEvent(0,3)=='OWNED_UNKNOWN')");
+        c.core(preparation::UNKNOWN_CORE);
+        c.run("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; local u=p.unknowns[1]; assert(p.stage=='SOURCES_INTENT' and p.outcome==nil and p.observerOutcome=='UNKNOWN' and u.nativeRead and u.nativeRead.id==3 and u.nativeRead.owner==0); assert(#REQUESTS==2 and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
+        c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+        c.fail("JAC_ReturnedPreparation548.SourcesOnce()");
+        if change.contains("GetMission") {
+            c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].nativeRead.ok==false)");
+        } else {
+            c.run("local r=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1].nativeRead; assert(r.ok and r.rawType==type(NEW_MISSION) and r.raw==NEW_MISSION)");
+        }
+    }
+}
+
+#[test]
+fn notification_ownership_uses_saved_actor_and_not_native_outcome() {
+    for change in ["p.sources.spy.owner=1", "p.sources.target.owner=0"] {
+        let c = Case::new();
+        c.travel_intent();
+        c.arrive(700);
+        c.sources_intent();
+        c.run(&format!("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; {change}; NEW_MISSION=nil; assert(JAC_ReturnedPreparation548.RouteEvent(0,3)=='UNOWNED' and ExposedMembers.JAC_ReturnedPreparation548Witness.phase~='UNKNOWN')"));
+    }
+    let c = Case::new();
+    c.travel_intent();
+    c.arrive(700);
+    c.sources_intent();
+    c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES(59,8000); OLD_HANDLER=0");
+    c.run(&format!(
+        "function EVENT(attacker,missionID) {} OLD_HANDLER=OLD_HANDLER+1 end",
+        preparation::UI_EARLY_EVENT_GATE
+    ));
+    c.run("EVENT(1,3); EVENT(0,2); assert(OLD_HANDLER==2); EVENT(0,3); assert(OLD_HANDLER==2)");
+    c.core(preparation::UNKNOWN_CORE);
+    c.run("local u=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1]; assert(u.nativeRead.raw.Operation==59 and u.nativeRead.raw.PlotIndex==8000 and #REQUESTS==2)");
+}
+
+#[test]
+fn initial_ui_failure_saves_provenance_without_an_intent_and_stays_terminal() {
+    assert_eq!(
+        preparation::UNKNOWN_PROPERTY,
+        "JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN"
+    );
+    for change in [
+        "Players[0]:GetUnits().FindID=nil",
+        "BAD_FIND=true",
+        "UnitManager.CanStartOperation=nil",
+        "Players[0]:GetDiplomacy().GetMission=nil",
+    ] {
+        let c = Case::new();
+        c.run(change);
+        assert_eq!(host_failure(&c, "travel-start"), 1);
+        c.run("local u=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN; assert(u.stage=='INITIAL_UNKNOWN' and u.observerOutcome=='UNKNOWN' and u.observation.step=='TRAVEL_READY' and u.observation.observer.localPlayer==0 and u.observation.initialProvenance.exchange.returnEvidence.returned.id==700 and u.observation.initialProvenance.ack.observed.mission.turn==62); assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION==nil and #REQUESTS==0 and SAVED_EVIDENCE:find('INITIAL_UNKNOWN'))");
+        c.fail("JAC_ReturnedPreparation548.Setup()");
+        c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+        assert_eq!(c.reload(), "INITIAL_UNKNOWN");
+        c.fail("JAC_ReturnedPreparation548.Setup()");
+        c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+        c.run("assert(JAC_ReturnedPreparation548.RouteEvent(0,3)=='UNOWNED' and #REQUESTS==0)");
+    }
+}
+
+#[test]
+fn initial_core_failure_preserves_ready_witness_without_inventing_travel() {
+    let c = Case::new();
+    c.run("CORE_MISSION_ERROR=true");
+    assert_eq!(host_failure(&c, "travel-start"), 2);
+    c.run("local u=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN; local w=u.observation.previousWitness; assert(u.observation.step=='TRAVEL_INTENT' and u.observation.raw.error:find('Core mission getter ABI failure') and w.phase=='TRAVEL_READY' and w.returnedID==700 and w.observation.before.unit.id==700 and w.observation.target.city==20); assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION==nil and #REQUESTS==0 and SAVED_EVIDENCE:find('TRAVEL_READY'))");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    assert_eq!(c.reload(), "INITIAL_UNKNOWN");
+}
+
+#[test]
+fn missing_or_malformed_return_receipt_remains_unknown_raw() {
+    for change in [
+        "PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62=nil",
+        "PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62=17",
+        "PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62.returnEvidence=nil",
+    ] {
+        let c = Case::new();
+        c.run(change);
+        c.run("BASELINE_PROTECTED=PROTECTED_SNAPSHOT()");
+        assert_eq!(host_failure(&c, "travel-start"), 1);
+        c.run("local u=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN; local original=u.observation.initialProvenance.exchange; if type(original)=='table' then assert(original.returnEvidence==nil) else assert(original==PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62) end; assert(u.stage=='INITIAL_UNKNOWN' and u.observation.raw.error and PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION==nil and H[1].turn==23 and H[2].turn==45 and H[3].turn==62 and #REQUESTS==0)");
+    }
+}
+
+#[test]
+fn repeated_unknown_copies_are_flat_and_have_a_finite_persistence_bound() {
+    let c = Case::new();
+    c.travel_intent();
+    c.run("local p=JAC_ReturnedPreparation548; for i=1,32 do p.CaptureUnknown('REPEAT',{marker=17}) end; local w=ExposedMembers.JAC_ReturnedPreparation548Witness; assert(w.observation.previousWitness.phase=='TRAVEL_READY' and w.observation.previousWitness.observation.previousWitness==nil); UNKNOWN_SIZE=#SAVE_FAILURE_SNAPSHOT()");
+    for _ in 0..16 {
+        c.core(preparation::UNKNOWN_CORE);
+        c.run("local p=JAC_ReturnedPreparation548; p.CaptureUnknown('REPEAT',{marker=17}); local w=ExposedMembers.JAC_ReturnedPreparation548Witness; assert(w.observation.previousWitness.phase=='TRAVEL_READY' and w.observation.previousWitness.observation.previousWitness==nil)");
+    }
+    c.run("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; assert(#p.unknowns==16); for _,u in ipairs(p.unknowns) do assert(u.previousWitness.phase=='TRAVEL_READY' and u.previousWitness.observation.previousWitness==nil and u.raw.marker==17) end; assert(#REQUESTS==0 and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
+    c.run("CONTEXT='CORE'");
+    c.fail(preparation::UNKNOWN_CORE);
+    c.run("CONTEXT='UI'");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+}
+
+#[test]
+fn initial_unknown_never_turns_an_old_witness_into_send_permission() {
+    let c = Case::new();
+    c.run("JAC_ReturnedPreparation548.Setup(); JAC_ReturnedPreparation548.PrepareTravel(1,20); ORIGINAL_READY=ExposedMembers.JAC_ReturnedPreparation548Witness");
+    for _ in 0..20 {
+        c.run("JAC_ReturnedPreparation548.CaptureUnknown('INITIAL_READ',{marker=19})");
+        c.core(preparation::UNKNOWN_CORE);
+        c.run("local u=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION_UNKNOWN; assert(u.observation.previousWitness.phase=='TRAVEL_READY' and u.observation.previousWitness.observation.previousWitness==nil and u.observation.raw.marker==19); local size=#SAVE_FAILURE_SNAPSHOT(); if INITIAL_SIZE then assert(size==INITIAL_SIZE) else INITIAL_SIZE=size end; assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION==nil)");
+    }
+    c.run("ExposedMembers.JAC_ReturnedPreparation548Witness=ORIGINAL_READY; CONTEXT='CORE'");
+    c.fail(preparation::TRAVEL_INTENT_CORE);
+    c.run("CONTEXT='UI'");
+    c.fail("JAC_ReturnedPreparation548.ArmAfterSave('TRAVEL')");
+    c.fail("JAC_ReturnedPreparation548.TravelOnce()");
+    assert_eq!(c.reload(), "INITIAL_UNKNOWN");
+    c.fail("JAC_ReturnedPreparation548.Setup()");
+    c.run("assert(PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION==nil and #REQUESTS==0 and PROTECTED_SNAPSHOT()==BASELINE_PROTECTED)");
+}
+
+#[test]
+fn host_core_failure_keeps_full_arrival_and_sources_result_witnesses() {
+    for phase in ["travel-observe", "sources-observe"] {
+        let c = Case::new();
+        c.travel_intent();
+        if phase == "travel-observe" {
+            c.run("JAC_ReturnedPreparation548.TravelOnce(); JAC_ReturnedPreparation548.Observe(); ARRIVE(701)");
+        } else {
+            c.arrive(700);
+            c.sources_intent();
+            c.run("JAC_ReturnedPreparation548.SourcesOnce(); COMPLETE_SOURCES()");
+        }
+        c.run("CORE_MISSION_ERROR=true");
+        host_failure(&c, phase);
+        if phase == "travel-observe" {
+            c.run("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; local w=p.unknowns[1].previousWitness; assert(p.stage=='TRAVEL_INTENT' and not p.arrival and w.phase=='TRAVEL_OBSERVATION' and w.observation.stage=='ARRIVED' and w.observation.unit.id==701 and SAVED_EVIDENCE:find('ARRIVED') and #REQUESTS==1)");
+        } else {
+            c.run("local p=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION; local w=p.unknowns[1].previousWitness; assert(p.stage=='SOURCES_INTENT' and not p.sourcesReceipt and p.outcome==nil and w.phase=='SOURCES_RESULT' and w.observation.event.raw.InitialResult==0 and w.observation.after.sourceTurns==6 and w.observation.comparison.delta>0 and SAVED_EVIDENCE:find('SOURCES_RESULT') and #REQUESTS==2)");
+        }
+        c.fail("JAC_ReturnedPreparation548.ArmAfterSave('SOURCES')");
+    }
 }

@@ -5,8 +5,9 @@
 #[path = "../src/spy_returned_preparation.rs"]
 #[allow(dead_code)]
 mod preparation;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 const KEY: &str = "JAC_BOUNDARY_RETURNED_PREPARATION";
+const UNKNOWN_KEY: &str = preparation::UNKNOWN_PROPERTY;
 const P: &str = "local P=assert(ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation,'owned View preparation absent'); ";
 const RESUME: &str = "if P.HasState() then return 'ALREADY_OBSERVING' end; local r=P.Resume(); assert(not string.find(r,'UNCONFIRMED',1,true),'native operation remains unconfirmed; no turns or resend'); return r";
 fn lua(state: &str, code: String) -> Value {
@@ -20,22 +21,22 @@ fn save() -> Value {
 }
 fn ui_observe(code: &str, label: &str) -> Value {
     ui(&format!(
-        "local ok,r=pcall(function() {code} end); if not ok then if not Game:GetProperty('{KEY}') then error(r) end; return P.CaptureUnknown('{label}',{{error=tostring(r)}}) end; return r"
+        "return P.ObserveStep('{label}',function() {code} end)"
     ))
 }
 fn core_observe(code: &str, label: &str) -> Value {
     lua(
         "GameCore_Tuner",
         format!(
-            "ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil; local ok,r=pcall(function() {code} end); if not ok then ExposedMembers.JAC_ReturnedPreparationCoreFailure={{step='{label}',error=tostring(r)}}; return 'CORE_UNKNOWN' end; return r"
+            "ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil; local previous=ExposedMembers.JAC_ReturnedPreparation548Witness; local ok,r=pcall(function() {code} end); if not ok then ExposedMembers.JAC_ReturnedPreparationCoreFailure={{step='{label}',error=tostring(r),previousWitness=previous}}; return 'CORE_UNKNOWN' end; return r"
         ),
     )
 }
 fn checkpoint(steps: &mut Vec<Value>) {
-    steps.push(ui("local failure=ExposedMembers.JAC_ReturnedPreparationCoreFailure; if failure then P.CaptureUnknown(failure.step,{error=failure.error}); ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil end; return 'OBSERVED'"));
+    steps.push(ui("local failure=ExposedMembers.JAC_ReturnedPreparationCoreFailure; if failure then P.CaptureUnknown(failure.step,{error=failure.error},failure.previousWitness); ExposedMembers.JAC_ReturnedPreparationCoreFailure=nil end; return 'OBSERVED'"));
     steps.push(lua("GameCore_Tuner",format!("local w=ExposedMembers.JAC_ReturnedPreparation548Witness; if not w or w.phase~='UNKNOWN' then return 'NO_UNKNOWN' end; {}",preparation::UNKNOWN_CORE)));
     steps.push(save());
-    steps.push(ui(&format!("local p=Game:GetProperty('{KEY}'); assert(not(p and p.unknowns and #p.unknowns>0),'saved unresolved preparation; no further operations'); return 'RECORDED'")));
+    steps.push(ui(&format!("local p=Game:GetProperty('{KEY}'); assert(not Game:GetProperty('{UNKNOWN_KEY}') and not(p and p.unknowns and #p.unknowns>0),'saved unresolved preparation; no further operations'); return 'RECORDED'")));
 }
 fn observe_travel(steps: &mut Vec<Value>) {
     steps.push(ui_observe("return P.Observe().stage", "TRAVEL_READ"));
@@ -57,14 +58,15 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
     ];
     match phase {
         "travel-start" => {
-            steps.push(ui("return P.Setup()"));
-            steps.push(ui("local c=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')); return P.PrepareTravel(c.owner,c.cityID)"));
-            steps.push(lua(
-                "GameCore_Tuner",
-                preparation::TRAVEL_INTENT_CORE.into(),
+            steps.push(ui_observe("P.Setup(); local c=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_CONFIG')); return P.PrepareTravel(c.owner,c.cityID)","TRAVEL_READY"));
+            checkpoint(&mut steps);
+            steps.push(core_observe(
+                preparation::TRAVEL_INTENT_CORE,
+                "TRAVEL_INTENT",
             ));
-            steps.push(save());
-            steps.push(ui("return P.ArmAfterSave('TRAVEL')"));
+            checkpoint(&mut steps);
+            steps.push(ui_observe("return P.ArmAfterSave('TRAVEL')", "TRAVEL_ARM"));
+            checkpoint(&mut steps);
             steps.push(ui_observe("return P.TravelOnce()", "TRAVEL_SEND"));
             checkpoint(&mut steps);
             observe_travel(&mut steps);
@@ -91,7 +93,11 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
                 "SOURCES_INTENT",
             ));
             checkpoint(&mut steps);
-            steps.push(ui("return P.ArmAfterSave('SOURCES')"));
+            steps.push(ui_observe(
+                "return P.ArmAfterSave('SOURCES')",
+                "SOURCES_ARM",
+            ));
+            checkpoint(&mut steps);
             steps.push(ui_observe("return P.SourcesOnce()", "SOURCES_SEND"));
             checkpoint(&mut steps);
         }
