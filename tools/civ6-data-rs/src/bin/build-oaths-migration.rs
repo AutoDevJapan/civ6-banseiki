@@ -360,7 +360,11 @@ const RESYNC_SNAPSHOT: &str = migration_lua!(snapshot_lua!(
 local migrated=validate_migration()
 local l=assert(Game:GetProperty('JAC_AGES_LEDGER'),'resync ledger missing')
 assert(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68,'resync requires the single naturally advanced turn')
-assert(Players[0]:IsTurnActive() and not Players[0]:IsTurnActiveComplete(),'human control not restored before/after resync: active='..tostring(Players[0]:IsTurnActive())..' complete='..tostring(Players[0]:IsTurnActiveComplete()))
+-- ActionPanel.lua:152 waits when activation is NOT complete. This is not
+-- an end-turn flag. The pre-save Core may be active while UI playback lags;
+-- after load both contexts must have completed activation.
+assert(Players[0]:IsTurnActive(),'human turn not active before/after resync')
+if __VERIFY__ then assert(Players[0]:IsTurnActiveComplete(),'human turn activation incomplete after resync') end
 assert(ser(l.history)==Game:GetProperty('JAC_TODO134_OLD_HISTORY'),'resync legacy history changed')
 local cities={}; local majors=0; local owners={}
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
@@ -405,6 +409,13 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do
  end
 end
 return 'RESYNC_DIPLOMACY_CLOSED all real peers checked'
+"#;
+
+const RESYNC_UI_READY: &str = r#"
+-- Official ActionPanel.lua:152,506-514: activation complete, no processing,
+-- no submitted end-turn, and CanEndTurn distinguish ready control from a wait.
+assert(Game.GetLocalPlayer()==0 and Players[0]:IsTurnActive() and Players[0]:IsTurnActiveComplete(),'loaded human turn activation not ready')
+assert(UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages(),'loaded UI turn control not ready')
 "#;
 
 fn resync_snapshot(verify: bool) -> Value {
@@ -454,7 +465,7 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
         lua("InGame", &turn_event_observer()),
         json!({"action":"observe_for","seconds":30,"timeout":45}),
         // Capture both control states before the strict snapshot can fail.
-        // An active-but-complete loaded turn must remain a failure, with evidence.
+        // Preserve activation and end-turn submission as separate observations.
         lua("GameCore_Tuner", TURN_DIAGNOSTIC),
         lua("InGame", TURN_DIAGNOSTIC),
         lua("InGame", SESSION_DIAGNOSTIC),
@@ -462,7 +473,7 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
         lua(
             "InGame",
             &format!(
-                "{CATALOGUE}\n{}",
+                "{CATALOGUE}\n{RESYNC_UI_READY}\n{}",
                 RESYNC_SNAPSHOT.replace("__VERIFY__", "true")
             ),
         ),
@@ -653,7 +664,7 @@ mod tests {
             for changed in [
                 "turn=69",
                 "active=false",
-                "Players[0].IsTurnActiveComplete=function()return true end",
+                "Players[0].IsTurnActiveComplete=function()return false end",
                 "ledger.houses.p0.oathDue=70",
                 "ledger.history.r1.turn=65",
                 "ledger.houses.p1.oathChosen=nil",
@@ -677,7 +688,7 @@ for i=0,21 do
  if id==0 then house.oathDue=69 else house.oathChosen=1;house.oaths['O'..(3*id+1)]=true end
  ledger.houses['p'..id]=house
  local city={GetOwner=function()return id end,GetID=function()return 10+id end,GetX=function()return 3+id end,GetY=function()return 4 end}
- local p={GetID=function()return id end,IsHuman=function()return id==0 end,IsTurnActive=function()return active end,IsTurnActiveComplete=function()return false end,GetTechs=function()return {HasTech=function()return false end} end,GetCulture=function()return {HasCivic=function()return false end} end,GetCities=function()return {Members=function()local done=false;return function()if not done then done=true;return 10+id,city end end end} end}
+ local p={GetID=function()return id end,IsHuman=function()return id==0 end,IsTurnActive=function()return active end,IsTurnActiveComplete=function()return true end,GetTechs=function()return {HasTech=function()return false end} end,GetCulture=function()return {HasCivic=function()return false end} end,GetCities=function()return {Members=function()local done=false;return function()if not done then done=true;return 10+id,city end end end} end}
  Players[id]=p;majors[#majors+1]=p
 end
 PlayerManager={GetAliveMajors=function()return majors end}
@@ -699,6 +710,43 @@ Map={GetPlot=function(x)return {GetOwner=function()return plotOwner or x-3 end,G
         }
         Ok(())
     }
+    #[test]
+    fn resync_ui_readiness_distinguishes_activation_from_end_turn_submission() -> Result<()> {
+        let ready = "active=true;activated=true;canEnd=true;sent=false;processing=false;localID=0;Game={GetLocalPlayer=function()return localID end};Players={[0]={IsTurnActive=function()return active end,IsTurnActiveComplete=function()return activated end}};UI={CanEndTurn=function()return canEnd end,HasSentTurnComplete=function()return sent end,IsProcessingMessages=function()return processing end}";
+        let scene = scenarios(&Repository::checked_in())?
+            .into_iter()
+            .find(|(name, _)| *name == "legacy-control-resync-diagnostic.json")
+            .unwrap()
+            .1;
+        assert!(scene["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["state_name"] == "InGame"
+                && s["code"]
+                    .as_str()
+                    .is_some_and(|c| c.contains(RESYNC_UI_READY))));
+        for changed in [
+            "active=false",
+            "activated=false",
+            "canEnd=false",
+            "sent=true",
+            "processing=true",
+            "localID=1",
+            "UI.HasSentTurnComplete=nil",
+        ] {
+            let vm = mlua::Lua::new();
+            vm.load(ready).exec()?;
+            vm.load(RESYNC_UI_READY).exec()?;
+            vm.load(changed).exec()?;
+            assert!(
+                vm.load(RESYNC_UI_READY).exec().is_err(),
+                "accepted {changed}"
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn every_emitted_scene_passes_the_real_driver_schema() -> Result<()> {
         for (name, scene) in scenarios(&Repository::checked_in())? {
