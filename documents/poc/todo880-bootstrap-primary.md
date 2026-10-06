@@ -249,7 +249,7 @@ D:/CC/Tools/codex-jobs/cargo_gate.exe build --locked --offline --release --manif
 <worktree>/tools/target/release/civ6-startup-diagnostics.exe order-parent <absolute order.input.json>
 ```
 
-親の実行記録には実際に起動したdiagnosticsのSHAとcheckout HEADも保存する。observerのcompiled_source_sha256は共有capture実装を束縛するが、diagnostics wrapper/runner全体を束縛しない。Steamフォルダへの配置や共有DLLの置換は不要。
+実行器はdiagnosticsのSHA、wrapper・runner・scenarioを含むソースの識別値とcheckoutパスをdriver.jsonへ保存する。候補コミットは親の別検証記録へ残し、観測記録だけでGit候補を認証したとは扱わない。helper本体は同一性確認より前から子の回収まで読取り専用で保持し、途中の差し替えを防ぐ。Steamフォルダへの配置や共有DLLの置換は不要。
 次の1実機は、同じowned lease下でfront ready後に初回factory/Lua初期化を取り、load phase_ready後に旧context/Lua破棄を取る。既にfactoryが通過した状態なら初回未観測と記録する。4slotの非選択phaseは欠測であり呼出し0としない。初期receipt前に解析器や自動Installを追加しない。
 
 ### 固定AMD版chainからの観測

@@ -108,6 +108,15 @@ fn restored_success_needs_the_exact_process_and_complete_parent_receipt() {
 }
 #[test]
 fn branch_built_existing_helper_exposes_order_identity_without_game_access() {
+    #[cfg(windows)]
+    let _pin = {
+        use std::os::windows::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(env!("CARGO_BIN_EXE_civ6-startup-diagnostics"))
+            .unwrap()
+    };
     let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-startup-diagnostics"));
     #[cfg(windows)]
     {
