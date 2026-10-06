@@ -10,7 +10,7 @@ function include() end
 function event() local e={}; e.Add=function(f) e[#e+1]=f end; return e end
 LuaEvents={DiploPopup_DealUpdated=event()}
 Events,GameEvents={},{}
-for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SpyMissionCompleted',
+for _,k in ipairs({'GameCoreEventPublishComplete','LocalPlayerTurnBegin','LoadScreenClose','SaveComplete','SpyMissionCompleted',
  'CityProductionQueueChanged','UnitOperationStarted','DiplomacyIncomingDeal'}) do Events[k]=event() end
 for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpawnSpy',
  'JAC_BoundaryGameplayApiProbe',
@@ -19,6 +19,7 @@ for _,k in ipairs({'JAC_BoundaryPrepare','JAC_BoundaryLoseCity','JAC_BoundarySpa
  'JAC_BoundaryEnemyBarrier','JAC_BoundaryEvolveEnemy',
  'JAC_BoundaryEnemyFixtureBarrier','JAC_BoundaryConfirmEnemy',
  'JAC_BoundaryRecordEnemyMission','JAC_BoundaryCaptureEnemyRecovery',
+ 'JAC_BoundaryThirdSpyCivicIntent',
  'JAC_BoundaryBeginEnemySpyRetry','JAC_BoundaryFinalizeEnemySpyRetry',
  'JAC_BoundaryProgressCapacityBuilding',
  'JAC_BoundaryMarkCaptiveExchange','JAC_BoundaryPrepareCapacityCivic',

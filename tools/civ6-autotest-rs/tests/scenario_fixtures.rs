@@ -187,6 +187,153 @@ fn multi_failure_inspection_preserves_the_latest_checkpoint_without_mutation() {
 }
 
 #[test]
+fn third_capacity_probe_reads_the_preserved_failure_without_changing_the_game() {
+    let data = scenario("leader-persona-spy-third-capacity-probe.json");
+    validate_scenario(&data).unwrap();
+    let actions = steps(&data);
+    assert_eq!(actions.len(), 4);
+    assert_eq!(
+        actions[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert_eq!(actions[0]["exact_name"], true);
+    assert!(actions[0].get("checkpoint").is_none());
+    assert!(action(&actions[1], "pause") && actions[1]["seconds"] == 2);
+    assert_eq!(actions[2]["lua_timeout"], 20);
+    assert!(actions.iter().all(|step| ![
+        "save",
+        "end_turn",
+        "configure",
+        "start_game",
+        "enable_mods",
+        "autoplay"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    assert!(action(&actions[3], "exit_to_menu"));
+    assert!(code(&actions[2]).contains("CIVIC_GRANT_SPY"));
+    let lua = Lua::new();
+    for step in actions {
+        if let Some(source) = embedded_lua(step) {
+            compile_lua(&lua, source);
+        }
+    }
+}
+
+#[test]
+fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it() {
+    let request = scenario("leader-persona-spy-third-civic-request.json");
+    let tick = scenario("leader-persona-spy-third-civic-tick.json");
+    let ready = scenario("leader-persona-spy-third-civic-ready.json");
+    validate_scenario(&request).unwrap();
+    validate_scenario(&tick).unwrap();
+    validate_scenario(&ready).unwrap();
+    let request_steps = steps(&request);
+    let tick_steps = steps(&tick);
+    assert_eq!(
+        request_steps[0]["name"],
+        "JAC-Enemy-Neutralization-91f02912dd354a18821959c99aa89868-0000000000000008"
+    );
+    assert!(request_steps[0].get("checkpoint").is_none());
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC')"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        ui_codes(&request)
+            .iter()
+            .filter(|source| source.contains("Queue('THIRD_SPY_CIVIC_INTENT')"))
+            .count(),
+        1
+    );
+    assert!(request_steps.iter().all(|step| !action(step, "end_turn")));
+    let intent_index = request_steps
+        .iter()
+        .position(|step| {
+            action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC_INTENT')")
+        })
+        .unwrap();
+    let request_index = request_steps
+        .iter()
+        .position(|step| action(step, "ui_lua") && code(step).contains("Queue('THIRD_SPY_CIVIC')"))
+        .unwrap();
+    let saves: Vec<_> = request_steps
+        .iter()
+        .enumerate()
+        .filter_map(|(i, step)| action(step, "save").then_some(i))
+        .collect();
+    assert_eq!(saves.len(), 2);
+    let reload = request_steps
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find_map(|(i, step)| action(step, "load").then_some(i))
+        .unwrap();
+    assert!(intent_index < saves[0] && saves[0] < request_index);
+    assert!(request_index < saves[1] && saves[1] < reload);
+    assert!(saves
+        .iter()
+        .all(|&i| request_steps[i]["checkpoint"] == true));
+    assert_eq!(request_steps[reload]["checkpoint"], true);
+    assert_eq!(request_steps[8]["action"], "inspect_native_spy_research");
+    assert_eq!(request_steps[8]["phase"], "after_acceptance");
+    assert_eq!(
+        request_steps[reload + 2]["action"],
+        "inspect_native_spy_research"
+    );
+    assert_eq!(request_steps[reload + 2]["phase"], "after_reload");
+    assert_eq!(tick_steps[0]["checkpoint"], true);
+    assert_eq!(
+        tick_steps
+            .iter()
+            .filter(|step| action(step, "end_turn"))
+            .count(),
+        1
+    );
+    let turn = tick_steps
+        .iter()
+        .position(|step| action(step, "end_turn"))
+        .unwrap();
+    let save = tick_steps
+        .iter()
+        .position(|step| action(step, "save"))
+        .unwrap();
+    assert!(turn < save && save < tick_steps.len() - 2);
+    assert_eq!(tick_steps[turn]["turns"], 1);
+    let ready_steps = steps(&ready);
+    assert_eq!(ready_steps.len(), 4);
+    assert_eq!(ready_steps[0]["checkpoint"], true);
+    assert_eq!(ready_steps[2]["action"], "inspect_native_spy_research");
+    assert_eq!(ready_steps[2]["phase"], "capacity_ready");
+    assert_eq!(tick_steps[5]["action"], "inspect_native_spy_research");
+    assert_eq!(tick_steps[5]["phase"], "after_turn");
+    assert!(ready_steps
+        .iter()
+        .all(|step| !action(step, "save") && !action(step, "end_turn")));
+    for data in [&request, &tick, &ready] {
+        assert_eq!(data["strict_lua_errors"], true);
+        assert!(steps(data)
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "start_game")));
+        let lua = Lua::new();
+        for step in steps(data) {
+            if let Some(source) = embedded_lua(step) {
+                compile_lua(&lua, source);
+            }
+        }
+    }
+    compile_lua(&Lua::new(), &civ6_autotest_rs::spy_research::read());
+    let mut bad = request.clone();
+    bad["steps"][8]["phase"] = json!("../escape");
+    assert!(validate_scenario(&bad).is_err());
+    bad["steps"][8]["phase"] = json!("after_acceptance");
+    bad["steps"][8]["code"] = json!("UI.RequestPlayerOperation(0,1,{})");
+    assert!(validate_scenario(&bad).is_err());
+}
+
+#[test]
 fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoints() {
     let lua = Lua::new();
     let mut checkpoint_count = 0;
@@ -1320,7 +1467,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     }
     // Includes the four main-branch carrier/religion/spent-spread scenes,
     // alongside the isolated promotion-call and assignment calibration games.
-    assert_eq!(count, 139);
+    assert_eq!(count, 141);
 }
 
 #[test]
@@ -1577,6 +1724,42 @@ fn ui_lua_comparison_requires_a_recorded_value() {
 
     data["steps"][0]["capture_as"] = json!("BEFORE");
     validate_scenario(&data).unwrap();
+}
+
+#[test]
+fn carrier_exchange_rejects_unimplemented_comparisons_but_checkpoint_retains_them() {
+    let base = json!({
+        "name": "carrier comparison scope",
+        "steps": [{"action": "carrier_exchange", "token": "saved_boundary", "candidate": "candidate"}]
+    });
+    validate_scenario(&base).unwrap();
+    for key in ["capture_as", "equals_capture"] {
+        for value in [json!("BEFORE"), Value::Null] {
+            let mut data = base.clone();
+            data["steps"][0][key] = value;
+            let error = validate_scenario(&data).unwrap_err();
+            assert!(error.message.contains(&format!("does not support {key}")));
+        }
+    }
+    let mut checkpoint = base;
+    checkpoint["steps"][0]["action"] = json!("carrier_checkpoint");
+    checkpoint["steps"][0]["path"] = json!("carrier/before.json");
+    checkpoint["steps"][0]["capture_as"] = json!("BEFORE");
+    checkpoint["steps"][0]["equals_capture"] = json!("BEFORE");
+    assert!(validate_scenario(&checkpoint)
+        .unwrap_err()
+        .message
+        .contains("earlier capture_as"));
+    checkpoint["steps"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("equals_capture");
+    let mut after = checkpoint["steps"][0].clone();
+    after["path"] = json!("carrier/after.json");
+    after.as_object_mut().unwrap().remove("capture_as");
+    after["equals_capture"] = json!("BEFORE");
+    checkpoint["steps"].as_array_mut().unwrap().push(after);
+    validate_scenario(&checkpoint).unwrap();
 }
 
 #[test]

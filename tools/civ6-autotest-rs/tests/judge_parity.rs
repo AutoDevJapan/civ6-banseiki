@@ -586,13 +586,15 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-native-type-run-artifact-return.json",
                 "absorption-native-type-run-artifact-scatter.json",
                 "absorption-return-boundary.json",
+                "assassin-actor-eliminated-save-load.json",
+                "assassin-target-eliminated-save-load.json",
                 "mod-selection-rollback.json",
             ]
             .into_iter()
             .map(str::to_string),
         )
         .collect();
-    assert_eq!(expected.len(), 142);
+    assert_eq!(expected.len(), 144);
     let actual: BTreeSet<_> = fs::read_dir(&folder)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
@@ -613,6 +615,15 @@ fn shipped_scenario_inventory_and_json_are_intact() {
             "leader-persona-property-abi-15km.json".to_string(),
             "leader-persona-spy-result-diagnostic.json".to_string(),
             "leader-persona-spy-neutralization-multi-failure-diagnose.json".to_string(),
+            "leader-persona-spy-third-capacity-probe.json".to_string(),
+            "leader-persona-spy-third-civic-request.json".to_string(),
+            "leader-persona-spy-third-civic-tick.json".to_string(),
+            "leader-persona-spy-third-civic-ready.json".to_string(),
+            "leader-persona-spy-neutralization-third-produce.json".to_string(),
+            "leader-persona-spy-neutralization-third-production-bind.json".to_string(),
+            "leader-persona-spy-neutralization-third-production-tick.json".to_string(),
+            "leader-persona-spy-neutralization-third-travel.json".to_string(),
+            "leader-persona-spy-neutralization-third-mission.json".to_string(),
             "leader-persona-spy-neutralization-retry-diagnose.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange-probe.json".to_string(),
             "leader-persona-spy-neutralization-retry-captive-exchange.json".to_string(),

@@ -2,6 +2,7 @@
 pub mod capture;
 pub mod carrier_sync;
 pub mod carrier_transport;
+pub mod catalog_check;
 pub mod catalog_scenario;
 pub mod checkpoint;
 pub mod click;
@@ -16,7 +17,9 @@ pub mod persona_payment;
 pub mod restart;
 pub mod runner;
 pub mod scenario;
+pub mod spy_completed_failure;
 pub mod spy_failures;
+pub mod spy_research;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;

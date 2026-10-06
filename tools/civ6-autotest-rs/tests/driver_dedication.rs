@@ -112,3 +112,89 @@ fn dedication_closes_only_a_visible_popup_and_never_sends_escape() {
         assert_eq!(*closes.lock().unwrap(), i32::from(!hidden));
     }
 }
+
+#[test]
+fn dedication_step_calls_the_existing_sender_and_visible_closer() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into(), "DedicationPopup".into()]))
+        .lua(|state, code| {
+            Ok(if code == "return Game.GetLocalPlayer()" {
+                "0"
+            } else if state == "DedicationPopup" {
+                "true"
+            } else {
+                "7"
+            }
+            .into())
+        });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner
+            .run_step(&json!({"action":"choose_dedication","human":0}))
+            .unwrap(),
+        "human=0 chose commemoration indices=7"
+    );
+    assert_eq!(count(&h, "UI.RequestPlayerOperation"), 1);
+    assert_eq!(count(&h, "OnClose()"), 1);
+    let calls = h.calls();
+    let send = calls
+        .iter()
+        .position(|(_, code)| code.contains("UI.RequestPlayerOperation"))
+        .unwrap();
+    let close = calls
+        .iter()
+        .position(|(_, code)| code.contains("OnClose()"))
+        .unwrap();
+    assert!(
+        send < close,
+        "dedication must submit before closing its visible screen"
+    );
+    assert_eq!(keys(&h), 0);
+}
+
+#[test]
+fn dedication_step_rejects_another_local_player_without_submitting() {
+    let fake = FakeBackend::new().lua(|_, _| Ok("1".into()));
+    let mut h = Harness::new(json!({}), fake);
+    let error = h
+        .runner
+        .run_step(&json!({"action":"choose_dedication","human":0}))
+        .unwrap_err();
+    assert!(error.to_string().contains("not the local player"));
+    assert_eq!(count(&h, "UI.RequestPlayerOperation"), 0);
+}
+
+#[test]
+fn dedication_step_fails_when_no_choice_is_pending() {
+    let fake = FakeBackend::new().lua(|_, code| {
+        Ok(if code == "return Game.GetLocalPlayer()" {
+            "0"
+        } else {
+            "none"
+        }
+        .into())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h
+        .runner
+        .run_step(&json!({"action":"choose_dedication","human":0}))
+        .unwrap_err();
+    assert!(error.to_string().contains("No pending dedication"));
+    assert_eq!(keys(&h), 0);
+}
+
+#[test]
+fn dedication_step_requires_a_valid_player_number() {
+    for human in [json!(0), json!(63)] {
+        civ6_autotest_rs::scenario::validate_scenario(
+            &json!({"name":"probe","steps":[{"action":"choose_dedication","human":human}]}),
+        )
+        .unwrap();
+    }
+    for human in [json!(-1), json!(64), json!(0.5), json!("0"), json!(null)] {
+        assert!(civ6_autotest_rs::scenario::validate_scenario(
+            &json!({"name":"probe","steps":[{"action":"choose_dedication","human":human}]})
+        )
+        .is_err());
+    }
+}

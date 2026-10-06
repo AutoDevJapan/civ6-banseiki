@@ -142,6 +142,16 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         ClosePaidAdmissionOwners();
     end
 end
+-- A diagnostic projection is a synchronized script operation. It never
+-- reconciles persons, finalizes evolution or sends a native title operation.
+GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
+    if Game:GetProperty("@EXPERIMENT@") ~= true or not Player(owner, true) or
+       type(params) ~= 'table' or type(params.ProjectionSerial) ~= 'number' or
+       params.ProjectionSerial % 1 ~= 0 or params.ProjectionSerial < 1 or
+       params.ProjectionSerial >= 9007199254740992 then return; end
+    SyncProductionAdmission(false, nil);
+    Player(owner, true):SetProperty('JAC_PERSONA_PROJECT_RECEIPT', params.ProjectionSerial);
+end);
 -- END RUST GENERATED PAID ASSIGNMENT GLUE
 "#;
 

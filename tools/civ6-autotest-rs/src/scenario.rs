@@ -4,13 +4,14 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 34] = [
+pub const ACTIONS: [&str; 38] = [
     "restart_game",
     "enable_mods",
     "configure",
     "start_game",
     "autoplay",
     "end_turn",
+    "choose_dedication",
     "ui_lua",
     "carrier_checkpoint",
     "carrier_exchange",
@@ -21,6 +22,7 @@ pub const ACTIONS: [&str; 34] = [
     "wait_for",
     "observe_captive_session",
     "inspect_native_spy_failures",
+    "inspect_native_spy_research",
     "pause",
     "manual",
     "start_native_governor_trace",
@@ -35,6 +37,8 @@ pub const ACTIONS: [&str; 34] = [
     "stop_native_joined_admission",
     "start_native_production_admission",
     "stop_native_production_admission",
+    "start_native_paid_runtime",
+    "stop_native_paid_runtime_observation",
     "start_native_property_trace",
     "stop_native_property_trace",
     "start_native_promotion_call_trace",
@@ -116,11 +120,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
     let mut joined_open = false;
     let mut production_open = false;
     let mut promotion_open = false;
+    let mut runtime_open = false;
+    let mut runtime_used = false;
     let mut property_used = false;
     let mut promotion_used = false;
     let mut assignment_used = false;
     let mut trace_names = BTreeSet::new();
     let mut lua_captures = BTreeSet::new();
+    let mut carrier_captures = BTreeSet::new();
     for (i, step) in steps.iter().enumerate() {
         let fail = |s: String| Error::scenario(format!("Step {}: {s}", i + 1));
         let action = step["action"]
@@ -175,6 +182,29 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             property_used = false;
             promotion_used = false;
             assignment_used = false;
+            runtime_used = false;
+        }
+        if runtime_used && matches!(action, "load" | "start_game" | "exit_to_menu") {
+            return Err(fail(
+                "resident runtime load-generation hook is not verified; restart_game first".into(),
+            ));
+        }
+        if runtime_used
+            && matches!(
+                action,
+                "start_native_can_ever_trace"
+                    | "start_native_can_ever_calibration"
+                    | "start_native_assign_calibration"
+                    | "start_native_joined_admission"
+                    | "start_native_production_admission"
+                    | "start_native_promotion_call_trace"
+                    | "start_native_property_trace"
+                    | "start_native_governor_trace"
+            )
+        {
+            return Err(fail(
+                "resident runtime owns native entries until restart_game".into(),
+            ));
         }
         match action {
             "start_native_can_ever_trace"
@@ -182,9 +212,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "start_native_assign_calibration"
             | "start_native_joined_admission"
             | "start_native_production_admission"
+            | "start_native_paid_runtime"
             | "start_native_promotion_call_trace"
             | "start_native_property_trace" => {
-                if bridge_open || trace_open {
+                if bridge_open
+                    || trace_open
+                    || (action == "start_native_paid_runtime"
+                        && (runtime_used || property_used || assignment_used || promotion_used))
+                {
                     return Err(fail("native observation already active".into()));
                 }
                 let uses_property = matches!(
@@ -192,6 +227,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     "start_native_property_trace"
                         | "start_native_joined_admission"
                         | "start_native_production_admission"
+                        | "start_native_paid_runtime"
                 );
                 if (uses_property && property_used)
                     || (action == "start_native_promotion_call_trace" && promotion_used)
@@ -234,6 +270,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 assignment_open = action == "start_native_assign_calibration";
                 joined_open = action == "start_native_joined_admission";
                 production_open = action == "start_native_production_admission";
+                runtime_open = action == "start_native_paid_runtime";
+                runtime_used |= runtime_open;
                 promotion_open = action == "start_native_promotion_call_trace";
                 property_used |= uses_property;
                 promotion_used |= promotion_open;
@@ -244,6 +282,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             | "stop_native_assign_calibration"
             | "stop_native_joined_admission"
             | "stop_native_production_admission"
+            | "stop_native_paid_runtime_observation"
             | "stop_native_promotion_call_trace"
             | "stop_native_property_trace" => {
                 if !bridge_open
@@ -252,6 +291,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     || assignment_open != (action == "stop_native_assign_calibration")
                     || joined_open != (action == "stop_native_joined_admission")
                     || production_open != (action == "stop_native_production_admission")
+                    || runtime_open != (action == "stop_native_paid_runtime_observation")
                     || promotion_open != (action == "stop_native_promotion_call_trace")
                     || step
                         .as_object()
@@ -267,6 +307,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 assignment_open = false;
                 joined_open = false;
                 production_open = false;
+                runtime_open = false;
                 promotion_open = false;
             }
             "start_native_governor_trace" => {
@@ -447,6 +488,24 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     ));
                 }
             }
+            "choose_dedication" => {
+                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
+                    return Err(fail(
+                        "choose_dedication human must be an integer in [0, 63]".into(),
+                    ));
+                }
+            }
+            "inspect_native_spy_research" => {
+                if step.as_object().is_none_or(|object| {
+                    object
+                        .keys()
+                        .any(|key| !["action", "timeout", "phase"].contains(&key.as_str()))
+                }) || !crate::spy_research::PHASES
+                    .contains(&step["phase"].as_str().unwrap_or_default())
+                {
+                    return Err(fail("native spy research inspection needs a known phase and only accepts timeout".into()));
+                }
+            }
             "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
                 let token = step["token"]
@@ -464,11 +523,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     )?;
                 }
                 for key in ["capture_as", "equals_capture"] {
-                    if action == "carrier_exchange" && step.get(key).is_some() {
-                        return Err(fail(format!("carrier_exchange does not support {key}")));
+                    if let Some(value) = step.get(key) {
+                        if action == "carrier_exchange" {
+                            return Err(fail(format!("carrier_exchange does not support {key}")));
+                        }
+                        if !type_id(value) {
+                            return Err(fail(format!("invalid {key}")));
+                        }
                     }
-                    if step.get(key).is_some_and(|v| !type_id(v)) {
-                        return Err(fail(format!("invalid {key}")));
+                }
+                if action == "carrier_checkpoint" {
+                    if let Some(key) = step["equals_capture"].as_str() {
+                        if !carrier_captures.contains(key) {
+                            return Err(fail(
+                                "carrier equals_capture needs an earlier capture_as".into(),
+                            ));
+                        }
+                    }
+                    if let Some(key) = step["capture_as"].as_str() {
+                        carrier_captures.insert(key.to_owned());
                     }
                 }
             }

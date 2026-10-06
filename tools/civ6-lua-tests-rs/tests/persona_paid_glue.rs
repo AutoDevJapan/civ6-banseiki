@@ -221,6 +221,33 @@ fn reset_method_lookup_failure_does_not_skip_other_namespace_or_later_owner() {
 }
 
 #[test]
+fn synchronized_projection_is_opt_in_and_cannot_finalize_or_spend_titles() {
+    run(r#"assert(loadstring(GAMEPLAY_SOURCE))()
+        FIRE('JAC_LeaderPersonaProject',0,{ProjectionSerial=1})
+        assert(Players[0]:GetProperty('JAC_PERSONA_PROJECT_RECEIPT')==nil)
+        Game:SetProperty('JAC_TEST853_PAID_ASSIGNMENT_V1',true)
+        local before={}
+        for row in GameInfo.JAC_LeaderPersonas() do
+            before[row.LeaderType]=Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_STATE')
+        end
+        local totalSpent=Players[0].spent+Players[1].spent+Players[2].spent
+        local beforeDestroys,beforeSpawns=DESTROYS,SPAWNS
+        for _,serial in ipairs({false,0,0.5,'2'}) do
+            FIRE('JAC_LeaderPersonaProject',0,{ProjectionSerial=serial})
+            assert(Players[0]:GetProperty('JAC_PERSONA_PROJECT_RECEIPT')==nil)
+        end
+        FIRE('JAC_LeaderPersonaProject',0,{ProjectionSerial=2})
+        assert(Players[0]:GetProperty('JAC_PERSONA_PROJECT_RECEIPT')==2)
+        for row in GameInfo.JAC_LeaderPersonas() do
+            assert(Game:GetProperty('JAC_PERSONA_'..row.LeaderType..'_STATE')==before[row.LeaderType])
+        end
+        assert(Players[0].spent+Players[1].spent+Players[2].spent==totalSpent)
+        assert(DESTROYS==beforeDestroys and SPAWNS==beforeSpawns)
+        assert(Players[0]:GetProperty(904999)==true)
+    "#);
+}
+
+#[test]
 fn nonthrowing_appointment_rejection_revokes_both_native_permissions() {
     for failure in ["schema", "collision", "readback"] {
         run(&format!(

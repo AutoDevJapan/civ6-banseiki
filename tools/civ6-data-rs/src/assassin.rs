@@ -1045,6 +1045,8 @@ pub fn cli(repo: &Repository, _args: &[String]) -> Result<()> {
     apply_outputs(repo, outputs(repo)?, false)
 }
 
+pub mod elimination;
+
 #[cfg(test)]
 mod tests {
     use super::*;

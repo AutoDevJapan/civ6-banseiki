@@ -143,7 +143,9 @@ local function qualification(entry,joined,evolving)
  local measured='CATALOG880 '..(core and 'GAMEPLAY_PROJECTION' or 'UI_NATIVE_QUALIFICATION')..' '..identity..' positive='..positives..' negative='..negatives..' raw='..table.concat(bits)
  rawQualifications[#rawQualifications+1]=measured; print(measured)
  local prefix='JAC_PERSONA_'..entry.row.LeaderType..'_'
- return identity..':'..tostring(Game:GetProperty(prefix..'STATE'))..':'..tostring(Game:GetProperty(prefix..'UNIT'))..':'..tostring(Game:GetProperty(prefix..'EVOLUTION_SURCHARGE'))..':'..ownerGov:GetGovernorPoints()..':'..ownerGov:GetGovernorPointsSpent(),positives,negatives
+ -- Civ6 returns zero Lua values for an absent property. Parentheses adjust
+ -- that to one nil only for display; the ledger assertions above stay strict.
+ return identity..':'..tostring((Game:GetProperty(prefix..'STATE')))..':'..tostring((Game:GetProperty(prefix..'UNIT')))..':'..tostring((Game:GetProperty(prefix..'EVOLUTION_SURCHARGE')))..':'..ownerGov:GetGovernorPoints()..':'..ownerGov:GetGovernorPointsSpent(),positives,negatives
 end
 "#);
     out
