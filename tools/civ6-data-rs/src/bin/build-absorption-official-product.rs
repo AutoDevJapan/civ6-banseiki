@@ -1457,17 +1457,22 @@ end}
             "MINOR.Civ='CIVILIZATION_SINGAPORE'",
             "MINOR.Major=true",
             "MINOR.Receives=false",
+            "MINOR.Level=0",
+            "GameInfo.Civilizations={}",
+            "GameInfo.Leaders={}",
         ] {
             let lua = Lua::new();
             lua.load(r#"
 Players,PlayerConfigurations={},{}
-MINOR={ID=2,Civ='CIVILIZATION_VATICAN_CITY',Leader='LEADER_MINOR_CIV_VATICAN_CITY',Major=false,Receives=true}
+CivilizationLevelTypes={CIVILIZATION_LEVEL_CITY_STATE=3}
+GameInfo={Civilizations={CIVILIZATION_VATICAN_CITY={StartingCivilizationLevelType='CIVILIZATION_LEVEL_CITY_STATE'}},Leaders={LEADER_MINOR_CIV_VATICAN_CITY={}}}
+MINOR={ID=2,Civ='CIVILIZATION_VATICAN_CITY',Leader='LEADER_MINOR_CIV_VATICAN_CITY',Major=false,Receives=true,Level=3}
 local rows={{ID=0,Civ='CIVILIZATION_JAC_TAKEDA',Leader='LEADER_JAC_TAKEDA_NOBUTORA',Major=true},
  {ID=1,Civ='CIVILIZATION_JAC_ODA',Leader='LEADER_JAC_ODA_NOBUHIDE',Major=true},MINOR}
 for _,row in ipairs(rows) do
  Players[row.ID]={GetID=function() return row.ID end,IsAlive=function() return true end,IsMajor=function() return row.Major==true end,
  GetInfluence=function() return {CanReceiveInfluence=function() return row.Receives==true end} end}
- PlayerConfigurations[row.ID]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end}
+ PlayerConfigurations[row.ID]={GetCivilizationTypeName=function() return row.Civ end,GetLeaderTypeName=function() return row.Leader end,GetCivilizationLevelTypeID=function() return row.Level end}
 end
 PlayerManager={GetAliveMinors=function() return {Players[2]} end}
 "#).exec()?;
