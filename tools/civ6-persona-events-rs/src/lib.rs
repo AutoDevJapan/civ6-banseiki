@@ -3,6 +3,7 @@ mod normal;
 pub mod scenario;
 pub mod sp_reassign;
 pub mod sp_runtime;
+pub mod sp_skill;
 
 pub const BEGIN: &str = "-- BEGIN RUST PERSONA EVENTS PROBE";
 pub const END: &str = "-- END RUST PERSONA EVENTS PROBE";

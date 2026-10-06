@@ -32,9 +32,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scenario = civ6_persona_events_rs::sp_reassign::build(&template, input.as_deref(), turns)?;
             fs::write(&args[3], serde_json::to_string_pretty(&scenario)?)?;
         }
+        Some("generate-sp-skill") if args.len() == 5 => {
+            let template = serde_json::from_slice(&fs::read(&args[1])?)?;
+            let (input, merit) = if args[2] == "-" && args[3] == "-" { (None,None) } else {
+                let path=PathBuf::from(&args[2]);
+                if !path.is_file() || fs::metadata(&path)?.len()==0 || path.extension().and_then(|v|v.to_str())!=Some("Civ6Save") {
+                    return Err("skill input must be a nonempty successful reassignment .Civ6Save; draft uses - -".into());
+                }
+                (Some(path.file_stem().and_then(|v|v.to_str()).ok_or("invalid save filename")?.to_owned()),Some(args[3].parse::<u32>()?))
+            };
+            let scenario=civ6_persona_events_rs::sp_skill::build(&template,input.as_deref(),merit)?;
+            fs::write(&args[4],serde_json::to_string_pretty(&scenario)?)?;
+        }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS]".into(),
+                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
             )
         }
     }
