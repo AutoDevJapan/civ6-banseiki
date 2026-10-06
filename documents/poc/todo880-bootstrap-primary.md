@@ -123,11 +123,21 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
-固定load実機04は5/7手順まで成功し、LeaveGame中に2プロセス検出で失敗した。原本は `D:/CC/Work/todo880/order-fixed-04-artifacts`。sequence120/121は同TID29092、code `0x406D1388` のfirst/second chanceで、旧observerは両方を透過した。4つのload siteはhit0、observerの復元・detach・回収は成功している。2プロセスの正体・失敗原因・境界不在は未確定とする。04はExceptionInformationを持たないため、正規thread-name payloadだったと断定しない。
+### 実機04のdumpで確認した6語通知
+
+追加一次証拠 `D:/CC/Work/todo880/order-fixed-04-windows-events.json` のApplication1000/1001はPID53272・開始FILETIME `0x1DD55D24B88AD90` と同runへ一致する。原dump `C:/Users/makhmeto/AppData/Local/CrashDumps/CivilizationVI.exe.53272.dmp` は85,471,399byte、SHA-256 `8588bdc1fc4146dea482e3a1340bc4c026913b8f524defb3d60302f78430b1a4`。SDK minidumpapiset.hのExceptionStream/ModuleList/MemoryList定義に従い読み取り、前後SHA不変を確認した。ExceptionStreamはTID29092、code0x406d1388、flags0x80、KernelBase+0xC41CA、NumberParameters=6である。
+
+ExceptionInformationは `[0x1000,0x7ffae1e09b28,0x71a4,0,0x7ffae1e204a0,0x7ffae1df5bfc]`。先頭3語のtype・名前pointer・対象TID29092・payload flags0は正規THREADNAME_INFOに一致する。名前pointerはdump内のBink module+0x49B28に属するが、そのページはdumpに含まれない。同timestamp・SizeOfImageの実ファイル `Base/Binaries/Win64Steam/bink2w64.dll`（SHA-256 `8c72bcb0a08f722a15afca6b0e3395e278b10e0b318b696182d5625a4375ee93`）の同RVAは `Bink IO\0` である。文字列は実ファイル由来であり、dumpからの復元と偽らない。
+
+同BinkのRVA0x35AE0は24byteの構造体をstackへ作る。0x35B98はR8D=6、0x35BA4はRaiseExceptionを呼ぶ。先頭24byteに対し48byteを引数として渡す実装で、後半3語は構造体外の値である。これにより旧3語限定候補a27fffeeがこの実通知を拒否することが判明した。新候補は3語または確認済み6語だけを認識し、後半3語を未解釈のrawとして保持する。先頭field・終端付き名前の実メモリ読取・所有thread・pending条件は変更しない。4/5語などを名前通知として推測しない。
+
+所有Rust子は3語・6語の両方で、旧first-chance透過→second-chanceと、修正first-chance継続→second-chanceなしを比較する。6語fixtureは配列全体を初期化し、実Binkの構造体外読み込みをテスト側で再現しない。04のownedゲームが命名例外でAPPCRASHしたことは確定したが、2プロセス目の正体は未確定、4load site hit0は境界不在の証明ではない。dump解析結果は `D:/CC/Work/todo880/bootstrap-live04-minidump-proof.json` に記録する。
+
+固定load実機04は5/7手順まで成功し、LeaveGame中に2プロセス検出で失敗した。原本は `D:/CC/Work/todo880/order-fixed-04-artifacts`。sequence120/121は同TID29092、code `0x406D1388` のfirst/second chanceで、旧observerは両方を透過した。4つのload siteはhit0、observerの復元・detach・回収は成功している。当初のobserver rawにはExceptionInformationがなく、payloadは未確定だった。追加dumpによる命名例外のAPPCRASH確認は上記のとおり。2プロセス目の正体と破棄境界は引き続き未確定である。
 
 Microsoftの[thread名通知](https://learn.microsoft.com/en-us/visualstudio/debugger/tips-for-debugging-threads?view=vs-2022)はpack8のTHREADNAME_INFOをRaiseExceptionへ渡す。固定EXE SHA `e7450823…d63` をLLVMで読むとRVA `0x98BF30`、`0xC896E0`、`0xF63060`にtype0x1000・名前pointer・thread ID・flags0を組み立て、3 ULONG_PTRで同コードをRaiseException IAT `0xF96788`へ送る命令がある。DWORD typeの上位は構造体paddingなので0を要求しない。これはゲームPEに実在する通知経路の証拠であり、04の例外callsiteの同定ではない。
 
-observerは3引数のWin64形式、type0x1000、payload flags0、256byte以内に終端する読み取り可能な名前、送信元と対象の保持済み同所有process/thread・生存を照合した場合だけDBG_CONTINUEとする。対象IDのDWORD -1は送信threadを表す。未知・不正なpayloadは透過し、TIDから不明handleを再取得しない。ExceptionFlagsは0またはSDK winnt.hの `EXCEPTION_SOFTWARE_ORIGINATE=0x80` のみ許す。実OS子ではRaiseExceptionへflags0を渡しても受信レコードに0x80が付いた。[EXCEPTION_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_record)が区別する非継続bit等は許可しない。同じthreadにpending命令がある場合は完了を作らず停止し、別threadのpendingは変更しない。
+observerは3引数のWin64形式または上記の6引数形式の先頭3語、type0x1000、payload flags0、256byte以内に終端する読み取り可能な名前、送信元と対象の保持済み同所有process/thread・生存を照合した場合だけDBG_CONTINUEとする。対象IDのDWORD -1は送信threadを表す。未知・不正なpayloadは透過し、TIDから不明handleを再取得しない。ExceptionFlagsは0またはSDK winnt.hの `EXCEPTION_SOFTWARE_ORIGINATE=0x80` のみ許す。実OS子ではRaiseExceptionへflags0を渡しても受信レコードに0x80が付いた。[EXCEPTION_RECORD](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-exception_record)が区別する非継続bit等は許可しない。同じthreadにpending命令がある場合は完了を作らず停止し、別threadのpendingは変更しない。
 
 例外のraw記録にExceptionFlags、NumberParameters、ExceptionInformation（最大15語）、名前のbyte列と対象TID、拒否理由を追加した。継続statusを記録I/Oより前に決定し、通知受理後にdisk書込が失敗しても、そのstatusを既存cleanupへ明示して維持する。`order_capture_thread_name_real_second_chance_and_fixed_continue` は既存所有Rust子に同じRaiseExceptionを実行させ、旧first-chance透過→second-chanceを観測後に救済する対照と、修正first-chance継続を比較する。不正payload・pending台帳の検査は実イベントの否定用変形で、ゲームがその値を送った証拠にはしない。
 

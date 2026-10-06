@@ -19,9 +19,29 @@ extern "C-unwind" fn naming_target(_: u64, _: u32) -> u8 {
     1
 }
 
+#[inline(never)]
+extern "C-unwind" fn naming_target_legacy(_: u64, _: u32) -> u8 {
+    let name = b"Bink IO\0";
+    let tid = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    // Reproduce the observed six-word API call without the real producer's
+    // out-of-structure stack read: all six source words are initialized here.
+    let args = [
+        0x1000usize,
+        name.as_ptr() as usize,
+        tid as usize,
+        0,
+        0x1234,
+        0x5678,
+    ];
+    unsafe {
+        RaiseException(THREAD_NAME_EXCEPTION as u32, 0, 6, args.as_ptr());
+    }
+    1
+}
+
 #[test]
 fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
-    for baseline in [true, false] {
+    for (baseline, parameter_count) in [(true, 3), (false, 3), (true, 6), (false, 6)] {
         let mut child = Fixture::start();
         let pid = child.child.id();
         let base = child.entry - CAN_EVER_RVA;
@@ -30,7 +50,12 @@ fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
         let remote = module_named(pid, exe.file_name().unwrap().to_str().unwrap())
             .unwrap()
             .base;
-        let target = remote + naming_target as *const () as u64 - local;
+        let function = if parameter_count == 3 {
+            naming_target as *const ()
+        } else {
+            naming_target_legacy as *const ()
+        };
+        let target = remote + function as u64 - local;
         let path = std::env::temp_dir().join(format!(
             "todo880-threadname-{}-{pid}.jsonl",
             std::process::id()
@@ -114,8 +139,12 @@ fn order_capture_thread_name_real_second_chance_and_fixed_continue() {
                             if baseline {mark(d,row).map_err(std::io::Error::other)}else{readonly.write_all(b"actual denied write")}
                         });
                         assert_eq!(recorded.is_ok(),baseline);
-                        assert_eq!(evidence["number_parameters"],3);
-                        assert_eq!(evidence["exception_information"].as_array().unwrap().len(),3);
+                        assert_eq!(evidence["number_parameters"],parameter_count);
+                        assert_eq!(evidence["exception_information"].as_array().unwrap().len(),parameter_count as usize);
+                        if parameter_count==6 {
+                            assert_eq!(evidence["thread_name_notice"]["trailing_words_uninterpreted"],json!([0,0x1234,0x5678]));
+                            assert_eq!(evidence["thread_name_notice"]["name_bytes"],json!(b"Bink IO"));
+                        }
                         assert_eq!(evidence["thread_name_notice"]["target_tid"],tid);
                         assert_eq!(evidence["continue_status"],DBG_CONTINUE);
                         cleanup_order(&mut d).unwrap();

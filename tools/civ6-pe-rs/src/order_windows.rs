@@ -434,6 +434,8 @@ fn emit(row: &Value) -> Result<(), String> {
 
 const THREAD_NAME_EXCEPTION: i32 = 0x406d1388;
 // Microsoft pack(8) THREADNAME_INFO on Win64 is 24 bytes / 3 ULONG_PTRs.
+// The shipped Bink producer passes count=6 for that same 24-byte prefix;
+// live04's dump confirms six words. Only this observed legacy count is added.
 // The upper DWORD of word 0 is padding, not a required zero field.
 fn thread_name_notice(d: &Debugger, event: &DEBUG_EVENT) -> Result<Value, String> {
     let ex = unsafe { event.u.Exception }.ExceptionRecord;
@@ -442,7 +444,7 @@ fn thread_name_notice(d: &Debugger, event: &DEBUG_EVENT) -> Result<Value, String
         // Windows adds EXCEPTION_SOFTWARE_ORIGINATE (SDK winnt.h) to the
         // observed record even when RaiseException was called with flags=0.
         || ex.ExceptionFlags & !0x80 != 0
-        || ex.NumberParameters != 3
+        || !matches!(ex.NumberParameters, 3 | 6)
     {
         return Err("not the Win64 thread-name notification shape".into());
     }
@@ -475,7 +477,7 @@ fn thread_name_notice(d: &Debugger, event: &DEBUG_EVENT) -> Result<Value, String
         let byte = read_exact::<1>(&d.game, address)?[0];
         if byte == 0 {
             return Ok(
-                json!({"target_tid":target,"name_bytes":name,"name_address":words[1],"layout":"Win64-pack8-3-ULONG_PTR","padding_ignored":(words[0] as u64)>>32}),
+                json!({"target_tid":target,"name_bytes":name,"name_address":words[1],"layout":if ex.NumberParameters==3 {"Win64-pack8-3-ULONG_PTR"} else {"Civ6-Bink-Win64-pack8-prefix-count6"},"padding_ignored":(words[0] as u64)>>32,"trailing_words_uninterpreted":if ex.NumberParameters==6 {&words[3..6]}else{&words[3..3]}}),
             );
         }
         name.push(byte);
