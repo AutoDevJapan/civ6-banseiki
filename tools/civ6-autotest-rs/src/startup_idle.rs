@@ -89,9 +89,9 @@ pub fn idle_refusal(proof: &IdleProof) -> Option<&'static str> {
             }
             if engine.physical != 0
                 || (!software.contains(&engine.adapter)
-                    && !expected
+                    && expected
                         .get(&engine.adapter)
-                        .is_some_and(|nodes| engine.engine < *nodes))
+                        .is_none_or(|nodes| engine.engine >= *nodes))
             {
                 return Some("unrecognized GPU adapter or engine");
             }

@@ -91,8 +91,8 @@ fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
         require(
             decimal::<usize>(parts[0])? == source
                 && decimal::<usize>(balance[0])? == source
-                && Value::from(parts[1]) == players[source]["leader"]
-                && Value::from(parts[2]) == players[source]["civ"]
+                && parts[1] == players[source]["leader"]
+                && parts[2] == players[source]["civ"]
                 && index < 256
                 && indices.insert(index)
                 && hashes.insert(hash)
@@ -279,9 +279,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                 !started
                     && next == 0
                     && status == "OK"
-                    && candidates
-                        .iter()
-                        .all(|c| Value::from(detail) == c.data["name"]),
+                    && candidates.iter().all(|c| detail == c.data["name"]),
                 "wrong/duplicate scenario start",
             )?;
             started = true;

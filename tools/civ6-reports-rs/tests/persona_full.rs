@@ -1,4 +1,4 @@
-use civ6_reports_rs::persona_full::{verify, verify_directory};
+use civ6_reports_rs::persona_full::{verify, verify_baseline_directory, verify_directory};
 use serde_json::{json, Value};
 
 const SCENARIO: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
@@ -211,4 +211,248 @@ fn incomplete_or_invalid_appended_receipt_is_not_silently_discarded() {
             "accepted {receipt}"
         );
     }
+}
+
+// The shared live_chain's ship::live adds exactly this restart and isolates
+// every non-exact save/load name with the artifact directory's run ID.
+fn chain_fixture(run_id: &str) -> (Vec<Value>, Value) {
+    let (rows, mut result) = fixture();
+    let mut out = vec![rows[0].clone()];
+    out.push(json!({"action":"1/114 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}));
+    out.push(
+        json!({"action":"1/114 restart_game","status":"OK","detail":"Civ VI relaunched via Steam"}),
+    );
+    for row in &rows[1..rows.len() - 1] {
+        let mut row = row.clone();
+        let action = row["action"].as_str().unwrap().to_owned();
+        let (number, kind) = action.split_once(" ").unwrap();
+        let index: usize = number.split('/').next().unwrap().parse().unwrap();
+        row["action"] = json!(format!("{}/114 {kind}", index + 1));
+        if row["status"] == "START" && matches!(kind, "save" | "load") {
+            let mut step: Value = serde_json::from_str(row["detail"].as_str().unwrap()).unwrap();
+            let name = step["name"].as_str().unwrap();
+            step["name"] = json!(format!("{name}-{run_id}"));
+            row["detail"] = json!(step.to_string());
+        }
+        out.push(row);
+    }
+    out.push(rows.last().unwrap().clone());
+    result["completed_steps"] = json!(114);
+    (out, result)
+}
+
+fn chain_directory(
+    rows: &[Value],
+    result: &Value,
+    run_id: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let temporary = tempfile::tempdir().unwrap();
+    let path = temporary.path().join(run_id);
+    std::fs::create_dir(&path).unwrap();
+    std::fs::write(path.join("steps.jsonl"), text(rows)).unwrap();
+    std::fs::write(path.join("result.json"), result.to_string()).unwrap();
+    for name in ["Lua.log", "Database.log", "Modding.log"] {
+        std::fs::write(path.join(name), "").unwrap();
+    }
+    (temporary, path)
+}
+
+#[test]
+fn shared_chain_restart_and_run_names_preserve_the_original_113_checks() {
+    let (rows, result) = chain_fixture("leaderperson-407");
+    let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+    let report = verify_directory(&directory).unwrap();
+    assert_eq!(report.completed_steps, 113);
+    assert_eq!(report.matched_save_load_snapshots, 6);
+    assert!(report.early_ai_check && report.final_ai_check);
+    assert!(!report.product_acceptance);
+}
+
+#[test]
+fn shared_chain_cannot_change_restart_timeout_save_namespace_or_ai_guard() {
+    let (rows, result) = chain_fixture("leaderperson-407");
+    for (action, field, value) in [
+        ("1/114 restart_game", "timeout", json!(421)),
+        (
+            "16/114 save",
+            "name",
+            json!("JAC_PERSONA_GREATPERSON-other-01"),
+        ),
+        (
+            "40/114 ui_lua",
+            "code",
+            json!("return 'native AI appointment gate verified after first turn'"),
+        ),
+    ] {
+        let mut mutated = rows.clone();
+        let row = mutated
+            .iter_mut()
+            .find(|r| r["action"] == action && r["status"] == "START")
+            .unwrap();
+        let mut step: Value = serde_json::from_str(row["detail"].as_str().unwrap()).unwrap();
+        step[field] = value;
+        row["detail"] = json!(step.to_string());
+        let (_temporary, directory) = chain_directory(&mutated, &result, "leaderperson-407");
+        assert!(
+            verify_directory(&directory).is_err(),
+            "accepted altered {action}/{field}"
+        );
+    }
+    let (_temporary, directory) = chain_directory(&rows, &result, "other-01");
+    assert!(verify_directory(&directory).is_err());
+}
+
+#[test]
+fn extra_restart_and_mixed_save_load_names_do_not_complete_a_chain_run() {
+    let (mut rows, mut result) = chain_fixture("leaderperson-407");
+    rows.insert(3, rows[1].clone());
+    result["completed_steps"] = json!(115);
+    let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+    assert!(verify_directory(&directory).is_err());
+
+    let (mut rows, result) = chain_fixture("leaderperson-407");
+    let row = rows
+        .iter_mut()
+        .find(|r| r["action"] == "18/114 load" && r["status"] == "START")
+        .unwrap();
+    let mut step: Value = serde_json::from_str(row["detail"].as_str().unwrap()).unwrap();
+    step["name"] = json!("JAC-Persona-GreatPerson-leaderperson-406");
+    row["detail"] = json!(step.to_string());
+    let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+    assert!(verify_directory(&directory).is_err());
+}
+
+fn baseline_fixture() -> (Vec<Value>, Value) {
+    let baseline: Value = serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/leader-persona-baseline-15km.json"
+    ))
+    .unwrap();
+    let mut rows = vec![json!({"action":"start","status":"OK","detail":baseline["name"]})];
+    rows.push(json!({"action":"1/6 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}));
+    rows.push(
+        json!({"action":"1/6 restart_game","status":"OK","detail":"Civ VI relaunched via Steam"}),
+    );
+    for (index, step) in baseline["steps"].as_array().unwrap().iter().enumerate() {
+        let action = format!("{}/6 {}", index + 2, step["action"].as_str().unwrap());
+        rows.push(json!({"action":action,"status":"START","detail":step.to_string()}));
+        let detail = if step["action"] == "ui_lua" {
+            "ran Lua in InGame; return=baseline has 22 factions and idle game core"
+        } else {
+            "operation completed"
+        };
+        rows.push(json!({"action":action,"status":"OK","detail":detail}));
+    }
+    rows.push(json!({"action":"judge","status":"OK","detail":"5/5 checks passed"}));
+    let names = [
+        "Generic: JAC Modding.log errors",
+        "Generic: JAC Database.log errors",
+        "Generic: [JAC_POC] errors",
+        "Generic: JAC Runtime Error",
+        "Generic: JAC missing texture",
+    ];
+    let result = json!({"scenario":baseline["name"],"passed":true,"completed_steps":6,"failure":null,"test_mode":null,"checks":names.map(|name|json!({"name":name,"passed":true}))});
+    (rows, result)
+}
+
+#[test]
+fn startup_comparison_proves_only_the_matching_configuration_is_ready() {
+    let (rows, result) = baseline_fixture();
+    let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+    let report = verify_baseline_directory(&directory).unwrap();
+    assert!(report.baseline_ready && report.preparation_restart);
+    assert_eq!(
+        (
+            report.completed_steps,
+            report.recorded_steps,
+            report.matched_save_load_snapshots
+        ),
+        (5, 6, 0)
+    );
+    assert!(
+        !report.scenario_completed
+            && !report.early_ai_check
+            && !report.final_ai_check
+            && !report.product_acceptance
+    );
+    assert!(verify_directory(&directory).is_err());
+}
+
+#[test]
+fn contamination_changed_seed_or_skipped_readiness_cannot_pass_baseline() {
+    let (rows, result) = baseline_fixture();
+    for (action, field, value) in [
+        (
+            "2/6 enable_mods",
+            "ids",
+            json!(["91cf7b65-54bb-4f69-a452-19a65527cde2"]),
+        ),
+        ("3/6 configure", "seed", json!(620975)),
+        (
+            "5/6 ui_lua",
+            "code",
+            json!("return 'baseline has 22 factions and idle game core'"),
+        ),
+    ] {
+        let mut mutated = rows.clone();
+        let row = mutated
+            .iter_mut()
+            .find(|r| r["action"] == action && r["status"] == "START")
+            .unwrap();
+        let mut step: Value = serde_json::from_str(row["detail"].as_str().unwrap()).unwrap();
+        step[field] = value;
+        row["detail"] = json!(step.to_string());
+        let (_temporary, directory) = chain_directory(&mutated, &result, "leaderperson-407");
+        assert!(
+            verify_baseline_directory(&directory).is_err(),
+            "accepted altered {action}/{field}"
+        );
+    }
+    let mut skipped = rows.clone();
+    skipped[10]["status"] = json!("SKIP");
+    let (_temporary, directory) = chain_directory(&skipped, &result, "leaderperson-407");
+    assert!(verify_baseline_directory(&directory).is_err());
+}
+
+#[test]
+fn successful_summary_cannot_hide_raw_log_errors_in_either_profile() {
+    for baseline in [false, true] {
+        let (rows, result) = if baseline {
+            baseline_fixture()
+        } else {
+            chain_fixture("leaderperson-407")
+        };
+        for (name, error) in [
+            ("Database.log", "[123] ERROR: no such table\n[123] from file Mods/JAC_PoC_LeaderPersona/Data/persona.sql\n"),
+            ("Modding.log", "Loading JAC_PoC_LeaderPersona\n[123] Failed to apply component\n"),
+            ("Lua.log", "[JAC_POC] operation failed\n"),
+            ("Lua.log", "GovernorPanel: Runtime Error: bad argument\n  JAC_LeaderPersona_View.lua:37\n"),
+            ("Lua.log", "Failed to load background image texture: JAC_BadTexture.dds\n"),
+        ] {
+            let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+            std::fs::write(directory.join(name), error).unwrap();
+            let verified = if baseline { verify_baseline_directory(&directory) } else { verify_directory(&directory) };
+            assert!(verified.unwrap_err().to_string().contains("raw log check failed"), "accepted stale successful summary for {name}/baseline={baseline}");
+        }
+    }
+}
+
+#[test]
+fn benign_log_lines_and_unrelated_database_errors_keep_the_runner_policy() {
+    let (rows, result) = baseline_fixture();
+    let (_temporary, directory) = chain_directory(&rows, &result, "leaderperson-407");
+    std::fs::write(
+        directory.join("Database.log"),
+        "[123] ERROR: unrelated vanilla asset\nfrom file Base/Assets/Data/core.xml\n",
+    )
+    .unwrap();
+    std::fs::write(
+        directory.join("Lua.log"),
+        "[JAC_POC] operation ok error=none\n[JAC_POC] operation ok error=nil\n",
+    )
+    .unwrap();
+    assert!(
+        verify_baseline_directory(&directory)
+            .unwrap()
+            .baseline_ready
+    );
 }

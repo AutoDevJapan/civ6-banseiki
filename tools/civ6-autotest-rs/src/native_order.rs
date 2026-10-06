@@ -118,7 +118,7 @@ pub fn validate_receipt(
         || row["child_pid"].as_u64() != Some(u64::from(observer))
         || row["permit_granted"] != true
         || row["never_attached"] != false
-        || !row["stop_writes"].as_u64().is_some_and(|n| n <= 1)
+        || row["stop_writes"].as_u64().is_none_or(|n| n > 1)
         || row["child_reaped"] != true
         || row["cleanup_confirmed"] != true
         || row["restored"] != true
@@ -358,14 +358,13 @@ mod platform {
                     }
                     self.observer = observer;
                 }
-                if row["pid"].as_u64() == Some(u64::from(self.pid)) {
-                    if row["ready"] == true
-                        && row["capture_only"] == true
-                        && row["phase"] == phase
-                        && self.observer != 0
-                    {
-                        return Ok(());
-                    }
+                if row["pid"].as_u64() == Some(u64::from(self.pid))
+                    && row["ready"] == true
+                    && row["capture_only"] == true
+                    && row["phase"] == phase
+                    && self.observer != 0
+                {
+                    return Ok(());
                 }
             }
         }
@@ -423,7 +422,10 @@ mod platform {
             for row in self.lines.try_iter() {
                 match row {
                     Ok(row) if row["type"] == "order_parent_receipt" => {
-                        if self.receipt.replace(row).is_some() {
+                        // Replacing the receipt consumes row; a match guard
+                        // cannot perform that move.
+                        let prior_receipt = self.receipt.replace(row);
+                        if prior_receipt.is_some() {
                             parse_error = Some("duplicate order receipt".to_string());
                         }
                     }

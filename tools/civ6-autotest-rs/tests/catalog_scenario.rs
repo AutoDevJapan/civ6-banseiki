@@ -171,7 +171,10 @@ fn generated_normal_setup_mode_and_zero_operation_contract_validate() {
             Ok(_) => panic!("invalid normal fixture was accepted: {mutation}"),
             Err(error) => error.to_string(),
         };
-        assert!(error.contains("normal fixture initialization failed"), "{mutation}: {error}");
+        assert!(
+            error.contains("normal fixture initialization failed"),
+            "{mutation}: {error}"
+        );
     }
     let data = catalog::build(&template()).unwrap();
     civ6_autotest_rs::scenario::validate_scenario(&data).unwrap();
@@ -421,13 +424,22 @@ fn game_cost_owner_source_and_boolean_result_tampering_rejects() {
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_SOURCE',1)",
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_EVOLUTION_COST',3)",
         "Game:SetProperty('JAC_PERSONA_LEADER_JAC_HOJO_UJITSUNA_EVOLUTION_SURCHARGE',1)",
-        "Players[1].points=0", "Players[1].spent=1", "UNKNOWN=true",
+        "Players[1].points=0",
+        "Players[1].spent=1",
+        "UNKNOWN=true",
         "local g=Players[1].GetGovernors; Players[1].GetGovernors=function() local v=g(); v.CanEverAppointGovernor=function() return 1 end; return v end",
     ] {
-        let lua=model(); run(&lua,&catalog::prepare_code());
-        run(&lua,&catalog::pair_code(0,false,true).unwrap()); run(&lua,&catalog::pair_code(0,true,true).unwrap());
+        let lua = model();
+        run(&lua, &catalog::prepare_code());
+        run(&lua, &catalog::pair_code(0, false, true).unwrap());
+        run(&lua, &catalog::pair_code(0, true, true).unwrap());
         lua.load(mutation).exec().unwrap();
-        assert!(lua.load(catalog::pair_code(0,true,false).unwrap()).eval::<String>().is_err(),"{mutation}");
+        assert!(
+            lua.load(catalog::pair_code(0, true, false).unwrap())
+                .eval::<String>()
+                .is_err(),
+            "{mutation}"
+        );
     }
 }
 

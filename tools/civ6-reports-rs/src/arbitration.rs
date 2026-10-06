@@ -334,7 +334,7 @@ pub fn summarize(artifact: &Path) -> Result<Value> {
         }
     }
     for ((turn, pair), _) in &outcomes.0 {
-        if !requests.get(&(turn - 1)).is_some_and(|r| &r.pair == pair) {
+        if requests.get(&(turn - 1)).is_none_or(|r| &r.pair != pair) {
             issues.push(format!("ruling without preceding request on turn {turn}"));
         }
     }
