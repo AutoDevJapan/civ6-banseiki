@@ -3407,6 +3407,32 @@ impl Runner {
             self.save_name(step)?
         };
         let path = self.save_path(&name);
+        // Keep the verified file open until load completes. On Windows the
+        // handle permits readers (Civ6), but denies replacement and writes.
+        let _save_pin = if let Some(expected) = step.get("save_sha256") {
+            let expected = expected
+                .as_str()
+                .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()))
+                .ok_or_else(|| Error::scenario("invalid save_sha256"))?;
+            let mut options = OpenOptions::new();
+            options.read(true);
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::OpenOptionsExt;
+                options.share_mode(windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ);
+            }
+            let mut file = options.open(&path)?;
+            let mut hasher = Sha256::new();
+            io::copy(&mut file, &mut hasher)?;
+            if !format!("{:x}", hasher.finalize()).eq_ignore_ascii_case(expected) {
+                return Err(Error::scenario(
+                    "load save_sha256 mismatch; no LoadGame sent",
+                ));
+            }
+            Some(file)
+        } else {
+            None
+        };
         if !path.is_file() {
             return Err(Error::scenario(format!(
                 "Save not found: {}",
@@ -3416,6 +3442,33 @@ impl Runner {
         let session = scenario::SessionType::from_scenario(&self.scenario)?;
         let code = scenario::load_code(&name, session);
         let before = self.loadscreen_count()?;
+        if step["resume_once"] == true {
+            let sha = step["save_sha256"]
+                .as_str()
+                .ok_or_else(|| Error::scenario("resume_once requires save_sha256"))?;
+            // A later retry must audit its own transcript and checkpoint, not
+            // reuse the historical no-send proof after this process has run.
+            let receipt = self
+                .saves
+                .join(format!("resume-once-{}.json", sha.to_ascii_lowercase()));
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&receipt)
+                .map_err(|e| {
+                    Error::scenario(format!(
+                        "cannot claim one-shot resume {}: {e}",
+                        receipt.display()
+                    ))
+                })?;
+            serde_json::to_writer(
+                &mut file,
+                &json!({"save":name,"sha256":sha,"output":self.output}),
+            )
+            .map_err(|e| Error::scenario(e.to_string()))?;
+            file.flush()?;
+            file.sync_all()?;
+        }
         let started = self.clock.now();
         let mut unknown = match self.send_frontend_transition(&code, deadline) {
             Ok(_) => false,

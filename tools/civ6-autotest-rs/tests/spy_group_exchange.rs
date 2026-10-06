@@ -219,6 +219,54 @@ end
 
 struct Case(Lua);
 
+fn reserved_reload() -> Case {
+    let c = Case::new();
+    c.reserve();
+    c.run("SAVED=PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62; SAVED_NONCE=SAVED.nonce; JAC_GroupExchange548=nil; Events.DiplomacyStatement.listeners={}; Events.DiplomacyIncomingDeal.listeners={}; ExposedMembers.JAC_GroupExchange548Witness=nil; ExposedMembers.JAC_PersonaBoundaryMissingCaptiveDealTooltipKey=ORIGINAL_TOOLTIP; Game.SetProperty=function() error('resume must not rewrite Core reservation') end");
+    c.0.load(spy_group_exchange::UI_SETUP).exec().unwrap();
+    c
+}
+
+#[test]
+fn reserved_reload_restores_original_nonce_without_repreparing_or_writing_core() {
+    let c = reserved_reload();
+    c.run("assert(JAC_GroupExchange548.ResumeReserved('live04-969d4256-b4daf733-58a796ad')=='RESUMED_RESERVED'); assert(PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62==SAVED and ExposedMembers.JAC_GroupExchange548Witness.nonce==SAVED_NONCE); assert(#SENDS==0 and #OUT.items==0 and SESSION==nil); JAC_GroupExchange548.ArmAfterSave(); JAC_GroupExchange548.OpenSession(); assert(JAC_GroupExchange548.SessionReady()); JAC_GroupExchange548.EqualizeOnce(); assert(#SENDS==1 and H[1].turn==23 and H[2].turn==45 and H[3].turn==62)");
+    c.rejects(
+        "JAC_GroupExchange548.ResumeReserved('live04-969d4256-b4daf733-58a796ad')",
+        "fresh UI instance",
+    );
+    c.rejects("JAC_GroupExchange548.EqualizeOnce()", "already sent");
+}
+
+#[test]
+fn resume_refuses_later_states_changed_history_and_occupied_native_session() {
+    for setup in [
+        "SAVED.stage='FINAL_INTENT'",
+        "SAVED.quote={}",
+        "SAVED.errors={}",
+        "SAVED.before.histories[1]={id=0,turn=22}",
+        "SESSION=99",
+        "CAPTIVE_COUNT=2",
+    ] {
+        let c = reserved_reload();
+        c.run(setup);
+        assert!(
+            c.0.load(
+                "return JAC_GroupExchange548.ResumeReserved('live04-969d4256-b4daf733-58a796ad')"
+            )
+            .exec()
+            .is_err(),
+            "{setup}"
+        );
+        c.run("assert(#SENDS==0 and #OUT.items==0 and PROPERTIES.JAC_BOUNDARY_GROUP_EXCHANGE_62==SAVED)");
+    }
+    let c = reserved_reload();
+    c.rejects(
+        "JAC_GroupExchange548.ResumeReserved('unverified')",
+        "audited host receipt",
+    );
+}
+
 #[test]
 fn cleanup_keeps_a_stock_copied_item_that_changed_after_observation() {
     let c = Case::new();

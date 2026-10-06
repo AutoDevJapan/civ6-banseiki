@@ -683,10 +683,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "save" | "load" => {
+                if step.get("save_sha256").is_some()
+                    && (action != "load"
+                        || !step["save_sha256"].as_str().is_some_and(|s| {
+                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                        }))
+                {
+                    return Err(fail(
+                        "save_sha256 requires load and 64 hexadecimal characters".into(),
+                    ));
+                }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
                     return Err(fail("invalid save name".into()));
                 }
-                bool_flags(&["exact_name", "metrics", "checkpoint"])?;
+                bool_flags(&["exact_name", "metrics", "checkpoint", "resume_once"])?;
+                if step.get("resume_once").is_some()
+                    && (action != "load" || step.get("save_sha256").is_none())
+                {
+                    return Err(fail("resume_once requires load with save_sha256".into()));
+                }
                 if step["checkpoint"] == true && step["exact_name"] != true {
                     return Err(fail("checkpoint requires exact_name: true".into()));
                 }
