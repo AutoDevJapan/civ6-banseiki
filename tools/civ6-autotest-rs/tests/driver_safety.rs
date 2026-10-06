@@ -1,5 +1,56 @@
 mod support_safety;
 
+#[allow(dead_code)]
+#[path = "../examples/read-group-refusal-62.rs"]
+mod refusal_reader;
+
+#[test]
+fn refusal_read_wait_never_closes_diplomacy_after_an_unknown_response() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "InGame".into(),
+            "DiplomacyActionView".into(),
+            "DiplomacyDealView".into(),
+        ])
+    });
+    let mut polls = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("ExposedMembers.JAC_PersonaBoundary~=nil") {
+            polls += 1;
+            if polls == 1 {
+                return Err(Error::new(
+                    ErrorKind::LuaResponseUnknown,
+                    "unknown read response",
+                ));
+            }
+        }
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok("false".into());
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.runner(json!({"name":"preserve refusal","steps":[]}), backend);
+    runner
+        .run_step(&refusal_reader::scene()["steps"][1])
+        .unwrap();
+    let trace = f.trace();
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, c, _)| c.contains("ExposedMembers.JAC_PersonaBoundary~=nil"))
+            .count(),
+        2
+    );
+    assert!(
+        trace.lua.iter().all(|(state, _, _)| state == "InGame"),
+        "{:?}",
+        trace.lua
+    );
+}
+
 #[test]
 fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     let valid = [

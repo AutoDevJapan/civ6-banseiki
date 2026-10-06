@@ -58,7 +58,8 @@ struct NativeReceipt {
     created_filetime: u64,
 }
 
-pub(crate) fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
+/// Decode a recorded Lua value while validating the optional host process receipt.
+pub fn lua_return<'a>(detail: &'a str, state: &str) -> Result<&'a str> {
     let raw = detail
         .strip_prefix(&format!("ran Lua in {state}; return="))
         .ok_or("Lua result has no raw return value")?;
