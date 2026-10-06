@@ -1,6 +1,7 @@
 //! Synchronous Gameplay acquisition sets and the retained private diagnostic.
 mod normal;
 pub mod scenario;
+pub mod sp_reassign;
 pub mod sp_runtime;
 
 pub const BEGIN: &str = "-- BEGIN RUST PERSONA EVENTS PROBE";

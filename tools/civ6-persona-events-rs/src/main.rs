@@ -19,9 +19,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scenario = civ6_persona_events_rs::sp_runtime::build(&template)?;
             fs::write(&args[2], serde_json::to_string_pretty(&scenario)?)?;
         }
+        Some("generate-sp-reassign") if args.len() == 4 || args.len() == 5 => {
+            let template = serde_json::from_slice(&fs::read(&args[1])?)?;
+            let turns = args.get(4).map(|n| n.parse()).transpose()?.unwrap_or(6);
+            let input = if args[2] == "-" { None } else {
+                let path = PathBuf::from(&args[2]);
+                if !path.is_file() || fs::metadata(&path)?.len() == 0 || path.extension().and_then(|v| v.to_str()) != Some("Civ6Save") {
+                    return Err("input must be an existing nonempty SP04 physical .Civ6Save; use - for a non-executable draft".into());
+                }
+                Some(path.file_stem().and_then(|v| v.to_str()).ok_or("input filename is not UTF-8")?.to_owned())
+            };
+            let scenario = civ6_persona_events_rs::sp_reassign::build(&template, input.as_deref(), turns)?;
+            fs::write(&args[3], serde_json::to_string_pretty(&scenario)?)?;
+        }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS]".into(),
             )
         }
     }
