@@ -3,13 +3,13 @@
 //! These Lua 5.1 scripts neither create spies nor edit native mission history.
 
 pub const UI_SETUP: &str = r#"
-assert(_G.JAC_ReturnedPreparation548==nil,'returned preparation already installed');
+assert(JAC_ReturnedPreparation548==nil,'returned preparation already installed');
 local KEY='JAC_BOUNDARY_RETURNED_PREPARATION';
 local EXCHANGE='JAC_BOUNDARY_GROUP_EXCHANGE_62';
 local WKEY='JAC_ReturnedPreparation548Witness';
 local B=assert(ExposedMembers.JAC_PersonaBoundary,'boundary UI reader missing');
 assert(type(B.ReadEnemy)=='function','boundary UI reader missing');
-local P={}; _G.JAC_ReturnedPreparation548=P;
+local P={}; JAC_ReturnedPreparation548=P;
 local x=nil;
 local function integer(v,min)
  return type(v)=='number' and v==v and v>=min and v<9007199254740992 and v==math.floor(v)
@@ -654,7 +654,7 @@ return 'RETURNED_PREPARATION_UI_READY'
 /// UI_SETUP must already have installed JAC_ReturnedPreparation548 in that
 /// View instance. Only a known unrelated event falls through to the old handler.
 pub const UI_EARLY_EVENT_GATE: &str = r#"
-local preparation=rawget(_G,'JAC_ReturnedPreparation548');
+local preparation=JAC_ReturnedPreparation548;
 if preparation and preparation.RouteEvent(attacker,missionID)~='UNOWNED' then return end
 "#;
 
@@ -662,7 +662,7 @@ if preparation and preparation.RouteEvent(attacker,missionID)~='UNOWNED' then re
 /// Resume through OwnedAuxiliaryEvent when the first post-load event arrives.
 pub const UI_RESUME_IF_SAVED: &str = r#"
 local p=Game:GetProperty('JAC_BOUNDARY_RETURNED_PREPARATION');
-local preparation=assert(rawget(_G,'JAC_ReturnedPreparation548'),
+local preparation=assert(JAC_ReturnedPreparation548,
  'returned preparation UI module missing');
 if p and not preparation.HasState() then return preparation.Resume() end
 return p and 'ALREADY_OBSERVING' or 'NO_SAVED_PREPARATION'
