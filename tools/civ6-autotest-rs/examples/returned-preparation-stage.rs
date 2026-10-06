@@ -1,4 +1,7 @@
 //! Finite stages: physical saves and native turns are owned by the host.
+//! SAVE is the latest successful physical checkpoint from the previous stage.
+//! Each checkpoint allocates a fresh run-ID/sequence name; never overwrite or
+//! automatically reload the input save after a native operation was sent.
 #[path = "../src/spy_returned_preparation.rs"]
 #[allow(dead_code)]
 mod preparation;
@@ -70,7 +73,9 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
             steps.push(ui_observe(RESUME, "RESUME_TRAVEL"));
             checkpoint(&mut steps);
             if phase == "travel-tick" {
-                steps.push(ui("local o=P.Observe(); assert(o.stage=='IN_TRANSIT' or o.stage=='WAIT_TRAVEL','already arrived or unknown; use observation only'); return o.stage"));
+                steps.push(ui_observe("ExposedMembers.JAC_ReturnedHostTurnReady=false; local o=P.Observe(); ExposedMembers.JAC_ReturnedHostTurnReady=o.stage=='IN_TRANSIT' or o.stage=='WAIT_TRAVEL'; return o.stage","TRAVEL_BEFORE_TURN"));
+                checkpoint(&mut steps);
+                steps.push(ui("assert(ExposedMembers.JAC_ReturnedHostTurnReady==true,'arrival already observed; use travel-observe'); return 'TURN_READY'"));
                 steps.push(json!({"action":"end_turn","timeout":180}));
                 checkpoint(&mut steps);
             }
@@ -94,7 +99,9 @@ pub(crate) fn scenario(physical: &str, phase: &str) -> Result<Value, String> {
             steps.push(ui_observe(RESUME, "RESUME_SOURCES"));
             checkpoint(&mut steps);
             if phase == "sources-tick" {
-                steps.push(ui("assert(not P.OwnedAuxiliaryEvent(0,3),'completion already present; use observation only'); return 'WAIT_SOURCES'"));
+                steps.push(ui_observe("ExposedMembers.JAC_ReturnedHostTurnReady=false; local completed=P.OwnedAuxiliaryEvent(0,3); ExposedMembers.JAC_ReturnedHostTurnReady=not completed; return completed and 'COMPLETED_ALREADY' or 'WAIT_SOURCES'","SOURCES_BEFORE_TURN"));
+                checkpoint(&mut steps);
+                steps.push(ui("assert(ExposedMembers.JAC_ReturnedHostTurnReady==true,'completion already observed; use sources-observe'); return 'TURN_READY'"));
                 steps.push(json!({"action":"end_turn","timeout":180}));
                 checkpoint(&mut steps);
             }

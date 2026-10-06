@@ -212,6 +212,42 @@ struct Case {
 }
 
 #[test]
+fn host_preturn_read_errors_are_saved_before_any_turn_or_retry() {
+    for phase in ["travel-tick", "sources-tick"] {
+        let c = Case::new();
+        c.travel_intent();
+        if phase == "travel-tick" {
+            c.run("JAC_ReturnedPreparation548.TravelOnce(); JAC_ReturnedPreparation548.Observe()");
+        } else {
+            c.arrive(700);
+            c.sources_intent();
+            c.run("JAC_ReturnedPreparation548.SourcesOnce()");
+        }
+        c.run("ExposedMembers.JAC_PersonaBoundary.ReturnedPreparation=JAC_ReturnedPreparation548; SAVES=0; local d=Players[0]:GetDiplomacy(); d.GetMission=function() error('preturn native history read failure') end");
+        let scenario =
+            host::scenario("JAC-Enemy-Neutralization-newest-physical-checkpoint", phase).unwrap();
+        let steps = scenario["steps"].as_array().unwrap();
+        let start = steps
+            .iter()
+            .position(|s| {
+                s["code"]
+                    .as_str()
+                    .is_some_and(|s| s.contains("ExposedMembers.JAC_ReturnedHostTurnReady=false"))
+            })
+            .unwrap();
+        for step in &steps[start..start + 4] {
+            match step["action"].as_str().unwrap() {
+    "ui_lua"=>{c.run(if step["state_name"]=="GameCore_Tuner" {"CONTEXT='CORE'"}else{"CONTEXT='UI'"}); c.run(step["code"].as_str().unwrap());},
+    "save"=>c.run("SAVES=SAVES+1; SAVED_UNKNOWN=PROPERTIES.JAC_BOUNDARY_RETURNED_PREPARATION.unknowns[1]"),
+    other=>panic!("operation before persisted unknown: {other}"),
+   }
+        }
+        c.fail(steps[start + 4]["code"].as_str().unwrap());
+        c.run("assert(SAVES==1 and SAVED_UNKNOWN and SAVED_UNKNOWN.raw.error:find('preturn native history'))");
+    }
+}
+
+#[test]
 fn host_stages_resume_each_turn_without_resending_and_record_native_success_or_failure() {
     for failed in [false, true] {
         let lua = Lua::new();
