@@ -3,4 +3,7 @@
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ja_JP"><Text>誓約検査用の建造費用</Text></Row>
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="en_US"><Text>Construction costs for oath diagnostics</Text></Row>
   <Row Tag="LOC_JAC_OATH_QUEUE_HEADROOM" Language="ru_RU"><Text>Стоимость строительства для проверки клятв</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ja_JP"><Text>誓約検査用の軍事建造校正</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="en_US"><Text>Military queue calibration diagnostic</Text></Row>
+  <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ru_RU"><Text>Проверка производства военных юнитов</Text></Row>
 </LocalizedText></GameData>
