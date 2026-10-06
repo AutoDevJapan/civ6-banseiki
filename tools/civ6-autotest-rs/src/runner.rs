@@ -544,7 +544,7 @@ impl Runner {
                     )?;
                     if diplomacy_closes > 25 {
                         return Err(Error::scenario(
-                            "AI diplomacy screens keep reopening during one end_turn",
+                            "Blocking popup screens keep reopening during one end_turn",
                         ));
                     }
                 }
@@ -785,6 +785,14 @@ impl Runner {
     pub fn close_diplomacy_once(&mut self, deadline: f64) -> Result<Vec<String>> {
         let states = self.states(self.budget(deadline, 5.0)?)?;
         let mut closed = vec![];
+        // An advisor can appear after the end-turn request and retain the UI
+        // event (AdvisorPopup.lua:232-243). Dismissing only before/after the wait
+        // deadlocks playback. The existing blocking predicate gates Continue.
+        if states.iter().any(|s| state_name_eq(s, "AdvisorPopup"))
+            && self.dismiss_advisor_once(deadline)?
+        {
+            closed.push("blocking Advisor popup".to_string());
+        }
         for (state, call, label) in POPUP_CLOSERS {
             if states.iter().any(|s| state_name_eq(s, state))
                 && self.lua(

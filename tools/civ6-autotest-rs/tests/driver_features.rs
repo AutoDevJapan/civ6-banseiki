@@ -26,6 +26,88 @@ fn turn_backend() -> FakeBackend {
 }
 
 #[test]
+fn end_turn_closes_an_advisor_that_appears_after_the_only_request() {
+    let state = Arc::new(Mutex::new((67_i64, false, 0_usize, 0_usize)));
+    let game = state.clone();
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "GameCore_Tuner".into(),
+                "AdvisorPopup".into(),
+            ])
+        })
+        .lua(move |context, code| {
+            let mut g = game.lock().unwrap();
+            if context == "AdvisorPopup" {
+                assert!(
+                    code.contains("IsBlockingInput()") && code.contains("OnHideAdvisorDialog()")
+                );
+                if g.1 {
+                    g.1 = false;
+                    g.3 += 1;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            if code.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN)") {
+                g.0 += 1;
+                g.1 = true;
+                g.2 += 1;
+                return Ok("true".into());
+            }
+            if code.trim() == "return Game.GetCurrentGameTurn()" {
+                return Ok(g.0.to_string());
+            }
+            if context == "GameCore_Tuner" && code.contains("end_turn advanced past") {
+                return Ok((g.0 == 68).to_string());
+            }
+            if code.contains("human inactive local=") {
+                return Ok((!g.1).to_string());
+            }
+            Ok("true".into())
+        });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner
+            .run_step(&json!({"action":"end_turn","timeout":5}))
+            .unwrap(),
+        "human turn 67->68"
+    );
+    assert_eq!(*state.lock().unwrap(), (68, false, 1, 1));
+}
+
+#[test]
+fn advisor_closure_is_opt_in_and_nonblocking_advisors_are_not_dismissed() {
+    for opt_in in [false, true] {
+        for blocking in [false, true] {
+            let state = Arc::new(Mutex::new((blocking, 0_usize)));
+            let game = state.clone();
+            let fake = FakeBackend::new()
+                .states(|| Ok(vec!["InGame".into(), "AdvisorPopup".into()]))
+                .lua(move |context, code| {
+                    assert!(!code.contains("ACTION_ENDTURN"));
+                    let mut g = game.lock().unwrap();
+                    if context == "AdvisorPopup" {
+                        assert!(code.contains("IsBlockingInput()"));
+                        if g.0 {
+                            g.0 = false;
+                            g.1 += 1;
+                            return Ok("true".into());
+                        }
+                        return Ok("false".into());
+                    }
+                    Ok((!g.0).to_string())
+                });
+            let mut h = Harness::new(json!({}), fake);
+            let result = h.runner.run_step(&json!({"action":"wait_for","timeout":2,"close_diplomacy":opt_in,"condition":{"type":"lua","state_name":"InGame","code":"return human_control_restored()"}}));
+            assert_eq!(result.is_ok(), !blocking || opt_in);
+            assert_eq!(state.lock().unwrap().1, usize::from(blocking && opt_in));
+        }
+    }
+}
+
+#[test]
 fn test_shortened_turns_require_explicit_test_mode() {
     let mut h = Harness::new(json!({}), turn_backend());
     let step = json!({"action":"end_turn","turns":10,"test_turns":1});
