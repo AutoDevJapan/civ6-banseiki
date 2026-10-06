@@ -134,12 +134,23 @@ unsafe extern "system" {
 core::arch::global_asm!(
     ".globl original_unwinds", ".seh_proc original_unwinds", "original_unwinds:",
     "sub rsp,0x518", ".seh_stackalloc 0x518", ".seh_endprologue",
+    "mov [rsp+0x30],rcx","call {hold}","mov rcx,[rsp+0x30]",
     "mov rdx,[rcx+8]", "mov rcx,[rcx]", "lea r10,[rsp+0x40]", "mov r11d,0x9a",
     "1:","mov qword ptr [r10],0","add r10,8","dec r11d","jnz 1b",
     "lea r10,[rsp+0x40]","mov [rsp+0x20],r10","mov qword ptr [rsp+0x28],0",
     "xor r8d,r8d","xor r9d,r9d","call {unwind}","add rsp,0x518","ret",".seh_endproc",
-    unwind=sym RtlUnwindEx
+    unwind=sym RtlUnwindEx, hold=sym hold_original_unwind
 );
+static HOLD_UNWIND: AtomicBool = AtomicBool::new(false);
+extern "system" fn hold_original_unwind() {
+    if HOLD_UNWIND.load(Ordering::Acquire) {
+        ORIGINAL_CALL_COUNT.fetch_add(1, Ordering::AcqRel);
+        ORIGINAL_ENTERED.store(true, Ordering::Release);
+        while !ORIGINAL_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+    }
+}
 unsafe extern "system-unwind" {
     fn original_unwinds(state: *const u64);
 }
@@ -451,7 +462,7 @@ fn close_drain_waits_for_entire_original_callback_not_only_added_action() {
     }
     assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 1);
     assert!(!ORIGINAL_SELF_DRAIN.load(Ordering::Acquire));
-    let closer = std::thread::spawn(move || tx.send(drain()).unwrap());
+    let closer = std::thread::spawn(move || tx.send(close_registered()).unwrap());
     assert!(
         rx.recv_timeout(std::time::Duration::from_millis(30))
             .is_err()
@@ -459,8 +470,47 @@ fn close_drain_waits_for_entire_original_callback_not_only_added_action() {
     ORIGINAL_RELEASE.store(true, Ordering::Release);
     worker.join().unwrap();
     closer.join().unwrap();
-    assert!(rx.recv().unwrap());
+    assert_eq!(rx.recv().unwrap(), Ok(()));
     assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(ORIGINAL_CALL_COUNT.load(Ordering::Acquire), 1);
+}
+
+#[test]
+fn close_registered_waits_for_original_seh_cleanup() {
+    if !child(
+        "ai_operation::gateway::tests::close_registered_waits_for_original_seh_cleanup",
+        "JAC_AI_CLOSE_SEH_CHILD",
+    ) {
+        return;
+    }
+    HOLD_UNWIND.store(true, Ordering::Release);
+    AI_GATE_TARGETS[0].store(original_unwinds as *const () as u64, Ordering::Release);
+    let worker = std::thread::spawn(|| {
+        let mut state = [0u64; 2];
+        assert_eq!(
+            unsafe { ai_unwind_driver(state.as_mut_ptr(), gateways()[0]) },
+            1
+        );
+        assert_eq!(THREAD_FLIGHTS.with(Cell::get), 0);
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while !ORIGINAL_ENTERED.load(Ordering::Acquire) {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 1);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let closer = std::thread::spawn(move || tx.send(close_registered()).unwrap());
+    assert!(
+        rx.recv_timeout(std::time::Duration::from_millis(30))
+            .is_err()
+    );
+    ORIGINAL_RELEASE.store(true, Ordering::Release);
+    worker.join().unwrap();
+    closer.join().unwrap();
+    assert_eq!(rx.recv().unwrap(), Ok(()));
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(UNWOUND.load(Ordering::Acquire), 1);
     assert_eq!(ORIGINAL_CALL_COUNT.load(Ordering::Acquire), 1);
 }
 
@@ -525,19 +575,18 @@ unsafe extern "system" fn accepted_original(receiver: u64, phase: u32) -> u64 {
         2 => {
             FIXTURE_EPOCH.fetch_add(1, Ordering::SeqCst);
         }
+        3 => {
+            ORIGINAL_ENTERED.store(true, Ordering::Release);
+            while !ORIGINAL_RELEASE.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+        }
         _ => {}
     }
     0x1234
 }
 
-#[test]
-fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() {
-    if !child(
-        "ai_operation::gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection",
-        "CIV6_ACCEPTED_GATEWAY_CHILD",
-    ) {
-        return;
-    }
+fn accepted_fixture() -> (Vec<u8>, u64) {
     let mut memory = vec![0u8; 0x600];
     let receiver = memory.as_ptr() as u64;
     let player = receiver + 0x300;
@@ -594,6 +643,122 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
     ROWS.lock().unwrap().reserve_exact(CAPACITY);
     ACTIVE.store(true, Ordering::Release);
     AI_GATE_TARGETS[0].store(accepted_original as *const () as u64, Ordering::Release);
+    (memory, receiver)
+}
+
+#[test]
+fn close_waits_for_wrong_phase_original_without_accepted_action() {
+    if !child(
+        "ai_operation::gateway::tests::close_waits_for_wrong_phase_original_without_accepted_action",
+        "JAC_AI_CLOSE_PHASE_CHILD",
+    ) {
+        return;
+    }
+    let (_memory, receiver) = accepted_fixture();
+    let binding = BINDING.get().unwrap();
+    assert!(binding.lease.begin(binding.owner, binding.player).is_some());
+    FIXTURE_ACTION.store(3, Ordering::Release);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let closer = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !ORIGINAL_ENTERED.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        tx.send(close_registered()).unwrap();
+    });
+    let release = std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while ACTIVE.load(Ordering::Acquire) {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::yield_now();
+        }
+        assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 1);
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(30))
+                .is_err()
+        );
+        ORIGINAL_RELEASE.store(true, Ordering::Release);
+        assert_eq!(
+            rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap(),
+            Err(Failure::CallerNotQuiescent)
+        );
+    });
+    assert_eq!(
+        unsafe { accepted_stage_driver(receiver, gateways()[0], 1) },
+        0x1234
+    );
+    closer.join().unwrap();
+    release.join().unwrap();
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire), 1);
+    assert_eq!(FIXTURE_ORIGINAL_PHASE.load(Ordering::Acquire), 1);
+    assert_eq!(FIXTURE_ARMED.load(Ordering::Acquire), 0);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(THREAD_FLIGHTS.with(Cell::get), 0);
+    let rows = observations().0;
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|row| !row.accepted && !row.capture_entry));
+}
+
+#[test]
+fn cached_callback_before_entry_prevents_false_close_success() {
+    if !child(
+        "ai_operation::gateway::tests::cached_callback_before_entry_prevents_false_close_success",
+        "JAC_AI_CLOSE_CACHED_CHILD",
+    ) {
+        return;
+    }
+    let (_memory, receiver) = accepted_fixture();
+    let page = unsafe { VirtualAlloc(ptr::null(), 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
+    assert!(!page.is_null());
+    let slot = unsafe { &*page.cast::<AtomicU64>() };
+    let original = accepted_original as *const () as u64;
+    slot.store(original, Ordering::Release);
+    let guard = INSTALL.lock().unwrap();
+    let registration = Registration::prepare_locked(
+        vec![Patch {
+            address: page as usize,
+            old: original,
+            new: gateways()[0] as u64,
+            wide: true,
+        }],
+        &guard,
+    )
+    .unwrap();
+    assert!(RECOVERY.set(registration.clone()).is_ok());
+    registration.install_locked(&guard, &SystemApi).unwrap();
+    drop(guard);
+    // Exact race: the dispatching thread has read the callback slot, but has
+    // not entered the gateway. Another OS thread restores that real slot.
+    let cached = slot.load(Ordering::Acquire) as usize;
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(
+        std::thread::spawn(close_registered).join().unwrap(),
+        Err(Failure::CallerNotQuiescent)
+    );
+    assert_eq!(slot.load(Ordering::Acquire), original);
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire), 0);
+    assert_eq!(
+        unsafe { accepted_stage_driver(receiver, cached, 2) },
+        0x1234
+    );
+    assert_eq!(FIXTURE_CALLS.load(Ordering::Acquire), 1);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(FIXTURE_ARMED.load(Ordering::Acquire), 0);
+    assert!(observations().0.iter().all(|row| !row.accepted));
+    assert_eq!(close_registered(), Err(Failure::CallerNotQuiescent));
+    unsafe { VirtualFree(page, 0, MEM_RELEASE) };
+}
+
+#[test]
+fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() {
+    if !child(
+        "ai_operation::gateway::tests::accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection",
+        "CIV6_ACCEPTED_GATEWAY_CHILD",
+    ) {
+        return;
+    }
+    let (mut memory, receiver) = accepted_fixture();
     assert_eq!(
         unsafe { accepted_stage_driver(receiver, gateways()[0], 2) },
         0x1234
@@ -695,6 +860,17 @@ fn accepted_capture_uses_dynamic_owner_generation_and_nested_thread_rejection() 
         .map(|r| r.sequence)
         .collect();
     assert_eq!(entries, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert_eq!(AI_GATE_FLIGHTS.load(Ordering::Acquire), 0);
+    assert_eq!(THREAD_FLIGHTS.with(Cell::get), 0);
+    assert_eq!(close_registered(), Err(Failure::CallerNotQuiescent));
+    // A callable already read by the engine still reaches the immutable
+    // original once after restoration/closure, without accepted authority.
+    let before_late = FIXTURE_CALLS.load(Ordering::SeqCst);
+    unsafe { accepted_stage_driver(receiver, gateways()[0], 2) };
+    assert_eq!(FIXTURE_CALLS.load(Ordering::SeqCst), before_late + 1);
+    let rows = observations().0;
+    assert!(rows[18..20].iter().all(|row| !row.accepted));
+    assert_eq!(close_registered(), Err(Failure::CallerNotQuiescent));
 }
 #[test]
 fn registration_fence_rejects_other_identity_load_arm_and_old_ticket() {

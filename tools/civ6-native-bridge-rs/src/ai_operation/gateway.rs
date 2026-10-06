@@ -204,8 +204,6 @@ unsafe extern "system" fn unwind_observer(
     _dispatcher: *mut std::ffi::c_void,
 ) -> i32 {
     if !record.is_null() && unsafe { (*record).ExceptionFlags } & (2 | 4 | 0x20 | 0x40) != 0 {
-        AI_GATE_FLIGHTS.fetch_sub(1, Ordering::AcqRel);
-        let _ = THREAD_FLIGHTS.try_with(|c| c.set(c.get().saturating_sub(1)));
         if let Some(binding) = BINDING.get() {
             binding.lease.on_unwind();
         }
@@ -217,6 +215,8 @@ unsafe extern "system" fn unwind_observer(
             }
         });
         UNWOUND.fetch_add(1, Ordering::Relaxed);
+        let _ = THREAD_FLIGHTS.try_with(|c| c.set(c.get().saturating_sub(1)));
+        AI_GATE_FLIGHTS.fetch_sub(1, Ordering::AcqRel);
     }
     1 // ExceptionContinueSearch, preserves the original unwind target.
 }
@@ -491,6 +491,7 @@ pub enum Failure {
     Patch,
     UnsupportedCpu,
     CriticalRestore,
+    CallerNotQuiescent,
 }
 pub fn operand(call: usize, target: usize) -> Result<u32, Failure> {
     let op = call.checked_add(1).ok_or(Failure::Range)?;
@@ -522,11 +523,17 @@ pub fn close_registered() -> Result<(), Failure> {
         registration.close_locked(&guard, &SystemApi)?;
     }
     drop(guard);
-    if drain() {
-        Ok(())
-    } else {
-        Err(Failure::CriticalRestore)
+    if !drain() {
+        return Err(Failure::CriticalRestore);
     }
+    // An engine thread can have loaded the old callable but not reached our
+    // first instruction. Local flight count zero cannot fence that thread.
+    // There is currently no genuine upstream dispatcher-stop adapter here;
+    // do not mint one from an empty counter, caller boolean or numeric token.
+    if BINDING.get().is_some() {
+        return Err(Failure::CallerNotQuiescent);
+    }
+    Ok(())
 }
 use patch_state::{INSTALL, RECOVERY, SystemApi};
 
