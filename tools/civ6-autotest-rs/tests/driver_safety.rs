@@ -1035,11 +1035,14 @@ fn test_oserror_after_autoplay_start_attempts_cleanup_without_replay() {
 }
 
 #[test]
-fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
+fn interrupted_autoplay_reconciles_the_owner_after_a_start_attempt() {
     for after_start in [true, false] {
         let f = Fixture::new();
         let mut backend = f.backend();
         backend.on_lua = Box::new(move |_, code, _| {
+            if code.starts_with("return JAC_AUTOTEST_AUTO_OWNER ==") {
+                return Ok(after_start.to_string());
+            }
             if code.contains("return tostring(startTurn)") {
                 return if after_start {
                     Ok("1|0".into())
@@ -1066,7 +1069,7 @@ fn interrupted_autoplay_stops_only_after_an_acknowledged_start() {
 }
 
 #[test]
-fn test_autoplay_lua_error_cleans_up_only_after_acknowledged_start() {
+fn autoplay_lua_errors_reconcile_attempted_start_and_stop_once() {
     for fail_at in ["start", "status"] {
         for kind in [ErrorKind::LuaResponseUnknown, ErrorKind::LuaExecution] {
             let f = Fixture::new();
@@ -1092,12 +1095,149 @@ fn test_autoplay_lua_error_cleans_up_only_after_acknowledged_start() {
                 "may have run",
             );
             assert_eq!(lua_count(&f, "SetActive(true)"), 1);
-            assert_eq!(
-                lua_count(&f, "SetActive(false)"),
-                usize::from(fail_at == "status")
+            assert_eq!(lua_count(&f, "SetActive(false)"), 1);
+        }
+    }
+}
+
+fn check_autoplay_start_cleanup(
+    start_error: ErrorKind,
+    foreign_active: bool,
+    lose_owner_reply: bool,
+    lose_stop_reply: bool,
+) {
+    #[derive(Default)]
+    struct State {
+        active: bool,
+        owner: Option<String>,
+        handler: bool,
+        starts: i64,
+        stops: i64,
+        removals: i64,
+    }
+    let state = Arc::new(Mutex::new(State {
+        active: foreign_active,
+        owner: foreign_active.then(|| "another-run".into()),
+        handler: foreign_active,
+        ..State::default()
+    }));
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    let observed = state.clone();
+    let clock = f.clock.clone();
+    backend.on_lua = Box::new(move |_, code, timeout| {
+        if !code.contains("JAC_AUTOTEST_AUTO_OWNER") {
+            return Ok("true".into());
+        }
+        let mut s = observed.lock().unwrap();
+        let lua = mlua::Lua::new();
+        let g = lua.globals();
+        g.set("active", s.active).unwrap();
+        g.set("JAC_AUTOTEST_AUTO_OWNER", s.owner.clone()).unwrap();
+        g.set("has_handler", s.handler).unwrap();
+        g.set("starts", s.starts).unwrap();
+        g.set("stops", s.stops).unwrap();
+        g.set("removals", s.removals).unwrap();
+        lua.load(
+            r#"
+Game = {GetCurrentGameTurn=function() return 1 end, GetLocalPlayer=function() return 0 end}
+PlayerTypes = {NONE=-1}
+LuaEvents = {AutoPlayEnd={Add=function(_) end, Remove=function(_) removals=removals+1 end}}
+AutoplayManager = {
+ IsActive=function() return active end,
+ SetTurns=function(_) end, SetReturnAsPlayer=function(_) end, SetObserveAsPlayer=function(_) end,
+ SetActive=function(v) active=v; if v then starts=starts+1 else stops=stops+1 end end
+}
+if has_handler then JAC_AUTOTEST_AUTO_HANDLER=function() end end
+"#,
+        )
+        .exec()
+        .unwrap();
+        // Execute the runner's actual command before dropping its reply. The
+        // game-side changes survive even when Rust never acknowledges them.
+        let result = lua.load(code).eval::<mlua::Value>();
+        s.active = g.get("active").unwrap();
+        s.owner = g.get("JAC_AUTOTEST_AUTO_OWNER").unwrap();
+        s.handler = matches!(
+            g.get::<mlua::Value>("JAC_AUTOTEST_AUTO_HANDLER").unwrap(),
+            mlua::Value::Function(_)
+        );
+        s.starts = g.get("starts").unwrap();
+        s.stops = g.get("stops").unwrap();
+        s.removals = g.get("removals").unwrap();
+        let value = result.map_err(|e| Error::new(ErrorKind::LuaExecution, e.to_string()))?;
+        if code.contains("return tostring(startTurn)") {
+            return Err(Error::new(start_error, "start reply lost after execution"));
+        }
+        if (lose_owner_reply && code.starts_with("return JAC_AUTOTEST_AUTO_OWNER =="))
+            || (lose_stop_reply && code.contains("SetActive(false)"))
+        {
+            clock.advance(timeout);
+            return Err(Error::unknown("cleanup reply lost after execution"));
+        }
+        Ok(match value {
+            mlua::Value::Boolean(v) => v.to_string(),
+            mlua::Value::String(v) => v.to_str().unwrap().to_string(),
+            other => panic!("unexpected Lua result: {other:?}"),
+        })
+    });
+    let mut runner = f.direct_runner(json!({}), backend);
+    let error = runner
+        .autoplay(3, 10.0, AutoplayOptions::default())
+        .unwrap_err();
+    assert_eq!(
+        error.kind,
+        if foreign_active {
+            ErrorKind::LuaExecution
+        } else {
+            start_error
+        }
+    );
+    if !foreign_active {
+        assert!(error.message.contains("start reply lost after execution"));
+    }
+    let s = state.lock().unwrap();
+    assert_eq!(s.active, foreign_active);
+    assert_eq!(s.starts, i64::from(!foreign_active));
+    assert_eq!(s.stops, i64::from(!foreign_active));
+    assert_eq!(s.removals, i64::from(!foreign_active));
+    assert_eq!(s.handler, foreign_active);
+    assert_eq!(s.owner.as_deref(), foreign_active.then_some("another-run"));
+    assert_eq!(lua_count(&f, "SetActive(true)"), 1);
+    assert_eq!(
+        lua_count(&f, "SetActive(false)"),
+        usize::from(!foreign_active)
+    );
+}
+
+#[test]
+fn lost_autoplay_start_reply_stops_the_executed_lua_once() {
+    for kind in [
+        ErrorKind::LuaResponseUnknown,
+        ErrorKind::LuaExecution,
+        ErrorKind::Interrupted,
+    ] {
+        check_autoplay_start_cleanup(kind, false, false, false);
+    }
+}
+
+#[test]
+fn autoplay_cleanup_lost_replies_do_not_replay_start_or_stop() {
+    for lose_owner in [false, true] {
+        for lose_stop in [false, true] {
+            check_autoplay_start_cleanup(
+                ErrorKind::LuaResponseUnknown,
+                false,
+                lose_owner,
+                lose_stop,
             );
         }
     }
+}
+
+#[test]
+fn rejected_autoplay_start_preserves_another_runs_active_game_and_handler() {
+    check_autoplay_start_cleanup(ErrorKind::LuaExecution, true, false, false);
 }
 
 #[test]
