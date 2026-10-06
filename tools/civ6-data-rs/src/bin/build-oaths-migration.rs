@@ -6,6 +6,7 @@ use std::{fs, path::PathBuf};
 
 const OLD_NAME: &str = "JAC-SengokuAges-02-ages-owner-l-05-543484304b0c";
 const PRE_NAME: &str = "JAC-SengokuAges-01-ages-owner-l-05-543484304b0c";
+const RESYNC_NAME: &str = "JAC-Todo134-Control-Resync";
 const CATALOGUE: &str = "local count=0; for _ in GameInfo.JAC_SengokuOaths() do count=count+1 end; if count~=66 then error('live oath catalogue must contain 66 rows, got '..count) end";
 const LEGACY: &str = r#"
 local l=Game:GetProperty('JAC_AGES_LEDGER')
@@ -37,7 +38,9 @@ Game:SetProperty('JAC_TODO134_OLD_TURN',Game.GetCurrentGameTurn()-GameConfigurat
 return 'legacy history snapshot captured without modifying the ledger'
 "#;
 
-const MIGRATED: &str = r#"
+macro_rules! migration_lua {
+    ($tail:literal) => { concat!(r#"
+local function validate_migration()
 local l=Game:GetProperty('JAC_AGES_LEDGER')
 local turn=Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1
 if turn~=68 or l.reign~=1 then error('one natural turn must migrate the same reign') end
@@ -45,6 +48,10 @@ local humans,ai=0,0
 for _,p in ipairs(PlayerManager.GetAliveMajors()) do
  local id=p:GetID() local h=l.houses['p'..id]
  if h.oathReign~=1 or type(h.oaths)~='table' or type(h.oathKnowledge)~='table' then error('missing migration for '..id) end
+ local tech,civic=0,0
+ for row in GameInfo.Technologies() do if p:GetTechs():HasTech(row.Index) then tech=tech+1 end end
+ for row in GameInfo.Civics() do if p:GetCulture():HasCivic(row.Index) then civic=civic+1 end end
+ if h.oathKnowledge.tech~=tech or h.oathKnowledge.civic~=civic then error('migrated research baseline mismatch '..id) end
  if (h.parts.oath or 0)~=0 then error('retroactive oath reward '..id) end
  local selected=0
  for oath,on in pairs(h.oaths) do
@@ -62,9 +69,12 @@ for _,p in ipairs(PlayerManager.GetAliveMajors()) do
   if h.oathChosen~=1 or selected~=(h.age=='HEROIC' and 3 or 1) then error('AI migrated choice count '..id) end
  end
 end
-if humans~=1 or ai==0 then error('missing human/AI migration coverage') end
+if humans~=1 or ai~=21 then error('missing human/AI migration coverage') end
 return 'MIGRATED turn=68 human='..humans..' AI='..ai..' retroactiveOathPoints=0'
-"#;
+end
+"#, "\n", $tail) };
+}
+const MIGRATED: &str = migration_lua!("return validate_migration()");
 
 const CHOOSE: &str = r#"
 if not JAC_ShowOaths(true) then error('migrated oath popup unavailable') end
@@ -319,13 +329,85 @@ for _,name in ipairs({{'TurnBegin','TurnEnd','PlayerTurnActivated','PlayerTurnDe
   Events[name].Add(function(...)
    local args={{}}; for i,v in ipairs({{...}}) do args[i]=tostring(v) end
    local state=event..':'..table.concat(args,',')..' '..snapshot()
-   if state~=last then print('LEGACY_CONTROL_EVENT '..state); last=state end
+   if event=='GameCoreEventPlaybackComplete' or state~=last then print('LEGACY_CONTROL_EVENT '..state); last=state end
   end)
  end
 end
 return 'diagnostic event observers registered; no acceptance'
 "#
     )
+}
+
+// A real save/load may rebuild a UI whose playback did not catch up. Record
+// the whole migrated ledger and every city flag before asking the native save
+// API; never write the migration or replay its turn in order to make it pass.
+const RESYNC_SNAPSHOT: &str = migration_lua!(
+    r#"
+local migrated=validate_migration()
+local l=assert(Game:GetProperty('JAC_AGES_LEDGER'),'resync ledger missing')
+assert(Game.GetCurrentGameTurn()-GameConfiguration.GetStartTurn()+1==68,'resync requires the single naturally advanced turn')
+assert(Players[0]:IsTurnActive() and not Players[0]:IsTurnActiveComplete(),'human not active before/after resync')
+local function ser(v)
+ if type(v)~='table' then local s=type(v)..':'..tostring(v); return #s..':'..s end
+ local entries={}
+ for k,value in pairs(v) do entries[#entries+1]=ser(k)..ser(value) end
+ table.sort(entries)
+ return '{'..table.concat(entries)..'}'
+end
+local function oldser(v)
+ if type(v)~='table' then return type(v)..':'..tostring(v) end
+ local keys={} for k in pairs(v) do keys[#keys+1]=k end table.sort(keys)
+ local out={} for _,k in ipairs(keys) do out[#out+1]=tostring(k)..'='..oldser(v[k]) end
+ return '{'..table.concat(out,',')..'}'
+end
+assert(oldser(l.history)==Game:GetProperty('JAC_TODO134_OLD_HISTORY'),'resync legacy history changed')
+local cities={}; local majors=0; local owners={}
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+ assert(not owners[p:GetID()],'duplicate resync house'); owners[p:GetID()]=true
+ majors=majors+1
+ local house=assert(l.houses['p'..p:GetID()],'resync house missing')
+ for _,city in p:GetCities():Members() do
+  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+  assert(city:GetOwner()==p:GetID() and plot:GetOwner()==p:GetID(),'resync city owner mismatch')
+  local flags={}
+  for row in GameInfo.JAC_SengokuOaths() do
+   local expected=(house.civ==row.CivilizationType and (house.age=='GOLDEN' or house.age=='HEROIC') and house.oaths[row.OathType]) and 1 or 0
+   local value=plot:GetProperty(row.OathType..'_ON')
+   assert(value==expected,'resync city flag missing or incorrect '..row.OathType)
+   flags[row.OathType]=value
+  end
+  cities[#cities+1]={owner=p:GetID(),id=city:GetID(),plot=plot:GetIndex(),flags=flags}
+ end
+end
+assert(majors==22 and #cities>0,'resync house/city coverage missing')
+table.sort(cities,function(a,b)return a.plot<b.plot end)
+local now=ser({ledger=l,cities=cities})
+local saved=Game:GetProperty('JAC_TODO134_RESYNC_SNAPSHOT')
+if __VERIFY__ then
+ assert(type(saved)=='string' and saved==now,'resync changed migrated ledger or city flags')
+else
+ assert(saved==nil,'resync snapshot already exists')
+ Game:SetProperty('JAC_TODO134_RESYNC_SNAPSHOT',now)
+end
+return 'RESYNC_STATE_UNCHANGED turn68 houses='..majors..' cities='..#cities..' verify='..tostring(__VERIFY__)..' '..migrated
+"#
+);
+
+const RESYNC_SESSIONS_CLOSED: &str = r#"
+assert(ContextPtr:IsHidden(),'diplomacy view still visible before resync save')
+assert(type(DiplomacyManager.FindOpenSessionID)=='function','session API missing')
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+ local id=p:GetID()
+ if id~=0 then
+  local session=DiplomacyManager.FindOpenSessionID(0,id)
+  assert(session==nil,'diplomacy session remains or result unavailable')
+ end
+end
+return 'RESYNC_DIPLOMACY_CLOSED all real peers checked'
+"#;
+
+fn resync_snapshot(verify: bool) -> Value {
+    catalogue_lua(&RESYNC_SNAPSHOT.replace("__VERIFY__", &verify.to_string()))
 }
 
 fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
@@ -354,12 +436,41 @@ fn scenarios(repo: &Repository) -> Result<Vec<(&'static str, Value)>> {
         lua("InGame", SESSION_DIAGNOSTIC),
         lua("DiplomacyActionView", SESSION_DIAGNOSTIC),
     ]);
+    let mut resync = recovery.clone();
+    resync["name"] =
+        "旧保存：自然移行後の別名保存と正式読込で画面の再同期を診断する（受入合格に数えない）"
+            .into();
+    let steps = resync["steps"].as_array_mut().unwrap();
+    steps.insert(3, lua("GameCore_Tuner", SNAPSHOT));
+    steps.extend([
+        lua("DiplomacyActionView", RESYNC_SESSIONS_CLOSED),
+        lua("GameCore_Tuner", MIGRATED),
+        resync_snapshot(false),
+        json!({"action":"save","name":RESYNC_NAME,"timeout":180}),
+        json!({"action":"exit_to_menu","timeout":180}),
+        json!({"action":"load","name":RESYNC_NAME,"timeout":600}),
+        lua("GameCore_Tuner", &turn_event_observer()),
+        lua("InGame", &turn_event_observer()),
+        json!({"action":"observe_for","seconds":30,"timeout":45}),
+        resync_snapshot(true),
+        lua(
+            "InGame",
+            &format!(
+                "{CATALOGUE}\n{}",
+                RESYNC_SNAPSHOT.replace("__VERIFY__", "true")
+            ),
+        ),
+        lua("GameCore_Tuner", TURN_DIAGNOSTIC),
+        lua("InGame", TURN_DIAGNOSTIC),
+        lua("InGame", SESSION_DIAGNOSTIC),
+    ]);
     Ok(vec![
         ("legacy-capabilities.json", probe),
         ("legacy-migration.json", migration),
         ("legacy-tenbun.json", pre),
         ("legacy-control-diagnostic.json", diagnostic),
         ("legacy-control-recovery-diagnostic.json", recovery),
+        ("legacy-control-resync-diagnostic.json", resync),
     ])
 }
 
@@ -388,6 +499,151 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn generated_save_and_load_names_match_the_actual_driver_resolver() -> Result<()> {
+        let repo = Repository::checked_in();
+        let runner = civ6_autotest_rs::runner::Runner::new(
+            json!({}),
+            repo.root.clone(),
+            repo.root.clone(),
+            repo.root.clone(),
+            4318,
+        );
+        for (_, scene) in scenarios(&repo)? {
+            let steps = scene["steps"].as_array().unwrap();
+            for save in steps.iter().filter(|s| s["action"] == "save") {
+                let load = steps
+                    .iter()
+                    .find(|s| s["action"] == "load" && s["name"] == save["name"])
+                    .context("matching load")?;
+                assert_eq!(runner.save_name(save)?, runner.save_name(load)?);
+                assert_ne!(
+                    runner.save_name(save)?,
+                    save["name"].as_str().unwrap(),
+                    "new saves need per-run names"
+                );
+                let mut wrong = load.clone();
+                wrong["exact_name"] = true.into();
+                assert_ne!(
+                    runner.save_name(save)?,
+                    runner.save_name(&wrong)?,
+                    "resolver must detect the reviewed mismatch"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resync_requires_hidden_diplomacy_and_verified_empty_sessions() -> Result<()> {
+        let vm = mlua::Lua::new();
+        vm.load("hidden=true;session=nil;ContextPtr={IsHidden=function()return hidden end};PlayerManager={GetAliveMajors=function()return {{GetID=function()return 0 end},{GetID=function()return 4 end}} end};DiplomacyManager={FindOpenSessionID=function(a,b)assert(a==0 and b==4);return session end}").exec()?;
+        let _: String = vm.load(RESYNC_SESSIONS_CLOSED).eval()?;
+        for invalid in [
+            "hidden=false",
+            "session=7",
+            "session=-1",
+            "session='unavailable'",
+            "DiplomacyManager.FindOpenSessionID=nil",
+            "DiplomacyManager.FindOpenSessionID=function()error('API failed')end",
+        ] {
+            vm.load("hidden=true;session=nil;DiplomacyManager.FindOpenSessionID=function()return session end").exec()?;
+            vm.load(invalid).exec()?;
+            assert!(
+                vm.load(RESYNC_SESSIONS_CLOSED).eval::<String>().is_err(),
+                "accepted {invalid}"
+            );
+        }
+        Ok(())
+    }
+    #[test]
+    fn resync_checks_emitted_lua_against_changed_turn_ledger_flags_and_control() -> Result<()> {
+        let scene = scenarios(&Repository::checked_in())?
+            .into_iter()
+            .find(|(name, _)| *name == "legacy-control-resync-diagnostic.json")
+            .unwrap()
+            .1;
+        assert_eq!(scene["diagnostic_only"], true);
+        let steps = scene["steps"].as_array().unwrap();
+        let before = steps
+            .iter()
+            .find(|s| s["code"] == resync_snapshot(false)["code"])
+            .unwrap()["code"]
+            .as_str()
+            .unwrap();
+        let after = steps
+            .iter()
+            .find(|s| s["code"] == resync_snapshot(true)["code"])
+            .unwrap()["code"]
+            .as_str()
+            .unwrap();
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["code"]
+                    .as_str()
+                    .is_some_and(|c| c.contains("UI.RequestAction(")))
+                .count(),
+            1
+        );
+        assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 1);
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["action"] == "load" && s["name"] == OLD_NAME)
+                .count(),
+            1
+        );
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["action"] == "load" && s["name"] == RESYNC_NAME)
+                .count(),
+            1
+        );
+        for changed in [
+            "turn=69",
+            "active=false",
+            "ledger.houses.p0.oathDue=70",
+            "ledger.history.r1.turn=65",
+            "ledger.houses.p1.oathChosen=nil",
+            "ledger.houses.p1.oathKnowledge.tech=1",
+            "flags.O1=1",
+            "missing=true",
+            "plotOwner=1",
+        ] {
+            let vm = mlua::Lua::new();
+            vm.load(r#"
+turn=68;active=true;plotOwner=nil;flags={};props={};ledger={reign=1,history={r1={turn=66}},houses={}}
+Game={GetCurrentGameTurn=function()return turn end,GetProperty=function(_,k)if k=='JAC_AGES_LEDGER' then return ledger end return props[k] end,SetProperty=function(_,k,v)assert(k~='JAC_AGES_LEDGER');props[k]=v end}
+GameConfiguration={GetStartTurn=function()return 1 end}
+local catalogue={};for i=1,66 do catalogue['O'..i]={OathType='O'..i,CivilizationType='C'..math.floor((i-1)/3)} end
+setmetatable(catalogue,{__call=function()local n=0;return function()n=n+1;return catalogue['O'..n] end end})
+GameInfo={JAC_SengokuOaths=catalogue,Technologies=function()return function()return nil end end,Civics=function()return function()return nil end end}
+Players={};local majors={}
+for i=0,21 do
+ local id=i
+ local house={civ='C'..id,age='NORMAL',oathReign=1,oaths={},oathKnowledge={tech=0,civic=0},parts={oath=0}}
+ if id==0 then house.oathDue=69 else house.oathChosen=1;house.oaths['O'..(3*id+1)]=true end
+ ledger.houses['p'..id]=house
+ local city={GetOwner=function()return id end,GetID=function()return 10+id end,GetX=function()return 3+id end,GetY=function()return 4 end}
+ local p={GetID=function()return id end,IsHuman=function()return id==0 end,IsTurnActive=function()return active end,IsTurnActiveComplete=function()return false end,GetTechs=function()return {HasTech=function()return false end} end,GetCulture=function()return {HasCivic=function()return false end} end,GetCities=function()return {Members=function()local done=false;return function()if not done then done=true;return 10+id,city end end end} end}
+ Players[id]=p;majors[#majors+1]=p
+end
+PlayerManager={GetAliveMajors=function()return majors end}
+Map={GetPlot=function(x)return {GetOwner=function()return plotOwner or x-3 end,GetIndex=function()return 100+x end,GetProperty=function(_,k)if missing then return nil end return flags[k:sub(1,-4)] or 0 end} end}
+"#).exec()?;
+            let _: String = vm.load(SNAPSHOT).eval()?;
+            let _: String = vm.load(before).eval()?;
+            let _: String = vm.load(after).eval()?;
+            vm.load(changed).exec()?;
+            assert!(
+                vm.load(after).eval::<String>().is_err(),
+                "accepted changed state: {changed}"
+            );
+        }
+        Ok(())
+    }
     #[test]
     fn every_emitted_scene_passes_the_real_driver_schema() -> Result<()> {
         for (name, scene) in scenarios(&Repository::checked_in())? {
@@ -631,6 +887,9 @@ assert(#logs==3)
 assert(string.find(logs[1],'PlayerTurnActivated:0,false',1,true))
 assert(string.find(logs[2],'p0.IsTurnActive=false',1,true))
 assert(string.find(logs[3],'GameCoreEventPlaybackComplete:',1,true))
+callbacks.GameCoreEventPlaybackComplete()
+assert(#logs==4)
+assert(string.find(logs[4],'GameCoreEventPlaybackComplete:',1,true))
 assert(ledger.houses.p0.oaths==nil)
 "#,
         )
@@ -662,7 +921,10 @@ assert(ledger.houses.p0.oaths==nil)
                 }
             }
         }
-        assert_eq!(checked, 4, "capability, two snapshots and pre-reign flags");
+        assert_eq!(
+            checked, 7,
+            "capability, two snapshots, pre-reign flags and three resync snapshots"
+        );
         Ok(())
     }
     #[test]
