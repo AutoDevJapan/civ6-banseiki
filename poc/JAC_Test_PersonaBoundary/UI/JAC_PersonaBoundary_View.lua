@@ -4107,7 +4107,9 @@ Events.LoadScreenClose.Add(function()
     last=nil;
     Observe("LOAD");
 end);
+include("JAC_ReturnedPreparation548");
 Events.SpyMissionCompleted.Add(function(attacker, missionID)
+    if B.ReturnedPreparation.RouteEvent(attacker,missionID) then return; end
     -- The event's player is the attacker, not the governor owner.
     Log("MISSION_EVENT", {attacker=attacker, mission=missionID, turn=Game.GetCurrentGameTurn()});
     local c=Game:GetProperty("JAC_BOUNDARY_ENEMY_CONFIG");

@@ -3,6 +3,8 @@ use std::{collections::BTreeSet, env, fs, path::Path};
 mod spy_completed_failure;
 #[path = "src/spy_third.rs"]
 mod spy_third;
+#[path = "src/spy_preparation_install.rs"]
+mod spy_preparation_install;
 
 fn collect_ids(dir: &Path, ids: &mut BTreeSet<String>) {
     println!("cargo:rerun-if-changed={}", dir.display());
@@ -36,6 +38,10 @@ fn main() {
     let manifest = env::var_os("CARGO_MANIFEST_DIR").expect("manifest directory");
     println!("cargo:rerun-if-changed=src/spy_third.rs");
     println!("cargo:rerun-if-changed=src/spy_completed_failure.rs");
+    println!("cargo:rerun-if-changed=src/spy_returned_preparation.rs");
+    println!("cargo:rerun-if-changed=src/spy_preparation_install.rs");
+    spy_preparation_install::write(&Path::new(&manifest).join("../.."))
+        .expect("generate test-only returned preparation event connection");
     spy_completed_failure::write(&Path::new(&manifest).join("../.."))
         .expect("generate shared native completed-failure policy from Rust");
     spy_third::write_connection(&Path::new(&manifest).join("../.."), false)
