@@ -12,15 +12,25 @@ end
 assert(Players[owner]:GetCities():GetCount()>=2,'nationwide lock requires two existing cities before fixture')
 Game:SetProperty(R.TEST,1)
 local cityX,cityY=city:GetX(),city:GetY(); local center=Map.GetPlot(cityX,cityY)
+local rejected,samples={},{}
+local function Reject(reason,detail)
+  rejected[reason]=(rejected[reason] or 0)+1
+  if detail and not samples[reason] then samples[reason]=tostring(detail) end
+  return false
+end
 local function EmptyLand(p)
-  if not p or p:IsCity() or p:IsWater() or p:IsImpassable() or
-    (p:GetOwner()~=-1 and p:GetOwner()~=owner) then return false end
+  if not p then return Reject('missing') end
+  if p:IsCity() then return Reject('city') end
+  if p:IsWater() then return Reject('water') end
+  if p:IsImpassable() then return Reject('impassable') end
+  if p:GetOwner()~=-1 and p:GetOwner()~=owner then return Reject('foreign-owner') end
   -- Use the same pre-mutation asset check as the city-origin scenario.
-  if not pcall(AssetFree,p) then return false end
+  local safe,why=pcall(AssetFree,p)
+  if not safe then return Reject('assets-or-api',why) end
   for id=0,63 do local player=Players[id]
     local units=player and player:GetUnits()
     if units then for _,u in units:Members() do
-      if u:GetX()==p:GetX() and u:GetY()==p:GetY() then return false end
+      if u:GetX()==p:GetX() and u:GetY()==p:GetY() then return Reject('occupied') end
     end end
   end
   return true
@@ -32,9 +42,14 @@ for index=0,Map.GetPlotCount()-1 do
   if distance>=3 and distance<=18 and EmptyLand(p) then
     local candidate={p}; for _,adjacent in ipairs(Map.GetAdjacentPlots(p:GetX(),p:GetY())) do candidate[#candidate+1]=adjacent end
     local good=#candidate==7
+    if not good then Reject('incomplete-ring',#candidate) end
     for _,q in ipairs(candidate) do if not EmptyLand(q) then good=false end end
     if good then origin=p; plots=candidate; break end
   end
+end
+local keys={}; for key in pairs(rejected) do keys[#keys+1]=key end; table.sort(keys)
+for _,key in ipairs(keys) do
+  print('[JAC_ASN_BLOCKED] rejected reason='..key..' count='..rejected[key]..' first='..tostring(samples[key]))
 end
 assert(origin,'no safe empty remote land footprint')
 local rows={}
