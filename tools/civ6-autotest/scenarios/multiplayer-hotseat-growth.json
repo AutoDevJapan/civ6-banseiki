@@ -5,6 +5,7 @@
   "steps": [
     {
       "action": "enable_mods",
+      "exclusive_user_mods": true,
       "ids": [
         "7696e937-2044-4f3c-8e13-4e27632e2710"
       ],

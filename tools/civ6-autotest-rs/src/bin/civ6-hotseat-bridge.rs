@@ -92,6 +92,14 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
         saves.to_path_buf(),
         port,
     );
+    let deadline = runner.clock.now() + 30.0;
+    let ready =
+        runner.send_frontend_transition_checked("return UI.IsInFrontEnd()", deadline, || {
+            verify_owner(&mut owner_check, &owner)
+        })?;
+    if ready.trim() != "true" {
+        return Err(Error::scenario("Civ6 main menu is not confirmed"));
+    }
     let mut sent = OpenOptions::new()
         .create_new(true)
         .append(true)
@@ -104,7 +112,9 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
         }
         writeln!(sent, "sent step {}", index + 1)?;
         sent.sync_all()?;
-        runner.run_step(&scenario["steps"][index])?;
+        runner.run_frontend_setup_step_checked(&scenario["steps"][index], || {
+            verify_owner(&mut owner_check, &owner)
+        })?;
     }
     if owner_check.owner()? != owner {
         return Err(Error::input(
@@ -114,11 +124,21 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
     writeln!(sent, "sent HostGame")?;
     sent.sync_all()?;
     let code = "if not UI.IsInFrontEnd() or not GameConfiguration.IsHotseat() then error('hotseat main menu required') end\nNetwork.HostGame(ServerType.SERVER_TYPE_HOTSEAT)\nreturn true";
-    let result = runner.lua("FrontEnd", code, 10.0);
+    let deadline = runner.clock.now() + 10.0;
+    let result = runner.send_frontend_transition_checked(code, deadline, || {
+        verify_owner(&mut owner_check, &owner)
+    });
     runner.disconnect();
     result?;
     validate_runtime_logs(logs, &audit_baseline)?;
     println!("HostGame sent once. Verify StagingRoom ReadyButton geometry before one click; then wait for the nonce-matched InGame BOOT and DIALOG_OPEN.");
+    Ok(())
+}
+
+fn verify_owner(io: &mut hs::SystemTransport<'_>, owner: &hs::WindowOwner) -> Result<()> {
+    if &io.owner()? != owner {
+        return Err(Error::input("Civ6 process or window ownership changed"));
+    }
     Ok(())
 }
 
@@ -517,7 +537,11 @@ fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result
         saves.to_path_buf(),
         port,
     );
-    let ready = runner.lua("FrontEnd", "return UI.IsInFrontEnd()", 5.0)?;
+    let deadline = runner.clock.now() + 30.0;
+    let ready =
+        runner.send_frontend_transition_checked("return UI.IsInFrontEnd()", deadline, || {
+            verify_owner(&mut owner_check, &state.owner)
+        })?;
     if ready.trim() != "true" {
         return Err(Error::scenario("Civ6 main menu is not confirmed"));
     }
@@ -532,7 +556,10 @@ fn menu_load(bundle_path: &Path, logs: &Path, saves: &Path, port: u16) -> Result
         "if not UI.IsInFrontEnd() then error('main menu required') end\nNetwork.LeaveGame()\n{}",
         scenario::load_code(&name, scenario::SessionType::Hotseat)
     );
-    let result = runner.lua("FrontEnd", &code, 15.0);
+    let deadline = runner.clock.now() + 15.0;
+    let result = runner.send_frontend_transition_checked(&code, deadline, || {
+        verify_owner(&mut owner_check, &state.owner)
+    });
     runner.disconnect();
     result?;
     println!("official LeaveGame and LoadGame sent once. Verify any StagingRoom Ready geometry and wait for a fresh InGame BOOT.");

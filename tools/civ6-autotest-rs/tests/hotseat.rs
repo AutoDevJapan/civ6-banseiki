@@ -35,6 +35,118 @@ fn two_humans_require_hotseat_and_unknown_modes_are_rejected() {
 }
 
 #[test]
+fn frontend_retry_rechecks_owner_before_sending() {
+    let fake = FakeBackend::new().lua(|_, _| Err(Error::tuner("not sent")));
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    let mut checks = 0;
+    let result = h
+        .runner
+        .send_frontend_transition_checked("Network.HostGame(1)", 5.0, || {
+            checks += 1;
+            if checks > 1 {
+                Err(Error::input("owner changed"))
+            } else {
+                Ok(())
+            }
+        });
+    assert!(result.unwrap_err().to_string().contains("owner changed"));
+    assert_eq!(checks, 2);
+    assert_eq!(h.count_code("HostGame"), 1);
+}
+
+#[test]
+fn frontend_retry_stops_after_unknown_result() {
+    let mut attempts = 0;
+    let fake = FakeBackend::new().lua(move |_, _| {
+        attempts += 1;
+        if attempts < 3 {
+            Err(Error::tuner("not sent"))
+        } else {
+            Err(Error::unknown("sent; reply lost"))
+        }
+    });
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    let mut checks = 0;
+    let error = h
+        .runner
+        .send_frontend_transition_checked("Network.LoadGame({})", 5.0, || {
+            checks += 1;
+            Ok(())
+        })
+        .unwrap_err();
+    assert_eq!(error.kind, civ6_autotest_rs::ErrorKind::LuaResponseUnknown);
+    assert_eq!(checks, 3);
+    assert_eq!(h.count_code("LoadGame"), 3);
+    assert!(h.clock.at() > 0.0 && h.clock.at() < 5.0);
+}
+
+#[test]
+fn setup_reconnect_does_not_replay_an_acknowledged_phase() {
+    let mut failures = 0;
+    let fake = FakeBackend::new().lua(move |_, code| {
+        if code.contains("JAC_AUTOTEST") && failures < 2 {
+            failures += 1;
+            return Err(Error::tuner("second phase was not sent"));
+        }
+        Ok("true".into())
+    });
+    let mut h = Harness::new(json!({"session_type":"hotseat"}), fake);
+    let mut checks = 0;
+    h.runner
+        .run_frontend_setup_step_checked(&configuration(), || {
+            checks += 1;
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(h.count_code("SetToDefaults"), 1);
+    assert_eq!(h.count_code("JAC_AUTOTEST"), 3);
+    assert_eq!(checks, 4);
+    assert!(h
+        .runner
+        .run_frontend_setup_step_checked(&json!({"action":"end_turn"}), || Ok(()))
+        .is_err());
+}
+
+#[test]
+fn original_hotseat_scenario_excludes_unlisted_user_mods() {
+    let original: Value = serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json"
+    ))
+    .unwrap();
+    let fake = FakeBackend::new().lua(|_, code| {
+        let lua = Lua::new();
+        lua.load(r#"
+            UI = {IsInFrontEnd=function() return true end}
+            GameConfiguration = {UpdateEnabledMods=function() end}
+            mods = {
+                growth={Id='7696e937-2044-4f3c-8e13-4e27632e2710',Enabled=false,Official=false},
+                extra={Id='unlisted-user-mod',Enabled=true,Official=false},
+                dlc={Id='official-dlc',Enabled=true,Official=true}
+            }
+            Modding = {
+                GetInstalledMods=function() return {{Handle='growth'},{Handle='extra'},{Handle='dlc'}} end,
+                GetModInfo=function(handle) return mods[handle] end,
+                GetModAssociations=function() return {} end,
+                GetModHandle=function(id)
+                    for handle,info in pairs(mods) do if info.Id==id then return handle end end
+                end,
+                CanDisableMod=function() return 'OK' end,
+                CanEnableMod=function() return 'OK' end,
+                DisableMod=function(handle) mods[handle].Enabled=false end,
+                EnableMod=function(handle) mods[handle].Enabled=true end
+            }
+        "#).exec().unwrap();
+        let result = lua.load(code).eval::<String>().unwrap();
+        assert!(lua.load("return mods.growth.Enabled").eval::<bool>().unwrap());
+        assert!(!lua.load("return mods.extra.Enabled").eval::<bool>().unwrap());
+        assert!(lua.load("return mods.dlc.Enabled").eval::<bool>().unwrap());
+        Ok(result)
+    });
+    let mut h = Harness::new(original.clone(), fake);
+    h.runner.run_step(&original["steps"][0]).unwrap();
+}
+
+#[test]
 fn load_uses_hotseat_mode_before_resolving_the_engine_save_type() {
     let lua = Lua::new();
     lua.load(

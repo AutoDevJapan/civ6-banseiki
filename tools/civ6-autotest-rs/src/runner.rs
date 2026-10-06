@@ -648,9 +648,21 @@ impl Runner {
     }
     /// Only Tuner errors precede the mutating send; unknown replies must escape.
     fn send_frontend_transition(&mut self, code: &str, deadline: f64) -> Result<String> {
+        self.send_frontend_transition_checked(code, deadline, || Ok(()))
+    }
+    /// Recheck a caller's pinned owner on every pre-send reconnect attempt.
+    pub fn send_frontend_transition_checked(
+        &mut self,
+        code: &str,
+        deadline: f64,
+        mut check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
         self.retry_when(
             deadline,
-            |this| this.lua("FrontEnd", code, this.budget(deadline, 5.0)?),
+            |this| {
+                check_owner()?;
+                this.lua("FrontEnd", code, this.budget(deadline, 5.0)?)
+            },
             |error| error.kind == ErrorKind::Tuner,
         )
     }
@@ -1550,6 +1562,23 @@ impl Runner {
         Ok(Some(value))
     }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
+        self.run_step_with_frontend_check(step, || Ok(()))
+    }
+    pub fn run_frontend_setup_step_checked(
+        &mut self,
+        step: &Value,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        if !matches!(text(step, "action"), "enable_mods" | "configure") {
+            return Err(Error::scenario("frontend setup step required"));
+        }
+        self.run_step_with_frontend_check(step, check_owner)
+    }
+    fn run_step_with_frontend_check(
+        &mut self,
+        step: &Value,
+        mut check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
         let action = text(step, "action");
         if action == "manual" {
             self.backend.manual(text(step, "prompt"))?;
@@ -1567,14 +1596,14 @@ impl Runner {
             "restart_game" => self.restart_game(self.remaining(deadline)?),
             "enable_mods" => {
                 let ids = strings(&step["ids"]);
-                let disabled = self.lua(
-                    "FrontEnd",
+                let disabled = self.send_frontend_transition_checked(
                     &scenario::enable_mods_code_with_scope(
                         &ids,
                         &strings(&step["disable_ids"]),
                         step["exclusive_user_mods"] == true,
                     ),
-                    self.remaining(deadline)?,
+                    deadline,
+                    &mut check_owner,
                 )?;
                 Ok(format!(
                     "enabled/verified {}; disabled {}",
@@ -1588,10 +1617,10 @@ impl Runner {
             }
             "configure" => {
                 let session = scenario::SessionType::from_scenario(&self.scenario)?;
-                self.lua(
-                    "FrontEnd",
+                self.send_frontend_transition_checked(
                     &scenario::configure_code_for_session(step, session),
-                    self.budget(deadline, 5.0)?,
+                    deadline,
+                    &mut check_owner,
                 )?;
                 self.ruleset = Some(text(step, "ruleset").into());
                 let build = scenario::builds_setup(step);
@@ -1602,13 +1631,14 @@ impl Runner {
                         self.budget(deadline, 30.0)?,
                     )?;
                 }
-                self.lua("FrontEnd",&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),self.budget(deadline,5.0)?)?;
+                self.send_frontend_transition_checked(&format!("GameConfiguration.SetValue('JAC_AUTOTEST', {})\nGameConfiguration.UpdateEnabledMods()\nreturn true",i32::from(self.test_mode)),deadline,&mut check_owner)?;
                 if let Some(nonce) = self.scenario["hotseat_bridge_nonce"]
                     .as_str()
                     .map(str::to_string)
                 {
                     let code = format!("GameConfiguration.SetValue('JAC_HOTSEAT_BRIDGE_NONCE', {})\nreturn GameConfiguration.GetValue('JAC_HOTSEAT_BRIDGE_NONCE')", scenario::lua_string(&nonce));
-                    let observed = self.lua("FrontEnd", &code, self.budget(deadline, 5.0)?)?;
+                    let observed =
+                        self.send_frontend_transition_checked(&code, deadline, &mut check_owner)?;
                     if observed.trim().trim_matches('"') != nonce {
                         return Err(Error::scenario(
                             "hotseat test nonce did not persist in GameConfiguration",
