@@ -170,8 +170,8 @@ fn admission_world() -> mlua::Result<Lua> {
 }
 
 #[test]
-fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_reload_reroll(
-) -> mlua::Result<()> {
+fn ordinary_leader_offer_enters_real_three_stage_flow_without_test_start_and_reload_reroll()
+-> mlua::Result<()> {
     let lua = admission_world()?;
     lua.load(
         r#"
@@ -258,8 +258,8 @@ fn product_world(small: bool, human: bool) -> mlua::Result<Lua> {
 }
 
 #[test]
-fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_saved_rolls(
-) -> mlua::Result<()> {
+fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_saved_rolls()
+-> mlua::Result<()> {
     for small in [true, false] {
         for human in [true, false] {
             let lua = product_world(small, human)?;
@@ -318,8 +318,8 @@ fn product_small_country_and_merger_enter_actual_flow_for_human_and_ai_and_keep_
 }
 
 #[test]
-fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating_a_roll(
-) -> mlua::Result<()> {
+fn interrupted_normal_admission_resumes_real_phase_one_journal_without_repeating_a_roll()
+-> mlua::Result<()> {
     let lua = admission_world()?;
     lua.load(
         r#"
@@ -518,8 +518,8 @@ fn religion_adapter_collision_rejects_before_native_absorption_mutation() -> mlu
 }
 
 #[test]
-fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation(
-) -> mlua::Result<()> {
+fn religion_adapter_stale_hero_identity_rejects_before_native_absorption_mutation()
+-> mlua::Result<()> {
     let lua = joint_adapter_world()?;
     lua.load(r#"
       local A=TEST_ABSORPTION
@@ -558,8 +558,8 @@ fn religion_adapter_corrupt_metadata_rejects_before_native_absorption_mutation()
 }
 
 #[test]
-fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment(
-) -> mlua::Result<()> {
+fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_increment()
+-> mlua::Result<()> {
     for revision in [2147483646i64, 2147483647] {
         let lua = joint_adapter_world()?;
         lua.globals().set("REVISION", revision)?;
@@ -583,8 +583,8 @@ fn religion_adapter_revision_boundary_commits_and_completed_retry_does_not_incre
 }
 
 #[test]
-fn religion_adapter_failed_property_write_resumes_without_second_native_transfer(
-) -> mlua::Result<()> {
+fn religion_adapter_failed_property_write_resumes_without_second_native_transfer()
+-> mlua::Result<()> {
     let lua = joint_adapter_world()?;
     lua.load(r#"
       local A=TEST_ABSORPTION
@@ -1004,8 +1004,8 @@ fn actual_city_methods_change_loyalty_once_and_resume_remaining_friction() -> ml
 }
 
 #[test]
-fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload(
-) -> mlua::Result<()> {
+fn separate_city_transfers_keep_their_first_physical_turn_across_errors_and_reload()
+-> mlua::Result<()> {
     let lua = world()?;
     lua.load(
         r#"
@@ -1323,8 +1323,8 @@ fn human_house_cannot_be_the_absorbed_source() -> mlua::Result<()> {
 }
 
 #[test]
-fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world(
-) -> mlua::Result<()> {
+fn execute_script_rejects_wrong_actor_and_invalid_asset_without_changing_flow_or_world()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     lua.load(
         r#"
@@ -1760,8 +1760,8 @@ fn prepare_choices(lua: &Lua) -> mlua::Result<()> {
 }
 
 #[test]
-fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected(
-) -> mlua::Result<()> {
+fn accepted_return_choices_are_revalidated_before_final_rolls_and_can_be_corrected()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -1930,8 +1930,8 @@ fn frozen_return_correction_panel_offers_only_the_missing_destination() -> mlua:
 }
 
 #[test]
-fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state(
-) -> mlua::Result<()> {
+fn choices_and_partial_transfer_resume_across_turns_without_replaying_unit_state()
+-> mlua::Result<()> {
     let lua = flow_world()?;
     prepare_choices(&lua)?;
     lua.load(
@@ -2172,7 +2172,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
             1,
         );
     }
-    assert!(manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>"));
+    assert!(
+        manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
+    );
     assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
