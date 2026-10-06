@@ -130,54 +130,285 @@ fn instruction(game: &Handle, base: u64, site: Site) -> Result<(), String> {
     }
     Ok(())
 }
-fn arm(d: &mut Debugger, tid: u32, phase: Phase, req: &Request) -> Result<(), String> {
-    if !d.threads.contains_key(&tid) {
-        let handle = thread_handle(tid)?;
-        if unsafe { GetProcessIdOfThread(handle.0) } != d.pid
-            || unsafe { GetThreadId(handle.0) } != tid
-        {
-            return Err("unknown thread ownership".into());
+#[derive(Clone, Copy)]
+struct CaptureEpoch {
+    phase: Phase,
+    generation: u64,
+    sites: [Option<u64>; 4],
+}
+impl CaptureEpoch {
+    fn new(phase: Phase, generation: u64, base: u64, req: &Request) -> Result<Self, String> {
+        let mut sites = [None; 4];
+        for (i, site) in plan::prefix(phase, req.count(phase))?.iter().enumerate() {
+            sites[i] = Some(
+                base.checked_add(site.rva)
+                    .ok_or("capture address overflow")?,
+            );
         }
-        let c = context(&handle)?;
-        if c.Dr7 & 0xff != 0 || c.EFlags & TF != 0 {
-            return Err("thread already has debugger state".into());
+        Ok(Self {
+            phase,
+            generation,
+            sites,
+        })
+    }
+}
+#[derive(Default)]
+struct CaptureThreads {
+    generations: BTreeMap<u32, u64>,
+    created: u64,
+    exited: u64,
+}
+fn arm_evidence(
+    d: &Debugger,
+    tid: u32,
+    from: Option<CaptureEpoch>,
+    to: CaptureEpoch,
+    generations: &BTreeMap<u32, u64>,
+) -> (Value, Result<CONTEXT, String>, u32) {
+    let state = &d.threads[&tid];
+    let wait = unsafe { WaitForSingleObject(state.handle.0, 0) };
+    let mut exit_code = 0;
+    let exit_ok = unsafe {
+        windows_sys::Win32::System::Threading::GetExitCodeThread(state.handle.0, &mut exit_code)
+    } != 0;
+    let c = context(&state.handle);
+    let mut row = json!({"type":"arm_state","tid":tid,"expected_owner_pid":d.pid,"thread_owner_pid":unsafe{GetProcessIdOfThread(state.handle.0)},"handle_tid":unsafe{GetThreadId(state.handle.0)},"handle_wait":wait,"exit_code":if exit_ok{Some(exit_code)}else{None},"held":d.held.contains(&tid),"armed_sites":state.armed_sites,"expected_phase":from.map(|e|e.phase.name()),"expected_generation":from.map(|e|e.generation),"last_written_generation":generations.get(&tid),"target_phase":to.phase.name(),"target_generation":to.generation,"target_sites":to.sites});
+    match &c {
+        Ok(c) => {
+            row["raw_context"] = json!({"context_flags":c.ContextFlags,"rip":c.Rip,"eflags":c.EFlags,"dr0":c.Dr0,"dr1":c.Dr1,"dr2":c.Dr2,"dr3":c.Dr3,"dr6":c.Dr6,"dr7":c.Dr7})
         }
-        d.threads.insert(
-            tid,
-            ThreadState {
-                handle,
-                original: Registers::from(&c),
-                returns: ReturnCorrelation::default(),
-                armed_sites: [None; 4],
-                property_capture: PropertyCapture::default(),
-                property_owner_id: None,
-                property_name: None,
-                property_value_name: None,
-            },
+        Err(e) => row["raw_context_error"] = json!(e),
+    }
+    (row, c, wait)
+}
+fn reject_arm(d: &mut Debugger, mut row: Value, error: String) -> String {
+    row["type"] = json!("arm_rejected");
+    row["error"] = json!(error);
+    if let Err(write_error) = mark(d, row.clone()) {
+        let _ = writeln!(
+            std::io::stderr(),
+            "{}",
+            json!({"type":"arm_record_failure","error":write_error,"evidence":row})
         );
     }
-    let state = d.threads.get_mut(&tid).ok_or("thread not tracked")?;
-    let mut c = context(&state.handle)?;
-    if state.armed_sites.iter().any(Option::is_some)
-        && !installed_sites_match_context(&state.armed_sites, &c)
-    {
-        return Err("prior capture debug-register ownership changed".into());
-    }
-    let sites = plan::prefix(phase, req.count(phase))?;
-    let mut addresses = [0; 4];
-    for (i, s) in sites.iter().enumerate() {
-        addresses[i] = d.module_base + s.rva;
-    }
-    [c.Dr0, c.Dr1, c.Dr2, c.Dr3] = addresses;
-    c.Dr7 =
-        (c.Dr7 & !0xff & !(0xffff << 16)) | (0..sites.len()).map(|i| 1u64 << (i * 2)).sum::<u64>();
+    error
+}
+fn install_sites(
+    d: &mut Debugger,
+    tid: u32,
+    epoch: CaptureEpoch,
+    mut c: CONTEXT,
+    threads: &mut CaptureThreads,
+) -> Result<(), String> {
+    let state = d.threads.get_mut(&tid).ok_or("thread lost during arm")?;
+    [c.Dr0, c.Dr1, c.Dr2, c.Dr3] = epoch.sites.map(|s| s.unwrap_or(0));
+    c.Dr7 = (c.Dr7 & !0xff & !(0xffff << 16))
+        | epoch
+            .sites
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.is_some())
+            .map(|(i, _)| 1u64 << (i * 2))
+            .sum::<u64>();
     c.Dr6 &= !0xf;
-    state.armed_sites = addresses.map(|v| (v != 0).then_some(v));
+    // Original state was captured before any write; shared cleanup owns partial failures.
+    state.armed_sites = epoch.sites;
     set_context(&state.handle, &c)?;
-    if !installed_sites_match_context(&state.armed_sites, &context(&state.handle)?) {
+    let after = context(&state.handle)?;
+    if !installed_sites_match_context(&epoch.sites, &after) {
         return Err("armed registers differ".into());
     }
+    threads.generations.insert(tid, epoch.generation);
     Ok(())
+}
+fn arm(
+    d: &mut Debugger,
+    tid: u32,
+    epoch: CaptureEpoch,
+    threads: &mut CaptureThreads,
+    steps: &BTreeMap<u32, Step>,
+) -> Result<(), String> {
+    if d.threads.contains_key(&tid) {
+        return Err("duplicate capture thread create event".into());
+    }
+    let handle = thread_handle(tid)?;
+    if unsafe { GetProcessIdOfThread(handle.0) } != d.pid || unsafe { GetThreadId(handle.0) } != tid
+    {
+        return Err("unknown thread ownership".into());
+    }
+    let c = context(&handle)?;
+    d.threads.insert(
+        tid,
+        ThreadState {
+            handle,
+            original: Registers::from(&c),
+            returns: ReturnCorrelation::default(),
+            armed_sites: [None; 4],
+            property_capture: PropertyCapture::default(),
+            property_owner_id: None,
+            property_name: None,
+            property_value_name: None,
+        },
+    );
+    let (mut row, _, wait) = arm_evidence(d, tid, None, epoch, &threads.generations);
+    row["pending_step_count"] = json!(steps.len());
+    row["pending_step_for_tid"] = json!(steps.contains_key(&tid));
+    if wait != WAIT_TIMEOUT || c.Dr7 & 0xff != 0 || c.EFlags & TF != 0 {
+        return Err(reject_arm(
+            d,
+            row,
+            "new capture thread is not live and free of debugger state".into(),
+        ));
+    }
+    install_sites(d, tid, epoch, c, threads)?;
+    threads.created += 1;
+    Ok(())
+}
+fn capture_thread_event(
+    d: &mut Debugger,
+    event: &DEBUG_EVENT,
+    epoch: CaptureEpoch,
+    threads: &mut CaptureThreads,
+    steps: &BTreeMap<u32, Step>,
+) -> Result<bool, String> {
+    let tid = event.dwThreadId;
+    match event.dwDebugEventCode {
+        CREATE_PROCESS_DEBUG_EVENT => {
+            let file = unsafe { event.u.CreateProcessInfo.hFile };
+            if !file.is_null() {
+                unsafe {
+                    CloseHandle(file);
+                }
+            }
+            arm(d, tid, epoch, threads, steps)?;
+        }
+        CREATE_THREAD_DEBUG_EVENT => {
+            let start = unsafe { event.u.CreateThread.lpStartAddress }.map(|p| p as usize as u64);
+            d.attach_origin.note_thread_start(tid, start);
+            arm(d, tid, epoch, threads, steps)?;
+        }
+        EXIT_THREAD_DEBUG_EVENT => {
+            if let Some(step) = steps.get(&tid) {
+                let mut row = if d.threads.contains_key(&tid) {
+                    arm_evidence(d, tid, Some(epoch), epoch, &threads.generations).0
+                } else {
+                    json!({"type":"arm_rejected","tid":tid,"raw_context_error":"unknown exiting thread handle"})
+                };
+                row["event_code"] = json!(event.dwDebugEventCode);
+                row["exit_event_code"] = json!(unsafe { event.u.ExitThread.dwExitCode });
+                row["pending_step"] = json!({"capture_seq":step.capture["capture_seq"],"expected_rip":step.expected,"armed_eflags":step.armed_eflags});
+                return Err(reject_arm(
+                    d,
+                    row,
+                    "thread exited before original instruction completion".into(),
+                ));
+            }
+            if !d.threads.contains_key(&tid) || !threads.generations.contains_key(&tid) {
+                return Err("exit event without a tracked capture thread".into());
+            }
+            d.attach_origin.note_thread_exit(tid);
+            // A real EXIT_THREAD event retires the pinned handle, never a guessed TID.
+            d.held.remove(&tid);
+            d.threads.remove(&tid);
+            threads.generations.remove(&tid);
+            threads.exited += 1;
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+enum PhaseBarrier {
+    Deferred,
+    Event(DEBUG_EVENT),
+    Switched(Vec<Value>),
+}
+fn phase_barrier(
+    d: &mut Debugger,
+    steps: &BTreeMap<u32, Step>,
+    from: CaptureEpoch,
+    to: CaptureEpoch,
+    threads: &mut CaptureThreads,
+) -> Result<PhaseBarrier, String> {
+    if !steps.is_empty() || d.cleanup_event.is_some() {
+        return Ok(PhaseBarrier::Deferred);
+    }
+    if to.generation
+        != from
+            .generation
+            .checked_add(1)
+            .ok_or("capture generation overflow")?
+        || to.phase == from.phase
+    {
+        return Err("invalid capture phase generation".into());
+    }
+    d.freeze()?;
+    let mut event = DEBUG_EVENT::default();
+    if unsafe { WaitForDebugEventEx(&mut event, 0) } != 0 {
+        d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
+        d.resume()?;
+        return Ok(PhaseBarrier::Event(event));
+    }
+    if std::io::Error::last_os_error().raw_os_error() != Some(121) {
+        return Err(win_error("phase drain WaitForDebugEventEx"));
+    }
+    rearm_frozen_threads(d, steps, from, to, threads).map(PhaseBarrier::Switched)
+}
+fn rearm_frozen_threads(
+    d: &mut Debugger,
+    steps: &BTreeMap<u32, Step>,
+    from: CaptureEpoch,
+    to: CaptureEpoch,
+    threads: &mut CaptureThreads,
+) -> Result<Vec<Value>, String> {
+    if !steps.is_empty() || d.cleanup_event.is_some() {
+        return Err("phase commit with pending instruction/event".into());
+    }
+    let mut prepared = Vec::new();
+    let mut evidence = Vec::new();
+    for tid in d.threads.keys().copied().collect::<Vec<_>>() {
+        let (mut row, c, wait) = arm_evidence(d, tid, Some(from), to, &threads.generations);
+        row["pending_step_count"] = json!(steps.len());
+        row["pending_step_for_tid"] = json!(steps.contains_key(&tid));
+        if wait == WAIT_OBJECT_0
+            && row["exit_code"].is_u64()
+            && threads.generations.contains_key(&tid)
+        {
+            // Keep this terminated handle tracked until its EXIT event (or
+            // detach), but never read it as a live DR set or write/resume it.
+            row["disposition"] = json!("signaled_handle_awaiting_exit_event");
+            d.held.remove(&tid);
+            evidence.push(row);
+            continue;
+        }
+        let c = match c {
+            Ok(c) => c,
+            Err(e) => return Err(reject_arm(d, row, e)),
+        };
+        let state = &d.threads[&tid];
+        if wait != WAIT_TIMEOUT
+            || !d.held.contains(&tid)
+            || row["thread_owner_pid"] != d.pid
+            || row["handle_tid"] != tid
+            || threads.generations.get(&tid) != Some(&from.generation)
+            || state.armed_sites != from.sites
+            || !installed_sites_match_context(&state.armed_sites, &c)
+        {
+            return Err(reject_arm(
+                d,
+                row,
+                "prior capture debug-register ownership changed".into(),
+            ));
+        }
+        row["disposition"] = json!("live_held_verified");
+        evidence.push(row);
+        prepared.push((tid, c));
+    }
+    // Preflight ALL threads before changing the first one. No partial phase
+    // executes: any write/readback failure goes through shared restoration.
+    for (tid, c) in prepared {
+        install_sites(d, tid, to, c, threads)?;
+    }
+    Ok(evidence)
 }
 fn read_pointer(game: &Handle, address: u64) -> Result<u64, String> {
     Ok(u64::from_le_bytes(read_exact::<8>(game, address)?))
@@ -496,6 +727,8 @@ pub fn observe(req: Request) -> Result<(), String> {
         json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"capture_phase":req.phase.name(),"front_prefix":req.front_prefix,"load_prefix":req.load_prefix,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
     let mut phase = req.phase;
+    let mut epoch = CaptureEpoch::new(phase, 0, exe.base, &req)?;
+    let mut capture_threads = CaptureThreads::default();
     let mut desired = phase;
     let mut steps: BTreeMap<u32, Step> = BTreeMap::new();
     let mut counts: BTreeMap<String, u64> = BTreeMap::new();
@@ -504,7 +737,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     let mut stop = admission.stop_requested();
     let mut hits = 0;
     let mut drain_deadline = None;
-    let mut phase_changes = 0;
+
     let mut armed_windows = BTreeMap::<String, u64>::new();
     for s in plan::prefix(phase, req.count(phase))? {
         armed_windows.insert(s.name.into(), 1);
@@ -545,37 +778,21 @@ pub fn observe(req: Request) -> Result<(), String> {
                     return Err(win_error("WaitForDebugEventEx"));
                 }
                 if desired != phase && steps.is_empty() && d.attach_origin.accepted {
-                    d.freeze()?;
-                    // An old-phase trap may have arrived between timeout and
-                    // suspension. Consume it under the OLD site set first.
-                    if unsafe{WaitForDebugEventEx(&mut event,0)}!=0 {
-                        d.cleanup_event=Some((event,DBG_EXCEPTION_NOT_HANDLED));
-                        d.resume()?;
-                        // Fall through to normal event handling without switching.
-                    } else {
-                        if std::io::Error::last_os_error().raw_os_error()!=Some(121){return Err(win_error("phase drain WaitForDebugEventEx"));}
-                        phase_changes += 1;
-                        if phase_changes > 8 {
-                            return Err("phase change bound exceeded".into());
+                    if epoch.generation >= 8 {return Err("phase change bound exceeded".into());}
+                    let next = CaptureEpoch::new(desired, epoch.generation + 1, exe.base, &req)?;
+                    for site in plan::prefix(desired, req.count(desired))? {instruction(&d.game,exe.base,*site)?;}
+                    match phase_barrier(&mut d,&steps,epoch,next,&mut capture_threads)? {
+                        PhaseBarrier::Deferred => continue,
+                        PhaseBarrier::Event(pending) => event=pending,
+                        PhaseBarrier::Switched(thread_checks) => {
+                            mark(&mut d,json!({"type":"phase_gap","old":phase.name(),"new":desired.name(),"generation":next.generation,"thread_checks":thread_checks,"unarmed_sites":"not_observed","first_factory_since_process_start":"unknown"}))?;
+                            epoch=next;
+                            phase=epoch.phase;
+                            for site in plan::prefix(phase,req.count(phase))? {*armed_windows.entry(site.name.into()).or_default()+=1;}
+                            d.resume()?;
+                            emit(&json!({"phase_ready":phase.name(),"pid":req.pid}))?;
+                            continue;
                         }
-                        for s in plan::prefix(desired, req.count(desired))? {
-                            instruction(&d.game, exe.base, *s)?;
-                        }
-                        let tids: Vec<_> = d.threads.keys().copied().collect();
-                        for t in tids {
-                            arm(&mut d, t, desired, &req)?;
-                        }
-                        mark(
-                            &mut d,
-                            json!({"type":"phase_gap","old":phase.name(),"new":desired.name(),"unarmed_sites":"not_observed","first_factory_since_process_start":"unknown"}),
-                        )?;
-                        phase = desired;
-                        for s in plan::prefix(phase, req.count(phase))? {
-                            *armed_windows.entry(s.name.into()).or_default() += 1;
-                        }
-                        d.resume()?;
-                        emit(&json!({"phase_ready":phase.name(),"pid":req.pid}))?;
-                        continue;
                     }
                 } else {
                     continue;
@@ -592,28 +809,8 @@ pub fn observe(req: Request) -> Result<(), String> {
             let mut status = DBG_CONTINUE;
             let mut announce_ready=false;
             match event.dwDebugEventCode {
-                CREATE_PROCESS_DEBUG_EVENT => {
-                    let info = unsafe { event.u.CreateProcessInfo };
-                    if !info.hFile.is_null() {
-                        unsafe {
-                            CloseHandle(info.hFile);
-                        }
-                    }
-                    // Windows owns hProcess/hThread in debug events until exit continuation.
-                    arm(&mut d, tid, phase, &req)?;
-                }
-                CREATE_THREAD_DEBUG_EVENT => {
-                    let start =
-                        unsafe { event.u.CreateThread.lpStartAddress }.map(|p| p as usize as u64);
-                    d.attach_origin.note_thread_start(tid, start);
-                    arm(&mut d, tid, phase, &req)?;
-                }
-                EXIT_THREAD_DEBUG_EVENT => {
-                    if steps.remove(&tid).is_some() {
-                        return Err("thread exited before original instruction completion".into());
-                    }
-                    d.attach_origin.note_thread_exit(tid);
-                    d.threads.remove(&tid);
+                CREATE_PROCESS_DEBUG_EVENT | CREATE_THREAD_DEBUG_EVENT | EXIT_THREAD_DEBUG_EVENT => {
+                    capture_thread_event(&mut d,&event,epoch,&mut capture_threads,&steps)?;
                 }
                 LOAD_DLL_DEBUG_EVENT => {
                     let info = unsafe { event.u.LoadDll };
@@ -845,7 +1042,7 @@ pub fn observe(req: Request) -> Result<(), String> {
     drop(input_reader);
     mark(
         &mut d,
-        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
+        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"capture_thread_events":{"armed_creates":capture_threads.created,"exit_events":capture_threads.exited,"final_tracked":capture_threads.generations.len()},"phase_generation":epoch.generation,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
     result.and(cleanup)
 }
@@ -1034,6 +1231,10 @@ pub fn parent(mut value: Value) -> Result<(), String> {
 #[cfg(test)]
 #[path = "order_step_tests.rs"]
 mod step_tests;
+
+#[cfg(test)]
+#[path = "order_phase_tests.rs"]
+mod phase_tests;
 
 #[cfg(test)]
 mod tests {

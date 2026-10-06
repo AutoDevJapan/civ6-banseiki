@@ -25,6 +25,10 @@ pub fn source_identity() -> Value {
             include_str!("order_step_tests.rs"),
         ),
         (
+            "civ6-pe-rs/src/order_phase_tests.rs",
+            include_str!("order_phase_tests.rs"),
+        ),
+        (
             "civ6-pe-rs/src/order_protocol.rs",
             include_str!("order_protocol.rs"),
         ),
