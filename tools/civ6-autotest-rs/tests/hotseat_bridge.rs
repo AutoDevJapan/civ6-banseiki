@@ -3,10 +3,15 @@ use mlua::Lua;
 use serde_json::{json, Value};
 use std::{
     fs,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
-const NONCE: &str = "0123456789abcdef0123456789abcdef";
+fn test_nonce() -> &'static str {
+    static VALUE: OnceLock<String> = OnceLock::new();
+    VALUE
+        .get_or_init(|| uuid::Uuid::new_v4().simple().to_string())
+        .as_str()
+}
 
 fn original() -> Value {
     serde_json::from_str(include_str!(
@@ -16,11 +21,12 @@ fn original() -> Value {
 }
 
 fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
+    let nonce = test_nonce();
     let output = tempfile::tempdir().unwrap();
     let bundle = hs::prepare(
         &original(),
         output.path(),
-        NONCE,
+        test_nonce(),
         "78ea4ad5-d526-4ca0-bd0e-cc4519261719",
     )
     .unwrap();
@@ -52,7 +58,7 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
         )
         .unwrap();
     lua.load(format!(r#"
-      runNonce = '{NONCE}'
+      runNonce = '{nonce}'
       localID = 0; turn = 0; dialogVisible = false; paused = false; dialogReady = false
       GameConfiguration = {{IsHotseat=function() return true end, GetValue=function(key) if key == 'JAC_HOTSEAT_BRIDGE_NONCE' then return runNonce end end,
         GetStartTurn=function() return 0 end, IsPaused=function() return paused end}}
@@ -101,7 +107,7 @@ fn lua_run_with_growth(xp: u32) -> (Vec<hs::Frame>, String) {
     lua.load(format!("updateHandler(); assert(key(124)); assert(key(125)); assert(key(125)); assert(key(133)); assert(key(133)); localID=1; updateHandler(); assert(key(126)); assert(key(127)); assert(key(134)); assert(savedName=='JAC-Hotseat-Mid-Round-'..runNonce); assert(saveType==1); assert(key(128)); localID=0; turn=1; for uid=1,2 do local r=growthRecords[0][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP={xp}; r.LastXPTurn=1 end; assert(key(129)); assert(key(130)); localID=1; for uid=1,2 do local r=growthRecords[1][uid]:GetProperty('JAC_POC_GROWTHUI_WARLORD'); r.XP=20; r.LastXPTurn=1 end; assert(key(131)); assert(key(134)); assert(savedName=='JAC-Hotseat-Next-Player-'..runNonce); assert(key(132))")).exec().unwrap();
     lua.load("dialogVisible=true; dialogReady=false; paused=false; updateHandler(); dialogReady=true; paused=true; updateHandler(); dialogVisible=false; dialogReady=false; paused=false; updateHandler()").exec().unwrap();
     let log = lines.lock().unwrap().join("\n");
-    (hs::parse_frames(&log, NONCE).unwrap(), log)
+    (hs::parse_frames(&log, test_nonce()).unwrap(), log)
 }
 
 fn lua_run() -> (Vec<hs::Frame>, String) {
@@ -159,7 +165,7 @@ fn actual_growth_lua_rejects_nineteen_instead_of_twenty_xp() {
 #[test]
 fn witness_does_not_register_inputs_without_hotseat_and_matching_nonce() {
     let lua = Lua::new();
-    lua.load("JAC_HOTSEAT_PLAN={nonce='0123456789abcdef0123456789abcdef'}; include=function() end; GameConfiguration={IsHotseat=function() return false end, GetValue=function() return 'wrong' end}").exec().unwrap();
+    lua.load(format!("JAC_HOTSEAT_PLAN={{nonce='{}'}}; include=function() end; GameConfiguration={{IsHotseat=function() return false end, GetValue=function() return 'wrong' end}}", test_nonce())).exec().unwrap();
     let witness = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_HotseatWitness.lua");
     lua.load(witness).exec().unwrap();
     lua.load("GameConfiguration.IsHotseat=function() return true end")
@@ -180,23 +186,26 @@ fn malformed_chunks_stale_nonce_and_duplicate_frames_fail() {
     let first = log.lines().next().unwrap();
     let parts: Vec<_> = first.split('|').collect();
     assert!(parts[7].starts_with("1/"));
-    assert!(hs::parse_frames(&format!("{first}\n{first}"), NONCE).is_err());
-    assert!(hs::parse_frames(
-        &log.replace(NONCE, "ffffffffffffffffffffffffffffffff"),
-        NONCE
-    )
-    .is_err());
+    assert!(hs::parse_frames(&format!("{first}\n{first}"), test_nonce()).is_err());
+    let mut stale_nonce = test_nonce().to_owned();
+    let replacement = if stale_nonce.starts_with('0') {
+        "1"
+    } else {
+        "0"
+    };
+    stale_nonce.replace_range(0..1, replacement);
+    assert!(hs::parse_frames(&log.replace(test_nonce(), &stale_nonce), test_nonce()).is_err());
     let skipped = log
         .lines()
         .filter(|line| !line.contains("|2/"))
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(hs::parse_frames(&skipped, NONCE).is_err());
+    assert!(hs::parse_frames(&skipped, test_nonce()).is_err());
     let mut first_two = log.lines().take(2).collect::<Vec<_>>();
     first_two.reverse();
     let reversed = first_two.join("\n");
-    assert!(hs::parse_frames(&reversed, NONCE).is_err());
-    assert!(hs::parse_frames(&format!("{log}\n{first}"), NONCE).is_err());
+    assert!(hs::parse_frames(&reversed, test_nonce()).is_err());
+    assert!(hs::parse_frames(&format!("{log}\n{first}"), test_nonce()).is_err());
 }
 
 #[test]
@@ -213,9 +222,9 @@ fn full_growth_comparison_catches_a_single_xp_change_and_bad_epochs() {
     assert!(hs::matching_capture(&captures, "MID_ROUND", "other", &state).is_err());
     assert!(hs::WitnessSnapshot::parse("3:nil").is_err());
     let boot = frames.iter().find(|f| f.kind == "BOOT").unwrap();
-    assert!(hs::validate_load_epoch(&state, boot, NONCE, 1, 2).is_ok());
-    assert!(hs::validate_load_epoch(&state, boot, NONCE, 1, 1).is_err());
-    assert!(hs::validate_load_epoch(&changed, boot, NONCE, 1, 2).is_err());
+    assert!(hs::validate_load_epoch(&state, boot, test_nonce(), 1, 2).is_ok());
+    assert!(hs::validate_load_epoch(&state, boot, test_nonce(), 1, 1).is_err());
+    assert!(hs::validate_load_epoch(&changed, boot, test_nonce(), 1, 2).is_err());
 }
 
 #[test]
@@ -227,33 +236,35 @@ fn log_baseline_rejects_old_ack_and_changed_generation() {
     }
     let baseline = judge::snapshot_logs(dir.path()).unwrap();
     fs::write(dir.path().join("Lua.log"), format!("old\n{log}\n")).unwrap();
-    assert!(!hs::fresh_frames(dir.path(), &baseline, NONCE)
+    assert!(!hs::fresh_frames(dir.path(), &baseline, test_nonce())
         .unwrap()
         .is_empty());
     let after = judge::snapshot_logs(dir.path()).unwrap();
-    assert!(hs::fresh_frames(dir.path(), &after, NONCE)
+    assert!(hs::fresh_frames(dir.path(), &after, test_nonce())
         .unwrap()
         .is_empty());
     fs::write(dir.path().join("Lua.log"), b"replaced").unwrap();
-    assert!(hs::fresh_frames(dir.path(), &after, NONCE).is_err());
+    assert!(hs::fresh_frames(dir.path(), &after, test_nonce()).is_err());
 }
 
 #[test]
 fn polling_waits_for_the_tail_of_a_chunked_frame() {
     let (complete, log) = lua_run();
     let first = log.lines().next().unwrap();
-    assert!(hs::parse_frames(first, NONCE).is_err());
-    assert!(hs::parse_available_frames(first, NONCE).unwrap().is_empty());
+    assert!(hs::parse_frames(first, test_nonce()).is_err());
+    assert!(hs::parse_available_frames(first, test_nonce())
+        .unwrap()
+        .is_empty());
     assert_eq!(
-        hs::parse_available_frames(&format!("{log}\n"), NONCE).unwrap(),
+        hs::parse_available_frames(&format!("{log}\n"), test_nonce()).unwrap(),
         complete
     );
-    let interrupted = format!("{log}\nJAC_HS|1|{NONCE}|unfinished");
+    let interrupted = format!("{log}\nJAC_HS|1|{}|unfinished", test_nonce());
     assert_eq!(
-        hs::parse_available_frames(&interrupted, NONCE).unwrap(),
+        hs::parse_available_frames(&interrupted, test_nonce()).unwrap(),
         complete
     );
-    assert!(hs::parse_available_frames(&format!("{interrupted}\n"), NONCE).is_err());
+    assert!(hs::parse_available_frames(&format!("{interrupted}\n"), test_nonce()).is_err());
     let finished = format!("{log}\n");
     let last_line = finished.lines().last().unwrap();
     let partial = last_line
@@ -262,13 +273,13 @@ fn polling_waits_for_the_tail_of_a_chunked_frame() {
         .unwrap();
     let without_last = finished.strip_suffix(&format!("{last_line}\n")).unwrap();
     assert_eq!(
-        hs::parse_available_frames(&format!("{without_last}{partial}"), NONCE)
+        hs::parse_available_frames(&format!("{without_last}{partial}"), test_nonce())
             .unwrap()
             .len(),
         complete.len() - 1
     );
     assert_eq!(
-        hs::parse_available_frames(&finished, NONCE).unwrap(),
+        hs::parse_available_frames(&finished, test_nonce()).unwrap(),
         complete
     );
 }
@@ -294,7 +305,7 @@ fn installed_lua_must_match_the_generated_original_scenario() {
     let bundle = hs::prepare(
         &original(),
         output.path(),
-        NONCE,
+        test_nonce(),
         "78ea4ad5-d526-4ca0-bd0e-cc4519261719",
     )
     .unwrap();
@@ -364,7 +375,7 @@ fn controller_spends_key_before_send_and_never_resends_unknown_mutation() {
         by_key: Default::default(),
         loss: false,
     };
-    let mut controller = hs::Controller::new(fake, NONCE, &boot).unwrap();
+    let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let mut spent = vec![];
     let err = controller
         .step(6, &original(), 0.25, |n| {
@@ -422,7 +433,7 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
     fields[8] = "boolean:false".into();
     let closed = packed(&fields);
     let frame = |serial, step, kind: &str, body: String| hs::Frame {
-        nonce: NONCE.into(),
+        nonce: test_nonce().into(),
         scene: boot.scene.clone(),
         serial,
         step,
@@ -448,7 +459,7 @@ fn player_change_requires_visible_paused_then_hidden_unpaused_human() {
         by_key,
         loss: false,
     };
-    let mut controller = hs::Controller::new(fake, NONCE, &boot).unwrap();
+    let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let receipt = controller.step(6, &original(), 3.0, |_| Ok(())).unwrap();
     let opened = receipt.dialog_open.unwrap();
     assert!(opened.dialog && opened.dialog_ready && opened.paused);
@@ -490,12 +501,12 @@ fn synchronous_save_complete_is_accepted_with_its_real_name() {
         by_key,
         loss: false,
     };
-    let mut controller = hs::Controller::new(fake, NONCE, &boot).unwrap();
+    let mut controller = hs::Controller::new(fake, test_nonce(), &boot).unwrap();
     let receipt = controller.step(9, &original(), 2.0, |_| Ok(())).unwrap();
     assert_eq!(receipt.kind, "SAVE_COMPLETE");
     assert_eq!(
         receipt.response_body,
-        format!("JAC-Hotseat-Mid-Round-{NONCE}")
+        format!("JAC-Hotseat-Mid-Round-{}", test_nonce())
     );
     assert_eq!(controller.io.keys, vec![hs::KEY_SAVE]);
 }

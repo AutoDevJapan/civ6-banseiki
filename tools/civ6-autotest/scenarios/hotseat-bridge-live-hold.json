@@ -8,6 +8,10 @@
       "timeout": 420
     },
     {
+      "action": "pause",
+      "seconds": 1
+    },
+    {
       "action": "wait_for",
       "condition": {
         "type": "log_line",
