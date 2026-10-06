@@ -772,6 +772,103 @@ mod tests {
         );
     }
 
+    #[test]
+    fn real_window_retry_deadline_keeps_absent_and_late_launches_unresolved() {
+        struct ManualClock(Mutex<f64>);
+        impl Clock for ManualClock {
+            fn now(&self) -> f64 {
+                *self.0.lock().unwrap()
+            }
+            fn sleep(&self, seconds: f64) {
+                *self.0.lock().unwrap() += seconds;
+            }
+        }
+        struct TimeoutBackend {
+            clock: Arc<ManualClock>,
+            calls: Arc<Mutex<Vec<&'static str>>>,
+            late: bool,
+        }
+        impl Backend for TimeoutBackend {
+            fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+                Ok((self.late && self.clock.now() >= 135.0).then_some((7, 135.0)))
+            }
+            fn launch(&mut self) -> Result<()> {
+                self.calls.lock().unwrap().push("launch");
+                Ok(())
+            }
+            fn wait_window(&mut self, deadline: f64) -> Result<isize> {
+                self.calls.lock().unwrap().push("window_wait");
+                self.clock.sleep(deadline - self.clock.now());
+                Err(Error::input("no visible window"))
+            }
+            fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+                let Some((pid, started)) = self.single_process(0.0)? else {
+                    return Ok(None);
+                };
+                crate::startup::validate_launch_binding(100.0, self.clock.now(), started)?;
+                Ok(Some(crate::startup::GameProcess { pid, started }))
+            }
+            fn terminate(&mut self, _: u32, _: f64) -> Result<()> {
+                panic!("an absent or late game must not be terminated")
+            }
+        }
+        for late in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let clock = Arc::new(ManualClock(Mutex::new(100.0)));
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(TimeoutBackend {
+                    clock: Arc::clone(&clock),
+                    calls: Arc::clone(&calls),
+                    late,
+                }),
+                clock.clone(),
+            );
+            r.persona_runtime_restart = true;
+            let failure = r
+                .launch_startup_and_wait(140.0, false, true, &mut StartupAttempt::default())
+                .unwrap_err();
+            assert_eq!(
+                calls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|&&c| c == "launch")
+                    .count(),
+                1
+            );
+            if late {
+                assert_eq!(clock.now(), 135.0);
+                assert!(failure.message.contains("association expired"));
+            } else {
+                assert_eq!(clock.now(), 140.0);
+                assert_eq!(failure.kind, ErrorKind::Scenario);
+                assert!(failure.message.contains("window did not appear"));
+                assert_eq!(
+                    calls
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .filter(|&&c| c == "window_wait")
+                        .count(),
+                    8
+                );
+            }
+            let cleanup = r.cleanup_persona_process().unwrap_err();
+            assert!(cleanup.message.contains(if late {
+                "association expired"
+            } else {
+                "outer live_chain cleanup required"
+            }));
+            assert!(r.persona_launch_requested && r.persona_launched_process.is_none());
+        }
+    }
+
     struct LostStateRead {
         calls: Arc<Mutex<usize>>,
         change_identity: bool,
