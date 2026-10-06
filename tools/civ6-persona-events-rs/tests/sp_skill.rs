@@ -29,6 +29,10 @@ Game={GetCurrentGameTurn=function() return turn end,
  SetProperty=function() writes=writes+1 end}
 "#).exec().unwrap();
     assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("merit=4; deed=nil").exec().unwrap();
+    assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
+    lua.load("deed=8").exec().unwrap();
+    assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
     lua.load("deed=9; merit=4; busy=true").exec().unwrap();
     assert!(!lua.load(sp_skill::EARN_READY).eval::<bool>().unwrap());
     lua.load("busy=false").exec().unwrap();
