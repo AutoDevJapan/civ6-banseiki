@@ -148,6 +148,49 @@ mod platform {
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+    fn wait_capability_child(
+        child: &mut Child,
+        budget: Duration,
+    ) -> Result<std::process::ExitStatus> {
+        let started = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return Ok(status),
+                Ok(None) if started.elapsed() < budget => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                outcome => {
+                    let killed = child.kill();
+                    let reaped = child.wait();
+                    return Err(Error::input(format!(
+                        "native bridge capability query did not finish within its budget: {outcome:?}; child kill={killed:?}; child reap={reaped:?}"
+                    )));
+                }
+            }
+        }
+    }
+
+    fn query_capabilities(executable: &Path) -> Result<()> {
+        let mut child = Command::new(executable)
+            .arg("--capabilities")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()?;
+        let status = wait_capability_child(&mut child, Duration::from_secs(3))?;
+        let mut bytes = Vec::new();
+        if let Some(stdout) = child.stdout.take() {
+            stdout.take(16_385).read_to_end(&mut bytes)?;
+        }
+        if bytes.len() > 16_384 {
+            return Err(Error::input(
+                "native bridge capability response is too large",
+            ));
+        }
+        verify_controller_capabilities(status.success(), &bytes)
+    }
+
     fn hex_address(value: &Value) -> Option<u64> {
         let raw = value.as_str()?.strip_prefix("0x")?;
         (raw.len() == 16)
@@ -1026,12 +1069,7 @@ mod platform {
             }
             // The shared release folder can contain a controller from an older
             // branch. Reject its parser before sending PID or installing a DLL.
-            let capabilities = Command::new(&executable)
-                .arg("--capabilities")
-                .stdin(Stdio::null())
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()?;
-            verify_controller_capabilities(capabilities.status.success(), &capabilities.stdout)?;
+            query_capabilities(&executable)?;
             if artifact.exists() {
                 return Err(Error::scenario("native bridge artifact already exists"));
             }
@@ -1289,6 +1327,19 @@ mod platform {
     mod tests {
         use super::*;
         use serde_json::json;
+
+        #[test]
+        fn stopped_capability_query_reaps_its_child_and_preserves_peer() {
+            let mut child = sleeping_child();
+            let mut peer = sleeping_child();
+            let started = std::time::Instant::now();
+            assert!(wait_capability_child(&mut child, Duration::from_millis(50)).is_err());
+            assert!(started.elapsed() < Duration::from_secs(3));
+            assert!(child.try_wait().unwrap().is_some());
+            assert!(peer.try_wait().unwrap().is_none());
+            peer.kill().unwrap();
+            peer.wait().unwrap();
+        }
 
         fn sleeping_child() -> Child {
             Command::new("powershell.exe")
