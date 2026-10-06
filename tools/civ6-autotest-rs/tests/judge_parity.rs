@@ -557,6 +557,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-return-boundary.json",
                 "assassin-actor-eliminated-save-load.json",
                 "assassin-target-eliminated-save-load.json",
+                "hotseat-bridge-live-hold.json",
+                "multiplayer-hotseat-growth.json",
                 "mod-selection-rollback.json",
             ]
             .into_iter()
