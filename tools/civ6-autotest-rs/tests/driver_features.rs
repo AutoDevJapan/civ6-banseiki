@@ -8,6 +8,51 @@ use std::{
 };
 use support_driver::{FakeBackend, Harness, ManualClock};
 
+#[test]
+fn end_turn_wait_dismisses_advisor_that_appears_after_the_first_poll() {
+    let state = Arc::new(Mutex::new((false, false)));
+    let events = state.clone();
+    let backend = FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into(), "AdvisorPopup".into()]))
+        .lua(move |name, code| {
+            let mut state = events.lock().unwrap();
+            if name == "AdvisorPopup" && code.contains("OnHideAdvisorDialog") {
+                if state.0 {
+                    state.0 = false;
+                    state.1 = true;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            if name == "InGame" && code == "return TURN_COMPLETE" {
+                if state.1 {
+                    return Ok("true".into());
+                }
+                state.0 = true;
+                return Ok("false".into());
+            }
+            Ok("false".into())
+        });
+    let mut harness = Harness::new(json!({}), backend);
+    harness
+        .runner
+        .wait(
+            &json!({"type":"lua","state_name":"InGame","code":"return TURN_COMPLETE"}),
+            5.0,
+            true,
+        )
+        .unwrap();
+    assert!(state.lock().unwrap().1);
+    let calls = harness.calls();
+    let first = calls
+        .iter()
+        .position(|(_, c)| c == "return TURN_COMPLETE")
+        .unwrap();
+    assert!(calls[first + 1..]
+        .iter()
+        .any(|(s, c)| s == "AdvisorPopup" && c.contains("OnHideAdvisorDialog")));
+}
+
 fn turn_backend() -> FakeBackend {
     let turn = Arc::new(Mutex::new(1));
     FakeBackend::new().lua(move |_, code| {

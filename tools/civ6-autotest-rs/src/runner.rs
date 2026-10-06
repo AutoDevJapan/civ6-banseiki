@@ -536,6 +536,9 @@ impl Runner {
         };
         while self.clock.now() < end {
             if close_diplomacy {
+                // A blocking advisor can appear after END TURN has already
+                // been sent. Dismiss it during the bounded wait as well.
+                self.dismiss_advisor(end)?;
                 let closed = self.close_diplomacy(end)?;
                 if !closed.is_empty() {
                     diplomacy_closes += closed.len();
