@@ -215,23 +215,35 @@ return 'LEGACY_CONTROL_DIAGNOSTIC '..table.concat(out,' ')
 // FindOpenSessionID/GetSessionInfo: official DiplomacyActionView.lua:2052-2054.
 const SESSION_DIAGNOSTIC: &str = r#"
 local out={}
+local function method(object,name)
+ if object==nil then return nil,'owner missing' end
+ local ok,fn=pcall(function() return object[name] end)
+ if not ok then return nil,name..' lookup failed:'..tostring(fn) end
+ if type(fn)~='function' then return nil,name..' missing' end
+ return fn
+end
 if ContextPtr and type(ContextPtr.IsHidden)=='function' then out[#out+1]='contextHidden='..tostring(ContextPtr:IsHidden()) end
-if DiplomacyManager and type(DiplomacyManager.FindOpenSessionID)=='function' then
+local find,findError=method(DiplomacyManager,'FindOpenSessionID')
+if not find then
+ out[#out+1]='sessionLookup=unavailable:'..findError
+else
  for _,p in ipairs(PlayerManager.GetAliveMajors()) do
   local id=p:GetID()
   if id~=0 then
-   local ok,session=pcall(DiplomacyManager.FindOpenSessionID,0,id)
+   local ok,session=pcall(find,0,id)
    out[#out+1]='session.p'..id..'='..(ok and tostring(session) or 'unavailable')
    local label='sessionInfo.'..id
    if not ok then
     out[#out+1]=label..'=unavailable:FindOpenSessionID failed:'..tostring(session)
    elseif type(session)~='number' or session<0 then
     out[#out+1]=label..'=not queried:session type='..type(session)..' value='..tostring(session)
-   elseif type(DiplomacyManager.GetSessionInfo)~='function' then
-    out[#out+1]=label..'=unavailable:GetSessionInfo missing'
    else
-    local success,info=pcall(DiplomacyManager.GetSessionInfo,session)
-    if not success then
+    local get,getError=method(DiplomacyManager,'GetSessionInfo')
+    local success,info
+    if get then success,info=pcall(get,session) end
+    if not get then
+     out[#out+1]=label..'=unavailable:'..getError
+    elseif not success then
      out[#out+1]=label..'=unavailable:GetSessionInfo failed:'..tostring(info)
     elseif type(info)~='table' then
      out[#out+1]=label..'=unavailable:GetSessionInfo returned '..type(info)
@@ -244,14 +256,21 @@ if DiplomacyManager and type(DiplomacyManager.FindOpenSessionID)=='function' the
   end
  end
 end
-if type(Game.GetEras)=='function' then
- local ok,eras=pcall(Game.GetEras)
- if ok and eras then
+local getEras,erasError=method(Game,'GetEras')
+if not getEras then
+ out[#out+1]='commemorations=unavailable:'..erasError
+else
+ local ok,eras=pcall(getEras)
+ if not ok or eras==nil then
+  out[#out+1]='commemorations=unavailable:GetEras '..(ok and 'returned nil' or ('failed:'..tostring(eras)))
+ else
   for _,name in ipairs({'GetPlayerNumAllowedCommemorations','GetPlayerCommemorateChoices'}) do
-   local found,fn=pcall(function()return eras[name] end)
-   if found and type(fn)=='function' then
+   local fn,missing=method(eras,name)
+   if fn then
     local success,value=pcall(fn,eras,0)
-    out[#out+1]=name..'='..(success and (type(value)=='table' and tostring(#value) or tostring(value)) or 'unavailable')
+    out[#out+1]=name..'='..(success and (type(value)=='table' and tostring(#value) or tostring(value)) or ('unavailable:call failed:'..tostring(value)))
+   else
+    out[#out+1]=name..'=unavailable:'..missing
    end
   end
  end
@@ -418,7 +437,18 @@ Game={GetEras=function()return {GetPlayerNumAllowedCommemorations=function(_,id)
         }
         vm.load("DiplomacyManager=nil;Game.GetEras=nil").exec()?;
         let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
-        assert_eq!(text, "LEGACY_SESSION_DIAGNOSTIC contextHidden=false");
+        assert!(text.contains("sessionLookup=unavailable:owner missing"));
+        assert!(text.contains("commemorations=unavailable:GetEras missing"));
+        vm.load("DiplomacyManager={};Game.GetEras=function()return {} end")
+            .exec()?;
+        let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+        assert!(text.contains("sessionLookup=unavailable:FindOpenSessionID missing"));
+        assert!(text.contains("GetPlayerNumAllowedCommemorations=unavailable:"));
+        assert!(text.contains("GetPlayerCommemorateChoices=unavailable:"));
+        vm.load("DiplomacyManager=setmetatable({},{__index=function()error('lookup failed')end});Game.GetEras=function()error('eras failed')end").exec()?;
+        let text: String = vm.load(SESSION_DIAGNOSTIC).eval()?;
+        assert!(text.contains("sessionLookup=unavailable:FindOpenSessionID lookup failed:"));
+        assert!(text.contains("commemorations=unavailable:GetEras failed:"));
         Ok(())
     }
 
