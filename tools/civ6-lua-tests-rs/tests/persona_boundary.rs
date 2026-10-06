@@ -796,7 +796,9 @@ fn test_real_persona_gameplay_stops_all_four_merit_sources_at_each_boundary() {
         let lua = new_lua();
         exec(&lua, include_str!("../fixtures/persona/stubs.lua"));
         inject_persona_tree_data(&lua);
+        civ6_lua_tests_rs::persona_engine::prepare(&lua).unwrap();
         load_persona_contexts(&lua);
+        civ6_lua_tests_rs::persona_engine::finish_startup(&lua).unwrap();
         exec(
             &lua,
             include_str!("../fixtures/persona/production_boundary.lua"),

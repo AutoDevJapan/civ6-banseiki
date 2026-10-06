@@ -1,4 +1,26 @@
 #[test]
+fn unreflected_stock_spending_cannot_overbook_a_new_person_reservation() {
+    let lua = normal_context(STOCK_GOVERNOR);
+    run(&lua, r#"
+        Players[0]:GetGovernors().GetGovernorPoints=function() return 1 end
+        emit(Events,'GovernorPromoted',0,240,4000)
+        emit(Events,'GovernorAppointed',0,240)
+        assert(used[0]==0 and properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.accounts[0].expected==1)
+        local leader=PlayerConfigurations[3]:GetLeaderTypeName()
+        emit(GameEvents,'JAC_LeaderPersonaJoin',0,{Source=3})
+        assert(playerProps[0].JAC_PERSONA_RESULT=='JOINED')
+        emit(GameEvents,'JAC_LeaderPersonaEvolve',0,{Leader=leader})
+        assert(playerProps[0].JAC_PERSONA_RESULT=='NATIVE_UNAVAILABLE',
+            'pending official consumption must prevent a new reservation')
+        assert(properties['JAC_PERSONA_'..leader..'_STATE']=='GREAT_PERSON' and #unitLists[0]==1)
+        used[0]=1
+        emit(GameEvents,'JAC_LeaderPersonaEvolve',0,{Leader=leader})
+        assert(playerProps[0].JAC_PERSONA_RESULT=='NO_TITLE')
+        assert(properties['JAC_PERSONA_'..leader..'_STATE']=='GREAT_PERSON' and #unitLists[0]==1)
+    "#);
+}
+
+#[test]
 fn unjoined_person_debit_cannot_settle_another_persons_lagging_payment() {
     let lua = normal_context("");
     run(&lua, r#"

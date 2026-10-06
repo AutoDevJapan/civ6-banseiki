@@ -7,6 +7,7 @@ const RULES: &str = "poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua";
 
 fn run_case(name: &str) {
     let lua = new_lua();
+    lua.globals().set("NORMAL_PERSONA_TEST_CASE", name).unwrap();
     for (source, label) in [
         (
             include_str!("../fixtures/persona/stubs.lua").to_string(),
@@ -27,11 +28,18 @@ fn run_case(name: &str) {
             "cases",
         ),
     ] {
+        if label == "Gameplay" {
+            civ6_lua_tests_rs::persona_engine::prepare(&lua).unwrap();
+        }
         lua.load(&source).set_name(label).exec().unwrap();
+        if label == "Gameplay" {
+            civ6_lua_tests_rs::persona_engine::finish_startup(&lua).unwrap();
+        }
     }
     lua.globals()
         .set("GAMEPLAY_SOURCE", read_repo(GAMEPLAY))
         .unwrap();
+    civ6_lua_tests_rs::persona_engine::update_cases(&lua).unwrap();
     let cases: Table = lua.globals().get("PRODUCTION_ADMISSION_CASES").unwrap();
     let case: Function = cases.get(name).unwrap();
     case.call::<()>(())

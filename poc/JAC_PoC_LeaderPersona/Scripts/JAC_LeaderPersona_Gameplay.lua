@@ -728,6 +728,9 @@ function E.BeforeEvolution(owner,row)
     local n=spent(owner); local a=s and s.accounts[owner]
     if not s or not d or not a or a.tainted or n==nil or Get(d.leader,'STATE')~='GREAT_PERSON' or
        not joined(owner,d,Get(d.leader,'SOURCE')) then return false end
+    -- A successful official debit may precede the aggregate Spent update.
+    -- Its still-visible balance cannot fund another person's reservation.
+    if n<a.expected then return false end
     local e=s.people[d.leader]
     if e and (e.tainted or next(e.acquired)) then return false end
     if n>a.expected then
