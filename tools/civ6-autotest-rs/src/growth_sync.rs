@@ -2,12 +2,18 @@
 //! Endpoint IDs and session/barrier/phase tags are claims supplied by the collector.
 //! A matching phase does not establish actual game timing, and a successful
 //! comparison proves only equality of these inputs, not live LAN synchronization.
-//! No collection, transport, save/load or rejoin operation is performed here.
+//! Collection uses the fixed read-only query below; save/load and rejoin are
+//! still separate operations. Neither labels nor matching records prove a barrier.
 
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
+
+/// Read the four GrowthUI records from an InGame context. No game state is written.
+/// The caller must hold both endpoints at the intended collection boundary;
+/// the before/after checks reject a turn change during this single query only.
+pub const COLLECTION_QUERY: &str = include_str!("growth_sync_query.lua");
 
 /// Envelope for the existing hotseat `turn|localPlayer|owner~unitID~...` text.
 /// The LAN collector must establish independent endpoints and a real barrier.
