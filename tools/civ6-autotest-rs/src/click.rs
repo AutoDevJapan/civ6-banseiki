@@ -450,7 +450,10 @@ mod win {
         press_key_with(&mut WindowsBackend::new(), vk, end, KeyDelivery::Window)
     }
     pub fn request_civ_window_close() -> Result<()> {
-        request_civ_window_close_with(&mut WindowsBackend::new())
+        let mut lease = crate::startup::RecoveryLease::acquire()?;
+        let game = crate::restart::single_civ_process(0.0)?
+            .ok_or_else(|| Error::input("owned Civ6 process is absent"))?;
+        crate::startup::request_owned_close(&mut lease, game.into())
     }
     pub fn require_single_civ_process() -> Result<()> {
         require_single_with(&mut WindowsBackend::new())

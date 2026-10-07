@@ -566,6 +566,7 @@ mod win {
             })
         }
         fn terminate_civ(&mut self, pid: u32, expected: f64) -> Result<()> {
+            let mut lease = crate::startup::RecoveryLease::acquire()?;
             with_process(pid, 0x1001, |h| {
                 let path = image_path(h)?;
                 let name = path
@@ -580,6 +581,7 @@ mod win {
                         "Civ VI process {pid} changed before termination"
                     )));
                 }
+                lease.check()?;
                 if unsafe { TerminateProcess(h, 1) } == 0 {
                     return Err(Error::input(format!(
                         "Could not terminate Civ VI process {pid}"
@@ -686,7 +688,12 @@ mod win {
             }
         }
         fn launch_uri(&mut self, uri: &str) -> Result<()> {
+            let mut lease = crate::startup::RecoveryLease::acquire()?;
             let wide: Vec<u16> = uri.encode_utf16().chain(std::iter::once(0)).collect();
+            lease.check()?;
+            if !self.civ_ids()?.is_empty() {
+                return Err(Error::input("Civ6 appeared before Steam launch"));
+            }
             if unsafe { ShellExecuteW(0, ptr::null(), wide.as_ptr(), ptr::null(), ptr::null(), 1) }
                 <= 32
             {
@@ -712,7 +719,12 @@ mod win {
         wait_for_exit_with(&mut WindowsLifecycle, pid, end)
     }
     pub fn terminate_civ_process(pid: u32, start: f64) -> Result<()> {
-        terminate_civ_process_with(&mut WindowsLifecycle, pid, start)
+        // Observer failure/cancellation still needs bounded reclamation of its
+        // matching owned game. Keep the interrupt pending and verify the same
+        // lease; the cleanup exemption grants no process ownership.
+        crate::time::with_interrupt_cleanup(|| {
+            terminate_civ_process_with(&mut WindowsLifecycle, pid, start)
+        })
     }
     pub fn close_orphan_civ_reporters() -> Result<()> {
         close_orphan_civ_reporters_with(&mut WindowsLifecycle)

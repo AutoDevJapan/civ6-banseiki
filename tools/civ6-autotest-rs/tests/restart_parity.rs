@@ -201,7 +201,7 @@ fn runner_preserves_parented_reporter_through_cleanup_and_actual_uri_request() {
         let lifecycle = Arc::new(Mutex::new(lifecycle));
         let cleanup_lifecycle = lifecycle.clone();
         let launch_lifecycle = lifecycle.clone();
-        let mut fake = FakeBackend::new().process(|_| Ok(None));
+        let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
         fake.on_close_orphans = Box::new(move || {
             restart::close_orphaned_civ_reporters_with(&mut *cleanup_lifecycle.lock().unwrap())
         });

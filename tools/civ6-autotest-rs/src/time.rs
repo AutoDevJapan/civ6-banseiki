@@ -9,6 +9,15 @@ static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 pub(crate) static INTERRUPT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 thread_local! {
     static INTERRUPT_CLEANUP: Cell<bool> = const { Cell::new(false) };
+    // A simulated Ctrl-C belongs to its test, not every parallel Rust fixture.
+    #[cfg(test)]
+    static TEST_INTERRUPTED: Cell<bool> = const { Cell::new(false) };
+}
+fn is_interrupted() -> bool {
+    let interrupted = INTERRUPTED.load(Ordering::Relaxed);
+    #[cfg(test)]
+    let interrupted = interrupted || TEST_INTERRUPTED.with(Cell::get);
+    interrupted
 }
 
 /// Permit only the bounded cleanup call on this thread; keep Ctrl-C pending.
@@ -29,7 +38,7 @@ pub fn install_interrupt_handler() -> crate::Result<()> {
     .map_err(|e| crate::Error::scenario(format!("Cannot register Ctrl-C handler: {e}")))
 }
 pub fn check_interrupt() -> crate::Result<()> {
-    if INTERRUPTED.load(Ordering::Relaxed) && !INTERRUPT_CLEANUP.with(Cell::get) {
+    if is_interrupted() && !INTERRUPT_CLEANUP.with(Cell::get) {
         Err(crate::Error::interrupted("interrupted"))
     } else {
         Ok(())
@@ -54,7 +63,7 @@ impl Clock for SystemClock {
     }
     fn sleep(&self, seconds: f64) {
         let end = monotonic() + seconds;
-        while !INTERRUPTED.load(Ordering::Relaxed) {
+        while !is_interrupted() {
             let left = end - monotonic();
             if left <= 0.0 {
                 break;
@@ -85,7 +94,7 @@ mod tests {
         struct Reset;
         impl Drop for Reset {
             fn drop(&mut self) {
-                INTERRUPTED.store(false, Ordering::Relaxed);
+                TEST_INTERRUPTED.with(|state| state.set(false));
             }
         }
         let _reset = Reset;
@@ -105,13 +114,13 @@ mod tests {
                 if code.contains("return tostring(startTurn)") {
                     self.starts.fetch_add(1, Ordering::Relaxed);
                     if !self.interrupt_at_status {
-                        INTERRUPTED.store(true, Ordering::Relaxed);
+                        TEST_INTERRUPTED.with(|state| state.set(true));
                     }
                     return Ok("1|0".into());
                 }
                 if self.interrupt_at_status && code.contains("tostring(AutoplayManager.IsActive())")
                 {
-                    INTERRUPTED.store(true, Ordering::Relaxed);
+                    TEST_INTERRUPTED.with(|state| state.set(true));
                     return Err(crate::Error::tuner("status transport failed during Ctrl-C"));
                 }
                 if code.contains("SetActive(false)") {
@@ -122,7 +131,7 @@ mod tests {
             }
         }
         for interrupt_at_status in [false, true] {
-            INTERRUPTED.store(false, Ordering::Relaxed);
+            TEST_INTERRUPTED.with(|state| state.set(false));
             let root = tempfile::tempdir().unwrap();
             let starts = Arc::new(AtomicUsize::new(0));
             let stops = Arc::new(AtomicUsize::new(0));

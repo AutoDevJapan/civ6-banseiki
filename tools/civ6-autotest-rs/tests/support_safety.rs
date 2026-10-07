@@ -75,6 +75,8 @@ type ProcessFn = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type CaptureFn = Box<dyn FnMut(&Path, Option<[f64; 4]>, f64) -> Result<()> + Send>;
 
 pub struct SafetyBackend {
+    control_owned: bool,
+    control_held: bool,
     pub trace: Arc<Mutex<Trace>>,
     pub on_connect: Option<Box<dyn FnMut(u16, f64) -> Result<()> + Send>>,
     pub on_states: StateFn,
@@ -89,6 +91,8 @@ pub struct SafetyBackend {
 impl SafetyBackend {
     pub fn new(trace: Arc<Mutex<Trace>>) -> Self {
         Self {
+            control_owned: false,
+            control_held: false,
             trace,
             on_connect: None,
             on_states: Box::new(|_| Ok(vec!["FrontEnd".into(), "InGame".into()])),
@@ -101,11 +105,32 @@ impl SafetyBackend {
             on_capture: None,
         }
     }
+    pub fn owned_chain(mut self) -> Self {
+        self.control_owned = true;
+        self
+    }
     fn event(&self, event: &str) {
         self.trace.lock().unwrap().events.push(event.into());
     }
 }
 impl Backend for SafetyBackend {
+    fn acquire_startup_lock(&mut self) -> Result<()> {
+        if !self.control_owned {
+            return Err(Error::input("safety fixture has no live-chain ownership"));
+        }
+        self.control_held = true;
+        self.check_startup_lock()
+    }
+    fn check_startup_lock(&mut self) -> Result<()> {
+        if self.control_owned && self.control_held {
+            Ok(())
+        } else {
+            Err(Error::input("safety fixture live-chain ownership was lost"))
+        }
+    }
+    fn release_startup_lock(&mut self) {
+        self.control_held = false;
+    }
     fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
         self.event("connect");
         self.trace.lock().unwrap().connects.push(timeout);
