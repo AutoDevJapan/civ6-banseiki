@@ -239,6 +239,11 @@ pub struct Fixture {
     pub trace: Arc<Mutex<Trace>>,
     pub clock: Arc<FakeClock>,
 }
+impl Default for Fixture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Fixture {
     pub fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
