@@ -112,7 +112,7 @@ local function growth(city)
  local function side(key) return KNOB.side and KNOB.side.key==key and flag(plot,KNOB.side.oath..'_ON') end
  local function housing() return (city.plot%2==0) and 0.5 or 1 end
  local function happiness() return ((city.plot%3==0) and -15 or 10)+(side('happiness') and 5 or 0) end
- function g:GetFoodSurplus() return city:GetYield(5)-((KNOB.consume or {})[city.plot] or 4) end
+ function g:GetFoodSurplus() if KNOB.fixed_surplus~=nil then return KNOB.fixed_surplus end; return city:GetYield(5)-((KNOB.consume or {})[city.plot] or 4) end
  function g:GetOtherGrowthModifier() return 0 end
  function g:GetHousingGrowthModifier() return housing() end
  function g:GetHappinessGrowthModifier() return happiness() end
@@ -910,6 +910,81 @@ fn growth_side_effects_fail_their_oath_and_food_may_cross_the_deficit() -> Resul
     );
     assert!(prev["food_surplus"].as_f64() < Some(0.0) && on["food_surplus"].as_f64() > Some(0.0));
     assert_ne!(prev["growth"], on["growth"]);
+    Ok(())
+}
+
+#[test]
+fn food_oaths_reject_growth_side_effects_when_both_samples_are_nonpositive() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = first()?;
+    let target = 2;
+    assert!(probe.cases[target]
+        .effects
+        .iter()
+        .any(|(kind, _)| *kind == Yield::Food));
+    let clean = verify(&repo, simulate(&probe, "")?.dir.path())?;
+    let food_rows: Vec<_> = clean["cases"][target]["results"]
+        .as_array()
+        .context("food results")?
+        .iter()
+        .filter(|row| row["kind"] == "food")
+        .collect();
+    let oath = &probe.cases[target].oath;
+    for mode in ["negative", "on_zero", "both_zero"] {
+        let knobs = if mode == "both_zero" {
+            "KNOB.fixed_surplus=0;".to_owned()
+        } else {
+            let consume = food_rows
+                .iter()
+                .map(|row| {
+                    Ok(format!(
+                        "[{}]={:.17}",
+                        plot_of_city(row["city"].as_i64().context("city")?),
+                        row["on"].as_f64().context("on food")?
+                            + if mode == "negative" { 10.0 } else { 0.0 }
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            format!("KNOB.consume={{{}}};", consume.join(","))
+        };
+        let run = simulate(
+            &probe,
+            &format!("{knobs} KNOB.side={{oath='{oath}',key='growth'}}"),
+        )?;
+        assert_eq!(run.failure, None, "{mode}");
+        let report = verify(&repo, run.dir.path())?;
+        assert_eq!(
+            report["verified_count"],
+            probe.cases.len() - 1,
+            "{mode}: {report:#}"
+        );
+        assert!(
+            reasons(&report["cases"][target])
+                .iter()
+                .any(|reason| reason.starts_with("non_target:") && reason.ends_with(":growth")),
+            "{mode}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn saved_control_civilization_must_match_its_configured_player_slot() -> Result<()> {
+    let probe = first()?;
+    assert!(probe
+        .cases
+        .iter()
+        .all(|case| case.civ != "CIVILIZATION_JAC_ODA"));
+    let run = simulate(&probe, "")?;
+    rejects(
+        &run,
+        |rows| {
+            edit_frames(rows, &run, &probe, true, &|body| {
+                body.replace("CIVILIZATION_JAC_ODA", "CIVILIZATION_JAC_ODZ")
+            })
+        },
+        "saved civilizations differ from the configured 22 player slots",
+    )?;
     Ok(())
 }
 

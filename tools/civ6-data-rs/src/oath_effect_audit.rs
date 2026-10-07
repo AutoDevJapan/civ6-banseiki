@@ -544,6 +544,7 @@ return '{"oath":"'..oath..'","phase":"'..phase..'","cities":['..table.concat(par
 const COMPARE: &str = r#"
 local oath=__OATH__
 local spec=__EFFECTS__
+local native_diagnostic=false
 local all=assert(JAC_OATH_AUDIT,'UI samples missing')
 local base=assert(all.baseline); local on=assert(all.selected)
 local off=assert(all.off); local back=assert(all.restored)
@@ -577,16 +578,38 @@ for i,a in ipairs(base.own) do
    assert(close(cv,av) and close(dv,bv),'off/on/off restoration failed for '..e.kind..' city '..a.id)
    local expected=nil; local quantity=false; local reporting_step=nil; local reason='raw_yield_basis_not_documented'
    if e.kind=='growth' then
-    assert(close(b.other-a.other,e.amount/100) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
+    assert(type(e.native_raw)=='number' and e.native_raw%1==0 and e.native_raw>0,'native growth conversion evidence missing')
+    local native_delta=e.native_raw/256
+    local requested_delta=native_diagnostic and native_delta or e.amount/100
+    assert(close(b.other-a.other,requested_delta) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
     assert(close(a.housing,b.housing) and close(a.housing,c.housing) and close(a.housing,d.housing),'housing changed during growth isolation')
     assert(close(a.happiness,b.happiness) and close(a.happiness,c.happiness) and close(a.happiness,d.happiness),'happiness changed during growth isolation')
     local eligible=not a.occupied and not b.occupied and not c.occupied and not d.occupied and a.surplus>0 and b.surplus>0 and c.surplus>0 and d.surplus>0 and close(a.loyalty,1) and close(b.loyalty,1) and close(c.loyalty,1) and close(d.loyalty,1)
     if eligible then
-     local factor=math.max(1+a.happiness/100+a.other,0)
-     assert(close(a.growth,a.housing*factor),'official overall-growth formula does not match baseline')
-     expected=a.housing*(math.max(1+a.happiness/100+a.other+e.amount/100,0)-factor)
+     -- XP2 producer 0x1247C0 truncates signed happiness/100 before
+     -- separately shifting housing and loyalty products. UI display arithmetic
+     -- cannot replace these intermediate Q8 operations.
+     local function raw(value)
+      local q=value*256
+      assert(q%1==0,'growth snapshot is not exact native Q8')
+      return q
+     end
+     local function native_value(additional)
+      local happiness=math.modf(raw(a.happiness)/100)
+      local factor=math.max(256+happiness+raw(a.other)+additional,0)
+      local housing=math.floor(factor*raw(a.housing)/256)
+      return math.floor(housing*raw(a.loyalty)/256)/256
+     end
+     if native_diagnostic then
+      assert(close(a.growth,native_value(0)),'native overall-growth formula does not match baseline')
+      expected=native_value(e.native_raw)-native_value(0)
+     else
+      local factor=math.max(1+a.happiness/100+a.other,0)
+      assert(close(a.growth,a.housing*factor),'official overall-growth formula does not match baseline')
+      expected=a.housing*(math.max(1+a.happiness/100+a.other+e.amount/100,0)-factor)
+     end
      assert(close(observed,expected),'overall growth did not match housing-adjusted expected delta')
-     quantity=true; reason='official_ui_growth_formula'
+     quantity=true; reason=native_diagnostic and 'diagnostic_native_q8_growth_formula' or 'official_ui_growth_formula'
      if expected>0.00002 then proven[e.kind]=proven[e.kind]+1 end
     else quantities=false; reason='occupied_deficit_or_loyalty_growth_requires_diagnosis' end
    else
@@ -700,10 +723,27 @@ fn effect_lua(case: &Case) -> String {
     let effects = case
         .effects
         .iter()
-        .map(|e| format!("{{kind={},amount={}}}", lua_string(&e.kind), e.amount))
+        .map(|e| {
+            let raw = if e.kind == "growth" {
+                format!(",native_raw={}", native_percentage_raw(e.amount))
+            } else {
+                String::new()
+            };
+            format!("{{kind={},amount={}{raw}}}", lua_string(&e.kind), e.amount)
+        })
         .collect::<Vec<_>>()
         .join(",");
     format!("{{{effects}}}")
+}
+
+/// Positive Amount conversion in GameCore XP2 SHA324c51e9: float32 Amount *
+/// 0.01f followed by the eight-bit fixed-point packing at RVA8D8D7A..8D8DB7
+/// (growth) and RVA8179EC..817A21 (military).
+/// GetOtherGrowthModifier and GetOverallGrowthModifier return that Q8 domain
+/// (RVA690A50/690AC0). This changes the observation basis, never the SQL Amount
+/// or the exact OFF restoration tolerance. Negative removal is a separate bug.
+fn native_percentage_raw(amount: i64) -> i64 {
+    ((amount as f32 * 0.01_f32) * 256.0_f32).trunc() as i64
 }
 
 // Plot properties can reach the UI before its cached growth values. Wait for
@@ -1113,7 +1153,8 @@ return 'single native human end-turn requested for '..target..'/'..phase
 "#;
 
 const PRODUCTION_COMPARE: &str = r#"
-local target=__TARGET__; local amount=__AMOUNT__
+local target=__TARGET__; local amount=__AMOUNT__; local native_rate=__NATIVE_RATE__
+local native_diagnostic=false
 local t=assert(assert(JAC_OATH_AUDIT).current)
 assert(t.Target==target,'production target changed')
 local rows=assert(assert(JAC_OATH_AUDIT).production[target])
@@ -1161,7 +1202,7 @@ elseif amount==0 then
 elseif unit_basis then
  -- Here the observed OFF queue rate equals the measured city production in both
  -- flanking turns. Additive and multiplicative interpretations coincide at 1.
- expected=1+amount/100
+ expected=1+(native_diagnostic and native_rate or amount/100)
  assert(math.abs(on-expected)<=tolerance,string.format('%s actual rate %.9f expected %.9f',target,on,expected))
  quantity=true
 else
@@ -1191,6 +1232,14 @@ fn production_code(
             ("__KIND__", &lua_string(&effect.kind)),
             ("__PHASE__", &lua_string(phase)),
             ("__AMOUNT__", &effect.amount.to_string()),
+            (
+                "__NATIVE_RATE__",
+                &if effect.kind == "military" {
+                    format!("{}/256", native_percentage_raw(effect.amount))
+                } else {
+                    format!("{}/100", effect.amount)
+                },
+            ),
             ("__FLAG__", &flag.to_string()),
             ("__SAMPLES_PER_PHASE__", &PRODUCTION_SAMPLES.to_string()),
         ],

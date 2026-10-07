@@ -23,6 +23,11 @@ pub const CORE_PLAYER0_READY: &str =
 pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
 
 pub trait Backend: Send {
+    fn oath_exact_removal(&mut self) -> Result<Value> {
+        Err(Error::input(
+            "backend does not support the native exact-removal diagnostic",
+        ))
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
     }
@@ -205,6 +210,13 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_exact_removal(&mut self) -> Result<Value> {
+        let pin = self.startup_pin.as_ref().ok_or_else(|| {
+            Error::input("exact-removal diagnostic requires this driver's newly launched game")
+        })?;
+        pin.check_remaining()?;
+        crate::oath_exact_removal::apply(pin.game)
+    }
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
             .launch_floor
@@ -2004,6 +2016,35 @@ impl Runner {
                     "native carrier evidence written to {}",
                     target.display()
                 ))
+            }
+            "oath_exact_removal" => {
+                crate::oath_exact_removal::validate(
+                    self.test_mode,
+                    self.scenario["diagnostic_only"] == true,
+                    crate::session::SessionType::from_scenario(&self.scenario)?
+                        != crate::session::SessionType::SinglePlayer,
+                )?;
+                self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                self.wait(
+                    &json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}),
+                    self.remaining(deadline)?,
+                    false,
+                )?;
+                self.wait(
+                    &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                    self.remaining(deadline)?,
+                    false,
+                )?;
+                self.remaining(deadline)?;
+                let path = self.output.join("oath-exact-removal.json");
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&path)?;
+                let proof = self.backend.oath_exact_removal()?;
+                file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
+                self.remaining(deadline)?;
+                Ok(format!("native exact-removal diagnostic: {proof}"))
             }
             "ui_lua" => {
                 let mut attempts = 0;

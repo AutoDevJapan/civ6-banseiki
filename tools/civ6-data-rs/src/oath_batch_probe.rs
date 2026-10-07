@@ -522,7 +522,7 @@ for ci,case in ipairs(CASES) do
    if prev[i].occupied~=on[i].occupied then fail('non_target:'..a.id..':occupied') end
    -- Overall growth excludes food while a city grows (CityPanelOverview.lua:661-672); in a
    -- deficit no growth bonus applies, so a food oath may move it only across that boundary.
-   if (amounts.food==nil or (prev[i].surplus>0 and on[i].surplus>0)) and not close(prev[i].growth,on[i].growth) then fail('non_target:'..a.id..':growth') end
+   if (amounts.food==nil or ((prev[i].surplus>0)==(on[i].surplus>0))) and not close(prev[i].growth,on[i].growth) then fail('non_target:'..a.id..':growth') end
    for _,e in ipairs(case.effects) do
     local av,bv=a.y[e.kind],on[i].y[e.kind]; local observed=bv-av
     local ref=S.reference[i].y[e.kind]; local hundred=ref-av
@@ -1078,8 +1078,8 @@ pub(crate) fn evaluate(
                 fail(verdict, "non_target", "occupied");
             }
             // Overall growth excludes food while a city grows (CityPanelOverview.lua:661-672).
-            let growing = prev[i].surplus > 0.0 && on[i].surplus > 0.0;
-            if (!food || growing) && !close(prev[i].growth[0], on[i].growth[0]) {
+            let same_growth_regime = (prev[i].surplus > 0.0) == (on[i].surplus > 0.0);
+            if (!food || same_growth_regime) && !close(prev[i].growth[0], on[i].growth[0]) {
                 fail(verdict, "non_target", GROWTH[0]);
             }
             for (e, (kind, amount)) in case.effects.iter().enumerate() {
@@ -1693,7 +1693,16 @@ fn saved_state(
     ui: &UiFrame,
     clean: [&Snapshot; 2],
     cases: &[Case],
+    expected_civs: &BTreeMap<i64, String>,
 ) -> Result<Saved> {
+    ensure!(
+        core.houses.len() == expected_civs.len()
+            && core
+                .houses
+                .iter()
+                .all(|(id, house)| expected_civs.get(id) == Some(&house.civ)),
+        "saved civilizations differ from the configured 22 player slots"
+    );
     ensure!(
         core.oath == cases[0].oath,
         "Core frame belongs to another human oath"
@@ -1982,11 +1991,33 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
     let observed = |phase: Phase| -> Result<Snapshot> {
         snapshot(&details[at(Role::Snapshot(phase))?], batch, phase)
     };
+    let configured = probe
+        .steps
+        .iter()
+        .find(|(_, step)| step["action"] == "configure")
+        .context("batch configure missing")?
+        .1["players"]
+        .as_array()
+        .context("configured players missing")?;
+    let expected_civs: BTreeMap<i64, String> = configured
+        .iter()
+        .enumerate()
+        .map(|(id, player)| {
+            Ok((
+                id as i64,
+                player["civ"]
+                    .as_str()
+                    .context("configured civilization missing")?
+                    .to_owned(),
+            ))
+        })
+        .collect::<Result<_>>()?;
     let (players, identity) = saved_state(
         &core,
         &ui_frame(frames[1].1)?,
         [&observed(Phase::Saved)?, &observed(Phase::Loaded)?],
         &probe.cases,
+        &expected_civs,
     )?;
     let order = schedule(probe.cases.len());
     let mut samples = BTreeMap::new();

@@ -14,6 +14,7 @@ pub const ACTIONS: &[&str] = &[
     "end_turn",
     "choose_dedication",
     "ui_lua",
+    "oath_exact_removal",
     "carrier_checkpoint",
     "carrier_exchange",
     "screenshot",
@@ -128,6 +129,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
+            "oath_exact_removal" => {
+                if data["diagnostic_only"] != true
+                    || session != SessionType::SinglePlayer
+                    || step
+                        .as_object()
+                        .unwrap()
+                        .keys()
+                        .any(|key| key != "action" && key != "timeout")
+                {
+                    return Err(fail("oath_exact_removal requires a single-player diagnostic and only accepts timeout".into()));
+                }
+            }
             "restart_game" => {
                 if step
                     .as_object()
