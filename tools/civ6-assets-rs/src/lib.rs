@@ -1,4 +1,5 @@
 //! Japan-map and JAC art tools. The migration never invokes Python.
+pub mod banseiki_pool;
 pub mod build_art;
 pub mod cli;
 pub mod constants;

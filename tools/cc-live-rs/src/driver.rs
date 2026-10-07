@@ -52,7 +52,7 @@ pub fn scenario_timeout(scenario: &Path) -> Result<f64, String> {
     Ok(seconds)
 }
 
-fn binary(worktree: &Path, name: &str) -> PathBuf {
+pub(crate) fn binary(worktree: &Path, name: &str) -> PathBuf {
     let name = if cfg!(windows) {
         format!("{name}.exe")
     } else {
@@ -111,6 +111,16 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
             tail(&out.stderr, 1600)
         ));
     }
+    verify_binaries(worktree, Path::new(MANIFEST), &names, &out)?;
+    Ok(())
+}
+
+fn verify_binaries(
+    worktree: &Path,
+    package_manifest: &Path,
+    names: &[&str],
+    out: &Output,
+) -> Result<(), String> {
     for name in names {
         let expected = binary(worktree, name);
         if !expected.is_file() {
@@ -118,7 +128,7 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
         }
         let expected = expected.canonicalize().map_err(|e| e.to_string())?;
         let manifest = worktree
-            .join(MANIFEST)
+            .join(package_manifest)
             .canonicalize()
             .map_err(|e| e.to_string())?;
         let built_here = out
@@ -127,7 +137,7 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())
             .any(|message| {
                 message["reason"] == "compiler-artifact"
-                    && message["target"]["name"] == name
+                    && message["target"]["name"] == *name
                     && message["target"]["kind"]
                         .as_array()
                         .is_some_and(|k| k.iter().any(|v| v == "bin"))
@@ -150,6 +160,54 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
         }
     }
     Ok(())
+}
+
+/// Build the preparation tool from the checked-out branch with the same artifact
+/// verification as the driver. An installed or previous branch's tool is not used.
+pub(crate) fn prepare_data_tool(
+    r: &mut impl Runner,
+    p: &Paths,
+    worktree: &Path,
+    name: &str,
+) -> Result<PathBuf, String> {
+    let manifest = Path::new("tools/civ6-data-rs/Cargo.toml");
+    if !worktree.join(manifest).is_file() {
+        return Err("Rust data-tool manifest is missing".into());
+    }
+    let cargo = std::env::var("CC_LIVE_CARGO").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            path(p.profile.join(".cargo/bin/cargo.exe"))
+        } else {
+            "cargo".into()
+        }
+    });
+    let out = r.run(
+        Call::new(args(&[
+            &cargo,
+            "build",
+            "--locked",
+            "--release",
+            "--message-format=json",
+            "--manifest-path",
+            &path(worktree.join(manifest)),
+            "--target-dir",
+            &path(worktree.join("tools/target")),
+            "--bin",
+            name,
+        ]))
+        .timeout(1200.0)
+        .managed(),
+    )?;
+    if out.code != 0 {
+        return Err(format!(
+            "Rust deployment-tool build failed (exit {}): {} {}",
+            out.code,
+            tail(&out.stdout, 800),
+            tail(&out.stderr, 1600)
+        ));
+    }
+    verify_binaries(worktree, manifest, &[name], &out)?;
+    Ok(binary(worktree, name))
 }
 
 pub fn scenario(_p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {

@@ -79,6 +79,7 @@ enum Command {
 fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16) -> Result<()> {
     let (bundle, scenario, journal_path) = bundle_data(bundle_path)?;
     hs::verify_installed(&bundle, &scenario, mods)?;
+    let helper = hs::pregame_helper(&scenario)?;
     let sent_path = journal_path.with_file_name("pregame-sent.txt");
     if sent_path.exists() {
         return Err(Error::scenario(
@@ -122,6 +123,25 @@ fn pregame(bundle_path: &Path, logs: &Path, saves: &Path, mods: &Path, port: u16
         runner.run_frontend_setup_step_checked(&scenario["steps"][index], || {
             verify_owner(&mut owner_check, &owner)
         })?;
+    }
+    if let Some(code) = helper {
+        if owner_check.owner()? != owner {
+            return Err(Error::input(
+                "Civ6 process or window changed before pool RANDOM",
+            ));
+        }
+        writeln!(sent, "sent pool RANDOM")?;
+        sent.sync_all()?;
+        let deadline = runner.clock.now() + 30.0;
+        let result = runner.send_state_transition_checked("HostGame", code, deadline, || {
+            verify_owner(&mut owner_check, &owner)
+        })?;
+        if result.trim().trim_matches('"') != hs::POOL_RANDOM_PREGAME_RESULT {
+            return Err(Error::scenario(format!(
+                "pool RANDOM was not confirmed: {result}"
+            )));
+        }
+        println!("{}", hs::POOL_RANDOM_PREGAME_RESULT);
     }
     if owner_check.owner()? != owner {
         return Err(Error::input(

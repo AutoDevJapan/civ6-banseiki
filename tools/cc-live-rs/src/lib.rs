@@ -1,4 +1,5 @@
 pub mod chain;
+pub mod deployment;
 pub mod driver;
 pub mod fairness;
 pub mod process;
