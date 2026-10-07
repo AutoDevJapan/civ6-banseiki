@@ -6,7 +6,7 @@
 
 | パス | 位置づけ |
 |---|---|
-| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの第1弾100人の候補データ。SSOT 4.7の方向確認待ち |
+| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの初期300人の採用済み人物台帳（SSOT 4.7） |
 | [`spec/banseiki-pool-data.md`](spec/banseiki-pool-data.md) | 人物データの項目とRust検査の使い方 |
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
@@ -55,6 +55,7 @@
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方、時間・メモリ・保存容量・ロード時間のCSVと集計、実機シナリオとログ判定 |
 | [`poc/autotest-native.md`](poc/autotest-native.md) | PR87のPythonを実行しないRust検証ドライバー、標準の待ち列との接続、対応範囲と検査結果 |
+| [`poc/banseiki-pool.md`](poc/banseiki-pool.md) | 300人の登録、2人の選択、保存・再読込の検証と画像の参照元 |
 | [`poc/hotseat-log-bridge.md`](poc/hotseat-log-bridge.md) | PR100の検証専用MODによるLua.log通信、元21手順と2回の保存・再読込の実機結果 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/japan-1534-relations.md`](poc/japan-1534-relations.md) | 日本マップの開始時に1534年の関係を外交状態へ反映する実装メモと実機確認項目 |
