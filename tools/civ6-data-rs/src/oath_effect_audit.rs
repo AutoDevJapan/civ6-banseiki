@@ -5,7 +5,7 @@ use std::{collections::BTreeSet, path::PathBuf};
 
 use crate::{oaths, Outputs, Repository};
 
-const BASE: &str = "tools/civ6-autotest/scenarios/sengoku-oaths-oda.json";
+pub(crate) const BASE: &str = "tools/civ6-autotest/scenarios/sengoku-oaths-oda.json";
 const DIR: &str = "tools/civ6-autotest/scenarios/oath-effects";
 const INVENTORY: &str = "documents/poc/data/oath-effect-scenarios.json";
 const PRODUCTION_SAMPLES: usize = 1;
@@ -232,7 +232,7 @@ fn cases(repo: &Repository) -> Result<Vec<Case>> {
     Ok(result)
 }
 
-const LUA_HELPERS: &str = r#"
+pub(crate) const LUA_HELPERS: &str = r#"
 local function finite(v) return type(v)=='number' and v==v and v>-math.huge and v<math.huge end
 local function number(v,label) assert(finite(v),'finite numeric API required: '..label); return v end
 local function jstr(v)
@@ -285,7 +285,7 @@ fn substitute(template: &str, case: &Case, extra: &[(&str, &str)]) -> String {
     code
 }
 
-fn first_steps(base: &Value, civ: &str) -> Result<Vec<Value>> {
+pub(crate) fn first_steps(base: &Value, civ: &str) -> Result<Vec<Value>> {
     let source = base["steps"].as_array().context("base steps")?;
     if source.len() < 4
         || source[0]["action"] != "enable_mods"
@@ -456,7 +456,7 @@ for _,c in Players[0]:GetCities():Members() do Map.GetPlot(c:GetX(),c:GetY()):Se
 return 'synthetic golden-age fixture, no oath chosen; real cities='..own
 "#;
 
-const POPUP: &str = r#"
+pub(crate) const POPUP: &str = r#"
 local oath=__OATH__; local civ=__CIV__
 assert(Players[0]:IsTurnActive(),'choice requires human active turn')
 assert(JAC_ShowOaths(true),'pending oath popup did not open')

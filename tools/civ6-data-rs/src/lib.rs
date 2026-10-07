@@ -170,6 +170,7 @@ mod data_tests;
 pub mod events;
 #[cfg(test)]
 mod hero_tests;
+pub mod oath_batch_probe;
 pub mod oath_effect_audit;
 pub mod oath_expiry_probe;
 pub mod oath_save_probe;
