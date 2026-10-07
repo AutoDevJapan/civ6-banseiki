@@ -55,6 +55,7 @@ type Lua = Box<dyn FnMut(&str, &str) -> Result<String> + Send>;
 type States = Box<dyn FnMut() -> Result<Vec<String>> + Send>;
 type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
+type Newest = Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>;
 
 pub struct FakeBackend {
     control_owned: bool,
@@ -71,7 +72,7 @@ pub struct FakeBackend {
     pub on_dx11: Box<dyn FnMut(isize) -> Result<()> + Send>,
     pub on_memory: Box<dyn FnMut(u32) -> Result<Value> + Send>,
     pub on_mods: Box<dyn FnMut() -> Result<Vec<PathBuf>> + Send>,
-    pub on_newest: Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>,
+    pub on_newest: Newest,
     pub on_stale: Box<dyn FnMut() -> Result<Vec<String>> + Send>,
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
