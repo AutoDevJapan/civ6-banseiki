@@ -12,14 +12,18 @@ fn game() -> Lua {
       Game={GetProperty=function(_,name) assert(name=='JAC_POC_GROWTHUI_INITIALIZED'); return initialized end,
         GetCurrentGameTurn=function() reads=reads+1; return worldTurn+(changedTurn and reads>1 and 1 or 0) end,
         GetLocalPlayer=function() return localPlayer end}
-      PlayerManager={GetAliveMajors=function() return majors end}
+      PlayerManager={GetAliveMajors=function()
+        local result={}; for _,id in ipairs(majors) do
+          local playerID=id; result[#result+1]=Players[playerID] or {GetID=function() return playerID end}
+        end; return result
+      end}
       Players={}; records={}; counts={[0]=2,[1]=2}
       for pid=0,1 do
         local owner=pid; records[owner]={}
         for id=10,11 do
           records[owner][id]={Level=1,XP=20,Personality='brave',Trait='guard',Equipment={'blade','cloak'},LastXPTurn=12}
         end
-        Players[owner]={IsHuman=function() return humans[owner] end,
+        Players[owner]={GetID=function() return owner end, IsHuman=function() return humans[owner] end,
           IsTurnActive=function() activeReads[owner]=(activeReads[owner] or 0)+1; return not(changedActive and activeReads[owner]>1) end,
           GetUnits=function() return {Members=function()
             local id=9; return function()

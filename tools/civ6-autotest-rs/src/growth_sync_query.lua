@@ -11,7 +11,8 @@ local rows = {tostring(turn), tostring(localPlayer)}
 local majors = PlayerManager.GetAliveMajors()
 assert(#majors == 2, 'exactly two alive major players required')
 local found = {}
-for _, pid in ipairs(majors) do
+for _, player in ipairs(majors) do
+  local pid = player:GetID()
   assert((pid == 0 or pid == 1) and not found[pid], 'unexpected major player')
   found[pid] = true
 end
