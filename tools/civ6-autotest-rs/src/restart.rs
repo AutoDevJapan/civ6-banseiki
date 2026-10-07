@@ -322,7 +322,7 @@ pub fn single_civ_process_with<B: LifecycleBackend>(
     let mut ids = backend.civ_ids()?;
     let end = backend.now() + settle.max(0.0);
     while ids.len() > 1 && backend.now() < end {
-        let wait = (end - backend.now()).max(0.0).min(0.5);
+        let wait = (end - backend.now()).max(0.0).clamp(0.0, 0.5);
         backend.sleep(wait);
         ids = backend.civ_ids()?;
     }
@@ -356,7 +356,7 @@ pub fn wait_for_exit_with<B: LifecycleBackend>(
         if !backend.civ_ids()?.contains(&pid) {
             return Ok(true);
         }
-        let remaining = (end - backend.now()).max(0.0).min(0.5);
+        let remaining = (end - backend.now()).max(0.0).clamp(0.0, 0.5);
         backend.sleep(remaining);
     }
     Ok(!backend.civ_ids()?.contains(&pid))
@@ -499,7 +499,7 @@ pub fn wait_for_civ_window_with<B: LifecycleBackend>(backend: &mut B, end: f64) 
                 Err(e) => last = e.message,
             }
         }
-        let remaining = (end - backend.now()).max(0.0).min(0.5);
+        let remaining = (end - backend.now()).max(0.0).clamp(0.0, 0.5);
         backend.sleep(remaining);
     }
     Err(Error::input(format!(
