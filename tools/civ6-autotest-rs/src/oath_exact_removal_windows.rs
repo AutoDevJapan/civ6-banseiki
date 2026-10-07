@@ -242,6 +242,7 @@ fn thread_ids(pid: u32) -> Result<Vec<u32>> {
 struct AlignedContext(CONTEXT);
 
 struct Native {
+    scope: Scope,
     process: Handle,
     game: GameProcess,
     created: u64,
@@ -259,7 +260,7 @@ struct Native {
 }
 
 impl Native {
-    fn open(game: GameProcess, until: Instant) -> Result<Self> {
+    fn open(game: GameProcess, until: Instant, scope: Scope) -> Result<Self> {
         if game.pid == 0
             || game.pid == std::process::id()
             || !game.started.is_finite()
@@ -328,21 +329,24 @@ impl Native {
         if dll.len() != FILE_SIZE || sha != MODULE_SHA256 {
             return Err(Error::input("unknown GameCore full-file SHA256"));
         }
-        validate_snapshot(
+        validate_snapshot_for_scope(
+            scope,
             &sha,
             &dll[..HEADER_SIZE],
-            &PATCHES
+            &scope
+                .patches()
                 .iter()
                 .map(|p| p.original.to_vec())
                 .collect::<Vec<_>>(),
         )?;
-        for patch in PATCHES {
+        for patch in scope.patches() {
             if disk_range(&dll, patch.rva, patch.original.len())? != patch.original {
                 return Err(Error::input("audited disk instruction bytes differ"));
             }
         }
         let module = module(game.pid, &dll_path, until)?;
         let mut native = Self {
+            scope,
             process,
             game,
             created,
@@ -451,7 +455,8 @@ impl Native {
         let Some(rva) = (address as usize).checked_sub(self.module.base) else {
             return false;
         };
-        FUNCTIONS
+        self.scope
+            .functions()
             .iter()
             .any(|(start, end)| (*start..*end).contains(&rva))
     }
@@ -600,16 +605,16 @@ impl Backend for Native {
                 "remote PE headers differ from pinned source DLL",
             ));
         }
-        let mut instructions = Vec::with_capacity(PATCHES.len());
-        for p in PATCHES {
+        let mut instructions = Vec::with_capacity(self.scope.patches().len());
+        for p in self.scope.patches() {
             instructions.push(self.read(p.rva, p.original.len())?);
         }
-        let state = validate_snapshot(&self.sha, &header, &instructions)?;
-        for (start, end) in FUNCTIONS {
+        let state = validate_snapshot_for_scope(self.scope, &self.sha, &header, &instructions)?;
+        for &(start, end) in self.scope.functions() {
             deadline(self.until)?;
             let mut expected = disk_range(&self.dll, start, end - start)?.to_vec();
             if state == PatchState::Patched {
-                for p in PATCHES {
+                for p in self.scope.patches() {
                     if (start..end).contains(&p.rva) {
                         expected[p.rva - start..p.rva - start + p.replacement.len()]
                             .copy_from_slice(p.replacement);
@@ -778,7 +783,7 @@ impl Drop for Native {
     }
 }
 
-pub(super) fn apply(game: GameProcess) -> Result<Value> {
+pub(super) fn apply(game: GameProcess, scope: Scope) -> Result<Value> {
     // The parent supplies diagnostic-only/non-MP proof through validate(). The
     // actual driver invocation must independently be in --test-mode as well.
     if !std::env::args_os().any(|arg| arg == "--test-mode") {
@@ -788,18 +793,18 @@ pub(super) fn apply(game: GameProcess) -> Result<Value> {
     }
     let until = Instant::now() + Duration::from_secs(10);
     catch_unwind(AssertUnwindSafe(|| {
-        let mut native = Native::open(game, until)?;
+        let mut native = Native::open(game, until, scope)?;
         for attempt in 1..=MAX_ATTEMPTS {
-            match transaction::attempt(&mut native)? {
+            match transaction::attempt_for_scope(&mut native, scope)? {
                 Outcome::Busy => {
                     deadline(until)?;
                     std::thread::sleep(Duration::from_millis(25));
                 }
                 outcome => {
-                    let mut evidence = plan();
+                    let mut evidence = plan_for_scope(scope);
                     evidence["status"] = json!(if outcome == Outcome::Applied { "applied" } else { "already_patched" });
                     evidence["attempts"] = json!(attempt);
-                    evidence["writes"] = json!(if outcome == Outcome::Applied { PATCHES.len() } else { 0 });
+                    evidence["writes"] = json!(if outcome == Outcome::Applied { scope.patches().len() } else { 0 });
                     evidence["pid"] = json!(native.game.pid);
                     evidence["started"] = json!(native.game.started);
                     evidence["creation_filetime"] = json!(native.created);

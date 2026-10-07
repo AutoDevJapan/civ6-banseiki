@@ -72,6 +72,77 @@ const CONSTANTS: [(usize, [u8; 4]); 3] = [
     (0x9c1b78, [0x00, 0x00, 0x80, 0x43]),
 ];
 
+// Separate from the legacy military/growth plan: old scenario/proof files must
+// continue to describe exactly their original four instruction sites.
+const PRODUCTION_PATCHES: [Patch; 4] = [
+    Patch {
+        name: "naval_remove_neg",
+        rva: 0x7e8ea6,
+        original: &[0xf7, 0xd8],
+        replacement: &[0x90, 0x90],
+        write_offset: 0,
+        write_len: 2,
+    },
+    Patch {
+        name: "naval_remove_sub",
+        rva: 0x7e8edc,
+        original: &[0x42, 0x01, 0x0c, 0xba],
+        replacement: &[0x42, 0x29, 0x0c, 0xba],
+        write_offset: 0,
+        write_len: 4,
+    },
+    Patch {
+        name: "building_remove_neg",
+        rva: 0x89560a,
+        original: &[0xf7, 0xd8],
+        replacement: &[0x90, 0x90],
+        write_offset: 0,
+        write_len: 2,
+    },
+    Patch {
+        name: "building_remove_sub",
+        rva: 0x895640,
+        original: &[0x01, 0x0c, 0xb2],
+        replacement: &[0x29, 0x0c, 0xb2],
+        write_offset: 0,
+        write_len: 3,
+    },
+];
+const PRODUCTION_FUNCTIONS: [(usize, usize); 4] = [
+    (0x7e8560, 0x7e86d5),
+    (0x7e8db0, 0x7e8f29),
+    (0x8947a0, 0x8949af),
+    (0x895460, 0x895677),
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Scope {
+    Legacy,
+    NavalBuildingsV1,
+}
+
+impl Scope {
+    pub fn from_step(step: &Value) -> Result<Self> {
+        match step.get("scope") {
+            None => Ok(Self::Legacy),
+            Some(Value::String(s)) if s == "naval-buildings-v1" => Ok(Self::NavalBuildingsV1),
+            _ => Err(Error::scenario("unknown exact-removal scope")),
+        }
+    }
+    fn patches(self) -> &'static [Patch] {
+        match self {
+            Self::Legacy => &PATCHES,
+            Self::NavalBuildingsV1 => &PRODUCTION_PATCHES,
+        }
+    }
+    fn functions(self) -> &'static [(usize, usize)] {
+        match self {
+            Self::Legacy => &FUNCTIONS,
+            Self::NavalBuildingsV1 => &PRODUCTION_FUNCTIONS,
+        }
+    }
+}
+
 /// Parent integration gate. These booleans must come from runner/game checks,
 /// not from arbitrary fields supplied inside the action itself.
 pub(crate) fn validate(test_mode: bool, diagnostic_only: bool, multiplayer: bool) -> Result<()> {
@@ -85,20 +156,30 @@ pub(crate) fn validate(test_mode: bool, diagnostic_only: bool, multiplayer: bool
 
 /// Reviewable immutable instruction plan; it performs no native operation.
 pub fn plan() -> Value {
-    json!({
+    plan_for_scope(Scope::Legacy)
+}
+
+pub fn plan_for_scope(scope: Scope) -> Value {
+    let mut value = json!({
         "diagnostic_only": true, "accepted": false, "quantity_verified": false,
         "memory_only": true, "platform": "windows-x86_64", "module": MODULE_NAME,
         "module_sha256": MODULE_SHA256, "image_size": IMAGE_SIZE,
         "file_size": FILE_SIZE, "deadline_seconds": 10, "max_attempts": 16,
-        "patches": PATCHES.iter().map(|p| json!({
+        "patches": scope.patches().iter().map(|p| json!({
             "name": p.name, "instruction_rva": p.rva,
             "original": p.original, "replacement": p.replacement,
             "write_rva": p.rva + p.write_offset, "write_bytes": p.write_len
         })).collect::<Vec<_>>(),
-        "excluded_rip_ranges": FUNCTIONS,
+        "excluded_rip_ranges": scope.functions(),
         "shared_constants_unchanged": CONSTANTS.iter().map(|(rva, bytes)|
             json!({"rva": rva, "bytes": bytes})).collect::<Vec<_>>()
-    })
+    });
+    if scope == Scope::NavalBuildingsV1 {
+        value["scope"] = json!("naval-buildings-v1");
+        value["plan_version"] = json!(1);
+        value["runtime_path_verified"] = json!(false);
+    }
+    value
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -112,6 +193,15 @@ pub enum PatchState {
 /// arguments from the suspended, pinned process; caller strings alone are not
 /// authorization to write memory.
 pub fn validate_snapshot(
+    sha256: &str,
+    remote_headers: &[u8],
+    instructions: &[Vec<u8>],
+) -> Result<PatchState> {
+    validate_snapshot_for_scope(Scope::Legacy, sha256, remote_headers, instructions)
+}
+
+pub fn validate_snapshot_for_scope(
+    scope: Scope,
     sha256: &str,
     remote_headers: &[u8],
     instructions: &[Vec<u8>],
@@ -144,18 +234,24 @@ pub fn validate_snapshot(
     {
         return Err(Error::input("remote PE is not the audited AMD64 XP2 DLL"));
     }
-    classify(instructions)
+    classify_for_scope(scope, instructions)
 }
 
+#[cfg(test)]
 fn classify(instructions: &[Vec<u8>]) -> Result<PatchState> {
-    if instructions.len() != PATCHES.len() {
+    classify_for_scope(Scope::Legacy, instructions)
+}
+
+fn classify_for_scope(scope: Scope, instructions: &[Vec<u8>]) -> Result<PatchState> {
+    let patches = scope.patches();
+    if instructions.len() != patches.len() {
         return Err(Error::input(
             "exact removal instruction snapshot is incomplete",
         ));
     }
     let mut original = 0;
     let mut patched = 0;
-    for (p, observed) in PATCHES.iter().zip(instructions) {
+    for (p, observed) in patches.iter().zip(instructions) {
         if observed.as_slice() == p.original {
             original += 1;
         } else if observed.as_slice() == p.replacement {
@@ -168,8 +264,8 @@ fn classify(instructions: &[Vec<u8>]) -> Result<PatchState> {
         }
     }
     match (original, patched) {
-        (4, 0) => Ok(PatchState::Original),
-        (0, 4) => Ok(PatchState::Patched),
+        (n, 0) if n == patches.len() => Ok(PatchState::Original),
+        (0, n) if n == patches.len() => Ok(PatchState::Patched),
         _ => Err(Error::input(
             "partially patched exact-removal instructions refused",
         )),
@@ -177,13 +273,17 @@ fn classify(instructions: &[Vec<u8>]) -> Result<PatchState> {
 }
 
 pub(crate) fn apply(game: crate::startup::GameProcess) -> Result<Value> {
+    apply_for_scope(game, Scope::Legacy)
+}
+
+pub(crate) fn apply_for_scope(game: crate::startup::GameProcess, scope: Scope) -> Result<Value> {
     #[cfg(all(windows, target_arch = "x86_64"))]
     {
-        platform::apply(game)
+        platform::apply(game, scope)
     }
     #[cfg(not(all(windows, target_arch = "x86_64")))]
     {
-        let _ = game;
+        let _ = (game, scope);
         Err(Error::input("exact removal supports only Windows AMD64"))
     }
 }
@@ -232,6 +332,7 @@ mod transaction {
         backend: &'a mut B,
         journal: Vec<Entry>,
         finished: bool,
+        scope: Scope,
     }
 
     impl<B: Backend> Session<'_, B> {
@@ -244,7 +345,7 @@ mod transaction {
             if state == PatchState::Patched {
                 return Ok(Outcome::AlreadyPatched);
             }
-            for patch in PATCHES {
+            for &patch in self.scope.patches() {
                 self.backend.check()?;
                 if self.backend.read(patch.rva, patch.original.len())? != patch.original {
                     return Err(Error::input(
@@ -381,12 +482,18 @@ mod transaction {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn attempt<B: Backend>(backend: &mut B) -> Result<Outcome> {
+        attempt_for_scope(backend, Scope::Legacy)
+    }
+
+    pub(super) fn attempt_for_scope<B: Backend>(backend: &mut B, scope: Scope) -> Result<Outcome> {
         backend.check()?;
         let mut session = Session {
             backend,
-            journal: Vec::with_capacity(PATCHES.len()),
+            journal: Vec::with_capacity(scope.patches().len()),
             finished: false,
+            scope,
         };
         if let Err(error) = session.backend.suspend() {
             return Err(session.abort(error));
@@ -438,6 +545,7 @@ mod tests {
     }
 
     struct Mock {
+        scope: Scope,
         memory: BTreeMap<usize, u8>,
         protections: BTreeMap<usize, u32>,
         writes: Vec<(usize, Vec<u8>)>,
@@ -460,15 +568,23 @@ mod tests {
     }
     impl Mock {
         fn new() -> Self {
+            Self::for_scope(Scope::Legacy)
+        }
+        fn for_scope(scope: Scope) -> Self {
             let mut memory = BTreeMap::new();
-            for p in PATCHES {
+            for p in scope.patches() {
                 for (offset, b) in p.original.iter().enumerate() {
                     memory.insert(p.rva + offset, *b);
                 }
             }
             Self {
+                scope,
                 memory,
-                protections: [(0x818000, 0x20), (0x8d9000, 0x20)].into(),
+                protections: scope
+                    .patches()
+                    .iter()
+                    .map(|p| (p.rva & !0xfff, 0x20))
+                    .collect(),
                 writes: vec![],
                 events: vec![],
                 sha: MODULE_SHA256.into(),
@@ -489,7 +605,8 @@ mod tests {
             }
         }
         fn sites(&self) -> Vec<Vec<u8>> {
-            PATCHES
+            self.scope
+                .patches()
                 .iter()
                 .map(|p| {
                     (0..p.original.len())
@@ -499,7 +616,10 @@ mod tests {
                 .collect()
         }
         fn restored(&self) {
-            assert_eq!(classify(&self.sites()), Ok(PatchState::Original));
+            assert_eq!(
+                classify_for_scope(self.scope, &self.sites()),
+                Ok(PatchState::Original)
+            );
             assert!(self.protections.values().all(|v| *v == 0x20));
             assert!(!self.suspended);
         }
@@ -534,7 +654,7 @@ mod tests {
         }
         fn verify(&mut self) -> Result<PatchState> {
             assert!(self.suspended);
-            validate_snapshot(&self.sha, &self.header, &self.sites())
+            validate_snapshot_for_scope(self.scope, &self.sha, &self.header, &self.sites())
         }
         fn read(&mut self, rva: usize, len: usize) -> Result<Vec<u8>> {
             assert!(self.suspended);
@@ -628,8 +748,11 @@ mod tests {
             (5, 12, -13),
             (10, 25, -26),
             (15, 38, -39),
+            (20, 51, -52),
             (25, 64, -64),
             (100, 256, -256),
+            (-15, -39, 38),
+            (-20, -52, 51),
         ] {
             assert_eq!(pack(amount), added);
             assert_eq!(pack(-amount), removed);
@@ -788,6 +911,98 @@ mod tests {
         assert_eq!(evidence["quantity_verified"], false);
         assert_eq!(evidence["memory_only"], true);
         assert_eq!(evidence["patches"].as_array().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn naval_building_scope_preserves_legacy_plan_and_uses_distinct_instructions() {
+        let legacy = plan();
+        // Immutable plan fields extracted from the original live37 proof;
+        // no pid/path/clock fields are included in the repository fixture.
+        let live37: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/oath-exact-removal-legacy-plan.json"
+        ))
+        .unwrap();
+        assert_eq!(legacy, live37);
+        assert!(legacy.get("scope").is_none());
+        assert!(legacy.get("plan_version").is_none());
+        assert_eq!(legacy, plan_for_scope(Scope::Legacy));
+        assert_eq!(legacy["patches"][0]["instruction_rva"], 0x818a80);
+        assert_eq!(legacy["patches"][3]["instruction_rva"], 0x8d97e7);
+        let production = plan_for_scope(Scope::NavalBuildingsV1);
+        assert_eq!(production["scope"], "naval-buildings-v1");
+        assert_eq!(production["plan_version"], 1);
+        assert_eq!(production["runtime_path_verified"], false);
+        assert_eq!(production["accepted"], false);
+        assert_eq!(production["quantity_verified"], false);
+        // Primary disassembly fixtures, including REX.X for the r15 index.
+        assert_eq!(
+            production["patches"][1]["original"],
+            json!([0x42, 0x01, 0x0c, 0xba])
+        );
+        assert_eq!(
+            production["patches"][1]["replacement"],
+            json!([0x42, 0x29, 0x0c, 0xba])
+        );
+        assert_eq!(
+            production["patches"][3]["original"],
+            json!([0x01, 0x0c, 0xb2])
+        );
+        assert_eq!(
+            production["patches"][3]["replacement"],
+            json!([0x29, 0x0c, 0xb2])
+        );
+        assert_eq!(
+            production["excluded_rip_ranges"],
+            json!([
+                [0x7e8560, 0x7e86d5],
+                [0x7e8db0, 0x7e8f29],
+                [0x8947a0, 0x8949af],
+                [0x895460, 0x895677]
+            ])
+        );
+        let snapshot = Mock::for_scope(Scope::NavalBuildingsV1).sites();
+        assert!(validate_snapshot(MODULE_SHA256, &headers(), &snapshot).is_err());
+        for scope in [Scope::Legacy, Scope::NavalBuildingsV1] {
+            let mut m = Mock::for_scope(scope);
+            assert_eq!(attempt_for_scope(&mut m, scope).unwrap(), Outcome::Applied);
+            assert_eq!(m.writes.len(), 4);
+            assert_eq!(
+                attempt_for_scope(&mut m, scope).unwrap(),
+                Outcome::AlreadyPatched
+            );
+            assert_eq!(m.writes.len(), 4);
+            assert!(m.protections.values().all(|v| *v == 0x20));
+            assert!(!m.suspended);
+        }
+    }
+
+    #[test]
+    fn production_scope_refuses_partial_state_and_rolls_back_each_failed_write() {
+        let scope = Scope::NavalBuildingsV1;
+        let mut partial = Mock::for_scope(scope);
+        partial.memory.insert(0x7e8ea6, 0x90);
+        assert!(attempt_for_scope(&mut partial, scope).is_err());
+        assert!(partial.writes.is_empty());
+        assert!(!partial.suspended);
+        for site in 1..=4 {
+            let mut m = Mock::for_scope(scope);
+            m.fail_write = Some(site);
+            assert!(attempt_for_scope(&mut m, scope).is_err());
+            m.restored();
+            assert_eq!(m.writes.len(), site * 2);
+        }
+        for failure in 0..4 {
+            let mut m = Mock::for_scope(scope);
+            match failure {
+                0 => m.fail_flush = true,
+                1 => m.fail_restore_once = true,
+                2 => m.fail_resume_once = true,
+                _ => m.corrupt_write_once = true,
+            }
+            assert!(attempt_for_scope(&mut m, scope).is_err());
+            m.restored();
+            assert!(!m.terminated);
+        }
     }
     #[test]
     fn unwinding_after_partial_write_rolls_back_before_resume() {

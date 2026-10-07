@@ -23,6 +23,18 @@ pub const CORE_PLAYER0_READY: &str =
 pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
 
 pub trait Backend: Send {
+    fn oath_exact_removal_scope(
+        &mut self,
+        scope: crate::oath_exact_removal::Scope,
+    ) -> Result<Value> {
+        if scope == crate::oath_exact_removal::Scope::Legacy {
+            self.oath_exact_removal()
+        } else {
+            Err(Error::input(
+                "backend does not support naval/building exact removal",
+            ))
+        }
+    }
     fn oath_exact_removal(&mut self) -> Result<Value> {
         Err(Error::input(
             "backend does not support the native exact-removal diagnostic",
@@ -210,6 +222,16 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_exact_removal_scope(
+        &mut self,
+        scope: crate::oath_exact_removal::Scope,
+    ) -> Result<Value> {
+        let pin = self.startup_pin.as_ref().ok_or_else(|| {
+            Error::input("exact-removal diagnostic requires this driver's newly launched game")
+        })?;
+        pin.check_remaining()?;
+        crate::oath_exact_removal::apply_for_scope(pin.game, scope)
+    }
     fn oath_exact_removal(&mut self) -> Result<Value> {
         let pin = self.startup_pin.as_ref().ok_or_else(|| {
             Error::input("exact-removal diagnostic requires this driver's newly launched game")
@@ -2038,6 +2060,7 @@ impl Runner {
                 ))
             }
             "oath_exact_removal" => {
+                let scope = crate::oath_exact_removal::Scope::from_step(step)?;
                 crate::oath_exact_removal::validate(
                     self.test_mode,
                     self.scenario["diagnostic_only"] == true,
@@ -2056,12 +2079,18 @@ impl Runner {
                     false,
                 )?;
                 self.remaining(deadline)?;
-                let path = self.output.join("oath-exact-removal.json");
+                let path = self
+                    .output
+                    .join(if scope == crate::oath_exact_removal::Scope::Legacy {
+                        "oath-exact-removal.json"
+                    } else {
+                        "oath-exact-removal-naval-buildings-v1.json"
+                    });
                 let mut file = OpenOptions::new()
                     .write(true)
                     .create_new(true)
                     .open(&path)?;
-                let proof = self.backend.oath_exact_removal()?;
+                let proof = self.backend.oath_exact_removal_scope(scope)?;
                 file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
                 self.remaining(deadline)?;
                 Ok(format!("native exact-removal diagnostic: {proof}"))

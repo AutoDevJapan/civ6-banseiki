@@ -1,0 +1,140 @@
+{
+  "diagnostic_only": true,
+  "accepted": false,
+  "quantity_verified": false,
+  "memory_only": true,
+  "platform": "windows-x86_64",
+  "module": "GameCore_XP2_FinalRelease.dll",
+  "module_sha256": "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c",
+  "image_size": 12976128,
+  "file_size": 12940384,
+  "deadline_seconds": 10,
+  "max_attempts": 16,
+  "patches": [
+    {
+      "name": "military_remove_neg",
+      "instruction_rva": 8489600,
+      "original": [
+        247,
+        216
+      ],
+      "replacement": [
+        144,
+        144
+      ],
+      "write_rva": 8489600,
+      "write_bytes": 2
+    },
+    {
+      "name": "military_remove_sub",
+      "instruction_rva": 8489653,
+      "original": [
+        1,
+        12,
+        170
+      ],
+      "replacement": [
+        41,
+        12,
+        170
+      ],
+      "write_rva": 8489653,
+      "write_bytes": 3
+    },
+    {
+      "name": "growth_remove_positive_multiplier",
+      "instruction_rva": 9279402,
+      "original": [
+        243,
+        15,
+        89,
+        53,
+        142,
+        12,
+        18,
+        0
+      ],
+      "replacement": [
+        243,
+        15,
+        89,
+        53,
+        198,
+        241,
+        14,
+        0
+      ],
+      "write_rva": 9279406,
+      "write_bytes": 4
+    },
+    {
+      "name": "growth_remove_sub",
+      "instruction_rva": 9279463,
+      "original": [
+        1,
+        152,
+        132,
+        0,
+        0,
+        0
+      ],
+      "replacement": [
+        41,
+        152,
+        132,
+        0,
+        0,
+        0
+      ],
+      "write_rva": 9279463,
+      "write_bytes": 6
+    }
+  ],
+  "excluded_rip_ranges": [
+    [
+      8484880,
+      8485474
+    ],
+    [
+      8489120,
+      8489718
+    ],
+    [
+      9276768,
+      9276874
+    ],
+    [
+      9279376,
+      9279482
+    ]
+  ],
+  "shared_constants_unchanged": [
+    {
+      "rva": 10258808,
+      "bytes": [
+        10,
+        215,
+        35,
+        60
+      ]
+    },
+    {
+      "rva": 10462272,
+      "bytes": [
+        10,
+        215,
+        35,
+        188
+      ]
+    },
+    {
+      "rva": 10230648,
+      "bytes": [
+        0,
+        0,
+        128,
+        67
+      ]
+    }
+  ]
+}

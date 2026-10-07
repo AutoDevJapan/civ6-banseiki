@@ -14,8 +14,16 @@ struct ProbeBackend {
     mutations: Arc<Mutex<usize>>,
     ready: bool,
     wrong_ruleset: bool,
+    scopes: Arc<Mutex<Vec<civ6_autotest_rs::oath_exact_removal::Scope>>>,
 }
 impl Backend for ProbeBackend {
+    fn oath_exact_removal_scope(
+        &mut self,
+        scope: civ6_autotest_rs::oath_exact_removal::Scope,
+    ) -> Result<Value> {
+        self.scopes.lock().unwrap().push(scope);
+        self.oath_exact_removal()
+    }
     fn require_single_process(&mut self) -> Result<()> {
         Ok(())
     }
@@ -55,6 +63,7 @@ fn runner(
             mutations: mutations.clone(),
             ready,
             wrong_ruleset,
+            scopes: Arc::new(Mutex::new(vec![])),
         }),
         Arc::new(ManualClock::default()),
     );
@@ -64,11 +73,19 @@ fn runner(
 #[test]
 fn schema_refuses_non_diagnostic_multiplayer_and_arbitrary_native_parameters() {
     scenario::validate_scenario(&data()).unwrap();
-    for mutation in ["ordinary", "multiplayer", "bytes"] {
+    for mutation in [
+        "ordinary",
+        "multiplayer",
+        "bytes",
+        "unknown_scope",
+        "null_scope",
+    ] {
         let mut value = data();
         match mutation {
             "ordinary" => value["diagnostic_only"] = json!(false),
             "multiplayer" => value["session_type"] = json!("hotseat"),
+            "unknown_scope" => value["steps"][0]["scope"] = json!("all"),
+            "null_scope" => value["steps"][0]["scope"] = Value::Null,
             _ => value["steps"][0]["bytes"] = json!([0x90]),
         }
         assert!(
@@ -76,6 +93,38 @@ fn schema_refuses_non_diagnostic_multiplayer_and_arbitrary_native_parameters() {
             "accepted {mutation}"
         );
     }
+}
+
+#[test]
+fn explicit_scope_dispatches_and_keeps_legacy_proof_separate() {
+    use civ6_autotest_rs::oath_exact_removal::Scope;
+    let dir = tempfile::tempdir().unwrap();
+    let mut value = data();
+    value["steps"][0]["scope"] = json!("naval-buildings-v1");
+    scenario::validate_scenario(&value).unwrap();
+    let step = value["steps"][0].clone();
+    let (mut runner, calls) = runner(dir.path(), value, true, false);
+    let observed = Arc::new(Mutex::new(vec![]));
+    runner.backend = Box::new(ProbeBackend {
+        mutations: calls.clone(),
+        ready: true,
+        wrong_ruleset: false,
+        scopes: observed.clone(),
+    });
+    let legacy = runner.output.join("oath-exact-removal.json");
+    fs::write(&legacy, b"legacy proof").unwrap();
+    runner.run_step(&step).unwrap();
+    assert_eq!(*observed.lock().unwrap(), vec![Scope::NavalBuildingsV1]);
+    assert_eq!(*calls.lock().unwrap(), 1);
+    assert_eq!(fs::read(&legacy).unwrap(), b"legacy proof");
+    let path = runner
+        .output
+        .join("oath-exact-removal-naval-buildings-v1.json");
+    let proof: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert_eq!(proof, json!({"status":"applied","task_accepted":false}));
+    assert!(runner.run_step(&step).is_err());
+    assert_eq!(*calls.lock().unwrap(), 1);
+    assert!(!runner.result_passed);
 }
 #[test]
 fn dispatch_guards_run_before_native_memory_mutation() {

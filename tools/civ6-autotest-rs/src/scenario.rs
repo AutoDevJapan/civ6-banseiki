@@ -136,10 +136,11 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         .as_object()
                         .unwrap()
                         .keys()
-                        .any(|key| key != "action" && key != "timeout")
+                        .any(|key| key != "action" && key != "timeout" && key != "scope")
                 {
-                    return Err(fail("oath_exact_removal requires a single-player diagnostic and only accepts timeout".into()));
+                    return Err(fail("oath_exact_removal requires a single-player diagnostic and only accepts timeout and a known scope".into()));
                 }
+                crate::oath_exact_removal::Scope::from_step(step)?;
             }
             "restart_game" => {
                 if step
