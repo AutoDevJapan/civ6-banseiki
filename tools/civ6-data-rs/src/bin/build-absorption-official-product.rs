@@ -352,6 +352,55 @@ local assets=ReadAssets()
 ExposedMembers.JAC_OfficialProductNativeAssets=assets
 "#;
 
+const NATIVE_TURN_OBSERVATION: &str = r#"
+InstallNativeTurnObservation=function()
+  if JAC_OfficialProductNativeTurnCallback then
+    GameEvents.JAC_AbsorptionProduct_TurnObservation.Remove(JAC_OfficialProductNativeTurnCallback)
+  end
+  JAC_OfficialProductNativeTurnCallback=function(stage,turn)
+    local ok,result=pcall(function()
+      local actors=assert(Game:GetProperty(KEY),'official observation actors missing')
+      local key=KEY..'_NATIVE_TURN'
+      local observed=Game:GetProperty(key) or {}
+      local row={Turn=Game.GetCurrentGameTurn(),
+        Pool=Players[actors.To]:GetInfluence():GetTokensToGive(),
+        Received=Players[actors.From]:GetInfluence():GetTokensReceived(actors.To),
+        Operations=Product().Operations or {}}
+      assert(row.Turn==turn,'native observation turn differs from engine')
+      print('[JAC_OFFICIAL_NATIVE_TURN] stage='..stage..' turn='..turn..' pool='..row.Pool..' received='..row.Received)
+      if stage=='BEFORE' then observed={Turn=turn,From=actors.From,To=actors.To,Before=row}
+      else assert(stage=='AFTER' and observed.Turn==turn and observed.Before,'native turn observation order invalid');observed.After=row end
+      Game:SetProperty(key,observed)
+    end)
+    if not ok then Game:SetProperty(KEY..'_NATIVE_TURN',{Error=tostring(result)}) end
+  end
+  GameEvents.JAC_AbsorptionProduct_TurnObservation.Add(JAC_OfficialProductNativeTurnCallback)
+end
+NativeTurnBefore=function(origin)
+  local observed=assert(Game:GetProperty(KEY..'_NATIVE_TURN'),'independent native turn observation missing')
+  assert(not observed.Error,observed.Error)
+  assert(observed.Turn==origin.Turn+1 and observed.Turn==Game.GetCurrentGameTurn()
+    and observed.From==t.From and observed.To==t.To,'native turn observation actor/turn mismatch')
+  local before=assert(observed.Before,'native before-turn observation missing')
+  local after=assert(observed.After,'native after-turn observation missing')
+  assert(before.Turn==observed.Turn and after.Turn==observed.Turn,'native boundary sample turn mismatch')
+  assert(after.Pool==Players[t.To]:GetInfluence():GetTokensToGive()
+    and after.Received==Players[t.From]:GetInfluence():GetTokensReceived(t.To),
+    'native counts changed after the independently observed product turn')
+  for key,op in pairs(before.Operations or {}) do
+    if op.Identity.Command=='SEND_ENVOY' and op.Identity.To==t.To then
+      assert(R.Equal(op,(origin.Product.Operations or {})[key]),'product envoy preceded the observed turn boundary')
+    end
+  end
+  local result=R.Copy(origin)
+  result.Pool=before.Pool;result.Received=before.Received
+  assert(type(result.Pool)=='number' and result.Pool>=0 and result.Pool==math.floor(result.Pool)
+    and type(result.Received)=='number' and result.Received>=0 and result.Received==math.floor(result.Received),
+    'native before-turn counts unavailable')
+  return result
+end
+"#;
+
 const CORE: &str = r#"
 local P=assert(JAC_AbsorptionProductGameplay,'ordinary product Gameplay unavailable')
 local N=assert(JAC_AbsorptionAdmissionGameplay,'ordinary admission Gameplay unavailable')
@@ -359,6 +408,7 @@ local A=assert(JAC_AbsorptionGameplay)
 local R=A.Rules
 local KEY='JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1'
 local t=Game:GetProperty(KEY)
+local InstallNativeTurnObservation,NativeTurnBefore
 local function Product() return R.Copy(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1') or {}) end
 local function FaithYield(actor)
   local total=Players[actor]:GetReligion():GetFaithYield()
@@ -480,6 +530,7 @@ local function Lifecycle(request)
   return {Kind=request.Plan and 'INTENT' or 'WAITING'}
 end
 local function EnvoyTurn(before,s)
+  before=NativeTurnBefore(before)
   ReceiptContinuity(before.Product,s,false)
   if t.ReplayBaseline then
     assert(t.ReplayHash==A.Canonical(t.ReplayBaseline),'original replay checkpoint was replaced')
@@ -825,6 +876,7 @@ local function SavedProgress(expected,label)
 end
 local function Send(before,previous)
   assert(Game.GetCurrentGameTurn()==before.Turn+1,'send did not follow exactly one actual end_turn')
+  before=NativeTurnBefore(before)
   local view=P.Get(t.From,t.To);NonDeposit(view)
   local s=Product();local key,operation,count=nil,nil,0
   for k,op in pairs(s.Operations or {}) do
@@ -989,6 +1041,7 @@ assert(v.Envoys.Envoys+2<v.Envoys.Required,'native territory does not leave room
 assert(Players[t.To]:GetInfluence():GetTokensToGive()>=v.Envoys.Required+2,'native pool too small for ordinary qualification')
 Unregistered()
 t.PreparedView=R.Copy(v);t.NativeAssets=assets;t.NativeFaithYield=metric.Current;t.BeforeFirst=Snapshot();Game:SetProperty(KEY,t)
+InstallNativeTurnObservation()
 return 'every live non-deposit condition matches; actual OFFICIAL eligibility verified before natural AI turn'
 "#;
 
@@ -1029,6 +1082,7 @@ const AFTER_LOAD: &str = r#"
 Unchanged(assert(t.SettledFirst),'same-name save/exit/load')
 assert(t.PublicationReplays>=2,'actual same-turn publication replay evidence was not saved')
 t.BeforeSecond=Snapshot();Game:SetProperty(KEY,t)
+InstallNativeTurnObservation()
 return 'same actual turn, official native counts, saved operation receipt and AI budget restored unchanged'
 "#;
 
@@ -1146,6 +1200,7 @@ return observed
 "#;
 
 const RESTORE_OBSERVATION: &str = r#"
+InstallNativeTurnObservation()
 assert(t.PendingSnapshot and t.PendingHash==A.Canonical(t.PendingSnapshot),'saved pending checkpoint changed')
 local old=t.PendingSnapshot;local now=Snapshot()
 now=SavedProgress(old,'pending save/exit/load')
@@ -1191,7 +1246,7 @@ return 'ordinary AI registration, official native envoy qualification, real depo
 "#;
 
 fn core(code: &str) -> Value {
-    json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{code}")})
+    json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{code}")})
 }
 
 fn ui(code: &str) -> Value {
@@ -1228,7 +1283,7 @@ fn observe_pending(steps: &mut Vec<Value>) {
         "JAC_OFFICIAL_PENDING_READS=0;return 'begin finite read-only publication observation'",
     ));
     steps.push(json!({"action":"wait_for","timeout":30,"condition":{
-        "type":"lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{OBSERVE_PENDING}")}}));
+        "type":"lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{OBSERVE_PENDING}")}}));
 }
 
 fn round_trip(steps: &mut Vec<Value>, name: &str) {
@@ -1535,7 +1590,7 @@ fn local_human_probe(repo: &Repository) -> Result<Value> {
     steps.insert(3,json!({"action":"ui_lua","state_name":"FrontEnd","code":format!("local function Diagnose()\n{FRONTEND_PROBE}\nend\nDiagnose()\n{LOCAL_HUMAN_METADATA}")}));
     steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":CORE_ROSTER}));
     steps.push(active());
-    steps.push(core(&format!("{roles}\n{LOCAL_HUMAN_CORE}")));
+    steps.push(json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry","code":format!("{P1}\n{CORE}\n{roles}\n{LOCAL_HUMAN_CORE}")}));
     ensure!(
         steps.len() <= 18,
         "local-human startup probe exceeded finite scope"
@@ -2061,7 +2116,19 @@ OP={Identity={Command='SEND_ENVOY',From=2,To=0,ExpectedEnvoys=0},Nonce='ai-envoy
 STATE={Version=2,Pairs={},Escrows={},Envoys={},Operations={[OPKEY]=OP},AiEnvoyTurns={['0']={Turn=3,Operation=OPKEY}}}
 TEST={From=2,To=0,Human=1,BeforeFirst={Turn=2,Pool=32,Received=0,Product={Operations={}}}}
 PROPS={JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1=TEST,JAC_ABSORPTION_PRODUCT_V1=STATE}
+function SET_NATIVE_TURN(before,pool,received)
+  PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN={Turn=TURN,From=2,To=0,
+    Before={Turn=TURN,Pool=before.Pool,Received=before.Received,Operations=copy(before.Product.Operations or {})},
+    After={Turn=TURN,Pool=pool,Received=received}}
+end
+SET_NATIVE_TURN(TEST.BeforeFirst,31,1)
 Game={GetCurrentGameTurn=function() return TURN end,GetProperty=function(_,k) return copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=copy(v) end}
+local turn_callbacks={}
+GameEvents={JAC_AbsorptionProduct_TurnObservation={
+  Add=function(fn) turn_callbacks[fn]=true end,
+  Remove=function(fn) turn_callbacks[fn]=nil end,
+  Call=function(...) for fn in pairs(turn_callbacks) do fn(...) end end}}
+function NATIVE_OBSERVER_COUNT() local n=0;for _ in pairs(turn_callbacks) do n=n+1 end;return n end
 local influence={GetTokensToGive=function() return POOL end,GetTokensReceived=function(_,sender) assert(sender==0);return RECEIVED end}
 Players={}
 for actor=0,2 do Players[actor]={
@@ -2091,7 +2158,9 @@ JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=functio
         lua.load("JAC_AbsorptionGameplay.Rules.Copy=JAC_AbsorptionRules.Copy; JAC_AbsorptionGameplay.Rules.Canonical=JAC_AbsorptionRules.Canonical")
             .exec()?;
         lua.load(mutation).exec()?;
-        Ok(lua.load(format!("{P1}\n{CORE}\n{code}")).exec())
+        Ok(lua
+            .load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{code}"))
+            .exec())
     }
 
     #[test]
@@ -2690,6 +2759,86 @@ GameInfo={{Districts={{DISTRICT_HOLY_SITE={{Index=7}}}}}}
     }
 
     #[test]
+    fn native_turn_subscription_reinstalls_once_and_reads_getters_after_vm_recreation() -> Result<()>
+    {
+        let lua = Lua::new();
+        lua.load(WORLD).exec()?;
+        lua.load(format!(r#"
+{CORE}
+{NATIVE_TURN_OBSERVATION}
+InstallNativeTurnObservation();InstallNativeTurnObservation()
+assert(NATIVE_OBSERVER_COUNT()==1,'duplicate native observation subscription')
+POOL,RECEIVED=30,3
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
+POOL,RECEIVED=29,4
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
+local o=Game:GetProperty(KEY..'_NATIVE_TURN')
+assert(o.Before.Pool==30 and o.Before.Received==3 and o.After.Pool==29 and o.After.Received==4)
+assert(PROPS.JAC_ABSORPTION_PRODUCT_V1.Operations[OPKEY].EnvoyReceipt.Before==32,'observer changed product receipt')
+return string.format('{{Turn=%d,From=%d,To=%d,Before={{Turn=%d,Pool=%d,Received=%d,Operations={{}}}},After={{Turn=%d,Pool=%d,Received=%d,Operations={{}}}}}}',
+ o.Turn,o.From,o.To,o.Before.Turn,o.Before.Pool,o.Before.Received,o.After.Turn,o.After.Pool,o.After.Received)
+"#)).eval::<String>().and_then(|saved| {
+            let restored=Lua::new();restored.load(WORLD).exec()?;
+            restored.load(format!(r#"
+PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN={saved}
+assert(NATIVE_OBSERVER_COUNT()==0,'callbacks survived VM recreation')
+{CORE}
+{NATIVE_TURN_OBSERVATION}
+local saved=Game:GetProperty(KEY..'_NATIVE_TURN')
+InstallNativeTurnObservation();InstallNativeTurnObservation()
+assert(NATIVE_OBSERVER_COUNT()==1)
+assert(R.Equal(saved,Game:GetProperty(KEY..'_NATIVE_TURN')),'subscription replaced saved evidence')
+TURN,POOL,RECEIVED=4,28,5
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
+POOL,RECEIVED=27,6
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
+local o=Game:GetProperty(KEY..'_NATIVE_TURN')
+assert(o.Turn==4 and o.Before.Pool==28 and o.Before.Received==5 and o.After.Pool==27 and o.After.Received==6)
+"#)).exec()
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn native_ai_moves_are_measured_before_product_and_never_inferred_from_receipt() -> Result<()> {
+        let setup = r#"
+TEST.BeforeFirst.Received=1
+POOL,RECEIVED=29,4
+VIEW.Envoys.Envoys=4
+STATE.Operations[OPKEY]=nil;OPKEY='0:ai-envoy:2:3'
+OP.Identity.ExpectedEnvoys=3;OP.Nonce='ai-envoy:2:3'
+OP.EnvoyReceipt.Before=30;OP.EnvoyReceipt.After=29
+OP.EnvoyReceipt.ReceivedBefore=3;OP.EnvoyReceipt.ReceivedAfter=4
+STATE.Operations[OPKEY]=OP;STATE.AiEnvoyTurns['0'].Operation=OPKEY
+SET_NATIVE_TURN(TEST.BeforeFirst,29,4)
+local o=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN
+o.Before.Pool=30;o.Before.Received=3
+"#;
+        for mutation in [
+            "",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN=nil",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN.Before.Pool=32",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN.Before.Received=1",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN.After=nil",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN.Turn=2",
+            "PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1_NATIVE_TURN.To=1",
+            "POOL=28",
+            "RECEIVED=5",
+            "OP.EnvoyReceipt.Before=31",
+            "OP.EnvoyReceipt.ReceivedBefore=2",
+            "OP.EnvoyReceipt.After=28;POOL=28",
+        ] {
+            let result = run(&format!("{setup}\n{mutation}"), "Send(t.BeforeFirst)")?;
+            assert_eq!(
+                result.is_ok(),
+                mutation.is_empty(),
+                "{mutation}: {result:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn send_assertions_require_exact_native_delta_saved_identity_receipt_and_turn() -> Result<()> {
         for mutation in [
             "",
@@ -2748,6 +2897,7 @@ VIEW.Envoys.Envoys=2
 local next=copy(OP);next.Identity.ExpectedEnvoys=1;next.Nonce='ai-envoy:2:1'
 next.EnvoyReceipt={{Before=31,After=30,ReceivedBefore=1,ReceivedAfter=2,ChargeDone=true,GrantIntent=true,GrantDone=true,Done=true}}
 STATE.Operations['0:ai-envoy:2:1']=next;STATE.AiEnvoyTurns['0']={{Turn=4,Operation='0:ai-envoy:2:1'}}
+SET_NATIVE_TURN(TEST.BeforeSecond,30,2)
 {mutation}
 "#
                 ),
@@ -2778,6 +2928,7 @@ ExposedMembers={JAC_OfficialProductCurrencySnapshots={Owner=0,Rows={{Turn=4,Gold
 TEST.BeforeQualification.CurrencyPoint={Turn=4,Gold=GOLD,Faith=FAITH,Sequence=1}
 TEST.BeforeQualification.CurrencyHash=JAC_AbsorptionGameplay.Canonical(TEST.BeforeQualification.CurrencyPoint)
 TEST.BeforeQualification.CurrencyPrefixHash=JAC_AbsorptionGameplay.Canonical(ExposedMembers.JAC_OfficialProductCurrencySnapshots.Rows)
+SET_NATIVE_TURN(TEST.BeforeQualification,30,2)
 "#;
 
     #[test]
@@ -2799,6 +2950,7 @@ NEXT=copy(TEST.Second.Operation);NEXT.Identity.ExpectedEnvoys=2;NEXT.Nonce='ai-e
 NEXT.EnvoyReceipt={{Before=30,After=29,ReceivedBefore=2,ReceivedAfter=3,ChargeDone=true,GrantIntent=true,GrantDone=true,Done=true}}
 STATE.Operations['0:ai-envoy:2:2']=NEXT;STATE.AiEnvoyTurns['0']={{Turn=5,Operation='0:ai-envoy:2:2'}}
 POOL,RECEIVED=29,3
+SET_NATIVE_TURN(TEST.BeforeQualification,29,3)
 {mutation}
 "#
             );
@@ -2986,33 +3138,48 @@ REQUEST.Status='STARTING';REQUEST.StartTurn=nil;VIEW.Status='STARTING'
 REGISTER.Done=false;ESCROW.Status='COLLECTING';ESCROW.CollectFaith.Done=false;FAITH=10000
 PROPS.JAC_ABSORPTION_FLOW_V1={{Version=1,Flows={{['normal-flow']={{ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=copy(REQUEST.Plan),Entries={{{{ID='native-asset',Rolls={{P1_ESCAPE={{Raw=123,Used=123,Label='saved-first-roll'}}}}}}}},Phase1Complete=false}}}}}}
 "#)).exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{QUALIFICATION_TURN}"))
-            .exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{QUALIFICATION_TURN}"
+        ))
+        .exec()?;
         lua.load("assert(not PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.NativeDebits[OFFER.ID]);assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.DebitParts[OFFER.ID].Gold)").exec()?;
         for _ in 0..5 {
-            lua.load(format!("{P1}\n{CORE}\n{OBSERVE_PENDING}"))
-                .exec()?;
+            lua.load(format!(
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{OBSERVE_PENDING}"
+            ))
+            .exec()?;
         }
         assert!(lua
-            .load(format!("{P1}\n{CORE}\n{QUALIFIED}"))
+            .load(format!(
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{QUALIFIED}"
+            ))
             .exec()
             .is_err());
         // Restore detached observations from the same saved test property.
         lua.load("ExposedMembers.JAC_OfficialProductCurrencySnapshots=JAC_AbsorptionGameplay.Rules.Copy(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.CurrencyHistory);JAC_OFFICIAL_PENDING_READS=nil").exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
-            .exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{RESTORE_OBSERVATION}"
+        ))
+        .exec()?;
         lua.load(
             r#"
 TURN=6;REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED'
 REGISTER.Done=true;ESCROW.Status='HELD';ESCROW.CollectFaith.Done=true
 GOLD,FAITH=10005,9980 -- later gold income must not invalidate the earlier observed gold leg
 PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
+GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
 "#,
         )
         .exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{QUALIFICATION_TURN}"))
-            .exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{QUALIFIED}")).exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{QUALIFICATION_TURN}"
+        ))
+        .exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{QUALIFIED}"
+        ))
+        .exec()?;
         // Frozen decisions and already drawn rolls remain immutable even
         // though normal completion and newly drawn later-stage rolls may advance.
         for mutation in [
@@ -3027,12 +3194,12 @@ PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
                 .load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}"))
                 .exec()?;
             probe.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Phase1Complete=true,Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='native-asset',Rolls={P1_ESCAPE={Used=123}}}}}}}").exec()?;
-            probe.load(format!("{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+            probe.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
             probe.load(mutation).exec()?;
             assert!(
                 probe
                     .load(format!(
-                        "{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+                        "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
                     ))
                     .exec()
                     .is_err(),
@@ -3056,7 +3223,7 @@ REQUEST.Decision.Requirements[1].Met=false
 "#
         ))
         .exec()?;
-        lua.load(format!("{P1}\n{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence);Game:SetProperty(KEY,t)")).exec()?;
         // Normal retry can replace both the preflight plan and its decision.
         lua.load(
             r#"
@@ -3065,23 +3232,25 @@ REQUEST.Decision.Requirements[1].Met=true
 "#,
         )
         .exec()?;
-        lua.load(format!("{P1}\n{CORE}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(not SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(not t.FrozenEvidence)")).exec()?;
         // The real native journal, with its immutable Request and normal v1
         // identity, is the first boundary at which frozen evidence may be stored.
         lua.load("PROPS.JAC_ABSORPTION_FLOW_V1={Version=1,Flows={['normal-flow']={ID='normal-flow',From=2,To=0,Mode='SMALL_STATE',Request=JAC_AbsorptionGameplay.Rules.Copy(REQUEST.Plan),Entries={{ID='asset',Rolls={P1_ESCAPE={Used=123}}}},Phase1Complete=false}}}").exec()?;
         lua.load("REGISTER.Done=false;REGISTER.LastError='native phase one pending'")
             .exec()?;
-        lua.load(format!("{P1}\n{CORE}\nassert(SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(t.FrozenEvidence[REQUEST.FlowID]);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(SavedAdmission(OFFER,REQUEST));PreservePending(REQUEST);assert(t.FrozenEvidence[REQUEST.FlowID]);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
         // The queued registration may complete during normal reload publication;
         // the original receipt checkpoint and journal-frozen decision survive.
         lua.load("REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED';REGISTER.Done=true;REGISTER.LastError=nil;PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true").exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
-            .exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{RESTORE_OBSERVATION}"
+        ))
+        .exec()?;
         lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Product.Operations['0:ai-register:2'].Done==false)").exec()?;
         lua.load("REQUEST.Decision.Turn=5").exec()?;
         assert!(lua
             .load(format!(
-                "{P1}\n{CORE}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedAdmission(OFFER,REQUEST);PreservePending(REQUEST)"
             ))
             .exec()
             .is_err());
@@ -3130,10 +3299,12 @@ QUEUED={{Identity={{Command='REGISTER',From=2,To=0}},Nonce='ai-register:2',Done=
  OfferIntent={{Offer={{ID='product:2:0:1',From=2,To=0}}}},LastError='preflight waiting'}}
 STATE.Operations['0:ai-register:2']=QUEUED
 "#)).exec()?;
-            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);t.BeforeQualification=CurrencyOrigin(Snapshot());Game:SetProperty(KEY,t)")).exec()?;
             lua.load(mutation).exec()?;
             let result = lua
-                .load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
+                .load(format!(
+                    "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{RESTORE_OBSERVATION}"
+                ))
                 .exec();
             assert_eq!(
                 result.is_ok(),
@@ -3147,7 +3318,7 @@ STATE.Operations['0:ai-register:2']=QUEUED
                 lua.load("STATE.Operations['0:ai-envoy:2:2']=nil").exec()?;
                 assert!(lua
                     .load(format!(
-                        "{P1}\n{CORE}\nReceiptContinuity(t.ReplayBaseline.Product,Product(),false)"
+                        "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nReceiptContinuity(t.ReplayBaseline.Product,Product(),false)"
                     ))
                     .exec()
                     .is_err());
@@ -3175,11 +3346,15 @@ STATE.Operations['0:ai-register:2']=QUEUED
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!(
-                "{P1}\n{CORE}\nt.SettledFirst=Snapshot();t.PublicationReplays=2;Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.SettledFirst=Snapshot();t.PublicationReplays=2;Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(mutation).exec()?;
-            let result = lua.load(format!("{P1}\n{CORE}\n{AFTER_LOAD}")).exec();
+            let result = lua
+                .load(format!(
+                    "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{AFTER_LOAD}"
+                ))
+                .exec();
             assert_eq!(
                 result.is_ok(),
                 mutation.is_empty(),
@@ -3240,7 +3415,7 @@ end
                     let lua = Lua::new();
                     lua.load(WORLD).exec()?;
                     lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';local e=f.Entries[1];e.Name='original-name';e.Portrait='original-portrait';e.Abilities={{'original-ability'}};e.Leader=true;e.NativeWork={{Index=9,Owner=2}};e.DormantClass=3")).exec()?;
-                    lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+                    lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
                     lua.load(format!("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];local e=f.Entries[1];f.Phase1Complete={complete};{mutation}")).exec()?;
                     let check = if checkpoint == "saved" {
                         "SavedProgress(t.PendingSnapshot,'initial inventory')"
@@ -3248,7 +3423,7 @@ end
                         "PreservePending(REQUEST)"
                     };
                     let error = lua
-                        .load(format!("{P1}\n{CORE}\n{check}"))
+                        .load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{check}"))
                         .exec()
                         .expect_err(mutation)
                         .to_string();
@@ -3281,9 +3456,9 @@ end
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';local e=f.Entries[1];e.EscapeOutcome='ESCAPE';e.Rolls.P3_RETRY_BRANCH={{Raw=44,Used=44,Label='old-retry'}}")).exec()?;
-            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
             lua.load(format!("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];local e=f.Entries[1];{mutation}")).exec()?;
-            let result = lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'partial first-stage');PreservePending(REQUEST)")).exec();
+            let result = lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.PendingSnapshot,'partial first-stage');PreservePending(REQUEST)")).exec();
             if let Some(reason) = reason {
                 let error = result.expect_err(mutation).to_string();
                 assert!(error.contains(reason), "{mutation}: {error}");
@@ -3296,9 +3471,9 @@ end
         let lua = Lua::new();
         lua.load(WORLD).exec()?;
         lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nlocal f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=false;f.FinalRollsComplete=nil;f.Phase='CHOICE';f.Entries[1].P1Chance=nil;f.Entries[1].EscapeOutcome=nil")).exec()?;
-        lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();PreservePending(REQUEST);Game:SetProperty(KEY,t)")).exec()?;
         lua.load("local f=PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'];f.Phase1Complete=true;f.Entries[1].P1Chance=5000;f.Entries[1].EscapeOutcome='ESCAPE'").exec()?;
-        lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'new first-stage results');PreservePending(REQUEST)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.PendingSnapshot,'new first-stage results');PreservePending(REQUEST)")).exec()?;
         Ok(())
     }
 
@@ -3312,9 +3487,9 @@ end
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000")).exec()?;
-            lua.load(format!("{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
             lua.load(advance).exec()?;
-            lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'collection progression')")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.PendingSnapshot,'collection progression')")).exec()?;
             lua.load("local original=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.PendingSnapshot;assert(original.Product.Escrows[OFFER.ID].CollectGold.Issued==nil);assert(original.Gold==10100);assert(original.Faith==10000)").exec()?;
         }
         Ok(())
@@ -3326,7 +3501,7 @@ end
         let lua = Lua::new();
         lua.load(WORLD).exec()?;
         lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Issued=true;ESCROW.CollectFaith.Issued=true;ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000")).exec()?;
-        lua.load(format!("{P1}\n{CORE}\nt.OriginalCollection=Snapshot();t.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.OriginalCollection=Snapshot();t.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
         for (advance, settled) in [
             ("", false),
             ("GOLD=10000", false),
@@ -3354,9 +3529,9 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             ))
             .exec()?;
             if !settled {
-                lua.load(format!("{P1}\n{CORE}\nassert(ESCROW.Status=='COLLECTING');assert(ESCROW.CollectGold.Done==nil and ESCROW.CollectFaith.Done==nil);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)==false);assert(not (t.NativeDebits or {{}})[OFFER.ID])")).exec()?;
+                lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(ESCROW.Status=='COLLECTING');assert(ESCROW.CollectGold.Done==nil and ESCROW.CollectFaith.Done==nil);assert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID)==false);assert(not (t.NativeDebits or {{}})[OFFER.ID])")).exec()?;
             } else {
-                lua.load(format!("{P1}\n{CORE}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));assert(t.CollectionCheckpoint.Gold==10000 and t.CollectionCheckpoint.Faith==9980)")).exec()?;
+                lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));assert(t.CollectionCheckpoint.Gold==10000 and t.CollectionCheckpoint.Faith==9980)")).exec()?;
             }
         }
         lua.load("local old=PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.OriginalCollection;assert(old.Gold==10100 and old.Faith==10000);assert(old.Product.Escrows[OFFER.ID].CollectGold.Done==nil)").exec()?;
@@ -3408,11 +3583,11 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             lua.load(WORLD).exec()?;
             lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Issued=true;ESCROW.CollectFaith.Issued=true;ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil")).exec()?;
             lua.load(format!(
-                "{P1}\n{CORE}\nt.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.CollectionCheckpoint=Snapshot();Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(mutation).exec()?;
-            let error = lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.CollectionCheckpoint,'interrupted native payment')")).exec().expect_err(mutation).to_string();
+            let error = lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.CollectionCheckpoint,'interrupted native payment')")).exec().expect_err(mutation).to_string();
             assert!(error.contains(reason), "{mutation}: {error}");
         }
         Ok(())
@@ -3488,13 +3663,13 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             lua.load(WORLD).exec()?;
             lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nESCROW.Status='COLLECTING';ESCROW.CollectGold.Done=nil;ESCROW.CollectFaith.Done=nil;GOLD=10100;FAITH=10000\n{initial}")).exec()?;
             lua.load(format!(
-                "{P1}\n{CORE}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.PendingSnapshot=Snapshot();Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(mutation).exec()?;
             let error = lua
                 .load(format!(
-                    "{P1}\n{CORE}\nSavedProgress(t.PendingSnapshot,'collection progression')"
+                    "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.PendingSnapshot,'collection progression')"
                 ))
                 .exec()
                 .expect_err(mutation)
@@ -3532,9 +3707,9 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
         ] {
             let lua=Lua::new();lua.load(WORLD).exec()?;
             lua.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}")).exec()?;
-            lua.load(format!("{P1}\n{CORE}\nt.Qualified=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
+            lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.Qualified=Snapshot();Game:SetProperty(KEY,t)")).exec()?;
             lua.load(mutation).exec()?;
-            let result=lua.load(format!("{P1}\n{CORE}\nSavedProgress(t.Qualified,'qualified original continuation')")).exec();
+            let result=lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.Qualified,'qualified original continuation')")).exec();
             assert_eq!(result.is_ok(),ok,"{mutation}: {result:?}");
         }
         Ok(())
@@ -3549,13 +3724,15 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             "{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}"
         ))
         .exec()?;
-        lua.load(format!("{P1}\n{CORE}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));PreservePending(REQUEST);t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
+        lua.load(format!("{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nassert(ObserveDebit(t.BeforeQualification,Product(),OFFER.ID));PreservePending(REQUEST);t.PendingSnapshot=Snapshot();t.PendingHash=A.Canonical(t.PendingSnapshot);Game:SetProperty(KEY,t)")).exec()?;
         lua.load("CompleteNative(true)").exec()?;
-        lua.load(format!("{P1}\n{CORE}\n{RESTORE_OBSERVATION}"))
-            .exec()?;
+        lua.load(format!(
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{RESTORE_OBSERVATION}"
+        ))
+        .exec()?;
         lua.load("assert(PROPS.JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1.ReplayBaseline.Flow.Flows['normal-flow'].Phase=='APPLYING')").exec()?;
         lua.load(format!(
-            "{P1}\n{CORE}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
+            "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
         ))
         .exec()?;
         for mutation in [
@@ -3568,14 +3745,14 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             probe.load(format!("{QUALIFICATION_WORLD}\n{ACCEPTED_WORLD}\n{PROGRESS_WORLD}\nCompleteNative(true)")).exec()?;
             probe
                 .load(format!(
-                    "{P1}\n{CORE}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
+                    "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.Terminal=Snapshot();Game:SetProperty(KEY,t)"
                 ))
                 .exec()?;
             probe.load(mutation).exec()?;
             assert!(
                 probe
                     .load(format!(
-                        "{P1}\n{CORE}\nSavedProgress(t.Terminal,'terminal receipt')"
+                        "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nSavedProgress(t.Terminal,'terminal receipt')"
                     ))
                     .exec()
                     .is_err(),
@@ -3597,7 +3774,7 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             let lua = Lua::new();
             lua.load(WORLD).exec()?;
             lua.load(format!(
-                "{P1}\n{CORE}\nt.SettledFirst=Snapshot();Game:SetProperty(KEY,t)"
+                "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\nt.SettledFirst=Snapshot();Game:SetProperty(KEY,t)"
             ))
             .exec()?;
             lua.load(format!(
@@ -3605,7 +3782,9 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             ))
             .exec()?;
             let result = lua
-                .load(format!("{P1}\n{CORE}\n{ASSERT_PUBLICATIONS}"))
+                .load(format!(
+                    "{P1}\n{CORE}\n{NATIVE_TURN_OBSERVATION}\n{ASSERT_PUBLICATIONS}"
+                ))
                 .exec();
             assert_eq!(
                 result.is_ok(),

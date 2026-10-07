@@ -942,6 +942,35 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
 }
 
 #[test]
+fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_flow(
+) -> anyhow::Result<()> {
+    for fail_observer in [false, true] {
+        let lua = world(9999.)?;
+        lua.globals().set("FAIL_OBSERVER", fail_observer)?;
+        lua.load(r#"
+          OFFICIAL_SOURCE();HUMAN[2]=false;READY()
+          -- The engine's own two assignments happen before our ordinary handler.
+          POOL,OFFICIAL_ENVOYS,TILES=8,2,6
+          local rows={}
+          GameEvents.JAC_AbsorptionProduct_TurnObservation={Call=function(stage,turn)
+            rows[#rows+1]={Stage=stage,Turn=turn,Pool=POOL,Received=OFFICIAL_ENVOYS}
+            if FAIL_OBSERVER then error('read-only observer failed') end
+          end}
+          GameEvents.OnGameTurnStarted.Call(TURN)
+          assert(#rows==2 and rows[1].Stage=='BEFORE' and rows[2].Stage=='AFTER')
+          assert(rows[1].Turn==TURN and rows[2].Turn==TURN)
+          assert(rows[1].Pool==8 and rows[1].Received==2 and rows[2].Pool==7 and rows[2].Received==3)
+          assert(SENDS==1 and GRANTS==1)
+          local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+          local op=s.Operations['2:ai-envoy:1:2']
+          assert(op and op.EnvoyReceipt.Before==8 and op.EnvoyReceipt.After==7)
+          assert(op.EnvoyReceipt.ReceivedBefore==2 and op.EnvoyReceipt.ReceivedAfter==3)
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn real_turn_event_argument_still_runs_the_normal_ai_envoy_scan() -> anyhow::Result<()> {
     let lua = world(9999.)?;
     lua.load(

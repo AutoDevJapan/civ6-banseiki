@@ -816,7 +816,15 @@ N.RegisterRequirement('PRODUCT_DEPOSIT',function(from,to,d) return Evaluate(from
 N.RegisterRequirement('PRODUCT_RELATIONS',function(from,to) return RelationState(from,to).Met and DiplomaticSituation(from,to)~='war' end)
 N.RegisterEnvoys('product',function(from,to) local value=Envoys(from,to);value.Eligible=value.Eligible and not PendingEnvoy(to);return value end)
 GameEvents.JAC_AbsorptionProduct_Operation.Add(Operation)
-GameEvents.OnGameTurnStarted.Add(function() P.Tick(false) end)
+-- Read-only diagnostics can sample the actual engine state on either side of
+-- the ordinary turn handler. Never let a diagnostic failure interrupt play.
+local function ObserveTurn(stage)
+  local event=GameEvents.JAC_AbsorptionProduct_TurnObservation
+  if event and event.Call then pcall(event.Call,stage,Game.GetCurrentGameTurn()) end
+end
+GameEvents.OnGameTurnStarted.Add(function()
+  ObserveTurn('BEFORE');P.Tick(false);ObserveTurn('AFTER')
+end)
 -- Read-only exports only. Mutating functions are never available to UI.
 ExposedMembers.JAC_AbsorptionProduct={Get=P.Get,GetSmallCountries=P.GetSmallCountries,Country=P.Country,PublicationKey=P.PublicationKey}
 JAC_AbsorptionProductGameplay=P
