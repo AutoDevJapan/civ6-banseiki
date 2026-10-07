@@ -239,6 +239,63 @@ fn issued_request_failure_allows_warning_recovery_without_uri_replay_after_45_se
 }
 
 #[test]
+fn sync_failure_during_helper_cleanup_wait_sends_no_uri() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    let clock = Arc::new(ManualClock::default());
+    let observed = clock.clone();
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    fake.on_close_orphans = Box::new(|| Ok(vec![99]));
+    fake.on_sync = Box::new(move |stage| {
+        assert_eq!(stage, Stage::Prelaunch);
+        Ok(if observed.at() >= 8.0 {
+            SyncStatus::Failed
+        } else {
+            SyncStatus::Idle
+        })
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock;
+    assert!(h
+        .runner
+        .launch_steam_and_wait(120.0)
+        .unwrap_err()
+        .message
+        .contains("URI not sent"));
+    assert!(!h.events().contains(&"launch".into()));
+}
+
+#[test]
+fn late_prelaunch_pending_waits_before_the_single_uri() {
+    use civ6_autotest_rs::steam_sync::SyncStatus;
+    let clock = Arc::new(ManualClock::default());
+    let before_launch = clock.clone();
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    let mut polls = 0;
+    fake.on_sync = Box::new(move |_| {
+        polls += 1;
+        Ok(if polls == 2 {
+            SyncStatus::Pending
+        } else {
+            SyncStatus::Idle
+        })
+    });
+    fake.on_launch = Box::new(move || {
+        assert!(
+            before_launch.at() >= 0.5,
+            "pending must wait without a busy launch loop"
+        );
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock;
+    h.runner.launch_steam_and_wait(120.0).unwrap();
+    assert_eq!(
+        h.events().iter().filter(|event| *event == "launch").count(),
+        1
+    );
+}
+
+#[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
     let mut fake = FakeBackend::new().process(processes(
         &[

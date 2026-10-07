@@ -1211,6 +1211,18 @@ impl Runner {
                 if recovery {
                     self.backend.check_startup_lock()?;
                 }
+                match self.backend.steam_sync_status(Stage::Prelaunch)? {
+                    SyncStatus::Idle => {}
+                    SyncStatus::Pending => {
+                        self.sleep_until(deadline, 0.5);
+                        continue;
+                    }
+                    SyncStatus::Failed => {
+                        return Err(Error::input(
+                            "Steam sync failed before launch; URI not sent",
+                        ))
+                    }
+                }
                 self.backend.launch()?;
                 startup.launch_requested = true;
                 attempts += 1;

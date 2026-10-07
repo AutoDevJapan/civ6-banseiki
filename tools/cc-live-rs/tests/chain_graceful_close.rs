@@ -76,6 +76,8 @@ struct Model {
     reporter_failed: bool,
     sync_code: i32,
     mark_code: i32,
+    omit_sync_journal: bool,
+    sync_phase: Option<&'static str>,
     restore_code: i32,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
@@ -99,6 +101,8 @@ impl Model {
             reporter_failed: false,
             sync_code: 0,
             mark_code: 0,
+            omit_sync_journal: false,
+            sync_phase: None,
             restore_code: 0,
             calls: vec![],
             sleeps: vec![],
@@ -165,6 +169,16 @@ impl Runner for Model {
                 assert!(serde_json::from_str::<serde_json::Value>(&call.args[2]).is_ok());
                 assert_eq!(call.args[3], "--journal");
                 assert!(call.kill_tree);
+                if !self.omit_sync_journal {
+                    let journal = PathBuf::from(&call.args[4]);
+                    fs::create_dir_all(journal.parent().unwrap()).unwrap();
+                    let phase = self.sync_phase.unwrap_or(if self.sync_code == 0 {
+                        "steam_released_without_new_sync_request"
+                    } else {
+                        "exit_sync_failed"
+                    });
+                    fs::write(journal, json!({"phase":phase}).to_string() + "\n").unwrap();
+                }
                 Ok(Output {
                     code: self.sync_code,
                     stderr: "sync fixture".into(),
@@ -339,6 +353,14 @@ fn exit_sync_barrier_runs_after_process_exit_and_propagates_failure() {
         if let Err(error) = result {
             assert!(error.contains("Steam exit sync did not finish"));
         }
+    }
+    for missing in [false, true] {
+        let mut r = Model::new([true, false]);
+        r.omit_sync_journal = missing;
+        r.sync_phase = Some("exit_sync_timeout");
+        assert!(chain::close_civ6_with_paths(&mut r, &f.paths)
+            .unwrap_err()
+            .contains("valid terminal journal"));
     }
     let mut r = Model::new([false, false]);
     chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();

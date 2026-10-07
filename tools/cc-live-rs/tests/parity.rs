@@ -2035,6 +2035,8 @@ struct ReliabilityRunner {
     waited: usize,
     add_waiter: bool,
     fail_cleanup: bool,
+    fail_begin: Option<bool>,
+    restore_calls: usize,
     revisions: VecDeque<String>,
 }
 impl ReliabilityRunner {
@@ -2063,6 +2065,8 @@ impl ReliabilityRunner {
             waited: 0,
             add_waiter: false,
             fail_cleanup: false,
+            fail_begin: None,
+            restore_calls: 0,
             revisions: vec!["a".repeat(40); 10].into(),
         }
     }
@@ -2075,6 +2079,55 @@ impl Runner for ReliabilityRunner {
         self.time
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
+        if call.args.get(1).is_some_and(|arg| arg == "--mark") {
+            return Ok(Output {
+                stdout: json!({"cloud":{},"process":{}}).to_string(),
+                ..Output::default()
+            });
+        }
+        if call.args.get(1).is_some_and(|arg| arg == "--cursor") {
+            assert!(!self.running && !self.closing);
+            write_json(
+                &call.args[4],
+                &json!({"phase":"steam_released_without_new_sync_request"}),
+            )?;
+            return Ok(Output::default());
+        }
+        if call.args.get(1).is_some_and(|arg| arg == "--begin") {
+            assert!(!self.running && !self.closing);
+            let original = self
+                .p
+                .profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+            let archive = PathBuf::from(&call.args[5]);
+            fs::rename(&original, archive.join("owner-auto-original"))
+                .map_err(|e| e.to_string())?;
+            fs::create_dir(&original).map_err(|e| e.to_string())?;
+            write_json(
+                &call.args[3],
+                &json!({"original":original,"archive":archive}),
+            )?;
+            if self.fail_begin == Some(true) {
+                return Err("begin timed out after original rename".into());
+            }
+            return Ok(Output {
+                code: 1,
+                stderr: "begin failed after original rename".into(),
+                ..Output::default()
+            });
+        }
+        if call.args.get(1).is_some_and(|arg| arg == "--restore") {
+            assert!(!self.running && !self.closing);
+            let record = read_json(&call.args[3])?;
+            let original = PathBuf::from(record["original"].as_str().unwrap());
+            let archive = PathBuf::from(record["archive"].as_str().unwrap());
+            fs::rename(&original, archive.join("test-auto")).map_err(|e| e.to_string())?;
+            fs::rename(archive.join("owner-auto-original"), &original)
+                .map_err(|e| e.to_string())?;
+            fs::remove_file(&call.args[3]).map_err(|e| e.to_string())?;
+            self.restore_calls += 1;
+            return Ok(Output::default());
+        }
         if call.args[0] == "tasklist" && call.args[2] == "IMAGENAME eq CivilizationVI.exe" {
             if self.closing {
                 if self.exit_polls > 0 {
@@ -2226,6 +2279,15 @@ impl Runner for ReliabilityRunner {
 #[test]
 fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock_yield() {
     let f = Fixture::new();
+    f.json(
+        "wt/live/tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs",
+        json!("fixture source"),
+    );
+    fs::write(
+        f.p.live().join("tools/target/release/civ6-steam-sync.exe"),
+        "fixture binary",
+    )
+    .unwrap();
     fs::create_dir_all(f.p.jobs.join("waiter")).unwrap();
     let mut r = ReliabilityRunner::new(&f, vec![0; 10]);
     r.add_waiter = true;
@@ -2272,7 +2334,20 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
     assert_eq!(summary["source_revision"], "a".repeat(40));
     let rounds = summary["rounds"].as_array().unwrap();
     assert_eq!(rounds.len(), 10);
+    let journals: std::collections::HashSet<_> = rounds
+        .iter()
+        .map(|round| round["exit"]["sync_journal"].as_str().unwrap())
+        .collect();
+    assert_eq!(journals.len(), 10);
     for round in rounds {
+        assert_eq!(
+            round["exit"]["sync_phase"],
+            "steam_released_without_new_sync_request"
+        );
+        assert_eq!(round["exit"]["autosave_restore_result"], "success");
+        assert_eq!(round["exit"]["recovery_receipt_remaining"], false);
+        let copied = read_json(round["exit"]["artifact_journal"].as_str().unwrap()).unwrap();
+        assert_eq!(copied["phase"], round["exit"]["sync_phase"]);
         assert_eq!(round["source"]["revision"], "a".repeat(40));
         assert!(
             round["source"]["files"]["tools/civ6-autotest/scenarios/cycle.json"]
@@ -2286,6 +2361,49 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         assert_eq!(round["driver_exit_code"], 0);
         assert_eq!(round["cleanup"]["game_closed"], true);
         assert_eq!(round["cleanup"]["lock_released"], true);
+    }
+}
+
+#[test]
+fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release() {
+    for unknown in [false, true] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let original =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        r.running = false;
+        r.fail_begin = Some(unknown);
+        assert!(cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"])).is_err());
+        assert_eq!(r.restore_calls, 1);
+        assert_eq!(
+            fs::read(original.join("owner-save")).unwrap(),
+            b"owner original bytes"
+        );
+        assert!(
+            r.artifacts.is_empty(),
+            "driver must not launch after isolation failure"
+        );
+        assert!(!f.p.here.join("reliability-auto-state.json").exists());
+        assert!(!f.p.here.join("civ6.lock").exists());
+        let summary = reliability_summary(&r);
+        assert_eq!(summary["consecutive_successes"], 0);
+        assert_eq!(
+            summary["rounds"][0]["cleanup"]["exit"]["autosave_restore_result"],
+            "success"
+        );
     }
 }
 
