@@ -434,6 +434,16 @@ pub fn close_orphaned_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -
             continue;
         }
         let Some(handle) = backend.open_reporter(row.pid)? else {
+            if backend
+                .process_rows()?
+                .iter()
+                .any(|current| current.pid == row.pid && current.name == row.name)
+            {
+                return Err(Error::input(format!(
+                    "Cannot open remaining Civ VI helper {}",
+                    row.pid
+                )));
+            }
             continue;
         };
         // Validate and terminate the same pinned process, even if its PID is reused.

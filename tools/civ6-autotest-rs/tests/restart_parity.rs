@@ -39,6 +39,7 @@ struct MockLifecycle {
     events: Vec<String>,
     clock: f64,
     process_rows: Vec<ProcessRow>,
+    process_rows_script: VecDeque<Vec<ProcessRow>>,
     reporter_open_fails: bool,
 }
 impl LifecycleBackend for MockLifecycle {
@@ -95,7 +96,10 @@ impl LifecycleBackend for MockLifecycle {
     }
     fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
         self.events.push("rows".into());
-        Ok(self.process_rows.clone())
+        Ok(self
+            .process_rows_script
+            .pop_front()
+            .unwrap_or_else(|| self.process_rows.clone()))
     }
     fn open_reporter(&mut self, pid: u32) -> Result<Option<isize>> {
         self.events.push(format!("open:{pid}"));
@@ -348,14 +352,15 @@ fn test_running_game_prevents_all_cleanup() {
 }
 
 #[test]
-fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_skipped() {
+fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_rechecked() {
     let mut b = orphan_reporter(REPORTER);
     b.reporter_open_fails = true;
-    assert_eq!(
-        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
-        Vec::<u32>::new()
-    );
-    assert_eq!(b.events, ["rows", "open:42"]);
+    assert!(restart::close_orphaned_civ_reporters_with(&mut b)
+        .unwrap_err()
+        .message
+        .contains("Cannot open remaining Civ VI helper 42"));
+    assert_eq!(b.events, ["rows", "open:42", "rows"]);
+    assert!(b.reporter_terminated.is_empty());
     for image_failure in [true, false] {
         let mut b = orphan_reporter(REPORTER);
         b.reporter_error = image_failure;
@@ -375,6 +380,27 @@ fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_skipped() {
             1
         );
         assert!(b.reporter_terminated.is_empty());
+    }
+}
+
+#[test]
+fn failed_reporter_open_allows_confirmed_disappearance_or_a_different_process() {
+    for current in [
+        Vec::new(),
+        vec![ProcessRow {
+            pid: 42,
+            name: "other-game.exe".into(),
+            parent_pid: 41,
+        }],
+    ] {
+        let mut b = orphan_reporter(REPORTER);
+        b.reporter_open_fails = true;
+        b.process_rows_script = VecDeque::from([b.process_rows.clone(), current]);
+        assert!(restart::close_orphaned_civ_reporters_with(&mut b)
+            .unwrap()
+            .is_empty());
+        assert!(b.reporter_terminated.is_empty());
+        assert_eq!(b.events, ["rows", "open:42", "rows"]);
     }
 }
 

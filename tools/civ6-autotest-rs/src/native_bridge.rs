@@ -141,9 +141,8 @@ mod platform {
         TH32CS_SNAPMODULE32,
     };
     use windows_sys::Win32::System::Threading::{
-        GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
-        WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-        PROCESS_TERMINATE,
+        GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     };
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -975,11 +974,10 @@ mod platform {
                 "pinned game creation time changed before close",
             ));
         }
-        if unsafe { TerminateProcess(inspected.0, 1) } == 0
-            && unsafe { WaitForSingleObject(inspected.0, 0) } != WAIT_OBJECT_0
-        {
-            return Err(Error::input("pinned game termination failed"));
-        }
+        // Keep the exact inspected game pinned, but use the same authority and
+        // termination path as restart, observers and resident-runtime cleanup.
+        // Core/image validation is evidence, not permission to end the game.
+        crate::restart::terminate_civ_process(pid, started)?;
         if unsafe { WaitForSingleObject(inspected.0, 10_000) } != WAIT_OBJECT_0 {
             return Err(Error::input("pinned game exit not confirmed"));
         }
