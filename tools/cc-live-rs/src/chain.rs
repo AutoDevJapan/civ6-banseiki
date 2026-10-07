@@ -148,6 +148,9 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
     } else {
         None
     };
+    let process_offset = fs::metadata(cloud_log.with_file_name("gameprocess_log.txt"))
+        .ok()
+        .map(|m| m.len());
     let outcome = close_civ6_outcome(r, p)?;
     let auto_state = p.here.join("reliability-auto-state.json");
     if auto_state.is_file() {
@@ -183,18 +186,22 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
             let journal = p
                 .temp
                 .join(format!("civ6-steam-exit-{}.jsonl", std::process::id()));
+            let mut sync_args = args(&[
+                &path(sync_tool),
+                "--offset",
+                &offset.to_string(),
+                "--journal",
+                &path(journal),
+            ]);
+            if let Some(offset) = process_offset {
+                sync_args.extend(args(&["--process-offset", &offset.to_string()]));
+            }
             let out = r.run(
-                Call::new(args(&[
-                    &path(sync_tool),
-                    "--offset",
-                    &offset.to_string(),
-                    "--journal",
-                    &path(journal),
-                ]))
-                .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
-                .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
-                .managed()
-                .timeout(50.0),
+                Call::new(sync_args)
+                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                    .managed()
+                    .timeout(50.0),
             )?;
             if out.code != 0 {
                 return Err(format!(

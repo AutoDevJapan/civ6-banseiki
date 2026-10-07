@@ -174,6 +174,34 @@ pub fn cloud_log() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("C:/Program Files (x86)/Steam"))
         .join("logs/cloud_log.txt")
 }
+/// A fresh Steam running-list removal proves the client observed the game exit.
+/// A later tracked process invalidates that observation.
+pub fn civ6_released(text: &str) -> bool {
+    let mut released = false;
+    for line in text.lines() {
+        if line.contains("AppID 289070 adding PID ") {
+            released = false;
+        }
+        if line.ends_with("Remove 289070 from running list") {
+            released = true;
+        }
+    }
+    released
+}
+pub fn fresh_release(offset: u64) -> Result<bool> {
+    let path = cloud_log().with_file_name("gameprocess_log.txt");
+    let mut f = File::open(path)?;
+    let len = f.metadata()?.len();
+    if len < offset || len - offset > 1024 * 1024 {
+        return Err(Error::input(
+            "Steam running-list log changed generation or exceeded the observation bound",
+        ));
+    }
+    f.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    f.take(len - offset).read_to_end(&mut bytes)?;
+    Ok(civ6_released(&String::from_utf8_lossy(&bytes)))
+}
 
 pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
     use std::io::Write;
@@ -193,6 +221,15 @@ pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn running_list_release_requires_civ6_and_is_invalidated_by_a_new_process() {
+        assert!(!civ6_released("[date] Remove 123 from running list"));
+        assert!(!civ6_released(
+            "[date] AppID 289070 no longer tracking PID 10, exit code 0"
+        ));
+        assert!(civ6_released("[date] Remove 289070 from running list"));
+        assert!(!civ6_released("[date] Remove 289070 from running list\n[date] AppID 289070 adding PID 11 as a tracked process"));
+    }
     #[test]
     fn controller_failure_is_not_a_save_conflict_or_success() {
         let mut m = Monitor::default();

@@ -16,6 +16,8 @@ struct Args {
     #[arg(long)]
     offset: Option<u64>,
     #[arg(long)]
+    process_offset: Option<u64>,
+    #[arg(long)]
     journal: Option<PathBuf>,
     #[arg(long, default_value_t = 45.0)]
     timeout: f64,
@@ -69,6 +71,18 @@ fn run(args: Args) -> Result<()> {
         if start.elapsed().as_secs_f64() >= 10.0 && !m.pending() && !m.states.is_empty() {
             steam_sync::journal(&journal, "exit_sync_complete", &m)?;
             return Ok(());
+        }
+        if start.elapsed().as_secs_f64() >= 10.0 && m.states.is_empty() {
+            if let Some(offset) = args.process_offset {
+                if steam_sync::fresh_release(offset)?
+                    && civ6_autotest_rs::restart::single_civ_process(0.0)?.is_none()
+                {
+                    // Play anyway can skip Cloud for the entire session. This
+                    // is explicit Steam idle evidence, not a claimed sync.
+                    steam_sync::journal(&journal, "steam_released_without_new_sync_request", &m)?;
+                    return Ok(());
+                }
+            }
         }
         if start.elapsed().as_secs_f64() >= args.timeout {
             steam_sync::journal(
