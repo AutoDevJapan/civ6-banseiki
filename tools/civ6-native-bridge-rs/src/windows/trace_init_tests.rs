@@ -156,3 +156,105 @@ fn trace_init_headers_and_complete_empty_rows_match_contract() {
         .all(|v| v.load(Ordering::Relaxed) == 0));
     assert!(trace.joined.property.complete_rows().unwrap().is_empty());
 }
+
+#[test]
+fn each_trace_initializer_preserves_every_header_and_row_field() {
+    macro_rules! fresh {
+        ($ty:ty, $initialize:expr) => {{
+            let mut value = Box::<$ty>::new_uninit();
+            unsafe {
+                ptr::write_bytes(value.as_mut_ptr().cast::<u8>(), 0xa5, size_of::<$ty>());
+                ($initialize)(value.as_mut_ptr());
+                value.assume_init()
+            }
+        }};
+    }
+    macro_rules! zero {
+        ($value:expr, $($field:ident),+ $(,)?) => {$(
+            assert_eq!($value.$field.load(Ordering::Relaxed), 0, stringify!($field));
+        )+};
+    }
+    let shared = fresh!(SharedTrace, SharedTrace::initialize_at);
+    assert_eq!(
+        (shared.magic, shared.version, shared.reserved),
+        (TRACE_MAGIC, TRACE_VERSION, 0)
+    );
+    zero!(shared, next, dropped, in_flight);
+    for row in &shared.rows {
+        zero!(
+            row,
+            sequence,
+            governor_index,
+            governors_this,
+            return_address
+        );
+    }
+    let promotion = fresh!(PromotionTrace, PromotionTrace::initialize_at);
+    assert_eq!(
+        (
+            promotion.magic,
+            promotion.version,
+            promotion.mode,
+            promotion.capacity,
+            promotion.reserved
+        ),
+        (
+            PROMOTION_TRACE_MAGIC,
+            PROMOTION_TRACE_VERSION,
+            BridgeMode::PromotionCall as u32,
+            PROMOTION_TRACE_CAPACITY as u32,
+            0
+        )
+    );
+    zero!(promotion, next, dropped, in_flight);
+    for row in &promotion.rows {
+        zero!(row, sequence, thread_id, rcx, rdx, r8, r9, return_address);
+    }
+    for scope in [0, 2, 4, 5, 6] {
+        let property = fresh!(PropertyTrace, |p| PropertyTrace::initialize_at(p, scope));
+        assert_eq!(
+            (
+                property.magic,
+                property.version,
+                property.scope,
+                property.reserved
+            ),
+            (PROPERTY_TRACE_MAGIC, PROPERTY_TRACE_VERSION, scope, 0)
+        );
+        zero!(property, next, dropped, in_flight, filtered);
+        for row in &property.rows {
+            zero!(
+                row, sequence, key_id, property, returned, thread_id, read_state, tag, flags,
+                payload
+            );
+        }
+    }
+    for mode in [BridgeMode::JoinedAdmission, BridgeMode::ProductionAdmission] {
+        let joined = fresh!(JoinedTrace, |p| JoinedTrace::initialize_at(p, mode));
+        assert_eq!(joined.property.scope, mode as u32);
+        let calibration = &joined.calibration;
+        assert_eq!(
+            (calibration.magic, calibration.version, calibration.reserved),
+            (CALIBRATION_TRACE_MAGIC, CALIBRATION_TRACE_VERSION, 0)
+        );
+        zero!(calibration, next, dropped, in_flight);
+        for row in &calibration.rows {
+            zero!(
+                row,
+                sequence,
+                governor_index,
+                thread_id,
+                owner_read_state,
+                governors_this,
+                return_address,
+                player_address,
+                player_id,
+                original_al,
+                effective_al,
+                property_receiver,
+                joined_session,
+                entry_ticket
+            );
+        }
+    }
+}
