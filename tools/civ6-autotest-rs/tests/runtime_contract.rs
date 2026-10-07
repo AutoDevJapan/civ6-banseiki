@@ -150,6 +150,8 @@ fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
         Box::new(backend),
         Arc::new(FakeClock::default()),
     );
+    // 実機への設置状況に依存せず、チェックアウト内のMOD定義を検査する。
+    runner.mods_dir = repo_root().join("poc");
     runner.auto_restart = false;
     assert_eq!(runner.run().unwrap(), 0);
     let result: Value =
