@@ -215,7 +215,7 @@ pub struct Evidence {
 
 /// The runner writes `NAME.Civ6Save`; NAME is the step name, or with exact_name
 /// absent its first 67 bytes plus a 12-digit hash of the output directory.
-fn recorded_save_name(detail: &str, step: &Value) -> Result<String> {
+pub(crate) fn recorded_save_name(detail: &str, step: &Value) -> Result<String> {
     let file = detail.rsplit(['/', '\\']).next().unwrap_or_default();
     let name = file
         .strip_suffix(".Civ6Save")
