@@ -1221,6 +1221,17 @@ fn mod_lists_every_file_and_imports_the_shared_frontend_module() {
         assert!(imported.contains(file), "{file}");
     }
     let ingame = modinfo.get_child("InGameActions").unwrap();
+    let setup_import = elements(ingame)
+        .find(|e| {
+            e.attributes
+                .get("id")
+                .is_some_and(|id| id == "JAC_BanseikiPool_InGameSetupFiles")
+        })
+        .unwrap();
+    assert!(
+        !setup_import.attributes.contains_key("criteria"),
+        "Frontend's shared module also needs its aliases when another ruleset enters Options"
+    );
     let ingame_imports: BTreeSet<String> = elements(ingame)
         .filter(|e| e.name == "ImportFiles")
         .flat_map(|e| elements(e).filter(|f| f.name == "File"))
