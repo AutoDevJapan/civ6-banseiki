@@ -269,47 +269,6 @@ fn native_pid_tasklist(pid: u32) -> Result<Output, String> {
     })
 }
 
-#[cfg(test)]
-mod pid_query_tests {
-    use super::*;
-
-    #[test]
-    fn native_query_only_accepts_the_existing_exact_pid_protocol() {
-        let args: Vec<String> = ["tasklist", "/FI", "PID eq 42", "/FO", "CSV", "/NH"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        assert_eq!(tasklist_pid(&args), Some(42));
-        for filter in [
-            "PID eq 0",
-            "PID eq -1",
-            "PID eq 4294967296",
-            "PID eq 42 extra",
-            "IMAGENAME eq live_chain.exe",
-        ] {
-            let mut other = args.clone();
-            other[2] = filter.into();
-            assert_eq!(tasklist_pid(&other), None);
-        }
-        let mut extra = args;
-        extra.push("/V".into());
-        assert_eq!(tasklist_pid(&extra), None);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn native_query_reports_the_real_current_image_and_absent_pid() {
-        let pid = std::process::id();
-        let expected = std::env::current_exe().unwrap();
-        let image = expected.file_name().unwrap().to_str().unwrap();
-        assert_eq!(
-            native_pid_tasklist(pid).unwrap().stdout,
-            format!("\"{image}\",\"{pid}\"\n")
-        );
-        assert!(native_pid_tasklist(u32::MAX).unwrap().stdout.is_empty());
-    }
-}
-
 pub fn install_interrupt_handler() {
     #[cfg(windows)]
     unsafe {
@@ -533,5 +492,46 @@ fn wait(
             .into());
         }
         thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod pid_query_tests {
+    use super::*;
+
+    #[test]
+    fn native_query_only_accepts_the_existing_exact_pid_protocol() {
+        let args: Vec<String> = ["tasklist", "/FI", "PID eq 42", "/FO", "CSV", "/NH"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(tasklist_pid(&args), Some(42));
+        for filter in [
+            "PID eq 0",
+            "PID eq -1",
+            "PID eq 4294967296",
+            "PID eq 42 extra",
+            "IMAGENAME eq live_chain.exe",
+        ] {
+            let mut other = args.clone();
+            other[2] = filter.into();
+            assert_eq!(tasklist_pid(&other), None);
+        }
+        let mut extra = args;
+        extra.push("/V".into());
+        assert_eq!(tasklist_pid(&extra), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_query_reports_the_real_current_image_and_absent_pid() {
+        let pid = std::process::id();
+        let expected = std::env::current_exe().unwrap();
+        let image = expected.file_name().unwrap().to_str().unwrap();
+        assert_eq!(
+            native_pid_tasklist(pid).unwrap().stdout,
+            format!("\"{image}\",\"{pid}\"\n")
+        );
+        assert!(native_pid_tasklist(u32::MAX).unwrap().stdout.is_empty());
     }
 }
