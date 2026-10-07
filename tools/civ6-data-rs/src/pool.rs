@@ -1,16 +1,16 @@
-//! The first, unapproved Banseiki character catalogue. No game registration.
+//! Validated, adopted Banseiki roster. Game registration is generated separately.
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
 pub const DATA_PATH: &str = "documents/spec/data/banseiki-pool.json";
 pub const CATEGORIES: [(&str, usize); 6] = [
-    ("武将", 40),
-    ("英傑武将", 8),
-    ("軍師", 12),
-    ("僧侶", 10),
-    ("陰陽師", 10),
-    ("一般ジョブUnit", 20),
+    ("武将", 120),
+    ("英傑武将", 24),
+    ("軍師", 36),
+    ("僧侶", 30),
+    ("陰陽師", 30),
+    ("一般ジョブUnit", 60),
 ];
 pub const REGIONS: [&str; 16] = [
     "北海道",
@@ -122,19 +122,19 @@ pub fn validate(data: &Value) -> Result<()> {
         "schema_version must be 1"
     );
     ensure!(
-        text(data, "status")? == "方向確認待ち",
-        "first batch must remain a proposal"
+        text(data, "status")? == "採用済み",
+        "roster must be adopted"
     );
     ensure!(
         data["target_size"].as_u64() == Some(300),
-        "target_size must be the proposed 300"
+        "target_size must be 300"
     );
     let rows = data["characters"]
         .as_array()
         .context("characters must be an array")?;
     ensure!(
-        rows.len() == 100,
-        "first batch must contain 100 characters, got {}",
+        rows.len() == 300,
+        "roster must contain 300 characters, got {}",
         rows.len()
     );
     let mut ids = BTreeSet::new();
@@ -146,6 +146,7 @@ pub fn validate(data: &Value) -> Result<()> {
     let mut counts = [0usize; 6];
     let mut historical = 0;
     let mut candidates = 0;
+    let mut territories = [0usize; 5];
     for (index, row) in rows.iter().enumerate() {
         let result = (|| -> Result<()> {
             keys(
@@ -205,6 +206,20 @@ pub fn validate(data: &Value) -> Result<()> {
             let region = text(row, "region")?;
             ensure!(REGIONS.contains(&region), "unknown region {region}");
             regions.insert(region);
+            let territory = if REGIONS[..8].contains(&region) {
+                if era == "戦国" {
+                    0
+                } else {
+                    1
+                }
+            } else if region == "地球圏" {
+                3
+            } else if region == "宇宙" {
+                4
+            } else {
+                2
+            };
+            territories[territory] += 1;
             let faction = text(row, "faction")?;
             if origin == "新規" {
                 ensure!(faction.contains("架空"), "new faction must be marked 架空");
@@ -225,6 +240,10 @@ pub fn validate(data: &Value) -> Result<()> {
             let candidate = row["leader_candidate"]
                 .as_bool()
                 .context("leader_candidate must be boolean")?;
+            ensure!(
+                candidate,
+                "every adopted character must be a leader candidate"
+            );
             candidates += usize::from(candidate);
             if !row["existing_leader_id"].is_null() {
                 let leader = text(row, "existing_leader_id")?;
@@ -277,8 +296,17 @@ pub fn validate(data: &Value) -> Result<()> {
         result.with_context(|| format!("character {} ({})", index + 1, row["id"]))?;
     }
     ensure!(
-        historical == 20,
-        "first batch must contain 20 historical and 80 new characters"
+        historical == 60,
+        "roster must contain 60 historical and 240 new characters"
+    );
+    let expected_ids: BTreeSet<String> = (1..=60)
+        .map(|i| format!("JAC_POOL_H{i:03}"))
+        .chain((1..=240).map(|i| format!("JAC_POOL_O{i:03}")))
+        .collect();
+    ensure!(
+        ids.iter().copied().collect::<BTreeSet<_>>()
+            == expected_ids.iter().map(String::as_str).collect(),
+        "roster IDs must cover H001-H060 and O001-O240 without gaps"
     );
     ensure!(
         candidates >= 2,
@@ -293,15 +321,19 @@ pub fn validate(data: &Value) -> Result<()> {
     }
     ensure!(
         REGIONS.iter().all(|r| regions.contains(r)),
-        "first batch must cover all 16 regions"
+        "roster must cover all 16 regions"
     );
     ensure!(
         ERAS.iter().all(|e| eras.contains(e)),
-        "first batch must cover all seven eras"
+        "roster must cover all seven eras"
     );
     ensure!(
         HOUSES.iter().all(|h| houses.contains(h)),
-        "first batch must cover all 20 houses with fictional retainers"
+        "roster must cover all 20 houses with fictional retainers"
+    );
+    ensure!(
+        territories == [140, 60, 60, 20, 20],
+        "territory allocation must be 140/60/60/20/20; got {territories:?}"
     );
     Ok(())
 }

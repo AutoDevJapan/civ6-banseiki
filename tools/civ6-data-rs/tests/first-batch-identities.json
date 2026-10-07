@@ -1,0 +1,402 @@
+[
+  {
+    "id": "JAC_POOL_H001",
+    "name": "織田信長"
+  },
+  {
+    "id": "JAC_POOL_H002",
+    "name": "豊臣秀吉"
+  },
+  {
+    "id": "JAC_POOL_H003",
+    "name": "徳川家康"
+  },
+  {
+    "id": "JAC_POOL_H004",
+    "name": "武田信玄"
+  },
+  {
+    "id": "JAC_POOL_H005",
+    "name": "上杉謙信"
+  },
+  {
+    "id": "JAC_POOL_H006",
+    "name": "伊達政宗"
+  },
+  {
+    "id": "JAC_POOL_H007",
+    "name": "島津義弘"
+  },
+  {
+    "id": "JAC_POOL_H008",
+    "name": "毛利元就"
+  },
+  {
+    "id": "JAC_POOL_H009",
+    "name": "源義経"
+  },
+  {
+    "id": "JAC_POOL_H010",
+    "name": "真田信繁"
+  },
+  {
+    "id": "JAC_POOL_H011",
+    "name": "黒田孝高"
+  },
+  {
+    "id": "JAC_POOL_H012",
+    "name": "竹中半兵衛"
+  },
+  {
+    "id": "JAC_POOL_H013",
+    "name": "空海"
+  },
+  {
+    "id": "JAC_POOL_H014",
+    "name": "最澄"
+  },
+  {
+    "id": "JAC_POOL_H015",
+    "name": "一休宗純"
+  },
+  {
+    "id": "JAC_POOL_H016",
+    "name": "安倍晴明"
+  },
+  {
+    "id": "JAC_POOL_H017",
+    "name": "緒方洪庵"
+  },
+  {
+    "id": "JAC_POOL_H018",
+    "name": "津田梅子"
+  },
+  {
+    "id": "JAC_POOL_H019",
+    "name": "南方熊楠"
+  },
+  {
+    "id": "JAC_POOL_H020",
+    "name": "渋沢栄一"
+  },
+  {
+    "id": "JAC_POOL_O001",
+    "name": "苅宿 弥九郎"
+  },
+  {
+    "id": "JAC_POOL_O002",
+    "name": "沼尻 十左衛門"
+  },
+  {
+    "id": "JAC_POOL_O003",
+    "name": "早瀬 主水"
+  },
+  {
+    "id": "JAC_POOL_O004",
+    "name": "榛名井 源蔵"
+  },
+  {
+    "id": "JAC_POOL_O005",
+    "name": "穂坂 小源太"
+  },
+  {
+    "id": "JAC_POOL_O006",
+    "name": "雪平 勘解由"
+  },
+  {
+    "id": "JAC_POOL_O007",
+    "name": "千鳥谷 右京"
+  },
+  {
+    "id": "JAC_POOL_O008",
+    "name": "葦原 甚兵衛"
+  },
+  {
+    "id": "JAC_POOL_O009",
+    "name": "矢作 孫七"
+  },
+  {
+    "id": "JAC_POOL_O010",
+    "name": "浅水 監物"
+  },
+  {
+    "id": "JAC_POOL_O011",
+    "name": "柚木 刑部"
+  },
+  {
+    "id": "JAC_POOL_O012",
+    "name": "阿波野 甚内"
+  },
+  {
+    "id": "JAC_POOL_O013",
+    "name": "愛知川 左近"
+  },
+  {
+    "id": "JAC_POOL_O014",
+    "name": "蓮津 了真"
+  },
+  {
+    "id": "JAC_POOL_O015",
+    "name": "椹野 兵庫"
+  },
+  {
+    "id": "JAC_POOL_O016",
+    "name": "飯梨 弾正"
+  },
+  {
+    "id": "JAC_POOL_O017",
+    "name": "可愛 内蔵助"
+  },
+  {
+    "id": "JAC_POOL_O018",
+    "name": "仁淀 左京"
+  },
+  {
+    "id": "JAC_POOL_O019",
+    "name": "久住 鉄之丞"
+  },
+  {
+    "id": "JAC_POOL_O020",
+    "name": "錦江 猪兵衛"
+  },
+  {
+    "id": "JAC_POOL_O021",
+    "name": "汐見 十蔵"
+  },
+  {
+    "id": "JAC_POOL_O022",
+    "name": "潮田 孫四郎"
+  },
+  {
+    "id": "JAC_POOL_O023",
+    "name": "千尋 ミカリ"
+  },
+  {
+    "id": "JAC_POOL_O024",
+    "name": "大楢 次郎"
+  },
+  {
+    "id": "JAC_POOL_O025",
+    "name": "月岡 兵馬"
+  },
+  {
+    "id": "JAC_POOL_O026",
+    "name": "浦辺 澪"
+  },
+  {
+    "id": "JAC_POOL_O027",
+    "name": "杜 澄遠"
+  },
+  {
+    "id": "JAC_POOL_O028",
+    "name": "ワユ・ケサンタラ"
+  },
+  {
+    "id": "JAC_POOL_O029",
+    "name": "ザリナ・ユルドゥズ"
+  },
+  {
+    "id": "JAC_POOL_O030",
+    "name": "オスヴィン・ハルデック"
+  },
+  {
+    "id": "JAC_POOL_O031",
+    "name": "セフ・マクンディ"
+  },
+  {
+    "id": "JAC_POOL_O032",
+    "name": "ルシア・アルバレンガ"
+  },
+  {
+    "id": "JAC_POOL_O033",
+    "name": "灰谷 弦之介"
+  },
+  {
+    "id": "JAC_POOL_O034",
+    "name": "沖鳴 ハヤテ"
+  },
+  {
+    "id": "JAC_POOL_O035",
+    "name": "駒ヶ嶺 志乃"
+  },
+  {
+    "id": "JAC_POOL_O036",
+    "name": "篠宮 カイリ"
+  },
+  {
+    "id": "JAC_POOL_O037",
+    "name": "ティエラ・モンクール"
+  },
+  {
+    "id": "JAC_POOL_O038",
+    "name": "アディセ・ウォルカ"
+  },
+  {
+    "id": "JAC_POOL_O039",
+    "name": "三篠 竹庵"
+  },
+  {
+    "id": "JAC_POOL_O040",
+    "name": "升田 礼斎"
+  },
+  {
+    "id": "JAC_POOL_O041",
+    "name": "白 在彦"
+  },
+  {
+    "id": "JAC_POOL_O042",
+    "name": "ナスリーン・タバリーザ"
+  },
+  {
+    "id": "JAC_POOL_O043",
+    "name": "アルノー・ヴェスティエ"
+  },
+  {
+    "id": "JAC_POOL_O044",
+    "name": "アイラ・ンドゥメ"
+  },
+  {
+    "id": "JAC_POOL_O045",
+    "name": "レオン・ヤルヴィネン"
+  },
+  {
+    "id": "JAC_POOL_O046",
+    "name": "鏡野 求馬"
+  },
+  {
+    "id": "JAC_POOL_O047",
+    "name": "酒匂 玄朴"
+  },
+  {
+    "id": "JAC_POOL_O048",
+    "name": "マテオ・リンドクイスト"
+  },
+  {
+    "id": "JAC_POOL_O049",
+    "name": "恵順"
+  },
+  {
+    "id": "JAC_POOL_O050",
+    "name": "覚融"
+  },
+  {
+    "id": "JAC_POOL_O051",
+    "name": "澄海"
+  },
+  {
+    "id": "JAC_POOL_O052",
+    "name": "ウィンタ・ソムパヌ"
+  },
+  {
+    "id": "JAC_POOL_O053",
+    "name": "法鑑"
+  },
+  {
+    "id": "JAC_POOL_O054",
+    "name": "玄宙"
+  },
+  {
+    "id": "JAC_POOL_O055",
+    "name": "汀渓"
+  },
+  {
+    "id": "JAC_POOL_O056",
+    "name": "星川 春遠"
+  },
+  {
+    "id": "JAC_POOL_O057",
+    "name": "宇津谷 晴庵"
+  },
+  {
+    "id": "JAC_POOL_O058",
+    "name": "鴻ノ峰 宗星"
+  },
+  {
+    "id": "JAC_POOL_O059",
+    "name": "辰巳屋 千鶴"
+  },
+  {
+    "id": "JAC_POOL_O060",
+    "name": "雲居 ミナセ"
+  },
+  {
+    "id": "JAC_POOL_O061",
+    "name": "霧生 静馬"
+  },
+  {
+    "id": "JAC_POOL_O062",
+    "name": "御影 ネネ"
+  },
+  {
+    "id": "JAC_POOL_O063",
+    "name": "穹山 ルカ"
+  },
+  {
+    "id": "JAC_POOL_O064",
+    "name": "眉山 式部"
+  },
+  {
+    "id": "JAC_POOL_O065",
+    "name": "指宿 五平"
+  },
+  {
+    "id": "JAC_POOL_O066",
+    "name": "萱津 権助"
+  },
+  {
+    "id": "JAC_POOL_O067",
+    "name": "能美 小太郎"
+  },
+  {
+    "id": "JAC_POOL_O068",
+    "name": "鳶丸"
+  },
+  {
+    "id": "JAC_POOL_O069",
+    "name": "伊吹野 菊"
+  },
+  {
+    "id": "JAC_POOL_O070",
+    "name": "真壁 ハル"
+  },
+  {
+    "id": "JAC_POOL_O071",
+    "name": "鴫野 玄斎"
+  },
+  {
+    "id": "JAC_POOL_O072",
+    "name": "網代 千代吉"
+  },
+  {
+    "id": "JAC_POOL_O073",
+    "name": "檜原 弥五"
+  },
+  {
+    "id": "JAC_POOL_O074",
+    "name": "梓 小弥太"
+  },
+  {
+    "id": "JAC_POOL_O075",
+    "name": "テミル・サルイェル"
+  },
+  {
+    "id": "JAC_POOL_O076",
+    "name": "アマニ・キトゥンゴ"
+  },
+  {
+    "id": "JAC_POOL_O077",
+    "name": "ルチア・ベラルディーニ"
+  },
+  {
+    "id": "JAC_POOL_O078",
+    "name": "萩野 霧丸"
+  },
+  {
+    "id": "JAC_POOL_O079",
+    "name": "野市 甚八"
+  },
+  {
+    "id": "JAC_POOL_O080",
+    "name": "ノア・ヴェリック"
+  }
+]

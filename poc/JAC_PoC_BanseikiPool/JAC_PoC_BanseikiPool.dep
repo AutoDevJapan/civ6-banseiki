@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AssetObjects..GameDependencyData>
+	<ID>
+		<name text="JAC_PoC_BanseikiPool"/>
+		<id text="c8fb8042-8e3e-4b35-b02a-781947194701"/>
+	</ID>
+	<RequiredGameArtIDs/>
+	<!-- No image is packaged. Pool leaders are 2D-only and point at the official
+	     LeaderFallbackImages package, as DLC/WarMachineScenario/WarMachineScenario.dep does. -->
+	<SystemDependencies>
+		<Element>
+			<ConsumerName text="Leaders"/>
+			<ArtDefDependencyPaths><Element text="Leaders.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies/>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+		<Element>
+			<ConsumerName text="LeaderFallback"/>
+			<ArtDefDependencyPaths><Element text="FallbackLeaders.artdef"/></ArtDefDependencyPaths>
+			<LibraryDependencies><Element text="LeaderFallback"/></LibraryDependencies>
+			<LoadsLibraries>true</LoadsLibraries>
+		</Element>
+	</SystemDependencies>
+	<ArtDefDependencies>
+		<Element><ArtDefPath text="Leaders.artdef"/><ArtDefDependencyPaths/></Element>
+		<Element><ArtDefPath text="FallbackLeaders.artdef"/><ArtDefDependencyPaths/></Element>
+	</ArtDefDependencies>
+	<LibraryDependencies>
+		<Element>
+			<LibraryName text="LeaderFallback"/>
+			<PackageDependencies><Element text="LeaderFallbackImages.blp"/></PackageDependencies>
+		</Element>
+	</LibraryDependencies>
+</AssetObjects..GameDependencyData>
