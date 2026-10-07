@@ -1,0 +1,83 @@
+{
+  "name": "Banseiki pool: new leader gameplay records and single-player save/load",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "session_type": "single_player",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "exclusive_user_mods": true,
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "c8fb8042-8e3e-4b35-b02a-781947194700"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "speed": "GAMESPEED_STANDARD",
+      "map_size": "MAPSIZE_DUEL",
+      "city_states": 0,
+      "seed": 1947202610,
+      "players": [
+        {
+          "leader": "LEADER_JAC_POOL_O008",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": false
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "if not JAC_POOL_FILTER_INSTALLED or GameConfiguration.IsAnyMultiplayer() then error('single player pool hook required') end\nlocal rows=DB.ConfigurationQuery('SELECT LeaderType FROM JAC_BanseikiPool')\nif #rows~=300 then error('pool count '..#rows) end\nlocal pool={}; for _,r in ipairs(rows) do pool[r.LeaderType]=true end\nlocal p=CreatePlayerParameters(0,true); p:Refresh()\nlocal count=0\nfor _,v in ipairs(p.Parameters.PlayerLeader.Values) do\n if pool[v.Value] then count=count+1 elseif v.Value~='RANDOM' then error('outside pool '..tostring(v.Value)) end\nend\nif count~=300 then error('human pool count '..count) end\nreturn 'single human pool300'",
+      "capture_as": "FRONTEND"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('ledger missing') end\nlocal pool={}; local count=0\nfor row in GameInfo.JAC_BanseikiPool() do pool[row.LeaderType]=row; count=count+1 end\nif count~=300 then error('game ledger count '..count) end\nlocal parts={version}; local expected={'LEADER_JAC_POOL_O008','LEADER_JAC_ODA_NOBUHIDE'}\nfor pid=0,1 do\n local p=Players[pid]; local c=PlayerConfigurations[pid]; local row=pool[expected[pid+1]]\n if not p or p:IsHuman()~=(pid==0) or c:GetLeaderTypeName()~=expected[pid+1] then error('player '..pid) end\n local id=p:GetProperty('JAC_POOL_PERSON_ID'); local trait=p:GetProperty('JAC_POOL_TRAIT'); local role=p:GetProperty('JAC_POOL_ROLE')\n if id~=row.PersonID or trait~=row.TraitType or role~='LEADER' or c:GetCivilizationTypeName()~=row.CivilizationType then error('person record '..pid..' '..tostring(id)) end\n parts[#parts+1]=table.concat({pid,c:GetLeaderTypeName(),id,trait,role},'|')\nend\nreturn table.concat(parts,';')",
+      "capture_as": "INITIAL_PEOPLE"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('ledger missing') end\nlocal pool={}; local count=0\nfor row in GameInfo.JAC_BanseikiPool() do pool[row.LeaderType]=row; count=count+1 end\nif count~=300 then error('game ledger count '..count) end\nlocal parts={version}; local expected={'LEADER_JAC_POOL_O008','LEADER_JAC_ODA_NOBUHIDE'}\nfor pid=0,1 do\n local p=Players[pid]; local c=PlayerConfigurations[pid]; local row=pool[expected[pid+1]]\n if not p or p:IsHuman()~=(pid==0) or c:GetLeaderTypeName()~=expected[pid+1] then error('player '..pid) end\n local id=p:GetProperty('JAC_POOL_PERSON_ID'); local trait=p:GetProperty('JAC_POOL_TRAIT'); local role=p:GetProperty('JAC_POOL_ROLE')\n if id~=row.PersonID or trait~=row.TraitType or role~='LEADER' or c:GetCivilizationTypeName()~=row.CivilizationType then error('person record '..pid..' '..tostring(id)) end\n parts[#parts+1]=table.concat({pid,c:GetLeaderTypeName(),id,trait,role},'|')\nend\nreturn table.concat(parts,';')",
+      "equals_capture": "INITIAL_PEOPLE"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Pool-SP"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Pool-SP",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('ledger missing') end\nlocal pool={}; local count=0\nfor row in GameInfo.JAC_BanseikiPool() do pool[row.LeaderType]=row; count=count+1 end\nif count~=300 then error('game ledger count '..count) end\nlocal parts={version}; local expected={'LEADER_JAC_POOL_O008','LEADER_JAC_ODA_NOBUHIDE'}\nfor pid=0,1 do\n local p=Players[pid]; local c=PlayerConfigurations[pid]; local row=pool[expected[pid+1]]\n if not p or p:IsHuman()~=(pid==0) or c:GetLeaderTypeName()~=expected[pid+1] then error('player '..pid) end\n local id=p:GetProperty('JAC_POOL_PERSON_ID'); local trait=p:GetProperty('JAC_POOL_TRAIT'); local role=p:GetProperty('JAC_POOL_ROLE')\n if id~=row.PersonID or trait~=row.TraitType or role~='LEADER' or c:GetCivilizationTypeName()~=row.CivilizationType then error('person record '..pid..' '..tostring(id)) end\n parts[#parts+1]=table.concat({pid,c:GetLeaderTypeName(),id,trait,role},'|')\nend\nreturn table.concat(parts,';')",
+      "equals_capture": "INITIAL_PEOPLE"
+    }
+  ]
+}

@@ -1390,6 +1390,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     let mut hotseat_growth_seen = false;
     let mut banseiki_hotseat_growth_seen = false;
     let mut japan_hotseat_growth_seen = false;
+    let mut pool_scenarios_seen = std::collections::BTreeSet::new();
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1405,6 +1406,15 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
             count += 1;
+            if matches!(
+                name.as_str(),
+                "banseiki-pool-bridge.json"
+                    | "banseiki-pool-hotseat.json"
+                    | "banseiki-pool-random-bridge.json"
+                    | "banseiki-pool-single-player.json"
+            ) {
+                pool_scenarios_seen.insert(name.clone());
+            }
             blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
             hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
             banseiki_hotseat_growth_seen |= name == "multiplayer-banseiki-hotseat-growth.json";
@@ -1474,13 +1484,14 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Preserve all prior 144 scenes and apply the same isolation assertions
-    // to the Japan Hotseat game. The witness hold starts no new game.
+    // Preserve all prior scenes and apply the same isolation assertions to
+    // Japan Hotseat and all four pool starts. The witness hold starts no game.
     assert!(blocked_recovery_seen);
     assert!(hotseat_growth_seen);
     assert!(banseiki_hotseat_growth_seen);
-    assert_eq!(count, 145);
+    assert_eq!(count, 149);
     assert!(japan_hotseat_growth_seen);
+    assert_eq!(pool_scenarios_seen.len(), 4);
 }
 
 #[test]

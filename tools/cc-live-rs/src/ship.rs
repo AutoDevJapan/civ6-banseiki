@@ -165,6 +165,7 @@ pub fn live(
         steps.insert(0, json!({"action":"restart_game","timeout":420}));
     }
     driver::prepare(r, p, &live)?;
+    deployment::prepare(r, p, &live)?;
     let mut run = 1;
     while live
         .join(format!("tools/civ6-autotest/artifacts/{name}-{run:02}"))
