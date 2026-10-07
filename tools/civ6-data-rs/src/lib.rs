@@ -174,6 +174,7 @@ pub mod oath_effect_audit;
 pub mod oath_expiry_probe;
 pub mod oath_save_probe;
 pub mod oaths;
+pub mod pool;
 pub mod reigns;
 pub mod trees;
 pub mod unification;
