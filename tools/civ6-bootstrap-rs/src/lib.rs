@@ -2,6 +2,7 @@
 //! MainMenu invocation; this library does not launch or inject into any process.
 //! Successful preparation is not proof of first-AI or world-reset ordering.
 #![deny(unsafe_op_in_unsafe_fn)]
+pub mod protocol;
 
 pub const VERSION: u32 = 0x0880_0002;
 pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";

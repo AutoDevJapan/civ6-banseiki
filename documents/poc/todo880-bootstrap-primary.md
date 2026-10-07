@@ -123,6 +123,20 @@ Clippyの `--all-targets -- -D warnings` は先行検査で成功した。その
 
 ## 追加のcapture-only候補
 
+### cold Menuからのcommon-driver接続
+
+14の原コピー `D:/CC/Work/todo880/bootstrap-preflight-14-artifacts/ruleset-before-world.jsonl` と13ファイルのhash manifestを再照合した。正常6MOD→restart→singleplayer22/HUGE・RULESET_JAC_BANSEIKIのconfigureだけでは、PID45176/FILETIME134358034705706507のinitial_core_baseはnull、Contextは1151404128だった。WorldStart/Load/Install0の結果であり、configureでXP2が用意できるとは扱わない。352のXP2型必須Prepareはこのcold経路に不適合だった。
+
+Prepare v2（72byte、version0x08800002）は、Base-menu Contextを確認してEXE3入口を準備する。target XP2未ロード、Base DLLの固定SHA・factory58DD30・table79E020とEXE globalを照合する。Base自体はPINしない。成功0/READYはpreparedであってruntime-installedではなく、この時のtrace Core/runtime addressは0。world load中のF8510全体の戻りで、target XP2・factory・globalContext0とcaller24B52Dを検証し、その同threadがF24B545でfactoryを呼ぶ前に実Mode6 Installを行う。DllMainでInstallしない。
+
+`civ6-startup-diagnostics bootstrap --request ABSOLUTE.json` を追加し、branchから通常buildされる同helperを使う。内部は既存 `civ6-native-bridge/bridge_controller.rs` を共有し、追加 `bootstrap_controller.rs` が `remote_call`、remote allocation/read/write、module列挙、PID/FILETIME handle、lease、OwnedJobを利用する。CreateRemoteThreadの別実装はない。共通chainは元pathか固定SHAのAMD pathのみ。requestはschema `todo880-bootstrap-controller-v2`、pid、created_filetime、max_seconds1..300、runtime_dll/runtime_sha256、bootstrap_dll/bootstrap_sha256、outputの9項目で、両DLLの絶対pathとSHAを省略できない。ファイルを保持して書込・削除を拒否し、sourceのexport RVAを使う。
+
+Prepare非zero・remote応答不明・controller内部失敗は、既存OwnedJobで元のgame終了を確認してから失敗を返す。Prepare再送0。正常stopは新export `RustBridgeBootstrapStopObservation` を1回呼び、bootstrap記録と既存Mode6観測だけを停止する。code/Core/relayは常駐のまま。header72＋104×128を2回一致・全seq commitで読み、dropped/unknown/未Installは成功にしない。native CompositeTraceも2回一致とpublic header版・dropped/in-flight・行commitを検査し、両raw binとJSONをcreate_newで保全する。フレーム整合は製品受入ではなく、既存public ledger/Mode6の意味検査を置換しない。
+
+runnerには `start_native_bootstrap` / `stop_native_bootstrap` を明示追加した。既存native bridge Sessionのpipe・固定process・終了/回収処理を共用し、fresh restartより後、最初のWorldStart/Loadより前、同processで1回だけ開始する。他native modeと共有しない。通常bridgeのlifecycle拒否は変更せず、この別sessionだけが同一PID/FILETIMEのload前後を確認する。待機中も既存remainingからcontroller/gameの生存を検査する。最後はstopを必須とし、失敗時にもcleanupへ入る。
+
+最小sceneはoffline `civ6-bootstrap-scene PREFIX.json RUNTIME.dll SHA256 BOOTSTRAP.dll SHA256 PHYSICAL_SAVE_NAME` で生成する。14のようなenable_mods/restart/configure prefixを保ち、start-bootstrap→同じ物理saveをload→Gameplay読取→Exit→同save再load→Gameplay読取→stopを追加してvalidateする。DLLのSHAは計算済みの明示入力を要求し、古いruntime DLLや暗黙pathへ戻らない。親のheap初期化修正後のbase DLLを指定する。generatorもcontrollerもworkerから実Gameへは実行していない。
+
 ### 実機09からのresident接続candidate
 
 09（actual `d6c`、observer `3563d7e3…0fd24b`）の13原ファイルを `D:/CC/Work/todo880/context-binding-09-hashes.json` と照合した。旧／incomingは実vtable Core+0xA101E8・仮想関数に一致し、Coreはbase6113984512・size12976128・disk SHA一致。Releaseの旧object1176373344はEXE caller0x24D1D2、最初のSetContextは0x169982、新ContextのSetContextは0x24B5D5、null Releaseは0x24B51Eだった。09でも同値4回はNoopである。後続DLL-loadのearly snapshot不明を解消済みとはしない。

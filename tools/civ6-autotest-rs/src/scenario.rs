@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 41] = [
+pub const ACTIONS: [&str; 43] = [
     "start_native_order_capture",
     "set_native_order_phase",
     "stop_native_order_capture",
@@ -47,6 +47,8 @@ pub const ACTIONS: [&str; 41] = [
     "stop_native_property_trace",
     "start_native_promotion_call_trace",
     "stop_native_promotion_call_trace",
+    "start_native_bootstrap",
+    "stop_native_bootstrap",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -84,6 +86,7 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(normalized))
 }
 pub fn validate_scenario(data: &Value) -> Result<()> {
+    crate::bootstrap_scenario::validate(data)?;
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
     }

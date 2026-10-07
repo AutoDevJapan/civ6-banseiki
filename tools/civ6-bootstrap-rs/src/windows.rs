@@ -8,7 +8,7 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
         Mutex,
     },
 };
@@ -40,6 +40,14 @@ static BOOT_LOADER_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 static STATE: Mutex<Option<Resident>> = Mutex::new(None);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
+static OBSERVING: AtomicBool = AtomicBool::new(true);
+static RECORD_FLIGHTS: AtomicU32 = AtomicU32::new(0);
+struct RecordFlight;
+impl Drop for RecordFlight {
+    fn drop(&mut self) {
+        RECORD_FLIGHTS.fetch_sub(1, Ordering::Release);
+    }
+}
 #[repr(C)]
 struct TraceRow {
     sequence: AtomicU64,
@@ -108,6 +116,14 @@ fn record(
     generation: u64,
     status: u32,
 ) {
+    if !OBSERVING.load(Ordering::Acquire) {
+        return;
+    }
+    RECORD_FLIGHTS.fetch_add(1, Ordering::AcqRel);
+    let _flight = RecordFlight;
+    if !OBSERVING.load(Ordering::Acquire) {
+        return;
+    }
     let seq = TRACE.reserved.fetch_add(1, Ordering::AcqRel);
     let Some(row) = TRACE.rows.get(seq as usize) else {
         TRACE.dropped.fetch_add(1, Ordering::Relaxed);
@@ -188,6 +204,7 @@ struct Resident {
     exe: usize,
     core: usize,
     install: Api,
+    stop: Api,
     close: Api,
     rebuild: Api,
     phase: Phase,
@@ -482,6 +499,9 @@ fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
         return Err("deferred Mode6 Install failed before factory".into());
     }
     s.phase = Phase::Open;
+    if !OBSERVING.load(Ordering::Acquire) && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+        return Err("deferred observation stop failed".into());
+    }
     Ok(())
 }
 extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usize) -> usize {
@@ -544,6 +564,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
     let install = api(bridge, b"BridgeRuntimeInstall\0")?;
     let close = api(bridge, b"BridgeRuntimeClose\0")?;
     let rebuild = api(bridge, b"BridgeRuntimeRebuild\0")?;
+    let stop = api(bridge, b"BridgeRuntimeStopObservation\0")?;
     // Own the lifetime of saved API addresses before any runtime invocation.
     // Mode6 also pins itself, but a file handle alone is not a module reference.
     let mut runtime_module = std::ptr::null_mut();
@@ -602,6 +623,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
         exe,
         core: 0,
         install,
+        stop,
         close,
         rebuild,
         phase: Phase::Prepared,
@@ -663,6 +685,28 @@ pub extern "system" fn RustBridgeBootstrapTrace() -> *const c_void {
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapTraceSize() -> usize {
     size_of::<Trace>()
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapStopObservation(_: *mut c_void) -> u32 {
+    std::panic::catch_unwind(|| -> Result<(), ()> {
+        OBSERVING.store(false, Ordering::Release);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while RECORD_FLIGHTS.load(Ordering::Acquire) != 0 {
+            if std::time::Instant::now() >= deadline {
+                return Err(());
+            }
+            std::thread::yield_now();
+        }
+        let lock = STATE.lock().map_err(|_| ())?;
+        let s = lock.as_ref().ok_or(())?;
+        if s.phase != Phase::Prepared && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+            return Err(());
+        }
+        Ok(())
+    })
+    .ok()
+    .and_then(Result::ok)
+    .map_or(1, |_| 0)
 }
 
 #[cfg(test)]
