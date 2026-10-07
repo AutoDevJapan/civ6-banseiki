@@ -2713,6 +2713,13 @@ impl Runner {
             }
             Err(e) => {
                 self.result_passed = false;
+                self.failure = Some(e.to_string());
+                fs::write(
+                    self.output.join("failure.json"),
+                    serde_json::to_vec_pretty(&crate::reliability::failure_boundary(
+                        None, None, &e,
+                    ))?,
+                )?;
                 self.log("run", "FAIL", &e.to_string())?;
                 1
             }
@@ -2747,12 +2754,15 @@ impl Runner {
     }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
+        // Installation errors are independent of process freshness. The chain
+        // disables automatic restarts, but must still reject missing MODs before
+        // spending a shared game slot launching Steam.
+        let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
+        let stale = self.backend.stale_art(&folders)?;
+        if !stale.is_empty() {
+            return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
+        }
         if self.auto_restart {
-            let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
-            let stale = self.backend.stale_art(&folders)?;
-            if !stale.is_empty() {
-                return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
-            }
             let newest = self.backend.newest_mod(&folders)?;
             let process = self.backend.single_process(30.0)?;
             if let Some(reason) =
@@ -2820,6 +2830,15 @@ impl Runner {
                     self.completed_steps += 1;
                 }
                 Err(e) => {
+                    self.failure = Some(e.to_string());
+                    fs::write(
+                        self.output.join("failure.json"),
+                        serde_json::to_vec_pretty(&crate::reliability::failure_boundary(
+                            Some(step),
+                            Some(i),
+                            &e,
+                        ))?,
+                    )?;
                     if e.kind == ErrorKind::Interrupted {
                         return Err(e);
                     }

@@ -184,9 +184,36 @@ fn test_no_auto_restart_skips_freshness_query() {
     prepare_run(&mut h);
     assert_eq!(h.runner.run().unwrap(), 0);
     let events = h.events();
-    assert!(!events.contains(&"mods".into()));
+    assert!(events.contains(&"mods".into()));
+    assert!(events.contains(&"stale".into()));
     assert!(!events.contains(&"newest".into()));
     assert!(!events.contains(&"launch".into()));
+}
+
+#[test]
+fn chain_mode_missing_mod_stops_before_any_launch_or_tuner_access() {
+    let mut fake = FakeBackend::new();
+    fake.on_mods = Box::new(|| {
+        Err(Error::input(
+            "Scenario mod is not installed: requested UUID",
+        ))
+    });
+    let mut h = Harness::new(
+        json!({"name":"missing mod","steps":[{"action":"restart_game"}]}),
+        fake,
+    );
+    h.runner.auto_restart = false;
+    prepare_run(&mut h);
+    assert_eq!(h.runner.run().unwrap(), 1);
+    assert_eq!(h.events(), ["mods", "disconnect"]);
+    let failure: Value =
+        serde_json::from_slice(&std::fs::read(h.runner.output.join("failure.json")).unwrap())
+            .unwrap();
+    assert_eq!(failure["stage"], "preflight");
+    assert!(failure["message"]
+        .as_str()
+        .unwrap()
+        .contains("requested UUID"));
 }
 
 #[test]
@@ -694,7 +721,7 @@ fn test_first_restart_action_can_start_stopped_game_with_auto_disabled() {
     prepare_run(&mut h);
     assert_eq!(h.runner.run().unwrap(), 0);
     assert_eq!(h.events().iter().filter(|s| *s == "launch").count(), 1);
-    assert!(!h.events().contains(&"mods".into()));
+    assert!(h.events().contains(&"mods".into()));
 }
 
 #[test]

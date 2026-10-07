@@ -1,0 +1,18 @@
+{
+  "name": "Reliability: launch, load, one turn, save, reload, exit",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"restart_game","timeout":420},
+    {"action":"enable_mods","ids":["dfa0717e-4d0b-4370-b693-27fc6758571b"],"exclusive_user_mods":true,"timeout":60},
+    {"action":"load","name":"JAC-Reliability-Seed-1971","exact_name":true,"metrics":true,"timeout":240},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=GameInfo.GlobalParameters['JAC_POC_BUNDLE0_VERSION']; if not r or tostring(r.Value)~='1' then error('minimal mod database missing') end; JAC_RELIABILITY_START_TURN=Game.GetCurrentGameTurn(); return tostring(JAC_RELIABILITY_START_TURN)","timeout":30},
+    {"action":"autoplay","turns":1,"timeout":120},
+    {"action":"ui_lua","state_name":"InGame","code":"if Game.GetCurrentGameTurn()~=JAC_RELIABILITY_START_TURN+1 then error('must advance exactly one turn') end; local s=Game:GetProperty('JAC_POC_BUNDLE0_STATE'); if type(s)~='table' then error('minimal mod script missing') end; return tostring(Game.GetCurrentGameTurn())..'|'..tostring(s.FirstTurn)..'|'..tostring(s.LastTurn)..'|'..tostring(s.TurnsSeen)","capture_as":"SAVED_STATE","timeout":30},
+    {"action":"save","name":"JAC-Reliability-Cycle","metrics":true,"timeout":60},
+    {"action":"exit_to_menu","timeout":60},
+    {"action":"load","name":"JAC-Reliability-Cycle","metrics":true,"timeout":240},
+    {"action":"ui_lua","state_name":"InGame","code":"local s=Game:GetProperty('JAC_POC_BUNDLE0_STATE'); if type(s)~='table' then error('minimal mod script missing after reload') end; return tostring(Game.GetCurrentGameTurn())..'|'..tostring(s.FirstTurn)..'|'..tostring(s.LastTurn)..'|'..tostring(s.TurnsSeen)","equals_capture":"SAVED_STATE","timeout":30},
+    {"action":"exit_to_menu","timeout":60}
+  ]
+}

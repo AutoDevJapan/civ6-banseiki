@@ -354,6 +354,16 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
     let t = f.trace();
     assert!(t.connects.is_empty());
     assert!(t.state_queries.is_empty());
+    let boundary: Value =
+        serde_json::from_slice(&fs::read(f.output.join("failure.json")).unwrap()).unwrap();
+    assert_eq!(boundary["stage"], "preflight");
+    assert_eq!(boundary["message"], "Multiple Civ VI processes");
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert!(result["failure"]
+        .as_str()
+        .unwrap()
+        .contains("Multiple Civ VI processes"));
     let last = f.records().pop().unwrap();
     assert_eq!(
         (last["action"].as_str(), last["status"].as_str()),
