@@ -243,10 +243,11 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
 end
 -- Load boundary. The forced pass closes every saved generation and lets a
 -- fresh store commit at its all-closed handshake. Only after that pass
--- published, the normal pass revalidates the restored paid sets.
+-- published, the normal pass revalidates the restored paid sets read-only:
+-- loading never confirms a saved debit or changes the acquisition store.
 local function InitializeProductionAdmission()
     SyncProductionAdmission(true);
-    if normalPaidPublished then SyncProductionAdmission(false); end
+    if normalPaidPublished then PersonaEvents.ReadOnly(SyncProductionAdmission, false); end
 end
 -- Explicit synchronized refresh after a controller install/rebuild. The caller
 -- supplies no eligibility, payment, flag or native-generation authority.
