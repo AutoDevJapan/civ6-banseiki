@@ -2460,6 +2460,10 @@ fn verification_all_new_chunks_validate_and_compile_as_lua() {
 }
 
 #[test]
+#[expect(
+    clippy::manual_repeat_n,
+    reason = "Keep the existing equality assertion and exact expected metrics-group sequence unchanged"
+)]
 fn verification_full_map_measurements_cover_continuous_play_and_both_reloads() {
     let base = scenario("japan-15km-200turn-full.json");
     for (turns, check_turns) in [
@@ -2595,6 +2599,10 @@ fn verification_saved_state_snapshot_uses_indexed_city_iterator_and_detects_chan
 }
 
 #[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing typed Lua boundary equality assertion, expected true value and diagnostic message unchanged"
+)]
 fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger() {
     let kinds = [
         "ERA_ANCIENT",
@@ -2609,7 +2617,8 @@ fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_
         "ERA_JAC_SHOHO",
         "ERA_JAC_KEIAN",
     ];
-    let cases: [(&str, Vec<(i64, i64)>, Vec<(i64, i64)>); 3] = [
+    type BoundaryCase<'a> = (&'a str, Vec<(i64, i64)>, Vec<(i64, i64)>);
+    let cases: [BoundaryCase<'_>; 3] = [
         (
             "sengoku-era-reigns-epic.json",
             vec![(0, 1), (1, 98), (2, 108), (3, 163)],

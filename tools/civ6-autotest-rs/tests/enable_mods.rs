@@ -124,6 +124,10 @@ fn static_gate_is_disabled_by_default_but_an_explicit_diagnostic_can_enable_it()
 }
 
 #[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing typed Lua equality assertions that both unrelated diagnostic MOD gates are disabled"
+)]
 fn persona_runs_select_their_required_mods_after_another_diagnostic() {
     const PERSONA: &str = "91cf7b65-54bb-4f69-a452-19a65527cde2";
     const BOUNDARY: &str = "4a72b1c0-958b-4bd5-81e4-a094f86ce643";

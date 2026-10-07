@@ -214,23 +214,35 @@ fn stop_register_evidence(
         } else if wait == WAIT_OBJECT_0 {
             exited += 1;
             "signaled_handle_coverage_unknown"
-        } else if wait != WAIT_TIMEOUT || !d.held.contains(&tid) || c.is_err() {
+        } else if wait != WAIT_TIMEOUT || !d.held.contains(&tid) {
             unknown += 1;
             "context_unproven"
-        } else if steps.contains_key(&tid) {
-            pending += 1;
-            "pending_instruction_not_completed"
-        } else if threads.generations.get(&tid) != Some(&epoch.generation)
-            || d.threads[&tid].armed_sites != epoch.sites
-        {
-            mismatched += 1;
-            "generation_or_sites_mismatch"
-        } else if !installed_sites_match_context(&epoch.sites, &c.unwrap()) {
-            mismatched += 1;
-            "debug_register_mismatch"
         } else {
-            matched += 1;
-            "matched_at_stop_only"
+            match c {
+                Err(_) => {
+                    unknown += 1;
+                    "context_unproven"
+                }
+                Ok(_) if steps.contains_key(&tid) => {
+                    pending += 1;
+                    "pending_instruction_not_completed"
+                }
+                Ok(_)
+                    if threads.generations.get(&tid) != Some(&epoch.generation)
+                        || d.threads[&tid].armed_sites != epoch.sites =>
+                {
+                    mismatched += 1;
+                    "generation_or_sites_mismatch"
+                }
+                Ok(c) if !installed_sites_match_context(&epoch.sites, &c) => {
+                    mismatched += 1;
+                    "debug_register_mismatch"
+                }
+                Ok(_) => {
+                    matched += 1;
+                    "matched_at_stop_only"
+                }
+            }
         };
         row["disposition"] = json!(disposition);
         rows.push(row);
@@ -1549,7 +1561,6 @@ mod tests {
                     continue;
                 }
                 d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
-                let status;
                 if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
                     && unsafe { event.u.Exception.ExceptionRecord.ExceptionCode }
                         == EXCEPTION_SINGLE_STEP
@@ -1575,7 +1586,7 @@ mod tests {
                     assert_eq!(d.terminal, TerminalKind::Detached);
                     return path;
                 }
-                status = d.handle_event(&event).unwrap();
+                let status = d.handle_event(&event).unwrap();
                 d.continue_pending_with_status(status).unwrap();
                 if ready_barrier.advance(&mut d, &event) {
                     ready_tx.send(()).unwrap();

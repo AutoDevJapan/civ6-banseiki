@@ -602,6 +602,10 @@ fn test_fixture_prepare_rejects_incorrect_native_title_grant_before_join() {
 }
 
 #[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing typed Lua boundary equality assertions and expected boolean values unchanged"
+)]
 fn test_native_city_transfer_and_spy_creation_do_not_write_persona_state() {
     let h = Boundary::new();
     h.fixture();

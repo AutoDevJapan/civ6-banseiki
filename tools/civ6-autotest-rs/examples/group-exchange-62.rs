@@ -1,7 +1,7 @@
 //! Host sequence for one native captive-group negotiation from the T62 save.
 //! The module supplies context-specific diagnostic glue, not game outcomes.
 #[path = "../src/spy_group_exchange.rs"]
-mod exchange;
+pub(crate) mod exchange;
 use serde_json::{json, Value};
 fn ui(code: &str) -> Value {
     json!({"action":"ui_lua","state_name":"InGame","code":code,"preserve_diplomacy_session":true})

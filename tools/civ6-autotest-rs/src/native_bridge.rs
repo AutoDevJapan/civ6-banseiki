@@ -2191,6 +2191,10 @@ mod platform {
         }
 
         #[test]
+        #[expect(
+            clippy::bool_assert_comparison,
+            reason = "Keep the existing equality assertion that unverified production denial evidence must remain an error"
+        )]
         fn production_terminal_accepts_invalid_raw_value_as_denial_evidence_only() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("production.jsonl");

@@ -4,7 +4,7 @@
 //! automatically reload the input save after a native operation was sent.
 #[path = "../src/spy_returned_preparation.rs"]
 #[allow(dead_code)]
-mod preparation;
+pub(crate) mod preparation;
 use serde_json::{json, Value};
 const KEY: &str = "JAC_BOUNDARY_RETURNED_PREPARATION";
 const UNKNOWN_KEY: &str = preparation::UNKNOWN_PROPERTY;

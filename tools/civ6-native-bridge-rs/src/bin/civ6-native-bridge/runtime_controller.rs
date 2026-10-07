@@ -156,7 +156,6 @@ pub(super) fn run(
     chain_pid: u32,
     target: usize,
     original_entries: ([u8; 8], [u8; 8]),
-    _original_prefix: [u8; PROPERTY_PREFIX_LEN],
 ) -> Result<(), String> {
     let (original, property_original) = original_entries;
     let base = target - PINNED_CAN_EVER_RVA;

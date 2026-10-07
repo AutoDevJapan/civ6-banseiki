@@ -79,6 +79,11 @@ pub struct FakeBackend {
     pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
 }
+impl Default for FakeBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl FakeBackend {
     pub fn new() -> Self {
         Self {

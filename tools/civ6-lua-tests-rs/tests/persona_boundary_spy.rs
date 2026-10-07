@@ -115,6 +115,10 @@ impl SpyHarness {
 }
 
 #[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing strict Lua boolean equality assertion and expected off-map presence value unchanged"
+)]
 fn accepted_travel_is_observed_on_first_nonbusy_frame() {
     let h = SpyHarness::new();
     h.case("spy_home", (0, 15));
