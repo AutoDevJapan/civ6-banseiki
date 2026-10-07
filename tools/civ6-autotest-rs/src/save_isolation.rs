@@ -10,6 +10,34 @@ struct State {
     existed: bool,
     original_digest: Option<String>,
 }
+#[cfg(windows)]
+fn volume(path: &Path) -> Result<String> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
+    };
+    let wide = path
+        .as_os_str()
+        .to_string_lossy()
+        .encode_utf16()
+        .chain(Some(0))
+        .collect::<Vec<_>>();
+    let mut mount = vec![0u16; 32768];
+    let mut name = vec![0u16; 128];
+    if unsafe { GetVolumePathNameW(wide.as_ptr(), mount.as_mut_ptr(), mount.len() as u32) } == 0
+        || unsafe {
+            GetVolumeNameForVolumeMountPointW(mount.as_ptr(), name.as_mut_ptr(), name.len() as u32)
+        } == 0
+    {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    let n = name.iter().position(|n| *n == 0).unwrap_or(name.len());
+    Ok(String::from_utf16_lossy(&name[..n]))
+}
+#[cfg(unix)]
+fn volume(path: &Path) -> Result<String> {
+    use std::os::unix::fs::MetadataExt;
+    Ok(fs::metadata(path)?.dev().to_string())
+}
 fn digest(path: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
@@ -17,11 +45,15 @@ fn digest(path: &Path) -> Result<String> {
     let mut entries = fs::read_dir(path)?.collect::<std::result::Result<Vec<_>, _>>()?;
     entries.sort_by_key(|e| e.file_name());
     for e in entries {
-        h.update(e.file_name().to_string_lossy().as_bytes());
-        h.update([0]);
+        let name = e.file_name().to_string_lossy().into_owned();
+        h.update((name.len() as u64).to_le_bytes());
+        h.update(name.as_bytes());
         if e.path().is_dir() {
+            h.update([1]);
             h.update(digest(&e.path())?.as_bytes());
         } else {
+            h.update([0]);
+            h.update(e.metadata()?.len().to_le_bytes());
             let mut f = fs::File::open(e.path())?;
             let mut buf = [0; 65536];
             loop {
@@ -54,6 +86,11 @@ pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
         .canonicalize()?
         .join("auto");
     let archive = archive.canonicalize()?;
+    if volume(original.parent().unwrap())? != volume(&archive)? {
+        return Err(Error::input(
+            "autosave isolation requires an archive on the same volume; state was not created",
+        ));
+    }
     no_links(&archive)?;
     let backup = archive.join("owner-auto-original");
     let test = archive.join("test-auto");
@@ -88,14 +125,37 @@ pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
     file.sync_all()?;
     drop(file);
     if existed {
-        fs::rename(&original, &backup)?;
+        if let Err(e) = fs::rename(&original, &backup) {
+            fs::remove_file(state).map_err(|cleanup| {
+                Error::input(format!(
+                    "autosave rename failed: {e}; planned state cleanup failed: {cleanup}"
+                ))
+            })?;
+            return Err(e.into());
+        }
     }
+    // Immutable first line plus an append-only phase: a crash cannot truncate
+    // the original recovery paths. Any partial second line is uncertain moved.
+    let mut phase = fs::OpenOptions::new().append(true).open(state)?;
+    phase.write_all(b"{\"phase\":\"renamed\"}\n")?;
+    phase.sync_all()?;
+    drop(phase);
     fs::create_dir(&original)?;
     Ok(())
 }
 pub fn restore(profile: &Path, state: &Path) -> Result<()> {
     let bytes = fs::read(state)?;
-    let s: State = serde_json::from_slice(&bytes)?;
+    let split = bytes
+        .iter()
+        .position(|b| *b == b'\n')
+        .ok_or_else(|| Error::input("autosave state lacks a durable first record"))?;
+    let s: State = serde_json::from_slice(&bytes[..split])?;
+    let restored = bytes[split + 1..]
+        .split(|b| *b == b'\n')
+        .rfind(|line| !line.is_empty())
+        .and_then(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
+        .is_some_and(|v| v["phase"] == "restored");
+    let moved_or_uncertain = bytes[split + 1..].iter().any(|b| !b.is_ascii_whitespace());
     let expected = profile
         .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single")
         .canonicalize()?
@@ -108,9 +168,20 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
     no_links(&s.archive)?;
     let backup = s.archive.join("owner-auto-original");
     let test = s.archive.join("test-auto");
+    if restored {
+        if backup.exists() || (s.existed && !s.original.exists()) {
+            return Err(Error::input(
+                "completed autosave recovery record contradicts filesystem",
+            ));
+        }
+        fs::remove_file(state)?;
+        return Ok(());
+    }
     // A crash before the first rename leaves the original folder untouched.
     if s.existed && !backup.exists() {
-        if !s.original.exists() || Some(digest(&s.original)?) != s.original_digest {
+        if !s.original.exists()
+            || (moved_or_uncertain && Some(digest(&s.original)?) != s.original_digest)
+        {
             return Err(Error::input("original autosave archive is missing and current folder is not the original; keeping recovery record"));
         }
         fs::remove_file(state)?;
@@ -137,12 +208,116 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
         no_links(&backup)?;
         fs::rename(&backup, &s.original)?;
     }
+    let mut phase = fs::OpenOptions::new().append(true).open(state)?;
+    phase.write_all(b"{\"phase\":\"restored\"}\n")?;
+    phase.sync_all()?;
+    drop(phase);
     fs::remove_file(state)?;
     Ok(())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    #[test]
+    fn completed_recovery_receipt_does_not_block_new_owner_saves_after_delete_failure() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"owner").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin(p, &archive, &state).unwrap();
+        fs::write(original.join("save"), b"test").unwrap();
+        let pin = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(3)
+            .open(&state)
+            .unwrap();
+        assert!(restore(p, &state).is_err());
+        assert_eq!(fs::read(original.join("save")).unwrap(), b"owner");
+        fs::write(original.join("save"), b"later owner save").unwrap();
+        drop(pin);
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert_eq!(
+            fs::read(original.join("save")).unwrap(),
+            b"later owner save"
+        );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn first_rename_denied_by_windows_removes_only_planned_receipt() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"owner").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        let pin = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(3)
+            .custom_flags(0x02000000)
+            .open(&original)
+            .unwrap();
+        assert!(begin(p, &archive, &state).is_err());
+        assert!(!state.exists());
+        assert_eq!(fs::read(original.join("save")).unwrap(), b"owner");
+        assert!(!archive.join("owner-auto-original").exists());
+        drop(pin);
+    }
+    #[test]
+    fn planned_crash_record_does_not_block_later_legitimate_autosaves() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"before").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        let s = State {
+            original: original.canonicalize().unwrap(),
+            archive,
+            existed: true,
+            original_digest: Some(digest(&original).unwrap()),
+        };
+        fs::write(&state, serde_json::to_string(&s).unwrap() + "\n").unwrap();
+        fs::write(original.join("save"), b"later legitimate owner save").unwrap();
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert_eq!(
+            fs::read(original.join("save")).unwrap(),
+            b"later legitimate owner save"
+        );
+    }
+    #[test]
+    fn changed_original_backup_is_retained_and_never_replaces_the_current_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"owner").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin(p, &archive, &state).unwrap();
+        fs::write(archive.join("owner-auto-original/save"), b"changed").unwrap();
+        fs::write(original.join("save"), b"test").unwrap();
+        assert!(restore(p, &state).is_err());
+        assert!(state.exists());
+        assert_eq!(fs::read(original.join("save")).unwrap(), b"test");
+        assert_eq!(
+            fs::read(archive.join("owner-auto-original/save")).unwrap(),
+            b"changed"
+        );
+    }
     #[test]
     fn autosaves_never_overwrite_original_bytes_and_are_restored() {
         let dir = tempfile::tempdir().unwrap();

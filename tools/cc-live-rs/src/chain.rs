@@ -1315,11 +1315,13 @@ fn main_owned(
             .managed()
             .timeout(timeout);
         command.lease = lease.clone();
-        if options.reliability
-            && p.live()
-                .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs")
-                .is_file()
-        {
+        let auto_source = p
+            .live()
+            .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs");
+        if options.reliability && !auto_source.is_file() && p.live().join(".git").exists() {
+            return Err("reliability checkout lacks autosave isolation source; refusing to run against original autosaves".into());
+        }
+        if options.reliability && auto_source.is_file() {
             let auto = p
                 .live()
                 .join("tools/target/release/civ6-save-isolation.exe");
