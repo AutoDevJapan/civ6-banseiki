@@ -18,7 +18,6 @@ pub mod startup_idle;
 pub mod startup_screen;
 pub mod time;
 pub mod tuner;
-pub mod tuner_endpoint;
 pub use error::{Error, ErrorKind, Result};
 
 pub fn repo_root() -> std::path::PathBuf {

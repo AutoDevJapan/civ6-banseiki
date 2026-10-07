@@ -262,16 +262,8 @@ impl Backend for SystemBackend {
     }
     fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
         if self.client.is_none() {
-            let deadline = crate::time::monotonic() + timeout;
-            let actual_port = crate::tuner_endpoint::resolve(port)?;
-            let remaining = deadline - crate::time::monotonic();
-            if remaining <= 0.0 {
-                return Err(Error::tuner(
-                    "FireTuner endpoint discovery exceeded the connection deadline",
-                ));
-            }
             self.client = Some(
-                crate::tuner::TunerClient::connect(actual_port, remaining).map_err(|e| {
+                crate::tuner::TunerClient::connect(port, timeout).map_err(|e| {
                     Error::tuner(format!(
                         "FireTuner に接続できません（Civ6 が起動していない可能性）: {e}"
                     ))
