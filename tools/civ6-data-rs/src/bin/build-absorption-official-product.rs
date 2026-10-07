@@ -834,8 +834,14 @@ local function Send(before,previous)
   end
   assert(count==1,'AI must perform exactly one operation for this recipient on this turn')
   local op=assert(operation);local id=assert(op.Identity);local identity=assert(op.EnvoyIdentity)
+  print('[JAC_OFFICIAL_SEND_EVIDENCE] turn='..Game.GetCurrentGameTurn()..' key='..tostring(key)..
+    ' before='..R.Canonical({Turn=before.Turn,Pool=before.Pool,Received=before.Received})..
+    ' actual='..R.Canonical({Pool=Players[t.To]:GetInfluence():GetTokensToGive(),Received=Players[t.From]:GetInfluence():GetTokensReceived(t.To)})..
+    ' operation='..R.Canonical(op))
   assert(id.Command=='SEND_ENVOY' and id.From==t.From and id.To==t.To and id.ExpectedEnvoys==before.Received,
-    'wrong AI envoy operation or expected actual received count')
+    'wrong AI envoy operation or expected actual received count: command='..tostring(id.Command)..
+    ' from='..tostring(id.From)..'/'..t.From..' to='..tostring(id.To)..'/'..t.To..
+    ' expected='..tostring(id.ExpectedEnvoys)..' before='..tostring(before.Received))
   assert(identity.Route=='OFFICIAL' and identity.CountryID=='VATICAN_CITY' and identity.From==t.From and identity.To==t.To,
     'wrong saved official envoy identity')
   assert(identity.CivilizationType==view.Country.Profile.CivilizationType and identity.LeaderType==view.Country.Profile.LeaderType,
@@ -2082,7 +2088,7 @@ JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=functio
             "../../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua"
         ))
         .exec()?;
-        lua.load("JAC_AbsorptionGameplay.Rules.Copy=JAC_AbsorptionRules.Copy")
+        lua.load("JAC_AbsorptionGameplay.Rules.Copy=JAC_AbsorptionRules.Copy; JAC_AbsorptionGameplay.Rules.Canonical=JAC_AbsorptionRules.Canonical")
             .exec()?;
         lua.load(mutation).exec()?;
         Ok(lua.load(format!("{P1}\n{CORE}\n{code}")).exec())
