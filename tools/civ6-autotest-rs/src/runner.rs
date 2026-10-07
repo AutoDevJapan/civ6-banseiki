@@ -2150,14 +2150,13 @@ impl Runner {
                     self.bind_persona_launch()?;
                     if pin_process && startup.launch_requested {
                         startup.process = self.backend.pin_startup_process(hwnd)?;
-                        if self.persona_runtime_restart {
-                            if startup.process.is_none()
-                                || startup.process != self.persona_launched_process
-                            {
-                                return Err(Error::input(
-                                    "persona window differs from the bound launch process",
-                                ));
-                            }
+                        if self.persona_runtime_restart
+                            && (startup.process.is_none()
+                                || startup.process != self.persona_launched_process)
+                        {
+                            return Err(Error::input(
+                                "persona window differs from the bound launch process",
+                            ));
                         }
                     }
                     self.backend.require_dx11(hwnd)?;
@@ -3808,7 +3807,8 @@ impl Runner {
         let autoplay_owner = uuid::Uuid::new_v4().simple().to_string();
         let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nJAC_AUTOTEST_AUTO_OWNER = '{autoplay_owner}'\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() if JAC_AUTOTEST_AUTO_OWNER == '{autoplay_owner}' then JAC_AUTOTEST_AUTO_DONE = true end end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
         let mut autoplay_attempted = false;
-        let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
+        type AutoplayExecution = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
+        let execution = (|| -> Result<AutoplayExecution> {
             let (pid, initial_memory, started) = if options.record_metrics {
                 let process = self.backend.single_process(30.0)?.ok_or_else(|| {
                     Error::scenario("Civ VI process disappeared before metrics sampling")
