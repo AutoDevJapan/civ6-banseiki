@@ -11,6 +11,41 @@ pub fn state_name_eq(a: &str, b: &str) -> bool {
     a.chars().default_caseless_match(b.chars())
 }
 
+/// Select one context, preferring only the explicitly registered Japan UI wrappers.
+/// Multiple wrappers are ambiguous even when there is a unique stock context.
+pub fn state_position<'a>(states: impl IntoIterator<Item = &'a str>, name: &str) -> Option<usize> {
+    let alias = [
+        ("MainMenu", "JAC_JapanMainMenu"),
+        ("StagingRoom", "JAC_JapanStagingRoom"),
+    ]
+    .into_iter()
+    .find(|(stock, _)| state_name_eq(stock, name))
+    .map(|(_, wrapper)| wrapper);
+    let mut stock_matches = Vec::new();
+    let mut alias_matches = Vec::new();
+    for (position, state) in states.into_iter().enumerate() {
+        if state_name_eq(state, name) {
+            stock_matches.push(position);
+        }
+        if alias.is_some_and(|wrapper| state_name_eq(state, wrapper)) {
+            alias_matches.push(position);
+        }
+    }
+    let matches = if alias_matches.is_empty() {
+        &stock_matches
+    } else {
+        &alias_matches
+    };
+    match matches.as_slice() {
+        [position] => Some(*position),
+        _ => None,
+    }
+}
+
+pub fn state_available(states: &[String], name: &str) -> bool {
+    state_position(states.iter().map(String::as_str), name).is_some()
+}
+
 pub const PORT: u16 = 4318;
 /// Parse an integer CLI argument without imposing the socket port range until use.
 #[derive(Clone, Debug)]
@@ -346,18 +381,14 @@ impl TunerClient {
 
     fn state_index_deadline(&mut self, name: &str, deadline: f64) -> Result<i64> {
         let pairs = self.list_state_pairs_deadline(deadline)?;
-        let matches: Vec<i64> = pairs
-            .iter()
-            .filter(|(_, state)| state_name_eq(state, name))
-            .map(|(index, _)| *index)
-            .collect();
-        if matches.len() != 1 {
+        let position = state_position(pairs.iter().map(|(_, state)| state.as_str()), name);
+        let Some(position) = position else {
             let names: Vec<&str> = pairs.iter().map(|(_, state)| state.as_str()).collect();
             return Err(Error::tuner(format!(
                 "Lua state {name:?} not uniquely available; states: {names:?}"
             )));
-        }
-        Ok(matches[0])
+        };
+        Ok(pairs[position].0)
     }
 
     fn send_lua_once(
