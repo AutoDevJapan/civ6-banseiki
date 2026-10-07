@@ -1,4 +1,5 @@
 //! Synchronous Gameplay acquisition sets and the retained private diagnostic.
+mod join_transaction;
 mod normal;
 pub mod price_routes;
 pub mod scenario;

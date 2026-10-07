@@ -623,8 +623,8 @@ local function proof(p,s,owner,d,key,source)
         integer(p.turn) and p.turn>=s.turn and p.turn<=Game.GetCurrentGameTurn() and
         (p.spent==nil or integer(p.spent))
 end
-local function readState(ignoreAdmissionSchema)
-    local s=Game:GetProperty(STORE); local c=catalog()
+local function readState(ignoreAdmissionSchema,snapshot)
+    local s=snapshot or Game:GetProperty(STORE); local c=catalog()
     local prices=c and type(s)=='table' and c.boundPrices(s.binding)
     if not prices or s.version~=3 or s.source~=SOURCE or
        s.baseline~=0 or not integer(s.turn) or s.turn~=configuredStartTurn() or not integer(s.sequence) or
@@ -771,15 +771,28 @@ function E.Cost(row)
        (phase~='GREAT_PERSON' and phase~='EVOLVING' and phase~='GOVERNOR') then return nil end
     return cost
 end
-function E.RecordJoinPrice(owner,source,row)
-    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return false end
+local function same(a,b)
+    if type(a)~=type(b) then return false end
+    if type(a)~='table' then return a==b end
+    for key,value in pairs(a) do if not same(value,b[key]) then return false end end
+    for key in pairs(b) do if a[key]==nil then return false end end
+    return true
+end
+function E.PrepareJoinPrice(owner,source,row)
+    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return nil end
+    local cfg=integer(source,64) and PlayerConfigurations[source]
+    if not Player(owner,true) or not cfg or source==owner or cfg:GetLeaderTypeName()~=row.LeaderType or
+       cfg:GetCivilizationTypeName()~=row.CivilizationType then return nil end
     if E.Enabled() then
-        Set(row.LeaderType,'PRICE_CONTRACT',{version=1,leader=row.LeaderType,owner=owner,sourcePlayer=source,
-            governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=row.EvolutionCost})
-        return true
+        local before=Get(row.LeaderType,'PRICE_CONTRACT')
+        local after={version=1,leader=row.LeaderType,owner=owner,sourcePlayer=source,
+            governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=row.EvolutionCost}
+        if before~=nil and not same(before,after) then return nil end
+        return {leader=row.LeaderType,owner=owner,source=source,key=Key(row.LeaderType,'PRICE_CONTRACT'),before=copy(before),after=after}
     end
     local s,c=state(); local d=s and c.leaders[row.LeaderType]
-    if not d or s.sources[d.leader]~=source or not s.accounts[owner] then return false end
+    if not d or s.sources[d.leader]~=source or not s.accounts[owner] or s.people[d.leader] then return nil end
+    local before=copy(s); s=copy(s) -- preparation must never mutate a Game table
     if not s.prices then
         -- Import only original joining prices that still match the d21
         -- commitment and the joined identities; never repair a damaged amount.
@@ -787,7 +800,7 @@ function E.RecordJoinPrice(owner,source,row)
         for _,prior in ipairs(c.rows) do
             local who=Get(prior.leader,'OWNER')
             if who~=nil then
-                if not joined(who,prior,Get(prior.leader,'SOURCE')) then return false end
+                if not joined(who,prior,Get(prior.leader,'SOURCE')) then return nil end
                 s.prices[prior.leader]={version=1,leader=prior.leader,owner=who,sourcePlayer=Get(prior.leader,'SOURCE'),
                     binding=s.binding,
                     governorType=prior.governorType,governor=prior.governor,governorHash=prior.governorHash,
@@ -796,13 +809,62 @@ function E.RecordJoinPrice(owner,source,row)
         end
     end
     local existing=s.prices[d.leader]
-    if existing and (existing.owner~=owner or existing.sourcePlayer~=source or existing.cost~=row.EvolutionCost) then return false end
-    s.prices[d.leader]={version=1,leader=d.leader,owner=owner,sourcePlayer=source,
+    local contract={version=1,leader=d.leader,owner=owner,sourcePlayer=source,
         binding=c.binding,
         governorType=d.governorType,governor=d.governor,governorHash=d.governorHash,
         personType=d.personType,person=d.person,personHash=d.personHash,baseType=d.baseType,cost=row.EvolutionCost}
-    Game:SetProperty(STORE,s)
-    return true
+    if existing and not same(existing,contract) then return nil end
+    s.prices[d.leader]=contract
+    return {leader=row.LeaderType,owner=owner,source=source,key=STORE,before=before,after=s}
+end
+function E.RecordJoinPrice(owner,source,row,plan)
+    local checked=E.PrepareJoinPrice(owner,source,row)
+    if not plan or not checked or plan.key~=checked.key or
+       not same(plan.before,checked.before) or not same(plan.after,checked.after) then return false end
+    Game:SetProperty(plan.key,copy(plan.after))
+    return same(Game:GetProperty(plan.key),plan.after)
+end
+function E.UndoJoinPrice(plan)
+    if type(plan)~='table' or not Definition(plan.leader) or not integer(plan.owner,64) or
+       not integer(plan.source,64) or plan.owner==plan.source or
+       (plan.key~=STORE and plan.key~=Key(plan.leader,'PRICE_CONTRACT')) then return false end
+    if plan.key==STORE then
+        if type(plan.before)~='table' or type(plan.after)~='table' then return false end
+        local before,after=copy(plan.before),copy(plan.after)
+        before.prices=nil; before.priceVersion=nil; after.prices=nil; after.priceVersion=nil
+        if not same(before,after) then return false end -- undo has no authority over spending/receipts/sources
+        local prior,oldCatalog=readState(false,plan.before)
+        local nextState=readState(false,plan.after)
+        local target=nextState and nextState.prices and nextState.prices[plan.leader]
+        if not prior or not target or target.owner~=plan.owner or target.sourcePlayer~=plan.source then return false end
+        if prior.prices then
+            for leader,p in pairs(prior.prices) do if not same(p,nextState.prices[leader]) then return false end end
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader and not same(p,prior.prices[leader]) then return false end
+            end
+        else
+            -- A legacy import may add only the existing joining contracts,
+            -- preserving their original binding and amount.
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader then
+                    local d=oldCatalog.leaders[leader]
+                    if not d or p.binding~=prior.binding or p.cost~=d.joinCost or
+                       not joined(p.owner,d,p.sourcePlayer) then return false end
+                end
+            end
+        end
+    else
+        local row=Definition(plan.leader); local p=plan.after
+        if type(p)~='table' or not integer(p.cost,4) or p.cost<1 or
+           not same(p,{version=1,leader=plan.leader,owner=plan.owner,sourcePlayer=plan.source,
+              governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=p.cost}) or
+           (plan.before~=nil and not same(plan.before,p)) then return false end
+    end
+    local current=Game:GetProperty(plan.key)
+    if same(current,plan.before) then return true end
+    if not same(current,plan.after) then return false end -- never repair a damaged/foreign ledger
+    Game:SetProperty(plan.key,copy(plan.before))
+    return same(Game:GetProperty(plan.key),plan.before)
 end
 -- Capture freshness before the existing admission initializer claims schema 3.
 -- Settings and a later ready state cannot recreate this lexical candidate.
@@ -1825,60 +1887,163 @@ GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
     Player(owner, true):SetProperty('JAC_PERSONA_PROJECT_RECEIPT', params.ProjectionSerial);
 end);
 -- END RUST GENERATED PAID ASSIGNMENT GLUE
-local function Join(owner, source, personality, trait)
-    local p, other = Player(owner, true), Player(source, false);
-    if not p or not other or owner == source then return Finish(owner, "INVALID"); end
-    local config = PlayerConfigurations[source];
-    local leader = config and config:GetLeaderTypeName();
-    local row = Definition(leader);
-    local ownConfig = PlayerConfigurations[owner];
-    if not row or not ownConfig or not Definition(ownConfig:GetLeaderTypeName()) or
-       config:GetCivilizationTypeName() ~= row.CivilizationType then return Finish(owner, "INVALID"); end
-    if (personality ~= nil and not PERSONALITIES[personality]) or
-       (trait ~= nil and not TRAITS[trait]) then return Finish(owner, "INVALID_METADATA"); end
-    -- A world-unique person, even if callers try another owner or a different source slot.
-    if Get(leader, "OWNER") ~= nil then
-        return Finish(owner, Get(leader, "OWNER") == owner and "ALREADY_JOINED" or "OTHER_OWNER");
-    end
-    if trait ~= nil and trait ~= row.Trait then return Finish(owner, "INVALID_METADATA"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " native-governor");
-    local native = NativeGovernor(owner, row);
-    if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
-    if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
-    local city = p:GetCities():GetCapitalCity();
-    if not city then return Finish(owner, "NO_CITY"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " find-person-before");
-    local unit, ready = FindPerson(owner, row);
-    if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
-    if not unit then
-        -- Gameplay grant: DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111.
-        -- CreatePerson is a Tuner placement API and does not return here.
-        local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
-        local class = GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
-        local era = GameInfo.Eras[individual.EraType];
-        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-before");
-        Game.GetGreatPeople():GrantPerson(individual.Hash, class.Hash, era.Hash, 0, owner, false);
-        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-after");
-        unit = FindPerson(owner, row);
-    end
-    if not unit then return Finish(owner, "SPAWN_FAILED"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " person-identified");
-    if not PersonaEvents.RecordJoinPrice(owner, source, row) then return Finish(owner, "NATIVE_UNAVAILABLE"); end;
-    Set(leader, "SOURCE", source);
-    Set(leader, "NAME", row.Name);
-    Set(leader, "PORTRAIT", row.PortraitIcon);
-    -- Designed defaults are data, not a claim that historical psychology is known.
-    Set(leader, "PERSONALITY", personality or row.Personality);
-    Set(leader, "TRAIT", row.Trait);
-    Set(leader, "EVOLUTION_COST", row.EvolutionCost);
-    Set(leader, "UNIT", unit:GetID());
-    Set(leader, "OWNER", owner);
-    Set(leader, "STATE", "GREAT_PERSON");
-    Set(leader, "MERIT", 0);
-    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
-    SyncProductionAdmission(false, owner);
-    return Finish(owner, "JOINED");
+-- BEGIN RUST PERSONA JOIN TRANSACTION
+-- Generated by civ6-persona-events-rs::join_transaction.
+local joinBusy = {};
+local joinFields = {"SOURCE","NAME","PORTRAIT","PERSONALITY","TRAIT","EVOLUTION_COST","UNIT","OWNER","STATE","MERIT"};
+local function JoinEqual(a,b)
+    if type(a)~=type(b) then return false; end
+    if type(a)~="table" then return a==b; end
+    for key,value in pairs(a) do if not JoinEqual(value,b[key]) then return false; end end
+    for key in pairs(b) do if a[key]==nil then return false; end end
+    return true;
 end
+local function JoinPeople(owner,row)
+    local individual=GameInfo.GreatPersonIndividuals[row.PersonType];
+    local class=individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+    local kind=class and GameInfo.Units[class.UnitType];
+    local p=Player(owner,false); if not p or not kind then return nil; end
+    local units={};
+    for _,unit in p:GetUnits():Members() do
+        if unit:GetType()==kind.Index then
+            local person=unit:GetGreatPerson(); local id=person and person:GetIndividual();
+            local definition=id~=nil and id~=-1 and GameInfo.GreatPersonIndividuals[id];
+            if definition and definition.GreatPersonIndividualType==row.PersonType then units[#units+1]=unit; end
+        end
+    end
+    return units;
+end
+local function RollbackJoin(transaction,row)
+    local owner,leader=transaction.owner,transaction.leader;
+    local restored=true;
+    for i=#joinFields,1,-1 do
+        local field=joinFields[i]; local current=Get(leader,field);
+        if not JoinEqual(current,transaction.before[field]) then
+            if not JoinEqual(current,transaction.after[field]) then restored=false;
+            else
+                local ok=pcall(Set,leader,field,transaction.before[field]);
+                if not ok or not JoinEqual(Get(leader,field),transaction.before[field]) then restored=false; end
+            end
+        end
+    end
+    local priced,priceOK=pcall(PersonaEvents.UndoJoinPrice,transaction.price);
+    restored=restored and priced and priceOK==true;
+    local read,units=pcall(JoinPeople,owner,row);
+    if not read or not units then return false; end
+    for _,unit in ipairs(units) do
+        if not transaction.existing[unit:GetID()] then
+            -- This ID did not exist at the verified grant boundary. Never
+            -- destroy or rename an existing person when adopting its ID.
+            local ok=pcall(function() Player(owner,false):GetUnits():Destroy(unit); end);
+            if not ok then restored=false; end
+        end
+    end
+    read,units=pcall(JoinPeople,owner,row);
+    if not read or not units then return false; end
+    for _,unit in ipairs(units) do if not transaction.existing[unit:GetID()] then restored=false; end end
+    if not restored then return false; end
+    local cleared=pcall(Set,leader,"JOIN_TRANSACTION",nil);
+    return cleared and Get(leader,"JOIN_TRANSACTION")==nil;
+end
+local function Join(owner, source, personality, trait)
+    local p,other=Player(owner,true),Player(source,false);
+    if not p or not other or owner==source then return Finish(owner,"INVALID"); end
+    local config=PlayerConfigurations[source]; local leader=config and config:GetLeaderTypeName();
+    local row=Definition(leader); local own=PlayerConfigurations[owner];
+    if not row or not own or not Definition(own:GetLeaderTypeName()) or config:GetCivilizationTypeName()~=row.CivilizationType then return Finish(owner,"INVALID"); end
+    if (personality~=nil and not PERSONALITIES[personality]) or (trait~=nil and not TRAITS[trait]) then return Finish(owner,"INVALID_METADATA"); end
+    if joinBusy[leader] then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    local pending=Get(leader,"JOIN_TRANSACTION");
+    if pending~=nil then
+        if type(pending)~="table" or pending.version~=1 or pending.leader~=leader or
+           pending.owner~=owner or pending.source~=source or type(pending.before)~="table" or
+           type(pending.after)~="table" or type(pending.existing)~="table" or type(pending.price)~="table" or
+           pending.price.leader~=leader or pending.price.owner~=owner or pending.price.source~=source or
+           pending.before.OWNER~=nil or pending.before.STATE~=nil or pending.before.UNIT~=nil or
+           pending.before.SOURCE~=nil or pending.before.EVOLUTION_COST~=nil then
+            return Finish(owner,"NATIVE_UNAVAILABLE");
+        end
+        for id,value in pairs(pending.existing) do
+            if type(id)~="number" or id%1~=0 or id<0 or value~=true then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+        end
+        joinBusy[leader]=true;
+        local ok,rolled=pcall(RollbackJoin,pending,row); joinBusy[leader]=nil;
+        if not ok or not rolled then return Finish(owner,"JOIN_ROLLBACK_PENDING"); end
+        -- A recovery request compensates old work only. A later explicit Join
+        -- can start a fresh transaction after every old mutation is removed.
+        return Finish(owner,"NATIVE_UNAVAILABLE");
+    end
+    if Get(leader,"OWNER")~=nil then return Finish(owner,Get(leader,"OWNER")==owner and "ALREADY_JOINED" or "OTHER_OWNER"); end
+    if trait~=nil and trait~=row.Trait then return Finish(owner,"INVALID_METADATA"); end
+    if Get(leader,"STATE")~=nil or Get(leader,"UNIT")~=nil or Get(leader,"SOURCE")~=nil or Get(leader,"EVOLUTION_COST")~=nil then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    print("JAC_PERSONA_STAGE "..leader.." native-governor");
+    local native=NativeGovernor(owner,row);
+    if not native then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    if native.appointed then return Finish(owner,"GOVERNOR_EXISTS"); end
+    if not p:GetCities():GetCapitalCity() then return Finish(owner,"NO_CITY"); end
+    -- The ordinary native read may confirm an earlier person's visible debit.
+    -- Capture the join image after that settlement, still before any grant.
+    local prepared,price=pcall(PersonaEvents.PrepareJoinPrice,owner,source,row);
+    if not prepared or not price then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    print("JAC_PERSONA_STAGE "..leader.." find-person-before");
+    local ready,people=pcall(JoinPeople,owner,row);
+    if not ready or not people or #people>1 then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    local transaction={version=1,leader=leader,owner=owner,source=source,price=price,before={},after={},existing={}};
+    for _,field in ipairs(joinFields) do transaction.before[field]=Get(leader,field); end
+    for _,unit in ipairs(people) do transaction.existing[unit:GetID()]=true; end
+    local staged=pcall(Set,leader,"JOIN_TRANSACTION",transaction);
+    if not staged or not JoinEqual(Get(leader,"JOIN_TRANSACTION"),transaction) then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    joinBusy[leader]=true;
+    local result="NATIVE_UNAVAILABLE";
+    local ok=pcall(function()
+        local unit=people[1];
+        if not unit then
+            local individual=GameInfo.GreatPersonIndividuals[row.PersonType];
+            local class=individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+            local era=individual and GameInfo.Eras[individual.EraType];
+            if not individual or not class or not era then return; end
+            result="SPAWN_FAILED";
+            -- Gameplay grant: DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111.
+            -- GrantPerson has no returned unit; identify it in the owner's collection.
+            print("JAC_PERSONA_STAGE "..leader.." grant-person-before");
+            Game.GetGreatPeople():GrantPerson(individual.Hash,class.Hash,era.Hash,0,owner,false);
+            print("JAC_PERSONA_STAGE "..leader.." grant-person-after");
+            local created=JoinPeople(owner,row);
+            if not created or #created~=1 then return; end
+            unit=created[1];
+        end
+        result="NATIVE_UNAVAILABLE";
+        print("JAC_PERSONA_STAGE "..leader.." person-identified");
+        if not PersonaEvents.RecordJoinPrice(owner,source,row,price) then return; end
+        transaction.after={SOURCE=source,NAME=row.Name,PORTRAIT=row.PortraitIcon,PERSONALITY=personality or row.Personality,
+            TRAIT=row.Trait,EVOLUTION_COST=price.after.cost or price.after.prices[leader].cost,UNIT=unit:GetID(),
+            OWNER=owner,STATE="GREAT_PERSON",MERIT=0};
+        for _,field in ipairs(joinFields) do
+            Set(leader,field,transaction.after[field]);
+            if not JoinEqual(Get(leader,field),transaction.after[field]) then return; end
+        end
+        -- Recheck the physical person and complete ledger before committing.
+        local found=JoinPeople(owner,row);
+        if not found or #found~=1 or found[1]:GetID()~=unit:GetID() or PersonaEvents.Cost(row)~=transaction.after.EVOLUTION_COST then return; end
+        Set(leader,"JOIN_TRANSACTION",nil);
+        if Get(leader,"JOIN_TRANSACTION")~=nil then return; end
+        result="JOINED";
+    end);
+    if not ok or result~="JOINED" then
+        -- Save the exact undo image before compensating. A refused native
+        -- Destroy remains a known pending transaction, never a new grant.
+        pcall(Set,leader,"JOIN_TRANSACTION",transaction);
+        local undone,rolled=pcall(RollbackJoin,transaction,row);
+        joinBusy[leader]=nil;
+        if not undone or not rolled then return Finish(owner,"JOIN_ROLLBACK_PENDING"); end
+        return Finish(owner,result=="SPAWN_FAILED" and "SPAWN_FAILED" or "NATIVE_UNAVAILABLE");
+    end
+    joinBusy[leader]=nil;
+    if leader==ASHINA_ADMISSION then SyncAshinaAdmission(true); end
+    SyncProductionAdmission(false,owner);
+    return Finish(owner,"JOINED");
+end
+-- END RUST PERSONA JOIN TRANSACTION
 
 local function EvolutionCost(leader)
     return PersonaEvents.Cost(Definition(leader));
