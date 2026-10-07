@@ -74,6 +74,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("pass installed StagingRoom.lua")?;
     let bytes = std::fs::read(path)?;
     let patched = staging::transform(&bytes)?;
+    if let Some(bundle_dir) = std::env::args().nth(2) {
+        let dir = std::path::Path::new(&bundle_dir);
+        let bundle: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("bundle.json"))?)?;
+        let n = bundle["nonce"].as_str().ok_or("boundary nonce missing")?;
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../civ6-autotest/scenarios");
+        let normal =
+            serde_json::from_slice(&std::fs::read(root.join("leader-persona-15km.json"))?)?;
+        let hotseat = serde_json::from_slice(&std::fs::read(
+            root.join("multiplayer-banseiki-hotseat-growth.json"),
+        )?)?;
+        let boundary = civ6_persona_events_rs::mp_staging_boundary::build(&normal, &hotseat, n)?;
+        let observer = civ6_persona_events_rs::mp_staging_boundary::observer(&normal, &hotseat, n)?;
+        let expected =
+            patched.replacen("\nInitialize();", &format!("{observer}\nInitialize();"), 1);
+        let actual = std::fs::read(dir.join(staging::MOD_FOLDER).join("UI/StagingRoom.lua"))?;
+        assert_eq!(
+            actual,
+            expected.as_bytes(),
+            "generated Lua differs from current Rust source"
+        );
+        assert_eq!(
+            staging::sha(&actual),
+            bundle["generated_sha256"].as_str().unwrap()
+        );
+        assert_eq!(
+            std::fs::read_to_string(
+                dir.join(staging::MOD_FOLDER)
+                    .join(format!("{}.modinfo", staging::MOD_FOLDER))
+            )?,
+            staging::manifest()
+        );
+        let scene = std::fs::read(dir.join("boundary.json"))?;
+        assert_eq!(
+            staging::sha(&scene),
+            bundle["scene_sha256"].as_str().unwrap()
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&scene)?,
+            boundary
+        );
+        println!("PASS actual CLI bundle/current source: Lua/manifest exact bytes; scenario exact values/arrays; raw artifact hashes");
+    }
     let stock = String::from_utf8(bytes)?.replace("\r\n", "\n");
     // Existing official rejection and launch logic is byte-for-byte preserved.
     for name in [
