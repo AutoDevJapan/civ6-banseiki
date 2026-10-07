@@ -81,6 +81,31 @@ fn frontend_retry_stops_after_unknown_result() {
 }
 
 #[test]
+fn named_state_transition_preserves_the_state_and_never_replays_sent_commands() {
+    for error in [
+        Error::unknown("sent; reply lost"),
+        Error::lua("execution failed"),
+    ] {
+        let kind = error.kind;
+        let mut h = Harness::new(
+            json!({}),
+            FakeBackend::new().lua(move |_, _| Err(error.clone())),
+        );
+        let result = h
+            .runner
+            .send_state_transition_checked("HostGame", "pool RANDOM", 5.0, || Ok(()));
+        assert_eq!(result.unwrap_err().kind, kind);
+        assert_eq!(h.calls(), [("HostGame".into(), "pool RANDOM".into())]);
+    }
+    let mut h = Harness::new(json!({}), FakeBackend::new());
+    assert!(h
+        .runner
+        .send_state_transition_checked("HostGame", "pool RANDOM", 0.0, || Ok(()))
+        .is_err());
+    assert!(h.calls().is_empty());
+}
+
+#[test]
 fn setup_reconnect_does_not_replay_an_acknowledged_phase() {
     let mut failures = 0;
     let fake = FakeBackend::new().lua(move |_, code| {

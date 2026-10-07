@@ -311,7 +311,32 @@ pub fn verify_installed(bundle: &Bundle, data: &Value, mods: &Path) -> Result<()
     {
         return Err(Error::scenario("installed hotseat bundle identity differs"));
     }
-    let root = mods.join("JAC_Test_HotseatBridge");
+    // Per-run witnesses can coexist with another task's installed witness.
+    // Identify our exact MOD ID rather than assuming ownership of a folder name.
+    let mut candidates = Vec::new();
+    for entry in fs::read_dir(mods)? {
+        let path = entry?.path();
+        let manifest = path.join("JAC_Test_HotseatBridge.modinfo");
+        if !path.is_dir() || !manifest.is_file() {
+            continue;
+        }
+        let text = fs::read_to_string(&manifest)?;
+        let doc = roxmltree::Document::parse(text.trim_start_matches('\u{feff}'))
+            .map_err(|e| Error::scenario(format!("Invalid hotseat manifest: {e}")))?;
+        if doc
+            .root_element()
+            .attribute("id")
+            .is_some_and(|id| id.eq_ignore_ascii_case(&bundle.mod_id))
+        {
+            candidates.push(path);
+        }
+    }
+    if candidates.len() != 1 {
+        return Err(Error::scenario(
+            "Exactly one installed witness with this run's MOD ID is required",
+        ));
+    }
+    let root = &candidates[0];
     for (relative, expected) in [
         (
             "JAC_Test_HotseatBridge.modinfo",

@@ -45,6 +45,39 @@ fn shipped_pool_bridges_are_the_registered_canonicals() {
 }
 
 #[test]
+fn installed_witness_is_identified_by_its_run_id_without_overwriting_another_task() {
+    let tmp = tempfile::tempdir().unwrap();
+    let bundle = hs::prepare(&fixed(), &tmp.path().join("bundle"), NONCE, MOD_ID).unwrap();
+    let prepared: Value = serde_json::from_slice(&fs::read(&bundle.scenario).unwrap()).unwrap();
+    let mods = tmp.path().join("Mods");
+    let installed = mods.join("JAC_Test_Pool1947_unique");
+    fs::create_dir_all(installed.join("UI")).unwrap();
+    for file in [
+        "JAC_Test_HotseatBridge.modinfo",
+        "UI/JAC_HotseatWitness.xml",
+        "UI/JAC_HotseatWitness.lua",
+        "UI/JAC_HotseatPlan.lua",
+    ] {
+        fs::copy(
+            std::path::Path::new(&bundle.mod_folder).join(file),
+            installed.join(file),
+        )
+        .unwrap();
+    }
+    hs::verify_installed(&bundle, &prepared, &mods).unwrap();
+    let other = mods.join("JAC_Test_HotseatBridge");
+    fs::create_dir_all(&other).unwrap();
+    fs::write(
+        other.join("JAC_Test_HotseatBridge.modinfo"),
+        "<Mod id=\"ffffffff-ffff-ffff-ffff-ffffffffffff\"/>",
+    )
+    .unwrap();
+    hs::verify_installed(&bundle, &prepared, &mods).unwrap();
+    fs::write(installed.join("UI/JAC_HotseatPlan.lua"), "tampered").unwrap();
+    assert!(hs::verify_installed(&bundle, &prepared, &mods).is_err());
+}
+
+#[test]
 fn only_the_prepared_random_canonical_gets_the_fixed_pregame_helper() {
     for (data, expected) in [
         (shipped("multiplayer-hotseat-growth.json"), false),
