@@ -74,7 +74,7 @@ const CONSTANTS: [(usize, [u8; 4]); 3] = [
 
 /// Parent integration gate. These booleans must come from runner/game checks,
 /// not from arbitrary fields supplied inside the action itself.
-pub fn validate(test_mode: bool, diagnostic_only: bool, multiplayer: bool) -> Result<()> {
+pub(crate) fn validate(test_mode: bool, diagnostic_only: bool, multiplayer: bool) -> Result<()> {
     if !test_mode || !diagnostic_only || multiplayer {
         return Err(Error::scenario(
             "exact removal requires a test-mode, diagnostic-only single-player game",
@@ -176,7 +176,7 @@ fn classify(instructions: &[Vec<u8>]) -> Result<PatchState> {
     }
 }
 
-pub fn apply(game: crate::startup::GameProcess) -> Result<Value> {
+pub(crate) fn apply(game: crate::startup::GameProcess) -> Result<Value> {
     #[cfg(all(windows, target_arch = "x86_64"))]
     {
         platform::apply(game)

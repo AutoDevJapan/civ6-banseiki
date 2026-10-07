@@ -8,6 +8,7 @@ pub mod growth_sync;
 pub mod hotseat_bridge;
 pub mod judge;
 pub mod metrics;
+pub mod oath_exact_removal;
 pub mod reliability;
 pub mod restart;
 pub mod runner;

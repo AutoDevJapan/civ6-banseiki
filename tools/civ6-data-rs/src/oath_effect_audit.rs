@@ -541,7 +541,36 @@ local controls={}; for _,r in ipairs(foreign) do controls[#controls+1]=encode(r)
 return '{"oath":"'..oath..'","phase":"'..phase..'","cities":['..table.concat(parts,',')..'],"foreign":['..table.concat(controls,',')..']}'
 "#;
 
+// Pinned XP2 producer RVA1247C0: signed happiness division, clamp, then
+// housing and loyalty multiplication with a separate arithmetic shift each.
+const GROWTH_NATIVE_FORMULA: &str = r#"
+local function raw_q8(value)
+ assert(type(value)=='number' and value==value and value>-math.huge and value<math.huge,'unknown Q8 input')
+ local raw=value*256
+ assert(raw%1==0 and raw>=-2147483648 and raw<=2147483647,'growth input is outside signed Q8 domain')
+ return raw
+end
+local function checked_i32(value)
+ assert(value%1==0 and value>=-2147483648 and value<=2147483647,'growth arithmetic overflow')
+ return value
+end
+local function q8_product(left,right)
+ assert(left>=0 and right>=0,'unknown negative growth multiplier')
+ assert(right==0 or left<=math.floor(9007199254740991/right),'growth product exceeds exact integer domain')
+ return checked_i32(math.floor(left*right/256))
+end
+local function native_overall(row,additional_raw)
+ local h,o,b,l=raw_q8(row.happiness),raw_q8(row.other),raw_q8(row.housing),raw_q8(row.loyalty)
+ assert(b==0 or b==64 or b==128 or b==256,'unknown housing multiplier')
+ local happy=h<0 and math.ceil(h/100) or math.floor(h/100)
+ local combined=checked_i32(checked_i32(256+happy)+checked_i32(o+additional_raw))
+ local factor=math.max(combined,0)
+ return q8_product(q8_product(factor,b),l)/256
+end
+"#;
+
 const COMPARE: &str = r#"
+__GROWTH_FORMULA__
 local oath=__OATH__
 local spec=__EFFECTS__
 local all=assert(JAC_OATH_AUDIT,'UI samples missing')
@@ -577,16 +606,20 @@ for i,a in ipairs(base.own) do
    assert(close(cv,av) and close(dv,bv),'off/on/off restoration failed for '..e.kind..' city '..a.id)
    local expected=nil; local quantity=false; local reporting_step=nil; local reason='raw_yield_basis_not_documented'
    if e.kind=='growth' then
-    assert(close(b.other-a.other,e.amount/100) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
+    assert(type(e.native_raw)=='number' and e.native_raw%1==0 and e.native_raw>0,'native growth conversion evidence missing')
+    local native_delta=e.native_raw/256
+    assert(close(b.other-a.other,native_delta) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
     assert(close(a.housing,b.housing) and close(a.housing,c.housing) and close(a.housing,d.housing),'housing changed during growth isolation')
     assert(close(a.happiness,b.happiness) and close(a.happiness,c.happiness) and close(a.happiness,d.happiness),'happiness changed during growth isolation')
     local eligible=not a.occupied and not b.occupied and not c.occupied and not d.occupied and a.surplus>0 and b.surplus>0 and c.surplus>0 and d.surplus>0 and close(a.loyalty,1) and close(b.loyalty,1) and close(c.loyalty,1) and close(d.loyalty,1)
     if eligible then
-     local factor=math.max(1+a.happiness/100+a.other,0)
-     assert(close(a.growth,a.housing*factor),'official overall-growth formula does not match baseline')
-     expected=a.housing*(math.max(1+a.happiness/100+a.other+e.amount/100,0)-factor)
+     for _,row in ipairs({a,b,c,d}) do
+      raw_q8(row.growth)
+      assert(close(row.growth,native_overall(row,0)),'official overall-growth formula does not match snapshot')
+     end
+     expected=native_overall(a,e.native_raw)-native_overall(a,0)
      assert(close(observed,expected),'overall growth did not match housing-adjusted expected delta')
-     quantity=true; reason='official_ui_growth_formula'
+     quantity=true; reason='native_q8_growth_formula'
      if expected>0.00002 then proven[e.kind]=proven[e.kind]+1 end
     else quantities=false; reason='occupied_deficit_or_loyalty_growth_requires_diagnosis' end
    else
@@ -700,10 +733,27 @@ fn effect_lua(case: &Case) -> String {
     let effects = case
         .effects
         .iter()
-        .map(|e| format!("{{kind={},amount={}}}", lua_string(&e.kind), e.amount))
+        .map(|e| {
+            let raw = if e.kind == "growth" {
+                format!(",native_raw={}", native_percentage_raw(e.amount))
+            } else {
+                String::new()
+            };
+            format!("{{kind={},amount={}{raw}}}", lua_string(&e.kind), e.amount)
+        })
         .collect::<Vec<_>>()
         .join(",");
     format!("{{{effects}}}")
+}
+
+/// Positive Amount conversion in GameCore XP2 SHA324c51e9: float32 Amount *
+/// 0.01f followed by the eight-bit fixed-point packing at RVA8D8D7A..8D8DB7
+/// (growth) and RVA8179EC..817A21 (military).
+/// GetOtherGrowthModifier and GetOverallGrowthModifier return that Q8 domain
+/// (RVA690A50/690AC0). This changes the observation basis, never the SQL Amount
+/// or the exact OFF restoration tolerance. Negative removal is a separate bug.
+fn native_percentage_raw(amount: i64) -> i64 {
+    ((amount as f32 * 0.01_f32) * 256.0_f32).trunc() as i64
 }
 
 // Plot properties can reach the UI before its cached growth values. Wait for
@@ -858,7 +908,14 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     measure_steps(&mut steps, case, "restored");
     steps.push(ui(
         "InGame",
-        substitute(COMPARE, case, &[("__EFFECTS__", &effect_lua(case))]),
+        substitute(
+            COMPARE,
+            case,
+            &[
+                ("__EFFECTS__", &effect_lua(case)),
+                ("__GROWTH_FORMULA__", GROWTH_NATIVE_FORMULA),
+            ],
+        ),
     ));
     // Restore all diagnostic inputs except production, which supplies measurable
     // one-turn progress without inventing an accepted quantity.
@@ -1113,7 +1170,7 @@ return 'single native human end-turn requested for '..target..'/'..phase
 "#;
 
 const PRODUCTION_COMPARE: &str = r#"
-local target=__TARGET__; local amount=__AMOUNT__
+local target=__TARGET__; local amount=__AMOUNT__; local native_rate=__NATIVE_RATE__
 local t=assert(assert(JAC_OATH_AUDIT).current)
 assert(t.Target==target,'production target changed')
 local rows=assert(assert(JAC_OATH_AUDIT).production[target])
@@ -1161,7 +1218,7 @@ elseif amount==0 then
 elseif unit_basis then
  -- Here the observed OFF queue rate equals the measured city production in both
  -- flanking turns. Additive and multiplicative interpretations coincide at 1.
- expected=1+amount/100
+ expected=1+native_rate
  assert(math.abs(on-expected)<=tolerance,string.format('%s actual rate %.9f expected %.9f',target,on,expected))
  quantity=true
 else
@@ -1191,6 +1248,14 @@ fn production_code(
             ("__KIND__", &lua_string(&effect.kind)),
             ("__PHASE__", &lua_string(phase)),
             ("__AMOUNT__", &effect.amount.to_string()),
+            (
+                "__NATIVE_RATE__",
+                &if effect.kind == "military" {
+                    format!("{}/256", native_percentage_raw(effect.amount))
+                } else {
+                    format!("{}/100", effect.amount)
+                },
+            ),
             ("__FLAG__", &flag.to_string()),
             ("__SAMPLES_PER_PHASE__", &PRODUCTION_SAMPLES.to_string()),
         ],

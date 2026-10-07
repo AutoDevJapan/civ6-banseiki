@@ -259,14 +259,16 @@ function audit_rows(off,on,last,first_yield,on_yield,last_yield)
   local samples={}
   for i=1,1 do
    turn=turn+1; local before=progress; progress=progress+delta
-   samples[i]={city=3,plot=22,turn=turn,before=before,after=progress,delta=delta,city_yield=yield,city_yield_after=yield,ui_city_yield=yield,ui_city_yield_after=yield,cost=1000}
+   samples[i]={city=3,plot=22,turn=turn,before=before,after=progress,delta=delta,city_yield=yield,city_yield_after=yield,ui_city_yield=yield,ui_city_yield_after=yield,cost=32768}
   end
   return {samples=samples}
  end
  local first=phase(off,first_yield); local active=phase(on,on_yield); local final=phase(last,last_yield)
- return {warmup={samples={{city=3,plot=22,turn=0,before=0,after=10,cost=1000,end_requested=true}}},off_first=first,on=active,off_last=final}
+ return {warmup={samples={{city=3,plot=22,turn=0,before=0,after=10,cost=32768,end_requested=true}}},off_first=first,on=active,off_last=final}
 end
-JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10.01,13.9035,11.02,10.01,12.09,11.02)
+-- Integer queue progress at sufficient input: floor(4103 * (1 + 38/256))=4712.
+-- Distinct city yields ensure progress, not changing displayed yield, is tested.
+JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(4099,4712,4101,4099,4103,4101)
 "#;
 
 #[test]
@@ -277,13 +279,13 @@ fn actual_progress_verifies_fifteen_percent_separately_from_city_yield() -> Resu
     let result = decode(&lua, &code)?;
     assert_eq!(result["quantity_verified"], true);
     assert_eq!(result["expected_percent"], 15);
-    assert_eq!(result["expected_on"], 1.15);
-    assert_eq!(result["on"], 1.15);
+    assert_eq!(result["expected_on"], 1.1484375);
+    assert!((result["on"].as_f64().unwrap() - 4712.0 / 4103.0).abs() < 1e-9);
     assert_eq!(result["restored"], true);
-    for delta in [12.0, 12.12, 13.2, 13.68, 15.0] {
+    for delta in [4103.0, 4513.0, 4651.0, 4756.0, 5000.0] {
         lua.load(PRODUCTION_OBSERVATIONS).exec()?;
         lua.load(format!(
-            "JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(10.01,{delta},11.02,10.01,12.09,11.02)"
+            "JAC_OATH_AUDIT.production.UNIT_SPEARMAN=audit_rows(4099,{delta},4101,4099,4103,4101)"
         ))
         .exec()?;
         assert!(
@@ -507,16 +509,16 @@ fn single_turn_samples_distinguish_adjacent_percentages_and_reject_low_resolutio
     )?;
     let lua = Lua::new();
     for (target, code, correct, adjacent) in [
-        ("UNIT_SPEARMAN", military, 7.038, 6.9768),
-        ("BUILDING_WALLS", wall, 7.344, 7.2828),
+        ("UNIT_SPEARMAN", military, 4707, 4659),
+        ("BUILDING_WALLS", wall, 4919, 4878),
     ] {
         lua.load(PRODUCTION_OBSERVATIONS).exec()?;
-        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(5.01,{correct},7.03,5.01,6.12,7.03)")).exec()?;
+        lua.load(format!("JAC_OATH_AUDIT.current.Target='{target}'; JAC_OATH_AUDIT.production['{target}']=audit_rows(4099,{correct},4099,4099,4099,4099)")).exec()?;
         let result = decode(&lua, &code)?;
         assert_eq!(result["quantity_verified"], true);
         assert_eq!(result["integer_percentage_resolved"], true);
         lua.load(format!(
-            "JAC_OATH_AUDIT.production['{target}']=audit_rows(5.01,{adjacent},7.03,5.01,6.12,7.03)"
+            "JAC_OATH_AUDIT.production['{target}']=audit_rows(4099,{adjacent},4099,4099,4099,4099)"
         ))
         .exec()?;
         assert!(
@@ -556,7 +558,7 @@ end}
 Map={GetPlotByIndex=function() return {GetOwner=function() return 0 end,GetProperty=function(_,name) return name==oath..'_ON' and 1 or 0 end} end}
 local function city(owner,on)
  return {id=owner+1,plot=owner+10,owner=owner,y={production=10,gold=3,science=on and 2.1 or 2,culture=3,faith=1,food=10},
- growth=on and 0.55 or 0.5,other=on and 0.1 or 0,housing=0.5,happiness=0,surplus=2,occupied=false,loyalty=1}
+ growth=on and 0.546875 or 0.5,other=on and 0.09765625 or 0,housing=0.5,happiness=0,surplus=2,occupied=false,loyalty=1}
 end
 JAC_OATH_AUDIT={}
 for _,phase in ipairs({'baseline','selected','off','restored'}) do
@@ -588,8 +590,8 @@ fn growth_uses_housing_formula_and_raw_yield_quantity_remains_unaccepted() -> Re
     let lua = Lua::new();
     lua.load(CITY_OBSERVATIONS).exec()?;
     let result = decode(&lua, &code)?;
-    assert_eq!(result["results"][0]["expected_delta"], 0.05);
-    assert_eq!(result["results"][0]["observed_delta"], 0.05);
+    assert_eq!(result["results"][0]["expected_delta"], 0.046875);
+    assert_eq!(result["results"][0]["observed_delta"], 0.046875);
     assert_eq!(result["results"][0]["quantity_verified"], true);
     assert_eq!(result["results"][1]["expected_delta"], Value::Null);
     assert_eq!(result["results"][1]["expected_percent"], 5);
@@ -603,6 +605,117 @@ fn growth_uses_housing_formula_and_raw_yield_quantity_remains_unaccepted() -> Re
         "a.selected.own[1].y.gold=4",
     ] {
         lua.load(CITY_OBSERVATIONS).exec()?;
+        lua.load(format!("local a=JAC_OATH_AUDIT; {mutation}"))
+            .exec()?;
+        assert!(decode(&lua, &code).is_err(), "accepted {mutation}");
+    }
+    Ok(())
+}
+
+#[test]
+fn growth_uses_native_literal_vectors_and_still_rejects_signed_removal_residue() -> Result<()> {
+    // Golden vectors from the pinned DLL's positive fixed-point converter;
+    // the decimal 10% value is not a representable UI Q8 sample.
+    for (amount, raw) in [
+        (1, 2),
+        (5, 12),
+        (10, 25),
+        (15, 38),
+        (20, 51),
+        (25, 64),
+        (100, 256),
+    ] {
+        assert_eq!(native_percentage_raw(amount), raw);
+    }
+    let code = generated_code(&growth_case(), "local spec=")?;
+    let lua = Lua::new();
+    for mutation in [
+        "a.selected.own[1].other=0.1; a.selected.own[1].growth=0.55",
+        "a.off.own[1].other=-0.00390625",
+        "a.restored.own[1].other=0.09375",
+        "a.off.own[1].growth=0.49609375",
+        "a.selected.own[1].other=0.09375",
+    ] {
+        lua.load(CITY_OBSERVATIONS).exec()?;
+        lua.load(format!("local a=JAC_OATH_AUDIT; {mutation}"))
+            .exec()?;
+        assert!(decode(&lua, &code).is_err(), "accepted {mutation}");
+    }
+    Ok(())
+}
+
+#[test]
+fn growth_overall_matches_pinned_signed_division_and_each_q8_product() -> Result<()> {
+    let lua = Lua::new();
+    lua.load(format!(
+        "{GROWTH_NATIVE_FORMULA}\ncheck_overall=native_overall"
+    ))
+    .exec()?;
+    let check: mlua::Function = lua.globals().get("check_overall")?;
+    // Literal results from RVA1247C0, not from the implementation under test.
+    for (happy, other, housing, loyalty, expected) in [
+        (20.0, 0.0, 1.0, 1.0, 307),
+        (20.0, 0.0, 0.5, 1.0, 153),
+        (-15.0, 0.0, 1.0, 1.0, 218),
+        (20.0, 0.0, 0.5, 0.75, 114),
+        (-100.0, -1.0, 0.5, 0.75, 0),
+    ] {
+        let row = lua.create_table()?;
+        row.set("happiness", happy)?;
+        row.set("other", other)?;
+        row.set("housing", housing)?;
+        row.set("loyalty", loyalty)?;
+        assert_eq!(check.call::<f64>((row, 0))?, f64::from(expected) / 256.0);
+    }
+    for field in ["happiness", "other", "housing", "loyalty"] {
+        for invalid in [0.1, f64::NAN, f64::INFINITY, 8388608.0] {
+            let row = lua.create_table()?;
+            row.set("happiness", 0)?;
+            row.set("other", 0)?;
+            row.set("housing", 1)?;
+            row.set("loyalty", 1)?;
+            row.set(field, invalid)?;
+            assert!(
+                check.call::<f64>((row, 0)).is_err(),
+                "accepted {field}={invalid}"
+            );
+        }
+    }
+    for (other, loyalty) in [
+        (2147483647.0 / 256.0, 1.0),
+        (2000000000.0 / 256.0, 2000000000.0 / 256.0),
+    ] {
+        let row = lua.create_table()?;
+        row.set("happiness", 0)?;
+        row.set("other", other)?;
+        row.set("housing", 1)?;
+        row.set("loyalty", loyalty)?;
+        assert!(
+            check.call::<f64>((row, 0)).is_err(),
+            "accepted overflowing arithmetic"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn growth_observation_rejects_decimal_formula_and_non_q8_snapshots() -> Result<()> {
+    let code = generated_code(&growth_case(), "local spec=")?;
+    let lua = Lua::new();
+    // Happiness -15: old decimal formula gives 217, actual signed quotient 218.
+    for mutation in [
+        "a.baseline.own[1].growth=217/256; a.off.own[1].growth=217/256",
+        "a.selected.own[1].happiness=-15+0.000001",
+        "a.selected.own[1].other=25/256+0.000001",
+        "a.restored.own[1].growth=243/256+0.000001",
+        "a.off.own[1].growth=217/256",
+    ] {
+        lua.load(CITY_OBSERVATIONS).exec()?;
+        lua.load("for _,p in ipairs({'baseline','selected','off','restored'}) do local r=JAC_OATH_AUDIT[p].own[1]; r.happiness=-15; r.housing=1; r.growth=(p=='selected' or p=='restored') and 243/256 or 218/256 end").exec()?;
+        assert_eq!(
+            decode(&lua, &code)?["results"][0]["expected_delta"],
+            25.0 / 256.0
+        );
         lua.load(format!("local a=JAC_OATH_AUDIT; {mutation}"))
             .exec()?;
         assert!(decode(&lua, &code).is_err(), "accepted {mutation}");

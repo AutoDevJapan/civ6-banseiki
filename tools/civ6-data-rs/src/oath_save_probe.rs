@@ -188,6 +188,25 @@ pub fn make_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     Ok(source)
 }
 
+/// The reviewed military-15 diagnostic, with an owned-process inverse-removal
+/// candidate before any reference or oath is attached. Normal probes stay intact.
+pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
+    ensure!(
+        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU",
+        "the native candidate is limited to the reviewed military-15 probe"
+    );
+    let mut probe = make_probe(repo, entry)?;
+    let steps = probe["steps"].as_array_mut().context("probe steps")?;
+    ensure!(
+        steps.len() > 5 && steps[3]["action"] == "start_game" && steps[4]["action"] == "wait_for",
+        "native candidate startup boundary changed"
+    );
+    steps.insert(5, json!({"action":"oath_exact_removal","timeout":30}));
+    probe["native_exact_removal_candidate"] = json!(true);
+    civ6_autotest_rs::scenario::validate_scenario(&probe)?;
+    Ok(probe)
+}
+
 pub fn catalogue(repo: &Repository) -> Result<Vec<Value>> {
     let data = repo.json(INVENTORY)?;
     let entries = data["scenarios"]
@@ -261,7 +280,41 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         .into_iter()
         .find(|e| e["oath"] == oath)
         .context("unknown oath artifact")?;
-    let expected = make_probe(repo, &entry)?;
+    let native = scenario.get("native_exact_removal_candidate").is_some();
+    ensure!(
+        !native || scenario["native_exact_removal_candidate"] == true,
+        "invalid native candidate marker"
+    );
+    let expected = if native {
+        make_native_probe(repo, &entry)?
+    } else {
+        make_probe(repo, &entry)?
+    };
+    if native {
+        let proof = read("oath-exact-removal.json")?;
+        for (key, value) in civ6_autotest_rs::oath_exact_removal::plan()
+            .as_object()
+            .context("native plan")?
+        {
+            ensure!(
+                &proof[key] == value,
+                "native proof differs from the reviewed instruction plan: {key}"
+            );
+        }
+        ensure!(
+            (proof["status"] == "applied" && proof["writes"] == 4)
+                || (proof["status"] == "already_patched" && proof["writes"] == 0),
+            "native candidate did not complete"
+        );
+        ensure!(
+            proof["original_protections_restored"] == true
+                && proof["pid"].as_u64().is_some_and(|id| id > 0)
+                && proof["creation_filetime"]
+                    .as_u64()
+                    .is_some_and(|time| time > 0),
+            "native process or protection evidence missing"
+        );
+    }
     let actual_steps = scenario["steps"].as_array().context("artifact steps")?;
     let expected_steps = expected["steps"].as_array().unwrap();
     ensure!(
@@ -460,7 +513,19 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
         write_new(Path::new(&args[3]), &make_probe(repo, &entry)?)?;
         return Ok(());
     }
-    bail!("usage: generate-oath-save-probes --check | --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
+    if args.len() == 5
+        && args[0] == "--native-exact-removal"
+        && args[1] == "--oath"
+        && args[3] == "--output"
+    {
+        let entry = catalogue(repo)?
+            .into_iter()
+            .find(|entry| entry["oath"] == args[2])
+            .context("unknown oath")?;
+        write_new(Path::new(&args[4]), &make_native_probe(repo, &entry)?)?;
+        return Ok(());
+    }
+    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
 }
 
 pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
@@ -476,6 +541,35 @@ pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn native_candidate_keeps_all_numeric_and_save_steps_and_refuses_other_oaths() -> Result<()> {
+        let repo = Repository::checked_in();
+        let entries = catalogue(&repo)?;
+        let entry = entries
+            .iter()
+            .find(|entry| entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU")
+            .context("military oath")?;
+        let plain = make_probe(&repo, entry)?;
+        let mut native = make_native_probe(&repo, entry)?;
+        let steps = native["steps"].as_array_mut().unwrap();
+        assert_eq!(
+            steps.remove(5),
+            json!({"action":"oath_exact_removal","timeout":30})
+        );
+        native
+            .as_object_mut()
+            .unwrap()
+            .remove("native_exact_removal_candidate");
+        assert_eq!(native, plain);
+        for entry in entries
+            .iter()
+            .filter(|entry| entry["oath"] != "JAC_OATH_ODA_TENKA_FUBU")
+        {
+            assert!(make_native_probe(&repo, entry).is_err());
+        }
+        Ok(())
+    }
 
     #[test]
     fn all_66_keep_the_numeric_gate_and_compile_in_lua51() -> Result<()> {
