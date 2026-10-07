@@ -57,6 +57,9 @@ type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
 
 pub struct FakeBackend {
+    control_owned: bool,
+    control_held: bool,
+    pub on_control_check: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_lease: Box<dyn Fn() -> Result<Option<f64>> + Send>,
     pub calls: Calls,
     pub timeouts: Arc<Mutex<Vec<f64>>>,
@@ -78,6 +81,9 @@ pub struct FakeBackend {
 impl FakeBackend {
     pub fn new() -> Self {
         Self {
+            control_owned: false,
+            control_held: false,
+            on_control_check: Box::new(|| Ok(())),
             on_lease: Box::new(|| Ok(None)),
             calls: Arc::new(Mutex::new(Vec::new())),
             timeouts: Arc::new(Mutex::new(Vec::new())),
@@ -107,6 +113,11 @@ impl FakeBackend {
             on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
     }
+    /// Fixtures must opt into a live-chain owner; the default has no authority.
+    pub fn owned_chain(mut self) -> Self {
+        self.control_owned = true;
+        self
+    }
     pub fn lua(mut self, f: impl FnMut(&str, &str) -> Result<String> + Send + 'static) -> Self {
         self.on_lua = Box::new(f);
         self
@@ -124,6 +135,22 @@ impl FakeBackend {
     }
 }
 impl Backend for FakeBackend {
+    fn acquire_startup_lock(&mut self) -> Result<()> {
+        if !self.control_owned {
+            return Err(Error::input("fixture has no live-chain ownership proof"));
+        }
+        self.control_held = true;
+        self.check_startup_lock()
+    }
+    fn check_startup_lock(&mut self) -> Result<()> {
+        if !self.control_held || !self.control_owned {
+            return Err(Error::input("fixture live-chain ownership lost"));
+        }
+        (self.on_control_check)()
+    }
+    fn release_startup_lock(&mut self) {
+        self.control_held = false;
+    }
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         (self.on_lease)()
     }
@@ -176,7 +203,7 @@ impl Backend for FakeBackend {
         self.events.lock().unwrap().push(format!("key:{key}"));
         Ok(())
     }
-    fn request_close(&mut self) -> Result<()> {
+    fn request_close(&mut self, _: civ6_autotest_rs::startup::GameProcess) -> Result<()> {
         self.events.lock().unwrap().push("close".into());
         Ok(())
     }

@@ -61,6 +61,22 @@ pub trait Backend: Send {
         ))
     }
     fn release_startup_lock(&mut self) {}
+    /// Process identity alone grants no permission. All game shutdown and
+    /// relaunch operations use the same invoking-chain lease as recovery.
+    fn authorize_game_control(&mut self, game: Option<crate::startup::GameProcess>) -> Result<()> {
+        self.check_startup_lock()?;
+        if let Some(game) = game {
+            if self.single_process(0.0)? != Some((game.pid, game.started)) {
+                return Err(Error::input(
+                    "owned Civ6 process changed; refusing game control",
+                ));
+            }
+            // Identity inspection can block or observe a concurrent owner
+            // change. Permission must still hold when it returns.
+            self.check_startup_lock()?;
+        }
+        Ok(())
+    }
     fn check_startup_process(&mut self, game: crate::startup::GameProcess) -> Result<()> {
         if self
             .single_process(0.0)?
@@ -176,7 +192,7 @@ pub trait Backend: Send {
     fn press_key(&mut self, _key: u16, _deadline: f64) -> Result<()> {
         Err(Error::input("backend cannot send keys"))
     }
-    fn request_close(&mut self) -> Result<()> {
+    fn request_close(&mut self, _game: crate::startup::GameProcess) -> Result<()> {
         Err(Error::input("backend cannot close window"))
     }
     fn wait_exit(&mut self, _pid: u32, _deadline: f64) -> Result<bool> {
@@ -736,8 +752,12 @@ impl Backend for SystemBackend {
         crate::startup::collect_diagnostics(game, output, &mut self.diagnostic_session)
     }
     fn acquire_startup_lock(&mut self) -> Result<()> {
-        self.startup_lease = Some(crate::startup::RecoveryLease::acquire()?);
-        Ok(())
+        // Never replace a held proof after ownership changed, or discard the
+        // independent launch pin when recovery reuses the initial lease.
+        if self.startup_lease.is_none() {
+            self.startup_lease = Some(crate::startup::RecoveryLease::acquire()?);
+        }
+        self.check_startup_lock()
     }
     fn check_startup_lock(&mut self) -> Result<()> {
         self.startup_lease
@@ -995,6 +1015,11 @@ impl Backend for SystemBackend {
         metrics::process_memory(pid)
     }
     fn launch(&mut self) -> Result<()> {
+        self.acquire_startup_lock()?;
+        self.authorize_game_control(None)?;
+        if self.single_process(0.0)?.is_some() {
+            return Err(Error::input("Civ6 appeared before Steam launch"));
+        }
         let floor = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| Error::input("Steam launch timestamp unavailable"))?
@@ -1004,6 +1029,7 @@ impl Backend for SystemBackend {
         Ok(())
     }
     fn close_orphaned_reporters(&mut self) -> Result<Vec<u32>> {
+        self.authorize_game_control(None)?;
         crate::restart::close_orphaned_civ_reporters()
     }
     fn wait_window(&mut self, deadline: f64) -> Result<isize> {
@@ -1018,13 +1044,21 @@ impl Backend for SystemBackend {
     fn press_key(&mut self, key: u16, deadline: f64) -> Result<()> {
         crate::click::press_key(key, Some(deadline))
     }
-    fn request_close(&mut self) -> Result<()> {
-        crate::click::request_civ_window_close()
+    fn request_close(&mut self, game: crate::startup::GameProcess) -> Result<()> {
+        self.authorize_game_control(Some(game))?;
+        crate::startup::request_owned_close(
+            self.startup_lease
+                .as_mut()
+                .ok_or_else(|| Error::input("shared startup lock was lost"))?,
+            game,
+        )
     }
     fn wait_exit(&mut self, pid: u32, deadline: f64) -> Result<bool> {
         crate::restart::wait_for_exit(pid, deadline)
     }
     fn terminate(&mut self, pid: u32, start: f64) -> Result<()> {
+        self.acquire_startup_lock()?;
+        self.authorize_game_control(Some((pid, start).into()))?;
         crate::restart::terminate_civ_process(pid, start)
     }
     fn capture(&mut self, path: &Path, crop: Option<[f64; 4]>, deadline: f64) -> Result<()> {
@@ -1249,6 +1283,15 @@ impl Runner {
         }
     }
     pub fn lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
+        self.lua_with_control(state, code, timeout, None)
+    }
+    fn lua_with_control(
+        &mut self,
+        state: &str,
+        code: &str,
+        timeout: f64,
+        game: Option<crate::startup::GameProcess>,
+    ) -> Result<String> {
         let deadline = self.clock.now() + timeout;
         self.states(self.remaining(deadline)?)?;
         let remaining = self.remaining(deadline).map_err(|e| {
@@ -1261,6 +1304,17 @@ impl Runner {
         self.backend.connect(self.port, remaining)?;
         // Connecting can consume the last budget; never mutate after it expired.
         let remaining = self.remaining(deadline)?;
+        if let Some(game) = game {
+            self.backend
+                .authorize_game_control(Some(game))
+                .map_err(|e| {
+                    if e.kind == ErrorKind::Interrupted {
+                        e
+                    } else {
+                        Error::new(ErrorKind::LiveLease, e.to_string())
+                    }
+                })?;
+        }
         self.backend.run_lua(state, code, remaining)
     }
     fn captive_session_read(
@@ -2015,12 +2069,16 @@ impl Runner {
         )))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
-        self.launch_startup_and_wait(deadline, false, false, &mut StartupAttempt::default())
+        let result = (|| {
+            self.backend.acquire_startup_lock()?;
+            self.launch_startup_and_wait(deadline, false, &mut StartupAttempt::default())
+        })();
+        self.backend.release_startup_lock();
+        result
     }
     fn launch_startup_and_wait(
         &mut self,
         deadline: f64,
-        recovery: bool,
         pin_process: bool,
         startup: &mut StartupAttempt,
     ) -> Result<()> {
@@ -2030,9 +2088,7 @@ impl Runner {
         while self.clock.now() < deadline {
             self.bind_persona_launch()?;
             self.backend.startup_cancel_check()?;
-            if recovery {
-                self.backend.check_startup_lock()?;
-            }
+            self.backend.authorize_game_control(None)?;
             let now = self.clock.now();
             let present = match self.backend.single_process(0.0) {
                 Ok(v) => v.is_some(),
@@ -2045,6 +2101,7 @@ impl Runner {
                 Err(e) => return Err(e),
             };
             if !present && now >= next_launch && attempts < 4 {
+                self.backend.authorize_game_control(None)?;
                 let closed = self.backend.close_orphaned_reporters()?;
                 if !closed.is_empty() {
                     println!("Closed helpers from failed launch: {closed:?}");
@@ -2062,9 +2119,7 @@ impl Runner {
                     }
                 }
                 self.remaining(deadline)?;
-                if recovery {
-                    self.backend.check_startup_lock()?;
-                }
+                self.backend.authorize_game_control(None)?;
                 if self.persona_runtime_restart {
                     self.persona_launch_requested = true;
                 }
@@ -2109,6 +2164,14 @@ impl Runner {
             return Err(Error::input("restart timeout must be finite and positive"));
         }
         self.backend.startup_cancel_check()?;
+        let result = (|| {
+            self.backend.acquire_startup_lock()?;
+            self.restart_game_inner(timeout)
+        })();
+        self.backend.release_startup_lock();
+        result
+    }
+    fn restart_game_inner(&mut self, timeout: f64) -> Result<String> {
         let mut first = StartupAttempt::default();
         let error = match self.restart_game_attempt(timeout, false, &mut first) {
             Ok(detail) => return Ok(detail),
@@ -2162,7 +2225,7 @@ impl Runner {
         );
         let result = (|| -> Result<String> {
             self.backend.startup_cancel_check()?;
-            self.backend.acquire_startup_lock()?;
+            self.backend.check_startup_lock()?;
             report["lock"] = json!({"status":"held"});
             self.stop_startup_process(game, &mut report)?;
             self.backend.startup_cancel_check()?;
@@ -2269,13 +2332,9 @@ impl Runner {
         report: &mut Value,
     ) -> Result<()> {
         self.backend.startup_cancel_check()?;
-        self.backend.check_startup_lock()?;
-        if self.backend.single_process(0.0)? != Some((game.pid, game.started)) {
-            return Err(Error::input(
-                "pinned startup process changed; refusing shutdown",
-            ));
-        }
+        self.backend.authorize_game_control(Some(game))?;
         self.disconnect();
+        self.backend.authorize_game_control(Some(game))?;
         self.backend.terminate(game.pid, game.started)?;
         let exited = self.backend.wait_exit(game.pid, self.clock.now() + 10.0)?;
         report["shutdown"] = json!({"status":if exited {"exited"}else{"pending"},"process":game});
@@ -2288,9 +2347,7 @@ impl Runner {
         attempt: &mut StartupAttempt,
     ) -> Result<String> {
         self.backend.startup_cancel_check()?;
-        if recovery {
-            self.backend.check_startup_lock()?;
-        }
+        self.backend.authorize_game_control(None)?;
         let deadline = self.clock.now() + timeout;
         let settle = self.budget(deadline, 30.0)?;
         let old = self.backend.single_process(settle)?;
@@ -2298,6 +2355,8 @@ impl Runner {
             return Err(Error::input("Civ6 appeared before the startup retry"));
         }
         if let Some((pid, started)) = old {
+            let game = crate::startup::GameProcess { pid, started };
+            self.backend.authorize_game_control(Some(game))?;
             let graceful = (|| -> Result<bool> {
                 let states = self.states(self.budget(deadline, 5.0)?)?;
                 let state = states
@@ -2305,10 +2364,11 @@ impl Runner {
                     .find(|s| state_name_eq(s, "FrontEnd"))
                     .or_else(|| states.iter().find(|s| state_name_eq(s, "InGame")));
                 if let Some(state) = state {
-                    match self.lua(
+                    match self.lua_with_control(
                         state,
                         "Events.UserConfirmedClose()\nreturn true",
                         self.budget(deadline, 5.0)?,
+                        Some(game),
                     ) {
                         Ok(_) => {}
                         Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {}
@@ -2329,7 +2389,8 @@ impl Runner {
             };
             let settle = self.budget(deadline, 30.0)?;
             if !graceful && self.backend.single_process(settle)? == old {
-                if let Err(e) = self.backend.request_close() {
+                self.backend.authorize_game_control(Some(game))?;
+                if let Err(e) = self.backend.request_close(game) {
                     println!("Civ VI window quit unavailable: {e}");
                 }
             }
@@ -2337,6 +2398,7 @@ impl Runner {
                 .backend
                 .wait_exit(pid, deadline.min(self.clock.now() + 15.0))?
             {
+                self.backend.authorize_game_control(Some(game))?;
                 self.backend.terminate(pid, started)?;
                 if !self
                     .backend
@@ -2362,12 +2424,13 @@ impl Runner {
                 "A Civ VI process appeared before Steam relaunch",
             ));
         }
+        self.backend.authorize_game_control(None)?;
         let closed = self.backend.close_orphaned_reporters()?;
         if !closed.is_empty() {
             println!("Closed orphan Civ VI helpers: {closed:?}");
             self.clock.sleep(self.budget(deadline, 8.0)?);
         }
-        self.launch_startup_and_wait(deadline, recovery, true, attempt)?;
+        self.launch_startup_and_wait(deadline, true, attempt)?;
         if self.owner_start {
             self.disconnect();
             self.wait_startup_frontend(self.remaining(deadline)?, false, attempt)?;

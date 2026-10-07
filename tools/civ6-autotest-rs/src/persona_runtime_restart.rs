@@ -355,6 +355,13 @@ impl Runner {
     }
 
     pub(super) fn cleanup_persona_process(&mut self) -> Result<()> {
+        let result = crate::time::with_interrupt_cleanup(|| self.cleanup_persona_process_inner());
+        if self.persona_runtime_restart {
+            self.backend.release_startup_lock();
+        }
+        result
+    }
+    fn cleanup_persona_process_inner(&mut self) -> Result<()> {
         if !self.persona_runtime_restart {
             return Ok(());
         }
@@ -387,6 +394,8 @@ impl Runner {
             }
             self.disconnect();
             self.retirement_authorized(deadline, true)?;
+            self.backend.acquire_startup_lock()?;
+            self.backend.authorize_game_control(Some(game))?;
             self.backend.terminate(game.pid, game.started)?;
             if !self.backend.wait_exit(game.pid, deadline)? {
                 return Err(Error::input("persona launched process exit not confirmed"));
@@ -452,6 +461,9 @@ impl Runner {
         }
         self.disconnect();
         self.retirement_authorized(deadline, cleanup)?;
+        self.backend.acquire_startup_lock()?;
+        self.backend
+            .authorize_game_control(Some((pid, started).into()))?;
         // Direct termination avoids invoking an unverified GameCore teardown
         // callback while the resident entries are live. Backend rechecks the
         // process creation identity, and only this live_chain owner's target.
@@ -491,6 +503,7 @@ mod tests {
 
     #[derive(Default)]
     struct LaunchState {
+        control_owned: bool,
         process: Option<(u32, f64)>,
         calls: Vec<&'static str>,
         lease_error: Option<&'static str>,
@@ -504,6 +517,16 @@ mod tests {
     }
     struct LaunchBackend(Arc<Mutex<LaunchState>>);
     impl Backend for LaunchBackend {
+        fn acquire_startup_lock(&mut self) -> Result<()> {
+            self.check_startup_lock()
+        }
+        fn check_startup_lock(&mut self) -> Result<()> {
+            if self.0.lock().unwrap().control_owned {
+                Ok(())
+            } else {
+                Err(Error::input("fixture does not own the shared lock"))
+            }
+        }
         fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
             Ok(self.0.lock().unwrap().process)
         }
@@ -575,9 +598,11 @@ mod tests {
             "exit_pending",
             "already_exited",
             "lease_changed_at_terminate",
+            "shared_lock_lost",
         ] {
             let dir = tempfile::tempdir().unwrap();
             let state = Arc::new(Mutex::new(LaunchState {
+                control_owned: true,
                 exit_confirmed: true,
                 ..Default::default()
             }));
@@ -592,7 +617,7 @@ mod tests {
             );
             r.persona_runtime_restart = true;
             let mut attempt = StartupAttempt::default();
-            r.launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+            r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
                 .unwrap();
             assert!(attempt.launch_requested);
             assert_eq!(r.persona_launched_process, attempt.process);
@@ -609,13 +634,17 @@ mod tests {
                         s.lease_checks = 0;
                         s.lease_changes_at = Some(3);
                     }
+                    "shared_lock_lost" => s.control_owned = false,
                     _ => {}
                 }
             }
             let result = r.cleanup_persona_process();
             let s = state.lock().unwrap();
             match case {
-                "lease_changed" | "pid_reused" | "lease_changed_at_terminate" => {
+                "lease_changed"
+                | "pid_reused"
+                | "lease_changed_at_terminate"
+                | "shared_lock_lost" => {
                     assert!(result.is_err());
                     assert_eq!(s.calls, ["launch", "pin_without_window"]);
                     assert_eq!(r.persona_launched_process, attempt.process);
@@ -662,6 +691,7 @@ mod tests {
     fn existing_unlaunched_game_is_not_adopted_for_persona_cleanup() {
         let dir = tempfile::tempdir().unwrap();
         let state = Arc::new(Mutex::new(LaunchState {
+            control_owned: true,
             process: Some((7, 1.0)),
             ..Default::default()
         }));
@@ -676,7 +706,7 @@ mod tests {
         );
         r.persona_runtime_restart = true;
         let mut attempt = StartupAttempt::default();
-        r.launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+        r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
             .unwrap();
         assert!(!attempt.launch_requested);
         assert_eq!(r.persona_launched_process, None);
@@ -694,6 +724,7 @@ mod tests {
         ] {
             let dir = tempfile::tempdir().unwrap();
             let state = Arc::new(Mutex::new(LaunchState {
+                control_owned: true,
                 exit_confirmed: true,
                 window_error,
                 dx11_error,
@@ -712,7 +743,7 @@ mod tests {
             r.persona_runtime_restart = true;
             let mut attempt = StartupAttempt::default();
             assert!(r
-                .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+                .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
                 .is_err());
             assert!(r.persona_launch_requested);
             assert_eq!(r.resident_runtime_identity, None);
@@ -745,6 +776,7 @@ mod tests {
     fn absent_launch_candidate_stays_unresolved_for_outer_cleanup() {
         let dir = tempfile::tempdir().unwrap();
         let state = Arc::new(Mutex::new(LaunchState {
+            control_owned: true,
             no_process: true,
             window_error: Some(ErrorKind::Interrupted),
             ..Default::default()
@@ -761,7 +793,7 @@ mod tests {
         r.persona_runtime_restart = true;
         let mut attempt = StartupAttempt::default();
         assert!(r
-            .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+            .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
             .is_err());
         let error = r.cleanup_persona_process().unwrap_err();
         assert!(error.message.contains("outer live_chain cleanup required"));
@@ -784,11 +816,22 @@ mod tests {
             }
         }
         struct TimeoutBackend {
+            control_owned: bool,
             clock: Arc<ManualClock>,
             calls: Arc<Mutex<Vec<&'static str>>>,
             late: bool,
         }
         impl Backend for TimeoutBackend {
+            fn acquire_startup_lock(&mut self) -> Result<()> {
+                self.check_startup_lock()
+            }
+            fn check_startup_lock(&mut self) -> Result<()> {
+                if self.control_owned {
+                    Ok(())
+                } else {
+                    Err(Error::input("fixture does not own the shared lock"))
+                }
+            }
             fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
                 Ok((self.late && self.clock.now() >= 135.0).then_some((7, 135.0)))
             }
@@ -823,6 +866,7 @@ mod tests {
                 dir.path().into(),
                 4318,
                 Box::new(TimeoutBackend {
+                    control_owned: true,
                     clock: Arc::clone(&clock),
                     calls: Arc::clone(&calls),
                     late,
@@ -831,7 +875,7 @@ mod tests {
             );
             r.persona_runtime_restart = true;
             let failure = r
-                .launch_startup_and_wait(140.0, false, true, &mut StartupAttempt::default())
+                .launch_startup_and_wait(140.0, true, &mut StartupAttempt::default())
                 .unwrap_err();
             assert_eq!(
                 calls
@@ -1221,6 +1265,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
     }
 
     struct LifecycleBackend {
+        control_owned: bool,
         identity: Option<(u32, u64)>,
         exited: bool,
         ready: bool,
@@ -1228,6 +1273,16 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         lease_failure: Option<(usize, bool)>,
     }
     impl Backend for LifecycleBackend {
+        fn acquire_startup_lock(&mut self) -> Result<()> {
+            self.check_startup_lock()
+        }
+        fn check_startup_lock(&mut self) -> Result<()> {
+            if self.control_owned {
+                Ok(())
+            } else {
+                Err(Error::input("fixture does not own the shared lock"))
+            }
+        }
         fn live_lease_budget(&self) -> Result<Option<f64>> {
             if let Some((after, changed)) = self.lease_failure {
                 if self.calls.lock().unwrap().len() >= after {
@@ -1304,6 +1359,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
             dir.into(),
             4318,
             Box::new(LifecycleBackend {
+                control_owned: true,
                 identity,
                 exited,
                 ready,
@@ -1440,6 +1496,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
                 dir.path().into(),
                 4318,
                 Box::new(LifecycleBackend {
+                    control_owned: true,
                     identity: Some((7, 123)),
                     exited: true,
                     ready: true,

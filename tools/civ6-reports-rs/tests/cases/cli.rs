@@ -241,13 +241,11 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
             .unwrap();
     assert!(default.output.is_none());
     assert!(default.repo.is_none());
-    assert_eq!(
-        scenario::default_output().unwrap(),
-        support::root()
-            .canonicalize()
-            .unwrap()
-            .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
-    );
+    // A shared target can be inside another checkout. The default follows the
+    // executable; scenario_paths tests that selection with distinct checkouts.
+    assert!(scenario::default_output()
+        .unwrap()
+        .ends_with("tools/civ6-autotest/scenarios/court-arbitration-ai.json"));
 }
 
 #[test]

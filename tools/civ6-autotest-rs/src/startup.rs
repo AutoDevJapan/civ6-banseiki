@@ -12,6 +12,74 @@ use std::{
 pub const RECOVERY_MARKER: &str = "STARTUP_RECOVERY_ATTEMPTED";
 pub const CHAIN_PID_ENV: &str = "CIV6_LIVE_CHAIN_PID";
 pub const LOCK_PATH_ENV: &str = "CIV6_LIVE_LOCK_PATH";
+pub const SHARED_LOCK_PATH: &str = "D:/CC/Tools/civ6-live/civ6.lock";
+pub const CHAIN_IMAGE_PATH: &str = "D:/CC/Tools/civ6-live/live_chain.exe";
+
+/// The PC has one game owner. An absolute path to another lock is not authority.
+pub fn verify_control_path(actual: &Path, expected: &str) -> Result<()> {
+    let normalize = |path: &str| {
+        path.trim_start_matches(r"\\?\")
+            .replace('\\', "/")
+            .to_lowercase()
+    };
+    if normalize(&actual.to_string_lossy()) != normalize(expected) {
+        return Err(Error::input("standard live-chain ownership path required"));
+    }
+    Ok(())
+}
+
+/// Bind the lease to the process and acquisition recorded by live_chain, not
+/// merely to a PID that could already have been reused before we arrived.
+pub fn verify_control_record(
+    record: &Value,
+    chain_pid: u32,
+    chain_created: u64,
+    token: &str,
+    now: f64,
+) -> Result<()> {
+    verify_lock_record(record, chain_pid)?;
+    let acquired = record["acquired_at"].as_f64();
+    let started = chain_created as f64 / 10_000_000.0 - 11_644_473_600.0;
+    if chain_created == 0
+        || record["pid_created_filetime"].as_u64() != Some(chain_created)
+        || token.is_empty()
+        || record["lock_token"].as_str() != Some(token)
+        || !now.is_finite()
+        || !acquired.is_some_and(|at| at.is_finite() && at >= started && at <= now)
+    {
+        return Err(Error::input(
+            "live-chain acquisition identity changed or missing",
+        ));
+    }
+    Ok(())
+}
+
+/// Validate the real caller ancestry using creation times from open handles.
+/// An environment PID, or a recycled parent PID, cannot grant game control.
+pub fn verify_control_ancestry(
+    caller: u32,
+    chain_pid: u32,
+    rows: &[crate::restart::ProcessRow],
+    mut created: impl FnMut(u32) -> Result<u64>,
+) -> Result<()> {
+    let mut child = caller;
+    for _ in 0..32 {
+        if child == chain_pid && child != 0 {
+            return Ok(());
+        }
+        let row = rows
+            .iter()
+            .find(|row| row.pid == child)
+            .ok_or_else(|| Error::input("live-chain ancestry is unknown"))?;
+        if created(row.parent_pid)? > created(child)? {
+            return Err(Error::input("live-chain ancestor PID was reused"));
+        }
+        child = row.parent_pid;
+    }
+    Err(Error::input(
+        "driver is not a descendant of the shared lock owner",
+    ))
+}
 /// Both executables embed the same source fingerprint; a leftover helper cannot pass.
 pub fn helper_identity() -> String {
     use sha2::{Digest, Sha256};
@@ -301,7 +369,8 @@ mod platform;
 #[cfg(windows)]
 pub use platform::{
     collect_diagnostics, diagnostic_worker, loading_evidence, pin_launched_process,
-    pin_window_process, reset_display, DiagnosticSession, PinnedGame, RecoveryLease,
+    pin_window_process, request_owned_close, reset_display, DiagnosticSession, PinnedGame,
+    RecoveryLease,
 };
 #[cfg(not(windows))]
 #[derive(Default)]
@@ -333,6 +402,10 @@ impl PinnedGame {
 
 #[cfg(not(windows))]
 pub struct RecoveryLease;
+#[cfg(not(windows))]
+pub fn request_owned_close(_: &mut RecoveryLease, _: GameProcess) -> Result<()> {
+    Err(Error::input("owned window shutdown requires Windows"))
+}
 #[cfg(not(windows))]
 impl RecoveryLease {
     pub fn acquire() -> Result<Self> {

@@ -555,7 +555,7 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
 #[test]
 fn test_failed_cold_start_is_reported_before_tuner_access() {
     let f = Fixture::new();
-    let mut backend = f.backend();
+    let mut backend = f.backend().owned_chain();
     backend.on_process = Box::new(|_| Ok(None));
     let clock = f.clock.clone();
     backend.on_launch = Some(Box::new(move || {
