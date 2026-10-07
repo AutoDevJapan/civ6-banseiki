@@ -18,6 +18,8 @@ const REPORTER:&str="D:\\SteamLibrary\\steamapps\\common\\Sid Meier's Civilizati
 
 #[derive(Default)]
 struct MockLifecycle {
+    control_checks: usize,
+    deny_control_at: Option<usize>,
     civ: BTreeSet<u32>,
     civ_script: VecDeque<BTreeSet<u32>>,
     civ_queries: usize,
@@ -40,6 +42,17 @@ struct MockLifecycle {
     reporter_open_fails: bool,
 }
 impl LifecycleBackend for MockLifecycle {
+    fn check_control(&mut self) -> Result<()> {
+        self.control_checks += 1;
+        if self
+            .deny_control_at
+            .is_some_and(|at| self.control_checks >= at)
+        {
+            Err(Error::input("fixture shared control lost"))
+        } else {
+            Ok(())
+        }
+    }
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
         self.civ_queries += 1;
         if let Some(next) = self.civ_script.pop_front() {
@@ -140,6 +153,55 @@ fn orphan_reporter(image: &str) -> MockLifecycle {
         reporter_path: Some(image.into()),
         ..Default::default()
     }
+}
+
+#[test]
+fn both_reporter_cleanup_paths_recheck_ownership_and_release_pinned_handles() {
+    for pinned in [false, true] {
+        for denied_at in [1, 2] {
+            let mut b = orphan_reporter(REPORTER);
+            b.reporters.insert(42);
+            b.deny_control_at = Some(denied_at);
+            let error = if pinned {
+                restart::close_orphaned_civ_reporters_with(&mut b).unwrap_err()
+            } else {
+                restart::launch_via_steam_with(&mut b).unwrap_err()
+            };
+            assert!(error.message.contains("shared control lost"));
+            assert_eq!(b.control_checks, denied_at);
+            assert!(b.reporter_terminated.is_empty());
+            assert!(b.uri.is_empty());
+            if pinned && denied_at == 2 {
+                assert_eq!(b.events.last().unwrap(), "close:200");
+                assert_eq!(b.events.iter().filter(|e| *e == "close:200").count(), 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn steam_launch_rechecks_control_after_authorized_reporter_cleanup() {
+    let mut b = orphan_reporter(REPORTER);
+    b.reporters.insert(42);
+    b.deny_control_at = Some(3);
+    assert!(restart::launch_via_steam_with(&mut b).is_err());
+    assert_eq!(b.reporter_terminated, [42]);
+    assert!(b.uri.is_empty());
+}
+
+#[test]
+fn reporter_scan_stops_when_control_changes_after_an_authorized_termination() {
+    let mut b = orphan_reporter(REPORTER);
+    b.process_rows.push(ProcessRow {
+        pid: 43,
+        name: "firaxisbugreporter.exe".into(),
+        parent_pid: 41,
+    });
+    b.deny_control_at = Some(3);
+    assert!(restart::close_orphaned_civ_reporters_with(&mut b).is_err());
+    assert_eq!(b.reporter_terminated, [42]);
+    assert_eq!(b.events.iter().filter(|e| *e == "close:200").count(), 2);
+    assert_eq!(b.control_checks, 3);
 }
 
 #[test]

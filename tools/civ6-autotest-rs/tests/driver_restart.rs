@@ -50,6 +50,10 @@ impl NativeFixture {
     }
 }
 impl LifecycleBackend for NativeFixture {
+    fn check_control(&mut self) -> Result<()> {
+        // This fixture models an owned live-chain without invoking Windows.
+        Ok(())
+    }
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
         Ok(self.ids.pop_front().unwrap_or_else(|| self.tail.clone()))
     }

@@ -10,8 +10,6 @@ use std::{
 };
 
 pub const STEAM_URI: &str = "steam://launch/289070/option2";
-const REPORTER_SUFFIX: &str =
-    "\\sid meier's civilization vi\\base\\binaries\\win64steam\\firaxisbugreporter.exe";
 
 pub fn reporter_finished(wait_result: u32) -> bool {
     wait_result == 0
@@ -274,6 +272,9 @@ pub struct ProcessRow {
 }
 
 pub trait LifecycleBackend {
+    fn check_control(&mut self) -> Result<()> {
+        Err(Error::input("backend cannot prove shared game control"))
+    }
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>>;
     fn process_start(&mut self, pid: u32) -> Result<f64>;
     fn terminate_civ(&mut self, pid: u32, expected_start: f64) -> Result<()>;
@@ -371,10 +372,12 @@ pub fn terminate_civ_process_with<B: LifecycleBackend>(
             "Civ VI process {pid} changed before termination"
         )));
     }
+    backend.check_control()?;
     backend.terminate_civ(pid, expected_start)
 }
 
 pub fn close_orphan_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
+    backend.check_control()?;
     if !backend.civ_ids()?.is_empty() {
         return Ok(());
     }
@@ -387,12 +390,13 @@ pub fn close_orphan_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> 
                 "Cannot open remaining crash reporter {pid}"
             )));
         };
-        if !path.to_lowercase().ends_with(REPORTER_SUFFIX) {
+        if !is_civ_reporter_image(&path) {
             continue;
         }
         if !backend.civ_ids()?.is_empty() {
             return Ok(());
         }
+        backend.check_control()?;
         backend.terminate_reporter(pid)?;
     }
     Ok(())
@@ -418,6 +422,7 @@ fn is_civ_reporter_image(path: &str) -> bool {
 }
 
 pub fn close_orphaned_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> Result<Vec<u32>> {
+    backend.check_control()?;
     if !backend.civ_ids()?.is_empty() {
         return Ok(Vec::new());
     }
@@ -439,6 +444,7 @@ pub fn close_orphaned_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -
             if !backend.civ_ids()?.is_empty() {
                 return Ok(true);
             }
+            backend.check_control()?;
             backend.terminate_reporter_handle(handle, row.pid)?;
             closed.push(row.pid);
             Ok(false)
@@ -458,6 +464,7 @@ pub fn launch_via_steam_with<B: LifecycleBackend>(backend: &mut B) -> Result<()>
 
 /// Send the URI after the caller has completed its own helper cleanup.
 pub fn request_steam_launch_with<B: LifecycleBackend>(backend: &mut B) -> Result<()> {
+    backend.check_control()?;
     backend.launch_uri(STEAM_URI)
 }
 
@@ -552,7 +559,35 @@ mod win {
         Ok((((a.high as u64) << 32 | a.low as u64) as f64) / 10_000_000.0 - 11_644_473_600.0)
     }
     pub struct WindowsLifecycle;
+    fn terminate_owned_reporter(handle: isize, pid: u32) -> Result<()> {
+        // Both reporter APIs terminate the same pinned object under the same
+        // live-chain authority as game shutdown, not a basename-only PID.
+        let mut lease = crate::startup::RecoveryLease::acquire()?;
+        if !is_civ_reporter_image(&image_path(handle)?) {
+            return Err(Error::input(format!(
+                "Crash reporter {pid} changed before termination"
+            )));
+        }
+        if !click::civ_process_ids()?.is_empty() {
+            return Err(Error::input("Civ6 appeared before reporter termination"));
+        }
+        lease.check()?;
+        if unsafe { TerminateProcess(handle, 1) } == 0 {
+            return Err(Error::input(format!(
+                "Could not close orphan Civ VI crash reporter {pid}"
+            )));
+        }
+        if !reporter_finished(unsafe { WaitForSingleObject(handle, 10_000) }) {
+            return Err(Error::input(format!(
+                "Orphan Civ VI crash reporter {pid} did not finish exiting"
+            )));
+        }
+        Ok(())
+    }
     impl LifecycleBackend for WindowsLifecycle {
+        fn check_control(&mut self) -> Result<()> {
+            crate::startup::RecoveryLease::acquire()?.check()
+        }
         fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
             click::civ_process_ids()
         }
@@ -605,29 +640,7 @@ mod win {
             path.map(Some)
         }
         fn terminate_reporter(&mut self, pid: u32) -> Result<()> {
-            with_process(pid, 0x101001, |h| {
-                let path = image_path(h)
-                    .map_err(|_| Error::input(format!("Cannot inspect crash reporter {pid}")))?;
-                if !path.to_lowercase().ends_with(REPORTER_SUFFIX) {
-                    return Err(Error::input(format!(
-                        "Crash reporter {pid} changed before termination"
-                    )));
-                }
-                if !click::civ_process_ids()?.is_empty() {
-                    return Ok(());
-                }
-                if unsafe { TerminateProcess(h, 1) } == 0 {
-                    return Err(Error::input(format!(
-                        "Could not close orphan Civ VI crash reporter {pid}"
-                    )));
-                }
-                if !reporter_finished(unsafe { WaitForSingleObject(h, 10_000) }) {
-                    return Err(Error::input(format!(
-                        "Orphan Civ VI crash reporter {pid} did not finish exiting"
-                    )));
-                }
-                Ok(())
-            })
+            with_process(pid, 0x101001, |h| terminate_owned_reporter(h, pid))
         }
         fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
             let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
@@ -668,19 +681,14 @@ mod win {
             result
         }
         fn open_reporter(&mut self, pid: u32) -> Result<Option<isize>> {
-            Ok(click::open_process(pid, 0x1001))
+            Ok(click::open_process(pid, 0x101001))
         }
         fn reporter_image(&mut self, handle: isize, pid: u32) -> Result<String> {
             image_path(handle)
                 .map_err(|_| Error::input(format!("Cannot verify Civ VI helper process {pid}")))
         }
         fn terminate_reporter_handle(&mut self, handle: isize, pid: u32) -> Result<()> {
-            if unsafe { TerminateProcess(handle, 1) } == 0 {
-                return Err(Error::input(format!(
-                    "Could not close orphan Civ VI helper {pid}"
-                )));
-            }
-            Ok(())
+            terminate_owned_reporter(handle, pid)
         }
         fn close_reporter_handle(&mut self, handle: isize) {
             unsafe {
