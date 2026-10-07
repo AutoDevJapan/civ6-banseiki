@@ -74,6 +74,7 @@ struct Model {
     query_failure_at: Option<f64>,
     query_duration: f64,
     reporter_failed: bool,
+    sync_code: i32,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
     printed: Vec<String>,
@@ -94,6 +95,7 @@ impl Model {
             query_failure_at: None,
             query_duration: 0.0,
             reporter_failed: false,
+            sync_code: 0,
             calls: vec![],
             sleeps: vec![],
             printed: vec![],
@@ -138,6 +140,17 @@ impl Runner for Model {
         }
         self.calls.push((self.time, call.clone()));
         match call.args[0].as_str() {
+            _ if call.args.get(1).is_some_and(|arg| arg == "--offset") => {
+                assert!(!self.running.iter().any(|running| *running));
+                assert!(call.args[2].parse::<u64>().is_ok());
+                assert_eq!(call.args[3], "--journal");
+                assert!(call.kill_tree);
+                Ok(Output {
+                    code: self.sync_code,
+                    stderr: "sync fixture".into(),
+                    ..Output::default()
+                })
+            }
             "tasklist" => {
                 self.time += self.query_duration.min(call.timeout.unwrap());
                 self.update();
@@ -280,6 +293,36 @@ fn each_renderer_quits_through_official_frontend_event_before_reporter_cleanup()
         assert_eq!(r.time, 101.0);
         assert_eq!(r.sleeps, [0.5, 0.5]);
     }
+}
+
+#[test]
+fn exit_sync_barrier_runs_after_process_exit_and_propagates_failure() {
+    let f = Fixture::new(true);
+    let source = f
+        .paths
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(source, "fixture").unwrap();
+    let binary = f
+        .paths
+        .live()
+        .join("tools/target/release/civ6-steam-sync.exe");
+    fs::write(&binary, "fixture: never executed").unwrap();
+    for code in [0, 1] {
+        let mut r = Model::new([true, false]);
+        r.sync_code = code;
+        let result = chain::close_civ6_with_paths(&mut r, &f.paths);
+        assert_eq!(result.is_ok(), code == 0);
+        assert_eq!(r.count("taskkill"), 0);
+        assert_eq!(r.count(&cc_live::path(&binary)), 1);
+        if let Err(error) = result {
+            assert!(error.contains("Steam exit sync did not finish"));
+        }
+    }
+    let mut r = Model::new([false, false]);
+    chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
+    assert_eq!(r.count(&cc_live::path(&binary)), 0);
 }
 
 #[test]
