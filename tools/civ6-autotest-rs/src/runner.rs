@@ -17,6 +17,12 @@ use std::{
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
+    fn begin_steam_observation(&mut self, _journal: &Path) -> Result<()> {
+        Ok(())
+    }
+    fn steam_sync_pending(&mut self) -> Result<bool> {
+        Ok(false)
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
     }
@@ -192,6 +198,8 @@ mod reliability_failure_tests {
 
 #[derive(Default)]
 pub struct SystemBackend {
+    steam_sync: Option<crate::steam_sync::Monitor>,
+    steam_journal: Option<PathBuf>,
     client: Option<crate::tuner::TunerClient>,
     startup_lease: Option<crate::startup::RecoveryLease>,
     launch_floor: Option<f64>,
@@ -199,6 +207,28 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn begin_steam_observation(&mut self, journal: &Path) -> Result<()> {
+        let monitor = crate::steam_sync::Monitor::new(crate::steam_sync::cloud_log())?;
+        crate::steam_sync::journal(journal, "begin", &monitor)?;
+        self.steam_sync = Some(monitor);
+        self.steam_journal = Some(journal.to_owned());
+        Ok(())
+    }
+    fn steam_sync_pending(&mut self) -> Result<bool> {
+        if let Some(monitor) = &mut self.steam_sync {
+            let before = monitor.evidence.len();
+            monitor.poll()?;
+            if before != monitor.evidence.len() {
+                crate::steam_sync::journal(
+                    self.steam_journal.as_ref().unwrap(),
+                    "observed",
+                    monitor,
+                )?;
+            }
+            return Ok(monitor.pending());
+        }
+        Ok(false)
+    }
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
             .launch_floor
@@ -347,6 +377,7 @@ pub struct AutoplayStatus {
     pub remaining: i64,
     pub local_player: i64,
 }
+type AutoplayExecution = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
 pub fn parse_autoplay_status(value: &str) -> Result<AutoplayStatus> {
     let parts: Vec<_> = value.split('|').collect();
     let error = || Error::scenario(format!("Unexpected autoplay status: {value:?}"));
@@ -1083,6 +1114,7 @@ impl Runner {
                 self.backend.check_startup_lock()?;
             }
             let now = self.clock.now();
+            let syncing = self.backend.steam_sync_pending()?;
             let present = match self.backend.single_process(0.0) {
                 Ok(v) => v.is_some(),
                 Err(e)
@@ -1093,7 +1125,7 @@ impl Runner {
                 }
                 Err(e) => return Err(e),
             };
-            if !present && now >= next_launch && attempts < 4 {
+            if !present && !syncing && now >= next_launch && attempts < 4 {
                 let closed = self.backend.close_orphaned_reporters()?;
                 if !closed.is_empty() {
                     println!("Closed helpers from failed launch: {closed:?}");
@@ -1330,6 +1362,8 @@ impl Runner {
         if recovery && old.is_some() {
             return Err(Error::input("Civ6 appeared before the startup retry"));
         }
+        self.backend
+            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
         if let Some((pid, started)) = old {
             let graceful = (|| -> Result<bool> {
                 let states = self.states(self.budget(deadline, 5.0)?)?;
@@ -1383,6 +1417,10 @@ impl Runner {
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
+            while self.backend.steam_sync_pending()? {
+                self.remaining(deadline)?;
+                self.sleep_until(deadline, 0.5);
+            }
         }
         let settle = self.budget(deadline, 30.0)?;
         if self.backend.single_process(settle)?.is_some() {
@@ -2352,7 +2390,7 @@ impl Runner {
             .unwrap_or_else(|| "local startTurn = Game.GetCurrentGameTurn()\n".into());
         let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() JAC_AUTOTEST_AUTO_DONE = true end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
         let mut autoplay_started = false;
-        let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
+        let execution = (|| -> Result<AutoplayExecution> {
             let (pid, initial_memory, started) = if options.record_metrics {
                 let process = self.backend.single_process(30.0)?.ok_or_else(|| {
                     Error::scenario("Civ VI process disappeared before metrics sampling")
@@ -2760,7 +2798,8 @@ impl Runner {
             fs::create_dir_all(parent)?;
         }
         fs::create_dir(&self.output)?;
-        self.log("start", "OK", &text(&self.scenario, "name").to_string())?;
+        let scenario_name = text(&self.scenario, "name").to_owned();
+        self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
         let code = match self.run_inner() {
             Ok(v) => v,
@@ -2876,8 +2915,7 @@ impl Runner {
                 frontend_ready = true;
             }
             self.backend.require_single_process()?;
-            if !frontend_ready && !(first["action"] == "ui_lua" && first["state_name"] == "InGame")
-            {
+            if !(frontend_ready || first["action"] == "ui_lua" && first["state_name"] == "InGame") {
                 self.wait(&json!({"type":"lua","state_name":"FrontEnd","code":"return UI.IsInFrontEnd()"}),10.0,false)?;
             }
         }

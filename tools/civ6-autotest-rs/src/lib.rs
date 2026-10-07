@@ -16,6 +16,7 @@ pub mod session;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;
+pub mod steam_sync;
 pub mod time;
 pub mod tuner;
 pub use error::{Error, ErrorKind, Result};

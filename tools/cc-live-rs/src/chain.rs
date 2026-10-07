@@ -131,7 +131,51 @@ pub fn close_civ6(r: &mut impl Runner) -> Result<(), String> {
 
 /// The caller must hold the shared Civ6 lock for the entire close and wait.
 pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
-    close_civ6_outcome(r, p).map(|_| ())
+    let cloud_log = std::env::var_os("CIV6_STEAM_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("C:/Program Files (x86)/Steam"))
+        .join("logs/cloud_log.txt");
+    let sync_tool = p.live().join("tools/target/release/civ6-steam-sync.exe");
+    let source = p
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    let offset = if source.is_file() && sync_tool.is_file() {
+        match fs::metadata(&cloud_log) {
+            Ok(m) => Some(m.len()),
+            Err(e) if e.kind() == ErrorKind::NotFound => Some(0),
+            Err(e) => return Err(format!("cannot mark Steam sync before exit: {e}")),
+        }
+    } else {
+        None
+    };
+    let outcome = close_civ6_outcome(r, p)?;
+    if outcome != "absent" {
+        if let Some(offset) = offset {
+            let journal = p
+                .temp
+                .join(format!("civ6-steam-exit-{}.jsonl", std::process::id()));
+            let out = r.run(
+                Call::new(args(&[
+                    &path(sync_tool),
+                    "--offset",
+                    &offset.to_string(),
+                    "--journal",
+                    &path(journal),
+                ]))
+                .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                .managed()
+                .timeout(50.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "Steam exit sync did not finish: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, String> {

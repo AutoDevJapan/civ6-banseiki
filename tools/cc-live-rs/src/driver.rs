@@ -75,6 +75,12 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
         }
     });
     let mut names = vec!["civ6-autotest", "civ6-tuner"];
+    if worktree
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs")
+        .is_file()
+    {
+        names.push("civ6-steam-sync");
+    }
     let helper = worktree.join("tools/civ6-autotest-rs/src/bin/civ6-startup-diagnostics.rs");
     if worktree
         .join("tools/civ6-autotest-rs/src/startup.rs")

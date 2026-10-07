@@ -122,6 +122,38 @@ fn test_restart_action_validation() {
 }
 
 #[test]
+fn steam_sync_must_finish_before_relaunch_after_game_exit() {
+    let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None, None], None));
+    let sync_checks = Arc::new(Mutex::new(0));
+    let checks = sync_checks.clone();
+    fake.on_sync = Box::new(move || {
+        let mut n = checks.lock().unwrap();
+        *n += 1;
+        Ok(*n < 4)
+    });
+    let checks = sync_checks.clone();
+    fake.on_launch = Box::new(move || {
+        assert!(*checks.lock().unwrap() >= 4);
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.restart_game(120.0).unwrap();
+    assert_eq!(h.events().iter().filter(|e| *e == "launch").count(), 1);
+    assert!(!h.events().iter().any(|e| e.starts_with("terminate:")));
+    assert!(h.clock.at() >= 17.5);
+}
+
+#[test]
+fn steam_sync_deadline_expiry_never_sends_a_launch() {
+    let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None], None));
+    fake.on_sync = Box::new(|| Ok(true));
+    let mut h = Harness::new(json!({}), fake);
+    assert!(h.runner.restart_game(30.0).is_err());
+    assert!(!h.events().contains(&"launch".into()));
+    assert_eq!(h.clock.at(), 30.0);
+}
+
+#[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
     let mut fake = FakeBackend::new().process(processes(
         &[
