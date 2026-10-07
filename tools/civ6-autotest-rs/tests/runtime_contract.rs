@@ -158,6 +158,7 @@ fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
     assert_eq!(result["passed"], true);
     assert_eq!(result["completed_steps"], 10);
     assert!(result["failure"].is_null());
+    assert!(result["failure_boundary"].is_null());
     assert!(result["test_mode"].is_null());
     let keys: std::collections::BTreeSet<_> = result
         .as_object()
@@ -173,6 +174,7 @@ fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
             "test_mode",
             "completed_steps",
             "failure",
+            "failure_boundary",
             "checks",
             "metrics"
         ]

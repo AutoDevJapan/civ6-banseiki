@@ -1414,11 +1414,7 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
         "here/civ6.lock",
         json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
     );
-    let limit = process::LeaseLimit {
-        paths: f.p.clone(),
-        token: "owned".into(),
-        cleanup_reserve_seconds: 240.0,
-    };
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
     let mut r = Fake::success();
     r.time = 10000.0;
     assert_eq!(
@@ -1438,7 +1434,7 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
     r.time = 1100.0;
     assert_eq!(
         process::lease_probe(&mut r, &limit).unwrap(),
-        process::LeaseProbe::Contended(1460.0)
+        process::LeaseProbe::Contended(2800.0)
     );
 }
 
@@ -1456,11 +1452,7 @@ fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
         .share_mode(1)
         .open(locked)
         .unwrap();
-    let limit = process::LeaseLimit {
-        paths: f.p.clone(),
-        token: "owned".into(),
-        cleanup_reserve_seconds: 240.0,
-    };
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
     let mut r = Fake::success();
     r.time = 10000.0;
     assert_eq!(
@@ -1539,6 +1531,141 @@ fn quiet_running_child_is_not_cut_off_at_the_contention_lease() {
         )
         .unwrap();
     assert_eq!(out.code, 0);
+}
+
+#[cfg(windows)]
+#[test]
+fn departed_waiter_cancels_the_competition_deadline_during_a_running_child() {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    let f = Fixture::new();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":now}),
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"running"}));
+    f.json(
+        "here/queue/waiter.json",
+        json!({"job":"waiter","since":now}),
+    );
+    let paths = f.p.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(350));
+        write_json(
+            paths.jobs.join("waiter/job.json"),
+            &json!({"status":"succeeded"}),
+        )
+        .unwrap();
+    });
+    let out = process::RealRunner
+        .run(
+            Call::new(args(&["cmd.exe", "/d", "/c", "ping 127.0.0.1 -n 5 > nul"]))
+                .managed()
+                .timeout(10.0)
+                .lease(&f.p, "owned", 1797.0),
+        )
+        .unwrap();
+    writer.join().unwrap();
+    assert_eq!(out.code, 0);
+}
+
+#[test]
+fn slow_waiter_investigation_does_not_extend_the_absolute_lease() {
+    struct SlowInspect(Fake);
+    impl Runner for SlowInspect {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            self.0.time += 100.0;
+            self.0.run(c)
+        }
+        fn now(&mut self) -> f64 {
+            self.0.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.0.sleep(s)
+        }
+    }
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"running"}));
+    f.json(
+        "here/queue/waiter.json",
+        json!({"job":"waiter","live_chain":true,"pid":4321,"since":1000}),
+    );
+    let mut r = SlowInspect(Fake::outputs(&[("\"live_chain.exe\",\"4321\"", "", 0)]));
+    r.0.time = 1100.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    assert_eq!(
+        process::lease_probe(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(2800.0)
+    );
+    assert_eq!(r.0.time, 1200.0);
+}
+
+#[test]
+fn dynamic_lease_deadline_is_shared_with_civ6_cleanup_and_lock_release() {
+    struct TightCleanup {
+        inner: ReliabilityRunner,
+        mono: f64,
+        driver_done: bool,
+        timeouts: Vec<f64>,
+    }
+    impl Runner for TightCleanup {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if c.args[0] == "fixture-python" {
+                let limit = c.lease.clone().unwrap();
+                self.inner.run(c)?;
+                limit.record_probe(&process::LeaseProbe::Contended(0.25));
+                self.mono = 0.20;
+                self.driver_done = true;
+                return Err(format!(
+                    "{}: give the slot to its waiter",
+                    process::LEASE_YIELD
+                ));
+            }
+            if c.args[0] == "taskkill" && self.driver_done {
+                let timeout = c.timeout.unwrap();
+                self.timeouts.push(timeout);
+                assert!(timeout <= 0.050001);
+                self.mono += timeout;
+                return Err("simulated cleanup deadline".into());
+            }
+            self.inner.run(c)
+        }
+        fn now(&mut self) -> f64 {
+            self.inner.now()
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.mono
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.mono += s;
+            Ok(())
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.inner.print(s)
+        }
+    }
+    let f = Fixture::new();
+    let mut r = TightCleanup {
+        inner: ReliabilityRunner::new(&f, vec![0; 10]),
+        mono: 0.0,
+        driver_done: false,
+        timeouts: vec![],
+    };
+    let error = cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"])).unwrap_err();
+    assert!(error.contains("simulated cleanup deadline"));
+    assert!(!r.timeouts.is_empty());
+    assert!(r.mono <= 0.250001);
+    let summary = reliability_summary(&r.inner);
+    assert_eq!(summary["rounds"][0]["contention_deadline_monotonic"], 0.25);
+    assert_eq!(summary["rounds"][0]["cleanup"]["lock_released"], true);
+    assert_eq!(summary["consecutive_successes"], 0);
 }
 
 #[test]
@@ -1731,7 +1858,8 @@ fn driver_is_bounded_by_the_remaining_scenario_window() {
                 });
             }
             if call.args[0] == "fixture-python" {
-                assert_eq!(call.timeout, Some(15.0));
+                assert_eq!(call.timeout, Some(1140.0));
+                assert_eq!(call.lease.as_ref().unwrap().hard_deadline(), Some(1800.0));
                 self.time += 15.0;
                 self.probed = true;
                 return Err("command timed out in driver".into());

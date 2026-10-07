@@ -22,11 +22,44 @@ pub struct Call {
     pub kill_tree: bool,
     pub lease: Option<LeaseLimit>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct LeaseLimit {
     pub paths: crate::Paths,
     pub token: String,
     pub cleanup_reserve_seconds: f64,
+    hard_deadline: std::sync::Arc<std::sync::Mutex<Option<f64>>>,
+}
+impl PartialEq for LeaseLimit {
+    fn eq(&self, other: &Self) -> bool {
+        self.paths == other.paths
+            && self.token == other.token
+            && self.cleanup_reserve_seconds == other.cleanup_reserve_seconds
+    }
+}
+impl LeaseLimit {
+    pub fn new(paths: &crate::Paths, token: &str, cleanup_reserve_seconds: f64) -> Self {
+        Self {
+            paths: paths.clone(),
+            token: token.into(),
+            cleanup_reserve_seconds,
+            hard_deadline: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+    pub fn hard_deadline(&self) -> Option<f64> {
+        *self.hard_deadline.lock().unwrap()
+    }
+    pub fn work_deadline(&self) -> Option<f64> {
+        self.hard_deadline()
+            .map(|d| d - self.cleanup_reserve_seconds)
+    }
+    pub fn record_probe(&self, probe: &LeaseProbe) {
+        let mut deadline = self.hard_deadline.lock().unwrap();
+        match *probe {
+            LeaseProbe::Clear => *deadline = None,
+            LeaseProbe::Contended(d) => *deadline = Some(deadline.map_or(d, |old| old.min(d))),
+            LeaseProbe::Unavailable => {}
+        }
+    }
 }
 pub const LEASE_YIELD: &str = "CIV6_LEASE_YIELD";
 #[derive(Debug, PartialEq)]
@@ -36,9 +69,31 @@ pub enum LeaseProbe {
     Contended(f64),
 }
 
+pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe, String> {
+    let now = r.monotonic();
+    if limit
+        .work_deadline()
+        .is_some_and(|deadline| now >= deadline)
+    {
+        return Ok(LeaseProbe::Contended(limit.hard_deadline().unwrap()));
+    }
+    let deadline = limit.work_deadline().unwrap_or(f64::MAX).min(now + 2.0);
+    let probe = lease_probe(
+        &mut crate::chain::WithinDeadline {
+            runner: r,
+            deadline,
+        },
+        limit,
+    )?;
+    limit.record_probe(&probe);
+    Ok(probe)
+}
+
 /// Use the same live-waiter definition as acquisition, without holding the
 /// lock while process/job queries run. A dead waiter never creates a deadline.
 pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe, String> {
+    let anchor = r.monotonic();
+    let now = r.now();
     #[cfg(unix)]
     let guard = crate::fairness::UnixGuard::acquire(&limit.paths.here.join("civ6.lock"))?;
     let mut options = std::fs::OpenOptions::new();
@@ -72,7 +127,6 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
     if owner["lock_token"].as_str() != Some(limit.token.as_str()) {
         return Err("Civ6 lease ownership changed while child was running".into());
     }
-    let now = r.now();
     let competitor = crate::fairness::competitor_since(
         r,
         &limit.paths,
@@ -86,7 +140,7 @@ pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe
     let acquired = owner["acquired_at"].as_f64().unwrap_or(now).min(now);
     let since = since.max(acquired).min(now);
     Ok(LeaseProbe::Contended(
-        (crate::fairness::LEASE_SECONDS - limit.cleanup_reserve_seconds - (now - since)).max(0.0),
+        anchor + crate::fairness::LEASE_SECONDS - (now - since),
     ))
 }
 impl Call {
@@ -124,11 +178,7 @@ impl Call {
         token: &str,
         cleanup_reserve_seconds: f64,
     ) -> Self {
-        self.lease = Some(LeaseLimit {
-            paths: paths.clone(),
-            token: token.into(),
-            cleanup_reserve_seconds,
-        });
+        self.lease = Some(LeaseLimit::new(paths, token, cleanup_reserve_seconds));
         self
     }
 }
@@ -322,7 +372,6 @@ fn wait(
 ) -> Result<i32, String> {
     let start = Instant::now();
     let mut next_probe = start;
-    let mut lease_deadline: Option<Instant> = None;
     let mut unavailable_since: Option<Instant> = None;
     loop {
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
@@ -331,18 +380,21 @@ fn wait(
         }
         let mut lease_error = None;
         if let Some(limit) = lease {
-            if Instant::now() >= next_probe {
+            if limit
+                .work_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
+            {
+                lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+            } else if Instant::now() >= next_probe {
                 next_probe = Instant::now() + Duration::from_secs(2);
-                match lease_probe(&mut RealRunner, limit) {
+                match observe_lease(&mut RealRunner, limit) {
                     Ok(LeaseProbe::Clear) => {
-                        lease_deadline = None;
+                        limit.record_probe(&LeaseProbe::Clear);
                         unavailable_since = None;
                     }
-                    Ok(LeaseProbe::Contended(left)) => {
+                    Ok(probe @ LeaseProbe::Contended(_)) => {
                         unavailable_since = None;
-                        let deadline = Instant::now() + Duration::from_secs_f64(left);
-                        lease_deadline =
-                            Some(lease_deadline.map_or(deadline, |old| old.min(deadline)));
+                        limit.record_probe(&probe);
                     }
                     Ok(LeaseProbe::Unavailable) => {
                         let since = *unavailable_since.get_or_insert_with(Instant::now);
@@ -353,7 +405,10 @@ fn wait(
                     Err(error) => lease_error = Some(error),
                 }
             }
-            if lease_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            if limit
+                .work_deadline()
+                .is_some_and(|d| RealRunner.monotonic() >= d)
+            {
                 lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
             }
         }

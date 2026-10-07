@@ -880,9 +880,9 @@ fn source_manifest(
     )
 }
 
-struct WithinDeadline<'a, R> {
-    runner: &'a mut R,
-    deadline: f64,
+pub(crate) struct WithinDeadline<'a, R> {
+    pub(crate) runner: &'a mut R,
+    pub(crate) deadline: f64,
 }
 impl<R: Runner> Runner for WithinDeadline<'_, R> {
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
@@ -1105,21 +1105,17 @@ fn main_owned(
         if options.test_mode {
             argv.push("--test-mode".into());
         }
-        let mut timeout = scenario_timeout;
-        let lease = token.map(|token| process::LeaseLimit {
-            paths: p.clone(),
-            token: token.into(),
-            cleanup_reserve_seconds: CLEANUP_RESERVE_SECONDS,
-        });
+        let timeout = scenario_timeout;
+        let lease = token.map(|token| process::LeaseLimit::new(p, token, CLEANUP_RESERVE_SECONDS));
         if let Some(limit) = &lease {
-            if let process::LeaseProbe::Contended(left) = process::lease_probe(r, limit)? {
-                if left <= 0.0 {
+            process::observe_lease(r, limit)?;
+            if let Some(deadline) = limit.work_deadline() {
+                if r.monotonic() >= deadline {
                     return Err(format!(
                         "{}: waiting peer requires the slot before another driver run",
                         process::LEASE_YIELD
                     ));
                 }
-                timeout = timeout.min(left);
             }
         }
         *cleanup_deadline = Some(r.monotonic() + timeout + CLEANUP_RESERVE_SECONDS);
@@ -1133,10 +1129,16 @@ fn main_owned(
             .merged()
             .managed()
             .timeout(timeout);
-        command.lease = lease;
+        command.lease = lease.clone();
         let driver_started = r.monotonic();
         *game_closed = false;
         let execution = r.run(command);
+        if let Some(deadline) = lease.as_ref().and_then(|limit| limit.hard_deadline()) {
+            *cleanup_deadline = Some(cleanup_deadline.unwrap().min(deadline));
+            if let Some(state) = reliability.as_deref_mut() {
+                state.round()["contention_deadline_monotonic"] = json!(deadline);
+            }
+        }
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["driver_elapsed_seconds"] =
                 json!((r.monotonic() - driver_started).max(0.0));
@@ -1386,7 +1388,13 @@ fn cli_once(
     let path = p.here.join("civ6.lock");
     let mut lock_released = false;
     let cleanup_started = r.monotonic();
+    let cleanup_end = cleanup_deadline.unwrap_or_else(|| r.monotonic() + CLEANUP_RESERVE_SECONDS);
     let cleanup = (|| {
+        let mut budget = WithinDeadline {
+            runner: r,
+            deadline: cleanup_end,
+        };
+        let r = &mut budget;
         let file = match open_owned_lock(r, &path, &token) {
             Ok(file) => file,
             Err(release_error) => {
