@@ -143,4 +143,31 @@ fn frontend_imports_the_real_staging_context_and_scoped_helper() {
         files,
         ["UI/StagingRoom.lua", "UI/JAC_JapanHotseatLimits.lua"]
     );
+    let replacement = doc
+        .descendants()
+        .find(|node| {
+            node.has_tag_name("ReplaceUIScript")
+                && node.attribute("id") == Some("JAC_JapanMapScale_HotseatStagingContext")
+        })
+        .unwrap();
+    assert!(replacement
+        .parent()
+        .unwrap()
+        .has_tag_name("FrontEndActions"));
+    assert_eq!(
+        replacement
+            .descendants()
+            .find(|node| node.has_tag_name("LuaContext"))
+            .unwrap()
+            .text(),
+        Some("StagingRoom")
+    );
+    assert_eq!(
+        replacement
+            .descendants()
+            .find(|node| node.has_tag_name("LuaReplace"))
+            .unwrap()
+            .text(),
+        Some("UI/StagingRoom.lua")
+    );
 }

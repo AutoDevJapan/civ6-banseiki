@@ -67,6 +67,12 @@
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
+    <ReplaceUIScript id="JAC_JapanMapScale_HotseatStagingContext">
+      <Properties>
+        <LuaContext>StagingRoom</LuaContext>
+        <LuaReplace>UI/StagingRoom.lua</LuaReplace>
+      </Properties>
+    </ReplaceUIScript>
     <ImportFiles id="JAC_JapanMapScale_HotseatStaging">
       <File>UI/StagingRoom.lua</File>
       <File>UI/JAC_JapanHotseatLimits.lua</File>
