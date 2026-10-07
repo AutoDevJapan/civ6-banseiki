@@ -1460,6 +1460,173 @@ fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
     );
 }
 
+struct ProbeTimeoutRunner(Fake);
+impl Runner for ProbeTimeoutRunner {
+    fn run(&mut self, call: Call) -> Result<Output, String> {
+        assert_eq!(call.args[0], "tasklist");
+        let budget = call.timeout.unwrap();
+        assert!(budget > 0.0 && budget <= 2.0);
+        let output = self.0.run(call);
+        if output.as_ref().is_err_and(|e| e == "command timed out") {
+            self.0.time += budget;
+        }
+        output
+    }
+    fn now(&mut self) -> f64 {
+        self.0.now()
+    }
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.0.sleep(seconds)
+    }
+    fn error(&mut self, text: &str) -> Result<(), String> {
+        self.0.error(text)
+    }
+}
+fn probe_timeout_fixture() -> (Fixture, ProbeTimeoutRunner, process::LeaseLimit) {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("here/queue/waiter.json", json!({"pid":4321,"since":1000}));
+    let mut fake = Fake::success();
+    fake.time = 1100.0;
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    (f, ProbeTimeoutRunner(fake), limit)
+}
+#[test]
+fn lease_monitor_timeout_is_unknown_and_recovers_without_extending_contention() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(2800.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.time, 1102.0);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    assert_eq!(r.0.errors.len(), 1);
+    r.0.replies.push_back(Ok(Output {
+        stdout: "\"live_chain.exe\",\"4321\"".into(),
+        ..Output::default()
+    }));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+    // A new outage after recovery has its own bounded grace period.
+    r.0.time = 1200.0;
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(r.0.errors.len(), 2);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+}
+#[test]
+fn lease_monitor_timeout_never_extends_a_known_competition_deadline() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1345.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.work_deadline(), Some(1105.0));
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains(process::LEASE_YIELD));
+    assert_eq!(r.0.calls.len(), 1);
+    assert_eq!(limit.hard_deadline(), Some(1345.0));
+}
+#[test]
+fn lease_monitor_yields_when_the_known_deadline_expires_inside_the_query() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    limit.record_probe(&process::LeaseProbe::Contended(1341.0));
+    r.0.replies.push_back(Err("command timed out".into()));
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(error.contains(process::LEASE_YIELD), "{error}");
+    assert_eq!(r.0.time, 1101.0);
+    assert_eq!(r.0.calls[0].timeout, Some(1.0));
+    assert_eq!(limit.hard_deadline(), Some(1341.0));
+}
+#[test]
+fn lease_monitor_authoritative_owner_change_is_fatal_after_a_timeout() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+
+    r.0.replies.push_back(Err("command timed out".into()));
+    process::monitor_lease(&mut r, &limit).unwrap();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"replacement","acquired_at":1102}),
+    );
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "Civ6 lease ownership changed while child was running"
+    );
+    assert_eq!(r.0.calls.len(), 1);
+}
+#[test]
+fn lease_monitor_persistent_timeout_is_bounded_and_not_driver_timeout() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    process::monitor_lease(&mut r, &limit).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    let error = process::monitor_lease(&mut r, &limit).unwrap_err();
+    assert!(
+        error.contains("lease observation unavailable for 5s"),
+        "{error}"
+    );
+    assert!(!error.contains("command timed out"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(r.0.errors.len(), 1);
+}
+#[test]
+fn lease_monitor_non_timeout_query_failure_remains_fatal() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    r.0.replies.push_back(Err("permission denied".into()));
+    assert_eq!(
+        process::monitor_lease(&mut r, &limit).unwrap_err(),
+        "permission denied"
+    );
+    assert_eq!(r.0.time, 1100.0);
+}
+#[test]
+fn lease_monitor_startup_outage_deadline_survives_clone_into_the_child() {
+    let (_f, mut r, limit) = probe_timeout_fixture();
+    for _ in 0..3 {
+        r.0.replies.push_back(Err("command timed out".into()));
+    }
+    // The initial check is exactly the same function called before driver launch.
+    process::monitor_lease(&mut r, &limit).unwrap();
+    assert_eq!(limit.observation_deadline(), Some(1105.0));
+    let child_limit = limit.clone();
+    process::monitor_lease(&mut r, &child_limit).unwrap();
+    assert!(process::monitor_lease(&mut r, &child_limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.time, 1105.0);
+    assert_eq!(
+        r.0.calls
+            .iter()
+            .map(|c| c.timeout.unwrap())
+            .collect::<Vec<_>>(),
+        vec![2.0, 2.0, 1.0]
+    );
+    r.0.time = 1110.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert_eq!(r.0.calls.len(), 3); // No new query can reset the expired outage.
+}
+#[test]
+fn lease_monitor_missing_lock_uses_the_same_absolute_outage_deadline() {
+    let (f, mut r, limit) = probe_timeout_fixture();
+    fs::remove_file(f.p.here.join("civ6.lock")).unwrap();
+    process::monitor_lease(&mut r, &limit).unwrap();
+    r.0.time = 1105.0;
+    assert!(process::monitor_lease(&mut r, &limit)
+        .unwrap_err()
+        .contains("unavailable for 5s"));
+    assert!(r.0.calls.is_empty());
+}
+
 #[cfg(windows)]
 #[test]
 fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
