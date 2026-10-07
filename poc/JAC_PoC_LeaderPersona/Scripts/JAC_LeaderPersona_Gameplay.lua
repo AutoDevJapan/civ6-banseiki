@@ -949,10 +949,19 @@ function E.NormalCommit(ok,forceClosed)
     Game:SetProperty(STORE,s)
     initialization.stage='committed'; initialization.owner=nil
 end
+-- Publication only verifies authority. A durable debit confirmation is a
+-- domain step for real operations and later callbacks, never for a load.
+local readOnly=0
+function E.ReadOnly(f,...)
+    readOnly=readOnly+1
+    local ok,err=pcall(f,...)
+    readOnly=readOnly-1 -- an error must not leave publication read-only
+    if not ok then error(err,0) end
+end
 -- Only a live lexical Gameplay getter can create a durable debit confirmation.
 -- Unexpected excess spending cannot settle earlier pending records.
 function E.Confirm(owner)
-    if E.Enabled() then return end
+    if E.Enabled() or readOnly>0 then return end
     local s=state(); local a=s and s.accounts[owner]; local n=spent(owner)
     if not a or a.tainted or n==nil or n~=a.expected then return end
     local changed=false
@@ -1844,10 +1853,11 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
 end
 -- Load boundary. The forced pass closes every saved generation and lets a
 -- fresh store commit at its all-closed handshake. Only after that pass
--- published, the normal pass revalidates the restored paid sets.
+-- published, the normal pass revalidates the restored paid sets read-only:
+-- loading never confirms a saved debit or changes the acquisition store.
 local function InitializeProductionAdmission()
     SyncProductionAdmission(true);
-    if normalPaidPublished then SyncProductionAdmission(false); end
+    if normalPaidPublished then PersonaEvents.ReadOnly(SyncProductionAdmission, false); end
 end
 -- Explicit synchronized refresh after a controller install/rebuild. The caller
 -- supplies no eligibility, payment, flag or native-generation authority.
