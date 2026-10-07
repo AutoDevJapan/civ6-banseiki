@@ -828,20 +828,36 @@ fn source_manifest(
 ) -> Result<Value, String> {
     let timeout = 30.0_f64.min(time_left(r, deadline)?);
     let out = r.run(
-        Call::new(args(&["git", "-C", &path(p.live()), "rev-parse", "HEAD"]))
-            .managed()
-            .timeout(timeout),
+        Call::new(args(&[
+            "git",
+            "-C",
+            &path(p.live()),
+            "show",
+            "--format=%H%n%T",
+            "--no-patch",
+            "HEAD",
+        ]))
+        .managed()
+        .timeout(timeout),
     )?;
-    let revision = out.stdout.trim();
+    let ids: Vec<_> = out
+        .stdout
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
     if out.code != 0
-        || !matches!(revision.len(), 40 | 64)
-        || !revision.bytes().all(|c| c.is_ascii_hexdigit())
+        || ids.len() != 2
+        || ids
+            .iter()
+            .any(|id| !matches!(id.len(), 40 | 64) || !id.bytes().all(|c| c.is_ascii_hexdigit()))
     {
         return Err(format!(
             "could not identify prepared SOURCE (exit {}): {} {}",
             out.code, out.stdout, out.stderr
         ));
     }
+    let (revision, tree) = (ids[0], ids[1]);
     let mut files = serde_json::Map::new();
     for relative in [
         driver::MANIFEST.to_owned(),
@@ -859,7 +875,7 @@ fn source_manifest(
         files.insert(relative, contents);
     }
     Ok(
-        json!({"revision":revision,"worktree":path(p.live()),"files":files,
+        json!({"revision":revision,"source_tree":tree,"worktree":path(p.live()),"files":files,
         "prepared_scenario_path":prepared,"prepared_scenario":read_json(prepared)?}),
     )
 }
@@ -997,19 +1013,24 @@ fn main_owned(
         // Close while holding the acquired shared lock, before checkout can
         // touch mod files. Never close and replay a failed preparation.
         let protection = if let Some(token) = token {
-            Some(open_owned_lock(r, &p.here.join("civ6.lock"), token)?
-                .ok_or("Civ6 lock ownership changed before preparation close")?)
-        } else { None };
-        close_civ6(&mut WithinDeadline {runner:r, deadline})?;
+            Some(
+                open_owned_lock(r, &p.here.join("civ6.lock"), token)?
+                    .ok_or("Civ6 lock ownership changed before preparation close")?,
+            )
+        } else {
+            None
+        };
+        close_civ6(&mut WithinDeadline {
+            runner: r,
+            deadline,
+        })?;
         drop(protection);
         *game_closed = true;
-        let prepare_args = args(&[&path(p.here.join("ship.exe")), "live", name, scenario]);
+        let ship = std::env::var("CC_LIVE_SHIP").unwrap_or_else(|_| path(p.here.join("ship.exe")));
+        let prepare_args = args(&[&ship, "live", name, scenario]);
+        let prepare_timeout = time_left(r, deadline)?.min(1200.0);
         let out = r
-            .run(
-                Call::new(prepare_args)
-                    .timeout(window.min(1200.0))
-                    .managed(),
-            )
+            .run(Call::new(prepare_args).timeout(prepare_timeout).managed())
             .map_err(|e| format!("prepare {name} {scenario} failed: {e}"))?;
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["prepare_exit_code"] = json!(windows_exit_code(out.code));
@@ -1052,22 +1073,26 @@ fn main_owned(
             let source_path = root.join("source-manifest.json");
             write_json(&source_path, &source)?;
             let revision = source["revision"].as_str().unwrap().to_owned();
+            let tree = source["source_tree"].as_str().unwrap().to_owned();
             state.round()["source"] = source;
             state.round()["source_manifest_path"] = json!(path(source_path));
             r.print(&format!("SOURCE {name} {scenario} {revision}"))?;
             if let Some(expected) = &state.revision {
-                if *expected != revision {
-                    return Err(format!("reliability SOURCE changed: expected {expected}, prepared {revision}; refusing another driver run"));
+                if *expected != tree {
+                    return Err(format!("reliability SOURCE changed: expected tree {expected}, prepared {tree}; refusing another driver run"));
                 }
             } else {
-                state.revision = Some(revision.clone());
+                state.revision = Some(tree.clone());
                 state.summary["source_revision"] = json!(revision);
+                state.summary["source_tree"] = json!(tree);
             }
             artifacts
         } else {
             artifacts.into()
         };
-        r.print(&format!("START {name} {scenario} civ6=closed-before-prepare"))?;
+        r.print(&format!(
+            "START {name} {scenario} civ6=closed-before-prepare"
+        ))?;
         // Use the driver of the branch under test: main's driver has moved past the old driver-diplo worktree
         // (popup closers from #65, save dismissing the tutorial advisor from #64).
         let mut argv = driver::scenario(p, &p.live())?;
@@ -1332,6 +1357,9 @@ fn cli_once(
         let file = match open_owned_lock(r, &path, &token) {
             Ok(file) => file,
             Err(release_error) => {
+                if game_closed {
+                    return Err(release_error);
+                }
                 #[cfg(windows)]
                 {
                     return match close_owned_after_release_error(r, &path, &token) {

@@ -1086,8 +1086,13 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
     assert!(
-        !r.fake.calls.iter().any(|c| c.args[0] == "taskkill"),
-        "peer's game must not be closed"
+        r.fake
+            .calls
+            .iter()
+            .filter(|c| c.args[0] == "taskkill")
+            .count()
+            == 2,
+        "only the owned pre-prepare game may be closed; never the peer's game"
     );
     assert_eq!(r.fake.sleeps, vec![0.05]);
 }
@@ -1166,6 +1171,16 @@ fn ready_chain(f: &Fixture, run_code: i32) -> Fake {
         ("", "", 0),
         ("", "", 0),
         ("", "", 0),
+    ])
+}
+fn before_prepare(prepare: (&str, &str, i32)) -> Fake {
+    Fake::outputs(&[
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        prepare,
     ])
 }
 fn failed_prepare_cli(r: &mut impl Runner, p: &Paths) -> Result<i32, String> {
@@ -1324,7 +1339,11 @@ fn preparation_execution_error_is_propagated_without_retry() {
             .count(),
         1
     );
-    let prepare = r.calls.iter().find(|c| c.args[0].ends_with("ship.exe")).unwrap();
+    let prepare = r
+        .calls
+        .iter()
+        .find(|c| c.args[0].ends_with("ship.exe"))
+        .unwrap();
     assert!(prepare.kill_tree);
     assert_eq!(prepare.timeout, Some(1200.0));
     assert!(!f.p.here.join("civ6.lock").exists());
@@ -1347,6 +1366,23 @@ fn ship_rejects_invalid_requests_before_git_or_network() {
     }
     let mut r = Fake::success();
     assert_eq!(ship::cli(&mut r, &f.p, &args(&["--help"])).unwrap(), 0);
+    assert!(r.calls.is_empty());
+}
+
+#[test]
+fn maintenance_stops_other_jobs_before_prepare_but_allows_the_repairing_job() {
+    let f = Fixture::new();
+    f.json(
+        "here/reliability-maintenance.json",
+        json!({"todo":1971,"allowed_jobs":["repair-job"],"reason":"最小保存読込10回の確認中"}),
+    );
+    assert!(ship::check_live_maintenance(&f.p, Some("other-job"))
+        .unwrap_err()
+        .contains("再試行せず"));
+    assert!(ship::check_live_maintenance(&f.p, None).is_err());
+    ship::check_live_maintenance(&f.p, Some("repair-job")).unwrap();
+    let mut r = Fake::success();
+    assert!(ship::live(&mut r, &f.p, "main", "s.json", true).is_err());
     assert!(r.calls.is_empty());
 }
 
@@ -1452,7 +1488,7 @@ fn driver_deadline_includes_time_spent_preparing_and_caps_long_scenarios() {
 }
 
 #[test]
-fn connection_probe_is_bounded_by_the_remaining_scenario_window() {
+fn driver_is_bounded_by_the_remaining_scenario_window() {
     struct LateProbe {
         p: Paths,
         time: f64,
@@ -1485,15 +1521,10 @@ fn connection_probe_is_bounded_by_the_remaining_scenario_window() {
                 });
             }
             if call.args[0] == "fixture-python" {
-                assert_eq!(
-                    call.args.last().unwrap(),
-                    "states",
-                    "driver must not start after probe timeout"
-                );
                 assert_eq!(call.timeout, Some(15.0));
                 self.time += 15.0;
                 self.probed = true;
-                return Err("command timed out in tuner".into());
+                return Err("command timed out in driver".into());
             }
             Ok(Output::default())
         }
@@ -1514,7 +1545,7 @@ fn connection_probe_is_bounded_by_the_remaining_scenario_window() {
     };
     assert!(cli(&mut r, &f.p, &args(&["a:s.json"]))
         .unwrap_err()
-        .contains("tuner"));
+        .contains("driver"));
     assert!(r.probed && r.closed);
     assert!(r.time <= 1800.0);
     assert!(!f.p.here.join("civ6.lock").exists());
@@ -1602,9 +1633,16 @@ impl Runner for ReliabilityRunner {
                 ..Output::default()
             });
         }
-        if call.args[0] == "git" && call.args[3..] == args(&["rev-parse", "HEAD"]) {
+        if call.args[0] == "git"
+            && call.args[3..] == args(&["show", "--format=%H%n%T", "--no-patch", "HEAD"])
+        {
+            let revision = self.revisions.pop_front().unwrap();
             return Ok(Output {
-                stdout: self.revisions.pop_front().unwrap(),
+                stdout: if revision.contains('\n') {
+                    revision
+                } else {
+                    format!("{revision}\n{revision}")
+                },
                 ..Output::default()
             });
         }
@@ -1718,6 +1756,73 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         assert_eq!(round["cleanup"]["game_closed"], true);
         assert_eq!(round["cleanup"]["lock_released"], true);
     }
+}
+
+#[test]
+fn merge_commit_time_changes_do_not_mix_or_reject_identical_source_trees() {
+    let f = Fixture::new();
+    let mut r = ReliabilityRunner::new(&f, vec![0; 10]);
+    r.revisions = (1..=10)
+        .map(|n| format!("{n:040x}\n{}", "a".repeat(40)))
+        .collect();
+    assert_eq!(
+        cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"])).unwrap(),
+        0
+    );
+    let summary = reliability_summary(&r);
+    assert_eq!(summary["consecutive_successes"], 10);
+    assert_eq!(summary["source_tree"], "a".repeat(40));
+    assert_ne!(
+        summary["rounds"][0]["source"]["revision"],
+        summary["rounds"][9]["source"]["revision"]
+    );
+}
+
+#[test]
+fn preparation_timeout_uses_the_budget_left_after_preparation_shutdown() {
+    struct SlowClose {
+        fake: Fake,
+        advanced: bool,
+    }
+    impl Runner for SlowClose {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if c.args[0] == "taskkill" && !self.advanced {
+                self.advanced = true;
+                self.fake.time += 700.0;
+            }
+            self.fake.run(c)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.fake.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.fake.print(s)
+        }
+    }
+    let f = Fixture::new();
+    let mut r = SlowClose {
+        fake: ready_chain(&f, 0),
+        advanced: false,
+    };
+    assert_eq!(cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap(), 0);
+    let prepare = r
+        .fake
+        .calls
+        .iter()
+        .find(|c| c.args[0].ends_with("ship.exe"))
+        .unwrap();
+    assert_eq!(prepare.timeout, Some(860.0));
+    let driver = r
+        .fake
+        .calls
+        .iter()
+        .find(|c| c.args[0] == "fixture-python")
+        .unwrap();
+    assert_eq!(driver.timeout, Some(860.0));
+    assert!(!f.p.here.join("civ6.lock").exists());
 }
 
 fn reliability_summary(r: &ReliabilityRunner) -> serde_json::Value {
@@ -2092,15 +2197,7 @@ fn ship_builds_checked_out_rust_driver_before_publishing_scenario_and_artifacts(
 #[test]
 fn preparation_failure_is_not_retried_and_keeps_the_original_error() {
     let f = Fixture::new();
-    let mut r = Fake::outputs(&[
-        ("", "first", 1),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "checkout failed", 1),
-    ]);
+    let mut r = before_prepare(("", "first", 1));
     assert_eq!(
         main(
             &mut r,
@@ -2111,7 +2208,13 @@ fn preparation_failure_is_not_retried_and_keeps_the_original_error() {
         1
     );
     assert!(r.sleeps.is_empty());
-    assert_eq!(r.calls.len(), 1);
+    assert_eq!(
+        r.calls
+            .iter()
+            .filter(|c| c.args[0].ends_with("ship.exe"))
+            .count(),
+        1
+    );
     assert_eq!(
         r.printed,
         vec!["RESULT a s.json prepare-failed 1 stdout= stderr=first"]
@@ -2361,19 +2464,16 @@ fn startup_failure_is_never_replayed_and_preserves_first_artifacts() {
         path(f.root.join("scenario.json")),
         path(&artifacts)
     );
-    let mut r = Fake::outputs(&[
-        (&prepare, "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("[FAIL] 1/ restart_game", "", 1),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("PASS second attempt", "", 0),
-    ]);
+    let mut r = ready_chain(&f, 1);
+    r.replies[5] = Ok(Output {
+        stdout: prepare,
+        ..Output::default()
+    });
+    r.replies[6] = Ok(Output {
+        stdout: "[FAIL] 1/ restart_game".into(),
+        code: 1,
+        ..Output::default()
+    });
     assert_eq!(main(&mut r, &f.p, &["a:s.json".into()]).unwrap(), 1);
     assert!(r.sleeps.is_empty());
     assert_eq!(
@@ -2389,7 +2489,7 @@ fn startup_failure_is_never_replayed_and_preserves_first_artifacts() {
     );
     assert_eq!(
         r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        2
+        4
     );
 }
 
@@ -2404,13 +2504,16 @@ fn recovered_startup_failure_does_not_launch_another_outer_retry() {
         path(f.root.join("scenario.json")),
         path(&artifacts)
     );
-    let mut r = Fake::outputs(&[
-        (&prepare, "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("STARTUP_RECOVERY_ATTEMPTED\n[FAIL] 1/ restart_game", "", 1),
-    ]);
+    let mut r = ready_chain(&f, 1);
+    r.replies[5] = Ok(Output {
+        stdout: prepare,
+        ..Output::default()
+    });
+    r.replies[6] = Ok(Output {
+        stdout: "STARTUP_RECOVERY_ATTEMPTED\n[FAIL] 1/ restart_game".into(),
+        code: 1,
+        ..Output::default()
+    });
     assert_eq!(
         main(
             &mut r,
@@ -2442,7 +2545,7 @@ fn recovered_startup_failure_does_not_launch_another_outer_retry() {
     );
     assert_eq!(
         r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        2
+        4
     );
 }
 
@@ -2623,7 +2726,7 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
             .iter()
             .filter(|c| c.args[0] == "taskkill")
             .count(),
-        2
+        4
     );
 }
 

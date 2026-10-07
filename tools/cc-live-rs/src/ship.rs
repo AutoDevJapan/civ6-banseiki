@@ -101,6 +101,7 @@ pub fn live(
     scenario: &str,
     restart: bool,
 ) -> Result<(String, String), String> {
+    check_live_maintenance(p, std::env::var("CODEX_JOB_ID").ok().as_deref())?;
     let live = p.live();
     git(r, &live, &["fetch", "-q", "origin"], true)?;
     let branch = if name.contains('/') || name == "main" {
@@ -184,6 +185,37 @@ pub fn live(
     r.print(&path(&target))?;
     r.print(&path(&artifacts))?;
     Ok((path(target), path(artifacts)))
+}
+
+/// Maintenance is a durable pause shared by old and new chain callers through
+/// ship. The repairing job can run the minimal acceptance, other jobs stop
+/// before touching the shared worktree or launching a game.
+pub fn check_live_maintenance(p: &Paths, job: Option<&str>) -> Result<(), String> {
+    let file = p.here.join("reliability-maintenance.json");
+    let data = match std::fs::read(&file) {
+        Ok(bytes) => serde_json::from_slice::<Value>(&bytes)
+            .map_err(|e| format!("invalid live maintenance record: {e}"))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "read live maintenance record {}: {e}",
+                file.display()
+            ))
+        }
+    };
+    let allowed = data["allowed_jobs"]
+        .as_array()
+        .ok_or("live maintenance allowed_jobs must be an array")?;
+    if job.is_some_and(|job| allowed.iter().any(|value| value.as_str() == Some(job))) {
+        return Ok(());
+    }
+    Err(format!(
+        "実機試験は基盤修正のため停止中です。再試行せず共有ToDo{}の完了を待ってください。{}",
+        data["todo"],
+        data["reason"]
+            .as_str()
+            .unwrap_or("最小保存読込10回の確認中")
+    ))
 }
 pub fn truthy(v: &Value) -> bool {
     match v {
