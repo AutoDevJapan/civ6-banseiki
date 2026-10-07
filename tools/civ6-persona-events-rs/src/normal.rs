@@ -196,8 +196,8 @@ local function proof(p,s,owner,d,key,source)
         integer(p.turn) and p.turn>=s.turn and p.turn<=Game.GetCurrentGameTurn() and
         (p.spent==nil or integer(p.spent))
 end
-local function readState(ignoreAdmissionSchema)
-    local s=Game:GetProperty(STORE); local c=catalog()
+local function readState(ignoreAdmissionSchema,snapshot)
+    local s=snapshot or Game:GetProperty(STORE); local c=catalog()
     local prices=c and type(s)=='table' and c.boundPrices(s.binding)
     if not prices or s.version~=3 or s.source~=SOURCE or
        s.baseline~=0 or not integer(s.turn) or s.turn~=configuredStartTurn() or not integer(s.sequence) or
@@ -344,15 +344,28 @@ function E.Cost(row)
        (phase~='GREAT_PERSON' and phase~='EVOLVING' and phase~='GOVERNOR') then return nil end
     return cost
 end
-function E.RecordJoinPrice(owner,source,row)
-    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return false end
+local function same(a,b)
+    if type(a)~=type(b) then return false end
+    if type(a)~='table' then return a==b end
+    for key,value in pairs(a) do if not same(value,b[key]) then return false end end
+    for key in pairs(b) do if a[key]==nil then return false end end
+    return true
+end
+function E.PrepareJoinPrice(owner,source,row)
+    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return nil end
+    local cfg=integer(source,64) and PlayerConfigurations[source]
+    if not Player(owner,true) or not cfg or source==owner or cfg:GetLeaderTypeName()~=row.LeaderType or
+       cfg:GetCivilizationTypeName()~=row.CivilizationType then return nil end
     if E.Enabled() then
-        Set(row.LeaderType,'PRICE_CONTRACT',{version=1,leader=row.LeaderType,owner=owner,sourcePlayer=source,
-            governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=row.EvolutionCost})
-        return true
+        local before=Get(row.LeaderType,'PRICE_CONTRACT')
+        local after={version=1,leader=row.LeaderType,owner=owner,sourcePlayer=source,
+            governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=row.EvolutionCost}
+        if before~=nil and not same(before,after) then return nil end
+        return {leader=row.LeaderType,owner=owner,source=source,key=Key(row.LeaderType,'PRICE_CONTRACT'),before=copy(before),after=after}
     end
     local s,c=state(); local d=s and c.leaders[row.LeaderType]
-    if not d or s.sources[d.leader]~=source or not s.accounts[owner] then return false end
+    if not d or s.sources[d.leader]~=source or not s.accounts[owner] or s.people[d.leader] then return nil end
+    local before=copy(s); s=copy(s) -- preparation must never mutate a Game table
     if not s.prices then
         -- Import only original joining prices that still match the d21
         -- commitment and the joined identities; never repair a damaged amount.
@@ -360,7 +373,7 @@ function E.RecordJoinPrice(owner,source,row)
         for _,prior in ipairs(c.rows) do
             local who=Get(prior.leader,'OWNER')
             if who~=nil then
-                if not joined(who,prior,Get(prior.leader,'SOURCE')) then return false end
+                if not joined(who,prior,Get(prior.leader,'SOURCE')) then return nil end
                 s.prices[prior.leader]={version=1,leader=prior.leader,owner=who,sourcePlayer=Get(prior.leader,'SOURCE'),
                     binding=s.binding,
                     governorType=prior.governorType,governor=prior.governor,governorHash=prior.governorHash,
@@ -369,13 +382,62 @@ function E.RecordJoinPrice(owner,source,row)
         end
     end
     local existing=s.prices[d.leader]
-    if existing and (existing.owner~=owner or existing.sourcePlayer~=source or existing.cost~=row.EvolutionCost) then return false end
-    s.prices[d.leader]={version=1,leader=d.leader,owner=owner,sourcePlayer=source,
+    local contract={version=1,leader=d.leader,owner=owner,sourcePlayer=source,
         binding=c.binding,
         governorType=d.governorType,governor=d.governor,governorHash=d.governorHash,
         personType=d.personType,person=d.person,personHash=d.personHash,baseType=d.baseType,cost=row.EvolutionCost}
-    Game:SetProperty(STORE,s)
-    return true
+    if existing and not same(existing,contract) then return nil end
+    s.prices[d.leader]=contract
+    return {leader=row.LeaderType,owner=owner,source=source,key=STORE,before=before,after=s}
+end
+function E.RecordJoinPrice(owner,source,row,plan)
+    local checked=E.PrepareJoinPrice(owner,source,row)
+    if not plan or not checked or plan.key~=checked.key or
+       not same(plan.before,checked.before) or not same(plan.after,checked.after) then return false end
+    Game:SetProperty(plan.key,copy(plan.after))
+    return same(Game:GetProperty(plan.key),plan.after)
+end
+function E.UndoJoinPrice(plan)
+    if type(plan)~='table' or not Definition(plan.leader) or not integer(plan.owner,64) or
+       not integer(plan.source,64) or plan.owner==plan.source or
+       (plan.key~=STORE and plan.key~=Key(plan.leader,'PRICE_CONTRACT')) then return false end
+    if plan.key==STORE then
+        if type(plan.before)~='table' or type(plan.after)~='table' then return false end
+        local before,after=copy(plan.before),copy(plan.after)
+        before.prices=nil; before.priceVersion=nil; after.prices=nil; after.priceVersion=nil
+        if not same(before,after) then return false end -- undo has no authority over spending/receipts/sources
+        local prior,oldCatalog=readState(false,plan.before)
+        local nextState=readState(false,plan.after)
+        local target=nextState and nextState.prices and nextState.prices[plan.leader]
+        if not prior or not target or target.owner~=plan.owner or target.sourcePlayer~=plan.source then return false end
+        if prior.prices then
+            for leader,p in pairs(prior.prices) do if not same(p,nextState.prices[leader]) then return false end end
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader and not same(p,prior.prices[leader]) then return false end
+            end
+        else
+            -- A legacy import may add only the existing joining contracts,
+            -- preserving their original binding and amount.
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader then
+                    local d=oldCatalog.leaders[leader]
+                    if not d or p.binding~=prior.binding or p.cost~=d.joinCost or
+                       not joined(p.owner,d,p.sourcePlayer) then return false end
+                end
+            end
+        end
+    else
+        local row=Definition(plan.leader); local p=plan.after
+        if type(p)~='table' or not integer(p.cost,4) or p.cost<1 or
+           not same(p,{version=1,leader=plan.leader,owner=plan.owner,sourcePlayer=plan.source,
+              governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=p.cost}) or
+           (plan.before~=nil and not same(plan.before,p)) then return false end
+    end
+    local current=Game:GetProperty(plan.key)
+    if same(current,plan.before) then return true end
+    if not same(current,plan.after) then return false end -- never repair a damaged/foreign ledger
+    Game:SetProperty(plan.key,copy(plan.before))
+    return same(Game:GetProperty(plan.key),plan.before)
 end
 -- Capture freshness before the existing admission initializer claims schema 3.
 -- Settings and a later ready state cannot recreate this lexical candidate.

@@ -20,13 +20,17 @@ pub fn gameplay(source: &str) -> Result<String, String> {
         "local function AvailableTitles",
         EVOLUTION,
     )?;
-    let hook = "    if not PersonaEvents.RecordJoinPrice(owner, source, row) then return Finish(owner, \"NATIVE_UNAVAILABLE\"); end;\n";
-    let source = source.replace(hook, "");
-    let anchor = "    Set(leader, \"SOURCE\", source);";
-    if source.matches(anchor).count() != 1 {
-        return Err("joining price anchor must be unique".into());
-    }
-    let source = source.replace(anchor, &(hook.to_owned() + anchor));
+    let start = if source.contains("-- BEGIN RUST PERSONA JOIN TRANSACTION") {
+        "-- BEGIN RUST PERSONA JOIN TRANSACTION"
+    } else {
+        "local function Join(owner, source, personality, trait)"
+    };
+    let source = super::route(
+        &source,
+        start,
+        "local function EvolutionCost(leader)",
+        super::join_transaction::SOURCE,
+    )?;
     Ok(source.replace(
         "for step=1,row.EvolutionCost-1 do",
         "for step=1,(PersonaEvents.Cost(row) or 1)-1 do",

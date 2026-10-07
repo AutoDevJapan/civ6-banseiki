@@ -409,7 +409,7 @@ fn valid_receipt_consumes_only_the_matching_person_found_by_engine_identity() {
         &lua,
         r#"
         FIRE('JAC_LeaderPersonaJoin',2,{Source=0})
-        assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='JOINED')
+        assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='JOINED',tostring(Players[2]:GetProperty('JAC_PERSONA_RESULT')))
         local other='JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_'
         local otherID=Game:GetProperty(other..'UNIT')
         assert(otherID~=PERSON_ID and Players[2]:GetUnits():FindID(otherID))
