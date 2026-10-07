@@ -315,7 +315,8 @@ end;return 'reconnected own paid permits and cross-owner denial'
 
 /// MP10 hit the stock StagingRoom twelve-slot limit before Ready. Isolate
 /// startup at that limit with the same six MODs and an ordinary generated map.
-/// This never opens normal persona accounting (which still requires 22).
+/// LeaderPersona actions require a fixed Japan map and do not apply here.
+/// Its API presence/absence is recorded, never used to accept basic startup.
 pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, String> {
     let payment = build(normal, hotseat)?;
     let mut config = payment["steps"][2].clone();
@@ -367,14 +368,18 @@ for _,id in ipairs(ids)do assert(type(id)=='number' and id>=0 and id<12 and not 
  assert(cfg:GetLeaderTypeName()==e.leader and cfg:GetCivilizationTypeName()==e.civ)
 end
 assert(seen[0] and seen[1] and not GameConfiguration.IsPaused())
-local api=assert(ExposedMembers.JAC_LeaderPersona,'persona MOD not loaded')
-local status=api.EventsGameplayStatus(0,'LEADER_JAC_DATE_TANEMUNE')
-assert(status.active==false and Game:GetProperty('JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1')==nil,'12-major probe must not bootstrap normal22 accounting')
-return 'MP_SETUP12 STARTED actual12majors human0,1 ai10; player0 active; persona accounting remains unavailable; no payment acceptance'
+-- Enabled MOD IDs do not imply applicable actions. LeaderPersona.modinfo
+-- restricts its Gameplay/UI/database actions to four fixed Japan maps.
+-- Record unexpected API presence too, but never call it or conflate this
+-- startup result with persona qualification/payment acceptance.
+local api=type(ExposedMembers)=='table' and ExposedMembers.JAC_LeaderPersona or nil
+local observed=type(api)
+print('MP_SETUP12 PERSONA_ACTIONS applicability=not_applicable map=Pangaea.lua expected_api=nil observed_api='..observed)
+return 'MP_SETUP12 STARTED actual12majors human0,1 ai10; player0 active; persona_actions=not_applicable; observed_api='..observed..'; persona_acceptance=unmeasured'
 "#
     );
     Ok(
-        json!({"name":"MP setup-only12: two humans ten AI, six persona MODs, generated Pangaea; preflight and actual game start, no native runtime/payment/22-major acceptance",
+        json!({"name":"MP setup-only12: two humans ten AI, six enabled MODs, explicit Pangaea; LeaderPersona actions not applicable; basic startup only, no native runtime/payment/22-major acceptance",
         "session_type":"hotseat","judge_profile":"generic","strict_lua_errors":true,"steps":[
          payment["steps"][0],{"action":"restart_game"},config,
          {"action":"ui_lua","state_name":"FrontEnd","code":preflight},

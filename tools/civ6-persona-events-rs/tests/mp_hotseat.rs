@@ -351,7 +351,7 @@ MapConfiguration={GetValue=function()return map end,GetMaxMajorPlayers=function(
 Game={GetLocalPlayer=function()return active end,GetCurrentGameTurn=function()return turn end,GetProperty=function()return accounting and {} or nil end}
 SlotStatus={SS_TAKEN=3,SS_COMPUTER=1};PlayerConfigurations={};Players={}
 PlayerManager={GetAliveMajorIDs=function()local t={};for i=0,count-1 do t[#t+1]=i end;return t end}
-ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function()return {active=accounting} end}}
+ExposedMembers={} -- Pangaea does not satisfy LeaderPersona's map criteria.
 "#).exec().unwrap();
     for (id, p) in probe["steps"][2]["players"]
         .as_array()
@@ -364,7 +364,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function()return {active
     lua
 }
 #[test]
-fn setup_proofs_reject_wrong_map_roster_activeplayer_and_accidental_normal_bootstrap() {
+fn setup_proofs_reject_wrong_map_roster_and_activeplayer_without_persona_dependency() {
     let probe = setup_probe();
     let pre = probe["steps"][3]["code"].as_str().unwrap();
     let post = probe["steps"][6]["code"].as_str().unwrap();
@@ -386,11 +386,29 @@ fn setup_proofs_reject_wrong_map_roster_activeplayer_and_accidental_normal_boots
         "humans=3",
         "active=1",
         "turn=2",
-        "accounting=true",
         "map='JAC_Japan_15km.Civ6Map'",
     ] {
         let lua = setup_world();
         lua.load(fault).exec().unwrap();
         assert!(lua.load(post).exec().is_err(), "{fault}");
+    }
+}
+
+#[test]
+fn basic_startup_acceptance_is_independent_of_inapplicable_persona_api() {
+    let probe = setup_probe();
+    let post = probe["steps"][6]["code"].as_str().unwrap();
+    assert!(!post.contains("EventsGameplayStatus") && !post.contains("GAMEPLAY_ACQUISITIONS"));
+    for (setup,observed) in [
+        ("ExposedMembers=nil","nil"),
+        ("ExposedMembers={}","nil"),
+        ("ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() error('must not call map-inapplicable API') end}}","table"),
+    ] {
+        let lua=setup_world();lua.load(setup).exec().unwrap();
+        let result=lua.load(post).eval::<String>().unwrap();
+        assert!(result.starts_with("MP_SETUP12 STARTED actual12majors"));
+        assert!(result.contains("persona_actions=not_applicable") && result.contains("persona_acceptance=unmeasured"));
+        assert!(result.contains(&format!("observed_api={observed}")));
+        lua.load("count=11").exec().unwrap();assert!(lua.load(post).exec().is_err());
     }
 }
