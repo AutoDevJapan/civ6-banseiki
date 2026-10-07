@@ -3,7 +3,6 @@ use super::{contracts::Contract, digest, json, require, SourceContractVersion};
 use crate::{persona_payment::ProcessIdentity, Error, Result};
 use civ6_native_bridge_rs::paid_catalog::COUNT;
 use serde::Serialize;
-use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
@@ -52,9 +51,11 @@ fn decimal<T: std::str::FromStr>(text: &str) -> Result<T> {
     text.parse()
         .map_err(|_| Error::input("receipt decimal overflow"))
 }
-fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
+/// Returns the runtime catalog and each owner's stable official title total.
+fn catalog(value: &str, contract: &Contract) -> Result<(Vec<CatalogEntry>, Vec<u32>)> {
+    let version = contract.version;
     let rest = value
-        .strip_prefix("CATALOG880 STABLE turn=")
+        .strip_prefix(&format!("{} STABLE turn=", version.marker()))
         .ok_or_else(|| Error::input("stable receipt missing"))?;
     let (turn, rest) = rest
         .split_once(" catalog=")
@@ -63,8 +64,9 @@ fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
     let (records, titles) = rest
         .split_once(" titles=")
         .ok_or_else(|| Error::input("stable titles missing"))?;
-    let players = contract["steps"][2]["players"].as_array().unwrap();
+    let players = contract.data["steps"][2]["players"].as_array().unwrap();
     let mut entries = Vec::new();
+    let mut totals = Vec::new();
     let mut indices = BTreeSet::new();
     let mut hashes = BTreeSet::new();
     let mut costs = BTreeSet::new();
@@ -87,7 +89,14 @@ fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
             .map_err(|_| Error::input("invalid runtime governor hash"))?;
         let cost: u32 = decimal(parts[5])?;
         let capital: u32 = decimal(parts[6])?;
-        let _: u32 = decimal(balance[1])?;
+        totals.push(decimal::<u32>(balance[1])?);
+        let owner = version.owner(source);
+        if version == SourceContractVersion::NormalAi851 {
+            require(
+                owner != 0 && owner != source && players[owner]["human"] == false,
+                "normal AI owner mapping assigns the local human or the source",
+            )?;
+        }
         require(
             decimal::<usize>(parts[0])? == source
                 && decimal::<usize>(balance[0])? == source
@@ -103,7 +112,7 @@ fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
         costs.insert(cost);
         entries.push(CatalogEntry {
             source: source as u32,
-            owner: ((source + 1) % COUNT) as u32,
+            owner: owner as u32,
             leader: parts[1].into(),
             civilization: parts[2].into(),
             index,
@@ -116,19 +125,17 @@ fn catalog(value: &str, contract: &Value) -> Result<Vec<CatalogEntry>> {
         costs == BTreeSet::from([1, 2, 3]),
         "runtime catalog lacks the three costs",
     )?;
+    // An owner of several persons must cover all of their reservations at once.
+    // Under the cyclic legacy ring each owner has one person, so this is unchanged.
+    let mut budgets = [0u32; COUNT];
     for e in &entries {
-        let fields: Vec<_> = titles
-            .split(';')
-            .nth(e.owner as usize)
-            .unwrap()
-            .split(':')
-            .collect();
-        require(
-            decimal::<u32>(fields[1])? >= e.cost,
-            "recipient lacks official titles",
-        )?;
+        budgets[e.owner as usize] += e.cost;
     }
-    Ok(entries)
+    require(
+        budgets.iter().zip(&totals).all(|(need, have)| have >= need),
+        "recipient lacks official titles",
+    )?;
+    Ok((entries, totals))
 }
 
 fn identity(parts: &[&str], e: &CatalogEntry) -> Result<()> {
@@ -142,7 +149,14 @@ fn identity(parts: &[&str], e: &CatalogEntry) -> Result<()> {
         "receipt source/subject owner/runtime index/leader/cost mismatch",
     )
 }
-fn ledger(value: &str, entries: &[CatalogEntry], phase: &str) -> Result<()> {
+/// `stable` (851 only) pins every owner balance to its stable read: a shared
+/// owner's combined budget was proven there, and nothing may spend it since.
+fn ledger(
+    value: &str,
+    entries: &[CatalogEntry],
+    phase: &str,
+    stable: Option<&[u32]>,
+) -> Result<()> {
     let records: Vec<_> = value.split(';').collect();
     require(
         records.len() == entries.len(),
@@ -152,8 +166,11 @@ fn ledger(value: &str, entries: &[CatalogEntry], phase: &str) -> Result<()> {
         let p: Vec<_> = record.split(':').collect();
         require(p.len() == 10, "incomplete ledger receipt")?;
         identity(&p, e)?;
+        let points = decimal::<u32>(p[8])?;
         require(
-            decimal::<u32>(p[8])? >= e.cost && decimal::<u32>(p[9])? == 0,
+            points >= e.cost
+                && decimal::<u32>(p[9])? == 0
+                && stable.is_none_or(|s| s[e.owner as usize] == points),
             "title balance changed",
         )?;
         match phase {
@@ -181,7 +198,13 @@ fn ledger(value: &str, entries: &[CatalogEntry], phase: &str) -> Result<()> {
     Ok(())
 }
 
-fn raw_matrix(value: &str, entries: &[CatalogEntry], core: bool, step: usize) -> Result<Matrix> {
+fn raw_matrix(
+    value: &str,
+    entries: &[CatalogEntry],
+    label: &str,
+    core: bool,
+    step: usize,
+) -> Result<Matrix> {
     let marker = if core {
         "GAMEPLAY_PROJECTION"
     } else {
@@ -198,7 +221,7 @@ fn raw_matrix(value: &str, entries: &[CatalogEntry], core: bool, step: usize) ->
     let mut bits = Vec::new();
     for (record, e) in records.iter().zip(entries) {
         let rest = record
-            .strip_prefix(&format!("CATALOG880 {marker} "))
+            .strip_prefix(&format!("{label} {marker} "))
             .ok_or_else(|| Error::input("mixed UI/Gameplay receipt provenance"))?;
         let (id, bit) = rest
             .split_once(" positive=1 negative=21 raw=")
@@ -229,9 +252,10 @@ pub fn evidence_from_steps(text: &str) -> Result<Evidence> {
 }
 
 pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evidence> {
-    let legacy = Contract::load(SourceContractVersion::Legacy4cd)?;
-    let adjusted = Contract::load(SourceContractVersion::NilAdjusted068)?;
-    let mut candidates = vec![legacy, adjusted];
+    let mut candidates = SourceContractVersion::ALL
+        .into_iter()
+        .map(Contract::load)
+        .collect::<Result<Vec<_>>>()?;
     let mut shipping_restart = None;
     let mut expected = candidates[0].data["steps"].as_array().unwrap().clone();
     let mut next = 0;
@@ -241,6 +265,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
     let mut auxiliary: Option<String> = None;
     let mut captures: BTreeMap<String, String> = BTreeMap::new();
     let mut entries: Option<Vec<CatalogEntry>> = None;
+    let mut stable_titles: Option<Vec<u32>> = None;
     let mut process = None;
     let mut artifact_path = None;
     let mut ui = None;
@@ -275,13 +300,14 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
             "failed or unknown step status",
         )?;
         if action == "start" {
+            // Legacy4cd and NilAdjusted068 share a name; 851 has its own. The
+            // exact name fixes the wire family, every START code then narrows it.
+            candidates.retain(|c| detail == c.data["name"]);
             require(
-                !started
-                    && next == 0
-                    && status == "OK"
-                    && candidates.iter().all(|c| detail == c.data["name"]),
+                !started && next == 0 && status == "OK" && !candidates.is_empty(),
                 "wrong/duplicate scenario start",
             )?;
+            expected = candidates[0].data["steps"].as_array().unwrap().clone();
             started = true;
             continue;
         }
@@ -407,10 +433,17 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
             failure = Some(format!("{action}: {detail}"));
             continue;
         }
+        // Every candidate left after the named start shares one wire family.
+        let version = candidates[0].version;
+        let label = version.marker();
+        let stable_key = format!("{label}_STABLE");
+        let closed_key = format!("{label}_CLOSED");
+        let final_key = format!("{label}_FINAL");
         match step["action"].as_str().unwrap() {
             "start_native_production_admission" => {
                 require(process.is_none(), "duplicate native observation")?;
-                let raw=detail.strip_prefix("native production-admission original-return telemetry ready; artifact normal-catalog22.jsonl; process=")
+                let raw = detail
+                    .strip_prefix(&format!("native production-admission original-return telemetry ready; artifact {}; process=", version.artifact()))
                     .ok_or_else(|| Error::input("native start process/artifact receipt missing"))?;
                 let id: ProcessIdentity = serde_json::from_value(json(raw)?)?;
                 require(
@@ -429,7 +462,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                     .ok_or_else(|| Error::input("native restoration path missing"))?;
                 let normalized = path.replace('\\', "/");
                 require(
-                    normalized.rsplit('/').next() == Some("normal-catalog22.jsonl"),
+                    normalized.rsplit('/').next() == Some(version.artifact()),
                     "stop names another artifact",
                 )?;
                 artifact_path = Some(PathBuf::from(normalized));
@@ -444,37 +477,54 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                     .strip_prefix(&format!("ran Lua in {state}; return="))
                     .ok_or_else(|| Error::input("Lua successful return missing or wrong state"))?
                     .trim_end_matches(['\r', '\n']);
+                // 851 receipts after native start carry exactly that process;
+                // before start they carry none. Strip only after verifying it.
+                let value = if !version.native_process_suffix() {
+                    value
+                } else if let Some(native) = &process {
+                    let (value, raw) = value
+                        .rsplit_once("; native_process=")
+                        .ok_or_else(|| Error::input("Lua receipt native process missing"))?;
+                    let id: ProcessIdentity = serde_json::from_value(json(raw)?)?;
+                    require(id == *native, "Lua receipt names another native process")?;
+                    value
+                } else {
+                    require(
+                        !value.contains("native_process="),
+                        "Lua receipt names a native process before start",
+                    )?;
+                    value
+                };
+                let stable = (version == SourceContractVersion::NormalAi851)
+                    .then_some(stable_titles.as_deref())
+                    .flatten();
                 let key = step["capture_as"]
                     .as_str()
                     .or_else(|| step["equals_capture"].as_str());
                 let frozen_steps = candidates[0].data["steps"].as_array().unwrap();
                 let is_prepare = step == &frozen_steps[5];
                 let is_closed_read = step == &frozen_steps[9];
-                if step["capture_as"] == "CATALOG880_STABLE"
-                    || step["equals_capture"] == "CATALOG880_STABLE"
-                {
-                    let read = catalog(value, &candidates[0].data)?;
+                if key == Some(stable_key.as_str()) {
+                    let (read, titles) = catalog(value, &candidates[0])?;
                     if entries.is_none() {
                         entries = Some(read);
+                        stable_titles = Some(titles);
                     }
-                } else if matches!(key, Some("CATALOG880_CLOSED" | "CATALOG880_FINAL")) {
-                    let key = step["capture_as"]
-                        .as_str()
-                        .or_else(|| step["equals_capture"].as_str())
-                        .unwrap_or("");
-                    let phase = if key == "CATALOG880_CLOSED" {
+                } else if key.is_some_and(|k| k == closed_key || k == final_key) {
+                    let phase = if key == Some(closed_key.as_str()) {
                         "closed"
                     } else {
                         "EVOLVING"
                     };
                     ledger(
                         value
-                            .strip_prefix("CATALOG880 MATRIX identities=22 ")
+                            .strip_prefix(&format!("{label} MATRIX identities=22 "))
                             .ok_or_else(|| Error::input("matrix ledger receipt missing"))?,
                         entries
                             .as_ref()
                             .ok_or_else(|| Error::input("stable catalog absent"))?,
                         phase,
+                        stable,
                     )?;
                 } else if key.is_none() && !is_prepare && !is_closed_read {
                     let core = state == "GameCore_Tuner";
@@ -483,6 +533,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                         entries
                             .as_ref()
                             .ok_or_else(|| Error::input("stable catalog absent"))?,
+                        label,
                         core,
                         next + 1,
                     )?;
@@ -494,7 +545,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                     .or_else(|| step["equals_capture"].as_str())
                 {
                     let rest = key
-                        .strip_prefix("CATALOG880_")
+                        .strip_prefix(&format!("{label}_"))
                         .ok_or_else(|| Error::input("unknown capture key"))?;
                     let (source, phase) = rest
                         .split_once('_')
@@ -506,14 +557,17 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
                         "JOINED"
                     };
                     let raw = value
-                        .strip_prefix(&format!("CATALOG880 {phase} "))
+                        .strip_prefix(&format!("{label} {phase} "))
                         .ok_or_else(|| Error::input("batch successful receipt missing"))?;
                     let entries = entries
                         .as_ref()
                         .ok_or_else(|| Error::input("stable catalog absent"))?;
-                    ledger(raw, &entries[first..(first + 4).min(COUNT)], phase)?;
+                    ledger(raw, &entries[first..(first + 4).min(COUNT)], phase, stable)?;
                 } else if is_prepare {
-                    require(value=="CATALOG880 official civics only; UI automatic submission paused; no game turn requested", "prepare receipt differs")?;
+                    require(
+                        value == version.prepare_receipt(),
+                        "prepare receipt differs",
+                    )?;
                 } else if is_closed_read {
                     // READ_CLOSED_ADMISSION asserts the original synchronized
                     // close/reset read. It is not the initial UI closed484 test.
@@ -565,7 +619,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
     )?;
     Ok(Evidence {
         process: process.ok_or_else(|| Error::input("native process missing"))?,
-        artifact: "normal-catalog22.jsonl".into(),
+        artifact: contract.version.artifact().into(),
         artifact_path,
         catalog: entries.ok_or_else(|| Error::input("stable runtime catalog missing"))?,
         ui: ui.unwrap_or_else(|| unmeasured("UI_NATIVE_QUALIFICATION")),
@@ -574,7 +628,7 @@ pub(super) fn parse_steps(text: &str, allow_failed_capture: bool) -> Result<Evid
         scenario_contract_sha256: contract.sha256.into(),
         source_contract_version: contract.version,
         scenario_complete: complete,
-        gameplay_closed484: captures.contains_key("CATALOG880_CLOSED"),
+        gameplay_closed484: captures.contains_key(&format!("{}_CLOSED", contract.version.marker())),
         failure,
     })
 }
