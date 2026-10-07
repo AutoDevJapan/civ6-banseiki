@@ -256,6 +256,80 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn original_identity_clears_leftover_receipt_after_restore_even_when_owner_data_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"owner").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin(p, &archive, &state).unwrap();
+        fs::rename(&original, archive.join("test-auto")).unwrap();
+        fs::rename(archive.join("owner-auto-original"), &original).unwrap();
+        fs::write(original.join("save"), b"later owner save").unwrap();
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert_eq!(
+            fs::read(original.join("save")).unwrap(),
+            b"later owner save"
+        );
+    }
+    #[test]
+    fn lost_backup_never_mistakes_test_folder_for_restored_original() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("save"), b"owner").unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        begin(p, &archive, &state).unwrap();
+        fs::remove_file(archive.join("owner-auto-original/save")).unwrap();
+        fs::remove_dir(archive.join("owner-auto-original")).unwrap();
+        fs::write(original.join("save"), b"test").unwrap();
+        assert!(restore(p, &state).is_err());
+        assert!(state.exists());
+        assert_eq!(fs::read(original.join("save")).unwrap(), b"test");
+    }
+    #[test]
+    fn incomplete_first_record_is_cleared_without_touching_any_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let state = p.join("state");
+        let save = p.join("normal.Civ6Save");
+        fs::write(&state, b"{\"original\":").unwrap();
+        fs::write(&save, b"owner").unwrap();
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert_eq!(fs::read(save).unwrap(), b"owner");
+    }
+    #[test]
+    fn planned_record_survives_user_removal_of_empty_auto_and_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        let original = p.join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        let archive = p.join("archive");
+        fs::create_dir(&archive).unwrap();
+        let state = p.join("state");
+        let s = State {
+            original: original.canonicalize().unwrap(),
+            archive: archive.clone(),
+            existed: true,
+            original_digest: Some(digest(&original).unwrap()),
+            original_identity: Some(identity(&original).unwrap()),
+        };
+        fs::write(&state, serde_json::to_string(&s).unwrap() + "\n").unwrap();
+        fs::remove_dir(&original).unwrap();
+        fs::remove_dir(&archive).unwrap();
+        restore(p, &state).unwrap();
+        assert!(!state.exists());
+        assert!(!original.exists());
+    }
     #[cfg(windows)]
     #[test]
     fn completed_recovery_receipt_does_not_block_new_owner_saves_after_delete_failure() {
