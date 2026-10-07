@@ -6,7 +6,7 @@ use crate::{read_repo, repo_root};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use rusqlite::{functions::FunctionFlags, types::ValueRef, Connection, MAIN_DB};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
