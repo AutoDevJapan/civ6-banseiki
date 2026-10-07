@@ -2470,32 +2470,74 @@ fn missing_startup_helper_source_refuses_existing_stale_binary_before_build() {
 #[cfg(windows)]
 #[test]
 fn cancelled_build_waits_for_real_grandchildren_to_exit() {
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER},
+        Foundation::CloseHandle,
         System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
     };
     let f = Fixture::new();
     let marker = f.root.join("grandchild.pid");
     let escaped = path(&marker).replace('\'', "''");
     let script = format!("$info = New-Object System.Diagnostics.ProcessStartInfo; $info.FileName = 'cmd.exe'; $info.Arguments = '/d /c ping 127.0.0.1 -n 31 > nul'; $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $child = [System.Diagnostics.Process]::Start($info); [System.IO.File]::WriteAllText('{escaped}', [string]$child.Id); Start-Sleep -Seconds 30");
-    let result = process::RealRunner.run(
-        Call::new(args(&["powershell", "-NoProfile", "-Command", &script]))
-            .managed()
-            .timeout(5.0),
+    // PowerShell startup can exceed five seconds on a loaded Windows runner.
+    // Cancel only after the real grandchild is ready, using the production
+    // lease cancellation path against this test's private fixture directory.
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"fixture-cancel", "acquired_at":process::RealRunner.now()}),
     );
-    assert!(result.unwrap_err().contains("timed out"));
-    let pid: u32 = read_text(marker).unwrap().parse().unwrap();
-    unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle.is_null() {
-            assert_eq!(GetLastError(), ERROR_INVALID_PARAMETER);
-        } else {
-            let mut code = 259;
-            let success = GetExitCodeProcess(handle, &mut code);
-            CloseHandle(handle);
-            assert_ne!(success, 0);
-            assert_ne!(code, 259, "Grandchild survived the cancelled build");
+    let call = Call::new(args(&["powershell", "-NoProfile", "-Command", &script]))
+        .managed()
+        .timeout(60.0)
+        .lease(&f.p, "fixture-cancel", 0.0);
+    let limit = call.lease.as_ref().unwrap().clone();
+    let worker = thread::spawn(move || process::RealRunner.run(call));
+    let ready_deadline = Instant::now() + Duration::from_secs(30);
+    let pid = loop {
+        if let Ok(pid) =
+            read_text(&marker).and_then(|text| text.parse::<u32>().map_err(|e| e.to_string()))
+        {
+            break Some(pid);
         }
+        if worker.is_finished() || Instant::now() >= ready_deadline {
+            break None;
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    unsafe {
+        // Keep one handle across cancellation: a recycled PID cannot satisfy
+        // the exit check. Always release the managed tree, even if readiness fails.
+        let handle = pid.map_or(std::ptr::null_mut(), |pid| {
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)
+        });
+        let mut before = 0;
+        let before_ok = if handle.is_null() {
+            0
+        } else {
+            GetExitCodeProcess(handle, &mut before)
+        };
+        limit.record_probe(&process::LeaseProbe::Contended(
+            process::RealRunner.monotonic(),
+        ));
+        let result = worker.join();
+        let mut after = 259;
+        let after_ok = if handle.is_null() {
+            0
+        } else {
+            GetExitCodeProcess(handle, &mut after)
+        };
+        if !handle.is_null() {
+            CloseHandle(handle);
+        }
+        assert!(pid.is_some(), "Grandchild never became ready: {result:?}");
+        assert_ne!(before_ok, 0, "could not observe ready grandchild");
+        assert_eq!(before, 259, "grandchild exited before cancellation");
+        assert!(result.unwrap().unwrap_err().contains(process::LEASE_YIELD));
+        assert_ne!(after_ok, 0);
+        assert_ne!(after, 259, "Grandchild survived the cancelled build");
     }
 }
 
