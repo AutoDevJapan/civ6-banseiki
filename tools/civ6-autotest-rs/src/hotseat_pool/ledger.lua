@@ -6,9 +6,10 @@ if poolRows~=300 or ledgerRows~=1 or ledgerCount~=300 or type(ledgerVersion)~='s
 local savedLedger=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')
 if savedLedger~=ledgerVersion then error('saved pool ledger '..tostring(savedLedger)) end
 local poolParts={savedLedger}
-local function poolPerson(pid,leader)
+local function poolPerson(pid,leader,human)
+  if human==nil then human=true end
   local row=poolByLeader[leader]; local p=Players[pid]; local c=PlayerConfigurations[pid]
-  if not row or not p or not c or not p:IsHuman() then error('pool human '..pid..' '..tostring(leader)) end
+  if not row or not p or not c or p:IsHuman()~=human then error('pool player '..pid..' '..tostring(leader)) end
   if c:GetCivilizationTypeName()~=row.CivilizationType then error('pool civilization '..pid..' '..tostring(c:GetCivilizationTypeName())) end
   local person=p:GetProperty('JAC_POOL_PERSON_ID')
   local trait=p:GetProperty('JAC_POOL_TRAIT')

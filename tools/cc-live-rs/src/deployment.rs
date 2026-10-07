@@ -9,6 +9,10 @@ pub const MOD: &str = "JAC_PoC_BanseikiRuleset";
 pub const GAME: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
 
 fn location(p: &Path) -> String {
+    lexical_location(&fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
+}
+
+fn lexical_location(p: &Path) -> String {
     let value = path(p);
     if cfg!(windows) {
         value
@@ -126,7 +130,7 @@ catch {{ if (-not (Test-Path -LiteralPath {link})) {{ New-Item -ItemType Junctio
 "#,
         link = literal(link),
         desired = literal(desired),
-        observed = location(current).replace('\'', "''"),
+        observed = lexical_location(current).replace('\'', "''"),
     );
     let out = r.run(
         Call::new(args(&[
@@ -147,7 +151,11 @@ catch {{ if (-not (Test-Path -LiteralPath {link})) {{ New-Item -ItemType Junctio
     }
     let installed = fs::read_link(link).map_err(|e| e.to_string())?;
     if location(&installed) != location(desired) {
-        return Err("ruleset junction update was not confirmed".into());
+        return Err(format!(
+            "ruleset junction update was not confirmed: installed={} expected={}",
+            path(installed),
+            path(desired)
+        ));
     }
     Ok(())
 }

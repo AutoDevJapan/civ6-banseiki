@@ -7,5 +7,9 @@ for pid=0,3 do
   if poolLeaders[leader] then error('random pool duplicate leader '..leader) end
   poolLeaders[leader]=true
   if pid<2 then poolParts[#poolParts+1]=poolPerson(pid,leader)
-  else poolParts[#poolParts+1]=table.concat({pid,leader,tostring(c:GetCivilizationTypeName())},'~') end
+  elseif poolByLeader[leader] then poolParts[#poolParts+1]=poolPerson(pid,leader,false)
+  else
+    if p:GetProperty('JAC_POOL_PERSON_ID')~=nil or p:GetProperty('JAC_POOL_TRAIT')~=nil or p:GetProperty('JAC_POOL_ROLE')~=nil then error('official AI has pool record '..pid) end
+    poolParts[#poolParts+1]=table.concat({pid,leader,tostring(c:GetCivilizationTypeName())},'~')
+  end
 end

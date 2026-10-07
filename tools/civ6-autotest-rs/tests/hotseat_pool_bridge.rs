@@ -375,7 +375,12 @@ fn injected_pool_record_rejects_wrong_people_ledgers_and_leaders() {
             "random pool duplicate leader",
         ),
         (true, "leaders[2]='RANDOM'", "random pool player 2"),
-        (true, "leaders[1]='LEADER_OFFICIAL_C'", "pool human 1"),
+        (true, "leaders[1]='LEADER_OFFICIAL_C'", "pool player 1"),
+        (
+            true,
+            "props[2].JAC_POOL_PERSON_ID='JAC_POOL_X3'",
+            "official AI has pool record 2",
+        ),
         (true, "majors=3", "random pool majors"),
         (
             true,
@@ -399,6 +404,44 @@ fn injected_pool_record_rejects_wrong_people_ledgers_and_leaders() {
                 .to_string();
             assert!(error.contains(*expected), "{tweak}: step {step}: {error}");
         }
+    }
+}
+
+#[test]
+fn random_pool_ai_records_are_captured_and_missing_or_changed_properties_are_rejected() {
+    let assigned = "leaders[2]='LEADER_X3'; civs[2]='CIVILIZATION_X'; props[2]={JAC_POOL_PERSON_ID='JAC_POOL_X3',JAC_POOL_TRAIT='TRAIT_X',JAC_POOL_ROLE='LEADER'}";
+    let data = random();
+    let lua = ingame(true, assigned);
+    let source = template();
+    for step in hs::POOL_RECORD_STEPS {
+        let original = run(&lua, source["steps"][step - 1]["code"].as_str().unwrap()).unwrap();
+        let code = data["steps"][step - 1]["code"].as_str().unwrap();
+        let expected = format!("{original}|JAC_POOL|{};2~LEADER_X3~CIVILIZATION_X~JAC_POOL_X3~TRAIT_X~LEADER;3~LEADER_OFFICIAL_B~CIVILIZATION_B", human_records());
+        assert_eq!(run(&lua, code).unwrap(), expected, "step {step}");
+        assert_eq!(
+            run(&lua, code).unwrap(),
+            expected,
+            "saved comparison {step}"
+        );
+        for changed in [
+            "props[2].JAC_POOL_PERSON_ID=nil",
+            "props[2].JAC_POOL_TRAIT='TRAIT_OTHER'",
+            "props[2].JAC_POOL_ROLE=nil",
+        ] {
+            let broken = ingame(true, &format!("{assigned}; {changed}"));
+            assert!(
+                run(&broken, code)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("pool person 2"),
+                "{changed} step {step}"
+            );
+        }
+        let broken = ingame(true, &format!("{assigned}; civs[2]='CIVILIZATION_OTHER'"));
+        assert!(run(&broken, code)
+            .unwrap_err()
+            .to_string()
+            .contains("pool civilization 2"));
     }
 }
 

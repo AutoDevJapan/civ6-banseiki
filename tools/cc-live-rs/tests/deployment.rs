@@ -297,6 +297,29 @@ fn successful_shell_exit_is_not_accepted_without_the_actual_junction_change() {
 
 #[cfg(windows)]
 #[test]
+fn short_path_junctions_are_recognized_as_the_same_shared_checkout() {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetShortPathNameW;
+    let f = Fixture::new();
+    let input: Vec<u16> = f.source.as_os_str().encode_wide().chain([0]).collect();
+    let mut output = vec![0u16; 32768];
+    let count =
+        unsafe { GetShortPathNameW(input.as_ptr(), output.as_mut_ptr(), output.len() as u32) };
+    assert!(count > 0 && (count as usize) < output.len());
+    let short = PathBuf::from(String::from_utf16(&output[..count as usize]).unwrap());
+    assert_eq!(
+        short.canonicalize().unwrap(),
+        f.source.canonicalize().unwrap()
+    );
+    unlink(&f.link);
+    junction(&f.link, &short);
+    let mut r = f.fake();
+    deployment::prepare(&mut r, &f.p, &f.live).unwrap();
+    assert!(f.target_is(&f.cache));
+}
+
+#[cfg(windows)]
+#[test]
 fn actual_pwsh_switches_and_restores_the_fixture_junction() {
     struct Shell(Fake);
     impl Runner for Shell {
