@@ -354,10 +354,9 @@ ExposedMembers.JAC_OfficialProductNativeAssets=assets
 
 const NATIVE_TURN_OBSERVATION: &str = r#"
 InstallNativeTurnObservation=function()
-  if JAC_OfficialProductNativeTurnCallback then
-    GameEvents.JAC_AbsorptionProduct_TurnObservation.Remove(JAC_OfficialProductNativeTurnCallback)
-  end
-  JAC_OfficialProductNativeTurnCallback=function(stage,turn)
+  -- P is the real Gameplay table in this same JAC_Absorption_Entry VM.
+  -- Replacing one optional diagnostic callback cannot accumulate subscribers.
+  P.NativeTurnObserver=function(stage,turn)
     local ok,result=pcall(function()
       local actors=assert(Game:GetProperty(KEY),'official observation actors missing')
       local key=KEY..'_NATIVE_TURN'
@@ -374,7 +373,6 @@ InstallNativeTurnObservation=function()
     end)
     if not ok then Game:SetProperty(KEY..'_NATIVE_TURN',{Error=tostring(result)}) end
   end
-  GameEvents.JAC_AbsorptionProduct_TurnObservation.Add(JAC_OfficialProductNativeTurnCallback)
 end
 NativeTurnBefore=function(origin)
   local observed=assert(Game:GetProperty(KEY..'_NATIVE_TURN'),'independent native turn observation missing')
@@ -2123,12 +2121,7 @@ function SET_NATIVE_TURN(before,pool,received)
 end
 SET_NATIVE_TURN(TEST.BeforeFirst,31,1)
 Game={GetCurrentGameTurn=function() return TURN end,GetProperty=function(_,k) return copy(PROPS[k]) end,SetProperty=function(_,k,v) PROPS[k]=copy(v) end}
-local turn_callbacks={}
-GameEvents={JAC_AbsorptionProduct_TurnObservation={
-  Add=function(fn) turn_callbacks[fn]=true end,
-  Remove=function(fn) turn_callbacks[fn]=nil end,
-  Call=function(...) for fn in pairs(turn_callbacks) do fn(...) end end}}
-function NATIVE_OBSERVER_COUNT() local n=0;for _ in pairs(turn_callbacks) do n=n+1 end;return n end
+function NATIVE_OBSERVER_COUNT() return type(JAC_AbsorptionProductGameplay.NativeTurnObserver)=='function' and 1 or 0 end
 local influence={GetTokensToGive=function() return POOL end,GetTokensReceived=function(_,sender) assert(sender==0);return RECEIVED end}
 Players={}
 for actor=0,2 do Players[actor]={
@@ -2769,9 +2762,9 @@ GameInfo={{Districts={{DISTRICT_HOLY_SITE={{Index=7}}}}}}
 InstallNativeTurnObservation();InstallNativeTurnObservation()
 assert(NATIVE_OBSERVER_COUNT()==1,'duplicate native observation subscription')
 POOL,RECEIVED=30,3
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('BEFORE',TURN)
 POOL,RECEIVED=29,4
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('AFTER',TURN)
 local o=Game:GetProperty(KEY..'_NATIVE_TURN')
 assert(o.Before.Pool==30 and o.Before.Received==3 and o.After.Pool==29 and o.After.Received==4)
 assert(PROPS.JAC_ABSORPTION_PRODUCT_V1.Operations[OPKEY].EnvoyReceipt.Before==32,'observer changed product receipt')
@@ -2789,9 +2782,9 @@ InstallNativeTurnObservation();InstallNativeTurnObservation()
 assert(NATIVE_OBSERVER_COUNT()==1)
 assert(R.Equal(saved,Game:GetProperty(KEY..'_NATIVE_TURN')),'subscription replaced saved evidence')
 TURN,POOL,RECEIVED=4,28,5
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('BEFORE',TURN)
 POOL,RECEIVED=27,6
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('AFTER',TURN)
 local o=Game:GetProperty(KEY..'_NATIVE_TURN')
 assert(o.Turn==4 and o.Before.Pool==28 and o.Before.Received==5 and o.After.Pool==27 and o.After.Received==6)
 "#)).exec()
@@ -3167,8 +3160,8 @@ TURN=6;REQUEST.Status='STARTED';REQUEST.StartTurn=6;VIEW.Status='STARTED'
 REGISTER.Done=true;ESCROW.Status='HELD';ESCROW.CollectFaith.Done=true
 GOLD,FAITH=10005,9980 -- later gold income must not invalidate the earlier observed gold leg
 PROPS.JAC_ABSORPTION_FLOW_V1.Flows['normal-flow'].Phase1Complete=true
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('BEFORE',TURN)
-GameEvents.JAC_AbsorptionProduct_TurnObservation.Call('AFTER',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('BEFORE',TURN)
+JAC_AbsorptionProductGameplay.NativeTurnObserver('AFTER',TURN)
 "#,
         )
         .exec()?;

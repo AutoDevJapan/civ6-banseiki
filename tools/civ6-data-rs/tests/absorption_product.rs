@@ -942,6 +942,43 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
 }
 
 #[test]
+fn diagnostic_turn_getter_failure_does_not_interrupt_the_ordinary_turn() -> anyhow::Result<()> {
+    let lua = world(9999.)?;
+    lua.load(
+        r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false;READY()
+      local turn=Game.GetCurrentGameTurn;local fail=true;local stages={}
+      Game.GetCurrentGameTurn=function()
+        if fail then fail=false;error('diagnostic turn getter unavailable') end
+        return turn()
+      end
+      JAC_AbsorptionProductGameplay.NativeTurnObserver=function(stage,observed)
+        assert(observed==TURN);stages[#stages+1]=stage
+      end
+      GameEvents.OnGameTurnStarted.Call(TURN)
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+      assert(#stages==1 and stages[1]=='AFTER')
+    "#,
+    )
+    .exec()?;
+    Ok(())
+}
+
+#[test]
+fn ordinary_turn_does_not_construct_unregistered_native_events_for_diagnostics(
+) -> anyhow::Result<()> {
+    let lua = world(9999.)?;
+    lua.load(r#"
+      OFFICIAL_SOURCE();HUMAN[2]=false;READY()
+      setmetatable(GameEvents,{__index=function(_,name) error('unregistered native event: '..name) end})
+      GameEvents.OnGameTurnStarted.Call(TURN)
+      assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
+      assert(JAC_AbsorptionProductGameplay.NativeTurnObserver==nil)
+    "#).exec()?;
+    Ok(())
+}
+
+#[test]
 fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_flow(
 ) -> anyhow::Result<()> {
     for fail_observer in [false, true] {
@@ -952,10 +989,10 @@ fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_fl
           -- The engine's own two assignments happen before our ordinary handler.
           POOL,OFFICIAL_ENVOYS,TILES=8,2,6
           local rows={}
-          GameEvents.JAC_AbsorptionProduct_TurnObservation={Call=function(stage,turn)
+          JAC_AbsorptionProductGameplay.NativeTurnObserver=function(stage,turn)
             rows[#rows+1]={Stage=stage,Turn=turn,Pool=POOL,Received=OFFICIAL_ENVOYS}
             if FAIL_OBSERVER then error('read-only observer failed') end
-          end}
+          end
           GameEvents.OnGameTurnStarted.Call(TURN)
           assert(#rows==2 and rows[1].Stage=='BEFORE' and rows[2].Stage=='AFTER')
           assert(rows[1].Turn==TURN and rows[2].Turn==TURN)

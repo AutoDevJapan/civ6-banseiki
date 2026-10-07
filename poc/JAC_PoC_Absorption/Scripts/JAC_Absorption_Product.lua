@@ -819,8 +819,10 @@ GameEvents.JAC_AbsorptionProduct_Operation.Add(Operation)
 -- Read-only diagnostics can sample the actual engine state on either side of
 -- the ordinary turn handler. Never let a diagnostic failure interrupt play.
 local function ObserveTurn(stage)
-  local event=GameEvents.JAC_AbsorptionProduct_TurnObservation
-  if event and event.Call then pcall(event.Call,stage,Game.GetCurrentGameTurn()) end
+  local observer=P.NativeTurnObserver
+  if type(observer)=='function' then
+    pcall(function() observer(stage,Game.GetCurrentGameTurn()) end)
+  end
 end
 GameEvents.OnGameTurnStarted.Add(function()
   ObserveTurn('BEFORE');P.Tick(false);ObserveTurn('AFTER')
