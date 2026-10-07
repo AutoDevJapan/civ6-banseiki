@@ -593,6 +593,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-banseiki-hotseat-growth.json",
                 "multiplayer-hotseat-growth.json",
                 "mod-selection-rollback.json",
+                "reliability-seed.json",
+                "reliability-cycle.json",
             ]
             .into_iter()
             .map(str::to_string),

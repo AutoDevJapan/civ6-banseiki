@@ -321,6 +321,45 @@ fn test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game() {
 }
 
 #[test]
+fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
+    for (reached_ingame, log_writable) in
+        [(true, true), (true, false), (false, true), (false, false)]
+    {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("OnActivateButtonClicked") {
+                Err(Error::unknown(
+                    "loading context disappeared after Begin Game",
+                ))
+            } else if code.contains("Game.GetLocalPlayer") {
+                Ok(reached_ingame.to_string())
+            } else {
+                Ok("true".into())
+            }
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        if !log_writable {
+            fs::create_dir(f.output.join("steps.jsonl")).unwrap();
+        }
+        ready(&f, &mut runner);
+        let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
+        if reached_ingame {
+            result.unwrap();
+        } else {
+            error_has(
+                result.unwrap_err(),
+                ErrorKind::Scenario,
+                "outcome undecidable",
+            );
+        }
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+        assert!(f.trace().presses.is_empty());
+    }
+}
+
+#[test]
 fn test_load_wait_never_sends_escape_before_load_complete_log() {
     let f = Fixture::new();
     let mut runner = f.direct_runner(json!({}), f.backend());
@@ -545,11 +584,75 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
     let t = f.trace();
     assert!(t.connects.is_empty());
     assert!(t.state_queries.is_empty());
+    let boundary: Value =
+        serde_json::from_slice(&fs::read(f.output.join("failure.json")).unwrap()).unwrap();
+    assert_eq!(boundary["stage"], "preflight");
+    assert_eq!(boundary["message"], "Multiple Civ VI processes");
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert!(result["failure"]
+        .as_str()
+        .unwrap()
+        .contains("Multiple Civ VI processes"));
     let last = f.records().pop().unwrap();
     assert_eq!(
         (last["action"].as_str(), last["status"].as_str()),
         (Some("run"), Some("FAIL"))
     );
+}
+
+#[test]
+fn failure_record_write_error_keeps_original_cause_and_disconnects() {
+    for preflight in [true, false] {
+        let f = Fixture::new();
+        let output = f.output.clone();
+        let mut backend = f.backend();
+        if preflight {
+            backend.on_require_process = Some(Box::new(move || {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::input("original process failure"))
+            }));
+        } else {
+            backend.on_lua = Box::new(move |_, _, _| {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::lua("original Lua failure"))
+            });
+        }
+        let mut runner = f.runner(
+            scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+            backend,
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert!(f.trace().disconnects > 0);
+        let result: Value =
+            serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+        assert!(result["failure"].as_str().unwrap().contains(if preflight {
+            "original process failure"
+        } else {
+            "original Lua failure"
+        }));
+        assert_eq!(result["passed"], false);
+    }
+}
+
+#[test]
+fn interrupted_step_keeps_its_original_boundary_through_finalization() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_lua = Box::new(|_, _, _| Err(Error::interrupted("stop during Lua request")));
+    let mut runner = f.runner(
+        scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+        backend,
+    );
+    runner.auto_restart = false;
+    assert_eq!(runner.run().unwrap_err().kind, ErrorKind::Interrupted);
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert_eq!(result["failure_boundary"]["step"], 1);
+    assert_eq!(result["failure_boundary"]["action"], "ui_lua");
+    assert_eq!(result["failure_boundary"]["error_kind"], "Interrupted");
+    assert!(f.trace().disconnects > 0);
 }
 
 #[test]

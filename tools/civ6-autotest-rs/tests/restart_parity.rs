@@ -633,6 +633,45 @@ fn missing_or_duplicate_enabled_mod_is_rejected() {
 }
 
 #[test]
+fn official_dlc_is_checked_separately_from_mutable_mod_artwork() {
+    let temp = tempfile::tempdir().unwrap();
+    let mods = temp.path().join("Mods");
+    let dlc = temp.path().join("DLC");
+    let official = dlc.join("Babylon");
+    fs::create_dir_all(&official).unwrap();
+    fs::write(
+        official.join("Babylon.modinfo"),
+        format!("<Mod id=\"{MOD_ID}\"/>"),
+    )
+    .unwrap();
+    let scenario = json!({"steps":[{"action":"enable_mods","ids":[MOD_ID]}]});
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &dlc)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &temp.path().join("missing"))
+            .unwrap_err()
+            .message
+            .contains(MOD_ID)
+    );
+    let duplicate = mods.join("PretendOfficial");
+    fs::create_dir_all(&duplicate).unwrap();
+    fs::write(
+        duplicate.join("duplicate.modinfo"),
+        format!("<Mod id=\"{MOD_ID}\"/>"),
+    )
+    .unwrap();
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &dlc)
+            .unwrap_err()
+            .message
+            .contains("Duplicate")
+    );
+}
+
+#[test]
 fn atlas_images_missing_from_mod_packages_are_reported() {
     let temp = tempfile::tempdir().unwrap();
     let folder = temp.path().join("MyMod");

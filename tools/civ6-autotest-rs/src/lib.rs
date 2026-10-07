@@ -18,6 +18,7 @@ pub mod native_order;
 pub mod native_trace;
 pub mod payment_scenario;
 pub mod persona_payment;
+pub mod reliability;
 pub mod restart;
 pub mod runner;
 pub mod scenario;
