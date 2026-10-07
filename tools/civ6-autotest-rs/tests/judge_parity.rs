@@ -592,6 +592,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "hotseat-bridge-live-hold.json",
                 "multiplayer-banseiki-hotseat-growth.json",
                 "multiplayer-hotseat-growth.json",
+                "multiplayer-japan-15km-settlers-hotseat-growth.json",
                 "mod-selection-rollback.json",
                 "reliability-seed.json",
                 "reliability-cycle.json",

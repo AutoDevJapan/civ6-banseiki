@@ -43,6 +43,9 @@ const ORIGINAL_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json");
 const BANSEIKI_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-banseiki-hotseat-growth.json");
+const JAPAN_SETTLERS_SCENARIO: &str = include_str!(
+    "../../civ6-autotest/scenarios/multiplayer-japan-15km-settlers-hotseat-growth.json"
+);
 
 pub fn check_scenario(data: &Value) -> Result<()> {
     scenario::validate_scenario(data)?;
@@ -67,7 +70,11 @@ pub fn check_scenario(data: &Value) -> Result<()> {
     {
         return Err(Error::scenario("hotseat save/load pairs changed"));
     }
-    for source in [ORIGINAL_SCENARIO, BANSEIKI_SCENARIO] {
+    for source in [
+        ORIGINAL_SCENARIO,
+        BANSEIKI_SCENARIO,
+        JAPAN_SETTLERS_SCENARIO,
+    ] {
         let mut expected: Value = serde_json::from_str(source)?;
         if let Some(nonce) = data.get("hotseat_bridge_nonce").and_then(Value::as_str) {
             let ids = data["steps"][0]["ids"]
