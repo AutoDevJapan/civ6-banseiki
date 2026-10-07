@@ -1384,6 +1384,204 @@ fn maintenance_stops_other_jobs_before_prepare_but_allows_the_repairing_job() {
     let mut r = Fake::success();
     assert!(ship::live(&mut r, &f.p, "main", "s.json", true).is_err());
     assert!(r.calls.is_empty());
+    let mut r = Fake::success();
+    assert!(cli(&mut r, &f.p, &args(&["main:s.json"])).is_err());
+    assert!(r.calls.is_empty());
+    assert!(!f.p.here.join("queue").exists());
+}
+
+#[test]
+fn dirty_tracked_source_stops_before_the_driver_build_and_keeps_input() {
+    let f = Fixture::new();
+    let original = json!({"steps":[{"action":"pause","seconds":1}]});
+    let source = f.json(
+        "wt/live/tools/civ6-autotest/scenarios/s.json",
+        original.clone(),
+    );
+    let mut r = Fake::outputs(&[("", "", 0), ("", "", 0), ("", "tracked edits", 1)]);
+    assert!(ship::live(&mut r, &f.p, "main", "s.json", true)
+        .unwrap_err()
+        .contains("diff --quiet HEAD"));
+    assert_eq!(read_json(source).unwrap(), original);
+    assert!(!r.calls.iter().any(|c| c.args.contains(&"build".into())));
+    assert!(r.printed.is_empty());
+}
+
+#[test]
+fn lease_probe_keeps_quiet_work_unbounded_and_ignores_dead_waiters() {
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    let limit = process::LeaseLimit {
+        paths: f.p.clone(),
+        token: "owned".into(),
+        cleanup_reserve_seconds: 240.0,
+    };
+    let mut r = Fake::success();
+    r.time = 10000.0;
+    assert_eq!(
+        process::lease_probe(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"succeeded"}));
+    f.json(
+        "here/queue/waiter.json",
+        json!({"job":"waiter","since":1000}),
+    );
+    assert_eq!(
+        process::lease_probe(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"running"}));
+    r.time = 1100.0;
+    assert_eq!(
+        process::lease_probe(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(1460.0)
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let f = Fixture::new();
+    let locked = f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    let recovery_pin = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(locked)
+        .unwrap();
+    let limit = process::LeaseLimit {
+        paths: f.p.clone(),
+        token: "owned".into(),
+        cleanup_reserve_seconds: 240.0,
+    };
+    let mut r = Fake::success();
+    r.time = 10000.0;
+    assert_eq!(
+        process::lease_probe(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Clear
+    );
+    drop(recovery_pin);
+}
+
+#[cfg(windows)]
+#[test]
+fn running_child_yields_to_a_waiter_arriving_after_it_started() {
+    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    let f = Fixture::new();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":now}),
+    );
+    fs::create_dir_all(f.p.jobs.join("waiter")).unwrap();
+    fs::create_dir_all(f.p.here.join("queue")).unwrap();
+    let paths = f.p.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(300));
+        write_json(
+            paths.jobs.join("waiter/job.json"),
+            &json!({"status":"running"}),
+        )
+        .unwrap();
+        let since = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        write_json(
+            paths.here.join("queue/waiter.json"),
+            &json!({"job":"waiter","since":since}),
+        )
+        .unwrap();
+    });
+    let start = Instant::now();
+    let error = process::RealRunner
+        .run(
+            Call::new(args(&["cmd.exe", "/d", "/c", "ping 127.0.0.1 -n 31 > nul"]))
+                .managed()
+                .timeout(15.0)
+                .lease(&f.p, "owned", 1797.0),
+        )
+        .unwrap_err();
+    writer.join().unwrap();
+    assert!(error.contains(process::LEASE_YIELD), "{error}");
+    assert!(start.elapsed().as_secs_f64() < 8.0);
+}
+
+#[cfg(windows)]
+#[test]
+fn quiet_running_child_is_not_cut_off_at_the_contention_lease() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let f = Fixture::new();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs_f64();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":now}),
+    );
+    let out = process::RealRunner
+        .run(
+            Call::new(args(&["cmd.exe", "/d", "/c", "ping 127.0.0.1 -n 5 > nul"]))
+                .managed()
+                .timeout(10.0)
+                .lease(&f.p, "owned", 1797.0),
+        )
+        .unwrap();
+    assert_eq!(out.code, 0);
+}
+
+#[test]
+fn shared_slot_yield_is_incomplete_and_never_counted_as_a_product_failure_or_success() {
+    struct Yielding(ReliabilityRunner);
+    impl Runner for Yielding {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            let driver = c.args[0] == "fixture-python";
+            let out = self.0.run(c)?;
+            if driver {
+                Err(format!(
+                    "{}: interrupted for a live waiter",
+                    process::LEASE_YIELD
+                ))
+            } else {
+                Ok(out)
+            }
+        }
+        fn now(&mut self) -> f64 {
+            self.0.now()
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.0.monotonic()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.0.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.0.print(s)
+        }
+    }
+    let f = Fixture::new();
+    let mut r = Yielding(ReliabilityRunner::new(&f, vec![0; 10]));
+    assert!(
+        cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"]))
+            .unwrap_err()
+            .contains(process::LEASE_YIELD)
+    );
+    let summary = reliability_summary(&r.0);
+    assert_eq!(summary["result"], "incomplete_shared_slot_yield");
+    assert_eq!(summary["consecutive_successes"], 0);
+    assert_eq!(r.0.artifacts.len(), 1);
+    assert_eq!(summary["rounds"][0]["cleanup"]["lock_released"], true);
 }
 
 #[test]
@@ -1451,7 +1649,7 @@ fn scenario_budget_uses_step_defaults_and_one_internal_recovery() {
 }
 
 #[test]
-fn driver_deadline_includes_time_spent_preparing_and_caps_long_scenarios() {
+fn quiet_slot_keeps_a_long_scenarios_own_deadline() {
     struct SlowPrepare(Fake);
     impl Runner for SlowPrepare {
         fn run(&mut self, c: Call) -> Result<Output, String> {
@@ -1484,7 +1682,8 @@ fn driver_deadline_includes_time_spent_preparing_and_caps_long_scenarios() {
             .find(|c| c.args[0] == "fixture-python")
             .unwrap();
     assert!(call.kill_tree);
-    assert_eq!(call.timeout, Some(860.0));
+    assert_eq!(call.timeout, Some(4300.0));
+    assert!(call.lease.is_some());
 }
 
 #[test]
@@ -1502,6 +1701,17 @@ fn driver_is_bounded_by_the_remaining_scenario_window() {
         fn run(&mut self, call: Call) -> Result<Output, String> {
             if call.args[0].ends_with("ship.exe") {
                 self.time += 1545.0;
+                fs::create_dir_all(self.p.jobs.join("waiter")).unwrap();
+                write_json(
+                    self.p.jobs.join("waiter/job.json"),
+                    &json!({"status":"running"}),
+                )
+                .unwrap();
+                write_json(
+                    self.p.here.join("queue/waiter.json"),
+                    &json!({"job":"waiter","since":0}),
+                )
+                .unwrap();
                 return Ok(Output {
                     stdout: format!(
                         "{}\n{}",
@@ -1821,7 +2031,7 @@ fn preparation_timeout_uses_the_budget_left_after_preparation_shutdown() {
         .iter()
         .find(|c| c.args[0] == "fixture-python")
         .unwrap();
-    assert_eq!(driver.timeout, Some(860.0));
+    assert_eq!(driver.timeout, Some(1140.0));
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 
@@ -2165,13 +2375,23 @@ fn ship_builds_checked_out_rust_driver_before_publishing_scenario_and_artifacts(
         json!({"name":"s","steps":[{"action":"pause","seconds":1}]}),
     );
     let artifacts = cargo_artifacts(&f);
-    let mut r = Fake::outputs(&[("", "", 0), ("", "", 0), ("", "", 0), (&artifacts, "", 0)]);
+    let mut r = Fake::outputs(&[
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        (&artifacts, "", 0),
+    ]);
     let (scenario, _) = ship::live(&mut r, &f.p, "name", "s.json", true).unwrap();
     assert_eq!(&r.calls[0].args[3..5], &["fetch", "-q"]);
     assert_eq!(&r.calls[1].args[3..5], &["checkout", "-q"]);
     assert_eq!(&r.calls[2].args[3..5], &["merge", "-q"]);
-    assert!(r.calls[3].args.contains(&"build".into()));
-    assert!(r.calls[3].kill_tree);
+    assert_eq!(
+        r.calls[3].args[3..],
+        args(&["diff", "--quiet", "HEAD", "--"])
+    );
+    assert!(r.calls[4].args.contains(&"build".into()));
+    assert!(r.calls[4].kill_tree);
     assert_eq!(r.printed.len(), 2);
     assert!(std::path::Path::new(&scenario).is_file());
 
@@ -2182,6 +2402,7 @@ fn ship_builds_checked_out_rust_driver_before_publishing_scenario_and_artifacts(
         json!({"name":"s","steps":[{"action":"pause","seconds":1}]}),
     );
     let mut r = Fake::outputs(&[
+        ("", "", 0),
         ("", "", 0),
         ("", "", 0),
         ("", "", 0),
@@ -2310,7 +2531,7 @@ fn main_branch_skips_merge_and_no_restart_keeps_first_action() {
     );
     let mut r = Fake::success();
     let (target, _) = ship::live(&mut r, &f.p, "main", "s.json", false).unwrap();
-    assert_eq!(r.calls.len(), 2);
+    assert_eq!(r.calls.len(), 3);
     assert_eq!(r.calls[1].args.last().unwrap(), "origin/main");
     assert_eq!(read_json(target).unwrap()["steps"][0]["action"], "save");
 }

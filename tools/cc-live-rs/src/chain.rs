@@ -1008,7 +1008,7 @@ fn main_owned(
         let deadline = r.monotonic() + window;
         *cleanup_deadline = Some(deadline + CLEANUP_RESERVE_SECONDS);
         if let Some(state) = reliability.as_deref_mut() {
-            state.round()["scenario_window_seconds"] = json!(window);
+            state.round()["prepare_window_seconds"] = json!(window);
         }
         // Close while holding the acquired shared lock, before checkout can
         // touch mod files. Never close and replay a failed preparation.
@@ -1105,17 +1105,35 @@ fn main_owned(
         if options.test_mode {
             argv.push("--test-mode".into());
         }
-        let timeout = scenario_timeout.min(time_left(r, deadline)?);
+        let mut timeout = scenario_timeout;
+        let lease = token.map(|token| process::LeaseLimit {
+            paths: p.clone(),
+            token: token.into(),
+            cleanup_reserve_seconds: CLEANUP_RESERVE_SECONDS,
+        });
+        if let Some(limit) = &lease {
+            if let process::LeaseProbe::Contended(left) = process::lease_probe(r, limit)? {
+                if left <= 0.0 {
+                    return Err(format!(
+                        "{}: waiting peer requires the slot before another driver run",
+                        process::LEASE_YIELD
+                    ));
+                }
+                timeout = timeout.min(left);
+            }
+        }
+        *cleanup_deadline = Some(r.monotonic() + timeout + CLEANUP_RESERVE_SECONDS);
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["scenario_budget_seconds"] = json!(scenario_timeout);
             state.round()["driver_timeout_seconds"] = json!(timeout);
         }
-        let command = Call::new(argv)
+        let mut command = Call::new(argv)
             .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
             .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
             .merged()
             .managed()
             .timeout(timeout);
+        command.lease = lease;
         let driver_started = r.monotonic();
         *game_closed = false;
         let execution = r.run(command);
@@ -1243,6 +1261,7 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
         r.print(HELP)?;
         return Ok(0);
     }
+    ship::check_live_maintenance(p, std::env::var("CODEX_JOB_ID").ok().as_deref())?;
     if !options.reliability {
         return cli_once(r, p, &options, None);
     }
@@ -1276,12 +1295,26 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
             Err(_) => 1,
         };
         reliability.round()["exit_code"] = json!(windows_exit_code(code));
-        reliability.round()["result"] = json!(if code == 0 { "success" } else { "failed" });
+        let yielded = result
+            .as_ref()
+            .err()
+            .is_some_and(|e| e.contains(process::LEASE_YIELD));
+        reliability.round()["result"] = json!(if code == 0 {
+            "success"
+        } else if yielded {
+            "incomplete_shared_slot_yield"
+        } else {
+            "failed"
+        });
         if let Err(error) = &result {
             reliability.round()["error"] = json!(error);
         }
         if code != 0 {
-            reliability.summary["result"] = json!("failed");
+            reliability.summary["result"] = json!(if yielded {
+                "incomplete_shared_slot_yield"
+            } else {
+                "failed"
+            });
             let saved = reliability.save();
             r.print(&format!(
                 "RELIABILITY FAILED {round}/10 exit={}",

@@ -20,6 +20,74 @@ pub struct Call {
     pub merge_stderr: bool,
     pub creationflags: u32,
     pub kill_tree: bool,
+    pub lease: Option<LeaseLimit>,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct LeaseLimit {
+    pub paths: crate::Paths,
+    pub token: String,
+    pub cleanup_reserve_seconds: f64,
+}
+pub const LEASE_YIELD: &str = "CIV6_LEASE_YIELD";
+#[derive(Debug, PartialEq)]
+pub enum LeaseProbe {
+    Clear,
+    Unavailable,
+    Contended(f64),
+}
+
+/// Use the same live-waiter definition as acquisition, without holding the
+/// lock while process/job queries run. A dead waiter never creates a deadline.
+pub fn lease_probe(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeaseProbe, String> {
+    #[cfg(unix)]
+    let guard = crate::fairness::UnixGuard::acquire(&limit.paths.here.join("civ6.lock"))?;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.share_mode(1);
+    }
+    // Recovery pins a read-only handle. A monitor must be another reader,
+    // rather than requesting write access and mistaking that pin for failure.
+    let file = match options.open(limit.paths.here.join("civ6.lock")) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(LeaseProbe::Unavailable),
+        #[cfg(windows)]
+        Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => return Ok(LeaseProbe::Unavailable),
+        Err(e) => return Err(e.to_string()),
+    };
+    let mut bytes = Vec::new();
+    (&file)
+        .take(32769)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() > 32768 {
+        return Err("Civ6 lease record too large".into());
+    }
+    let owner: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    drop(file);
+    #[cfg(unix)]
+    drop(guard);
+    if owner["lock_token"].as_str() != Some(limit.token.as_str()) {
+        return Err("Civ6 lease ownership changed while child was running".into());
+    }
+    let now = r.now();
+    let competitor = crate::fairness::competitor_since(
+        r,
+        &limit.paths,
+        &owner,
+        &crate::fairness::todo_path(&limit.paths),
+        now,
+    )?;
+    let Some(since) = competitor else {
+        return Ok(LeaseProbe::Clear);
+    };
+    let acquired = owner["acquired_at"].as_f64().unwrap_or(now).min(now);
+    let since = since.max(acquired).min(now);
+    Ok(LeaseProbe::Contended(
+        (crate::fairness::LEASE_SECONDS - limit.cleanup_reserve_seconds - (now - since)).max(0.0),
+    ))
 }
 impl Call {
     pub fn new(args: Vec<String>) -> Self {
@@ -30,6 +98,7 @@ impl Call {
             merge_stderr: false,
             creationflags: CREATE_NO_WINDOW,
             kill_tree: false,
+            lease: None,
         }
     }
     pub fn timeout(mut self, seconds: f64) -> Self {
@@ -47,6 +116,19 @@ impl Call {
     /// Contain a build and all descendants until it completes or is cancelled.
     pub fn managed(mut self) -> Self {
         self.kill_tree = true;
+        self
+    }
+    pub fn lease(
+        mut self,
+        paths: &crate::Paths,
+        token: &str,
+        cleanup_reserve_seconds: f64,
+    ) -> Self {
+        self.lease = Some(LeaseLimit {
+            paths: paths.clone(),
+            token: token.into(),
+            cleanup_reserve_seconds,
+        });
         self
     }
 }
@@ -148,7 +230,7 @@ impl Runner for RealRunner {
                 let mut b = Vec::new();
                 source.read_to_end(&mut b).map(|_| b)
             });
-            let status = wait(&mut child, &mut tree, call.timeout);
+            let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
             if let (false, Err(error)) = (call.kill_tree, &status) {
                 return Err(error.clone());
             }
@@ -177,7 +259,7 @@ impl Runner for RealRunner {
             let mut b = Vec::new();
             stderr.read_to_end(&mut b).map(|_| b)
         });
-        let status = wait(&mut child, &mut tree, call.timeout);
+        let status = wait(&mut child, &mut tree, call.timeout, call.lease.as_ref());
         if let (false, Err(error)) = (call.kill_tree, &status) {
             return Err(error.clone());
         }
@@ -236,17 +318,55 @@ fn wait(
     child: &mut std::process::Child,
     tree: &mut crate::process_tree::Tree,
     timeout: Option<f64>,
+    lease: Option<&LeaseLimit>,
 ) -> Result<i32, String> {
     let start = Instant::now();
+    let mut next_probe = start;
+    let mut lease_deadline: Option<Instant> = None;
+    let mut unavailable_since: Option<Instant> = None;
     loop {
         if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
             tree.stop(child)?;
             return Ok(s.code().unwrap_or(1));
         }
-        if interrupted().is_err() || timeout.is_some_and(|t| start.elapsed().as_secs_f64() >= t) {
+        let mut lease_error = None;
+        if let Some(limit) = lease {
+            if Instant::now() >= next_probe {
+                next_probe = Instant::now() + Duration::from_secs(2);
+                match lease_probe(&mut RealRunner, limit) {
+                    Ok(LeaseProbe::Clear) => {
+                        lease_deadline = None;
+                        unavailable_since = None;
+                    }
+                    Ok(LeaseProbe::Contended(left)) => {
+                        unavailable_since = None;
+                        let deadline = Instant::now() + Duration::from_secs_f64(left);
+                        lease_deadline =
+                            Some(lease_deadline.map_or(deadline, |old| old.min(deadline)));
+                    }
+                    Ok(LeaseProbe::Unavailable) => {
+                        let since = *unavailable_since.get_or_insert_with(Instant::now);
+                        if since.elapsed() >= Duration::from_secs(5) {
+                            lease_error = Some("Civ6 lease state unavailable for 5s".to_string());
+                        }
+                    }
+                    Err(error) => lease_error = Some(error),
+                }
+            }
+            if lease_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                lease_error=Some(format!("{LEASE_YIELD}: live waiter requires the shared slot; unfinished scenario, not a product failure"));
+            }
+        }
+        if lease_error.is_some()
+            || interrupted().is_err()
+            || timeout.is_some_and(|t| start.elapsed().as_secs_f64() >= t)
+        {
             tree.stop(child)?;
             let _ = child.kill();
             let _ = child.wait();
+            if let Some(error) = lease_error {
+                return Err(error);
+            }
             return Err(if INTERRUPTED.load(Ordering::SeqCst) {
                 "interrupted"
             } else {

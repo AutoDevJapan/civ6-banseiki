@@ -139,6 +139,8 @@ pub fn live(
             });
         }
     }
+    // Preserve local tracked edits and reject them before building or loading.
+    git(r, &live, &["diff", "--quiet", "HEAD", "--"], true)?;
     let name = name.rsplit('/').next().unwrap();
     // A branch without a mod folder deletes it; a dangling Mods junction then breaks Civ6's mod scan (live 2026-09-29).
     let mods = p

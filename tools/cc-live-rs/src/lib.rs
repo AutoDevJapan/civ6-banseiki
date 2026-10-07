@@ -9,7 +9,7 @@ pub use process::{Call, Output, Runner};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Paths {
     pub here: PathBuf,
     pub wt: PathBuf,
