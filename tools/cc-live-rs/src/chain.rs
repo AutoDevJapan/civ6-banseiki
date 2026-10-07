@@ -1524,7 +1524,6 @@ mod unix_guard_tests {
                 jobs: root.join("jobs"),
                 temp: root.join("temp"),
                 profile: root.join("profile"),
-                python: "unused-test-value".into(),
             };
             Self { root, paths }
         }

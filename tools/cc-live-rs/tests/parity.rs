@@ -7,6 +7,12 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 static SERIAL: AtomicUsize = AtomicUsize::new(0);
+fn is_rust_driver(call: &Call) -> bool {
+    call.args
+        .first()
+        .and_then(|program| std::path::Path::new(program).file_stem())
+        .is_some_and(|name| name == "civ6-autotest" || name == "civ6-tuner")
+}
 struct Fixture {
     root: PathBuf,
     p: Paths,
@@ -24,7 +30,6 @@ impl Fixture {
             jobs: root.join("jobs"),
             temp: root.join("temp"),
             profile: root.join("user"),
-            python: "fixture-python".into(),
         };
         for dir in [&p.here, &p.wt, &p.jobs, &p.temp, &p.profile] {
             fs::create_dir_all(dir).unwrap();
@@ -39,7 +44,9 @@ impl Fixture {
             &json!({"steps":[{"action":"restart_game","timeout":420}]}),
         )
         .unwrap();
-        Self { root, p }
+        let fixture = Self { root, p };
+        rust_driver_fixture(&fixture);
+        fixture
     }
     fn json(&self, relative: &str, v: serde_json::Value) -> PathBuf {
         let p = self.root.join(relative);
@@ -87,9 +94,35 @@ impl Runner for Fake {
     fn run(&mut self, call: Call) -> Result<Output, String> {
         assert_eq!(call.creationflags, CREATE_NO_WINDOW);
         self.calls.push(call);
-        self.replies
+        let mut output = self
+            .replies
             .pop_front()
-            .unwrap_or_else(|| Ok(Output::default()))
+            .unwrap_or_else(|| Ok(Output::default()))?;
+        let call = self.calls.last().unwrap();
+        if output.code == 0
+            && output.stdout.is_empty()
+            && call.args.contains(&"--message-format=json".into())
+        {
+            let manifest = call
+                .args
+                .windows(2)
+                .find(|pair| pair[0] == "--manifest-path")
+                .unwrap()[1]
+                .clone();
+            let target = PathBuf::from(
+                &call
+                    .args
+                    .windows(2)
+                    .find(|pair| pair[0] == "--target-dir")
+                    .unwrap()[1],
+            );
+            output.stdout = call.args.windows(2).filter(|pair| pair[0] == "--bin").map(|pair| {
+                let name = &pair[1];
+                let filename = if cfg!(windows) { format!("{name}.exe") } else { name.clone() };
+                json!({"reason":"compiler-artifact", "manifest_path":manifest, "target":{"name":name,"kind":["bin"]}, "executable":path(target.join("release").join(filename))}).to_string()
+            }).collect::<Vec<_>>().join("\n");
+        }
+        Ok(output)
     }
     fn now(&mut self) -> f64 {
         self.times.pop_front().unwrap_or(self.time)
@@ -198,7 +231,7 @@ fn test_absent_game_avoids_tuner_and_kill() {
     assert!(r
         .calls
         .iter()
-        .all(|c| c.args[0] != "taskkill" && c.args[0] != "fixture-python"));
+        .all(|c| c.args[0] != "taskkill" && !is_rust_driver(c)));
 }
 
 #[test]
@@ -220,7 +253,7 @@ fn answering_game_is_still_closed_before_relaunch() {
     let f = Fixture::new();
     let mut r = Fake::outputs(&[("\"CivilizationVI.exe\",\"11\"", "", 0)]);
     assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
-    assert_eq!(r.calls[1].args[0], "fixture-python");
+    assert!(is_rust_driver(&r.calls[1]));
     assert_eq!(r.calls[2].args[0], "taskkill");
     assert_eq!(r.sleeps, vec![45.0]);
 }
@@ -234,13 +267,7 @@ fn unresponsive_game_retries_tuner_three_times() {
         ("", "", 1),
     ]);
     ensure_responsive_civ6(&mut r, &f.p).unwrap();
-    assert_eq!(
-        r.calls
-            .iter()
-            .filter(|c| c.args[0] == "fixture-python")
-            .count(),
-        3
-    );
+    assert_eq!(r.calls.iter().filter(|c| is_rust_driver(c)).count(), 3);
     assert_eq!(r.sleeps, vec![10.0, 10.0, 10.0, 45.0]);
 }
 #[test]
@@ -1194,11 +1221,7 @@ fn chain_closes_game_after_each_run_and_on_exit() {
         cli(&mut r, &f.p, &["name:s.json".into(), "--test-mode".into()]).unwrap(),
         0
     );
-    let scenario = r
-        .calls
-        .iter()
-        .find(|c| c.args[0] == "fixture-python")
-        .unwrap();
+    let scenario = r.calls.iter().find(|c| is_rust_driver(c)).unwrap();
     assert!(scenario.merge_stderr);
     assert!(scenario.kill_tree);
     assert_eq!(scenario.timeout, Some(1140.0));
@@ -1288,13 +1311,7 @@ fn default_chain_retains_failure_even_after_a_later_success() {
         cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap(),
         7
     );
-    assert_eq!(
-        r.calls
-            .iter()
-            .filter(|c| c.args[0] == "fixture-python")
-            .count(),
-        2
-    );
+    assert_eq!(r.calls.iter().filter(|c| is_rust_driver(c)).count(), 2);
     assert_eq!(r.printed.last().unwrap(), "CHAIN FAILED");
     assert!(!r.printed.iter().any(|s| s == "CHAIN DONE"));
     assert!(!f.p.here.join("civ6.lock").exists());
@@ -1317,7 +1334,7 @@ fn nonzero_preparation_with_two_paths_never_launches_a_driver() {
             .count(),
         1
     );
-    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
+    assert!(!r.calls.iter().any(|c| is_rust_driver(c)));
     assert!(r
         .printed
         .iter()
@@ -1617,7 +1634,7 @@ fn dynamic_lease_deadline_is_shared_with_civ6_cleanup_and_lock_release() {
     }
     impl Runner for TightCleanup {
         fn run(&mut self, c: Call) -> Result<Output, String> {
-            if c.args[0] == "fixture-python" {
+            if is_rust_driver(&c) {
                 let limit = c.lease.clone().unwrap();
                 self.inner.run(c)?;
                 limit.record_probe(&process::LeaseProbe::Contended(0.25));
@@ -1673,7 +1690,7 @@ fn shared_slot_yield_is_incomplete_and_never_counted_as_a_product_failure_or_suc
     struct Yielding(ReliabilityRunner);
     impl Runner for Yielding {
         fn run(&mut self, c: Call) -> Result<Output, String> {
-            let driver = c.args[0] == "fixture-python";
+            let driver = is_rust_driver(&c);
             let out = self.0.run(c)?;
             if driver {
                 Err(format!(
@@ -1735,13 +1752,7 @@ fn driver_timeout_keeps_failure_log_and_releases_lock() {
     assert!(read_text(f.root.join("artifacts.log"))
         .unwrap()
         .contains("partial startup diagnostic"));
-    assert_eq!(
-        r.calls
-            .iter()
-            .filter(|c| c.args[0] == "fixture-python")
-            .count(),
-        1
-    );
+    assert_eq!(r.calls.iter().filter(|c| is_rust_driver(c)).count(), 1);
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 
@@ -1803,11 +1814,7 @@ fn quiet_slot_keeps_a_long_scenarios_own_deadline() {
     .unwrap();
     let mut r = SlowPrepare(ready_chain(&f, 0));
     assert_eq!(cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap(), 0);
-    let call =
-        r.0.calls
-            .iter()
-            .find(|c| c.args[0] == "fixture-python")
-            .unwrap();
+    let call = r.0.calls.iter().find(|c| is_rust_driver(c)).unwrap();
     assert!(call.kill_tree);
     assert_eq!(call.timeout, Some(4300.0));
     assert!(call.lease.is_some());
@@ -1857,7 +1864,7 @@ fn driver_is_bounded_by_the_remaining_scenario_window() {
                     ..Output::default()
                 });
             }
-            if call.args[0] == "fixture-python" {
+            if is_rust_driver(&call) {
                 assert_eq!(call.timeout, Some(1140.0));
                 assert_eq!(call.lease.as_ref().unwrap().hard_deadline(), Some(1800.0));
                 self.time += 15.0;
@@ -1984,7 +1991,7 @@ impl Runner for ReliabilityRunner {
                 ..Output::default()
             });
         }
-        if call.args[0] == "fixture-python" {
+        if is_rust_driver(&call) {
             assert!(call.kill_tree && call.timeout.unwrap() <= 1560.0);
             let scenario = read_json(&call.args[2])?;
             assert_eq!(scenario["steps"][1]["name"], "JAC-Reliability-Seed-1971");
@@ -2153,12 +2160,7 @@ fn preparation_timeout_uses_the_budget_left_after_preparation_shutdown() {
         .find(|c| c.args[0].ends_with("ship.exe"))
         .unwrap();
     assert_eq!(prepare.timeout, Some(860.0));
-    let driver = r
-        .fake
-        .calls
-        .iter()
-        .find(|c| c.args[0] == "fixture-python")
-        .unwrap();
+    let driver = r.fake.calls.iter().find(|c| is_rust_driver(c)).unwrap();
     assert_eq!(driver.timeout, Some(1140.0));
     assert!(!f.p.here.join("civ6.lock").exists());
 }
@@ -2329,25 +2331,20 @@ fn rust_driver_missing_binary_is_an_error_instead_of_a_legacy_fallback() {
 }
 
 #[test]
-fn branches_without_rust_driver_keep_their_own_legacy_commands() {
+fn branches_without_rust_driver_stop_before_any_child_runs() {
     let f = Fixture::new();
+    fs::remove_file(f.p.live().join(driver::MANIFEST)).unwrap();
     let mut r = Fake::success();
-    driver::prepare(&mut r, &f.p, &f.p.live()).unwrap();
+    assert!(driver::prepare(&mut r, &f.p, &f.p.live())
+        .unwrap_err()
+        .contains("manifest is missing"));
     assert!(r.calls.is_empty());
-    assert_eq!(
-        driver::scenario(&f.p, &f.p.live()).unwrap(),
-        args(&[
-            "fixture-python",
-            &path(f.p.live().join("tools/civ6-autotest/scenario.py"))
-        ])
-    );
-    assert_eq!(
-        driver::tuner(&f.p, &f.p.live()).unwrap(),
-        args(&[
-            "fixture-python",
-            &path(f.p.live().join("tools/civ6-autotest/tuner.py"))
-        ])
-    );
+    assert!(driver::scenario(&f.p, &f.p.live())
+        .unwrap_err()
+        .contains("manifest is missing"));
+    assert!(driver::tuner(&f.p, &f.p.live())
+        .unwrap_err()
+        .contains("manifest is missing"));
 }
 
 #[test]
@@ -2373,7 +2370,7 @@ fn chain_passes_legacy_flags_and_artifact_paths_to_rust_driver() {
         ]
     );
     assert!(scenario.merge_stderr);
-    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
+    assert!(!r.calls.iter().any(|c| is_rust_driver(c)));
     assert_eq!(
         r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
         4
@@ -2389,7 +2386,7 @@ fn responsive_game_probe_uses_branch_rust_tuner() {
     assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
     let tuner = driver::tuner(&f.p, &f.p.live()).unwrap().remove(0);
     assert_eq!(r.calls[1].args, vec![tuner, "states".into()]);
-    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
+    assert!(!r.calls.iter().any(|c| is_rust_driver(c)));
     assert_eq!(r.sleeps, vec![45.0]);
 }
 
@@ -2540,7 +2537,7 @@ fn ship_builds_checked_out_rust_driver_before_publishing_scenario_and_artifacts(
         .unwrap_err()
         .contains("build failed"));
     assert!(r.printed.is_empty());
-    assert!(!r.calls.iter().any(|c| c.args[0] == "fixture-python"));
+    assert!(!r.calls.iter().any(|c| is_rust_driver(c)));
     assert!(!f.p.temp.join("live_name_01.json").exists());
 }
 #[test]
@@ -2735,20 +2732,107 @@ fn merge_pr_posts_marks_ready_and_squashes_in_order() {
     fs::write(&md, "検証済み\n").unwrap();
     let mut r = Fake::outputs(&[
         ("url\n", "", 0),
-        ("", "ignored", 1),
-        ("", "merge failed", 1),
+        ("true\n", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("MERGED\n", "", 0),
     ]);
     assert_eq!(
         review::merge_cli(&mut r, &f.p, &["3".into(), path(md)]).unwrap(),
         0
     );
-    assert_eq!(r.printed, vec!["url", "merge failed"]);
-    assert_eq!(r.calls[1].args[2], "ready");
-    assert_eq!(r.calls[2].args.last().unwrap(), "--squash");
+    assert_eq!(r.printed, vec!["url", "merged"]);
+    assert_eq!(r.calls[2].args[2], "ready");
+    assert_eq!(r.calls[3].args.last().unwrap(), "--squash");
     assert_eq!(
         read_json(f.p.temp.join("c3.json")).unwrap(),
         json!({"body":"検証済み\n"})
     );
+}
+
+#[test]
+fn review_launch_failure_or_missing_job_id_never_returns_success() {
+    let f = Fixture::new();
+    let facts = f.root.join("facts.txt");
+    fs::write(&facts, "検証済み").unwrap();
+    let mut rejected = Fake::outputs(&[("", "launch rejected", 17)]);
+    let error = review::cli(
+        &mut rejected,
+        &f.p,
+        &["name".into(), "122".into(), path(&facts)],
+    )
+    .unwrap_err();
+    assert!(error.contains("review launch failed (exit 17)"));
+    assert!(error.contains("launch rejected"));
+    assert_eq!(rejected.calls.len(), 1);
+    assert!(rejected.printed.is_empty());
+    let mut empty = Fake::success();
+    assert!(review::cli(
+        &mut empty,
+        &f.p,
+        &["name".into(), "122".into(), path(&facts)]
+    )
+    .unwrap_err()
+    .contains("no job id"));
+    assert!(empty.printed.is_empty());
+}
+
+#[test]
+fn merge_stops_at_each_failed_stage_and_keeps_the_original_error() {
+    let f = Fixture::new();
+    let md = f.root.join("comment.md");
+    fs::write(&md, "検証済み").unwrap();
+    for (failed_at, stage) in [
+        (0, "review comment post"),
+        (1, "PR draft query"),
+        (2, "PR ready"),
+        (3, "PR merge"),
+        (4, "PR merge verification"),
+    ] {
+        let mut replies = vec![
+            ("url", "", 0),
+            ("true", "", 0),
+            ("", "", 0),
+            ("", "", 0),
+            ("MERGED", "", 0),
+        ];
+        replies[failed_at] = ("", "original reason", 17);
+        let mut r = Fake::outputs(&replies);
+        let error = review::merge_cli(&mut r, &f.p, &["122".into(), path(&md)]).unwrap_err();
+        assert!(error.contains(stage), "{error}");
+        assert!(error.contains("exit 17"));
+        assert!(error.contains("original reason"));
+        assert_eq!(r.calls.len(), failed_at + 1);
+        assert!(!r.printed.iter().any(|message| message == "merged"));
+    }
+}
+
+#[test]
+fn already_ready_pr_skips_conversion_and_pending_merge_is_not_success() {
+    let f = Fixture::new();
+    let md = f.root.join("comment.md");
+    fs::write(&md, "検証済み").unwrap();
+    for state in ["MERGED", "OPEN"] {
+        let mut r = Fake::outputs(&[
+            ("url", "", 0),
+            ("false", "", 0),
+            ("", "", 0),
+            (state, "", 0),
+        ]);
+        let result = review::merge_cli(&mut r, &f.p, &["122".into(), path(&md)]);
+        assert_eq!(r.calls.len(), 4);
+        assert!(!r
+            .calls
+            .iter()
+            .any(|call| call.args.iter().any(|arg| arg == "ready")));
+        if state == "MERGED" {
+            assert_eq!(result.unwrap(), 0);
+            assert_eq!(r.printed.last().unwrap(), "merged");
+        } else {
+            assert!(result.unwrap_err().contains("not confirmed"));
+            assert!(!r.printed.iter().any(|message| message == "merged"));
+        }
+    }
 }
 
 #[test]
@@ -2829,13 +2913,7 @@ fn startup_failure_is_never_replayed_and_preserves_first_artifacts() {
         read_text(artifacts.join("first.txt")).unwrap(),
         "first attempt"
     );
-    assert_eq!(
-        r.calls
-            .iter()
-            .filter(|c| c.args[0] == "fixture-python")
-            .count(),
-        1
-    );
+    assert_eq!(r.calls.iter().filter(|c| is_rust_driver(c)).count(), 1);
     assert_eq!(
         r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
         4
@@ -2872,11 +2950,7 @@ fn recovered_startup_failure_does_not_launch_another_outer_retry() {
         .unwrap(),
         1
     );
-    let drivers: Vec<_> = r
-        .calls
-        .iter()
-        .filter(|c| c.args[0] == "fixture-python")
-        .collect();
+    let drivers: Vec<_> = r.calls.iter().filter(|c| is_rust_driver(c)).collect();
     assert_eq!(drivers.len(), 1);
     assert_eq!(
         drivers[0].env["CIV6_LIVE_CHAIN_PID"],
@@ -2964,7 +3038,7 @@ fn broken_stdout_stops_before_scenario_and_still_cleans() {
             .unwrap_err()
             .contains("broken pipe")
     );
-    assert!(!r.0.calls.iter().any(|c| c.args[0] == "fixture-python"));
+    assert!(!r.0.calls.iter().any(|c| is_rust_driver(c)));
     assert_eq!(
         r.0.calls
             .iter()
@@ -3110,7 +3184,7 @@ fn live_chain_finishes_scenario_then_requeues_fifo_before_next() {
                     ..Output::default()
                 });
             }
-            if c.args[0] == "fixture-python" {
+            if is_rust_driver(&c) {
                 assert!(self.p.here.join("civ6.lock").exists());
                 self.scenarios += 1;
                 if self.scenarios == 1 {

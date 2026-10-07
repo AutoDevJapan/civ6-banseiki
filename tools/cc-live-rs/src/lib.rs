@@ -16,7 +16,6 @@ pub struct Paths {
     pub jobs: PathBuf,
     pub temp: PathBuf,
     pub profile: PathBuf,
-    pub python: String,
 }
 impl Default for Paths {
     fn default() -> Self {
@@ -30,9 +29,6 @@ impl Default for Paths {
             profile: std::env::var_os("USERPROFILE")
                 .map(PathBuf::from)
                 .unwrap_or_default(),
-            python: std::env::var("CC_LIVE_PYTHON").unwrap_or_else(|_| {
-                r"C:\Users\makhmeto\AppData\Local\Programs\Python\Python312\python.exe".into()
-            }),
         }
     }
 }

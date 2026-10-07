@@ -1,4 +1,4 @@
-//! Start a Codex review of a batch PR (no sandbox: the Windows sandbox service is hung; told not to modify).
+//! Start a read-only review of a batch PR.
 //!
 //! review.exe <name> <pr_number> <facts_file>
 use crate::*;
@@ -23,32 +23,36 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
         .parent()
         .ok_or("jobs parent missing")?
         .join("codex_jobs.exe");
-    let out = r.run(Call::new(args(&[
-        &path(cj),
-        "run",
-        "--name",
-        &format!("rev-{name}"),
-        "--model",
-        "gpt-6-luna",
-        "--effort",
-        "max",
-        "--sandbox",
-        "read-only",
-        "--cwd",
-        &path(p.wt.join(name)),
-        "--prompt-file",
-        &path(prompt),
-        "--task-type",
-        "review",
-    ])))?;
-    r.print(
-        &out.stdout
-            .trim()
-            .lines()
-            .last()
-            .map(str::to_owned)
-            .unwrap_or_else(|| tail(out.stderr.trim(), 300)),
+    let out = checked(
+        r,
+        Call::new(args(&[
+            &path(cj),
+            "run",
+            "--name",
+            &format!("rev-{name}"),
+            "--model",
+            "gpt-6-luna",
+            "--effort",
+            "max",
+            "--sandbox",
+            "read-only",
+            "--cwd",
+            &path(p.wt.join(name)),
+            "--prompt-file",
+            &path(prompt),
+            "--task-type",
+            "review",
+        ])),
+        "review launch",
     )?;
+    let job = out
+        .stdout
+        .trim()
+        .lines()
+        .last()
+        .filter(|line| !line.is_empty())
+        .ok_or("review launch returned no job id")?;
+    r.print(job)?;
     Ok(0)
 }
 /// merge_pr.exe <pr> <comment.md> -> post comment, mark ready, squash-merge
@@ -59,39 +63,97 @@ pub fn merge_cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, St
     let pr = &a[0];
     let payload = p.temp.join(format!("c{pr}.json"));
     write_json(&payload, &json!({"body":read_text(&a[1])?}))?;
-    let out = r.run(Call::new(args(&[
-        "gh",
-        "api",
-        "-X",
-        "POST",
-        &format!("repos/{}/issues/{pr}/comments", ship::REPO),
-        "--input",
-        &path(payload),
-        "--jq",
-        ".html_url",
-    ])))?;
+    let out = checked(
+        r,
+        Call::new(args(&[
+            "gh",
+            "api",
+            "-X",
+            "POST",
+            &format!("repos/{}/issues/{pr}/comments", ship::REPO),
+            "--input",
+            &path(payload),
+            "--jq",
+            ".html_url",
+        ])),
+        "review comment post",
+    )?;
     r.print(out.stdout.trim())?;
-    r.run(Call::new(args(&[
-        "gh",
-        "pr",
-        "ready",
-        pr,
-        "-R",
-        ship::REPO,
-    ])))?;
-    let out = r.run(Call::new(args(&[
-        "gh",
-        "pr",
-        "merge",
-        pr,
-        "-R",
-        ship::REPO,
-        "--squash",
-    ])))?;
-    r.print(&if out.code == 0 {
-        "merged".into()
-    } else {
-        head(out.stderr.trim(), 300)
-    })?;
+    let draft = checked(
+        r,
+        Call::new(args(&[
+            "gh",
+            "pr",
+            "view",
+            pr,
+            "-R",
+            ship::REPO,
+            "--json",
+            "isDraft",
+            "--jq",
+            ".isDraft",
+        ])),
+        "PR draft query",
+    )?;
+    let is_draft: bool = serde_json::from_str(draft.stdout.trim())
+        .map_err(|error| format!("PR draft query returned an invalid boolean: {error}"))?;
+    if is_draft {
+        checked(
+            r,
+            Call::new(args(&["gh", "pr", "ready", pr, "-R", ship::REPO])),
+            "PR ready",
+        )?;
+    }
+    checked(
+        r,
+        Call::new(args(&[
+            "gh",
+            "pr",
+            "merge",
+            pr,
+            "-R",
+            ship::REPO,
+            "--squash",
+        ])),
+        "PR merge",
+    )?;
+    let state = checked(
+        r,
+        Call::new(args(&[
+            "gh",
+            "pr",
+            "view",
+            pr,
+            "-R",
+            ship::REPO,
+            "--json",
+            "state",
+            "--jq",
+            ".state",
+        ])),
+        "PR merge verification",
+    )?;
+    if state.stdout.trim() != "MERGED" {
+        return Err(format!(
+            "PR merge was not confirmed: state {}",
+            state.stdout.trim()
+        ));
+    }
+    r.print("merged")?;
     Ok(0)
+}
+
+fn checked(r: &mut impl Runner, call: Call, operation: &str) -> Result<Output, String> {
+    let out = r
+        .run(call)
+        .map_err(|error| format!("{operation}: {error}"))?;
+    if out.code != 0 {
+        return Err(format!(
+            "{operation} failed (exit {}): {} {}",
+            out.code,
+            out.stdout.trim(),
+            out.stderr.trim()
+        ));
+    }
+    Ok(out)
 }

@@ -65,7 +65,10 @@ fn binary(worktree: &Path, name: &str) -> PathBuf {
 pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), String> {
     let manifest = worktree.join(MANIFEST);
     if !manifest.is_file() {
-        return Ok(());
+        return Err(format!(
+            "Rust driver manifest is missing: {}",
+            manifest.display()
+        ));
     }
     let cargo = std::env::var("CC_LIVE_CARGO").unwrap_or_else(|_| {
         if cfg!(windows) {
@@ -152,15 +155,15 @@ pub fn prepare(r: &mut impl Runner, p: &Paths, worktree: &Path) -> Result<(), St
     Ok(())
 }
 
-pub fn scenario(p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
-    command(p, worktree, "civ6-autotest", "scenario.py")
+pub fn scenario(_p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
+    command(worktree, "civ6-autotest")
 }
 
-pub fn tuner(p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
-    command(p, worktree, "civ6-tuner", "tuner.py")
+pub fn tuner(_p: &Paths, worktree: &Path) -> Result<Vec<String>, String> {
+    command(worktree, "civ6-tuner")
 }
 
-fn command(p: &Paths, worktree: &Path, name: &str, legacy: &str) -> Result<Vec<String>, String> {
+fn command(worktree: &Path, name: &str) -> Result<Vec<String>, String> {
     if worktree.join(MANIFEST).is_file() {
         let executable = binary(worktree, name);
         if !executable.is_file() {
@@ -171,10 +174,9 @@ fn command(p: &Paths, worktree: &Path, name: &str, legacy: &str) -> Result<Vec<S
         }
         Ok(vec![path(executable)])
     } else {
-        // Only old branches without a Rust driver retain their legacy command.
-        Ok(args(&[
-            &p.python,
-            &path(worktree.join("tools/civ6-autotest").join(legacy)),
-        ]))
+        Err(format!(
+            "Rust driver manifest is missing: {}",
+            worktree.join(MANIFEST).display()
+        ))
     }
 }
