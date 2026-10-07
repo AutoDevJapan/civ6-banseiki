@@ -597,8 +597,10 @@ SSOT 2.2「ゲームモードと指導者プール」および 16.1 束0の検�
 | DLC | 指導者 / 文明 | 根拠（公式ファイル:行） | 万世紀での扱い |
 |---|---|---|---|
 | GreatBuilders | `LEADER_SEJONG` / `CIVILIZATION_KOREA` | `DLC/GreatBuilders/GreatBuilders.modinfo:36,38,61`（XP2 専用の InGame アクション）、`DLC/GreatBuilders/Data/GreatBuilders_ConfigData_Korea.xml:7`（FrontEnd 登録）。XP1 側も同 `.modinfo:32-34,58-59` に限定 | `JAC_Banseiki_UnsupportedLeaderFilter` が `difference` で人間・AI の全候補から除外 |
+| Babylon | `LEADER_HAMMURABI` | 基礎定義を読まない条件でもXP2の読込条件が成立し、参照先が欠ける。既存の互換性フィルターの対象 | 同じクエリで人間・AIの候補から除外 |
+| Ethiopia | `LEADER_MENELIK` | `DLC/Ethiopia/Ethiopia.modinfo:19` は基礎データのXP1・XP2候補を空白で連結し、同32のXP2候補は単独で成立する。実機52で拡張だけが読み込まれ、文明・外交街区等の参照検査が失敗して内容が巻き戻された | 同じクエリで人間・AIの候補から除外。公式ルールセットは対象外。修正後の実機は未完了 |
 
-他の公式指導者の基礎定義には、万世紀でも成立する InGame アクションがある。公式ファイルは変更せず、専用クエリにルールセット条件を付けた。`LEADER_SEJONG` が元のドメインに無い環境では除外行は返さず、公式 `RULESET_EXPANSION_2` の候補も変えない。XP2 専用の追加能力や各ゲームモードの完全な互換性までは、この基礎定義の監査だけでは保証しない。
+基礎定義の監査に加え、実際のDLC依存値で拡張だけが読み込まれる場合も除外する。公式ファイルは変更せず、専用クエリにルールセット条件を付けた。対象の指導者が元のドメインに無い環境では除外行は返さず、公式 `RULESET_EXPANSION_2` の候補も変えない。XP2専用の追加能力や各ゲームモードの完全な互換性は、この監査だけでは保証しない。エチオピアの失敗原本と修正範囲は [吸収の実機52](absorption.md#エチオピアの拡張だけが読み込まれる問題2026-10-07pr-116) に記録する。
 
 2026-09-29 の設定画面と FrontEnd Lua の結果：**設定部分は成功**。英語 UI の「Create Game」ルールセット欄に `Banseiki` が現れ、選択すると `Human Leader Choices` の既定 `Use Banseiki pool only` が表示された。`Use all leader pools` への切替も画面で確認した。**非対応指導者の除外を追加する前**の `HostGame` の `CreatePlayerParameters(id, true)` と `Refresh()` では、既定時は人間枠 2 候補（両 JAC）、AI 枠 1・2 は各 82 候補（公式クレオパトラと両 JAC を含む）。全プールを選ぶと人間枠も 82 候補となった。スクリーンショットは Git 管理外の `tools/civ6-autotest/artifacts/banseiki-ui-01/ruleset-selected.png` と `pool-all.png`。3言語のタグは登録したが、ゲーム画面での表示確認は英語のみ。除外追加後の候補数・世宗の不在は要実機確認。
 

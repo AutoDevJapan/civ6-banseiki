@@ -1528,44 +1528,46 @@ impl Runner {
                     self.sleep_until(end, 0.5);
                     continue;
                 }
-                // Use the official keyboard path outside a FireTuner Lua call.
-                // Keep direct Lua activation as an explicit diagnostic only.
-                if states.iter().any(|s| state_name_eq(s, "LoadScreen"))
-                    && self.scenario["loadscreen_input"] == "lua"
-                {
-                    let response = self.lua(
-                        "LoadScreen",
-                        "OnActivateButtonClicked()\nreturn true",
-                        self.budget(end, 5.0)?,
-                    );
-                    match response {
-                        Ok(reply) => {
-                            snapshot["begin_game_response"] =
-                                json!({"status":"acknowledged","reply":reply});
-                            last = "Begin Game pressed via LoadScreen Lua".into();
+                if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
+                    // Only this context owns the Begin Game input. InGame on
+                    // its own needs a readiness read, never a global Esc.
+                    // Use the official keyboard path outside a FireTuner Lua call.
+                    // Keep direct Lua activation as an explicit diagnostic only.
+                    if self.scenario["loadscreen_input"] == "lua" {
+                        let response = self.lua(
+                            "LoadScreen",
+                            "OnActivateButtonClicked()\nreturn true",
+                            self.budget(end, 5.0)?,
+                        );
+                        match response {
+                            Ok(reply) => {
+                                snapshot["begin_game_response"] =
+                                    json!({"status":"acknowledged","reply":reply});
+                                last = "Begin Game pressed via LoadScreen Lua".into();
+                            }
+                            Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
+                                // Activation may already have closed its Lua state.
+                                // Never send it again; confirm InGame readiness under
+                                // the same deadline instead of treating a lost reply
+                                // as proof that loading failed.
+                                snapshot["begin_game_response"] = json!({"status":"unknown",
+                                    "error":error.to_string(),"error_kind":"LuaResponseUnknown"});
+                                response_unknown = true;
+                                last = "Begin Game reply unknown; awaiting InGame readiness".into();
+                            }
+                            Err(error) => return Err(error),
                         }
-                        Err(error) if error.kind == ErrorKind::LuaResponseUnknown => {
-                            // Activation may already have closed its Lua state.
-                            // Never send it again; confirm InGame readiness under
-                            // the same deadline instead of treating a lost reply
-                            // as proof that loading failed.
-                            snapshot["begin_game_response"] = json!({"status":"unknown",
-                                "error":error.to_string(),"error_kind":"LuaResponseUnknown"});
-                            response_unknown = true;
-                            last = "Begin Game reply unknown; awaiting InGame readiness".into();
-                        }
-                        Err(error) => return Err(error),
+                    } else {
+                        self.remaining(end)?;
+                        self.backend.press_key(crate::click::VK_ESCAPE, end)?;
+                        snapshot["begin_game_response"] =
+                            json!({"status":"input_sent","method":"escape"});
+                        last = "Esc sent on loading screen".into();
                     }
-                } else {
-                    self.remaining(end)?;
-                    self.backend.press_key(crate::click::VK_ESCAPE, end)?;
-                    snapshot["begin_game_response"] =
-                        json!({"status":"input_sent","method":"escape"});
-                    last = "Esc sent on loading screen".into();
+                    sent = true;
+                    snapshot["begin_game_sent"] = true.into();
+                    self.disconnect();
                 }
-                sent = true;
-                snapshot["begin_game_sent"] = true.into();
-                self.disconnect();
             }
             let check = (|| -> Result<bool> {
                 if self

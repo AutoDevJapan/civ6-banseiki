@@ -81,10 +81,7 @@ fn test_owner_start_opens_setup_without_hosting_and_waits_long() {
     assert!(code.contains("/FrontEnd/MainMenu/AdvancedSetup"));
     assert!(!code.contains("HostGame"));
     assert!(!code.contains("SetToDefaults"));
-    assert_eq!(
-        t.presses,
-        vec![(civ6_autotest_rs::click::VK_ESCAPE, 3600.0)]
-    );
+    assert!(t.presses.is_empty());
 }
 
 #[test]
@@ -107,10 +104,7 @@ fn test_load_wait_sends_one_escape_even_if_ingame_state_exists() {
         .enter_game_after_loadscreen(0, 5.0, Some(5.0), false)
         .unwrap();
     assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 2);
-    assert_eq!(
-        f.trace().presses,
-        vec![(civ6_autotest_rs::click::VK_ESCAPE, 5.0)]
-    );
+    assert!(f.trace().presses.is_empty());
 }
 
 #[test]
@@ -724,7 +718,47 @@ fn test_load_wait_sends_begin_game_escape_only_once() {
     runner
         .enter_game_after_loadscreen(0, 5.0, None, false)
         .unwrap();
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
+}
+
+#[test]
+fn ingame_readiness_never_sends_global_input_even_with_joining_contexts_present() {
+    for mixed in [false, true] {
+        for ready_player in [false, true] {
+            let f = Fixture::new();
+            let mut backend = f.backend();
+            backend.on_states = Box::new(move |_| {
+                Ok(if mixed {
+                    vec!["FrontEnd".into(), "JoiningRoom".into(), "InGame".into()]
+                } else {
+                    vec!["InGame".into()]
+                })
+            });
+            backend.on_press = Some(Box::new(|_, _| panic!("InGame readiness is read-only")));
+            backend.on_lua = Box::new(move |_, code, _| {
+                Ok(if code.contains("Game.GetLocalPlayer") && !ready_player {
+                    "false".into()
+                } else {
+                    "true".into()
+                })
+            });
+            let mut runner = f.direct_runner(json!({}), backend);
+            ready(&f, &mut runner);
+            let result = runner.enter_game_after_loadscreen(0, 3.0, Some(3.0), false);
+            if ready_player {
+                result.unwrap();
+            } else {
+                error_has(
+                    result.unwrap_err(),
+                    ErrorKind::Scenario,
+                    "entering the game",
+                );
+            }
+            assert!(f.trace().presses.is_empty());
+            assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 0);
+            assert!(lua_count(&f, "Game.GetLocalPlayer") > 0);
+        }
+    }
 }
 
 #[test]
@@ -744,7 +778,7 @@ fn test_load_wait_reconnects_when_frontend_state_list_is_stale() {
     runner
         .enter_game_after_loadscreen(0, 1.0, None, false)
         .unwrap();
-    assert_eq!(f.trace().presses.len(), 1);
+    assert_eq!(f.trace().presses.len(), 0);
     assert!(f.trace().disconnects >= 1);
 }
 
@@ -838,7 +872,7 @@ fn test_transition_lua_errors_stop_without_retrying_mutations() {
             .iter()
             .all(|(_, code, _)| code == "return ContextPtr:IsHidden()"));
         assert_eq!(lua_count(&f, "CloseImmediately"), 1);
-        assert_eq!(f.trace().presses.len(), 1);
+        assert_eq!(f.trace().presses.len(), 0);
         if kind == ErrorKind::LuaExecution {
             assert!(f.clock.sleeps().is_empty());
         }
@@ -1395,7 +1429,7 @@ fn test_transition_waits_after_unknown_reply_without_resending() {
             "Network.HostGame"
         };
         assert_eq!(lua_count(&f, needle), 1);
-        assert_eq!(f.trace().presses.len(), 1);
+        assert_eq!(f.trace().presses.len(), 0);
         assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
     }
 }

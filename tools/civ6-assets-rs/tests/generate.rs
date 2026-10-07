@@ -1128,6 +1128,96 @@ fn test_all_leaders_registered_with_nonmissing_icons() {
     }
 }
 #[test]
+fn unsupported_leader_filter_prevents_partial_dlc_loading_only_in_banseiki() {
+    let rules =
+        xml(root().join("poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")).unwrap();
+    let query = attr(
+        civ6_assets_rs::rows(&rules, "Queries")
+            .into_iter()
+            .find(|row| attr(row, "QueryId") == "JAC_Banseiki_UnsupportedLeaderFilter")
+            .unwrap(),
+        "SQL",
+    );
+    let db = Connection::open_in_memory().unwrap();
+    db.execute("CREATE TABLE Players (Domain TEXT,LeaderType TEXT)", [])
+        .unwrap();
+    for leader in [
+        "LEADER_SEJONG",
+        "LEADER_HAMMURABI",
+        "LEADER_MENELIK",
+        "LEADER_SIMON_BOLIVAR",
+        "LEADER_LADY_SIX_SKY",
+        "LEADER_JAC_ODA_NOBUHIDE",
+    ] {
+        db.execute(
+            "INSERT INTO Players VALUES ('Players:Expansion2_Players', ?)",
+            [leader],
+        )
+        .unwrap();
+    }
+    db.execute(
+        "INSERT INTO Players VALUES ('Players:StandardPlayers', 'LEADER_MENELIK')",
+        [],
+    )
+    .unwrap();
+    let excluded = rows_params(&db, query, params!["RULESET_JAC_BANSEIKI"]);
+    assert_eq!(
+        excluded
+            .iter()
+            .map(|row| s(&row[1]))
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["LEADER_SEJONG", "LEADER_HAMMURABI", "LEADER_MENELIK"])
+    );
+    assert!(excluded
+        .iter()
+        .all(|row| s(&row[0]) == "Players:Expansion2_Players" && s(&row[2]) == "difference"));
+    for official in [
+        "RULESET_STANDARD",
+        "RULESET_EXPANSION_1",
+        "RULESET_EXPANSION_2",
+    ] {
+        assert!(rows_params(&db, query, params![official]).is_empty());
+    }
+    // Installed Ethiopia.modinfo:19 joins these two domain tokens with a
+    // space. Its XP2 criterion (32) is separate and valid. The engine's comma
+    // token contract therefore enables XP2 without its prerequisite base data.
+    let base_criteria = "Players:StandardPlayers::LEADER_MENELIK,StandardPlayers::LEADER_MENELIK,Players:Expansion1_Players::LEADER_MENELIK Players:Expansion2_Players::LEADER_MENELIK";
+    let xp2_criteria = "Players:Expansion2_Players::LEADER_MENELIK";
+    let raw = [
+        xp2_criteria,
+        "Players:Expansion2_Players::LEADER_SIMON_BOLIVAR",
+    ];
+    let matches =
+        |criteria: &str, values: &[&str]| criteria.split(',').any(|token| values.contains(&token));
+    assert!(
+        !matches(base_criteria, &raw) && matches(xp2_criteria, &raw),
+        "native partial-load failure must be reproducible"
+    );
+    let native_values: Vec<_> = raw
+        .into_iter()
+        .filter(|value| {
+            let leader = value.rsplit_once("::").unwrap().1;
+            !excluded.iter().any(|row| s(&row[1]) == leader)
+        })
+        .collect();
+    assert!(!matches(base_criteria, &native_values) && !matches(xp2_criteria, &native_values));
+    assert!(
+        matches(
+            "Players:Expansion2_Players::LEADER_SIMON_BOLIVAR",
+            &native_values
+        ),
+        "required Vatican DLC dependency must remain available"
+    );
+    db.execute("DELETE FROM Players WHERE LeaderType='LEADER_MENELIK'", [])
+        .unwrap();
+    assert_eq!(
+        rows_params(&db, query, params!["RULESET_JAC_BANSEIKI"]).len(),
+        2,
+        "missing DLC must not create a synthetic exclusion row"
+    );
+}
+
+#[test]
 fn test_banseiki_filter_skips_japan_maps_and_settler_removal_is_scoped() {
     let rules =
         xml(root().join("poc/JAC_PoC_BanseikiRuleset/Config/JAC_Banseiki_Config.xml")).unwrap();
