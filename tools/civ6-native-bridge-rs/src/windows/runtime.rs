@@ -435,10 +435,13 @@ fn pause_reset() {
 }
 
 pub(super) fn start_observation(seconds: u32) {
-    INSTALLED.store(true, Ordering::Release);
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     DEADLINE_MS.store(now + u64::from(seconds) * 1000, Ordering::Release);
     SAMPLE_STATE.store(0, Ordering::Release);
+    // Publish stoppability only after opening the observation. Otherwise a
+    // concurrent stop could succeed against the initial closed word and then
+    // be undone by this store of zero.
+    INSTALLED.store(true, Ordering::Release);
 }
 
 #[cfg(test)]
