@@ -21,8 +21,8 @@ static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 // One atomic word orders admission against closure. A successful stop cannot
 // miss a writer between a separate enabled check and counter increment.
-const SAMPLE_CLOSED: u32 = 1 << 31;
-static SAMPLE_STATE: AtomicU32 = AtomicU32::new(SAMPLE_CLOSED);
+static SAMPLE_GATE: civ6_bootstrap_rs::observation::ObservationGate =
+    civ6_bootstrap_rs::observation::ObservationGate::new(false);
 static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
 // Reset stamp and invocation generation change in ONE cmpxchg16b. A reset
 // paused after its phase CAS cannot advance generation after a newer reset.
@@ -358,18 +358,14 @@ pub(super) fn sample_begin() -> bool {
     }
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     if now >= DEADLINE_MS.load(Ordering::Acquire) {
-        SAMPLE_STATE.fetch_or(SAMPLE_CLOSED, Ordering::AcqRel);
+        SAMPLE_GATE.close();
     }
-    SAMPLE_STATE
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
-            (state < SAMPLE_CLOSED - 1).then_some(state + 1)
-        })
-        .is_ok()
+    SAMPLE_GATE.try_acquire()
 }
 
 pub(super) fn sample_end() {
     if owned() {
-        SAMPLE_STATE.fetch_sub(1, Ordering::Release);
+        SAMPLE_GATE.release();
     }
 }
 
@@ -387,9 +383,9 @@ fn stop_observation() -> BridgeStatus {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput;
     }
-    SAMPLE_STATE.fetch_or(SAMPLE_CLOSED, Ordering::AcqRel);
+    SAMPLE_GATE.close();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    while SAMPLE_STATE.load(Ordering::Acquire) != SAMPLE_CLOSED {
+    while !SAMPLE_GATE.drained() {
         if std::time::Instant::now() >= deadline {
             return BridgeStatus::Critical;
         }
@@ -437,7 +433,7 @@ fn pause_reset() {
 pub(super) fn start_observation(seconds: u32) {
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     DEADLINE_MS.store(now + u64::from(seconds) * 1000, Ordering::Release);
-    SAMPLE_STATE.store(0, Ordering::Release);
+    SAMPLE_GATE.initialize_before_publish();
     // Publish stoppability only after opening the observation. Otherwise a
     // concurrent stop could succeed against the initial closed word and then
     // be undone by this store of zero.

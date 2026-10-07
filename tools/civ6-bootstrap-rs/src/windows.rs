@@ -8,7 +8,7 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Mutex,
     },
 };
@@ -40,12 +40,12 @@ static BOOT_LOADER_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 static STATE: Mutex<Option<Resident>> = Mutex::new(None);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
-static OBSERVING: AtomicBool = AtomicBool::new(true);
-static RECORD_FLIGHTS: AtomicU32 = AtomicU32::new(0);
+static OBSERVATION: crate::observation::ObservationGate =
+    crate::observation::ObservationGate::new(true);
 struct RecordFlight;
 impl Drop for RecordFlight {
     fn drop(&mut self) {
-        RECORD_FLIGHTS.fetch_sub(1, Ordering::Release);
+        OBSERVATION.release();
     }
 }
 #[repr(C)]
@@ -116,14 +116,10 @@ fn record(
     generation: u64,
     status: u32,
 ) {
-    if !OBSERVING.load(Ordering::Acquire) {
+    if !OBSERVATION.try_acquire() {
         return;
     }
-    RECORD_FLIGHTS.fetch_add(1, Ordering::AcqRel);
     let _flight = RecordFlight;
-    if !OBSERVING.load(Ordering::Acquire) {
-        return;
-    }
     let seq = TRACE.reserved.fetch_add(1, Ordering::AcqRel);
     let Some(row) = TRACE.rows.get(seq as usize) else {
         TRACE.dropped.fetch_add(1, Ordering::Relaxed);
@@ -499,7 +495,7 @@ fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
         return Err("deferred Mode6 Install failed before factory".into());
     }
     s.phase = Phase::Open;
-    if !OBSERVING.load(Ordering::Acquire) && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+    if OBSERVATION.is_closed() && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
         return Err("deferred observation stop failed".into());
     }
     Ok(())
@@ -689,9 +685,9 @@ pub extern "system" fn RustBridgeBootstrapTraceSize() -> usize {
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapStopObservation(_: *mut c_void) -> u32 {
     std::panic::catch_unwind(|| -> Result<(), ()> {
-        OBSERVING.store(false, Ordering::Release);
+        OBSERVATION.close();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        while RECORD_FLIGHTS.load(Ordering::Acquire) != 0 {
+        while !OBSERVATION.drained() {
             if std::time::Instant::now() >= deadline {
                 return Err(());
             }
