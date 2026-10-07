@@ -2,6 +2,7 @@
 mod join_transaction;
 pub mod mp_hotseat;
 pub mod mp_setup_read;
+pub mod mp_staging;
 mod normal;
 pub mod price_routes;
 pub mod scenario;

@@ -219,6 +219,7 @@ if kind=='number' and max>=0 and max%1==0 and taken~=nil and computer~=nil and f
  end
 else eval.reason='missing or invalid mapMax/slot enums; no guessed bound' end
 report.read_counts={OK=0,MISSING=0,ERROR=0}
+report.read_counts_scope='measurements only; excludes map_size_rows and mods; read each row status separately'
 for _,entry in pairs(report.measurements)do report.read_counts[entry.status]=report.read_counts[entry.status]+1 end
 report.acceptance='not_evaluated; collected facts only, including missing/error records'
 return serial(report)

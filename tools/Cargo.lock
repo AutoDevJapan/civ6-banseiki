@@ -376,6 +376,7 @@ dependencies = [
  "mlua",
  "roxmltree 0.21.1",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

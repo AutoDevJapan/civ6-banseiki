@@ -178,4 +178,5 @@ fn source_root_manifest_and_no_host_scene_are_complete() {
     let lua = world();
     let encoded = lua.load(code).eval::<String>().unwrap();
     assert!(encoded.contains("not_measured_before_host") && encoded.contains("ERROR"));
+    assert!(encoded.contains("measurements only; excludes map_size_rows and mods"));
 }
