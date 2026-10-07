@@ -1,6 +1,5 @@
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::Lua;
-const LIMITS: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanHotseatLimits.lua";
 const STAGING: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
 fn fixture() -> Lua {
     let lua = new_lua();
@@ -13,12 +12,11 @@ fn fixture() -> Lua {
  MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return map end,GetMaxMajorPlayers=function() return maxPlayers end}
  "#,
     );
-    exec(&lua, &read_repo(LIMITS));
     lua
 }
 #[test]
 fn fixed_japan_hotseat_maps_allow_all_twenty_two_slots() {
-    let lua = fixture();
+    let lua = wrapped_fixture();
     for suffix in ["20km", "20km_Settlers", "15km", "15km_Settlers"] {
         lua.globals()
             .set(
@@ -26,7 +24,7 @@ fn fixed_japan_hotseat_maps_allow_all_twenty_two_slots() {
                 format!("{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{suffix}.Civ6Map"),
             )
             .unwrap();
-        exec(&lua, "assert(JAC_JapanHotseatMaxPlayers(12)==22)");
+        exec(&lua, "assert(math.min(22,12)==22)");
     }
 }
 #[test]
@@ -40,11 +38,11 @@ fn network_other_rulesets_maps_and_unexpected_rosters_keep_original_cap() {
         "maxPlayers=21",
         "maxPlayers=nil",
     ] {
-        let lua = fixture();
+        let lua = wrapped_fixture();
         exec(&lua, change);
         exec(
             &lua,
-            "assert(JAC_JapanHotseatMaxPlayers(12)==12);assert(JAC_JapanHotseatMaxPlayers(8)==8)",
+            "assert(math.min(22,12)==12);assert(math.min(22,8)==8)",
         );
     }
 }
@@ -53,17 +51,13 @@ fn network_other_rulesets_maps_and_unexpected_rosters_keep_original_cap() {
 // script instead of shipping a whole UI snapshot.
 fn wrapped_fixture() -> Lua {
     let lua = fixture();
-    lua.globals()
-        .set("limits_source", read_repo(LIMITS))
-        .unwrap();
     exec(
         &lua,
         r#"
  original_math=math; included={}
  function include(name)
   included[#included+1]=name
-  if name=='JAC_JapanHotseatLimits' then assert(loadstring(limits_source))()
-  elseif name=='StagingRoom' then
+  if name=='StagingRoom' then
    local MAX_EVER_PLAYERS=12;local currentMax=MAX_EVER_PLAYERS
    function SetCurrentMaxPlayers(newMaxPlayers) currentMax=math.min(newMaxPlayers,MAX_EVER_PLAYERS) end
    function OnShow() currentMax=math.min(MapConfiguration.GetMaxMajorPlayers(),12) end
@@ -78,7 +72,7 @@ fn wrapped_fixture() -> Lua {
 #[test]
 fn stock_callbacks_get_twenty_two_and_keep_dynamic_context_changes() {
     let lua = wrapped_fixture();
-    exec(&lua,"assert(#included==2 and included[1]=='JAC_JapanHotseatLimits' and included[2]=='StagingRoom');SetCurrentMaxPlayers(22);assert(ReadMax()==22);OnShow();assert(ReadMax()==22)");
+    exec(&lua,"assert(#included==1 and included[1]=='StagingRoom');SetCurrentMaxPlayers(22);assert(ReadMax()==22);OnShow();assert(ReadMax()==22)");
     exec(&lua,"hotseat=false;SetCurrentMaxPlayers(22);assert(ReadMax()==12);OnShow();assert(ReadMax()==12)");
     exec(
         &lua,
@@ -91,6 +85,16 @@ fn save_load_keeps_the_limits_callback_after_frontend_globals_are_cleared() {
     exec(
         &lua,
         "JAC_JapanHotseatMaxPlayers=nil;OnShow();assert(ReadMax()==22);hotseat=false;OnShow();assert(ReadMax()==12)",
+    );
+}
+#[test]
+fn reloaded_frontend_defines_limits_without_cached_helper_exports() {
+    let lua = wrapped_fixture();
+    exec(&lua, "JAC_JapanHotseatMaxPlayers=nil");
+    exec(&lua, &read_repo(STAGING));
+    exec(
+        &lua,
+        "OnShow();assert(ReadMax()==22);hotseat=false;OnShow();assert(ReadMax()==12)",
     );
 }
 #[test]
@@ -143,7 +147,6 @@ fn frontend_xml_binds_stock_wrappers_without_unsupported_replacement_actions() {
             "UI/JAC_JapanMainMenu.lua",
             "UI/JAC_JapanStagingRoom.xml",
             "UI/JAC_JapanStagingRoom.lua",
-            "UI/JAC_JapanHotseatLimits.lua"
         ]
     );
     let front = read_repo("poc/JAC_PoC_JapanMapScale/UI/FrontEnd.xml");

@@ -73,7 +73,6 @@
       <File>UI/JAC_JapanMainMenu.lua</File>
       <File>UI/JAC_JapanStagingRoom.xml</File>
       <File>UI/JAC_JapanStagingRoom.lua</File>
-      <File>UI/JAC_JapanHotseatLimits.lua</File>
     </ImportFiles>
     <UpdateDatabase id="JAC_JapanMapScale_Config">
       <File>Config/JAC_JapanMapScale_Config.xml</File>
@@ -163,7 +162,6 @@
     <File>UI/JAC_JapanMainMenu.lua</File>
     <File>UI/JAC_JapanStagingRoom.xml</File>
     <File>UI/JAC_JapanStagingRoom.lua</File>
-    <File>UI/JAC_JapanHotseatLimits.lua</File>
     <File>Data/JAC_Japan_20km_Castles.sql</File>
     <File>Data/JAC_Japan_15km_Castles.sql</File>
     <File>Config/JAC_JapanMapScale_Config.xml</File>

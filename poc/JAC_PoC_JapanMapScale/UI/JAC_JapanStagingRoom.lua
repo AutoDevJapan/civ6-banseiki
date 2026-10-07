@@ -1,9 +1,22 @@
 -- Frontend does not accept the gameplay map criteria. Keep the installed UI,
 -- and change only its two twelve-slot clamps in this Lua context.
-include("JAC_JapanHotseatLimits")
--- Frontend globals can be cleared when returning from a saved game. Keep
--- the callback alive with the math wrapper rather than resolving it again.
-local hotseatMaxPlayers = JAC_JapanHotseatMaxPlayers
+-- A reload can clear helper exports while include still considers them loaded.
+-- Build the private policy afresh each time this context is initialized.
+local japanMaps = {
+  ['{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km.Civ6Map'] = true,
+  ['{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_20km_Settlers.Civ6Map'] = true,
+  ['{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map'] = true,
+  ['{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map'] = true,
+}
+local function hotseatMaxPlayers(originalLimit)
+  if GameConfiguration.IsHotseat()
+    and GameConfiguration.GetValue('RULESET') == 'RULESET_JAC_BANSEIKI'
+    and japanMaps[MapConfiguration.GetValue('MAP_SCRIPT')]
+    and MapConfiguration.GetMaxMajorPlayers() == 22 then
+    return 22
+  end
+  return originalLimit
+end
 local originalMath = math
 local contextMath = {}
 for key, value in pairs(originalMath) do contextMath[key] = value end
