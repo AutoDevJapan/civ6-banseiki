@@ -1389,6 +1389,7 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     let mut blocked_recovery_seen = false;
     let mut hotseat_growth_seen = false;
     let mut banseiki_hotseat_growth_seen = false;
+    let mut japan_hotseat_growth_seen = false;
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1407,6 +1408,8 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
             hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
             banseiki_hotseat_growth_seen |= name == "multiplayer-banseiki-hotseat-growth.json";
+            japan_hotseat_growth_seen |=
+                name == "multiplayer-japan-15km-settlers-hotseat-growth.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1471,12 +1474,13 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Preserve all prior 143 scenes and apply the same isolation assertions
-    // to the new Banseiki Hotseat game. The witness hold starts no new game.
+    // Preserve all prior 144 scenes and apply the same isolation assertions
+    // to the Japan Hotseat game. The witness hold starts no new game.
     assert!(blocked_recovery_seen);
     assert!(hotseat_growth_seen);
     assert!(banseiki_hotseat_growth_seen);
-    assert_eq!(count, 144);
+    assert_eq!(count, 145);
+    assert!(japan_hotseat_growth_seen);
 }
 
 #[test]
