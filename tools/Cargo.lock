@@ -383,6 +383,7 @@ dependencies = [
 name = "civ6-persona-merit-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-persona-events-rs",
  "mlua",
  "serde_json",
  "tempfile",

@@ -7,6 +7,7 @@ pub mod mp_staging_boundary;
 mod normal;
 pub mod price_routes;
 pub mod scenario;
+pub mod snapshot;
 pub mod sp_reassign;
 pub mod sp_runtime;
 pub mod sp_skill;

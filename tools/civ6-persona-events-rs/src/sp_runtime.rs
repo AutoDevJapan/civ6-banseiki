@@ -29,15 +29,7 @@ end
 assert(owners==22 and people==484 and gs:GetGovernorPointsSpent()==0)
 return 'fresh SP: 22 owners / 484 absent persons; no pre-existing AI appointments'
 "#;
-pub const SERIAL: &str = r#"
-local function serial(v)
- if type(v)~='table' then local t=tostring(v); return type(v)..':'..#t..':'..t end
- local keys={}; for k in pairs(v) do keys[#keys+1]=k end
- table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
- local out={}; for _,k in ipairs(keys) do out[#out+1]=serial(k)..'='..serial(v[k]) end
- return '{'..table.concat(out,';')..'}'
-end
-"#;
+pub use crate::snapshot::SERIAL;
 pub const SNAPSHOT: &str = r#"
 local function sample(readGate)
  local leader='LEADER_JAC_DATE_TANEMUNE'; local row=assert(GameInfo.JAC_LeaderPersonas[leader])

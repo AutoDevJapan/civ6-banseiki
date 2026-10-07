@@ -1,4 +1,5 @@
 //! One fresh cost-two person, no existing partial/spy checkpoint is opened.
+use crate::snapshot::SERIAL;
 use serde_json::{json, Value};
 pub const LEADER: &str = "LEADER_JAC_DATE_TANEMUNE";
 const SAVE: &str = "JAC-Todo324-GameplayEvents-Cost2-Proved";
@@ -22,15 +23,6 @@ assert(PlayerConfigurations[1]:GetLeaderTypeName()==leader and row.EvolutionCost
 "#
     )
 }
-const SERIAL: &str = r#"
-local function serial(v)
- if type(v)~='table' then return type(v)..':'..tostring(v) end
- local keys={}; for k in pairs(v) do keys[#keys+1]=k end
- table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
- local out={}; for _,k in ipairs(keys) do out[#out+1]=serial(k)..'='..serial(v[k]) end
- return '{'..table.concat(out,';')..'}'
-end
-"#;
 pub fn snapshot(paid: u8) -> String {
     format!(
         r#"{}
