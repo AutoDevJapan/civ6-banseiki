@@ -1,0 +1,3 @@
+{"at":"2026-10-07T18:58:13.076729+00:00","action":"start","status":"OK","detail":"New peer21 border sale financing; no captive equalization replay"}
+{"at":"2026-10-07T18:58:13.092812+00:00","action":"1/29 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}
+{"at":"2026-10-07T19:05:13.092111+00:00","action":"1/29 restart_game","status":"FAIL","detail":"Civ VI window did not appear after 4 Steam launch attempts within the deadline; last: Civ VI window did not appear after Steam launch: no Civ VI process yet"}

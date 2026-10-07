@@ -17,6 +17,8 @@ const SALE_SHA: &str = "e84d34a97d4c10406b97dcf4e22716ab788453d282e76b6ccac10a86
 const RECOVERY_OUT: &str =
     "D:/CC/Work/todo1665/20261007-current/pinned-border-sale-load-recovery-live.json";
 const RECOVERY_ROOT: &str = "D:/CC/Work/todo1665/20261007-current";
+const RESTART_RECOVERY_OUT: &str =
+    "D:/CC/Work/todo1665/20261007-current/pinned-border-sale-restart-recovery-live.json";
 const SAVE_SHA: &str = "6529c3edefbd5db0a36c5bfb6c23ae066c78fee52448c7d3954c1d6dfbd10487";
 const MOD_IDS: &str = "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7,403be889-1455-4de7-967b-ad54c0ff3431,4873eb62-8ccc-4574-b784-dda455e74e68,4a72b1c0-958b-4bd5-81e4-a094f86ce643,7696e937-2044-4f3c-8e13-4e27632e2710,8424840c-92ef-4426-a9b4-b4e0cb818049,91cf7b65-54bb-4f69-a452-19a65527cde2,ba3a1c58-9287-4654-a22f-85f9e6841e9b,bba3a0d2-8f08-4715-9263-00a773e6ae86,bd7a82c5-6b38-4b69-a7f5-8dc9af534249";
 fn audit_failed_load(
@@ -120,6 +122,82 @@ fn recovery_admission() -> Result<Value, Box<dyn std::error::Error>> {
         "claim":claim,"save_sha256":SAVE_SHA,"all_prior_started_operations_match":true,
         "transaction_steps_started":0,"old_claim_preserved":true,"new_admission":"create_new recovery output and admission file",
         "mods":MOD_IDS.split(',').collect::<Vec<_>>()}),
+    )
+}
+fn audit_failed_restart(scene: &Value, raw: &str, result: &Value) -> Result<(), String> {
+    let rows: Vec<Value> = raw
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let steps = scene["steps"]
+        .as_array()
+        .ok_or("prior restart scene steps missing")?;
+    if steps.len() != 29
+        || steps[0] != json!({"action":"restart_game","timeout":420})
+        || rows.len() != 3
+        || rows[0]["action"] != "start"
+        || rows[0]["status"] != "OK"
+        || rows[1]["action"] != "1/29 restart_game"
+        || rows[1]["status"] != "START"
+        || rows[2]["action"] != "1/29 restart_game"
+        || rows[2]["status"] != "FAIL"
+        || result["passed"] != false
+        || result["completed_steps"] != 0
+        || result["checks"] != json!([])
+        || result["failure"]
+            != format!(
+                "1/29 restart_game: {}",
+                rows[2]["detail"]
+                    .as_str()
+                    .ok_or("restart failure missing")?
+            )
+    {
+        return Err("prior restart did not stop before all load/mod/transaction steps".into());
+    }
+    let sent: Value =
+        serde_json::from_str(rows[1]["detail"].as_str().ok_or("restart START missing")?)
+            .map_err(|e| e.to_string())?;
+    if sent != steps[0] {
+        return Err("prior restart START differs".into());
+    }
+    Ok(())
+}
+fn restart_recovery_admission() -> Result<Value, Box<dyn std::error::Error>> {
+    // Both attempts must be audited; a restart failure must never discard the
+    // earlier load attempt or grant fresh authority from its old no-send proof.
+    let prior = recovery_admission()?;
+    let pinned = [
+        (
+            "border-sale-live-16/steps.jsonl",
+            "59bbe53752103bc6356a70a2e68349b83f8a18259187a32586bd90d6ef772134",
+        ),
+        (
+            "border-sale-live-16/result.json",
+            "a4dd0e503b9809b5f5c615c89a545f26568500c3974c151114d656bd0bead704",
+        ),
+        (
+            "pinned-border-sale-load-recovery-live.json",
+            "e60fca5eed5f7cb62d1d28e1275d2a0a38c557bfc08140a9f0199a1756cf88af",
+        ),
+    ];
+    let mut bytes = Vec::new();
+    for (path, hash) in pinned {
+        let data = std::fs::read(Path::new(RECOVERY_ROOT).join(path))?;
+        if format!("{:x}", Sha256::digest(&data)) != hash {
+            return Err(format!("restart evidence changed: {path}").into());
+        }
+        bytes.push(data);
+    }
+    audit_failed_restart(
+        &serde_json::from_slice(&bytes[2])?,
+        std::str::from_utf8(&bytes[0])?,
+        &serde_json::from_slice(&bytes[1])?,
+    )?;
+    Ok(
+        json!({"prior_load_admission":prior,"prior_restart_artifact":"todo880-citizen-12-08",
+        "restart_source_hashes":pinned,"all_prior_started_operations_match":true,"new_load_steps_started":0,
+        "transaction_steps_started":0,"all_old_claims_preserved":true,"new_admission":"create_new restart-recovery output and admission file"}),
     )
 }
 fn output_for_hash(hash: &str) -> Result<&'static str, String> {
@@ -364,18 +442,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = std::fs::read(&args[2])?;
     let mut scene = check_input(&args, &bytes)?;
     let hash = format!("{:x}", Sha256::digest(&bytes));
-    let recovery = match std::env::var("CIV6_BORDER_SALE_LOAD_RECOVERY").as_deref() {
-        Err(std::env::VarError::NotPresent) => false,
-        Ok("1") => true,
+    let recovery_kind = match std::env::var("CIV6_BORDER_SALE_LOAD_RECOVERY").as_deref() {
+        Err(std::env::VarError::NotPresent) => 0,
+        Ok("1") => 1,
+        Ok("2") => 2,
         _ => return Err("invalid recovery option".into()),
     };
+    let recovery = recovery_kind != 0;
     if recovery && hash != SALE_SHA {
         return Err("recovery only supports the unsent border sale".into());
     }
-    let output = if recovery {
-        RECOVERY_OUT
-    } else {
-        output_for_hash(&hash)?
+    let output = match recovery_kind {
+        1 => RECOVERY_OUT,
+        2 => RESTART_RECOVERY_OUT,
+        _ => output_for_hash(&hash)?,
     };
     if Path::new(output).exists() {
         return Err("prepared output already exists; no repeat admission".into());
@@ -383,10 +463,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lock_path = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
     let lock: Value = serde_json::from_slice(&std::fs::read(lock_path)?)?;
     check_lock(&lock, &std::env::var("CODEX_JOB_ID")?)?;
-    let admission = if recovery {
-        Some(recovery_admission()?)
-    } else {
-        None
+    let admission = match recovery_kind {
+        1 => Some(recovery_admission()?),
+        2 => Some(restart_recovery_admission()?),
+        _ => None,
     };
     // Maintenance is also checked by live_chain before it invokes its preparer.
     let maintenance = Path::new("D:/CC/Tools/civ6-live/reliability-maintenance.json");
@@ -462,7 +542,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if extra_inputs()? != inventory {
         return Err("untracked input inventory changed during preparation".into());
     }
-    if recovery && Some(recovery_admission()?) != admission {
+    let after_admission = match recovery_kind {
+        1 => Some(recovery_admission()?),
+        2 => Some(restart_recovery_admission()?),
+        _ => None,
+    };
+    if after_admission != admission {
         return Err("recovery admission changed during preparation".into());
     }
     prepare_scene(&mut scene, recovery, &inventory)?;
@@ -609,6 +694,56 @@ mod load_recovery_tests {
             let error = lua.load(&code).exec().unwrap_err().to_string();
             assert!(error.contains("active mods differ; expected="), "{error}");
         }
+    }
+}
+#[cfg(test)]
+mod restart_recovery_tests {
+    use super::*;
+    fn fixture() -> (Value, String, Value) {
+        (
+            serde_json::from_str(include_str!(
+                "../tests/fixtures/border-sale-restart-failure/scene.json"
+            ))
+            .unwrap(),
+            include_str!("../tests/fixtures/border-sale-restart-failure/steps.jsonl").to_owned(),
+            serde_json::from_str(include_str!(
+                "../tests/fixtures/border-sale-restart-failure/result.json"
+            ))
+            .unwrap(),
+        )
+    }
+    #[test]
+    fn original_restart_failure_is_the_entire_transcript() {
+        let (scene, raw, result) = fixture();
+        audit_failed_restart(&scene, &raw, &result).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(raw.as_bytes())),
+            "59bbe53752103bc6356a70a2e68349b83f8a18259187a32586bd90d6ef772134"
+        );
+        assert_ne!(RESTART_RECOVERY_OUT, RECOVERY_OUT);
+    }
+    #[test]
+    fn later_load_mod_or_transaction_event_rejects_a_new_admission() {
+        let (scene, raw, result) = fixture();
+        for action in ["2/29 enable_mods", "3/29 load", "6/29 ui_lua"] {
+            let extra = format!(
+                "{raw}{{\"action\":\"{action}\",\"status\":\"START\",\"detail\":\"{{}}\"}}\n"
+            );
+            assert!(audit_failed_restart(&scene, &extra, &result).is_err());
+        }
+    }
+    #[test]
+    fn missing_failure_changed_restart_or_completed_step_rejects_admission() {
+        let (scene, raw, mut result) = fixture();
+        assert!(audit_failed_restart(
+            &scene,
+            &raw.lines().take(2).collect::<Vec<_>>().join("\n"),
+            &result
+        )
+        .is_err());
+        assert!(audit_failed_restart(&scene, &raw.replace("420", "421"), &result).is_err());
+        result["completed_steps"] = json!(1);
+        assert!(audit_failed_restart(&scene, &raw, &result).is_err());
     }
 }
 #[test]
