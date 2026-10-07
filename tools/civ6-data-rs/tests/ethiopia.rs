@@ -179,7 +179,7 @@ fn foreign_keys(db: &Connection) -> ForeignKeyFailures {
         .collect()
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "installed-game-data"))]
 fn gameplay_db(game: &std::path::Path) -> Connection {
     let db = civ6_data_rs::cascade::official_db().unwrap();
     // The legacy cascade loader ignores InsertOrIgnore, notably KIND_TRAIT.
@@ -314,9 +314,9 @@ fn official_xml(db: &Connection, source: &str) {
     }
 }
 
-/// On Windows the installed source is required, not silently skipped. The same
-/// converter/oracle contracts above run in Linux CI without redistributing DLC.
-#[cfg(windows)]
+/// The installed-game-data suite requires official source, with no early return
+/// or ignored tests. Hosted CI runs the hermetic converter/oracle contracts.
+#[cfg(all(windows, feature = "installed-game-data"))]
 #[test]
 fn installed_official_base_and_xp2_repair_missing_existing_and_repeated_loading() {
     use civ6_data_rs::read_utf8;
@@ -415,7 +415,7 @@ fn installed_official_base_and_xp2_repair_missing_existing_and_repeated_loading(
         .contains("LEADER_MENELIK Players:Expansion2_Players"));
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "installed-game-data"))]
 fn assert_same_data(db: &Connection, expected: &DatabaseSnapshot, state: &str) {
     let actual = snapshot(db);
     for (table, rows) in expected {
@@ -455,7 +455,7 @@ fn assert_same_data(db: &Connection, expected: &DatabaseSnapshot, state: &str) {
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, feature = "installed-game-data"))]
 #[test]
 fn installed_babylon_base_and_xp2_match_official_order_and_cross_dlc() {
     use civ6_data_rs::read_utf8;
