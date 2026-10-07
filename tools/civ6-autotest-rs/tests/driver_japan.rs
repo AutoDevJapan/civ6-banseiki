@@ -138,12 +138,14 @@ fn test_autoplay_writes_turn_and_memory_samples() {
             "checks",
             "completed_steps",
             "failure",
+            "failure_boundary",
             "metrics",
             "passed",
             "scenario",
             "test_mode"
         ]
     );
+    assert!(result["failure_boundary"].is_null());
     assert_eq!(
         support_driver::object_keys(&result["metrics"]),
         ["autoplay", "groups", "save_load", "turn_summary"]

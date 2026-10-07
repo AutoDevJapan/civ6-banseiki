@@ -160,6 +160,42 @@ pub trait Backend: Send {
     }
 }
 
+#[cfg(test)]
+mod reliability_failure_tests {
+    use super::*;
+
+    #[test]
+    fn failed_judgment_is_retained_when_the_step_log_cannot_be_written() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("output");
+        fs::create_dir_all(output.join("steps.jsonl")).unwrap();
+        let mut runner = Runner::new(
+            json!({"name":"judgment failure"}),
+            output.clone(),
+            root.path().join("logs"),
+            root.path().join("saves"),
+            4318,
+        );
+        let checks = vec![judge::Check {
+            name: "Database integrity".into(),
+            passed: false,
+            detail: "foreign key rollback".into(),
+        }];
+        assert_eq!(runner.finish_judgment(checks).unwrap(), 1);
+        runner.write_result().unwrap();
+        let result: Value =
+            serde_json::from_slice(&fs::read(output.join("result.json")).unwrap()).unwrap();
+        assert!(result["failure"]
+            .as_str()
+            .unwrap()
+            .contains("foreign key rollback"));
+        assert_eq!(result["failure_boundary"]["stage"], "judge");
+        let boundary: Value =
+            serde_json::from_slice(&fs::read(output.join("failure.json")).unwrap()).unwrap();
+        assert_eq!(boundary, result["failure_boundary"]);
+    }
+}
+
 #[derive(Default)]
 pub struct SystemBackend {
     client: Option<crate::tuner::TunerClient>,
@@ -381,6 +417,7 @@ pub struct Runner {
     pub completed_steps: usize,
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
+    failure_boundary: Option<Value>,
     pub lua_captures: BTreeMap<String, String>,
     pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
@@ -430,6 +467,7 @@ impl Runner {
             completed_steps: 0,
             result_checks: vec![],
             failure: None,
+            failure_boundary: None,
             lua_captures: BTreeMap::new(),
             carrier_captures: BTreeMap::new(),
             ruleset: None,
@@ -1398,6 +1436,7 @@ impl Runner {
     ) -> Result<()> {
         let end = deadline.unwrap_or_else(|| self.clock.now() + timeout);
         let mut sent = false;
+        let mut begin_unknown = false;
         let mut last = "loading screen not ready".to_string();
         while self.clock.now() < end {
             let count = self.loadscreen_count()?;
@@ -1413,12 +1452,24 @@ impl Runner {
                     Err(e) => return Err(e),
                 };
                 if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
-                    self.lua(
+                    let begin = self.lua(
                         "LoadScreen",
                         "OnActivateButtonClicked()\nreturn true",
                         self.budget(end, 5.0)?,
-                    )?;
-                    last = "Begin Game pressed via LoadScreen Lua".into();
+                    );
+                    match begin {
+                        Ok(_) => last = "Begin Game pressed via LoadScreen Lua".into(),
+                        Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                            // The loading context can disappear before its reply.
+                            // Observe InGame; never replay the accepted Begin Game.
+                            begin_unknown = true;
+                            last = format!("Begin Game response unknown; observing InGame: {e}");
+                            if let Err(log_error) = self.log("loadscreen_begin", "UNKNOWN", &last) {
+                                eprintln!("{last}; writing transition log failed: {log_error}");
+                            }
+                        }
+                        Err(e) => return Err(e),
+                    }
                 } else {
                     self.remaining(end)?;
                     self.backend.press_key(crate::click::VK_ESCAPE, end)?;
@@ -1470,7 +1521,7 @@ impl Runner {
             }
             self.sleep_until(end, 2.0);
         }
-        let uncertain = if response_unknown {
+        let uncertain = if response_unknown || begin_unknown {
             "; outcome undecidable after unknown Lua response"
         } else {
             ""
@@ -2770,12 +2821,17 @@ impl Runner {
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
                 self.failure = Some(format!("KeyboardInterrupt: {e}"));
+                self.record_failure(None, None, &e);
                 interruption = Some(e);
                 130
             }
             Err(e) => {
                 self.result_passed = false;
-                self.log("run", "FAIL", &e.to_string())?;
+                self.failure = Some(e.to_string());
+                self.record_failure(None, None, &e);
+                if let Err(log_error) = self.log("run", "FAIL", &e.to_string()) {
+                    eprintln!("Original failure: {e}; writing step log failed: {log_error}");
+                }
                 1
             }
         };
@@ -2807,14 +2863,34 @@ impl Runner {
             Ok(code)
         }
     }
+    fn record_failure(&mut self, step: Option<&Value>, index: Option<usize>, error: &Error) {
+        // Keep the first boundary in memory even when artifact storage fails.
+        // Outer interruption/finalization must not replace a step with preflight.
+        if self.failure_boundary.is_some() {
+            return;
+        }
+        let boundary = crate::reliability::failure_boundary(step, index, error);
+        self.failure_boundary = Some(boundary.clone());
+        let written = serde_json::to_vec_pretty(&boundary)
+            .map_err(Error::from)
+            .and_then(|bytes| {
+                fs::write(self.output.join("failure.json"), bytes).map_err(Error::from)
+            });
+        if let Err(write_error) = written {
+            eprintln!("Original failure: {error}; writing failure.json failed: {write_error}");
+        }
+    }
     fn run_inner(&mut self) -> Result<i32> {
         let mut frontend_ready = false;
+        // Installation errors are independent of process freshness. The chain
+        // disables automatic restarts, but must still reject missing MODs before
+        // spending a shared game slot launching Steam.
+        let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
+        let stale = self.backend.stale_art(&folders)?;
+        if !stale.is_empty() {
+            return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
+        }
         if self.auto_restart {
-            let folders = self.backend.mod_folders(&self.scenario, &self.mods_dir)?;
-            let stale = self.backend.stale_art(&folders)?;
-            if !stale.is_empty() {
-                return Err(Error::scenario(format!("Icon atlas images missing from the installed mods' BLP packages (rebuild the installed mod's art with its Rust build tool): {}",stale.join(", "))));
-            }
             let newest = self.backend.newest_mod(&folders)?;
             let process = self.backend.single_process(30.0)?;
             if let Some(reason) =
@@ -2882,10 +2958,14 @@ impl Runner {
                     self.completed_steps += 1;
                 }
                 Err(e) => {
+                    self.failure = Some(e.to_string());
+                    self.record_failure(Some(step), Some(i), &e);
                     if e.kind == ErrorKind::Interrupted {
                         return Err(e);
                     }
-                    self.log(&action, "FAIL", &e.to_string())?;
+                    if let Err(log_error) = self.log(&action, "FAIL", &e.to_string()) {
+                        eprintln!("Original failure: {e}; writing step log failed: {log_error}");
+                    }
                     return Ok(1);
                 }
             }
@@ -2897,15 +2977,34 @@ impl Runner {
             self.scenario["expected_units"].as_u64().map(|n| n as usize),
             self.scenario["strict_lua_errors"] == true,
         );
+        self.finish_judgment(checks)
+    }
+    fn finish_judgment(&mut self, checks: Vec<judge::Check>) -> Result<i32> {
         judge::print_table(&checks);
         let passed = checks.iter().filter(|c| c.passed).count();
         self.result_passed = passed == checks.len();
         self.result_checks = checks;
-        self.log(
-            "judge",
-            if self.result_passed { "OK" } else { "FAIL" },
-            &format!("{passed}/{} checks passed", self.result_checks.len()),
-        )?;
+        if !self.result_passed {
+            let failed = self
+                .result_checks
+                .iter()
+                .filter(|c| !c.passed)
+                .map(|c| format!("{}: {}", c.name, c.detail))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let error = Error::scenario(format!("Log checks failed: {failed}"));
+            self.failure = Some(error.to_string());
+            self.record_failure(Some(&json!({"action":"judge"})), None, &error);
+            if let Err(log_error) = self.log("judge", "FAIL", &error.to_string()) {
+                eprintln!("Original failure: {error}; writing step log failed: {log_error}");
+            }
+        } else {
+            self.log(
+                "judge",
+                "OK",
+                &format!("{passed}/{} checks passed", self.result_checks.len()),
+            )?;
+        }
         Ok(if self.result_passed { 0 } else { 1 })
     }
     fn write_baseline(&self) -> Result<()> {
@@ -2948,7 +3047,7 @@ impl Runner {
             .into_iter()
             .map(|(name, rows)| (name, metrics::summarize_turns(&rows)))
             .collect();
-        let mut result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
+        let mut result = json!({"scenario":self.scenario.get("name"),"passed":self.result_passed,"test_mode":self.scenario.get("test_mode"),"completed_steps":self.completed_steps,"failure":self.failure,"failure_boundary":self.failure_boundary,"checks":self.result_checks,"metrics":{"autoplay":runs,"turn_summary":metrics::summarize_turns(&rows),"groups":groups,"save_load":self.save_load_metrics.summary()}});
         if self.scenario["diagnostic_only"] == true {
             result["diagnostic_only"] = true.into();
             result["observation_completed"] = self.result_passed.into();
