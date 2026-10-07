@@ -1,52 +1,21 @@
 use civ6_lua_tests_rs::{exec, new_lua, read_repo};
 use mlua::Lua;
-use regex::Regex;
-
 const LIMITS: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanHotseatLimits.lua";
 const STAGING: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
-
 fn fixture() -> Lua {
     let lua = new_lua();
     exec(
         &lua,
         r#"
-      hotseat=true; ruleset='RULESET_JAC_BANSEIKI'; maxPlayers=22
-      map='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map'
-      GameConfiguration={IsHotseat=function() return hotseat end,
-        GetValue=function(key) assert(key=='RULESET'); return ruleset end}
-      MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT'); return map end,
-        GetMaxMajorPlayers=function() return maxPlayers end}
-    "#,
+ hotseat=true; ruleset='RULESET_JAC_BANSEIKI'; maxPlayers=22
+ map='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km_Settlers.Civ6Map'
+ GameConfiguration={IsHotseat=function() return hotseat end,GetValue=function(key) assert(key=='RULESET');return ruleset end}
+ MapConfiguration={GetValue=function(key) assert(key=='MAP_SCRIPT');return map end,GetMaxMajorPlayers=function() return maxPlayers end}
+ "#,
     );
     exec(&lua, &read_repo(LIMITS));
     lua
 }
-
-fn stock_lua(source: &str) -> String {
-    // Preserve quoted strings, long strings and comments byte for byte.
-    // Only a type token in executable code is removed for the test VM.
-    let tokens = Regex::new(
-        r#"(?s)--\[\[.*?\]\]|--[^\r\n]*|\[\[.*?\]\]|'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|:\s*(?:number|string|table|boolean|object)\b"#,
-    ).unwrap();
-    tokens
-        .replace_all(source, |capture: &regex::Captures<'_>| {
-            let matched = &capture[0];
-            if matched.starts_with(':') {
-                String::new()
-            } else {
-                matched.to_owned()
-            }
-        })
-        .into_owned()
-}
-
-#[test]
-fn test_vm_type_translation_preserves_strings_and_comments() {
-    let source = "local n : number = 1; local text=':number'; -- :table\nlocal s:string=\" :boolean\"; --[[:number]]\nlocal long=[[:table]]";
-    assert_eq!(stock_lua(source), "local n  = 1; local text=':number'; -- :table\nlocal s=\" :boolean\"; --[[:number]]\nlocal long=[[:table]]");
-    new_lua().load(stock_lua(source)).exec().unwrap();
-}
-
 #[test]
 fn fixed_japan_hotseat_maps_allow_all_twenty_two_slots() {
     let lua = fixture();
@@ -60,7 +29,6 @@ fn fixed_japan_hotseat_maps_allow_all_twenty_two_slots() {
         exec(&lua, "assert(JAC_JapanHotseatMaxPlayers(12)==22)");
     }
 }
-
 #[test]
 fn network_other_rulesets_maps_and_unexpected_rosters_keep_original_cap() {
     for change in [
@@ -76,68 +44,104 @@ fn network_other_rulesets_maps_and_unexpected_rosters_keep_original_cap() {
         exec(&lua, change);
         exec(
             &lua,
-            "assert(JAC_JapanHotseatMaxPlayers(12)==12); assert(JAC_JapanHotseatMaxPlayers(8)==8)",
+            "assert(JAC_JapanHotseatMaxPlayers(12)==12);assert(JAC_JapanHotseatMaxPlayers(8)==8)",
         );
     }
 }
-
-#[test]
-fn official_staging_script_compiles_on_lua51_and_both_caps_use_scoped_limit() {
-    let source = read_repo(STAGING);
-    // The installed game accepts type annotations; strip only those for stock Lua 5.1.
-    new_lua().load(stock_lua(&source)).into_function().unwrap();
-    assert!(
-        source.contains("math.min(newMaxPlayers, JAC_JapanHotseatMaxPlayers(MAX_EVER_PLAYERS))")
-    );
-    assert!(source.contains(
-        "math.min(MapConfiguration.GetMaxMajorPlayers(), JAC_JapanHotseatMaxPlayers(12))"
-    ));
-    assert!(!source.contains("math.min(newMaxPlayers, MAX_EVER_PLAYERS)"));
-    assert!(!source.contains("math.min(MapConfiguration.GetMaxMajorPlayers(), 12)"));
-}
-
-#[test]
-fn actual_staging_setter_uses_twenty_two_then_restores_twelve_on_context_change() {
-    let source = read_repo(STAGING);
-    let setter = source
-        .split_once("function SetCurrentMaxPlayers")
-        .unwrap()
-        .1
-        .split_once("function SetCurrentMinPlayers")
-        .unwrap()
-        .0;
+// Installed 1.0.12.68 StagingRoom's two independent cap statements, from
+// SetCurrentMaxPlayers and OnShow. The production wrapper loads the installed
+// script instead of shipping a whole UI snapshot.
+fn wrapped_fixture() -> Lua {
     let lua = fixture();
+    lua.globals()
+        .set("limits_source", read_repo(LIMITS))
+        .unwrap();
     exec(
         &lua,
-        &format!(
-            "MAX_EVER_PLAYERS=12; g_currentMaxPlayers=0; function SetCurrentMaxPlayers{}",
-            stock_lua(setter)
-        ),
+        r#"
+ original_math=math; included={}
+ function include(name)
+  included[#included+1]=name
+  if name=='JAC_JapanHotseatLimits' then assert(loadstring(limits_source))()
+  elseif name=='StagingRoom' then
+   local MAX_EVER_PLAYERS=12;local currentMax=MAX_EVER_PLAYERS
+   function SetCurrentMaxPlayers(newMaxPlayers) currentMax=math.min(newMaxPlayers,MAX_EVER_PLAYERS) end
+   function OnShow() currentMax=math.min(MapConfiguration.GetMaxMajorPlayers(),12) end
+   function ReadMax() return currentMax end
+  else error('unexpected include '..name) end
+ end
+ "#,
     );
-    exec(&lua, "SetCurrentMaxPlayers(22); assert(g_currentMaxPlayers==22); SetCurrentMaxPlayers(23); assert(g_currentMaxPlayers==22); SetCurrentMaxPlayers(10); assert(g_currentMaxPlayers==10)");
-    exec(
-        &lua,
-        "hotseat=false; SetCurrentMaxPlayers(22); assert(g_currentMaxPlayers==12)",
-    );
-    exec(&lua, "hotseat=true; map='Continents.lua'; SetCurrentMaxPlayers(22); assert(g_currentMaxPlayers==12)");
+    exec(&lua, &read_repo(STAGING));
+    lua
 }
-
 #[test]
-fn frontend_imports_the_real_staging_context_and_scoped_helper() {
+fn stock_callbacks_get_twenty_two_and_keep_dynamic_context_changes() {
+    let lua = wrapped_fixture();
+    exec(&lua,"assert(#included==2 and included[1]=='JAC_JapanHotseatLimits' and included[2]=='StagingRoom');SetCurrentMaxPlayers(22);assert(ReadMax()==22);OnShow();assert(ReadMax()==22)");
+    exec(&lua,"hotseat=false;SetCurrentMaxPlayers(22);assert(ReadMax()==12);OnShow();assert(ReadMax()==12)");
+    exec(
+        &lua,
+        "hotseat=true;map='Continents.lua';OnShow();assert(ReadMax()==12)",
+    );
+}
+#[test]
+fn wrapper_keeps_original_math_and_unrelated_minimums_unchanged() {
+    let lua = wrapped_fixture();
+    exec(
+        &lua,
+        r#"
+ assert(math~=original_math and original_math.min(22,12)==12)
+ assert(math.min(22,12)==22)
+ assert(math.min(22,12,9)==9 and math.min(22,11)==11)
+ assert(math.min(23,12)==12 and math.min(-5,12)==-5)
+ assert(math.min(22)==22 and math.sqrt==original_math.sqrt)
+ for _,args in ipairs({{22,12},{23,12},{22,11},{22,12,9}}) do
+  hotseat=false;assert(math.min(unpack(args))==original_math.min(unpack(args)))
+ end
+ "#,
+    );
+    exec(&new_lua(), "assert(math.min(22,12)==12)");
+}
+#[test]
+fn frontend_binds_thin_wrapper_without_gameplay_criteria_or_filename_shadow() {
     let manifest = read_repo("poc/JAC_PoC_JapanMapScale/JAC_PoC_JapanMapScale.modinfo");
     let doc = roxmltree::Document::parse(&manifest).unwrap();
-    let action = doc
+    let frontend = doc
         .descendants()
-        .find(|node| {
-            node.has_tag_name("ImportFiles")
-                && node.attribute("id") == Some("JAC_JapanMapScale_HotseatStaging")
-        })
+        .find(|n| n.has_tag_name("FrontEndActions"))
         .unwrap();
-    assert!(action.parent().unwrap().has_tag_name("FrontEndActions"));
-    let files: Vec<_> = action
+    let replacements: Vec<_> = frontend
         .children()
-        .filter(|node| node.has_tag_name("File"))
-        .map(|node| node.text().unwrap())
+        .filter(|n| n.has_tag_name("ReplaceUIScript"))
+        .collect();
+    assert_eq!(replacements.len(), 1);
+    let replacement = replacements[0];
+    assert!(replacement.attribute("criteria").is_none());
+    assert_eq!(
+        replacement
+            .descendants()
+            .find(|n| n.has_tag_name("LuaContext"))
+            .unwrap()
+            .text(),
+        Some("StagingRoom")
+    );
+    assert_eq!(
+        replacement
+            .descendants()
+            .find(|n| n.has_tag_name("LuaReplace"))
+            .unwrap()
+            .text(),
+        Some("UI/JAC_JapanStagingRoom.lua")
+    );
+    let imports = frontend
+        .children()
+        .find(|n| n.has_tag_name("ImportFiles"))
+        .unwrap();
+    let files: Vec<_> = imports
+        .children()
+        .filter(|n| n.has_tag_name("File"))
+        .map(|n| n.text().unwrap())
         .collect();
     assert_eq!(
         files,
@@ -146,68 +150,9 @@ fn frontend_imports_the_real_staging_context_and_scoped_helper() {
             "UI/JAC_JapanHotseatLimits.lua"
         ]
     );
-    let frontend = doc
-        .descendants()
-        .find(|node| node.has_tag_name("FrontEndActions"))
-        .unwrap();
-    let replacements: Vec<_> = frontend
-        .children()
-        .filter(|node| node.has_tag_name("ReplaceUIScript"))
-        .collect();
-    assert_eq!(replacements.len(), 4);
-    let mut maps = std::collections::BTreeSet::new();
-    for replacement in replacements {
-        assert_eq!(
-            replacement
-                .descendants()
-                .find(|node| node.has_tag_name("LuaContext"))
-                .unwrap()
-                .text(),
-            Some("StagingRoom")
-        );
-        assert_eq!(
-            replacement
-                .descendants()
-                .find(|node| node.has_tag_name("LuaReplace"))
-                .unwrap()
-                .text(),
-            Some("UI/JAC_JapanStagingRoom.lua")
-        );
-        let criteria_id = replacement.attribute("criteria").unwrap();
-        let criteria = doc
-            .descendants()
-            .find(|node| node.has_tag_name("Criteria") && node.attribute("id") == Some(criteria_id))
-            .unwrap();
-        assert_eq!(
-            criteria
-                .descendants()
-                .find(|node| node.has_tag_name("RuleSetInUse"))
-                .unwrap()
-                .text(),
-            Some("RULESET_JAC_BANSEIKI")
-        );
-        let matches = criteria
-            .descendants()
-            .find(|node| node.has_tag_name("ConfigurationValueMatches"))
-            .unwrap();
-        let field = |name| {
-            matches
-                .children()
-                .find(|node| node.has_tag_name(name))
-                .unwrap()
-                .text()
-                .unwrap()
-        };
-        assert_eq!(field("Group"), "Map");
-        assert_eq!(field("ConfigurationId"), "MAP_SCRIPT");
-        maps.insert(field("Value").to_owned());
-    }
-    let expected: std::collections::BTreeSet<_> =
-        ["20km", "15km", "20km_Settlers", "15km_Settlers"]
-            .map(|name| {
-                format!("{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{name}.Civ6Map")
-            })
-            .into();
-    assert_eq!(maps, expected);
     assert!(!manifest.contains("UI/StagingRoom.lua"));
+    let source = read_repo(STAGING);
+    new_lua().load(&source).into_function().unwrap();
+    assert!(source.lines().count() < 30);
+    assert!(source.contains("include(\"StagingRoom\")"));
 }

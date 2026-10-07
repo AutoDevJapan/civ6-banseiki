@@ -67,16 +67,7 @@
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
-    <ReplaceUIScript id="JAC_JapanMapScale_Staging_20km_Historical" criteria="JAC_Japan_20km_Historical">
-      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_JapanMapScale_Staging_15km_Historical" criteria="JAC_Japan_15km_Historical">
-      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_JapanMapScale_Staging_20km_Settlers" criteria="JAC_Japan_20km_Settlers">
-      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
-    </ReplaceUIScript>
-    <ReplaceUIScript id="JAC_JapanMapScale_Staging_15km_Settlers" criteria="JAC_Japan_15km_Settlers">
+    <ReplaceUIScript id="JAC_JapanMapScale_HotseatStagingContext">
       <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
     </ReplaceUIScript>
     <ImportFiles id="JAC_JapanMapScale_HotseatStaging">
