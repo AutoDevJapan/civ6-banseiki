@@ -130,7 +130,13 @@ for pid=0,21 do
   local plot={index=1000+pid*10+n,props={}}
   function plot:GetIndex() return self.index end
   function plot:GetOwner() return pid end
-  function plot:GetProperty(k) return self.props[k] end
+  function plot:GetProperty(k)
+   if CONTEXT=='ui' and k=='JAC_TODO134_FINE_TWO_ON' and self.props[k]==1 then
+    if KNOB.extra_flag_frozen==self.index then return 0 end
+    if KNOB.extra_flag_lag==self.index and not self.extra_flag_delivered then self.extra_flag_delivered=true; return 0 end
+   end
+   return self.props[k]
+  end
   function plot:SetProperty(k,v)
    if k=='JAC_TODO134_FINE_TWO_ON' and KNOB.extra_flag_stick==self.index and self.props[k]==1 and v==0 then return end
    self.props[k]=v
@@ -827,6 +833,26 @@ fn refined_metadata_phase_code_and_observation_are_required() -> Result<()> {
         "Core and UI observations differ",
     )?;
     verify(&repo, run.dir.path())?;
+    Ok(())
+}
+
+#[test]
+fn refined_ui_waits_for_calibration_properties_and_rejects_a_frozen_delivery() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = Probe::with_resolution(&repo, 2, true)?;
+    let subject = first_plot(&probe, &probe.cases[0].civ)?;
+    let lagging = simulate(&probe, &format!("KNOB.extra_flag_lag={subject}"))?;
+    assert_eq!(lagging.failure, None);
+    assert_eq!(
+        verify(&repo, lagging.dir.path())?["verified_count"],
+        probe.cases.len()
+    );
+    let frozen = simulate(&probe, &format!("KNOB.extra_flag_frozen={subject}"))?;
+    assert!(frozen
+        .failure
+        .as_deref()
+        .is_some_and(|error| error.contains("Timed out waiting")));
+    assert!(verify(&repo, frozen.dir.path()).is_err());
     Ok(())
 }
 

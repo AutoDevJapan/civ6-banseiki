@@ -368,16 +368,22 @@ return string.format('batch diagnostic meter fine=%d shift=%d cal=%d base=%d fin
 /// the cleared pre-save and post-load state. The default Lua stays byte-identical.
 const PHASE_REFINED: &str = r#"
 local METER_STATE=__METER_STATE__
+local WAITING_FOR_METER=__WAITING_FOR_METER__
+local function meter_matches(condition,key,index)
+ if not condition and WAITING_FOR_METER then return false end
+ assert(condition,'diagnostic meter property leaked or not restored: '..key..' at '..index)
+ return true
+end
 local oath_flags_match=flags_match
 flags_match=function(row)
  if not oath_flags_match(row) then return false end
  local selected=SUBJECT[row.owner]~=nil
  for _,entry in ipairs({{'JAC_TODO134_FINE_ON',METER_STATE.fine},{'JAC_TODO134_SHIFT_ON',METER_STATE.shift},{'JAC_TODO134_CAL_ON',METER_STATE.cal},{'JAC_TODO134_FINE_TWO_ON',METER_STATE.fine_two}}) do
-  assert((row.plot:GetProperty(entry[1]) or 0)==(selected and entry[2] or 0),'diagnostic meter property leaked or not restored: '..entry[1]..' at '..row.index)
+  if not meter_matches((row.plot:GetProperty(entry[1]) or 0)==(selected and entry[2] or 0),entry[1],row.index) then return false end
  end
  for _,kind in ipairs(KINDS) do
   local key='JAC_TODO134_BASE_'..string.upper(kind)
-  assert((row.plot:GetProperty(key) or 0)==(selected and METER_STATE.base or 0),'diagnostic meter property leaked or not restored: '..key..' at '..row.index)
+  if not meter_matches((row.plot:GetProperty(key) or 0)==(selected and METER_STATE.base or 0),key,row.index) then return false end
  end
  return true
 end
@@ -754,7 +760,7 @@ impl Probe {
             .replace("__CASES__", &format!("{{{}}}", cases.join(",")))
     }
 
-    fn phased(&self, phase: Phase) -> String {
+    fn phased(&self, phase: Phase, waiting: bool) -> String {
         let code = PHASE
             .replace("__PHASE__", &lua_string(&phase.name()))
             .replace("__ON__", &phase.on_lua(self.cases.len()));
@@ -762,10 +768,15 @@ impl Probe {
             return format!("{}{code}", self.prelude());
         }
         let [fine, shift, cal, base, fine_two] = phase_meter_state(phase);
-        let flags = PHASE_REFINED.replace(
-            "__METER_STATE__",
-            &format!("{{fine={fine},shift={shift},cal={cal},base={base},fine_two={fine_two}}}"),
-        );
+        let flags = PHASE_REFINED
+            .replace(
+                "__METER_STATE__",
+                &format!("{{fine={fine},shift={shift},cal={cal},base={base},fine_two={fine_two}}}"),
+            )
+            .replace(
+                "__WAITING_FOR_METER__",
+                if waiting { "true" } else { "false" },
+            );
         format!("{}{code}{flags}", self.prelude())
     }
 
@@ -810,17 +821,18 @@ impl Probe {
 
     /// Core snapshot, then wait until the UI shows the same flags and yields.
     fn sync(&mut self, phase: Phase) {
-        let phased = self.phased(phase);
+        let phased = self.phased(phase, false);
         self.core(
             Role::Snapshot(phase),
             format!("{LUA_HELPERS}{phased}{SNAPSHOT}"),
         );
-        self.wait(Role::Synced(phase), "InGame", format!("{phased}{SYNCED}"));
+        let waiting = self.phased(phase, true);
+        self.wait(Role::Synced(phase), "InGame", format!("{waiting}{SYNCED}"));
     }
 
     fn measure(&mut self, phase: Phase) {
         self.sync(phase);
-        let code = format!("{LUA_HELPERS}{}{MEASURE}", self.phased(phase));
+        let code = format!("{LUA_HELPERS}{}{MEASURE}", self.phased(phase, false));
         self.ui(Role::Measure(phase), code);
     }
 
