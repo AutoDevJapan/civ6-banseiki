@@ -242,12 +242,25 @@ for _,row in ipairs(attempt.rows) do
 end
 "#;
 
-/// The military-15 or explicit growth cache diagnostic, with an owned-process inverse-removal
+/// The military-15 or a yield-and-growth diagnostic, with an owned-process inverse-removal
 /// candidate before any reference or oath is attached. Normal probes stay intact.
 pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     ensure!(
-        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU" || entry["oath"] == "JAC_OATH_ODA_TSUSHIMA",
-        "the native candidate is limited to the military-15 and Tsushima diagnostics"
+        catalogue(repo)?.iter().any(|known| known == entry),
+        "native diagnostic needs an unchanged catalogue entry"
+    );
+    let growth = entry["effects"]
+        .as_array()
+        .context("catalogue effects")?
+        .iter()
+        .any(|effect| effect["kind"] == "growth")
+        && entry["production_targets"]
+            .as_array()
+            .context("catalogue production targets")?
+            .is_empty();
+    ensure!(
+        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU" || growth,
+        "the native candidate is limited to the military-15 and yield-and-growth diagnostics"
     );
     let mut probe = make_probe(repo, entry)?;
     let steps = probe["steps"].as_array_mut().context("probe steps")?;
@@ -266,15 +279,10 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
         }
     }
     ensure!(
-        conversions
-            == if entry["oath"] == "JAC_OATH_ODA_TSUSHIMA" {
-                1
-            } else {
-                3
-            },
+        conversions == if growth { 1 } else { 3 },
         "native diagnostic comparison boundaries changed"
     );
-    if entry["oath"] == "JAC_OATH_ODA_TSUSHIMA" {
+    if growth {
         let original = std::mem::take(steps);
         let mut refreshes = 0;
         for mut step in original {
@@ -685,67 +693,83 @@ pub(crate) mod tests {
             .unwrap()
             .remove("native_exact_removal_candidate");
         assert_eq!(native, plain);
-        for entry in entries.iter().filter(|entry| {
-            entry["oath"] != "JAC_OATH_ODA_TENKA_FUBU" && entry["oath"] != "JAC_OATH_ODA_TSUSHIMA"
-        }) {
-            assert!(make_native_probe(&repo, entry).is_err());
-        }
         Ok(())
     }
 
     #[test]
     fn growth_focus_diagnostic_keeps_plain_probe_and_all_three_numeric_waits() -> Result<()> {
         let repo = Repository::checked_in();
-        let entry = catalogue(&repo)?
-            .into_iter()
-            .find(|e| e["oath"] == "JAC_OATH_ODA_TSUSHIMA")
-            .context("growth oath")?;
-        let plain = make_probe(&repo, &entry)?;
-        let native = make_native_probe(&repo, &entry)?;
-        let steps = native["steps"].as_array().context("native steps")?;
-        let focus_positions: Vec<_> = steps
-            .iter()
-            .enumerate()
-            .filter(|(_, step)| step["code"] == GROWTH_FOCUS_RESYNC)
-            .map(|(i, _)| i)
-            .collect();
-        assert_eq!(focus_positions.len(), 3);
-        assert_eq!(steps.len(), plain["steps"].as_array().unwrap().len() + 7);
-        for position in focus_positions {
-            assert_eq!(steps[position - 1]["action"], "wait_for");
-            assert!(steps[position - 1]["condition"]["code"]
-                .as_str()
-                .unwrap()
-                .contains("Core growth inventory incomplete"));
-            assert_eq!(steps[position - 2]["state_name"], "GameCore_Tuner");
-            assert_eq!(steps[position + 1]["action"], "wait_for");
-            assert!(steps[position + 1]["condition"]["code"]
-                .as_str()
-                .unwrap()
-                .contains(GROWTH_FOCUS_UNCHANGED));
-            assert!(steps[position + 2]["condition"]["code"]
-                .as_str()
-                .unwrap()
-                .contains("previous growth observation missing"));
-        }
-        assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 1);
-        assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 1);
-        assert_eq!(
-            steps
-                .iter()
-                .filter(|s| s["action"] == "oath_exact_removal")
-                .count(),
-            1
-        );
-        for step in steps {
-            if let Some(code) = step["code"]
-                .as_str()
-                .or_else(|| step["condition"]["code"].as_str())
-            {
-                mlua::Lua::new().load(code).into_function()?;
+        let growth_oaths = [
+            "JAC_OATH_ODA_TSUSHIMA",
+            "JAC_OATH_TAKEDA_RYUO",
+            "JAC_OATH_ASAKURA_ICHIJODANI",
+            "JAC_OATH_ROKKAKU_ISHIDERA",
+            "JAC_OATH_HONGANJI_TEMPLE_TOWN",
+            "JAC_OATH_MORI_OTA_TOWN",
+            "JAC_OATH_OTOMO_FUNAI_HEALING",
+            "JAC_OATH_AINU_RIVER_MOUTH",
+        ];
+        let mut covered = BTreeSet::new();
+        for entry in catalogue(&repo)? {
+            let oath = entry["oath"].as_str().context("oath id")?;
+            if !growth_oaths.contains(&oath) {
+                if oath != "JAC_OATH_ODA_TENKA_FUBU" {
+                    assert!(make_native_probe(&repo, &entry).is_err(), "{oath}");
+                }
+                continue;
             }
+            covered.insert(oath.to_owned());
+            let plain = make_probe(&repo, &entry)?;
+            let native = make_native_probe(&repo, &entry)?;
+            let steps = native["steps"].as_array().context("native steps")?;
+            let focus_positions: Vec<_> = steps
+                .iter()
+                .enumerate()
+                .filter(|(_, step)| step["code"] == GROWTH_FOCUS_RESYNC)
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(focus_positions.len(), 3);
+            assert_eq!(steps.len(), plain["steps"].as_array().unwrap().len() + 7);
+            for position in focus_positions {
+                assert_eq!(steps[position - 1]["action"], "wait_for");
+                assert!(steps[position - 1]["condition"]["code"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Core growth inventory incomplete"));
+                assert_eq!(steps[position - 2]["state_name"], "GameCore_Tuner");
+                assert_eq!(steps[position + 1]["action"], "wait_for");
+                assert!(steps[position + 1]["condition"]["code"]
+                    .as_str()
+                    .unwrap()
+                    .contains(GROWTH_FOCUS_UNCHANGED));
+                assert!(steps[position + 2]["condition"]["code"]
+                    .as_str()
+                    .unwrap()
+                    .contains("previous growth observation missing"));
+            }
+            assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 1);
+            assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 1);
+            assert_eq!(
+                steps
+                    .iter()
+                    .filter(|s| s["action"] == "oath_exact_removal")
+                    .count(),
+                1
+            );
+            for step in steps {
+                if let Some(code) = step["code"]
+                    .as_str()
+                    .or_else(|| step["condition"]["code"].as_str())
+                {
+                    mlua::Lua::new().load(code).into_function()?;
+                }
+            }
+            assert!(!plain.to_string().contains("focus_resync"));
+            let mut changed = entry.clone();
+            changed["effects"][1]["expected_percent"] = json!(999);
+            assert!(make_native_probe(&repo, &changed).is_err());
         }
-        assert!(!plain.to_string().contains("focus_resync"));
+        assert_eq!(covered.len(), growth_oaths.len());
         Ok(())
     }
 
