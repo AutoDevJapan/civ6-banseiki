@@ -30,12 +30,14 @@ pub struct Trace {
     pub manuals: Vec<String>,
 }
 
+type SleepFn = Box<dyn FnMut(f64) + Send>;
+
 #[derive(Default)]
 pub struct FakeClock {
     now: Mutex<f64>,
     sleeps: Mutex<Vec<f64>>,
     reads: Mutex<usize>,
-    on_sleep: Mutex<Option<Box<dyn FnMut(f64) + Send>>>,
+    on_sleep: Mutex<Option<SleepFn>>,
 }
 impl FakeClock {
     pub fn set(&self, value: f64) {
@@ -73,19 +75,21 @@ type StateFn = Box<dyn FnMut(f64) -> Result<Vec<String>> + Send>;
 type LuaFn = Box<dyn FnMut(&str, &str, f64) -> Result<String> + Send>;
 type ProcessFn = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type CaptureFn = Box<dyn FnMut(&Path, Option<[f64; 4]>, f64) -> Result<()> + Send>;
+type ConnectFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
+type PressFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
 
 pub struct SafetyBackend {
     control_owned: bool,
     control_held: bool,
     pub trace: Arc<Mutex<Trace>>,
-    pub on_connect: Option<Box<dyn FnMut(u16, f64) -> Result<()> + Send>>,
+    pub on_connect: Option<ConnectFn>,
     pub on_states: StateFn,
     pub on_lua: LuaFn,
     pub on_process: ProcessFn,
     pub on_require_process: Option<Box<dyn FnMut() -> Result<()> + Send>>,
     pub on_launch: Option<Box<dyn FnMut() -> Result<()> + Send>>,
     pub on_wait_window: Option<Box<dyn FnMut(f64) -> Result<isize> + Send>>,
-    pub on_press: Option<Box<dyn FnMut(u16, f64) -> Result<()> + Send>>,
+    pub on_press: Option<PressFn>,
     pub on_capture: Option<CaptureFn>,
 }
 impl SafetyBackend {
