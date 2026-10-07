@@ -9,7 +9,7 @@ use std::{
 fn run(bin: &str, args: &[&std::ffi::OsStr]) -> Output {
     Command::new(bin)
         .args(args)
-        .current_dir(support::root())
+        .current_dir(support::source_root())
         .output()
         .unwrap()
 }

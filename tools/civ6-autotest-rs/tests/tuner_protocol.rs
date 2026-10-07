@@ -109,7 +109,7 @@ fn tcp_pair() -> (TcpStream, TcpStream) {
     (left, right)
 }
 
-const NAMED_STATES: &str = "3\0FrontEnd\017\0InGame\041\0GameCore_Tuner";
+const NAMED_STATES: &str = "3\0FrontEnd\x0017\0InGame\x0041\0GameCore_Tuner";
 
 #[test]
 fn round_trip_fragmented_and_named_state() {
@@ -290,7 +290,7 @@ fn names_only_reply_uses_positions_and_case_insensitive_lookup() {
 
 #[test]
 fn duplicate_state_name_is_rejected_before_send() {
-    let fake = FakeTuner::start(LuaReply::Ok, "0\0InGame\01\0ingame", false);
+    let fake = FakeTuner::start(LuaReply::Ok, "0\0InGame\x001\0ingame", false);
     let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
     let error = client.run_lua("InGame", "return true", 1.0).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Tuner);

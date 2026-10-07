@@ -247,13 +247,13 @@ for owner=0,1 do local p=Players[owner];local gs=p:GetGovernors();assert(gs:GetG
 end;return 'official civic title grants for both humans; no balance setters'
 "#)));
     attach(&mut steps, "initial");
-    for owner in 0..2 {
+    for (owner, source) in sources.iter().enumerate() {
         steps.push(ui(
             "JAC_LeaderPersona_View",
             format!(
                 "{} JAC_RequestLeaderJoin({});return 'one ordinary Join request'",
                 active(owner, 0),
-                sources[owner]
+                source
             ),
         ));
         steps.push(wait(format!("{h}\n{READ}\nlocal v=person({owner},true);return v and v.state=='GREAT_PERSON' and v.paid==0 and v.remaining==2")));

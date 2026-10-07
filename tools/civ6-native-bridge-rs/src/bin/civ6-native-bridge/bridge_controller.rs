@@ -1004,7 +1004,6 @@ pub fn run() -> Result<(), String> {
             target,
             original,
             property_original.unwrap(),
-            original_prefix.unwrap(),
         );
     }
     let dll = bridge_dll()?;

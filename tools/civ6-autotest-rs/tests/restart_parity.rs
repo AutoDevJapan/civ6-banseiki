@@ -545,6 +545,10 @@ fn missing_or_duplicate_enabled_mod_is_rejected() {
 }
 
 #[test]
+#[expect(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "Keep the existing atlas equality assertion and its owned path clone unchanged"
+)]
 fn atlas_images_missing_from_mod_packages_are_reported() {
     let temp = tempfile::tempdir().unwrap();
     let folder = temp.path().join("MyMod");

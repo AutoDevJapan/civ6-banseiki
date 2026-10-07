@@ -157,7 +157,6 @@ pub(super) fn run(
     target: usize,
     original: [u8; 8],
     property_original: [u8; 8],
-    _original_prefix: [u8; PROPERTY_PREFIX_LEN],
 ) -> Result<(), String> {
     let base = target - PINNED_CAN_EVER_RVA;
     let assignment_original = pinned_entry_bytes(

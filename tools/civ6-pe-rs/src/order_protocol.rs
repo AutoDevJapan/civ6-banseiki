@@ -764,6 +764,52 @@ impl<R: Recovery> Drop for ChildGuard<R> {
     }
 }
 
+pub fn commands(buffer: &mut Vec<u8>) -> Result<Vec<String>, String> {
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE};
+    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
+    let mut available = 0;
+    if unsafe {
+        PeekNamedPipe(
+            h,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    } == 0
+    {
+        if std::io::Error::last_os_error().raw_os_error() == Some(109) {
+            return Ok(vec!["eof".into()]);
+        }
+        return Err("controller stdin must be a live pipe".into());
+    }
+    if available > 0 {
+        let mut bytes = vec![0; available.min(1024) as usize];
+        let n = std::io::stdin()
+            .read(&mut bytes)
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Ok(vec!["eof".into()]);
+        }
+        buffer.extend_from_slice(&bytes[..n]);
+    }
+    if buffer.len() > 4096 {
+        return Err("controller command exceeds limit".into());
+    }
+    let mut out = Vec::new();
+    while let Some(n) = buffer.iter().position(|b| *b == b'\n') {
+        let bytes: Vec<_> = buffer.drain(..=n).collect();
+        out.push(
+            std::str::from_utf8(&bytes)
+                .map_err(|e| e.to_string())?
+                .trim()
+                .into(),
+        );
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1254,50 +1300,4 @@ mod tests {
         assert_eq!(guard.run(&mut io::sink(), &rx), Outcome::Reaped);
         assert!(!path.exists());
     }
-}
-
-pub fn commands(buffer: &mut Vec<u8>) -> Result<Vec<String>, String> {
-    use windows_sys::Win32::System::Console::{GetStdHandle, STD_INPUT_HANDLE};
-    let h = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
-    let mut available = 0;
-    if unsafe {
-        PeekNamedPipe(
-            h,
-            std::ptr::null_mut(),
-            0,
-            std::ptr::null_mut(),
-            &mut available,
-            std::ptr::null_mut(),
-        )
-    } == 0
-    {
-        if std::io::Error::last_os_error().raw_os_error() == Some(109) {
-            return Ok(vec!["eof".into()]);
-        }
-        return Err("controller stdin must be a live pipe".into());
-    }
-    if available > 0 {
-        let mut bytes = vec![0; available.min(1024) as usize];
-        let n = std::io::stdin()
-            .read(&mut bytes)
-            .map_err(|e| e.to_string())?;
-        if n == 0 {
-            return Ok(vec!["eof".into()]);
-        }
-        buffer.extend_from_slice(&bytes[..n]);
-    }
-    if buffer.len() > 4096 {
-        return Err("controller command exceeds limit".into());
-    }
-    let mut out = Vec::new();
-    while let Some(n) = buffer.iter().position(|b| *b == b'\n') {
-        let bytes: Vec<_> = buffer.drain(..=n).collect();
-        out.push(
-            std::str::from_utf8(&bytes)
-                .map_err(|e| e.to_string())?
-                .trim()
-                .into(),
-        );
-    }
-    Ok(out)
 }

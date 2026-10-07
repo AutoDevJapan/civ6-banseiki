@@ -1,7 +1,6 @@
 //! Modeled native APIs exercise the generated Lua in Lua 5.1. These cases
 //! establish script behavior, not a live Civ6 exchange or a specific spy ID.
-#[path = "../src/spy_group_exchange.rs"]
-mod spy_group_exchange;
+use host::exchange as spy_group_exchange;
 
 use mlua::Lua;
 

@@ -1,6 +1,6 @@
 //! Observe the immutable T62 save before any new exchange or mission.
 #[path = "../src/spy_roster_read.rs"]
-mod observer;
+pub(crate) mod observer;
 use serde_json::{json, Value};
 
 pub(crate) fn scenario() -> Value {

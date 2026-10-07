@@ -1,7 +1,6 @@
 //! Lua 5.1 model of the saved property shape and the official API boundary.
 //! These fixtures cannot establish that the captive was returned in Civ6.
-#[path = "../src/spy_returned_preparation.rs"]
-mod preparation;
+use host::preparation;
 
 use mlua::Lua;
 #[allow(dead_code)]

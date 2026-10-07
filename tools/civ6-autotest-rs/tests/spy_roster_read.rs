@@ -2,8 +2,7 @@
 #[allow(dead_code)]
 #[path = "../examples/group-roster-read-62.rs"]
 mod host;
-#[path = "../src/spy_roster_read.rs"]
-mod observer;
+use host::observer;
 use mlua::Lua;
 use serde_json::Value;
 

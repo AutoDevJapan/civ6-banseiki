@@ -1,6 +1,7 @@
 //! Real owned OS fixture for the production phase barrier and thread ledger.
 use super::super::test_support::{AttachReadyBarrier, Fixture};
 use super::*;
+use std::collections::btree_map::Entry;
 
 core::arch::global_asm!(
     ".text",
@@ -271,7 +272,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                                     let actual=context(&d.threads[other].handle).unwrap();
                                     assert_eq!([actual.Dr0,actual.Dr1,actual.Dr2,actual.Dr3,actual.Dr7],[old.Dr0,old.Dr1,old.Dr2,old.Dr3,old.Dr7]);
                                 }
-                                mismatch_proof=fs::read_to_string(&trace_path).unwrap().lines().filter_map(|line|serde_json::from_str::<Value>(line).ok()).filter(|row|row["type"]=="arm_rejected").last().unwrap();
+                                mismatch_proof=fs::read_to_string(&trace_path).unwrap().lines().filter_map(|line|serde_json::from_str::<Value>(line).ok()).rfind(|row|row["type"]=="arm_rejected").unwrap();
                                 assert_eq!(mismatch_proof["tid"],tid);
                                 assert_eq!(mismatch_proof["raw_context"]["dr0"],altered.Dr0);
                                 assert_eq!(mismatch_proof["expected_generation"],1);
@@ -330,29 +331,33 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 classify_then_record(&mut d,&event,&steps,&sites,|d,row|mark(d,row).map_err(std::io::Error::other)).unwrap();
                 if ex.ExceptionRecord.ExceptionCode==EXCEPTION_SINGLE_STEP {
                     let mut c=context(&d.threads[&tid].handle).unwrap();
-                    if steps.contains_key(&tid){
+                    match steps.entry(tid) {
+                    Entry::Occupied(step) => {
                         let prior=original.remove(&tid).unwrap();
                         c.Rip=prior;
                         c.EFlags=(c.EFlags & !TF)|RF;
                         c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
-                        steps.remove(&tid);
+                        step.remove();
                         completed+=1;
-                    }else if c.Rip==entry {
+                    }
+                    Entry::Vacant(_) if c.Rip==entry => {
                         if epoch.phase==Phase::Load {load_hits+=1;c.EFlags|=RF;}
                         else {original.insert(tid,entry);c.Rip=mov;c.EFlags &= !RF;}
                         c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
-                    }else{
+                    }
+                    Entry::Vacant(step) => {
                         assert_eq!(c.Rip,mov);
                         c.EFlags|=TF|RF;c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
                         let armed=context(&d.threads[&tid].handle).unwrap();
-                        steps.insert(tid,Step{site:Site{name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
+                        step.insert(Step{site:Site{name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
                         let next=CaptureEpoch{phase:Phase::Load,generation:epoch.generation+1,sites:load};
                         assert!(matches!(phase_barrier(&mut d,&steps,epoch,next,&mut threads).unwrap(),PhaseBarrier::Deferred));
                         deferred+=1;
                         if epoch.generation==0 {desired=Phase::Load;}
+                    }
                     }
                     d.continue_pending_with_status(DBG_CONTINUE).unwrap();
                     if !steps.is_empty() {
