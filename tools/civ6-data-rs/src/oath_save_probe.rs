@@ -197,6 +197,24 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     );
     let mut probe = make_probe(repo, entry)?;
     let steps = probe["steps"].as_array_mut().context("probe steps")?;
+    // Q8 observations belong only to the explicit memory diagnostic. Ordinary
+    // numeric acceptance retains the catalogue percentage and its old bounds.
+    let mut conversions = 0;
+    for step in steps.iter_mut() {
+        if let Some(code) = step["code"].as_str() {
+            if code.contains("local native_diagnostic=false") {
+                conversions += 1;
+                step["code"] = json!(code.replace(
+                    "local native_diagnostic=false",
+                    "local native_diagnostic=true"
+                ));
+            }
+        }
+    }
+    ensure!(
+        conversions == 3,
+        "native diagnostic comparison boundaries changed"
+    );
     ensure!(
         steps.len() > 5 && steps[3]["action"] == "start_game" && steps[4]["action"] == "wait_for",
         "native candidate startup boundary changed"
@@ -476,8 +494,16 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
 
 pub fn verify_artifacts(repo: &Repository, path: &Path) -> Result<Value> {
     let evidence = verify(repo, path)?;
+    let native = evidence.source["native_exact_removal_candidate"] == true;
+    let mut remaining = vec!["natural_age_transition", "foreign_specialty_queue"];
+    if native {
+        remaining.extend(["nominal_percentage_quantity", "normal_product_integration"]);
+    }
     Ok(
-        json!({"oath":evidence.oath,"numeric_and_native_save_verified":true,"saved_name":evidence.saved_name,"house_count":22,"city_count":56,"flags_per_city":66,"task_accepted":false,"remaining":["natural_age_transition","foreign_specialty_queue"]}),
+        json!({"oath":evidence.oath,"numeric_and_native_save_verified":!native,
+        "native_q8_inverse_and_save_diagnostic_verified":native,
+        "saved_name":evidence.saved_name,"house_count":22,"city_count":56,
+        "flags_per_city":66,"task_accepted":false,"remaining":remaining}),
     )
 }
 
@@ -557,6 +583,19 @@ pub(crate) mod tests {
             steps.remove(5),
             json!({"action":"oath_exact_removal","timeout":30})
         );
+        let mut conversions = 0;
+        for step in steps {
+            if let Some(code) = step["code"].as_str() {
+                if code.contains("local native_diagnostic=true") {
+                    conversions += 1;
+                    step["code"] = json!(code.replace(
+                        "local native_diagnostic=true",
+                        "local native_diagnostic=false"
+                    ));
+                }
+            }
+        }
+        assert_eq!(conversions, 3);
         native
             .as_object_mut()
             .unwrap()

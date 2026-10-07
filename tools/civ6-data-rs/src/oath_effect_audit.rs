@@ -573,6 +573,7 @@ const COMPARE: &str = r#"
 __GROWTH_FORMULA__
 local oath=__OATH__
 local spec=__EFFECTS__
+local native_diagnostic=false
 local all=assert(JAC_OATH_AUDIT,'UI samples missing')
 local base=assert(all.baseline); local on=assert(all.selected)
 local off=assert(all.off); local back=assert(all.restored)
@@ -608,18 +609,25 @@ for i,a in ipairs(base.own) do
    if e.kind=='growth' then
     assert(type(e.native_raw)=='number' and e.native_raw%1==0 and e.native_raw>0,'native growth conversion evidence missing')
     local native_delta=e.native_raw/256
-    assert(close(b.other-a.other,native_delta) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
+    local requested_delta=native_diagnostic and native_delta or e.amount/100
+    assert(close(b.other-a.other,requested_delta) and close(c.other,a.other) and close(d.other,b.other),'wrong percentage in actual other-growth modifier')
     assert(close(a.housing,b.housing) and close(a.housing,c.housing) and close(a.housing,d.housing),'housing changed during growth isolation')
     assert(close(a.happiness,b.happiness) and close(a.happiness,c.happiness) and close(a.happiness,d.happiness),'happiness changed during growth isolation')
     local eligible=not a.occupied and not b.occupied and not c.occupied and not d.occupied and a.surplus>0 and b.surplus>0 and c.surplus>0 and d.surplus>0 and close(a.loyalty,1) and close(b.loyalty,1) and close(c.loyalty,1) and close(d.loyalty,1)
     if eligible then
-     for _,row in ipairs({a,b,c,d}) do
-      raw_q8(row.growth)
-      assert(close(row.growth,native_overall(row,0)),'official overall-growth formula does not match snapshot')
+     if native_diagnostic then
+      for _,row in ipairs({a,b,c,d}) do
+       raw_q8(row.growth)
+       assert(close(row.growth,native_overall(row,0)),'native overall-growth formula does not match snapshot')
+      end
+      expected=native_overall(a,e.native_raw)-native_overall(a,0)
+     else
+      local factor=math.max(1+a.happiness/100+a.other,0)
+      assert(close(a.growth,a.housing*factor),'official overall-growth formula does not match baseline')
+      expected=a.housing*(math.max(1+a.happiness/100+a.other+e.amount/100,0)-factor)
      end
-     expected=native_overall(a,e.native_raw)-native_overall(a,0)
      assert(close(observed,expected),'overall growth did not match housing-adjusted expected delta')
-     quantity=true; reason='native_q8_growth_formula'
+     quantity=true; reason=native_diagnostic and 'diagnostic_native_q8_growth_formula' or 'official_ui_growth_formula'
      if expected>0.00002 then proven[e.kind]=proven[e.kind]+1 end
     else quantities=false; reason='occupied_deficit_or_loyalty_growth_requires_diagnosis' end
    else
@@ -1171,6 +1179,7 @@ return 'single native human end-turn requested for '..target..'/'..phase
 
 const PRODUCTION_COMPARE: &str = r#"
 local target=__TARGET__; local amount=__AMOUNT__; local native_rate=__NATIVE_RATE__
+local native_diagnostic=false
 local t=assert(assert(JAC_OATH_AUDIT).current)
 assert(t.Target==target,'production target changed')
 local rows=assert(assert(JAC_OATH_AUDIT).production[target])
@@ -1218,7 +1227,7 @@ elseif amount==0 then
 elseif unit_basis then
  -- Here the observed OFF queue rate equals the measured city production in both
  -- flanking turns. Additive and multiplicative interpretations coincide at 1.
- expected=1+native_rate
+ expected=1+(native_diagnostic and native_rate or amount/100)
  assert(math.abs(on-expected)<=tolerance,string.format('%s actual rate %.9f expected %.9f',target,on,expected))
  quantity=true
 else
