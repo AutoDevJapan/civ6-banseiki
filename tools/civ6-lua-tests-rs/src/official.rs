@@ -52,12 +52,24 @@ pub fn register_hash(db: &Connection) {
 /// pre-MOD image is cached under the target dir, keyed by the dump's bytes.
 pub fn official_db() -> Connection {
     let path = repo_root().join("tools/civ6-lua-tests-rs/fixtures/official/pre_sengoku.sql.gz");
-    let target = match std::env::var_os("CARGO_TARGET_DIR") {
-        // An absolute CARGO_TARGET_DIR replaces the base path in join.
-        Some(dir) => std::path::absolute(dir).expect("resolve Cargo target directory"),
-        None => repo_root().join("tools/target"),
-    };
+    let target = target_for_executable(&std::env::current_exe().expect("locate test executable"));
     cached_snapshot(&path, &target.join("civ6-official-cache")).0
+}
+
+// Cargo runs test executables in <target>/<profile>/deps. Deriving the root
+// from that path also respects config files, --target-dir, and relative env
+// paths without interpreting them again from the test crate's working dir.
+fn target_for_executable(executable: &Path) -> PathBuf {
+    let parent = executable.parent().expect("executable has a directory");
+    let profile = if parent.file_name().is_some_and(|name| name == "deps") {
+        parent.parent().expect("deps has a profile directory")
+    } else {
+        parent
+    };
+    profile
+        .parent()
+        .expect("profile has a target directory")
+        .to_owned()
 }
 
 fn read_snapshot(path: &Path) -> Connection {
@@ -491,6 +503,27 @@ mod cache_tests {
     fn count(db: &Connection, table: &str) -> i64 {
         db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
             .unwrap()
+    }
+
+    #[test]
+    fn cache_root_follows_actual_cargo_output_directory() {
+        let temp = Temp::new("target-dir");
+        let target = temp.0.join("configured-output");
+        for profile in ["debug", "release", "custom-profile"] {
+            assert_eq!(
+                target_for_executable(&target.join(profile).join("deps").join("test.exe")),
+                target
+            );
+            assert_eq!(
+                target_for_executable(&target.join(profile).join("capture.exe")),
+                target
+            );
+        }
+        let cross_target = target.join("x86_64-pc-windows-msvc");
+        assert_eq!(
+            target_for_executable(&cross_target.join("debug/deps/test.exe")),
+            cross_target
+        );
     }
 
     #[test]
