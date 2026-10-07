@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContextDefaults Name="StagingRoom" ColorSet="BodyTextCool" Style="FontNormal22" FontStyle="Glow">
+  <Include File="StagingRoom"/>
+</ContextDefaults>
