@@ -154,6 +154,29 @@ fn steam_sync_deadline_expiry_never_sends_a_launch() {
 }
 
 #[test]
+fn an_active_steam_warning_suppresses_repeated_launch_requests() {
+    let clock_holder = Arc::new(Mutex::new(None::<Arc<ManualClock>>));
+    let clock = clock_holder.clone();
+    let mut count = 0;
+    let mut fake = FakeBackend::new().process(processes(&[None], None));
+    fake.on_warning = Box::new(|| Ok(true));
+    fake.on_window = Box::new(move |_| {
+        count += 1;
+        clock.lock().unwrap().as_ref().unwrap().advance(5.0);
+        if count < 13 {
+            Err(Error::input("Steam warning is still present"))
+        } else {
+            Ok(123)
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    *clock_holder.lock().unwrap() = Some(h.clock.clone());
+    h.runner.restart_game(120.0).unwrap();
+    assert_eq!(h.events().iter().filter(|e| *e == "launch").count(), 1);
+    assert!(h.clock.at() >= 65.0);
+}
+
+#[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
     let mut fake = FakeBackend::new().process(processes(
         &[

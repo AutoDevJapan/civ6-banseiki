@@ -2863,7 +2863,10 @@ fn preparation_failure_is_not_retried_and_keeps_the_original_error() {
     );
     assert_eq!(
         r.printed,
-        vec!["RESULT a s.json prepare-failed 1 stdout= stderr=first"]
+        vec![
+            "CIV6_CLOSE outcome=absent",
+            "RESULT a s.json prepare-failed 1 stdout= stderr=first"
+        ]
     );
 }
 #[test]
@@ -3307,7 +3310,7 @@ fn broken_stdout_stops_before_scenario_and_still_cleans() {
             .iter()
             .filter(|c| c.args[0].ends_with("ship.exe"))
             .count(),
-        1
+        0 // The close outcome is now logged before preparation starts.
     );
     assert_normal_closes(&r.0.calls, 1);
     assert_eq!(

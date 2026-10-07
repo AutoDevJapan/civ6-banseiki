@@ -16,6 +16,8 @@ pub mod session;
 pub mod startup;
 pub mod startup_idle;
 pub mod startup_screen;
+pub mod steam_dialog;
+pub mod steam_policy;
 pub mod steam_sync;
 pub mod time;
 pub mod tuner;

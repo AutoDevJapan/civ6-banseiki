@@ -23,6 +23,9 @@ pub trait Backend: Send {
     fn steam_sync_pending(&mut self) -> Result<bool> {
         Ok(false)
     }
+    fn steam_warning(&mut self, _journal: &Path) -> Result<bool> {
+        Ok(false)
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
     }
@@ -198,6 +201,7 @@ mod reliability_failure_tests {
 
 #[derive(Default)]
 pub struct SystemBackend {
+    steam_session: Option<crate::steam_dialog::Session>,
     steam_sync: Option<crate::steam_sync::Monitor>,
     steam_journal: Option<PathBuf>,
     client: Option<crate::tuner::TunerClient>,
@@ -212,7 +216,14 @@ impl Backend for SystemBackend {
         crate::steam_sync::journal(journal, "begin", &monitor)?;
         self.steam_sync = Some(monitor);
         self.steam_journal = Some(journal.to_owned());
+        self.steam_session = Some(crate::steam_dialog::Session::begin()?);
         Ok(())
+    }
+    fn steam_warning(&mut self, journal: &Path) -> Result<bool> {
+        match &self.steam_session {
+            Some(s) => crate::steam_dialog::handle_warning(s, journal),
+            None => Ok(false),
+        }
     }
     fn steam_sync_pending(&mut self) -> Result<bool> {
         if let Some(monitor) = &mut self.steam_sync {
@@ -1125,7 +1136,13 @@ impl Runner {
                 }
                 Err(e) => return Err(e),
             };
-            if !present && !syncing && now >= next_launch && attempts < 4 {
+            let warning = if !present && attempts > 0 {
+                self.backend
+                    .steam_warning(&self.output.join("steam-warnings.jsonl"))?
+            } else {
+                false
+            };
+            if !present && !syncing && !warning && now >= next_launch && attempts < 4 {
                 let closed = self.backend.close_orphaned_reporters()?;
                 if !closed.is_empty() {
                     println!("Closed helpers from failed launch: {closed:?}");
