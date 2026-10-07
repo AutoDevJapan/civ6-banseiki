@@ -35,6 +35,56 @@ pub fn record_budget(record: &Value, chain: u64, now: f64) -> Result<Option<f64>
 }
 
 pub fn environment_budget() -> Result<Option<f64>> {
+    let Some((lock, chain, now)) = environment()? else {
+        return Ok(None);
+    };
+    directory_budget(&lock, chain, now, |waiter| {
+        native_waiter_alive(waiter, &lock)
+    })
+}
+
+/// Native controllers already have an unconditional acquisition-based limit.
+/// Keep it separate from fairness: no waiter still means no general yield.
+pub fn bootstrap_record_budget(record: &Value, chain: u64, now: f64) -> Result<f64> {
+    let mut identity = record.clone();
+    identity
+        .as_object_mut()
+        .ok_or_else(|| refused("invalid live chain record"))?
+        .remove("competitor_since");
+    record_budget(&identity, chain, now)?;
+    if record["pid"].as_u64() != Some(chain) {
+        return Err(refused("live chain ownership changed"));
+    }
+    let acquired = record["acquired_at"]
+        .as_f64()
+        .filter(|v| now.is_finite() && v.is_finite() && *v >= 0.0 && *v <= now)
+        .ok_or_else(|| refused("invalid live chain lease timestamp"))?;
+    let remaining = LEASE_SECONDS - (now - acquired);
+    if remaining <= 0.0 {
+        return Err(refused("native bootstrap acquisition-based lease expired"));
+    }
+    Ok(remaining)
+}
+
+pub fn environment_bootstrap_budget() -> Result<Option<f64>> {
+    let (lock, chain, now) =
+        environment()?.ok_or_else(|| refused("native bootstrap requires a live chain lease"))?;
+    let fairness = directory_budget(&lock, chain, now, |waiter| {
+        native_waiter_alive(waiter, &lock)
+    })?;
+    let record: Value = serde_json::from_slice(
+        &std::fs::read(&lock).map_err(|_| refused("live chain lock unavailable"))?,
+    )
+    .map_err(|_| refused("live chain lock changed or is invalid"))?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| refused("live chain clock unavailable"))?
+        .as_secs_f64();
+    let hard = bootstrap_record_budget(&record, chain, now)?;
+    Ok(Some(fairness.map_or(hard, |remaining| remaining.min(hard))))
+}
+
+fn environment() -> Result<Option<(PathBuf, u64, f64)>> {
     let Some(chain) = std::env::var_os(crate::startup::CHAIN_PID_ENV) else {
         return Ok(None);
     };
@@ -53,9 +103,7 @@ pub fn environment_budget() -> Result<Option<f64>> {
         .duration_since(UNIX_EPOCH)
         .map_err(|_| refused("live chain clock unavailable"))?
         .as_secs_f64();
-    directory_budget(&lock, chain, now, |waiter| {
-        native_waiter_alive(waiter, &lock)
-    })
+    Ok(Some((lock, chain, now)))
 }
 
 /// Queue entries are the publication of new waiting chains. The owner updates
@@ -224,6 +272,36 @@ mod tests {
         let mut r = record();
         r.as_object_mut().unwrap().remove("competitor_since");
         assert_eq!(record_budget(&r, 7, 10000.0).unwrap(), None);
+    }
+    #[test]
+    fn native_bootstrap_uses_acquisition_limit_even_without_a_waiter() {
+        let r = json!({"pid":7,"chain_pid":7,"live_chain":true,"acquired_at":100});
+        assert_eq!(record_budget(&r, 7, 340.0).unwrap(), None);
+        assert_eq!(bootstrap_record_budget(&r, 7, 340.0).unwrap(), 1560.0);
+        assert_eq!(bootstrap_record_budget(&r, 7, 1899.0).unwrap(), 1.0);
+        assert!(bootstrap_record_budget(&r, 7, 1900.0).is_err());
+        assert_eq!(
+            record_budget(&r, 7, 1900.0).unwrap(),
+            None,
+            "native controller bound does not change fairness"
+        );
+        // Stale competitor bookkeeping cannot replace the acquisition bound.
+        let mut stale = r.clone();
+        stale["competitor_since"] = json!(0);
+        assert_eq!(bootstrap_record_budget(&stale, 7, 340.0).unwrap(), 1560.0);
+        for (key, value) in [
+            ("pid", json!(8)),
+            ("chain_pid", json!(8)),
+            ("live_chain", json!(false)),
+            ("acquired_at", Value::Null),
+            ("acquired_at", json!("100")),
+            ("acquired_at", json!(-1)),
+            ("acquired_at", json!(341)),
+        ] {
+            let mut bad = r.clone();
+            bad[key] = value;
+            assert!(bootstrap_record_budget(&bad, 7, 340.0).is_err());
+        }
     }
     #[test]
     fn new_holder_receives_its_own_lease_even_with_older_waiters() {

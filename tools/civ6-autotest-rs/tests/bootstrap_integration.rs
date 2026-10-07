@@ -101,6 +101,48 @@ fn invalid_controller_budget_is_refused_before_bootstrap_start() {
 }
 
 #[test]
+fn no_waiter_cannot_hide_the_native_controller_acquisition_deadline() {
+    struct NoWaiter;
+    impl Backend for NoWaiter {
+        fn live_lease_budget(&self) -> Result<Option<f64>> {
+            Ok(None)
+        }
+        fn native_bootstrap_lease_budget(&self) -> Result<Option<f64>> {
+            Ok(Some(civ6_autotest_rs::live_lease::bootstrap_record_budget(
+                &json!({"pid":7,"chain_pid":7,"live_chain":true,"acquired_at":100}),
+                7,
+                340.0,
+            )?))
+        }
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            _: &serde_json::Value,
+        ) -> Result<()> {
+            panic!("acquisition deadline must refuse before controller startup");
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let mut runner = Runner::with_backend(
+        json!({"name":"no waiter deadline","steps":[]}),
+        temp.path().into(),
+        temp.path().into(),
+        temp.path().into(),
+        4318,
+        Box::new(NoWaiter),
+        std::sync::Arc::new(SystemClock),
+    );
+    let error = runner
+        .run_step(&json!({"action":"start_native_bootstrap",
+        "max_seconds":300,"controller_seconds":1500,"timeout":40}))
+        .unwrap_err();
+    assert_eq!(
+        error.message,
+        "live_chain lease cannot cover bootstrap observation"
+    );
+}
+
+#[test]
 fn either_observer_failure_interrupts_the_shared_step_budget() {
     struct Ended(bool);
     impl Backend for Ended {

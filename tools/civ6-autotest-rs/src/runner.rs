@@ -22,6 +22,9 @@ pub trait Backend: Send {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         Ok(None)
     }
+    fn native_bootstrap_lease_budget(&self) -> Result<Option<f64>> {
+        self.live_lease_budget()
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         crate::time::check_interrupt()
     }
@@ -825,6 +828,9 @@ impl Backend for SystemBackend {
     }
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         crate::live_lease::environment_budget()
+    }
+    fn native_bootstrap_lease_budget(&self) -> Result<Option<f64>> {
+        crate::live_lease::environment_bootstrap_budget()
     }
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
@@ -2972,9 +2978,13 @@ impl Runner {
                 };
                 // Refuse before FrontEnd requests or controller spawn: a
                 // pre-mutation lease refusal must not enter READY recovery.
-                if self.backend.live_lease_budget()?.is_some_and(|remaining| {
-                    remaining <= controller_seconds as f64 + preparation_seconds + 45.0
-                }) {
+                if self
+                    .backend
+                    .native_bootstrap_lease_budget()?
+                    .is_some_and(|remaining| {
+                        remaining <= controller_seconds as f64 + preparation_seconds + 45.0
+                    })
+                {
                     return Err(Error::input(
                         "live_chain lease cannot cover bootstrap observation",
                     ));
