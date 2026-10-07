@@ -6,6 +6,8 @@
 
 | パス | 位置づけ |
 |---|---|
+| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの第1弾100人の候補データ。SSOT 4.8の方向確認待ち |
+| [`spec/banseiki-pool-data.md`](spec/banseiki-pool-data.md) | 人物データの項目とRust検査の使い方 |
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
