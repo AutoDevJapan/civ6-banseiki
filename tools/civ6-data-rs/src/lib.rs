@@ -171,6 +171,7 @@ pub mod events;
 #[cfg(test)]
 mod hero_tests;
 pub mod oaths;
+pub mod persona_payments;
 pub mod reigns;
 pub mod trees;
 pub mod unification;

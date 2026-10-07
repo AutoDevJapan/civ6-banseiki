@@ -6,6 +6,7 @@ include!("support/spending_continuity_cases.rs");
 include!("support/native_rejection_cases.rs");
 include!("support/confirmed_debit_cases.rs");
 include!("support/paid_publication_cases.rs");
+include!("support/saved_price_cases.rs");
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

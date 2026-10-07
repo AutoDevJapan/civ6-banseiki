@@ -49,8 +49,9 @@ local function NormalPaidPublicationActive(ids, rows)
     return type(view) == 'table' and view.active == true;
 end
 local function PaidPublicationEligible(owner, row, forceClosed, diagnostic)
+    local cost = PersonaEvents.Cost(row);
     if forceClosed or Get(row.LeaderType, 'OWNER') ~= owner or Get(row.LeaderType, 'STATE') ~= 'GOVERNOR' or
-       Get(row.LeaderType, 'UNIT') ~= nil or Get(row.LeaderType, 'EVOLUTION_COST') ~= row.EvolutionCost then
+       Get(row.LeaderType, 'UNIT') ~= nil or not cost then
         return false;
     end
     local person, ready, count = FindPerson(owner, row);
@@ -58,8 +59,8 @@ local function PaidPublicationEligible(owner, row, forceClosed, diagnostic)
     -- A diagnostic true cell only requests native inspection. Normal cells
     -- additionally require this person's validated, confirmed Gameplay set.
     if diagnostic then return true; end
-    local paid, readable = PersonaEvents.NormalPaid(owner, row, row.EvolutionCost);
-    return readable == true and paid == row.EvolutionCost;
+    local paid, readable = PersonaEvents.NormalPaid(owner, row, cost);
+    return readable == true and paid == cost;
 end
 local function PublishProductionAdmission(forceClosed, onlyOwner)
     local close = ClosePaidAdmissionOwners;
@@ -116,7 +117,13 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     end
     local packed, used = {}, {};
     for slot,entry in ipairs(rows) do
-        local row, cost = entry.row, entry.row.EvolutionCost;
+        local row = entry.row;
+        -- One person has one joined owner and one immutable payment prefix.
+        -- Unjoined people use the current price for future joins.
+        -- Pack the independent definition even if one mutable prepare receipt
+        -- is damaged. Eligibility below still requires the complete receipt,
+        -- and other owners must keep their valid appointment/placement cells.
+        local cost = PersonaEvents.CatalogCost(row);
         local governor = GameInfo.Governors[row.GovernorType];
         if not integer(cost, 4) or cost == 0 or not governor or governor.GovernorType ~= row.GovernorType or
            row.BasePromotionType ~= "GOVERNOR_PROMOTION_JAC_PERSONA_" .. string.sub(row.LeaderType,12) .. "_BASE" then close(); return; end

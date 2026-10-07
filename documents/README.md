@@ -56,6 +56,7 @@
 | [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
 | [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |
 | [`poc/pr86-native-admission.md`](poc/pr86-native-admission.md) | PR86の加入人物と本体任命資格の静的解析、実機拒否、独立Rust bridgeの元判定を保つ試作と次の実機順序 |
+| [`poc/pr86-saved-price.md`](poc/pr86-saved-price.md) | PR86の加入時価格契約、価格更新をまたぐ保存、称号予約・資格・UIの生成と回帰検査、親で継続する受入範囲 |
 | [`poc/pr86-native-runtime-probe.md`](poc/pr86-native-runtime-probe.md) | PR86の本体資格関数を変更せずに呼出し元・引数・戻り値を観測するRust debugger、live_chain接続、専用子プロセスでの検査と実機未確認の条件 |
 | [`poc/pr86-boundary-diagnostic.md`](poc/pr86-boundary-diagnostic.md) | PR86の本体中和・未配置回復・都市喪失を観測するテスト専用MOD、独立シナリオと未確定の敵スパイ操作 |
 | [`poc/pr86-boundary-progress.md`](poc/pr86-boundary-progress.md) | 境界診断を実装する担当の検査結果と、実機未観測の項目 |

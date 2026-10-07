@@ -4,10 +4,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     match args.first().map(String::as_str) {
-        Some("embed") if args.len() == 1 => {
+        Some("embed") if args.len() == 1 || args.len() == 2 => {
+            let root = args.get(1).map(PathBuf::from).unwrap_or(root);
             let file = root.join(civ6_persona_events_rs::GAMEPLAY);
             let source = fs::read_to_string(&file)?.replace("\r\n", "\n");
             fs::write(file, civ6_persona_events_rs::embed(&source)?)?;
+            for (path, render) in [
+                ("poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua", civ6_persona_events_rs::price_routes::ui as fn(&str) -> Result<String, String>),
+                ("poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua", civ6_persona_events_rs::price_routes::shared),
+            ] {
+                let file = root.join(path);
+                let source = fs::read_to_string(&file)?.replace("\r\n", "\n");
+                fs::write(file, render(&source)?)?;
+            }
         }
         Some("generate") if args.len() == 3 => {
             let template = serde_json::from_slice(&fs::read(&args[1])?)?;
