@@ -842,7 +842,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     db.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE Requirements(RequirementId TEXT PRIMARY KEY,RequirementType TEXT NOT NULL); CREATE TABLE RequirementArguments(RequirementId TEXT REFERENCES Requirements,Name TEXT,Value TEXT,PRIMARY KEY(RequirementId,Name)); CREATE TABLE RequirementSets(RequirementSetId TEXT PRIMARY KEY,RequirementSetType TEXT); CREATE TABLE RequirementSetRequirements(RequirementSetId TEXT REFERENCES RequirementSets,RequirementId TEXT REFERENCES Requirements,PRIMARY KEY(RequirementSetId,RequirementId)); CREATE TABLE Modifiers(ModifierId TEXT PRIMARY KEY,ModifierType TEXT NOT NULL,SubjectRequirementSetId TEXT REFERENCES RequirementSets); CREATE TABLE ModifierArguments(ModifierId TEXT REFERENCES Modifiers,Name TEXT,Value TEXT,PRIMARY KEY(ModifierId,Name));")?;
     db.execute_batch(sql)?;
     let count: i64 = db.query_row("SELECT count(*) FROM Modifiers", [], |r| r.get(0))?;
-    assert_eq!(count, 39);
+    assert_eq!(count, 45);
     for percent in [100, 1, 15] {
         let id = format!("JAC_TODO134_QCAL_TAG_P{percent}");
         let row: (String, String, String, String, String) = db.query_row(
@@ -970,6 +970,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
             ("BASE", "6", "CHANGE"),
             ("CAL", "100", "MODIFIER"),
             ("FINE", "1", "MODIFIER"),
+            ("FINE_TWO", "2", "MODIFIER"),
             ("SHIFT", "1", "CHANGE"),
         ] {
             let id = format!("JAC_TODO134_{mode}_{kind}");
@@ -994,6 +995,14 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
                 |r| r.get(0),
             )?;
             assert_eq!(yield_type, format!("YIELD_{kind}"));
+            if mode == "FINE_TWO" {
+                let property: String = db.query_row(
+                    "SELECT Value FROM RequirementArguments WHERE RequirementId=? AND Name='PropertyName'",
+                    [format!("{id}_REQ")],
+                    |r| r.get(0),
+                )?;
+                assert_eq!(property, "JAC_TODO134_FINE_TWO_ON");
+            }
         }
     }
     assert!(

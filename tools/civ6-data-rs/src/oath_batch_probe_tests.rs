@@ -85,6 +85,7 @@ function CORE_YIELD(city,k)
  if mine['JAC_TODO134_CAL_'..kind] and flag(plot,'JAC_TODO134_CAL_ON') then pct=pct+100 end
  if KNOB.meter_leak==city.plot and anywhere('JAC_TODO134_CAL_ON') then pct=pct+100 end
  if mine['JAC_TODO134_FINE_'..kind] and flag(plot,'JAC_TODO134_FINE_ON') then pct=pct+1 end
+ if mine['JAC_TODO134_FINE_TWO_'..kind] and flag(plot,'JAC_TODO134_FINE_TWO_ON') then pct=pct+2 end
  for _,r in ipairs(OATH_ROWS) do
   local oath=r.OathType; local amount=OATH_EFFECTS[oath][string.lower(kind)]
   if amount then
@@ -130,7 +131,11 @@ for pid=0,21 do
   function plot:GetIndex() return self.index end
   function plot:GetOwner() return pid end
   function plot:GetProperty(k) return self.props[k] end
-  function plot:SetProperty(k,v) self.props[k]=v end
+  function plot:SetProperty(k,v)
+   if k=='JAC_TODO134_FINE_TWO_ON' and KNOB.extra_flag_stick==self.index and self.props[k]==1 and v==0 then return end
+   self.props[k]=v
+   if k=='JAC_TODO134_FINE_TWO_ON' and v==1 and KNOB.extra_flag_leak then PLOTS[KNOB.extra_flag_leak].props[k]=1 end
+  end
   PLOTS[plot.index]=plot
   local city={id=65536*n+pid,owner=pid,plot=plot.index}
   function city:GetID() return self.id end
@@ -687,6 +692,158 @@ fn reported_step_matches_the_audit_lua() -> Result<()> {
             reported_step(&values).map(f64::to_bits),
             "{values:?}"
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn independent_extra_observation_can_break_the_live_coarse_lattice() -> Result<()> {
+    // Original live38 city 196610 culture observations, in their recorded order.
+    let off = 6.6015625;
+    let reference = 14.09765625;
+    let one = 6.67578125;
+    let shifted = 7.56640625;
+    let old = reported_step(&[off, reference, one, shifted]).context("old step")?;
+    assert_eq!(old, 19.0 / 256.0 + 0.00002);
+    // A possible *new observation*, 37 native ticks above OFF. This is a
+    // diagnostic fixture, not a claim about what the next game run will return.
+    let extra = off + 37.0 / 256.0;
+    let refined = reported_step(&[off, reference, one, shifted, extra]).context("new step")?;
+    assert_eq!(refined, 1.0 / 256.0 + 0.00002);
+    let hundred = reference - off;
+    let tolerance = 2.0 * refined * 1.05 + 0.00004;
+    assert!(2.0 * old * 1.05 + 0.00004 >= hundred * 0.005);
+    assert!(tolerance < hundred * 0.005);
+    assert!(((6.9765625 - off) - hundred * 0.05).abs() <= tolerance);
+    assert!(((6.9765625 - off) - hundred * 0.06).abs() > tolerance);
+    let vm = Lua::new();
+    let lua: f64 = vm
+        .load(format!(
+            "{LUA_HELPERS}\nreturn reported_step({{{off},{reference},{one},{shifted},{extra}}})"
+        ))
+        .eval()?;
+    assert_eq!(lua.to_bits(), refined.to_bits());
+    Ok(())
+}
+
+#[test]
+fn refined_batch_uses_all_six_new_samples_and_keeps_case_failures() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = Probe::with_resolution(&repo, 2, true)?;
+    let phases = schedule_for(probe.cases.len(), true);
+    assert_eq!(phases[3], Phase::PrecisionFineTwo);
+    assert_eq!(phases.len(), schedule(probe.cases.len()).len() + 1);
+    let scenario = probe.scenario()?;
+    assert_eq!(scenario["batch_probe"]["refine_resolution"], true);
+    assert_eq!(scenario["batch_probe"]["task_accepted"], false);
+    for step in scenario["steps"].as_array().context("steps")? {
+        if let Some(code) = step["code"]
+            .as_str()
+            .or_else(|| step["condition"]["code"].as_str())
+        {
+            Lua::new().load(code).into_function()?;
+        }
+    }
+    let attach = scenario["steps"]
+        .as_array()
+        .context("steps")?
+        .iter()
+        .filter_map(|s| s["code"].as_str())
+        .find(|code| code.contains(ATTACH_FINE_TWO))
+        .context("refined attachment")?;
+    assert!(attach
+        .contains("for _,kind in ipairs(KINDS) do p:AttachModifierByID('JAC_TODO134_FINE_TWO_'"));
+    let run = simulate(&probe, "")?;
+    assert_eq!(run.failure, None);
+    let report = verify(&repo, run.dir.path())?;
+    assert_eq!(report["verified_count"], probe.cases.len());
+    assert_eq!(report["task_accepted"], false);
+    assert_eq!(report["accepted_all_66"], false);
+    let wrong = simulate(
+        &probe,
+        &format!("KNOB.wrong={}", lua_string(&probe.cases[2].oath)),
+    )?;
+    assert_eq!(wrong.failure, None);
+    let wrong_report = verify(&repo, wrong.dir.path())?;
+    assert!(reasons(&wrong_report["cases"][2])
+        .iter()
+        .any(|reason| reason.starts_with("quantity:")));
+    assert_eq!(
+        wrong_report["cases"][2]["quantity_and_native_save_verified"],
+        false
+    );
+    Ok(())
+}
+
+#[test]
+fn refined_metadata_phase_code_and_observation_are_required() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = Probe::with_resolution(&repo, 2, true)?;
+    let run = simulate(&probe, "")?;
+    assert_eq!(run.failure, None);
+    verify(&repo, run.dir.path())?;
+    let path = run.dir.path().join("scenario.json");
+    for edit in 0..4 {
+        let mut scenario = run.scenario.clone();
+        match edit {
+            0 => {
+                scenario["batch_probe"]
+                    .as_object_mut()
+                    .context("metadata")?
+                    .remove("refine_resolution");
+            }
+            1 => scenario["batch_probe"]["refine_resolution"] = json!(false),
+            2 => scenario["batch_probe"]["phases"][3] = json!("precision_off"),
+            _ => {
+                let at = probe.position(Role::Measure(Phase::PrecisionFineTwo))? + 1;
+                let code = scenario["steps"][at]["code"].as_str().context("code")?;
+                ensure!(code.contains("fine_two=1"), "refined state missing");
+                scenario["steps"][at]["code"] = json!(code.replacen("fine_two=1", "fine_two=0", 1));
+            }
+        }
+        fs::write(&path, serde_json::to_string(&scenario)?)?;
+        assert!(
+            verify(&repo, run.dir.path()).is_err(),
+            "scenario mutation {edit}"
+        );
+    }
+    fs::write(&path, serde_json::to_string(&run.scenario)?)?;
+    let at = record(&run, &probe, Role::Measure(Phase::PrecisionFineTwo), "OK")?;
+    rejects(
+        &run,
+        |rows| {
+            rows.remove(at);
+            Ok(())
+        },
+        "driver record",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            edit_return(&mut rows[at], |value| {
+                value["cities"][0]["culture"] = json!(9999.0);
+            })
+        },
+        "Core and UI observations differ",
+    )?;
+    verify(&repo, run.dir.path())?;
+    Ok(())
+}
+
+#[test]
+fn refined_meter_rejects_control_leaks_and_failed_restoration() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = Probe::with_resolution(&repo, 2, true)?;
+    let control = control_plot(&probe)?;
+    let subject = first_plot(&probe, &probe.cases[0].civ)?;
+    for (knob, plot) in [("extra_flag_leak", control), ("extra_flag_stick", subject)] {
+        let run = simulate(&probe, &format!("KNOB.{knob}={plot}"))?;
+        let failure = run.failure.context("refined meter fault was accepted")?;
+        assert!(
+            failure.contains("diagnostic meter property leaked or not restored"),
+            "{failure}"
+        );
+        assert!(verify(&repo, run.dir.path()).is_err());
     }
     Ok(())
 }
@@ -1657,6 +1814,19 @@ fn cli_writes_new_files_only_and_rejects_bad_arguments() -> Result<()> {
     )?;
     let third: Value = serde_json::from_str(&fs::read_to_string(path("three.json"))?)?;
     assert_eq!(third["batch_probe"]["batch"], 3);
+    run(
+        &repo,
+        &[
+            "--refine-resolution".into(),
+            "--batch".into(),
+            "2".into(),
+            "--output".into(),
+            path("refined.json"),
+        ],
+    )?;
+    let refined: Value = serde_json::from_str(&fs::read_to_string(path("refined.json"))?)?;
+    assert_eq!(refined, Probe::with_resolution(&repo, 2, true)?.scenario()?);
+    assert_eq!(refined["batch_probe"]["refine_resolution"], true);
     assert!(run(
         &repo,
         &[

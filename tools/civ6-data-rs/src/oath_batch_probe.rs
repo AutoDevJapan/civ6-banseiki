@@ -173,6 +173,8 @@ pub enum Phase {
     Baseline,
     PrecisionOne,
     PrecisionTwo,
+    /// Independent 2-percent city-yield modifier, only in refined diagnostics.
+    PrecisionFineTwo,
     PrecisionOff,
     Reference,
     ReferenceOff,
@@ -193,6 +195,7 @@ impl Phase {
             Phase::Baseline => "baseline".into(),
             Phase::PrecisionOne => "precision_one".into(),
             Phase::PrecisionTwo => "precision_two".into(),
+            Phase::PrecisionFineTwo => "precision_fine_two".into(),
             Phase::PrecisionOff => "precision_off".into(),
             Phase::Reference => "reference".into(),
             Phase::ReferenceOff => "reference_off".into(),
@@ -229,6 +232,14 @@ pub fn schedule(cases: usize) -> Vec<Phase> {
         phases.extend([Phase::On(case), Phase::Off(case)]);
     }
     phases.push(Phase::AllOn);
+    phases
+}
+
+fn schedule_for(cases: usize, refine_resolution: bool) -> Vec<Phase> {
+    let mut phases = schedule(cases);
+    if refine_resolution {
+        phases.insert(3, Phase::PrecisionFineTwo);
+    }
     phases
 }
 
@@ -321,6 +332,13 @@ end
 Game:SetProperty('JAC_TODO134_BATCH_METER_ATTACHED',true)
 "#;
 
+const ATTACH_FINE_TWO: &str = r#"
+for _,case in ipairs(CASES) do
+ local p=assert(Players[case.player])
+ for _,kind in ipairs(KINDS) do p:AttachModifierByID('JAC_TODO134_FINE_TWO_'..string.upper(kind)) end
+end
+"#;
+
 /// The audit's meter inputs, on the cities of every batch house only.
 const METER: &str = r#"
 assert(Game:GetProperty('JAC_TODO134_BATCH_METER_ATTACHED'),'batch reference not attached')
@@ -332,6 +350,37 @@ for _,r in ipairs(cities()) do
  end
 end
 return string.format('batch diagnostic meter fine=%d shift=%d cal=%d base=%d on %d houses; no natural balance claim',fine,shift,cal,base,#CASES)
+"#;
+
+const METER_REFINED: &str = r#"
+assert(Game:GetProperty('JAC_TODO134_BATCH_METER_ATTACHED'),'batch reference not attached')
+local fine,shift,cal,base,fine_two=__FINE__,__SHIFT__,__CAL__,__BASE__,__FINE_TWO__
+for _,r in ipairs(cities()) do
+ if SUBJECT[r.owner] then
+  r.plot:SetProperty('JAC_TODO134_FINE_ON',fine); r.plot:SetProperty('JAC_TODO134_SHIFT_ON',shift); r.plot:SetProperty('JAC_TODO134_CAL_ON',cal); r.plot:SetProperty('JAC_TODO134_FINE_TWO_ON',fine_two)
+  for _,kind in ipairs(KINDS) do r.plot:SetProperty('JAC_TODO134_BASE_'..string.upper(kind),base) end
+ end
+end
+return string.format('batch diagnostic meter fine=%d shift=%d cal=%d base=%d fine_two=%d on %d houses; no natural balance claim',fine,shift,cal,base,fine_two,#CASES)
+"#;
+
+/// Refined phases check every calibration property on all 56 plots, including
+/// the cleared pre-save and post-load state. The default Lua stays byte-identical.
+const PHASE_REFINED: &str = r#"
+local METER_STATE=__METER_STATE__
+local oath_flags_match=flags_match
+flags_match=function(row)
+ if not oath_flags_match(row) then return false end
+ local selected=SUBJECT[row.owner]~=nil
+ for _,entry in ipairs({{'JAC_TODO134_FINE_ON',METER_STATE.fine},{'JAC_TODO134_SHIFT_ON',METER_STATE.shift},{'JAC_TODO134_CAL_ON',METER_STATE.cal},{'JAC_TODO134_FINE_TWO_ON',METER_STATE.fine_two}}) do
+  assert((row.plot:GetProperty(entry[1]) or 0)==(selected and entry[2] or 0),'diagnostic meter property leaked or not restored: '..entry[1]..' at '..row.index)
+ end
+ for _,kind in ipairs(KINDS) do
+  local key='JAC_TODO134_BASE_'..string.upper(kind)
+  assert((row.plot:GetProperty(key) or 0)==(selected and METER_STATE.base or 0),'diagnostic meter property leaked or not restored: '..key..' at '..row.index)
+ end
+ return true
+end
 "#;
 
 const FIXTURE: &str = r#"
@@ -500,7 +549,7 @@ for i,a in ipairs(base) do
   local kind=differs(a,S[name][i]); assert(kind==nil,'diagnostic meter did not restore '..tostring(kind)..' at city '..a.id)
  end
  if not SUBJECT[a.owner] then
-  for _,name in ipairs({'precision_one','precision_two','reference'}) do
+  for _,name in ipairs({'precision_one','precision_two'__EXTRA_PRECISION__,'reference'}) do
    local kind=differs(a,S[name][i]); assert(kind==nil,'diagnostic meter leaked to non-batch city '..a.id..' '..tostring(kind))
   end
  end
@@ -530,7 +579,7 @@ for ci,case in ipairs(CASES) do
     if not (finite(hundred) and hundred>0.03) then
      reason='reference_unmeasurable'; fail('reference:'..a.id..':'..e.kind)
     else
-     step=reported_step({av,ref,S.precision_one[i].y[e.kind],S.precision_two[i].y[e.kind]})
+     step=reported_step({av,ref,S.precision_one[i].y[e.kind],S.precision_two[i].y[e.kind]__EXTRA_SAMPLE__})
      tolerance=step and 2*step*(1+e.amount/100)+0.00004
      if tolerance and tolerance<hundred*0.005 then
       expected=hundred*e.amount/100
@@ -593,14 +642,24 @@ return 'JAC_OATH_BATCH_UI___PHASE__|batch-__BATCH__|'..#signature..':'..signatur
 pub struct Probe {
     pub batch: usize,
     pub cases: Vec<Case>,
+    refine_resolution: bool,
     steps: Vec<(Role, Value)>,
 }
 
 impl Probe {
     pub fn new(repo: &Repository, batch: usize) -> Result<Self> {
+        Self::with_resolution(repo, batch, false)
+    }
+
+    pub fn with_resolution(
+        repo: &Repository,
+        batch: usize,
+        refine_resolution: bool,
+    ) -> Result<Self> {
         let mut probe = Probe {
             batch,
             cases: self::batch(repo, batch)?,
+            refine_resolution,
             steps: Vec::new(),
         };
         for step in first_steps(&repo.json(BASE)?, &probe.cases[0].civ)? {
@@ -608,18 +667,28 @@ impl Probe {
         }
         probe.core(
             Role::Meter,
-            format!("{}{ATTACH}{}", probe.prelude(), meter_code([0, 0, 0, 1])),
+            format!(
+                "{}{ATTACH}{}{}",
+                probe.prelude(),
+                if refine_resolution {
+                    ATTACH_FINE_TWO
+                } else {
+                    ""
+                },
+                probe.meter_code([0, 0, 0, 1, 0])
+            ),
         );
         probe.core(Role::Fixture, format!("{}{FIXTURE}", probe.prelude()));
         let n = probe.cases.len();
         let all: Vec<usize> = (0..n).collect();
-        for phase in schedule(n) {
+        for phase in schedule_for(n, refine_resolution) {
             match phase {
                 Phase::Baseline => {}
-                Phase::PrecisionOne => probe.meter([1, 0, 0, 1]),
-                Phase::PrecisionTwo => probe.meter([1, 1, 0, 1]),
-                Phase::PrecisionOff | Phase::ReferenceOff => probe.meter([0, 0, 0, 1]),
-                Phase::Reference => probe.meter([0, 0, 1, 1]),
+                Phase::PrecisionOne => probe.meter([1, 0, 0, 1, 0]),
+                Phase::PrecisionTwo => probe.meter([1, 1, 0, 1, 0]),
+                Phase::PrecisionFineTwo => probe.meter([0, 0, 0, 1, 1]),
+                Phase::PrecisionOff | Phase::ReferenceOff => probe.meter([0, 0, 0, 1, 0]),
+                Phase::Reference => probe.meter([0, 0, 1, 1, 0]),
                 Phase::On(0) => probe.select(),
                 Phase::On(case) => probe.flag(&[case], 1),
                 Phase::Off(case) => probe.flag(&[case], 0),
@@ -628,13 +697,33 @@ impl Probe {
             }
             probe.measure(phase);
         }
-        let order: Vec<_> = schedule(n).iter().map(|p| lua_string(&p.name())).collect();
-        let compare = COMPARE.replace("__ORDER__", &format!("{{{}}}", order.join(",")));
+        let order: Vec<_> = schedule_for(n, refine_resolution)
+            .iter()
+            .map(|p| lua_string(&p.name()))
+            .collect();
+        let compare = COMPARE
+            .replace("__ORDER__", &format!("{{{}}}", order.join(",")))
+            .replace(
+                "__EXTRA_PRECISION__",
+                if refine_resolution {
+                    ",'precision_fine_two'"
+                } else {
+                    ""
+                },
+            )
+            .replace(
+                "__EXTRA_SAMPLE__",
+                if refine_resolution {
+                    ",S.precision_fine_two[i].y[e.kind]"
+                } else {
+                    ""
+                },
+            );
         probe.ui(
             Role::Compare,
             format!("{LUA_HELPERS}{}{compare}", probe.prelude()),
         );
-        probe.meter([0, 0, 0, 0]);
+        probe.meter([0, 0, 0, 0, 0]);
         probe.save_suffix();
         Ok(probe)
     }
@@ -669,7 +758,15 @@ impl Probe {
         let code = PHASE
             .replace("__PHASE__", &lua_string(&phase.name()))
             .replace("__ON__", &phase.on_lua(self.cases.len()));
-        format!("{}{code}", self.prelude())
+        if !self.refine_resolution {
+            return format!("{}{code}", self.prelude());
+        }
+        let [fine, shift, cal, base, fine_two] = phase_meter_state(phase);
+        let flags = PHASE_REFINED.replace(
+            "__METER_STATE__",
+            &format!("{{fine={fine},shift={shift},cal={cal},base={base},fine_two={fine_two}}}"),
+        );
+        format!("{}{code}{flags}", self.prelude())
     }
 
     fn core(&mut self, role: Role, code: String) {
@@ -693,8 +790,21 @@ impl Probe {
         ));
     }
 
-    fn meter(&mut self, state: [u8; 4]) {
-        let code = format!("{}{}", self.prelude(), meter_code(state));
+    fn meter_code(&self, [fine, shift, cal, base, fine_two]: [u8; 5]) -> String {
+        if self.refine_resolution {
+            METER_REFINED
+                .replace("__FINE__", &fine.to_string())
+                .replace("__SHIFT__", &shift.to_string())
+                .replace("__CAL__", &cal.to_string())
+                .replace("__BASE__", &base.to_string())
+                .replace("__FINE_TWO__", &fine_two.to_string())
+        } else {
+            meter_code([fine, shift, cal, base])
+        }
+    }
+
+    fn meter(&mut self, state: [u8; 5]) {
+        let code = format!("{}{}", self.prelude(), self.meter_code(state));
         self.core(Role::Meter, code);
     }
 
@@ -808,11 +918,15 @@ impl Probe {
                 json!({"oath":c.oath,"house":c.house,"civilization":c.civ,"selection_path":selection_path(i),"effects":effects})
             })
             .collect();
-        let phases: Vec<_> = schedule(self.cases.len())
+        let phases: Vec<_> = schedule_for(self.cases.len(), self.refine_resolution)
             .iter()
             .map(|p| p.name())
             .collect();
-        json!({"batch":self.batch,"batches":BATCHES,"scope":"yield_quantities_and_native_save_only","cases":cases,"phases":phases,"requires_offline_verification":true,"task_accepted":false,"remaining":["natural_age_transition","official_ui_selection_for_ledger_fixture_houses"]})
+        let mut identity = json!({"batch":self.batch,"batches":BATCHES,"scope":"yield_quantities_and_native_save_only","cases":cases,"phases":phases,"requires_offline_verification":true,"task_accepted":false,"remaining":["natural_age_transition","official_ui_selection_for_ledger_fixture_houses"]});
+        if self.refine_resolution {
+            identity["refine_resolution"] = json!(true);
+        }
+        identity
     }
 
     pub fn scenario(&self) -> Result<Value> {
@@ -836,6 +950,17 @@ fn meter_code([fine, shift, cal, base]: [u8; 4]) -> String {
         .replace("__SHIFT__", &shift.to_string())
         .replace("__CAL__", &cal.to_string())
         .replace("__BASE__", &base.to_string())
+}
+
+fn phase_meter_state(phase: Phase) -> [u8; 5] {
+    match phase {
+        Phase::PrecisionOne => [1, 0, 0, 1, 0],
+        Phase::PrecisionTwo => [1, 1, 0, 1, 0],
+        Phase::PrecisionFineTwo => [0, 0, 0, 1, 1],
+        Phase::Reference => [0, 0, 1, 1, 0],
+        Phase::Saved | Phase::Loaded => [0, 0, 0, 0, 0],
+        _ => [0, 0, 0, 1, 0],
+    }
 }
 
 /// The audit's `reported_step`, with Lua 5.1 number semantics.
@@ -1006,6 +1131,10 @@ pub(crate) fn evaluate(
         );
     }
     let subject = |owner: i64| players.iter().position(|p| *p == owner);
+    let fine_two = order
+        .contains(&Phase::PrecisionFineTwo)
+        .then(|| get(Phase::PrecisionFineTwo))
+        .transpose()?;
     for (i, a) in base.iter().enumerate() {
         for phase in [Phase::PrecisionOff, Phase::ReferenceOff] {
             if let Some(kind) = differs(a, &get(phase)?[i]) {
@@ -1013,7 +1142,10 @@ pub(crate) fn evaluate(
             }
         }
         if subject(a.owner).is_none() {
-            for phase in [Phase::PrecisionOne, Phase::PrecisionTwo, Phase::Reference] {
+            let phases = [Phase::PrecisionOne, Phase::PrecisionTwo, Phase::Reference]
+                .into_iter()
+                .chain(fine_two.map(|_| Phase::PrecisionFineTwo));
+            for phase in phases {
                 if let Some(kind) = differs(a, &get(phase)?[i]) {
                     bail!(
                         "diagnostic meter leaked to non-batch city {} {kind}",
@@ -1103,12 +1235,16 @@ pub(crate) fn evaluate(
                 if !(detail.reference.is_finite() && detail.reference > 0.03) {
                     fail(verdict, "reference", kind.key());
                 } else {
-                    detail.step = reported_step(&[
+                    let mut calibration = vec![
                         av,
                         reference[i].yields[slot],
                         one[i].yields[slot],
                         two[i].yields[slot],
-                    ]);
+                    ];
+                    if let Some(rows) = fine_two {
+                        calibration.push(rows[i].yields[slot]);
+                    }
+                    detail.step = reported_step(&calibration);
                     let amount = *amount as f64;
                     detail.tolerance = detail
                         .step
@@ -1894,7 +2030,12 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
     let batch = scenario["batch_probe"]["batch"]
         .as_u64()
         .context("artifact batch identity")? as usize;
-    let probe = Probe::new(repo, batch)?;
+    let refine_resolution = match scenario["batch_probe"]["refine_resolution"].as_bool() {
+        Some(true) => true,
+        None if scenario["batch_probe"]["refine_resolution"].is_null() => false,
+        _ => bail!("invalid resolution refinement metadata"),
+    };
+    let probe = Probe::with_resolution(repo, batch, refine_resolution)?;
     let expected = probe.scenario()?;
     ensure!(
         scenario["diagnostic_only"] == true
@@ -2019,7 +2160,7 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         &probe.cases,
         &expected_civs,
     )?;
-    let order = schedule(probe.cases.len());
+    let order = schedule_for(probe.cases.len(), refine_resolution);
     let mut samples = BTreeMap::new();
     for phase in &order {
         let rows = measured(&details[at(Role::Measure(*phase))?], batch, *phase)?;
@@ -2108,8 +2249,8 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
 
 pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = |batch: usize, path: &str| -> Result<()> {
-        let probe = Probe::new(repo, batch)?;
+    let output = |batch: usize, path: &str, refine_resolution: bool| -> Result<()> {
+        let probe = Probe::with_resolution(repo, batch, refine_resolution)?;
         write_new(Path::new(path), &probe.scenario()?)?;
         println!(
             "batch {batch}: {} yield-only oaths, {} steps; diagnostic only, live unverified",
@@ -2153,11 +2294,18 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
             );
             Ok(())
         }
-        ["--output", path] => output(1, path),
+        ["--output", path] => output(1, path, false),
         ["--batch", batch, "--output", path] => {
-            output(batch.parse().context("batch number")?, path)
+            output(batch.parse().context("batch number")?, path, false)
         }
-        _ => bail!("usage: generate-oath-batch-probes --check | [--batch 1..={BATCHES}] --output NEW.json | --verify ARTIFACT_DIR"),
+        ["--refine-resolution", "--batch", batch, "--output", path] => {
+            output(batch.parse().context("batch number")?, path, true)
+        }
+        ["--refine-resolution", "--output", path] => output(1, path, true),
+        ["--batch", batch, "--refine-resolution", "--output", path] => {
+            output(batch.parse().context("batch number")?, path, true)
+        }
+        _ => bail!("usage: generate-oath-batch-probes --check | [--refine-resolution] [--batch 1..={BATCHES}] --output NEW.json | --verify ARTIFACT_DIR"),
     }
 }
 

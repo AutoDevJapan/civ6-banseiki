@@ -40,6 +40,12 @@ fn meter_outputs() -> Outputs {
                 "JAC_TODO134_FINE_ON".into(),
             ),
             (
+                "FINE_TWO",
+                2,
+                "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_MODIFIER",
+                "JAC_TODO134_FINE_TWO_ON".into(),
+            ),
+            (
                 "SHIFT",
                 1,
                 "MODIFIER_PLAYER_CITIES_ADJUST_CITY_YIELD_CHANGE",
