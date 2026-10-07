@@ -571,54 +571,6 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
-        let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
-        let before = (
-            owned(),
-            PRODUCT_ACTIVE.load(Ordering::Acquire),
-            PRODUCT_SESSION.load(Ordering::Acquire),
-            EPOCH.load(),
-        );
-        for input in [
-            null_mut(),
-            std::ptr::dangling_mut(),
-            usize::MAX as *mut c_void,
-        ] {
-            assert_eq!(
-                BridgeRuntimeInstall(input),
-                BridgeStatus::InvalidInput as u32
-            );
-        }
-        let mut invalid = BridgeConfig::for_production(0, 0, 0);
-        // This export accepts only its explicit version and game-owned trace.
-        assert_eq!(
-            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
-            BridgeStatus::InvalidInput as u32
-        );
-        invalid.version = RUNTIME_CONFIG_VERSION;
-        invalid.trace_size = 0;
-        invalid.max_seconds = 0;
-        assert_eq!(
-            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
-            BridgeStatus::InvalidInput as u32
-        );
-        assert_eq!(
-            (
-                owned(),
-                PRODUCT_ACTIVE.load(Ordering::Acquire),
-                PRODUCT_SESSION.load(Ordering::Acquire),
-                EPOCH.load()
-            ),
-            before
-        );
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeRuntimeStopObservation(_: *mut c_void) -> u32 {
     stop_observation() as u32
@@ -665,4 +617,52 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
     // Each owner enters rebuilding on its own natural reset getter. No
     // controller metadata supplies identity or a publication fence.
     BridgeStatus::Ok as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
+        let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
+        let before = (
+            owned(),
+            PRODUCT_ACTIVE.load(Ordering::Acquire),
+            PRODUCT_SESSION.load(Ordering::Acquire),
+            EPOCH.load(),
+        );
+        for input in [
+            null_mut(),
+            std::ptr::dangling_mut(),
+            usize::MAX as *mut c_void,
+        ] {
+            assert_eq!(
+                BridgeRuntimeInstall(input),
+                BridgeStatus::InvalidInput as u32
+            );
+        }
+        let mut invalid = BridgeConfig::for_production(0, 0, 0);
+        // This export accepts only its explicit version and game-owned trace.
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        invalid.version = RUNTIME_CONFIG_VERSION;
+        invalid.trace_size = 0;
+        invalid.max_seconds = 0;
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        assert_eq!(
+            (
+                owned(),
+                PRODUCT_ACTIVE.load(Ordering::Acquire),
+                PRODUCT_SESSION.load(Ordering::Acquire),
+                EPOCH.load()
+            ),
+            before
+        );
+    }
 }

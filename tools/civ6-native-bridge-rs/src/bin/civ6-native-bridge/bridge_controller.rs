@@ -1002,8 +1002,7 @@ pub fn run() -> Result<(), String> {
             &chain,
             chain_pid,
             target,
-            original,
-            property_original.unwrap(),
+            (original, property_original.unwrap()),
             original_prefix.unwrap(),
         );
     }

@@ -42,6 +42,120 @@ fn property_value(row: &Value) -> bool {
     }
 }
 
+pub fn validate(text: &str, pid: u32, created: u64) -> Result<usize, String> {
+    let mut phase = 0;
+    let mut count = 0;
+    let mut assignment = 0;
+    let mut property = 0;
+    let mut calibration = 0;
+    for line in text.lines() {
+        let row: Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
+        match row["kind"].as_str() {
+            Some("identity") if phase == 0 => {
+                if row["pid"] != pid
+                    || row["created_filetime"] != created
+                    || pid == 0
+                    || created == 0
+                    || row["mode"] != "paid-assignment-experimental"
+                    || row["artifact_schema"] != 1
+                    || row["paid_assignment_experimental"] != true
+                    || row["scope_key_ranges"] != serde_json::json!(KEY_RANGES)
+                    || row["gamecore_sha256"]
+                        != "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c"
+                    || row["assignment_rva"] != 0x2dd880u64
+                    || row["can_ever_rva"] != 0x2dddd0u64
+                    || row["property_rva"] != 0x99f5c0u64
+                {
+                    return Err("experimental identity differs".into());
+                }
+                phase = 1;
+            }
+            Some("install") if phase == 1 && row["status"] == 0 => phase = 2,
+            Some("uninstall")
+                if phase == 2
+                    && row["status"] == 0
+                    && row["entry_restored"] == true
+                    && row["assignment_restored"] == true
+                    && row["prefix_retained_until_exit"] == true =>
+            {
+                phase = 3
+            }
+            Some("property_get") if phase == 3 => {
+                let key = row["key_id"].as_u64().ok_or("property key missing")?;
+                if key == 0
+                    || !KEY_RANGES
+                        .iter()
+                        .any(|r| (r[0] as u64..=r[1] as u64).contains(&key))
+                    || row["sequence"] != property + 1
+                    || !property_value(&row)
+                    || hex(&row["property"]).is_none_or(|p| p == 0 || p & 7 != 0)
+                    || hex(&row["returned"]).is_none()
+                {
+                    return Err("invalid experimental property row".into());
+                }
+                property += 1;
+                count += 1;
+            }
+            Some("calibration") if phase == 3 => {
+                if row["sequence"] != calibration + 1
+                    || row["original_al"].as_u64().is_none_or(|v| v > 255)
+                    || row["effective_al"].as_u64().is_none_or(|v| v > 255)
+                    || row["governor_index"]
+                        .as_u64()
+                        .is_none_or(|v| v > u32::MAX as u64)
+                {
+                    return Err("invalid appointment row".into());
+                }
+                calibration += 1;
+                count += 1;
+            }
+            Some("paid_assignment") if phase == 3 => {
+                let original = hex(&row["original_rax"]).ok_or("missing original RAX")?;
+                let effective = hex(&row["effective_rax"]).ok_or("missing effective RAX")?;
+                if row["sequence"] != assignment + 1
+                    || (effective != original && effective != original & !255)
+                    || row["original_al"] != original & 255
+                    || row["effective_al"] != effective & 255
+                    || row["payment_authority"] != false
+                    || row["observation_only"] != true
+                    || row["player_id"]
+                        .as_u64()
+                        .is_none_or(|v| v > u32::MAX as u64)
+                    || row["governor_index"]
+                        .as_u64()
+                        .is_none_or(|v| v > u32::MAX as u64)
+                {
+                    return Err("invalid paid assignment decision".into());
+                }
+                assignment += 1;
+                count += 1;
+            }
+            Some("stop") if phase == 3 => {
+                let dropped = row["dropped"].as_u64().ok_or("missing dropped count")?;
+                if assignment == 0
+                    || property == 0
+                    || calibration == 0
+                    || row["rows"] != count
+                    || row["observed_calls"] != count as u64 + dropped
+                    || row["result"] != "ok"
+                    || row["classification"] != "paid_assignment_experimental"
+                    || row["in_flight"] != 0
+                    || row["snapshot_stable"] != true
+                    || row["quiescence_proven"] != false
+                {
+                    return Err("incomplete experimental capture".into());
+                }
+                phase = 4;
+            }
+            _ => return Err("unexpected experimental artifact row or lifecycle".into()),
+        }
+    }
+    if phase != 4 {
+        return Err("missing completed experimental capture".into());
+    }
+    Ok(assignment)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,118 +264,4 @@ mod tests {
             "bounded prefix remains valid capture"
         );
     }
-}
-
-pub fn validate(text: &str, pid: u32, created: u64) -> Result<usize, String> {
-    let mut phase = 0;
-    let mut count = 0;
-    let mut assignment = 0;
-    let mut property = 0;
-    let mut calibration = 0;
-    for line in text.lines() {
-        let row: Value = serde_json::from_str(line).map_err(|e| e.to_string())?;
-        match row["kind"].as_str() {
-            Some("identity") if phase == 0 => {
-                if row["pid"] != pid
-                    || row["created_filetime"] != created
-                    || pid == 0
-                    || created == 0
-                    || row["mode"] != "paid-assignment-experimental"
-                    || row["artifact_schema"] != 1
-                    || row["paid_assignment_experimental"] != true
-                    || row["scope_key_ranges"] != serde_json::json!(KEY_RANGES)
-                    || row["gamecore_sha256"]
-                        != "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c"
-                    || row["assignment_rva"] != 0x2dd880u64
-                    || row["can_ever_rva"] != 0x2dddd0u64
-                    || row["property_rva"] != 0x99f5c0u64
-                {
-                    return Err("experimental identity differs".into());
-                }
-                phase = 1;
-            }
-            Some("install") if phase == 1 && row["status"] == 0 => phase = 2,
-            Some("uninstall")
-                if phase == 2
-                    && row["status"] == 0
-                    && row["entry_restored"] == true
-                    && row["assignment_restored"] == true
-                    && row["prefix_retained_until_exit"] == true =>
-            {
-                phase = 3
-            }
-            Some("property_get") if phase == 3 => {
-                let key = row["key_id"].as_u64().ok_or("property key missing")?;
-                if key == 0
-                    || !KEY_RANGES
-                        .iter()
-                        .any(|r| (r[0] as u64..=r[1] as u64).contains(&key))
-                    || row["sequence"] != property + 1
-                    || !property_value(&row)
-                    || hex(&row["property"]).is_none_or(|p| p == 0 || p & 7 != 0)
-                    || hex(&row["returned"]).is_none()
-                {
-                    return Err("invalid experimental property row".into());
-                }
-                property += 1;
-                count += 1;
-            }
-            Some("calibration") if phase == 3 => {
-                if row["sequence"] != calibration + 1
-                    || !row["original_al"].as_u64().is_some_and(|v| v <= 255)
-                    || !row["effective_al"].as_u64().is_some_and(|v| v <= 255)
-                    || !row["governor_index"]
-                        .as_u64()
-                        .is_some_and(|v| v <= u32::MAX as u64)
-                {
-                    return Err("invalid appointment row".into());
-                }
-                calibration += 1;
-                count += 1;
-            }
-            Some("paid_assignment") if phase == 3 => {
-                let original = hex(&row["original_rax"]).ok_or("missing original RAX")?;
-                let effective = hex(&row["effective_rax"]).ok_or("missing effective RAX")?;
-                if row["sequence"] != assignment + 1
-                    || (effective != original && effective != original & !255)
-                    || row["original_al"] != original & 255
-                    || row["effective_al"] != effective & 255
-                    || row["payment_authority"] != false
-                    || row["observation_only"] != true
-                    || !row["player_id"]
-                        .as_u64()
-                        .is_some_and(|v| v <= u32::MAX as u64)
-                    || !row["governor_index"]
-                        .as_u64()
-                        .is_some_and(|v| v <= u32::MAX as u64)
-                {
-                    return Err("invalid paid assignment decision".into());
-                }
-                assignment += 1;
-                count += 1;
-            }
-            Some("stop") if phase == 3 => {
-                let dropped = row["dropped"].as_u64().ok_or("missing dropped count")?;
-                if assignment == 0
-                    || property == 0
-                    || calibration == 0
-                    || row["rows"] != count
-                    || row["observed_calls"] != count as u64 + dropped
-                    || row["result"] != "ok"
-                    || row["classification"] != "paid_assignment_experimental"
-                    || row["in_flight"] != 0
-                    || row["snapshot_stable"] != true
-                    || row["quiescence_proven"] != false
-                {
-                    return Err("incomplete experimental capture".into());
-                }
-                phase = 4;
-            }
-            _ => return Err("unexpected experimental artifact row or lifecycle".into()),
-        }
-    }
-    if phase != 4 {
-        return Err("missing completed experimental capture".into());
-    }
-    Ok(assignment)
 }
