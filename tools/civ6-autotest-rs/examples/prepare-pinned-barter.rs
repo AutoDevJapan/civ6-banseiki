@@ -13,15 +13,20 @@ const HEAD: &str = "5a792461e3ab4bcc0bc393ed5cb75e70fd05f4ff";
 const SCENE_SHA: &str = "99fb9e5f20e897414403434504d0c0e9aad3f546577e5b650bea153dadf1127d";
 const JOB: &str = "20261006-171922-orch-todo-1665";
 const LIVE: &str = "C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live";
-const OUT: &str = "D:/CC/Work/todo1665/20261007-current/pinned-barter-live.json";
+const SALE_SHA: &str = "e84d34a97d4c10406b97dcf4e22716ab788453d282e76b6ccac10a86c9bc43cc";
+fn output_for_hash(hash: &str) -> Result<&'static str, String> {
+    match hash {
+        SCENE_SHA => Ok("D:/CC/Work/todo1665/20261007-current/pinned-barter-live.json"),
+        SALE_SHA => Ok("D:/CC/Work/todo1665/20261007-current/pinned-border-sale-live.json"),
+        _ => Err("scenario differs from reviewed task profiles".into()),
+    }
+}
 static COMMAND_INDEX: AtomicUsize = AtomicUsize::new(0);
 fn check_input(args: &[String], bytes: &[u8]) -> Result<Value, String> {
     if args.len() != 3 || args[0] != "live" || args[1] != BRANCH {
         return Err("only the fixed barter preparation is supported".into());
     }
-    if format!("{:x}", Sha256::digest(bytes)) != SCENE_SHA {
-        return Err("barter scenario differs from the reviewed bytes".into());
-    }
+    output_for_hash(&format!("{:x}", Sha256::digest(bytes)))?;
     let scene: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
     civ6_autotest_rs::scenario::validate_scenario(&scene).map_err(|e| e.to_string())?;
     Ok(scene)
@@ -215,7 +220,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.len() != 3 {
         return Err("expected live fixed-branch reviewed-scenario".into());
     }
-    let mut scene = check_input(&args, &std::fs::read(&args[2])?)?;
+    let bytes = std::fs::read(&args[2])?;
+    let mut scene = check_input(&args, &bytes)?;
+    let output = output_for_hash(&format!("{:x}", Sha256::digest(&bytes)))?;
     let lock_path = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
     let lock: Value = serde_json::from_slice(&std::fs::read(lock_path)?)?;
     check_lock(&lock, &std::env::var("CODEX_JOB_ID")?)?;
@@ -248,7 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     git(&["diff", "--quiet", "HEAD", "--"])?;
     let inventory = extra_inputs()?;
     std::fs::write(
-        "D:/CC/Work/todo1665/20261007-current/pinned-barter-inputs.json",
+        output.replace(".json", "-inputs.json"),
         serde_json::to_vec_pretty(&inventory)?,
     )?;
     let manifest = Path::new(LIVE).join("tools/civ6-autotest-rs/Cargo.toml");
@@ -317,16 +324,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(OUT)?;
+        .open(output)?;
     serde_json::to_writer_pretty(&out, &scene)?;
     out.sync_all()?;
     eprintln!("PINNED GAME {HEAD}; historical-save diagnostic; integration acceptance=false");
-    println!("{OUT}");
+    println!("{output}");
     println!("{}", artifacts.display());
     Ok(())
 }
 #[test]
 fn changed_scenario_and_unowned_chain_are_rejected() {
+    assert_ne!(
+        output_for_hash(SCENE_SHA).unwrap(),
+        output_for_hash(SALE_SHA).unwrap()
+    );
+    assert!(output_for_hash("unknown").is_err());
     assert!(check_input(&["live".into(), BRANCH.into(), "x".into()], b"{}").is_err());
     assert!(check_input(&["live".into(), "main".into(), "x".into()], b"{}").is_err());
     let good = json!({"job":JOB,"live_chain":true,"pid":10,"chain_pid":10,"pid_created_filetime":1,"lock_token":"t"});
