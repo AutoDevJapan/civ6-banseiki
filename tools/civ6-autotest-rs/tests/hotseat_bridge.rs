@@ -633,6 +633,22 @@ fn japan_initial_probe_reads_all_22_majors_and_rejects_roster_or_start_mismatche
     assert_eq!(lua.load(code).eval::<String>().unwrap(), "0|0");
     for (change, expected_error) in [
         (
+            "GameConfiguration.IsHotseat=function() return false end",
+            "active human hotseat turn required",
+        ),
+        (
+            "Game.GetLocalPlayer=function() return 1 end; Players[1].IsTurnActive=function() return true end",
+            "unexpected hotseat player or round",
+        ),
+        (
+            "Game.GetCurrentGameTurn=function() return 1 end",
+            "unexpected hotseat player or round",
+        ),
+        (
+            "Players[0].IsTurnActive=function() return false end",
+            "active human hotseat turn required",
+        ),
+        (
             "Map.GetGridSize=function() return 154,67 end",
             "map grid mismatch",
         ),
