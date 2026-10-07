@@ -108,14 +108,14 @@ impl PromotionSnapshot {
 /// caller found absent from that catalog; unknown or unready catalogs must be
 /// passed as a `Persona` without a snapshot so that they close.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PromotionSubject {
+pub enum PromotionSubject<'a> {
     Standard,
     Persona {
         definition: PaymentDefinition,
         /// Expected owner from the current invocation (Governors+0x70 -> +0xd8).
         owner: u32,
         /// None when the person's own flags could not be read consistently.
-        snapshot: Option<PromotionSnapshot>,
+        snapshot: Option<&'a PromotionSnapshot>,
         /// Synchronized join/evolution admission for this owner and person.
         joined: bool,
     },
@@ -129,7 +129,7 @@ pub enum PromotionSubject {
 /// Not connected to any runtime call site yet.
 pub fn restrict_promotion(
     original: u64,
-    subject: PromotionSubject,
+    subject: PromotionSubject<'_>,
     requested: u32,
     call_current: bool,
 ) -> u64 {
@@ -595,7 +595,7 @@ mod tests {
                             let subject = PromotionSubject::Persona {
                                 definition,
                                 owner: 7,
-                                snapshot: readable.then_some(snapshot),
+                                snapshot: readable.then_some(&snapshot),
                                 joined,
                             };
                             let allowed = joined
@@ -689,7 +689,7 @@ mod tests {
                 let subject = PromotionSubject::Persona {
                     definition,
                     owner: 7,
-                    snapshot: Some(snapshot),
+                    snapshot: Some(&snapshot),
                     joined: true,
                 };
                 assert_eq!(
@@ -708,7 +708,7 @@ mod tests {
                 titles: [None, None],
             },
             owner: 7,
-            snapshot: Some(snapshot),
+            snapshot: Some(&snapshot),
             joined: true,
         };
         assert_eq!(
@@ -716,6 +716,7 @@ mod tests {
             0xffff_ff00
         );
         // An out-of-range owner never matches even if the snapshot says so.
+        let foreign_snapshot = snapshot_with(64, 22, &[10]);
         let foreign = PromotionSubject::Persona {
             definition: PaymentDefinition {
                 governor_index: 22,
@@ -724,7 +725,7 @@ mod tests {
                 titles: [Some(11), None],
             },
             owner: 64,
-            snapshot: Some(snapshot_with(64, 22, &[10])),
+            snapshot: Some(&foreign_snapshot),
             joined: true,
         };
         assert_eq!(
