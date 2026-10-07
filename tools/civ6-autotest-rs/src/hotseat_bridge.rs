@@ -43,8 +43,100 @@ const ORIGINAL_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json");
 const BANSEIKI_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-banseiki-hotseat-growth.json");
+const POOL_MOD_ID: &str = "c8fb8042-8e3e-4b35-b02a-781947194700";
+/// Growth queries whose captured value also carries the pool record.
+pub const POOL_RECORD_STEPS: [usize; 6] = [5, 8, 12, 15, 17, 21];
+const GROWTH_RETURN: &str = "return table.concat(rows,'|')";
+const POOL_LEDGER: &str = include_str!("hotseat_pool/ledger.lua");
+const POOL_FIXED: &str = include_str!("hotseat_pool/fixed.lua");
+const POOL_RANDOM: &str = include_str!("hotseat_pool/random.lua");
+/// Sent once in pregame, only for the registered pool random canonical.
+pub const POOL_RANDOM_PREGAME: &str = include_str!("hotseat_pool/random_pregame.lua");
+pub const POOL_RANDOM_PREGAME_RESULT: &str =
+    "pool random leaders 0=RANDOM,1=RANDOM,2=RANDOM,3=RANDOM";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Canonical {
+    Growth,
+    BanseikiGrowth,
+    Pool,
+    PoolRandom,
+}
+
+const POOL_NAME: &str =
+    "Banseiki pool hotseat bridge: two ledger people of one civilization, growth and saved person records";
+const POOL_RANDOM_NAME: &str =
+    "Banseiki pool hotseat bridge: random leaders for two humans and two AI, growth and saved person records";
+/// Two humans (H040 and O008, both Oda), then the two AI of the random variant.
+const POOL_PLAYERS: &str = r#"[
+  {"civ": "CIVILIZATION_JAC_ODA", "leader": "LEADER_JAC_ODA_NOBUHIDE", "human": true},
+  {"civ": "CIVILIZATION_JAC_ODA", "leader": "LEADER_JAC_POOL_O008", "human": true},
+  {"civ": "CIVILIZATION_JAC_TAKEDA", "leader": "LEADER_JAC_TAKEDA_NOBUTORA", "human": false},
+  {"civ": "CIVILIZATION_JAPAN", "leader": "LEADER_JAC_POOL_H042", "human": false}
+]"#;
+const POOL_RETURN: &str = "return growth..'|JAC_POOL|'..table.concat(poolParts,';')";
+
+/// The pool canonicals are the Banseiki growth template with the pool MOD,
+/// fixed players, and the pool record appended to every growth capture.
+pub fn pool_scenario(random: bool) -> Value {
+    let mut data: Value = serde_json::from_str(BANSEIKI_SCENARIO).unwrap();
+    let (name, variant, count) = if random {
+        (POOL_RANDOM_NAME, POOL_RANDOM, 4)
+    } else {
+        (POOL_NAME, POOL_FIXED, 2)
+    };
+    let mut players: Vec<Value> = serde_json::from_str(POOL_PLAYERS).unwrap();
+    players.truncate(count);
+    data["name"] = name.into();
+    data["steps"][0]["ids"]
+        .as_array_mut()
+        .unwrap()
+        .push(POOL_MOD_ID.into());
+    data["steps"][1]["players"] = players.into();
+    for step in POOL_RECORD_STEPS {
+        let growth = data["steps"][step - 1]["code"]
+            .as_str()
+            .and_then(|code| code.strip_suffix(GROWTH_RETURN))
+            .expect("growth query ends with its record return");
+        let code = format!(
+            "{growth}local growth=table.concat(rows,'|')\n{}\n{}\n{POOL_RETURN}",
+            POOL_LEDGER.trim_end(),
+            variant.trim_end()
+        );
+        data["steps"][step - 1]["code"] = code.into();
+    }
+    data
+}
+
+fn registered() -> [(Canonical, Value); 4] {
+    [
+        (
+            Canonical::Growth,
+            serde_json::from_str(ORIGINAL_SCENARIO).unwrap(),
+        ),
+        (
+            Canonical::BanseikiGrowth,
+            serde_json::from_str(BANSEIKI_SCENARIO).unwrap(),
+        ),
+        (Canonical::Pool, pool_scenario(false)),
+        (Canonical::PoolRandom, pool_scenario(true)),
+    ]
+}
+
+/// The registered pregame helper, if any. Never derived from scenario text.
+pub fn pregame_helper(data: &Value) -> Result<Option<&'static str>> {
+    Ok(if canonical(data)? == Canonical::PoolRandom {
+        Some(POOL_RANDOM_PREGAME)
+    } else {
+        None
+    })
+}
 
 pub fn check_scenario(data: &Value) -> Result<()> {
+    canonical(data).map(|_| ())
+}
+
+pub fn canonical(data: &Value) -> Result<Canonical> {
     scenario::validate_scenario(data)?;
     if data["session_type"] != "hotseat" || data["steps"].as_array().map(Vec::len) != Some(21) {
         return Err(Error::scenario(
@@ -67,8 +159,7 @@ pub fn check_scenario(data: &Value) -> Result<()> {
     {
         return Err(Error::scenario("hotseat save/load pairs changed"));
     }
-    for source in [ORIGINAL_SCENARIO, BANSEIKI_SCENARIO] {
-        let mut expected: Value = serde_json::from_str(source)?;
+    for (kind, mut expected) in registered() {
         if let Some(nonce) = data.get("hotseat_bridge_nonce").and_then(Value::as_str) {
             let ids = data["steps"][0]["ids"]
                 .as_array()
@@ -87,7 +178,7 @@ pub fn check_scenario(data: &Value) -> Result<()> {
             expected["hotseat_bridge_nonce"] = nonce.into();
         }
         if data == &expected {
-            return Ok(());
+            return Ok(kind);
         }
     }
     Err(Error::scenario(

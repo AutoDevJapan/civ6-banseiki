@@ -563,6 +563,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "mod-selection-rollback.json",
                 "banseiki-pool-hotseat.json",
                 "banseiki-pool-single-player.json",
+                "banseiki-pool-bridge.json",
+                "banseiki-pool-random-bridge.json",
                 "reliability-seed.json",
                 "reliability-cycle.json",
             ]

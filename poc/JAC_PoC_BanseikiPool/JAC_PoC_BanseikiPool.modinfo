@@ -30,6 +30,12 @@
 		</Criteria>
 	</ActionCriteria>
 	<InGameActions>
+		<!-- Options also includes SetupParameters while entering/leaving a game. -->
+		<ImportFiles id="JAC_BanseikiPool_InGameSetupFiles" criteria="JAC_BanseikiPool_Ruleset">
+			<File>UI/JAC_PoolSetup.lua</File>
+			<File>UI/JAC_Stock_SetupParameters.lua</File>
+			<File>UI/SetupParameters.lua</File>
+		</ImportFiles>
 		<UpdateDatabase id="JAC_BanseikiPool_Gameplay" criteria="JAC_BanseikiPool_Ruleset">
 			<Properties><LoadOrder>500</LoadOrder></Properties>
 			<File>Data/JAC_BanseikiPool_Gameplay.sql</File>

@@ -1220,6 +1220,16 @@ fn mod_lists_every_file_and_imports_the_shared_frontend_module() {
     ] {
         assert!(imported.contains(file), "{file}");
     }
+    let ingame = modinfo.get_child("InGameActions").unwrap();
+    let ingame_imports: BTreeSet<String> = elements(ingame)
+        .filter(|e| e.name == "ImportFiles")
+        .flat_map(|e| elements(e).filter(|f| f.name == "File"))
+        .map(|e| e.get_text().unwrap().into_owned())
+        .collect();
+    assert!(
+        imported.is_subset(&ingame_imports),
+        "Options includes the same module in-game; aliases must remain available"
+    );
     let wrapper = read(&mod_dir().join("UI/SetupParameters.lua"));
     assert!(
         wrapper
