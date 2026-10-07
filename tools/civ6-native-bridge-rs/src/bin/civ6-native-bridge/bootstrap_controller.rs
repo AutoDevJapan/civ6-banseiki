@@ -140,7 +140,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     } else {
         return Err("bootstrap chain image is not allowlisted".into());
     };
-    verify_lease_for_image(chain_pid, &chain, req.seconds, &chain_path)?;
+    verify_lease_for_image(chain_pid, &chain, req.controller_seconds, &chain_path)?;
     let game = open_process(
         req.pid,
         PROCESS_QUERY_LIMITED_INFORMATION
@@ -248,6 +248,10 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         {
             return Err("prepared trace identity differs".into());
         }
+        // Preparation/injection consumed part of the lease. Recheck the whole
+        // controller budget at its actual start, including the existing
+        // recovery reserve; a runner-side check is not controller authority.
+        verify_lease_for_image(chain_pid, &chain, req.controller_seconds, &chain_path)?;
         writeln!(
             std::io::stdout(),
             "READY pid={} created={} bootstrap=v2 prepared=true runtime_installed=false",
