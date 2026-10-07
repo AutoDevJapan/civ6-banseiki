@@ -19,7 +19,12 @@ INSERT INTO RequirementArguments (RequirementId,Name,Value) SELECT 'JAC_TODO134_
 INSERT INTO RequirementSets (RequirementSetId,RequirementSetType) SELECT 'JAC_TODO134_QCAL_P25_SET',RequirementSetType FROM RequirementSets WHERE RequirementSetId='JAC_TODO134_QCAL_P1_SET';\n\
 INSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_QCAL_P25_SET','JAC_TODO134_QCAL_P25_REQ');\n\
 INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) SELECT 'JAC_TODO134_QCAL_P25',ModifierType,'JAC_TODO134_QCAL_P25_SET' FROM Modifiers WHERE ModifierId='JAC_TODO134_QCAL_P1';\n\
-INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_P25','Amount','25');\n"
+INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_P25','Amount','25');\n\
+-- Official BlackDeathScenario FEALTY uses EFFECT_ADJUST_UNIT_PRODUCTION with UnitType/Amount.\n\
+-- These independent modifiers are attached only by the unit-type diagnostic.\n\
+INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) SELECT REPLACE(ModifierId,'QCAL_P','QCAL_UNIT_P'),'MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION',SubjectRequirementSetId FROM Modifiers WHERE ModifierId IN ('JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15');\n\
+INSERT INTO ModifierArguments (ModifierId,Name,Value) SELECT REPLACE(ModifierId,'QCAL_P','QCAL_UNIT_P'),Name,Value FROM ModifierArguments WHERE ModifierId IN ('JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15');\n\
+INSERT INTO ModifierArguments (ModifierId,Name,Value) SELECT ModifierId,'UnitType','UNIT_SPEARMAN' FROM Modifiers WHERE ModifierId IN ('JAC_TODO134_QCAL_UNIT_P100','JAC_TODO134_QCAL_UNIT_P1','JAC_TODO134_QCAL_UNIT_P15');\n"
 }
 
 const SETUP: &str = r#"
@@ -302,6 +307,29 @@ pub(super) fn scenario(base: &Value) -> Result<Value> {
 
 pub(super) fn quarter_control_scenario(base: &Value) -> Result<Value> {
     scenario_with_control(base, 25)
+}
+
+pub(super) fn unit_type_control_scenario(base: &Value) -> Result<Value> {
+    let mut data = scenario_with_control(base, 1)?;
+    let steps = data["steps"].as_array_mut().context("calibration steps")?;
+    // Replace only attachment IDs, keeping the original phase flags and observations.
+    // Never attach both families: that would double the measured effect.
+    let setup = steps
+        .iter_mut()
+        .find(|step| {
+            step["code"]
+                .as_str()
+                .is_some_and(|code| code.ends_with(SETUP))
+        })
+        .context("calibration setup step")?;
+    let code = SETUP.replace(
+        "'JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15','JAC_TODO134_QCAL_P25'",
+        "'JAC_TODO134_QCAL_UNIT_P100','JAC_TODO134_QCAL_UNIT_P1','JAC_TODO134_QCAL_UNIT_P15'",
+    );
+    *setup = ui("GameCore_Tuner", code);
+    data["name"] = json!("ユニット種別の生産補正を軍事全体の補正と同じ38手番で比較する診断");
+    data["modifier_family"] = json!("MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION");
+    Ok(data)
 }
 
 fn compare_code(control: i64) -> String {

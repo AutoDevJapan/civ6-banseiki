@@ -3,6 +3,7 @@
   "capability_scenario": "tools/civ6-autotest/scenarios/oath-effects/capabilities.json",
   "queue_calibration_scenario": "tools/civ6-autotest/scenarios/oath-effects/queue-calibration.json",
   "queue_quarter_control_scenario": "tools/civ6-autotest/scenarios/oath-effects/queue-quarter-control.json",
+  "queue_unit_type_control_scenario": "tools/civ6-autotest/scenarios/oath-effects/queue-unit-type-control.json",
   "oath_count": 66,
   "house_count": 22,
   "max_turns": 16,

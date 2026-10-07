@@ -120,33 +120,40 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
         .iter()
         .all(|s| s.get("turns").is_none()));
     expected.insert(capability.to_owned());
-    let calibration = inventory["queue_calibration_scenario"]
-        .as_str()
-        .expect("separate military calibration diagnosis");
-    let data = load(calibration);
-    validate_scenario(&data).expect("calibration driver schema");
-    assert_eq!(data["diagnostic_only"], true);
-    assert_eq!(data["finite_turns"], 38);
-    assert_eq!(
-        data["steps"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter_map(|s| s["code"].as_str())
-            .filter(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,"))
-            .count(),
-        38
-    );
-    expected.insert(calibration.to_owned());
-    let quarter = inventory["queue_quarter_control_scenario"]
-        .as_str()
-        .expect("independent quarter control");
-    let data = load(quarter);
-    validate_scenario(&data).expect("quarter-control driver schema");
-    assert_eq!(data["diagnostic_only"], true);
-    assert_eq!(data["control_percent"], 25);
-    assert_eq!(data["finite_turns"], 38);
-    expected.insert(quarter.to_owned());
+    for (key, control) in [
+        ("queue_calibration_scenario", 1),
+        ("queue_quarter_control_scenario", 25),
+        ("queue_unit_type_control_scenario", 1),
+    ] {
+        let path = inventory[key]
+            .as_str()
+            .expect("independent calibration diagnosis");
+        let data = load(path);
+        validate_scenario(&data).unwrap_or_else(|error| panic!("{path}: {error}"));
+        assert_eq!(data["diagnostic_only"], true);
+        assert_eq!(data["control_percent"], control);
+        assert_eq!(data["finite_turns"], 38);
+        assert_eq!(
+            data["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|s| s["code"].as_str())
+                .filter(|c| c.contains("UI.RequestAction(ActionTypes.ACTION_ENDTURN,"))
+                .count(),
+            38
+        );
+        if key == "queue_unit_type_control_scenario" {
+            assert_eq!(
+                data["modifier_family"],
+                "MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION"
+            );
+        }
+        assert!(
+            expected.insert(path.to_owned()),
+            "duplicate diagnostic: {path}"
+        );
+    }
     let actual: BTreeSet<_> =
         std::fs::read_dir(root.join("tools/civ6-autotest/scenarios/oath-effects"))
             .expect("scenario directory")

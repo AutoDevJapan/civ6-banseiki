@@ -169,3 +169,8 @@ INSERT INTO RequirementSets (RequirementSetId,RequirementSetType) SELECT 'JAC_TO
 INSERT INTO RequirementSetRequirements (RequirementSetId,RequirementId) VALUES ('JAC_TODO134_QCAL_P25_SET','JAC_TODO134_QCAL_P25_REQ');
 INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) SELECT 'JAC_TODO134_QCAL_P25',ModifierType,'JAC_TODO134_QCAL_P25_SET' FROM Modifiers WHERE ModifierId='JAC_TODO134_QCAL_P1';
 INSERT INTO ModifierArguments (ModifierId,Name,Value) VALUES ('JAC_TODO134_QCAL_P25','Amount','25');
+-- Official BlackDeathScenario FEALTY uses EFFECT_ADJUST_UNIT_PRODUCTION with UnitType/Amount.
+-- These independent modifiers are attached only by the unit-type diagnostic.
+INSERT INTO Modifiers (ModifierId,ModifierType,SubjectRequirementSetId) SELECT REPLACE(ModifierId,'QCAL_P','QCAL_UNIT_P'),'MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION',SubjectRequirementSetId FROM Modifiers WHERE ModifierId IN ('JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15');
+INSERT INTO ModifierArguments (ModifierId,Name,Value) SELECT REPLACE(ModifierId,'QCAL_P','QCAL_UNIT_P'),Name,Value FROM ModifierArguments WHERE ModifierId IN ('JAC_TODO134_QCAL_P100','JAC_TODO134_QCAL_P1','JAC_TODO134_QCAL_P15');
+INSERT INTO ModifierArguments (ModifierId,Name,Value) SELECT ModifierId,'UnitType','UNIT_SPEARMAN' FROM Modifiers WHERE ModifierId IN ('JAC_TODO134_QCAL_UNIT_P100','JAC_TODO134_QCAL_UNIT_P1','JAC_TODO134_QCAL_UNIT_P15');

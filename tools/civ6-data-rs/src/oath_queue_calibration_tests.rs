@@ -48,16 +48,17 @@ if mode=='completion' then JAC_QUEUE_CAL.samples[38].after=131072 end
 
 #[test]
 fn core_publishes_identity_and_ui_requests_without_a_property_setter() -> Result<()> {
-    for mutation in [
-        "",
-        "owner=1",
-        "cost=110000",
-        "can_start=false",
-        "props.JAC_TODO134_QCAL_ID.city=99",
-    ] {
-        let vm = Lua::new();
-        vm.load(r#"
-props={}; flags={}; requests=0; owner=0; cost=131072; can_start=true
+    for unit_type in [false, true] {
+        for mutation in [
+            "",
+            "owner=1",
+            "cost=110000",
+            "can_start=false",
+            "props.JAC_TODO134_QCAL_ID.city=99",
+        ] {
+            let vm = Lua::new();
+            vm.load(r#"
+props={}; flags={}; attached={}; requests=0; owner=0; cost=131072; can_start=true
 Game={GetLocalPlayer=function()return 0 end, GetProperty=function(_,key)return props[key] end,
  SetProperty=function(_,key,value)props[key]=value end}
 GameConfiguration={GetValue=function(key)return key=='JAC_TODO134_QUEUE_CALIBRATION' and 1 or 0 end}
@@ -70,30 +71,49 @@ local city={GetID=function()return 3 end,GetOwner=function()return owner end,Get
 local cities={Members=function()local once=false;return function()if not once then once=true;return 3,city end end end,
  FindID=function(_,id)if id==3 then return city end end}
 Players={[0]={IsHuman=function()return true end,IsTurnActive=function()return true end,
- GetCities=function()return cities end,AttachModifierByID=function()end}}
+ GetCities=function()return cities end,AttachModifierByID=function(_,id)attached[id]=true end}}
 CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,VALUE_REPLACE_AT=3,PARAM_QUEUE_DESTINATION_LOCATION=4,BUILD=5}
 CityManager={CanStartOperation=function()return can_start end,RequestOperation=function(c,op,params)
  assert(c==city and op==5 and params[1]==123);requests=requests+1 end}
 "#).exec()?;
-        vm.load(format!("{LUA_HELPERS}\n{SETUP}"))
-            .eval::<String>()?;
-        assert_eq!(
-            vm.load("return props.JAC_TODO134_QCAL_ID.city")
-                .eval::<i64>()?,
-            3
-        );
-        // InGame exposes GetProperty but not Game.SetProperty.
-        vm.load("Game.SetProperty=nil").exec()?;
-        vm.load(mutation).exec()?;
-        let result = vm
-            .load(format!("{LUA_HELPERS}\n{REQUEST}"))
-            .eval::<String>();
-        if mutation.is_empty() {
-            assert!(result.is_ok(), "{result:?}");
-            assert_eq!(vm.load("return requests").eval::<i64>()?, 1);
-        } else {
-            assert!(result.is_err(), "{mutation}");
-            assert_eq!(vm.load("return requests").eval::<i64>()?, 0);
+            if unit_type {
+                let scenario = unit_type_control_scenario(
+                    &Repository::checked_in().json(super::super::BASE)?,
+                )?;
+                let code = scenario["steps"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|step| step["code"].as_str())
+                    .find(|code| {
+                        code.contains("calibration-only military modifiers attached but off")
+                    })
+                    .expect("generated setup exists");
+                vm.load(code).eval::<String>()?;
+                vm.load("assert(attached.JAC_TODO134_QCAL_UNIT_P100 and attached.JAC_TODO134_QCAL_UNIT_P1 and attached.JAC_TODO134_QCAL_UNIT_P15); assert(not attached.JAC_TODO134_QCAL_P100 and not attached.JAC_TODO134_QCAL_P1 and not attached.JAC_TODO134_QCAL_P15 and not attached.JAC_TODO134_QCAL_P25); assert(flags.JAC_TODO134_QCAL_P15_ON==0)").exec()?;
+            } else {
+                vm.load(format!("{LUA_HELPERS}\n{SETUP}"))
+                    .eval::<String>()?;
+                vm.load("assert(attached.JAC_TODO134_QCAL_P15 and not attached.JAC_TODO134_QCAL_UNIT_P15)").exec()?;
+            }
+            assert_eq!(
+                vm.load("return props.JAC_TODO134_QCAL_ID.city")
+                    .eval::<i64>()?,
+                3
+            );
+            // InGame exposes GetProperty but not Game.SetProperty.
+            vm.load("Game.SetProperty=nil").exec()?;
+            vm.load(mutation).exec()?;
+            let result = vm
+                .load(format!("{LUA_HELPERS}\n{REQUEST}"))
+                .eval::<String>();
+            if mutation.is_empty() {
+                assert!(result.is_ok(), "{result:?}");
+                assert_eq!(vm.load("return requests").eval::<i64>()?, 1);
+            } else {
+                assert!(result.is_err(), "{mutation}");
+                assert_eq!(vm.load("return requests").eval::<i64>()?, 0);
+            }
         }
     }
     Ok(())
@@ -318,6 +338,36 @@ fn generated_quarter_control_retains_all_native_requests_and_has_no_placeholders
         }
     }
     assert_eq!(quarter_on, 4);
+    Ok(())
+}
+
+#[test]
+fn unit_type_control_changes_only_attachment_and_keeps_strict_verdict() -> Result<()> {
+    let base = Repository::checked_in().json(super::super::BASE)?;
+    let original = scenario(&base)?;
+    let control = unit_type_control_scenario(&base)?;
+    assert_eq!(control["diagnostic_only"], true);
+    assert_eq!(control["finite_turns"], 38);
+    let mut changed = 0;
+    for (old, new) in original["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(control["steps"].as_array().unwrap())
+    {
+        if old != new {
+            changed += 1;
+            assert!(new["code"].as_str().unwrap().contains("QCAL_UNIT_P15"));
+        }
+        if let Some(code) = new["code"].as_str() {
+            Lua::new().load(code).into_function()?;
+        }
+    }
+    assert_eq!(changed, 1);
+    assert_eq!(
+        original["steps"].as_array().unwrap().len(),
+        control["steps"].as_array().unwrap().len()
+    );
     Ok(())
 }
 
