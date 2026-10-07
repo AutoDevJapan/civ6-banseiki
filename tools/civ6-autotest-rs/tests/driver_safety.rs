@@ -131,7 +131,9 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
 
 #[test]
 fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
-    for reached_ingame in [true, false] {
+    for (reached_ingame, log_writable) in
+        [(true, true), (true, false), (false, true), (false, false)]
+    {
         let f = Fixture::new();
         let mut backend = f.backend();
         backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
@@ -147,6 +149,9 @@ fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
             }
         });
         let mut runner = f.direct_runner(json!({}), backend);
+        if !log_writable {
+            fs::create_dir(f.output.join("steps.jsonl")).unwrap();
+        }
         ready(&f, &mut runner);
         let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
         if reached_ingame {

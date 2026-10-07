@@ -1450,7 +1450,9 @@ impl Runner {
                             // Observe InGame; never replay the accepted Begin Game.
                             begin_unknown = true;
                             last = format!("Begin Game response unknown; observing InGame: {e}");
-                            self.log("loadscreen_begin", "UNKNOWN", &last)?;
+                            if let Err(log_error) = self.log("loadscreen_begin", "UNKNOWN", &last) {
+                                eprintln!("{last}; writing transition log failed: {log_error}");
+                            }
                         }
                         Err(e) => return Err(e),
                     }
