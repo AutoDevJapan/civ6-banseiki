@@ -149,6 +149,31 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
         None
     };
     let outcome = close_civ6_outcome(r, p)?;
+    let auto_state = p.here.join("reliability-auto-state.json");
+    if auto_state.is_file() {
+        let helper = p
+            .live()
+            .join("tools/target/release/civ6-save-isolation.exe");
+        let out = r.run(
+            Call::new(args(&[
+                &path(helper),
+                "--restore",
+                "--state",
+                &path(auto_state),
+            ]))
+            .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+            .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+            .managed()
+            .timeout(30.0),
+        )?;
+        if out.code != 0 {
+            return Err(format!(
+                "owner autosave recovery failed: {} {}",
+                out.stdout, out.stderr
+            ));
+        }
+        r.print("AUTOSAVE original folder restored; test autosaves retained with artifacts")?;
+    }
     r.print(&format!("CIV6_CLOSE outcome={outcome}"))?;
     if outcome != "absent" {
         if let Some(offset) = offset {
@@ -1290,6 +1315,40 @@ fn main_owned(
             .managed()
             .timeout(timeout);
         command.lease = lease.clone();
+        if options.reliability
+            && p.live()
+                .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs")
+                .is_file()
+        {
+            let auto = p
+                .live()
+                .join("tools/target/release/civ6-save-isolation.exe");
+            let state = p.here.join("reliability-auto-state.json");
+            let archive = Path::new(&artifacts)
+                .parent()
+                .ok_or("reliability artifact parent missing")?;
+            let out = r.run(
+                Call::new(args(&[
+                    &path(auto),
+                    "--begin",
+                    "--state",
+                    &path(state),
+                    "--archive",
+                    &path(archive),
+                ]))
+                .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                .managed()
+                .timeout(30.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "owner autosave isolation failed: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+            r.print("AUTOSAVE isolated: original files will not be overwritten")?;
+        }
         let driver_started = r.monotonic();
         *game_closed = false;
         let execution = r.run(command);

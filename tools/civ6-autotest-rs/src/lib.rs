@@ -11,6 +11,7 @@ pub mod metrics;
 pub mod reliability;
 pub mod restart;
 pub mod runner;
+pub mod save_isolation;
 pub mod scenario;
 pub mod session;
 pub mod startup;
