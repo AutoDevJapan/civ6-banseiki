@@ -41,6 +41,12 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
         "--task-type",
         "review",
     ])))?;
+    if out.code != 0 {
+        return Err(format!(
+            "review launch failed (exit {}): {} {}",
+            out.code, out.stdout, out.stderr
+        ));
+    }
     r.print(
         &out.stdout
             .trim()
@@ -70,8 +76,14 @@ pub fn merge_cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, St
         "--jq",
         ".html_url",
     ])))?;
+    if out.code != 0 {
+        return Err(format!(
+            "review comment failed (exit {}): {} {}",
+            out.code, out.stdout, out.stderr
+        ));
+    }
     r.print(out.stdout.trim())?;
-    r.run(Call::new(args(&[
+    let ready = r.run(Call::new(args(&[
         "gh",
         "pr",
         "ready",
@@ -79,6 +91,12 @@ pub fn merge_cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, St
         "-R",
         ship::REPO,
     ])))?;
+    if ready.code != 0 {
+        return Err(format!(
+            "mark PR ready failed (exit {}): {} {}",
+            ready.code, ready.stdout, ready.stderr
+        ));
+    }
     let out = r.run(Call::new(args(&[
         "gh",
         "pr",
@@ -88,6 +106,12 @@ pub fn merge_cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, St
         ship::REPO,
         "--squash",
     ])))?;
+    if out.code != 0 {
+        return Err(format!(
+            "PR merge failed (exit {}): {} {}",
+            out.code, out.stdout, out.stderr
+        ));
+    }
     r.print(&if out.code == 0 {
         "merged".into()
     } else {
