@@ -18,9 +18,13 @@ pub fn failure_boundary(step: Option<&Value>, index: Option<usize>, error: &Erro
         "ui_lua" | "wait_for" => "scenario_assertion",
         _ => action,
     };
-    json!({"stage":stage,"action":action,"step":index.map(|i| i + 1),
+    let mut boundary = json!({"stage":stage,"action":action,"step":index.map(|i| i + 1),
         "error_kind":format!("{:?}",error.kind),"message":error.message,
-        "automatic_replay":false})
+        "automatic_replay":false});
+    if let Some(context) = step.and_then(|s| s.get("repeat_until")) {
+        boundary["repeat_until"] = context.clone();
+    }
+    boundary
 }
 
 #[cfg(test)]

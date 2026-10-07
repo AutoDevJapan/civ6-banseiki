@@ -1037,7 +1037,10 @@ local gold=v.Deposit.Gold+10000;local faith=v.Deposit.Faith+10000
 Players[t.To]:GetTreasury():ChangeGoldBalance(gold-Players[t.To]:GetTreasury():GetGoldBalance())
 Players[t.To]:GetReligion():ChangeFaithBalance(faith-A.PlayerFaithBalance(t.To))
 local influence=Players[t.To]:GetInfluence()
-local pool=math.max(32,v.Envoys.Required+4)
+-- Native territory continues growing while AI sends at most one envoy per
+-- turn. Supply the bounded continuation once, without changing received
+-- envoys, territory or the product's live qualification threshold.
+local pool=math.max(72,v.Envoys.Required+68)
 influence:ChangeTokensToGive(pool-influence:GetTokensToGive())
 assert(influence:GetTokensToGive()==pool,'actual unassigned pool was not prepared')
 Unregistered()
@@ -1211,6 +1214,10 @@ if pair then
 end
 t.BeforeQualification=CurrencyOrigin(Snapshot())
 Game:SetProperty(KEY,t)
+local view=P.Get(t.From,t.To)
+print('[JAC_OFFICIAL_QUALIFICATION] turn='..t.BeforeQualification.Turn..' status='..tostring(view.Status)..
+  ' received='..tostring(view.Envoys and view.Envoys.Envoys)..' required='..tostring(view.Envoys and view.Envoys.Required)..
+  ' pool='..t.BeforeQualification.Pool..' error='..tostring(view.Error))
 return 'natural qualification turn inspected: at most one official envoy per recipient and real non-deposit prerequisites for AI registration'
 "#;
 
@@ -1387,19 +1394,22 @@ return v.Status=='AVAILABLE'
     advance(&mut steps);
     steps.push(ui(CURRENCY_WATCH));
     steps.push(core(SECOND_SEND));
-    for index in 0..10 {
-        advance(&mut steps);
-        steps.push(core(QUALIFICATION_TURN));
-        observe_pending(&mut steps);
-        if index == 0 {
-            round_trip(&mut steps, "JAC-official-product-ai-pending");
-            // Core restores only detached read evidence; UI still obtains
-            // actors from official configuration and never reads properties.
-            steps.push(core("ExposedMembers.JAC_OfficialProductCurrencySnapshots=R.Copy(assert(t.CurrencyHistory));return 'restore saved native observation history'"));
-            steps.push(ui(CURRENCY_WATCH));
-            steps.push(core(RESTORE_OBSERVATION));
-        }
-    }
+    advance(&mut steps);
+    steps.push(core(QUALIFICATION_TURN));
+    observe_pending(&mut steps);
+    round_trip(&mut steps, "JAC-official-product-ai-pending");
+    // Core restores only detached read evidence; UI still obtains actors
+    // from official configuration and never reads properties.
+    steps.push(core("ExposedMembers.JAC_OfficialProductCurrencySnapshots=R.Copy(assert(t.CurrencyHistory));return 'restore saved native observation history'"));
+    steps.push(ui(CURRENCY_WATCH));
+    steps.push(core(RESTORE_OBSERVATION));
+    let mut qualification_steps = Vec::new();
+    advance(&mut qualification_steps);
+    qualification_steps.push(core(QUALIFICATION_TURN));
+    observe_pending(&mut qualification_steps);
+    steps.push(json!({"action":"repeat_until","max_iterations":64,"timeout":1200,
+        "condition":{"type":"lua","state_name":"InGame","code":format!("{UI_ACTORS}\nif not from or not to or not ExposedMembers.JAC_AbsorptionProduct then return false end;local v=ExposedMembers.JAC_AbsorptionProduct.Get(from,to);return v~=nil and v.Status=='STARTED'")},
+        "steps":qualification_steps}));
     steps.push(wait("if not from or not to or not ExposedMembers.JAC_AbsorptionProduct then return false end;local v=ExposedMembers.JAC_AbsorptionProduct.Get(from,to);return v and v.Status=='STARTED'"));
     steps.push(core(QUALIFIED));
     steps.push(ui("Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback);JAC_OfficialProductCurrencyCallback=nil;ExposedMembers.JAC_OfficialProductCurrencySnapshots=nil;return 'native currency snapshot observer removed after verified debit'"));
@@ -3896,7 +3906,24 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
             }
         }
         assert_eq!(trips, 3);
-        assert_eq!(turns, 13); // one native founding turn, two measured sends, ten qualification turns
+        assert_eq!(turns, 4); // founding, two measured sends, pending round trip
+        let repeat: Vec<_> = steps
+            .iter()
+            .filter(|s| s["action"] == "repeat_until")
+            .collect();
+        assert_eq!(repeat.len(), 1);
+        assert_eq!(repeat[0]["max_iterations"], 64);
+        assert_eq!(repeat[0]["steps"][0]["action"], "end_turn");
+        assert_eq!(repeat[0]["steps"][0]["turns"], 1);
+        assert_eq!(repeat[0]["steps"][1]["action"], "wait_for");
+        assert!(repeat[0]["steps"][2]["code"]
+            .as_str()
+            .unwrap()
+            .contains(QUALIFICATION_TURN));
+        assert!(repeat[0]["steps"][4]["condition"]["code"]
+            .as_str()
+            .unwrap()
+            .contains(OBSERVE_PENDING));
         let rendered = serde_json::to_string(&scene)?;
         assert!(!rendered.contains("test_mode"));
         assert!(rendered.contains("qualified original evidence"));

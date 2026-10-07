@@ -412,6 +412,7 @@ pub struct Runner {
     pub result_checks: Vec<judge::Check>,
     pub failure: Option<String>,
     failure_boundary: Option<Value>,
+    stop_on_unknown_wait: bool,
     pub lua_captures: BTreeMap<String, String>,
     pub carrier_captures: BTreeMap<String, crate::carrier_sync::Checkpoint>,
     pub ruleset: Option<String>,
@@ -463,6 +464,7 @@ impl Runner {
             result_checks: vec![],
             failure: None,
             failure_boundary: None,
+            stop_on_unknown_wait: false,
             lua_captures: BTreeMap::new(),
             carrier_captures: BTreeMap::new(),
             ruleset: None,
@@ -649,6 +651,9 @@ impl Runner {
                 Ok(false) => {}
                 Err(e) if e.kind == ErrorKind::LuaExecution => return Err(e),
                 Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                    if self.stop_on_unknown_wait {
+                        return Err(e);
+                    }
                     if !self.unblock_ingame(text(condition, "state_name"), end, unblocked)? {
                         return Err(e);
                     }
@@ -2091,6 +2096,7 @@ impl Runner {
                 }
                 Ok(results.join("; "))
             }
+            "repeat_until" => self.repeat_until(step, deadline),
             "carrier_exchange" => {
                 let token = text(step, "token");
                 let candidate = text(step, "candidate");
@@ -2332,6 +2338,81 @@ impl Runner {
             ));
         }
         Ok(target.display().to_string())
+    }
+    fn repeat_until(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        scenario::validate_repeat_step(&self.scenario, step)?;
+        self.stop_on_unknown_wait = true;
+        let result = self.repeat_until_inner(step, deadline);
+        self.stop_on_unknown_wait = false;
+        result
+    }
+    fn repeat_until_inner(&mut self, step: &Value, deadline: f64) -> Result<String> {
+        let limit = step["max_iterations"].as_u64().unwrap();
+        let condition = &step["condition"];
+        for completed in 0..=limit {
+            let value = self.lua(
+                text(condition, "state_name"),
+                text(condition, "code"),
+                self.budget(deadline, 5.0)?,
+            )?;
+            self.remaining(deadline)?;
+            self.log(
+                "repeat_until_condition",
+                "OK",
+                &format!("iterations={completed} value={value}"),
+            )?;
+            match value.as_str() {
+                "true" => return Ok(format!("condition met after {completed} iterations")),
+                "false" => {}
+                _ => {
+                    return Err(Error::scenario(format!(
+                        "repeat_until condition must return a boolean; got {value}"
+                    )))
+                }
+            }
+            if completed == limit {
+                break;
+            }
+            for (index, child) in step["steps"].as_array().unwrap().iter().enumerate() {
+                let action = format!(
+                    "repeat_until iteration={} child={} {}",
+                    completed + 1,
+                    index + 1,
+                    text(child, "action")
+                );
+                self.log(&action, "START", &serde_json::to_string(child)?)?;
+                let mut bounded = child.clone();
+                bounded["timeout"] = child["timeout"]
+                    .as_f64()
+                    .unwrap_or(120.0)
+                    .min(self.remaining(deadline)?)
+                    .into();
+                if child["action"] != "wait_for" {
+                    self.log_step_baseline = Some(judge::snapshot_logs(&self.logs)?);
+                    self.log_matches_consumed.clear();
+                }
+                match self.run_step(&bounded) {
+                    Ok(detail) => {
+                        self.remaining(deadline)?;
+                        self.log(&action, "OK", &detail)?;
+                    }
+                    Err(error) => {
+                        if let Err(log_error) = self.log(&action, "FAIL", &error.to_string()) {
+                            eprintln!("Original failure: {error}; writing repeated step log failed: {log_error}");
+                        }
+                        // Preserve the child failure and its error kind. An unknown
+                        // mutating reply never advances or replays this sequence.
+                        let mut failed = child.clone();
+                        failed["repeat_until"] = json!({"iteration":completed + 1,"child":index + 1,"parent_step":self.completed_steps + 1});
+                        self.record_failure(Some(&failed), None, &error);
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        Err(Error::scenario(format!(
+            "repeat_until exhausted {limit} iterations; condition remained false"
+        )))
     }
     fn load_step(&mut self, step: &Value, timeout: f64, deadline: f64) -> Result<String> {
         let name = self.save_name(step)?;

@@ -5,13 +5,14 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 17] = [
+pub const ACTIONS: [&str; 18] = [
     "restart_game",
     "enable_mods",
     "configure",
     "start_game",
     "autoplay",
     "end_turn",
+    "repeat_until",
     "choose_dedication",
     "ui_lua",
     "carrier_checkpoint",
@@ -267,6 +268,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
+            "repeat_until" => {
+                validate_repeat_step(data, step).map_err(|e| fail(e.to_string()))?;
+            }
             "choose_dedication" => {
                 if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
                     return Err(fail(
@@ -406,6 +410,71 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             .is_some_and(|v| !v.as_f64().is_some_and(|n| n.is_finite() && n > 0.0))
         {
             return Err(fail("timeout must be a finite positive number".into()));
+        }
+    }
+    Ok(())
+}
+/// Repetition is finite and cannot contain another loop or frontend transition.
+/// Embedded Lua is compiled by Lua 5.1 during preflight, without executing it.
+pub fn validate_repeat_step(data: &Value, step: &Value) -> Result<()> {
+    if !step["max_iterations"]
+        .as_u64()
+        .is_some_and(|n| (1..=64).contains(&n))
+    {
+        return Err(Error::scenario(
+            "repeat_until max_iterations must be an integer from 1 to 64",
+        ));
+    }
+    let children = step["steps"]
+        .as_array()
+        .filter(|s| !s.is_empty() && s.len() <= 16)
+        .ok_or_else(|| Error::scenario("repeat_until needs 1 to 16 steps"))?;
+    if children.len() < 2
+        || children[0]["action"] != "end_turn"
+        || children[0]["turns"] != 1
+        || children[0].get("test_turns").is_some_and(|v| v != 1)
+        || children[1]["action"] != "wait_for"
+        || children.iter().skip(1).any(|s| s["action"] == "end_turn")
+    {
+        return Err(Error::scenario(
+            "repeat_until starts with exactly one end_turn(turns=1) followed by wait_for",
+        ));
+    }
+    for child in children {
+        if !matches!(
+            child["action"].as_str(),
+            Some("end_turn" | "wait_for" | "ui_lua")
+        ) || child.get("capture_as").is_some()
+            || child.get("equals_capture").is_some()
+        {
+            return Err(Error::scenario(
+                "repeat_until only accepts end_turn, wait_for and ui_lua without captures",
+            ));
+        }
+    }
+    if step["condition"]["type"] != "lua" || step["condition"].get("equals").is_some() {
+        return Err(Error::scenario(
+            "repeat_until needs a Lua condition returning a boolean",
+        ));
+    }
+    let mut validation = data.clone();
+    let mut steps = children.clone();
+    steps.push(json!({"action":"wait_for","condition":step["condition"]}));
+    validation["steps"] = steps.into();
+    validate_scenario(&validation)?;
+    let lua = mlua::Lua::new();
+    for child in validation["steps"].as_array().unwrap() {
+        let code = if child["action"] == "ui_lua" {
+            child["code"].as_str()
+        } else if child["action"] == "wait_for" && child["condition"]["type"] == "lua" {
+            child["condition"]["code"].as_str()
+        } else {
+            None
+        };
+        if let Some(code) = code {
+            lua.load(code)
+                .into_function()
+                .map_err(|e| Error::scenario(format!("repeat_until Lua 5.1 syntax: {e}")))?;
         }
     }
     Ok(())

@@ -19,6 +19,7 @@ uuid = { version = "1", features = ["v4"] }
 ctrlc = "3"
 caseless = "0.2.2"
 png = "0.18"
+mlua = { version = "0.11", features = ["lua51", "vendored"] }
 
 [build-dependencies]
 roxmltree = "0.21"
@@ -29,5 +30,4 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 [dev-dependencies]
 civ6-reports-rs = { path = "../civ6-reports-rs" }
 tempfile = "3"
-mlua = { version = "0.11", features = ["lua51", "vendored"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
