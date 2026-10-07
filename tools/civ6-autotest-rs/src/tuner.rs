@@ -300,7 +300,11 @@ impl TunerClient {
                 )));
             }
             let frame = recv_frame(self.socket()?, Some(deadline))?;
-            if frame.payload.is_empty()
+            // The second header word is the reply listener, not a message
+            // type. SDK Connection.RouteMessages sends unsolicited L/O
+            // updates to listener 0, separately from our query listener 4.
+            if frame.tag != HANDSHAKE
+                || frame.payload.is_empty()
                 || frame.payload.starts_with("O ")
                 || frame.payload.starts_with("O\0")
             {

@@ -44,6 +44,15 @@ impl FakeTuner {
                     if noisy_queries {
                         send_split(&mut connection, HANDSHAKE, "");
                         send_split(&mut connection, COMMAND, "O unsolicited game output");
+                        // SDK Connection.DefaultRequestHandler routes listener 0
+                        // state notifications separately from the query listener.
+                        send_split(&mut connection, 0, "L\0");
+                        send_split(
+                            &mut connection,
+                            0,
+                            "L\x000\x00JoiningRoom\x0017\x00LoadScreen",
+                        );
+                        send_split(&mut connection, COMMAND, "unrelated query reply");
                     }
                     let answer = if payload == "APP:" {
                         "Civilization VI"
@@ -115,6 +124,60 @@ fn tcp_pair() -> (TcpStream, TcpStream) {
 }
 
 const NAMED_STATES: &str = "3\0FrontEnd\017\0InGame\041\0GameCore_Tuner";
+
+#[test]
+fn state_notifications_never_become_query_replies_or_change_the_command_index() {
+    let fake = FakeTuner::start(LuaReply::Ok, NAMED_STATES, true);
+    let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
+    assert_eq!(client.identity, "Civilization VI");
+    assert_eq!(
+        client.list_states(1.0).unwrap(),
+        ["FrontEnd", "InGame", "GameCore_Tuner"]
+    );
+    assert_eq!(
+        client.run_lua("InGame", "return true", 1.0).unwrap().value,
+        "true"
+    );
+    client.close();
+    let commands: Vec<_> = fake
+        .finish()
+        .into_iter()
+        .filter(|frame| frame.tag == COMMAND)
+        .collect();
+    assert_eq!(commands.len(), 1);
+    assert!(commands[0].payload.starts_with("CMD:17:"));
+}
+
+#[test]
+fn unrelated_listener_cannot_complete_a_query_or_authorize_lua() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        connection.set_nodelay(true).unwrap();
+        connection
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut received = Vec::new();
+        while let Ok(frame) = recv_frame(&mut connection, None) {
+            let answer = if frame.payload == "APP:" {
+                "Civilization VI"
+            } else {
+                NAMED_STATES
+            };
+            received.push(frame);
+            send_split(&mut connection, 0, answer);
+        }
+        received
+    });
+    let error = TunerClient::connect(port, 0.2)
+        .err()
+        .expect("wrong listener must not establish a connection");
+    assert_eq!(error.kind, ErrorKind::Tuner);
+    let received = server.join().unwrap();
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].payload, "APP:");
+}
 
 #[test]
 fn round_trip_fragmented_and_named_state() {

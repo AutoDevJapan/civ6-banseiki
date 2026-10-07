@@ -164,15 +164,16 @@ impl TunerClient {
             .map_err(|failure| failure.message)?;
             loop {
                 let frame = recv_frame(stream, deadline)?;
-                if frame.payload.is_empty()
+                // SDK Connection.RouteMessages separates listener 0 L/O
+                // notifications from the listener used by this query (4).
+                if frame.tag != HANDSHAKE
+                    || frame.payload.is_empty()
                     || frame.payload == "O"
                     || frame.payload.starts_with("O ")
                     || frame.payload.starts_with("O\0")
                 {
                     continue;
                 }
-                // The legacy client accepts reply tags independently of the
-                // outgoing command tag; only output/empty frames are excluded.
                 return Ok(frame.payload);
             }
         })();
@@ -302,7 +303,7 @@ fn write_packet<W: Write>(
 }
 
 struct Frame {
-    _tag: i32,
+    tag: i32,
     payload: String,
 }
 
@@ -347,7 +348,7 @@ fn recv_frame(stream: &mut TcpStream, deadline: Instant) -> Result<Frame, String
     }
     if size == 0 {
         return Ok(Frame {
-            _tag: tag,
+            tag,
             payload: String::new(),
         });
     }
@@ -360,7 +361,7 @@ fn recv_frame(stream: &mut TcpStream, deadline: Instant) -> Result<Frame, String
         body.pop();
     }
     let payload = String::from_utf8(body).map_err(|e| format!("invalid FireTuner UTF-8: {e}"))?;
-    Ok(Frame { _tag: tag, payload })
+    Ok(Frame { tag, payload })
 }
 
 fn parse_state_pairs(raw: &str) -> Result<Vec<(i32, String)>, String> {
@@ -450,6 +451,8 @@ mod tests {
         PartialAck,
         DuplicateAck,
         SlowQueryAndAck,
+        StateUpdates,
+        QueryNotificationsOnly,
     }
 
     // Fixture framing is written separately from the implementation under test.
@@ -497,12 +500,27 @@ mod tests {
             let mut state_queries = 0;
             while let Ok((tag, payload)) = fixture_read(&mut stream) {
                 received.push((tag, payload.clone()));
+                if matches!(reply, Reply::StateUpdates)
+                    && matches!(payload.as_str(), "APP:" | "LSQ:")
+                {
+                    fixture_frame(&mut stream, 0, "L\0");
+                    fixture_frame(&mut stream, 0, "L\x000\x00JoiningRoom\x0017\x00LoadScreen");
+                    fixture_frame(&mut stream, COMMAND, "unrelated query reply");
+                }
                 match payload.as_str() {
                     "APP:" => {
                         assert_eq!(tag, HANDSHAKE);
                         stream.write_all(&[0, 0, 0, 0, 3, 0, 0, 0]).unwrap();
                         fixture_frame(&mut stream, COMMAND, "O asynchronous print");
-                        fixture_frame(&mut stream, HANDSHAKE, "Civilization VI");
+                        fixture_frame(
+                            &mut stream,
+                            if matches!(reply, Reply::QueryNotificationsOnly) {
+                                0
+                            } else {
+                                HANDSHAKE
+                            },
+                            "Civilization VI",
+                        );
                     }
                     "LSQ:" => {
                         assert_eq!(tag, HANDSHAKE);
@@ -511,7 +529,15 @@ mod tests {
                             thread::sleep(Duration::from_millis(400));
                         }
                         fixture_frame(&mut stream, COMMAND, "O\0another print");
-                        fixture_frame(&mut stream, HANDSHAKE, &states);
+                        fixture_frame(
+                            &mut stream,
+                            if matches!(reply, Reply::QueryNotificationsOnly) {
+                                0
+                            } else {
+                                HANDSHAKE
+                            },
+                            &states,
+                        );
                     }
                     _ => {
                         assert_eq!(tag, COMMAND);
@@ -546,7 +572,7 @@ mod tests {
                             Reply::LuaError => {
                                 fixture_frame(&mut stream, COMMAND, &format!("O {token}|ERR|boom"))
                             }
-                            Reply::Ok => {
+                            Reply::Ok | Reply::StateUpdates | Reply::QueryNotificationsOnly => {
                                 fixture_frame(&mut stream, COMMAND, "unrelated|OK|old");
                                 fixture_frame(&mut stream, COMMAND, "O printed 日本語");
                                 fixture_frame(&mut stream, COMMAND, &format!("O {token}|OK|true"));
@@ -589,6 +615,46 @@ mod tests {
                 .iter()
                 .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:"))
         );
+    }
+
+    #[test]
+    fn state_notifications_never_become_query_replies_or_change_the_command_index() {
+        let (port, server) = fake(STATES, Reply::StateUpdates);
+        let mut client = TunerClient::connect(port, Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            client.list_state_pairs(Duration::from_secs(1)).unwrap(),
+            vec![
+                (3, "FrontEnd".into()),
+                (17, "InGame".into()),
+                (41, "GameCore_Tuner".into())
+            ]
+        );
+        assert_eq!(
+            client
+                .run_lua("InGame", "return true", Duration::from_secs(1))
+                .unwrap()
+                .value,
+            "true"
+        );
+        drop(client);
+        let received = server.join().unwrap();
+        assert_eq!(count_commands(&received), 1);
+        assert!(
+            received
+                .iter()
+                .any(|(tag, code)| *tag == COMMAND && code.starts_with("CMD:17:"))
+        );
+    }
+
+    #[test]
+    fn unrelated_listener_cannot_complete_a_query_or_authorize_lua() {
+        let (port, server) = fake(STATES, Reply::QueryNotificationsOnly);
+        assert!(matches!(
+            TunerClient::connect(port, Duration::from_millis(200)),
+            Err(TunerError::Preflight(_))
+        ));
+        let received = server.join().unwrap();
+        assert_eq!(received, vec![(HANDSHAKE, "APP:".into())]);
     }
 
     #[test]
