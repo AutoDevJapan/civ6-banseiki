@@ -62,6 +62,9 @@ mod tests {
     use super::*;
     #[test]
     fn runtime_abi_is_exact_and_noop_cannot_rebuild() {
+        assert_eq!(std::mem::size_of::<Prepare>(), 72);
+        assert_eq!(std::mem::offset_of!(Prepare, expected_menu_context), 64);
+        assert_eq!(VERSION, 0x0880_0002);
         assert_eq!(std::mem::size_of::<RuntimeConfig>(), 40);
         assert_eq!(std::mem::align_of::<RuntimeConfig>(), 8);
         assert_eq!(std::mem::offset_of!(RuntimeConfig, trace_address), 24);

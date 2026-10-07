@@ -4287,6 +4287,7 @@ impl Runner {
             println!("Native CanEver bridge cleanup failed: {e}");
         }
         if let Err(e) = self.backend.stop_native_bootstrap() {
+            code = 1;
             self.result_passed = false;
             self.failure = Some(format!("bootstrap cleanup: {e}"));
         }
