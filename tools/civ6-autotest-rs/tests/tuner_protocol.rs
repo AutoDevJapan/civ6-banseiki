@@ -187,6 +187,8 @@ fn unrelated_listener_cannot_complete_a_query_or_authorize_lua() {
 fn a_timed_out_query_cannot_leave_a_late_reply_for_the_next_command() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
+    let (release_late, await_timeout) = std::sync::mpsc::channel();
+    let (report_attempt, await_attempt) = std::sync::mpsc::channel();
     let server = thread::spawn(move || {
         let (mut connection, _) = listener.accept().unwrap();
         connection.set_nodelay(true).unwrap();
@@ -199,8 +201,9 @@ fn a_timed_out_query_cannot_leave_a_late_reply_for_the_next_command() {
             send_split(&mut connection, HANDSHAKE, answer);
         }
         received.push(recv_frame(&mut connection, None).unwrap());
-        thread::sleep(Duration::from_millis(100));
-        let _ = try_send_split(&mut connection, HANDSHAKE, "3\0FrontEnd\099\0InGame");
+        await_timeout.recv_timeout(Duration::from_secs(2)).unwrap();
+        let attempted = try_send_split(&mut connection, HANDSHAKE, "3\0FrontEnd\099\0InGame");
+        report_attempt.send(attempted).unwrap();
         while let Ok(frame) = recv_frame(&mut connection, None) {
             let answer = if frame.tag == COMMAND {
                 format!("{}|OK|true", extract_token(&frame.payload))
@@ -215,8 +218,22 @@ fn a_timed_out_query_cannot_leave_a_late_reply_for_the_next_command() {
     });
     let mut client = TunerClient::connect(port, 1.0).unwrap();
     assert_eq!(client.list_states(0.02).unwrap_err().kind, ErrorKind::Tuner);
-    // Let the old reply reach the socket before a new command tries to read it.
-    thread::sleep(Duration::from_millis(150));
+    release_late.send(()).unwrap();
+    // Attempt the late reply only after timeout, and wait for that attempt
+    // before the next command. A correctly closed peer can reject the write.
+    let attempted = await_attempt.recv_timeout(Duration::from_secs(2)).unwrap();
+    if let Err(error) = attempted {
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::NotConnected
+            ),
+            "unexpected fixture send error: {error}"
+        );
+    }
     let result = client.run_lua("InGame", "return true", 0.2);
     client.close();
     let received = server.join().unwrap();

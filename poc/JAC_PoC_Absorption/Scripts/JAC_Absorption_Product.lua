@@ -8,6 +8,14 @@ local KEY='JAC_ABSORPTION_PRODUCT_V1'
 local RELATIONS='JAC_COUNTRY_RELATIONS_V1'
 local busy=false
 local publishing=false
+-- A private, replaceable diagnostic hook on the Gameplay table. Its caller
+-- supplies only operation identity; the observer reads native getters itself.
+local function ObserveEnvoy(stage,from,to,opkey,nonce)
+  local observer=P.NativeEnvoyObserver
+  if type(observer)=='function' then
+    pcall(function() observer(stage,from,to,opkey,nonce,Game.GetCurrentGameTurn()) end)
+  end
+end
 local function State()
   local s=R.Copy(Game:GetProperty(KEY) or {Version=2,Pairs={},Escrows={},Envoys={},Operations={}})
   assert((s.Version==1 or s.Version==2) and type(s.Pairs)=='table' and type(s.Escrows)=='table'
@@ -547,7 +555,9 @@ local function SendEnvoy(from,to,opkey,expected)
   local s=State();local operation=assert(s.Operations[opkey])
   assert(R.Equal(operation.EnvoyIdentity,identity),'envoy sender, recipient or route changed')
   local receipt=operation.EnvoyReceipt
-  if receipt and receipt.Done then return end
+  -- The native grant may have completed just before an engine call threw.
+  -- Command still has to settle the same operation and its AFTER sample.
+  if receipt and receipt.Done then return true end
   assert(envoys.Eligible,'official envoy sender or recipient is not eligible')
   assert(not PendingEnvoy(to,opkey),'another envoy assignment is unsettled')
   if not Players[to]:IsHuman() then
@@ -569,6 +579,11 @@ local function SendEnvoy(from,to,opkey,expected)
     operation.EnvoyReceipt=receipt
   end
   Save(s)
+  -- Sample only while the saved receipt is still unconsumed. A retry after a
+  -- mutate-then-throw call must keep the original BEFORE sample.
+  if not receipt.ChargeDone and not receipt.GrantIntent then
+    ObserveEnvoy('BEFORE',from,to,opkey,operation.Nonce)
+  end
   if not receipt.ChargeDone then
     -- Observe even a mutate-then-throw call before returning its error. If
     -- that observation was not saved, an altered pool on replay is ambiguous.
@@ -602,6 +617,7 @@ local function SendEnvoy(from,to,opkey,expected)
     entry.Count=receipt.ReceivedAfter
     receipt=s.Operations[opkey].EnvoyReceipt;receipt.GrantDone,receipt.Done=true,true;Save(s)
   end
+  return true
 end
 function P.Command(actor,params)
   assert(Integer(actor) and Players[actor] and Players[actor]:IsAlive(),'actual player actor required')
@@ -649,8 +665,9 @@ function P.Command(actor,params)
     end
     s.Operations[opkey]={Identity=identity,Nonce=params.Nonce,EnvoyIdentity=envoyIdentity};Save(s)
   end
+  local envoyCompleted=false
   if params.Command=='SEND_ENVOY' then
-    SendEnvoy(from,actor,opkey,params.ExpectedEnvoys)
+    envoyCompleted=SendEnvoy(from,actor,opkey,params.ExpectedEnvoys)
   elseif params.Command=='REGISTER' then
     s=State();local key=Pair(from,actor);local pair=s.Pairs[key]
     if not pair or pair.Cancelled then
@@ -674,6 +691,7 @@ function P.Command(actor,params)
     s=State();s.Pairs[Pair(from,actor)].Cancelled=true;Save(s)
   else error('unknown product operation') end
   s=State();s.Operations[opkey].Done=true;Save(s)
+  if envoyCompleted then ObserveEnvoy('AFTER',from,actor,opkey,params.Nonce) end
   return P.Get(from,actor)
 end
 local function Operation(actor,params)
@@ -816,17 +834,7 @@ N.RegisterRequirement('PRODUCT_DEPOSIT',function(from,to,d) return Evaluate(from
 N.RegisterRequirement('PRODUCT_RELATIONS',function(from,to) return RelationState(from,to).Met and DiplomaticSituation(from,to)~='war' end)
 N.RegisterEnvoys('product',function(from,to) local value=Envoys(from,to);value.Eligible=value.Eligible and not PendingEnvoy(to);return value end)
 GameEvents.JAC_AbsorptionProduct_Operation.Add(Operation)
--- Read-only diagnostics can sample the actual engine state on either side of
--- the ordinary turn handler. Never let a diagnostic failure interrupt play.
-local function ObserveTurn(stage)
-  local observer=P.NativeTurnObserver
-  if type(observer)=='function' then
-    pcall(function() observer(stage,Game.GetCurrentGameTurn()) end)
-  end
-end
-GameEvents.OnGameTurnStarted.Add(function()
-  ObserveTurn('BEFORE');P.Tick(false);ObserveTurn('AFTER')
-end)
+GameEvents.OnGameTurnStarted.Add(function() P.Tick(false) end)
 -- Read-only exports only. Mutating functions are never available to UI.
 ExposedMembers.JAC_AbsorptionProduct={Get=P.Get,GetSmallCountries=P.GetSmallCountries,Country=P.Country,PublicationKey=P.PublicationKey}
 JAC_AbsorptionProductGameplay=P

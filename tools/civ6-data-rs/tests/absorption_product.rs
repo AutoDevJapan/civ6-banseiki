@@ -786,12 +786,26 @@ fn official_envoy_mutate_then_throw_reloads_without_second_debit_or_grant() -> a
         lua.globals().set("FAIL_AT_GRANT", grant)?;
         lua.load(r#"
           OFFICIAL_SOURCE();HUMAN[2]=false
+          OBSERVED={}
+          RECORD_OBSERVATION=function(stage,from,to,opkey,nonce,turn)
+            assert(from==1 and to==2 and opkey=='2:envoy0' and nonce=='envoy0' and turn==TURN)
+            OBSERVED[#OBSERVED+1]={Stage=stage,Pool=Players[to]:GetInfluence():GetTokensToGive(),
+              Received=Players[from]:GetInfluence():GetTokensReceived(to)}
+          end
+          JAC_AbsorptionProductGameplay.NativeEnvoyObserver=RECORD_OBSERVATION
           if FAIL_AT_GRANT then FAIL_GRANT=true else FAIL_ENVOY=true end
           assert(not pcall(ENVOY,0));assert(POOL==9 and SENDS==1 and GRANTS==(FAIL_AT_GRANT and 1 or 0))
+          assert(#OBSERVED==1 and OBSERVED[1].Stage=='BEFORE'
+            and OBSERVED[1].Pool==10 and OBSERVED[1].Received==0)
         "#).exec()?;
         load(&lua, 9999.)?;
         lua.load(r#"
+          assert(JAC_AbsorptionProductGameplay.NativeEnvoyObserver==nil)
+          JAC_AbsorptionProductGameplay.NativeEnvoyObserver=RECORD_OBSERVATION
           ENVOY(0);ENVOY(0);assert(POOL==9 and SENDS==1 and GRANTS==1 and VIEW().Envoys.Envoys==1)
+          assert(#OBSERVED==2 and OBSERVED[2].Stage=='AFTER'
+            and OBSERVED[2].Pool==9 and OBSERVED[2].Received==1,
+            'recovery replaced the original before sample or missed the settled grant')
           local op=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Operations['2:envoy0']
           assert(op.Done and op.EnvoyReceipt.ChargeDone and op.EnvoyReceipt.GrantIntent and op.EnvoyReceipt.GrantDone and op.EnvoyReceipt.Done)
           assert(op.EnvoyIdentity.From==1 and op.EnvoyIdentity.To==2 and op.EnvoyIdentity.Route=='OFFICIAL')
@@ -942,22 +956,24 @@ fn p1_checkpoint_preserves_decisions_while_application_advances() -> anyhow::Res
 }
 
 #[test]
-fn diagnostic_turn_getter_failure_does_not_interrupt_the_ordinary_turn() -> anyhow::Result<()> {
+fn diagnostic_envoy_getter_failure_does_not_interrupt_the_operation() -> anyhow::Result<()> {
     let lua = world(9999.)?;
     lua.load(
         r#"
       OFFICIAL_SOURCE();HUMAN[2]=false;READY()
-      local turn=Game.GetCurrentGameTurn;local fail=true;local stages={}
-      Game.GetCurrentGameTurn=function()
-        if fail then fail=false;error('diagnostic turn getter unavailable') end
-        return turn()
+      local stages={}
+      JAC_AbsorptionProductGameplay.NativeEnvoyObserver=function(stage,from,to,opkey,nonce,turn)
+        stages[#stages+1]=stage
+        assert(from==1 and to==2 and opkey=='2:envoy0' and nonce=='envoy0' and turn==TURN)
+        local getter=Game.GetCurrentGameTurn
+        Game.GetCurrentGameTurn=function() error('diagnostic getter unavailable') end
+        local ok=pcall(Game.GetCurrentGameTurn)
+        Game.GetCurrentGameTurn=getter
+        assert(ok)
       end
-      JAC_AbsorptionProductGameplay.NativeTurnObserver=function(stage,observed)
-        assert(observed==TURN);stages[#stages+1]=stage
-      end
-      GameEvents.OnGameTurnStarted.Call(TURN)
+      ENVOY(0)
       assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
-      assert(#stages==1 and stages[1]=='AFTER')
+      assert(#stages==2 and stages[1]=='BEFORE' and stages[2]=='AFTER')
     "#,
     )
     .exec()?;
@@ -973,13 +989,13 @@ fn ordinary_turn_does_not_construct_unregistered_native_events_for_diagnostics(
       setmetatable(GameEvents,{__index=function(_,name) error('unregistered native event: '..name) end})
       GameEvents.OnGameTurnStarted.Call(TURN)
       assert(SENDS==1 and GRANTS==1 and POOL==9 and OFFICIAL_ENVOYS==1)
-      assert(JAC_AbsorptionProductGameplay.NativeTurnObserver==nil)
+      assert(JAC_AbsorptionProductGameplay.NativeEnvoyObserver==nil)
     "#).exec()?;
     Ok(())
 }
 
 #[test]
-fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_flow(
+fn operation_observation_reads_native_ai_changes_without_changing_product_or_error_flow(
 ) -> anyhow::Result<()> {
     for fail_observer in [false, true] {
         let lua = world(9999.)?;
@@ -989,8 +1005,11 @@ fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_fl
           -- The engine's own two assignments happen before our ordinary handler.
           POOL,OFFICIAL_ENVOYS,TILES=8,2,6
           local rows={}
-          JAC_AbsorptionProductGameplay.NativeTurnObserver=function(stage,turn)
-            rows[#rows+1]={Stage=stage,Turn=turn,Pool=POOL,Received=OFFICIAL_ENVOYS}
+          JAC_AbsorptionProductGameplay.NativeEnvoyObserver=function(stage,from,to,opkey,nonce,turn)
+            assert(from==1 and to==2 and opkey=='2:ai-envoy:1:2' and nonce=='ai-envoy:1:2')
+            rows[#rows+1]={Stage=stage,Turn=turn,
+              Pool=Players[to]:GetInfluence():GetTokensToGive(),
+              Received=Players[from]:GetInfluence():GetTokensReceived(to)}
             if FAIL_OBSERVER then error('read-only observer failed') end
           end
           GameEvents.OnGameTurnStarted.Call(TURN)
@@ -1002,6 +1021,51 @@ fn turn_observation_reads_native_ai_changes_without_changing_product_or_error_fl
           local op=s.Operations['2:ai-envoy:1:2']
           assert(op and op.EnvoyReceipt.Before==8 and op.EnvoyReceipt.After==7)
           assert(op.EnvoyReceipt.ReceivedBefore==2 and op.EnvoyReceipt.ReceivedAfter==3)
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn envoy_gateway_after_noop_turn_and_fresh_install_observes_only_the_real_operation(
+) -> anyhow::Result<()> {
+    for via_event in [false, true] {
+        let lua = world(9999.)?;
+        lua.globals().set("VIA_EVENT", via_event)?;
+        lua.load(
+            r#"
+          OFFICIAL_SOURCE();HUMAN[2]=false;POOL=30;OFFICIAL_ENVOYS=3;TILES=6
+          JAC_AbsorptionProductGameplay.NativeEnvoyObserver=function() error('old VM callback') end
+          GameEvents.OnGameTurnStarted.Call(TURN)
+          assert(SENDS==0 and GRANTS==0 and POOL==30 and OFFICIAL_ENVOYS==3)
+        "#,
+        )
+        .exec()?;
+        load(&lua, 9999.)?;
+        lua.load(r#"
+          assert(JAC_AbsorptionProductGameplay.NativeEnvoyObserver==nil)
+          READY()
+          local rows={}
+          JAC_AbsorptionProductGameplay.NativeEnvoyObserver=function(stage,from,to,opkey,nonce,turn)
+            assert(from==1 and to==2 and opkey=='2:later' and nonce=='later' and turn==TURN)
+            rows[#rows+1]={Stage=stage,Pool=Players[to]:GetInfluence():GetTokensToGive(),
+              Received=Players[from]:GetInfluence():GetTokensReceived(to)}
+          end
+          local command={Command='SEND_ENVOY',From=1,Nonce='later',ExpectedEnvoys=3}
+          if VIA_EVENT then
+            GameEvents.JAC_AbsorptionProduct_Operation.Call(2,command)
+            assert(Players[2]:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1').Accepted)
+          else JAC_AbsorptionProductGameplay.Command(2,command) end
+          assert(#rows==2 and rows[1].Stage=='BEFORE' and rows[1].Pool==30 and rows[1].Received==3)
+          assert(rows[2].Stage=='AFTER' and rows[2].Pool==29 and rows[2].Received==4)
+          assert(SENDS==1 and GRANTS==1 and POOL==29 and OFFICIAL_ENVOYS==4)
+          local operation=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1').Operations['2:later']
+          assert(operation.Done and operation.EnvoyReceipt.Done and operation.EnvoyReceipt.Before==30
+            and operation.EnvoyReceipt.After==29 and operation.EnvoyReceipt.ReceivedBefore==3
+            and operation.EnvoyReceipt.ReceivedAfter==4)
+          GameEvents.OnGameTurnStarted.Call(TURN)
+          JAC_AbsorptionProductGameplay.Command(2,command)
+          assert(#rows==2 and SENDS==1 and GRANTS==1,'no-op tick or nonce replay replaced observation')
         "#).exec()?;
     }
     Ok(())
