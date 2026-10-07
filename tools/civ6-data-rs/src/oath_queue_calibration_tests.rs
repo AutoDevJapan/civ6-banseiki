@@ -48,7 +48,7 @@ if mode=='completion' then JAC_QUEUE_CAL.samples[38].after=131072 end
 
 #[test]
 fn core_publishes_identity_and_ui_requests_without_a_property_setter() -> Result<()> {
-    for unit_type in [false, true] {
+    for family in ["military", "unit", "tag"] {
         for mutation in [
             "",
             "owner=1",
@@ -76,10 +76,13 @@ CityOperationTypes={PARAM_UNIT_TYPE=1,PARAM_INSERT_MODE=2,VALUE_REPLACE_AT=3,PAR
 CityManager={CanStartOperation=function()return can_start end,RequestOperation=function(c,op,params)
  assert(c==city and op==5 and params[1]==123);requests=requests+1 end}
 "#).exec()?;
-            if unit_type {
-                let scenario = unit_type_control_scenario(
-                    &Repository::checked_in().json(super::super::BASE)?,
-                )?;
+            if family != "military" {
+                let base = Repository::checked_in().json(super::super::BASE)?;
+                let scenario = if family == "tag" {
+                    tag_era_control_scenario(&base)?
+                } else {
+                    unit_type_control_scenario(&base)?
+                };
                 let code = scenario["steps"]
                     .as_array()
                     .unwrap()
@@ -90,11 +93,13 @@ CityManager={CanStartOperation=function()return can_start end,RequestOperation=f
                     })
                     .expect("generated setup exists");
                 vm.load(code).eval::<String>()?;
-                vm.load("assert(attached.JAC_TODO134_QCAL_UNIT_P100 and attached.JAC_TODO134_QCAL_UNIT_P1 and attached.JAC_TODO134_QCAL_UNIT_P15); assert(not attached.JAC_TODO134_QCAL_P100 and not attached.JAC_TODO134_QCAL_P1 and not attached.JAC_TODO134_QCAL_P15 and not attached.JAC_TODO134_QCAL_P25); assert(flags.JAC_TODO134_QCAL_P15_ON==0)").exec()?;
+                let prefix = if family == "tag" { "TAG" } else { "UNIT" };
+                let other = if family == "tag" { "UNIT" } else { "TAG" };
+                vm.load(format!("for _,percent in ipairs({{100,1,15}}) do assert(attached['JAC_TODO134_QCAL_{prefix}_P'..percent]); assert(not attached['JAC_TODO134_QCAL_{other}_P'..percent] and not attached['JAC_TODO134_QCAL_P'..percent]) end; assert(not attached.JAC_TODO134_QCAL_P25); assert(flags.JAC_TODO134_QCAL_P15_ON==0)")).exec()?;
             } else {
                 vm.load(format!("{LUA_HELPERS}\n{SETUP}"))
                     .eval::<String>()?;
-                vm.load("assert(attached.JAC_TODO134_QCAL_P15 and not attached.JAC_TODO134_QCAL_UNIT_P15)").exec()?;
+                vm.load("assert(attached.JAC_TODO134_QCAL_P15 and not attached.JAC_TODO134_QCAL_UNIT_P15 and not attached.JAC_TODO134_QCAL_TAG_P15)").exec()?;
             }
             assert_eq!(
                 vm.load("return props.JAC_TODO134_QCAL_ID.city")
@@ -343,31 +348,37 @@ fn generated_quarter_control_retains_all_native_requests_and_has_no_placeholders
 
 #[test]
 fn unit_type_control_changes_only_attachment_and_keeps_strict_verdict() -> Result<()> {
-    let base = Repository::checked_in().json(super::super::BASE)?;
-    let original = scenario(&base)?;
-    let control = unit_type_control_scenario(&base)?;
-    assert_eq!(control["diagnostic_only"], true);
-    assert_eq!(control["finite_turns"], 38);
-    let mut changed = 0;
-    for (old, new) in original["steps"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .zip(control["steps"].as_array().unwrap())
-    {
-        if old != new {
-            changed += 1;
-            assert!(new["code"].as_str().unwrap().contains("QCAL_UNIT_P15"));
+    for tag_era in [false, true] {
+        let base = Repository::checked_in().json(super::super::BASE)?;
+        let original = scenario(&base)?;
+        let control = typed_control_scenario(&base, tag_era)?;
+        assert_eq!(control["diagnostic_only"], true);
+        assert_eq!(control["finite_turns"], 38);
+        let mut changed = 0;
+        for (old, new) in original["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(control["steps"].as_array().unwrap())
+        {
+            if old != new {
+                changed += 1;
+                assert!(new["code"].as_str().unwrap().contains(if tag_era {
+                    "QCAL_TAG_P15"
+                } else {
+                    "QCAL_UNIT_P15"
+                }));
+            }
+            if let Some(code) = new["code"].as_str() {
+                Lua::new().load(code).into_function()?;
+            }
         }
-        if let Some(code) = new["code"].as_str() {
-            Lua::new().load(code).into_function()?;
-        }
+        assert_eq!(changed, 1);
+        assert_eq!(
+            original["steps"].as_array().unwrap().len(),
+            control["steps"].as_array().unwrap().len()
+        );
     }
-    assert_eq!(changed, 1);
-    assert_eq!(
-        original["steps"].as_array().unwrap().len(),
-        control["steps"].as_array().unwrap().len()
-    );
     Ok(())
 }
 

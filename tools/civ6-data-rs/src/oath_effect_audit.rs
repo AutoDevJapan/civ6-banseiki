@@ -1198,6 +1198,11 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
         PathBuf::from(format!("{DIR}/queue-unit-type-control.json")),
         format!("{}\n", serde_json::to_string_pretty(&unit_type_control)?),
     );
+    let tag_era_control = queue_calibration::tag_era_control_scenario(&base)?;
+    result.insert(
+        PathBuf::from(format!("{DIR}/queue-tag-era-control.json")),
+        format!("{}\n", serde_json::to_string_pretty(&tag_era_control)?),
+    );
     for case in cases {
         let scenario = selected_scenario(&base, &case)?;
         let path = format!("{DIR}/{}.json", case.oath.to_lowercase());
@@ -1220,7 +1225,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
             format!("{}\n", serde_json::to_string_pretty(&scenario)?),
         );
     }
-    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"queue_calibration_scenario":format!("{DIR}/queue-calibration.json"),"queue_quarter_control_scenario":format!("{DIR}/queue-quarter-control.json"),"queue_unit_type_control_scenario":format!("{DIR}/queue-unit-type-control.json"),"oath_count":66,"house_count":22,"max_turns":16,
+    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"queue_calibration_scenario":format!("{DIR}/queue-calibration.json"),"queue_quarter_control_scenario":format!("{DIR}/queue-quarter-control.json"),"queue_unit_type_control_scenario":format!("{DIR}/queue-unit-type-control.json"),"queue_tag_era_control_scenario":format!("{DIR}/queue-tag-era-control.json"),"oath_count":66,"house_count":22,"max_turns":16,
         "quantity_acceptance":"legacy_getyield_queue_denominator_unverified; raw_progress_calibration_diagnostic_only; all_66_live_unverified","diagnostic_mod":METER_ID,"scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
@@ -1280,7 +1285,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 77);
+        assert_eq!(generated.len(), 78);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));

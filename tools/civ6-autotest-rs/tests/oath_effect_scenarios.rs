@@ -124,6 +124,7 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
         ("queue_calibration_scenario", 1),
         ("queue_quarter_control_scenario", 25),
         ("queue_unit_type_control_scenario", 1),
+        ("queue_tag_era_control_scenario", 1),
     ] {
         let path = inventory[key]
             .as_str()
@@ -147,6 +148,12 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
             assert_eq!(
                 data["modifier_family"],
                 "MODIFIER_PLAYER_CITIES_ADJUST_UNIT_PRODUCTION"
+            );
+        }
+        if key == "queue_tag_era_control_scenario" {
+            assert_eq!(
+                data["modifier_family"],
+                "MODIFIER_PLAYER_CITIES_ADJUST_UNIT_TAG_ERA_PRODUCTION"
             );
         }
         assert!(
