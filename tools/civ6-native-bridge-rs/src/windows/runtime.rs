@@ -7,7 +7,7 @@ use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
 };
 
-pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0001;
+pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0002;
 // Relocated data exports identify the exact gateway for each entry. Read
 // their values in the loaded DLL, not a DONT_RESOLVE_DLL_REFERENCES image.
 #[unsafe(no_mangle)]
@@ -394,11 +394,14 @@ fn stop_observation() -> BridgeStatus {
     BridgeStatus::Ok
 }
 
-pub(super) fn allocate_trace() -> *mut CompositeTrace {
+/// The complete raw property log is committed and touched before any hook
+/// exists. Its failure refuses installation; there is no 4096-row fallback.
+pub(super) fn allocate_trace() -> Option<*mut CompositeTrace> {
+    property_log::publish()?;
     let trace = Box::into_raw(CompositeTrace::boxed());
     OWNED.store(true, Ordering::Release);
     advance();
-    trace
+    Some(trace)
 }
 
 #[cfg(test)]
@@ -544,7 +547,9 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         {
             return BridgeStatus::HookFailure as u32;
         }
-        let trace = allocate_trace();
+        let Some(trace) = allocate_trace() else {
+            return BridgeStatus::HookFailure as u32;
+        };
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;

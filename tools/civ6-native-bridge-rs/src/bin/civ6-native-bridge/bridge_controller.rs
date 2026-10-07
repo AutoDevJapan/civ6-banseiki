@@ -549,6 +549,31 @@ fn read_remote(game: &Handle, address: usize, output: &mut [u8]) -> Result<(), S
     }
     Ok(())
 }
+/// Create-new original evidence beside `output`; a capture is never replaced.
+fn preserve(output: &Path, extension: &str, bytes: &[u8]) -> Result<(), String> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output.with_extension(extension))
+        .and_then(|mut f| f.write_all(bytes))
+        .map_err(|e| format!("preserve native observation {extension}: {e}"))
+}
+/// Two whole reads of the runtime property log. `export` is the loaded
+/// runtime's data export; its current value, not its address, is the log.
+fn property_log_pair(game: &Handle, export: usize) -> Result<(Vec<u8>, Vec<u8>), String> {
+    use civ6_bootstrap_rs::protocol::PROPERTY_LOG_BYTES;
+    let mut pointer = [0u8; 8];
+    read_remote(game, export, &mut pointer)?;
+    let address = u64::from_le_bytes(pointer) as usize;
+    if address == 0 {
+        return Err("runtime property log was not published".into());
+    }
+    let mut first = vec![0; PROPERTY_LOG_BYTES];
+    let mut second = vec![0; PROPERTY_LOG_BYTES];
+    read_remote(game, address, &mut first)?;
+    read_remote(game, address, &mut second)?;
+    Ok((first, second))
+}
 fn write_remote(game: &Handle, address: usize, input: &[u8]) -> Result<(), String> {
     let mut written = 0usize;
     if unsafe {

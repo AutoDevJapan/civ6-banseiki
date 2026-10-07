@@ -3,6 +3,15 @@
 fn bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
     let bytes = std::fs::read(path.with_extension("bootstrap.bin"))?;
     civ6_bootstrap_rs::protocol::trace(&bytes, pid, created).map_err(Error::input)?;
+    // Do not rely on the controller receipt alone: the stopped runtime prefix
+    // needs both preserved whole captures of its separate property log.
+    let log = std::fs::read(path.with_extension("property-log-first.bin"))?;
+    if log != std::fs::read(path.with_extension("property-log-second.bin"))? {
+        return Err(Error::input("bootstrap property log captures differ"));
+    }
+    let native = std::fs::read(path.with_extension("runtime.bin"))?;
+    civ6_bootstrap_rs::protocol::native_trace(&native, Some(&log), pid, created)
+        .map_err(Error::input)?;
     let text = std::fs::read_to_string(path)?;
     let row: Value = serde_json::from_str(
         text.lines()

@@ -148,23 +148,41 @@ fn record(
 }
 fn native_counts() -> [u64; 4] {
     // Public D21 CompositeTrace begins with CalibrationTrace v4: a 24-byte
-    // header and 1024 repr(C) 72-byte CalibrationRows, then PropertyTrace v3.
+    // header and 1024 repr(C) 72-byte CalibrationRows, then the PropertyTrace
+    // prefix. The runtime marks that prefix external and writes every property
+    // row to its separate log, so the property counts come from the log.
     // These read-only checkpoints are NOT an authorization/publication fence.
-    const PROPERTY: usize = 24 + 1024 * 72;
+    use protocol::{COMPOSITE_PROPERTY as PROPERTY, *};
     let base = TRACE.runtime_trace.load(Ordering::Acquire) as usize;
     if base == 0 || TRACE.runtime_trace_size.load(Ordering::Acquire) < (PROPERTY + 20) as u64 {
         return [u64::MAX; 4];
     }
-    let sample = |offset: usize, magic: u32, version: u32| -> Option<[u64; 2]> {
-        let b = read(base.checked_add(offset)?, 20).ok()?;
-        let u = |n: usize| u32::from_le_bytes(b[n..n + 4].try_into().unwrap());
-        (u(0) == magic && u(4) == version).then_some([u(8) as u64, u(16) as u64])
+    let u = |b: &[u8], n: usize| u32::from_le_bytes(b[n..n + 4].try_into().unwrap());
+    let calibration = || -> Option<[u64; 2]> {
+        let b = read(base, 20).ok()?;
+        (u(&b, 0) == 0x4a414341 && u(&b, 4) == 4).then_some([u(&b, 8) as u64, u(&b, 16) as u64])
     };
-    match (sample(0, 0x4a414341, 4), sample(PROPERTY, 0x4a414350, 3)) {
+    let property = || -> Option<[u64; 2]> {
+        let prefix = read(base.checked_add(PROPERTY)?, 32).ok()?;
+        if u(&prefix, 0) != 0x4a414350
+            || u(&prefix, 4) != PROPERTY_EXTERNAL_VERSION
+            || u(&prefix, 28) != PROPERTY_LOG_MAGIC
+        {
+            return None;
+        }
+        let log = ptr_at(LOG_EXPORT.load(Ordering::Acquire)).ok()?;
+        let b = read(log, PROPERTY_LOG_HEADER).ok()?;
+        let w = |n: usize| u64::from_le_bytes(b[n..n + 8].try_into().unwrap());
+        (log != 0 && u(&b, 0) == PROPERTY_LOG_MAGIC && u(&b, 4) == PROPERTY_LOG_VERSION)
+            .then(|| [w(PROPERTY_LOG_NEXT), w(PROPERTY_LOG_IN_FLIGHT)])
+    };
+    match (calibration(), property()) {
         (Some(a), Some(b)) => [a[0], a[1], b[0], b[1]],
         _ => [u64::MAX; 4],
     }
 }
+/// Address of the pinned runtime's `BRIDGE_RUNTIME_PROPERTY_LOG` data export.
+static LOG_EXPORT: AtomicUsize = AtomicUsize::new(0);
 
 core::arch::global_asm!(
     ".text",
@@ -317,6 +335,22 @@ fn api(module: usize, name: &[u8]) -> Result<Api, String> {
         return Err("runtime export outside executable source module".into());
     }
     Ok(unsafe { std::mem::transmute::<unsafe extern "system" fn() -> isize, Api>(f) })
+}
+/// A pointer-sized data export of `module`; its current value is read later.
+fn data(module: usize, name: &[u8]) -> Result<usize, String> {
+    let p = unsafe { GetProcAddress(module as _, name.as_ptr()) }.ok_or("runtime export absent")?
+        as usize;
+    let mut m = MEMORY_BASIC_INFORMATION::default();
+    if unsafe { VirtualQuery(p as _, &mut m, size_of::<MEMORY_BASIC_INFORMATION>()) } == 0
+        || m.AllocationBase as usize != module
+        || m.State != MEM_COMMIT
+        || !p.is_multiple_of(8)
+        || p + 8 > m.BaseAddress as usize + m.RegionSize
+        || read(p, 8).is_err()
+    {
+        return Err("runtime data export outside readable source module".into());
+    }
+    Ok(p)
 }
 fn typed(core: usize, p: usize) -> bool {
     p != 0
@@ -569,6 +603,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
     let close = api(bridge, b"BridgeRuntimeClose\0")?;
     let rebuild = api(bridge, b"BridgeRuntimeRebuild\0")?;
     let stop = api(bridge, b"BridgeRuntimeStopObservation\0")?;
+    let log_export = data(bridge, b"BRIDGE_RUNTIME_PROPERTY_LOG\0")?;
     // Own the lifetime of saved API addresses before any runtime invocation.
     // Mode6 also pins itself, but a file handle alone is not a module reference.
     let mut runtime_module = std::ptr::null_mut();
@@ -613,7 +648,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
         loader_entry as *const () as usize,
     )?;
     let config = RuntimeConfig {
-        version: 0x03240001,
+        version: 0x03240002,
         size: 40,
         pid: input.pid,
         max_seconds: input.observation_seconds,
@@ -637,6 +672,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
         _source: source,
         _hooks: vec![a, b, c],
     });
+    LOG_EXPORT.store(log_export, Ordering::Release);
     if let Some(_flight) = RecordFlight::try_enter() {
         TRACE.pid.store(input.pid as u64, Ordering::Release);
         TRACE

@@ -13,7 +13,7 @@ pub fn controller_capabilities() -> serde_json::Value {
     serde_json::json!({
         "schema": "civ6-native-controller-capabilities-v1",
         "gamecore_sha256": PINNED_GAMECORE_SHA256,
-        "runtime_config_version": 0x0324_0001u32,
+        "runtime_config_version": 0x0324_0002u32,
         "modes": ["can-ever", "property", "property-scoped", "can-ever-calibration",
             "property-admission-scoped", "assign-calibration", "joined-admission",
             "production-admission", "paid-assignment-experimental",

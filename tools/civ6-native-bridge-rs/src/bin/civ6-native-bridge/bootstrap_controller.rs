@@ -177,6 +177,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             b"BridgeRuntimeClose\0",
             b"BridgeRuntimeRebuild\0",
             b"BridgeRuntimeStopObservation\0",
+            b"BRIDGE_RUNTIME_PROPERTY_LOG\0",
         ],
     )?;
     let list = modules(req.pid)?;
@@ -204,7 +205,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         let runtime = load(&game, req.pid, &req.runtime, loader)?;
         let bootstrap = load(&game, req.pid, &req.bootstrap, loader)?;
         if prepared.iter().any(|r| *r >= bootstrap.size)
-            || runtime_exports.iter().any(|r| *r >= runtime.size)
+            || runtime_exports.iter().any(|r| r + 8 > runtime.size)
         {
             return Err("export outside source image".into());
         }
@@ -317,17 +318,27 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         // Ongoing policy guards and sampled rows must not be reconstructed from
         // another process or a later successful read after the owned game ends.
         for (extension, bytes) in [("native-first.bin", &native), ("native-second.bin", &again)] {
-            fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(req.output.with_extension(extension))
-                .and_then(|mut f| f.write_all(bytes))
-                .map_err(|e| format!("preserve native observation {extension}: {e}"))?;
+            preserve(&req.output, extension, bytes)?;
+        }
+        let log = property_log_pair(&game, runtime.base + runtime_exports[4])?;
+        for (extension, bytes) in [
+            ("property-log-first.bin", &log.0),
+            ("property-log-second.bin", &log.1),
+        ] {
+            preserve(&req.output, extension, bytes)?;
         }
         if native != again {
             return Err("native drained trace is not stable".into());
         }
-        wire::native_trace(&native)?;
+        if log.0 != log.1 {
+            return Err("runtime property log is not stable".into());
+        }
+        wire::native_trace(&native, Some(&log.0), req.pid, req.created)?;
+        let summary = wire::property_log(&log.0, req.pid, req.created)?;
+        write_json(
+            &mut writer,
+            json!({"type":"bootstrap_property_log","pid":req.pid,"created_filetime":req.created,"rows":summary.rows,"dropped":0,"in_flight":0,"filtered":summary.filtered,"capacity":wire::PROPERTY_LOG_CAPACITY,"bytes":wire::PROPERTY_LOG_BYTES,"captures_equal":true}),
+        )?;
         fs::OpenOptions::new()
             .write(true)
             .create_new(true)

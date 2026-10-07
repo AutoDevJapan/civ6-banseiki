@@ -4,6 +4,7 @@ use super::*;
 struct Exports {
     install: usize,
     stop: usize,
+    property_log: usize,
     gateways: [usize; 3],
 }
 
@@ -22,6 +23,9 @@ fn exports(path: &Path) -> Result<Exports, String> {
         .ok_or("runtime install export missing")? as usize;
     let stop = unsafe { GetProcAddress(dll.0, c"BridgeRuntimeStopObservation".as_ptr().cast()) }
         .ok_or("runtime observation stop export missing")? as usize;
+    let property_log =
+        unsafe { GetProcAddress(dll.0, c"BRIDGE_RUNTIME_PROPERTY_LOG".as_ptr().cast()) }
+            .ok_or("runtime property log export missing")? as usize;
     let mut gateways = [0usize; 3];
     for (slot, name) in gateways.iter_mut().zip([
         c"BRIDGE_RUNTIME_APPOINTMENT_GATEWAY",
@@ -35,6 +39,7 @@ fn exports(path: &Path) -> Result<Exports, String> {
     Ok(Exports {
         install: install - dll.0 as usize,
         stop: stop - dll.0 as usize,
+        property_log: property_log - dll.0 as usize,
         gateways,
     })
 }
@@ -194,6 +199,7 @@ pub(super) fn run(
             .ok_or("runtime DLL missing")?;
         if install_rva >= bridge.size
             || stop_rva >= bridge.size
+            || exports.property_log + 8 > bridge.size
             || exports
                 .gateways
                 .iter()
@@ -269,9 +275,14 @@ pub(super) fn run(
             "trace_owner":"game_process","bounded_uninstall_allowed":false}),
         )?;
         job.disarm_after_verified_runtime_transfer()?;
-        Ok((bridge.base + stop_rva, entries, image))
+        Ok((
+            bridge.base + stop_rva,
+            entries,
+            image,
+            config.trace_address as usize,
+        ))
     })();
-    let (stop, installed, image) = match transfer {
+    let (stop, installed, image, trace_address) = match transfer {
         Ok(transfer) => transfer,
         Err(error) => {
             return Err(fail_owned_call(
@@ -323,6 +334,33 @@ pub(super) fn run(
     {
         return Err("runtime branch bytes changed while observing; runtime retained".into());
     }
+    // Both whole captures of the stopped prefix and of the separate property
+    // log are preserved before any comparison or validation can fail.
+    let mut native = vec![0; size_of::<civ6_native_bridge_rs::CompositeTrace>()];
+    let mut again = vec![0; native.len()];
+    read_remote(game, trace_address, &mut native)?;
+    read_remote(game, trace_address, &mut again)?;
+    for (extension, bytes) in [("native-first.bin", &native), ("native-second.bin", &again)] {
+        preserve(&parsed.out, extension, bytes)?;
+    }
+    let log = property_log_pair(game, image.base + exports.property_log)?;
+    for (extension, bytes) in [
+        ("property-log-first.bin", &log.0),
+        ("property-log-second.bin", &log.1),
+    ] {
+        preserve(&parsed.out, extension, bytes)?;
+    }
+    if native != again || log.0 != log.1 {
+        return Err("stopped runtime observation is not stable; runtime retained".into());
+    }
+    let summary =
+        civ6_bootstrap_rs::protocol::runtime_property(&native, &log.0, parsed.pid, parsed.created)?;
+    write_json(
+        &mut writer,
+        json!({"kind":"property_log","rows":summary.rows,"dropped":0,"in_flight":0,
+        "filtered":summary.filtered,"capacity":civ6_bootstrap_rs::protocol::PROPERTY_LOG_CAPACITY,
+        "captures_equal":true}),
+    )?;
     write_json(
         &mut writer,
         json!({"kind":"observation_stop","status":status,

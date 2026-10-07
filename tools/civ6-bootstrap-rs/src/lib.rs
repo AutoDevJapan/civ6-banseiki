@@ -5,7 +5,7 @@
 pub mod observation;
 pub mod protocol;
 
-pub const VERSION: u32 = 0x0880_0002;
+pub const VERSION: u32 = 0x0880_0003;
 pub const EXE_SHA: &str = "e7450823cc8e00468cff7b9d7b97c63140eae38ae1d774ba4efa437556c42d63";
 pub const CORE_SHA: &str = "324c51e9ea3531758842e16c69e6cddbefbb226c5b675c3d6e60111646c2e98c";
 pub const MENU_CORE_SHA: &str = "d7ed520e1334947fc7b3be50b00c78eea55e69eb079583f24d87742e90f2a5c3";
@@ -65,7 +65,7 @@ mod tests {
     fn runtime_abi_is_exact_and_noop_cannot_rebuild() {
         assert_eq!(std::mem::size_of::<Prepare>(), 72);
         assert_eq!(std::mem::offset_of!(Prepare, expected_menu_context), 64);
-        assert_eq!(VERSION, 0x0880_0002);
+        assert_eq!(VERSION, 0x0880_0003);
         assert_eq!(std::mem::size_of::<RuntimeConfig>(), 40);
         assert_eq!(std::mem::align_of::<RuntimeConfig>(), 8);
         assert_eq!(std::mem::offset_of!(RuntimeConfig, trace_address), 24);

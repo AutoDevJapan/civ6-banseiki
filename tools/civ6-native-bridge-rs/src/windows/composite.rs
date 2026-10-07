@@ -316,6 +316,11 @@ pub(super) unsafe fn install(
     // Assignment is installed first, with ENABLED already true and no valid
     // catalog. Thus partial installation never temporarily permits personas.
     product_deactivate();
+    if property_log::published() {
+        // The runtime writes property rows only to its separate log. Mark the
+        // empty prefix before any entry exists so it never passes alone.
+        unsafe { property_log::mark_prefix(ptr::addr_of_mut!((*trace).joined.property)) };
+    }
     ENABLED.store(true, Ordering::Release);
     TRACE.store(trace, Ordering::Release);
     let assignment = unsafe { ptr::addr_of_mut!((*trace).assignment) };
@@ -383,6 +388,11 @@ mod tests {
     }
 
     #[test]
+    fn runtime_property_log_keeps_every_owner_row_and_freezes_after_stop() {
+        owned_child(true, "log-many");
+    }
+
+    #[test]
     fn runtime_old_reset_cannot_roll_back_committed_owner() {
         owned_child(true, "reset-race");
     }
@@ -405,6 +415,33 @@ mod tests {
     #[test]
     fn runtime_call_started_before_accepted_false_is_rejected_without_epoch_advance() {
         owned_child(true, "caller-fence");
+    }
+
+    /// Whole copy through ReadProcessMemory, like an external controller.
+    fn copy_bytes(address: *const u8, len: usize) -> Vec<u8> {
+        let mut bytes = vec![0u8; len];
+        let mut copied = 0;
+        assert_ne!(
+            unsafe {
+                ReadProcessMemory(
+                    GetCurrentProcess(),
+                    address.cast(),
+                    bytes.as_mut_ptr().cast(),
+                    len,
+                    &mut copied,
+                )
+            },
+            0
+        );
+        assert_eq!(copied, len);
+        bytes
+    }
+
+    fn identity() -> (u32, u64) {
+        (
+            unsafe { GetCurrentProcessId() },
+            current_created_filetime().unwrap(),
+        )
     }
 
     fn owned_child(runtime: bool, case: &str) {
@@ -475,7 +512,7 @@ mod tests {
         // Runtime and controller both use this process-owned allocation. It
         // never drops when observation stops, including the failure case.
         let trace_pointer = if is_runtime {
-            runtime::allocate_trace()
+            runtime::allocate_trace().unwrap()
         } else {
             Box::into_raw(CompositeTrace::boxed())
         };
@@ -722,6 +759,14 @@ mod tests {
                 bytes
             };
             let frozen = snapshot();
+            let frozen_log = property_log::snapshot_for_test();
+            let (pid, created) = identity();
+            civ6_bootstrap_rs::protocol::native_trace(&frozen, Some(&frozen_log), pid, created)
+                .unwrap();
+            assert!(
+                civ6_bootstrap_rs::protocol::native_trace(&frozen, None, pid, created).is_err(),
+                "the marked empty prefix never passes without its log"
+            );
             assert_eq!(unsafe { calibration_end(pending_can, 1, 77, this) }, 1);
             assert_eq!(snapshot(), frozen, "appointment end after stop");
             for _ in 0..32 {
@@ -760,6 +805,11 @@ mod tests {
                 assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
                 assert_eq!(snapshot(), frozen, "all trace bytes remain frozen");
             }
+            assert_eq!(
+                property_log::snapshot_for_test(),
+                frozen_log,
+                "all property log bytes remain frozen"
+            );
             assert!(PRODUCT_ACTIVE.load(Ordering::Acquire));
             assert_eq!(trace.joined.property.dropped.load(Ordering::Acquire), 0);
             assert_eq!(trace.joined.property.in_flight.load(Ordering::Acquire), 0);
@@ -768,6 +818,141 @@ mod tests {
                 0
             );
             assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 0);
+            return;
+        }
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("log-many") {
+            use civ6_bootstrap_rs::protocol as wire;
+            const OWNERS: usize = 22;
+            let log = property_log::header_for_test();
+            let start = log.next.load(Ordering::Acquire) as usize;
+            let filtered = log.filtered.load(Ordering::Acquire);
+            // One receiver and one returned value per owner. The synthetic
+            // getter returns [receiver+0x40] and counts calls at +0x48.
+            let receivers: Vec<*mut u64> = (0..OWNERS)
+                .map(|_| Box::into_raw(Box::new([0u64; 16])).cast::<u64>())
+                .collect();
+            let values: Vec<*mut u64> = (0..OWNERS)
+                .map(|_| Box::into_raw(Box::new([1u64, 0, 0])).cast::<u64>())
+                .collect();
+            // (key, receiver, returned, read_state, tag, payload, flags)
+            let mut expected: Vec<(u32, u64, u64, u32, u32, u64, u32)> = Vec::new();
+            let mut calls = [0u64; OWNERS];
+            let mut call = |o: usize, key: u32, returned: u64, read: (u32, u32, u64, u32)| {
+                unsafe { receivers[o].add(8).write_volatile(returned) };
+                assert_eq!(get(receivers[o] as u64, key), returned);
+                calls[o] += 1;
+                expected.push((
+                    key,
+                    receivers[o] as u64,
+                    returned,
+                    read.0,
+                    read.1,
+                    read.2,
+                    read.3,
+                ));
+            };
+            let value = |o: usize, tag: u64, payload: u64, flags: u64| {
+                unsafe {
+                    values[o].write_volatile(tag);
+                    values[o].add(1).write_volatile(payload);
+                    values[o].add(2).write_volatile(flags << 32);
+                }
+                values[o] as u64
+            };
+            for o in 0..OWNERS {
+                let owner = 3 + o as u32;
+                call(o, PAID_RESET_BASE + owner, value(o, 1, 1, 0), (1, 1, 1, 0));
+                call(o, COMMIT_KEY, value(o, 1, 0, 0), (1, 1, 0, 0));
+                for bit in 0..BITS {
+                    let set = u64::from(words[bit / WIDTH] & (1 << (bit % WIDTH)) != 0);
+                    call(
+                        o,
+                        paid_catalog::bit_key(bit),
+                        value(o, 1, set, 0),
+                        (1, 1, set, 0),
+                    );
+                }
+                call(o, COMMIT_KEY, value(o, 1, 1, 0), (1, 1, 1, 0));
+                assert_eq!(runtime::phase(owner as usize), 2, "owner {owner} ready");
+            }
+            // Missing, unreadable, mistyped and flagged reads are raw rows too,
+            // and each one closes the last owner's committed catalog.
+            let last = OWNERS - 1;
+            call(last, COMMIT_KEY, 0, (0, 0, 0, 0));
+            call(last, COMMIT_KEY, 0x10, (2, 0, 0, 0));
+            call(last, COMMIT_KEY, value(last, 2, 1, 0), (1, 2, 1, 0));
+            call(last, COMMIT_KEY, value(last, 1, 1, 5), (1, 1, 1, 5));
+            assert_eq!(runtime::phase(3 + last), 0);
+            // An unrelated key is counted as filtered, never as a row.
+            assert_eq!(get(receivers[0] as u64, 123), values[0] as u64);
+            assert_eq!(log.filtered.load(Ordering::Acquire), filtered + 1);
+            let next = log.next.load(Ordering::Acquire) as usize;
+            assert_eq!(next, start + expected.len());
+            assert!(expected.len() > OWNERS * BITS && next > TRACE_CAPACITY);
+            assert_eq!(log.dropped.load(Ordering::Acquire), 0);
+            assert_eq!(log.in_flight.load(Ordering::Acquire), 0);
+            let thread = unsafe { GetCurrentThreadId() };
+            for (i, row) in expected.iter().enumerate() {
+                let actual = property_log::row_for_test(start + i);
+                let tag = actual.tag.load(Ordering::Acquire);
+                assert_eq!(actual.sequence.load(Ordering::Acquire), 1);
+                assert_eq!(
+                    (
+                        actual.key_id.load(Ordering::Relaxed),
+                        actual.property.load(Ordering::Relaxed),
+                        actual.returned.load(Ordering::Relaxed),
+                        actual.read_state.load(Ordering::Relaxed),
+                        tag & 0xffff,
+                        actual.payload.load(Ordering::Relaxed),
+                        actual.flags.load(Ordering::Relaxed),
+                    ),
+                    *row,
+                    "row {i}"
+                );
+                assert_eq!(actual.thread_id.load(Ordering::Relaxed), thread);
+            }
+            // The original getter ran exactly once per call, including the
+            // filtered key on owner 0.
+            for (o, count) in calls.iter().enumerate() {
+                assert_eq!(
+                    unsafe { receivers[o].add(9).read_volatile() } as u32 as u64,
+                    count + u64::from(o == 0)
+                );
+            }
+            // The bounded prefix is untouched; its mark points to the log.
+            assert_eq!(trace.joined.property.next.load(Ordering::Acquire), 0);
+            assert_eq!(trace.joined.property.filtered.load(Ordering::Acquire), 0);
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            let composite =
+                || copy_bytes(trace_pointer.cast(), std::mem::size_of::<CompositeTrace>());
+            let (frozen, frozen_log) = (composite(), property_log::snapshot_for_test());
+            let (pid, created) = identity();
+            wire::native_trace(&frozen, Some(&frozen_log), pid, created).unwrap();
+            let summary = wire::property_log(&frozen_log, pid, created).unwrap();
+            assert_eq!(
+                (summary.rows, summary.filtered),
+                (next as u64, filtered + 1)
+            );
+            assert!(wire::native_trace(&frozen, Some(&frozen_log), pid, created + 1).is_err());
+            // Authority keeps consuming natural getters with the log closed.
+            unsafe { receivers[0].add(8).write_volatile(value(0, 1, 1, 0)) };
+            assert_eq!(
+                get(receivers[0] as u64, PAID_RESET_BASE + 3),
+                values[0] as u64
+            );
+            assert_eq!(runtime::phase(3), 1, "post-stop reset still rebuilds");
+            assert_eq!(get(receivers[1] as u64, 123), values[1] as u64);
+            assert_eq!(can_call(this, 77), 1, "owner 2 keeps its admission");
+            assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+            assert_eq!(composite(), frozen, "prefix bytes frozen");
+            assert_eq!(
+                property_log::snapshot_for_test(),
+                frozen_log,
+                "log bytes frozen"
+            );
             return;
         }
         if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("reset-race") {
@@ -1232,19 +1417,25 @@ mod tests {
             // Fill real gateway samples; do not simulate capacity by editing
             // counters. Gate decisions still run on caller scratch/current
             // objects once all three finite record regions are exhausted.
-            for _ in 0..TRACE_CAPACITY + 1 {
+            // Runtime property rows fill the whole 2^20-row log, not 4096.
+            let log = property_log::header_for_test();
+            let remaining = civ6_bootstrap_rs::protocol::PROPERTY_LOG_CAPACITY
+                - log.next.load(Ordering::Acquire) as usize;
+            for _ in 0..remaining + 1 {
                 publish(PAID_ALLOW_BASE + 77, true);
             }
+            assert_eq!(
+                log.next.load(Ordering::Acquire),
+                civ6_bootstrap_rs::protocol::PROPERTY_LOG_CAPACITY as u64
+            );
+            assert_eq!(log.dropped.load(Ordering::Acquire), 1);
+            assert_eq!(trace.joined.property.next.load(Ordering::Acquire), 0);
             for _ in 0..CALIBRATION_CAPACITY + 1 {
                 assert_eq!(can_call(this, 77), 1);
             }
             for _ in 0..assignment::ASSIGN_CAPACITY + 1 {
                 assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
             }
-            assert_eq!(
-                trace.joined.property.next.load(Ordering::Acquire),
-                TRACE_CAPACITY as u32
-            );
             assert_eq!(
                 trace.joined.calibration.next.load(Ordering::Acquire),
                 CALIBRATION_CAPACITY as u32
@@ -1274,6 +1465,16 @@ mod tests {
             assert_eq!(
                 runtime::BridgeRuntimeStopObservation(null_mut()),
                 BridgeStatus::Ok as u32
+            );
+            let (pid, created) = identity();
+            let overflowed = civ6_bootstrap_rs::protocol::property_log(
+                &property_log::snapshot_for_test(),
+                pid,
+                created,
+            );
+            assert!(
+                overflowed.unwrap_err().contains("dropped=1"),
+                "a full log is reported and never accepted"
             );
             assert_eq!(
                 BridgeUninstall(null_mut()),

@@ -513,7 +513,7 @@ runtimeのCOMMIT権威は所有者ごとの単一transaction wordへ統合した
 
 通常runtimeの設置時は固定SHAのGameCoreとbridgeをWindowsローダーにpinし、通常のFreeLibraryによる寿命切れを防ぐ。一方、実機のGameCore unload、強制unmap、別baseへの再ロードと再設置は未証明であり、対応済みとは扱わない。property prefixと中継コードは一度だけ設置する契約を維持する。Close/Rebuildは判定状態の閉鎖・再構築であり、三入口の再設置APIではない。ロード開始前の実在フックへの接続は別Mustとして保持する。
 
-通常起動担当へ渡すABIは`BridgeRuntimeInstall`・`BridgeRuntimeStopObservation`・`BridgeRuntimeClose`・`BridgeRuntimeRebuild`の四exportで、いずれもWindows x64の`extern "system" fn(*mut c_void) -> u32`である。Installの入出力は`#[repr(C)] BridgeConfig`（40byte・align8）を使う。フィールド順はversion/size/game_pid/max_seconds（各u32）、created_filetime/trace_address（各u64）、trace_size/mode（各u32）。version=`0x0324_0001`、size=40、mode=6、入力trace_address/trace_size=0、max_seconds=1..300は観測時間だけである。PIDと作成FILETIMEは現在のゲームへ完全一致させる。返値0のときだけ同じ設定領域にゲーム所有のtraceアドレスとサイズが返る。その他は1入力不正、2プロセス不一致、3GameCore不一致、4入口不一致、5設置失敗、6重大失敗、99panicである。Closeは本体オブジェクト破棄前に呼ぶ必要があり、Rebuild後も所有者ごとの自然resetと公開が必要になる。このABIの記述を、通常起動や実在するロード前フックへの接続成功とは扱わない。
+通常起動担当へ渡すABIは`BridgeRuntimeInstall`・`BridgeRuntimeStopObservation`・`BridgeRuntimeClose`・`BridgeRuntimeRebuild`の四exportで、いずれもWindows x64の`extern "system" fn(*mut c_void) -> u32`である。Installの入出力は`#[repr(C)] BridgeConfig`（40byte・align8）を使う。フィールド順はversion/size/game_pid/max_seconds（各u32）、created_filetime/trace_address（各u64）、trace_size/mode（各u32）。version=`0x0324_0002`（ToDo324の別領域プロパティ記録で`0x0324_0001`から変更）、size=40、mode=6、入力trace_address/trace_size=0、max_seconds=1..300は観測時間だけである。PIDと作成FILETIMEは現在のゲームへ完全一致させる。返値0のときだけ同じ設定領域にゲーム所有のtraceアドレスとサイズが返る。property生行ログの位置はdata export `BRIDGE_RUNTIME_PROPERTY_LOG`（`AtomicPtr`）の現在値で公開する。その他は1入力不正、2プロセス不一致、3GameCore不一致、4入口不一致、5設置失敗、6重大失敗、99panicである。Closeは本体オブジェクト破棄前に呼ぶ必要があり、Rebuild後も所有者ごとの自然resetと公開が必要になる。このABIの記述を、通常起動や実在するロード前フックへの接続成功とは扱わない。
 
 controllerはrel32の接続先と中継命令を確認する。ロード済みbridgeのdata exportから入口ごとの期待gatewayを読み、DLL内の別functionでも拒否する。停止後は入口8byte、property prefix5byteと中継14byteを設置時と完全一致で比較する。callbackが終了へ到達せずcounterが残った場合は観測停止を不完全として拒否し、判定を解除しない。これは未終了callbackを使った合成検査の範囲であり、実機SEHがcallbackをどのように離脱させるかの証明ではない。通常Luaの試験フラグ依存を外す接続、本人会計、AIの正式支払いと通常runtimeの実機証明は引き続き未達である。
 
@@ -769,6 +769,27 @@ UIでは全3都市のスパイ生産可否がfalse、費用450、進捗0で、�
 
 独立したWin64子プロセスで、停止を跨ぐ任命の終了、停止後の配置の開始中、対象外キーの読取、本人の資格変更、費用3の未払い拒否と支払済み配置を検査した。32回繰り返し、917584バイトの全観測領域が不変だった。保留中の受付がある場合は停止がCriticalを返し、処理完了後にだけ成功する既存検査も保持する。この検査は実機の成功ではない。
 
-実機175で同時に確認されたプロパティ記録4096件の満杯と115355件の欠落は別の未解決事項である。容量、欠落0、原バイトの完全一致という検査条件は変更しない。通常起動、同一プロセスの読込、AI本人の費用2/3、途中保存を含むマルチプレイ、中和後の功績と効果停止・回復は引き続き実機での受入を要する。
+実機175で同時に確認されたプロパティ記録4096件の満杯と115355件の欠落は別の未解決事項である。この停止修正だけでは容量不足は解消しない。従来の4096件の形式と、欠落0・原バイトの完全一致という検査条件を保持する。通常起動、同一プロセスの読込、AI本人の費用2/3、途中保存を含むマルチプレイ、中和後の功績と効果停止・回復は引き続き実機での受入を要する。
 
 起動用の記録も同じ原子受付へ統一する。閉鎖フラグと受付件数を別々に更新する経路を残さず、二つの実装は共通のObservationGateを使用する。競合検査は実スレッドをチャネルで止め、閉鎖後の新規受付拒否、先行書き込みの未完了、完了後の可視性と排出を個別に断言する。起動処理と人物処理の本体判定を観測受付で止めない。
+
+### ToDo324: 常駐runtimeのプロパティ生行を別領域へ全件記録する
+
+実機175の原観測（`city-startup-native.native-first.bin`、SHA-256 `90D17D33…CADB4E`）は、受け付けたプロパティ呼出し119,451件のうち先頭4,096件だけを残し、115,355件を欠落として数えた。残った4,096件も欠測2,600件・読取済1,496件、受信先22件で、catalog配信の途中で満杯になっている。1回の全員への配信はcatalogのbit部分だけで22人×1,012bit＝22,264件あり、reset・commit・資格の読取が別に加わる。4,096行ではこのbit部分だけでも入らない。
+
+常駐runtimeだけ、設置時にプロパティ生行の専用ログを別領域に確保する。容量は2^20行（48MiB＋ヘッダー80byte）で、実機175の受付件数の約8.8倍にあたる有限の診断予算である。この比率は配信回数や観測時間の保証ではない。無限には保持しない。VirtualAllocで確保した全ページを0で書いてから公開し、確保に失敗した場合はフックを置く前に設置失敗（5）を返す。確保した領域はプロセス終了まで解放しない。行は既存の48byte `PropertyRow` のまま全項目を残し、圧縮・間引き・消去・上書きはしない。満杯後は行を書かずに欠落数を加算し、検証を失敗させる。ヘッダーはmagic `JACL`・version 1・容量・行幅48・総byte長・PID・作成FILETIME・next・dropped・in_flight・filteredを持つ。
+
+フィルター、24byteの一回読取、任命と支払の判定は従来の経路と共通の関数を使い、書き込み先だけが異なる。ログへの書き込み（件数を含む）は観測の受付と終了の間だけで行う。判定は行の空きや観測の停止と無関係に続く。フック内で確保・ロック・Luaの呼出しはしない。
+
+CompositeTraceの917,584byteとprefixの4,096行の配置は変えない。runtimeでは、prefixのPropertyTraceのversionを4、reservedを`JACL`にし、行と件数は0のまま残す。version 3だけを受け付ける旧検査はこのprefixを拒否し、新しい検査はログが無いと拒否するので、空のprefixだけで合格することはない。共通の定数と検証は`civ6-bootstrap-rs`の`protocol`に置き、native側は構造体の大きさとoffsetを静的に照合する。runtimeの設定versionは`0x0324_0002`、bootstrapのPrepare versionは`0x0880_0003`へ上げた（`todo880-bootstrap-primary.md`の旧値を置き換える）。
+
+bootstrap controllerは停止後、Compositeとログを各2回すべて読み、比較や検証の前に`native-first/second.bin`と`property-log-first/second.bin`をcreate_newで保存する。成功には、2回の一致、PIDと作成FILETIME、容量・行幅・総byte長、公開済み行のsequence、未使用の行がすべて0、droppedとin_flightが0を要求する。JSONLへ`bootstrap_property_log`行を出す。実行器の終了検査は`runtime.bin`と2本のログを読み直して同じ検査を行う。直接のruntime controllerも同じ4本を保存し、prefixの印とログを同じ基準で検査して`property_log`行を出す。任命と配置の記録枠の検査はこのcontrollerへ新たに加えていない。既存の成功条件は弱めていない。bootstrap DLLの途中件数は、ログのnextとin_flightを読む。印の無いprefixの0は件数として扱わず、不明（u64::MAX）にする。
+
+独立したWin64子プロセスで、実際のgetter gatewayを通して次を確認した。
+
+1. 22人分のcatalog全公開と、欠測・読取不可・tag 2・flags付きの読取を記録し、4,096件を超える全行のkey・受信先・戻り値・thread・読取状態・tag・payload・flagsが呼出し順に一致した。元のgetterの呼出し回数も一致し、対象外キーは行にせずfilteredだけに数えた。
+2. 停止後のreset、対象外キー、任命と配置の判定は続き、Compositeとログの全byteは変わらなかった。実際のbyteを新しい検査に通し、FILETIME違いとログ無しは拒否した。停止をまたぐ既存の32回検査も、ログの全byteが不変であることを確認する。
+3. 2^20＋1回の実呼出しで、next=2^20・dropped=1となり、検査は失敗した。容量が尽きても未払いの拒否と支払済みの配置は続いた。
+4. 改変検査として、欠落の加算を消す変更とprefixの印を消す変更を入れると、それぞれ検査が失敗することを確認した。
+
+これは合成検査の結果で、実機ではまだ確認していない。既知の上限として、観測中の対象呼び出しが2^20件を超えると溢れ、検査は失敗する。再配信の頻度や300秒までの観測で何件に達するかは、実機で確認する。そのときは容量を勘で増やさず、設計を見直す。1回の成果物はログ2本で約96MiBになる。作業集合から外れたページへの再アクセスで起きるソフトページフォルトは防がない（VirtualLockは使わない）。

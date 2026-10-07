@@ -254,3 +254,41 @@ fn actual_owned_hotpatch_original_once_and_reap() {
     drop(child);
     println!("owned_child_pid={pid} reaped=true runtime_api_calls=0 game_live=false");
 }
+
+#[test]
+fn native_counts_read_runtime_log_and_never_report_an_empty_prefix() {
+    use protocol::*;
+    let put = |b: &mut [u8], o: usize, n: u32| b[o..o + 4].copy_from_slice(&n.to_le_bytes());
+    let mut composite = vec![0u8; COMPOSITE_PROPERTY + 32];
+    put(&mut composite, 0, 0x4a414341);
+    put(&mut composite, 4, 4);
+    put(&mut composite, 8, 7);
+    put(&mut composite, COMPOSITE_PROPERTY, 0x4a414350);
+    put(&mut composite, COMPOSITE_PROPERTY + 4, 3);
+    let mut log = vec![0u8; PROPERTY_LOG_HEADER];
+    put(&mut log, 0, PROPERTY_LOG_MAGIC);
+    put(&mut log, 4, PROPERTY_LOG_VERSION);
+    log[PROPERTY_LOG_NEXT..PROPERTY_LOG_NEXT + 8].copy_from_slice(&5000u64.to_le_bytes());
+    let export = log.as_ptr() as u64;
+    LOG_EXPORT.store(std::ptr::addr_of!(export) as usize, Ordering::Release);
+    TRACE
+        .runtime_trace_size
+        .store(composite.len() as u64, Ordering::Release);
+    TRACE
+        .runtime_trace
+        .store(composite.as_ptr() as u64, Ordering::Release);
+    // A bounded prefix with next=0 is not evidence of zero runtime calls.
+    assert_eq!(native_counts(), [u64::MAX; 4]);
+    put(
+        &mut composite,
+        COMPOSITE_PROPERTY + 4,
+        PROPERTY_EXTERNAL_VERSION,
+    );
+    put(&mut composite, COMPOSITE_PROPERTY + 28, PROPERTY_LOG_MAGIC);
+    assert_eq!(native_counts(), [7, 0, 5000, 0]);
+    put(&mut log, 0, 0);
+    assert_eq!(native_counts(), [u64::MAX; 4]);
+    TRACE.runtime_trace.store(0, Ordering::Release);
+    TRACE.runtime_trace_size.store(0, Ordering::Release);
+    LOG_EXPORT.store(0, Ordering::Release);
+}
