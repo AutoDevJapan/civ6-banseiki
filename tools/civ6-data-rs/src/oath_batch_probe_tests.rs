@@ -104,14 +104,23 @@ end
 function REFRESH() for _,c in ipairs(CITIES) do local row={}; for k=1,6 do row[k]=CORE_YIELD(c,k) end; UI_CACHE[c.plot]=row end end
 -- The UI cache follows Core on ticks only; a lagging UI misses every other tick.
 function TICK() TICKS=TICKS+1; if KNOB.frozen or (KNOB.lag and TICKS%2==1) then return end; REFRESH() end
+-- Growth as CityPanelOverview.lua:661-686 reads it: bonuses apply only while the
+-- city grows; in a deficit the overall modifier carries no bonus. A side-effect
+-- knob lets an oath's flag move one growth value as a faulty product would.
 local function growth(city)
- local g={}
- function g:GetOverallGrowthModifier() return 1 end
+ local plot=PLOTS[city.plot]; local g={}
+ local function side(key) return KNOB.side and KNOB.side.key==key and flag(plot,KNOB.side.oath..'_ON') end
+ local function housing() return (city.plot%2==0) and 0.5 or 1 end
+ local function happiness() return ((city.plot%3==0) and -15 or 10)+(side('happiness') and 5 or 0) end
+ function g:GetFoodSurplus() return city:GetYield(5)-((KNOB.consume or {})[city.plot] or 4) end
  function g:GetOtherGrowthModifier() return 0 end
- function g:GetHousingGrowthModifier() return 1 end
- function g:GetHappinessGrowthModifier() return 0 end
- function g:GetFoodSurplus() return city:GetYield(5)-4 end
+ function g:GetHousingGrowthModifier() return housing() end
+ function g:GetHappinessGrowthModifier() return happiness() end
  function g:GetLoyaltyGrowthModifier() return 1 end
+ function g:GetOverallGrowthModifier()
+  local overall=g:GetFoodSurplus()>0 and housing()*math.max(1+happiness()/100,0) or 1
+  return overall+(side('growth') and 0.05 or 0)
+ end
  return g
 end
 for pid=0,21 do
@@ -399,6 +408,11 @@ fn control_plot(probe: &Probe) -> Result<i64> {
     first_plot(probe, "CIVILIZATION_JAC_ODA")
 }
 
+/// The mocked plot of a mocked city id (id 65536*n+player, plot 1000+10*player+n).
+fn plot_of_city(city: i64) -> i64 {
+    1000 + 10 * (city % 65536) + city / 65536
+}
+
 fn records(run: &Run) -> Result<Vec<Value>> {
     fs::read_to_string(run.dir.path().join("steps.jsonl"))?
         .lines()
@@ -422,17 +436,23 @@ fn record(run: &Run, probe: &Probe, role: Role, status: &str) -> Result<usize> {
         .context("record")
 }
 
-fn rejects(run: &Run, edit: impl FnOnce(&mut Vec<Value>), reason: &str) -> Result<()> {
+/// Writes edited records, expects the verifier to reject them for `reason`, restores.
+fn rejects(
+    run: &Run,
+    edit: impl FnOnce(&mut Vec<Value>) -> Result<()>,
+    reason: &str,
+) -> Result<()> {
     let original = records(run)?;
     let mut rows = original.clone();
-    edit(&mut rows);
+    edit(&mut rows)?;
     write_rows(run.dir.path(), &rows)?;
+    let outcome = verify(&Repository::checked_in(), run.dir.path());
+    write_rows(run.dir.path(), &original)?;
     let error = format!(
         "{:#}",
-        verify(&Repository::checked_in(), run.dir.path()).unwrap_err()
+        outcome.err().context(format!("accepted: {reason}"))?
     );
     assert!(error.contains(reason), "{reason}: {error}");
-    write_rows(run.dir.path(), &original)?;
     Ok(())
 }
 
@@ -442,6 +462,71 @@ fn replace(row: &mut Value, from: &str, to: &str) {
         .unwrap_or_default()
         .replacen(from, to, 1);
     row["detail"] = json!(detail);
+}
+
+/// Rewrites the body of both save frames of one side alike, keeping each frame's
+/// marker, length and terminator consistent, so only content checks can reject.
+fn edit_frames(
+    rows: &mut [Value],
+    run: &Run,
+    probe: &Probe,
+    core: bool,
+    edit: &dyn Fn(&str) -> String,
+) -> Result<()> {
+    for after in [false, true] {
+        let role = if core {
+            Role::CoreFrame { after }
+        } else {
+            Role::UiFrame { after }
+        };
+        let at = record(run, probe, role, "OK")?;
+        let detail = rows[at]["detail"].as_str().context("frame")?.to_owned();
+        let (head, tail) = detail.split_at(detail.find(":{").context("frame body")?);
+        let prefix = &head[..head.rfind('|').context("frame marker")? + 1];
+        let body = edit(tail[1..].strip_suffix(END).context("frame end")?);
+        rows[at]["detail"] = json!(format!("{prefix}{}:{body}{END}", body.len()));
+    }
+    Ok(())
+}
+
+/// Edits the JSON object a driver record returned, keeping its context head.
+fn edit_return(row: &mut Value, edit: impl FnOnce(&mut Value)) -> Result<()> {
+    let detail = row["detail"].as_str().context("detail")?.to_owned();
+    let (head, body) = detail.split_once("; return=").context("return")?;
+    let mut value: Value = serde_json::from_str(body)?;
+    edit(&mut value);
+    row["detail"] = json!(format!("{head}; return={value}"));
+    Ok(())
+}
+
+/// The scalar after `marker` changes from a number to a numeric string.
+fn retype_after(body: &str, marker: &str) -> String {
+    let start = body.find(marker).expect("marker") + marker.len();
+    let at = start + body[start..].find(":number:").expect("number");
+    format!("{}:string:{}", &body[..at], &body[at + 8..])
+}
+
+/// The first digit of the number after `marker` changes, keeping its length.
+fn bump_after(body: &str, marker: &str) -> String {
+    let start = body.find(marker).expect("marker") + marker.len();
+    let at = start + body[start..].find(":number:").expect("number") + 8;
+    let digit = if body.as_bytes()[at] == b'9' {
+        '8'
+    } else {
+        (body.as_bytes()[at] + 1) as char
+    };
+    format!("{}{digit}{}", &body[..at], &body[at + 1..])
+}
+
+fn reasons(case: &Value) -> Vec<String> {
+    case["reasons"]
+        .as_array()
+        .map(|r| {
+            r.iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[test]
@@ -745,8 +830,615 @@ fn calibration_ui_flag_ledger_and_save_faults_fail_the_whole_run() -> Result<()>
     Ok(())
 }
 
+/// A growth side effect fails its oath. A food oath may move overall growth only
+/// across the deficit boundary, where the official modifier stops applying.
 #[test]
-fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Result<()> {
+fn growth_side_effects_fail_their_oath_and_food_may_cross_the_deficit() -> Result<()> {
+    let repo = Repository::checked_in();
+    let probe = first()?;
+    let food = |case: usize| {
+        probe.cases[case]
+            .effects
+            .iter()
+            .any(|(k, _)| *k == Yield::Food)
+    };
+    let (plain, fed, crossing) = (3, 2, 11);
+    assert!(!food(plain) && food(fed) && food(crossing));
+    for (target, key, expected) in [
+        (plain, "happiness", vec![":happiness", ":growth"]),
+        (plain, "growth", vec![":growth"]),
+        (fed, "growth", vec![":growth"]),
+    ] {
+        let oath = &probe.cases[target].oath;
+        let run = simulate(&probe, &format!("KNOB.side={{oath='{oath}',key='{key}'}}"))?;
+        assert_eq!(run.failure, None, "{key}");
+        let report = verify(&repo, run.dir.path())?;
+        assert_eq!(
+            report["verified_count"],
+            probe.cases.len() - 1,
+            "{key}: {report:#}"
+        );
+        let case = &report["cases"][target];
+        assert_eq!(case["reasons"], case["in_game_reasons"], "{key}");
+        let found = reasons(case);
+        for suffix in expected {
+            assert!(
+                found
+                    .iter()
+                    .any(|r| r.starts_with("non_target:") && r.ends_with(suffix)),
+                "{key} {suffix}: {found:?}"
+            );
+        }
+    }
+    // Consumption between the OFF and ON food of one city: OFF starves, ON grows.
+    let clean = verify(&repo, simulate(&probe, "")?.dir.path())?;
+    let line = clean["cases"][crossing]["results"]
+        .as_array()
+        .context("results")?
+        .iter()
+        .find(|r| r["kind"] == "food")
+        .context("food line")?
+        .clone();
+    let city = line["city"].as_i64().context("city")?;
+    let consume = (line["off"].as_f64().context("off")? + line["on"].as_f64().context("on")?) / 2.0;
+    let run = simulate(
+        &probe,
+        &format!("KNOB.consume={{[{}]={consume:?}}}", plot_of_city(city)),
+    )?;
+    assert_eq!(run.failure, None);
+    let report = verify(&repo, run.dir.path())?;
+    assert_eq!(report["verified_count"], probe.cases.len(), "{report:#}");
+    // The case really crossed: overall growth moved with the food surplus sign.
+    let rows = records(&run)?;
+    let sample = |phase: Phase| -> Result<Value> {
+        let detail = rows[record(&run, &probe, Role::Measure(phase), "OK")?]["detail"]
+            .as_str()
+            .context("measure")?
+            .to_owned();
+        let data: Value = serde_json::from_str(detail.split_once("return=").context("return")?.1)?;
+        data["cities"]
+            .as_array()
+            .context("cities")?
+            .iter()
+            .find(|c| c["city"] == city)
+            .cloned()
+            .context("city")
+    };
+    let (prev, on) = (
+        sample(Phase::Off(crossing - 1))?,
+        sample(Phase::On(crossing))?,
+    );
+    assert!(prev["food_surplus"].as_f64() < Some(0.0) && on["food_surplus"].as_f64() > Some(0.0));
+    assert_ne!(prev["growth"], on["growth"]);
+    Ok(())
+}
+
+/// Every numbered record maps to exactly one generated operation; only the start
+/// record, a relaunch before the first step, UI-recovery notes inside a step, the
+/// judge and the diagnostic exit 3 may surround them.
+#[test]
+fn run_log_admits_only_the_generated_operations() -> Result<()> {
+    let probe = first()?;
+    let run = simulate(&probe, "")?;
+    let repo = Repository::checked_in();
+    verify(&repo, run.dir.path())?;
+    let total = run.scenario["steps"].as_array().context("steps")?.len();
+    let save = record(&run, &probe, Role::Save, "OK")?;
+    let compare = record(&run, &probe, Role::Compare, "START")?;
+    let unexpected = "unexpected, missing or duplicated driver record";
+    rejects(
+        &run,
+        |rows| {
+            for status in ["OK", "START"] {
+                let label = format!("{}/{} load", total + 1, total + 1);
+                rows.insert(
+                    save + 1,
+                    json!({"action":label,"status":status,"detail":"loaded other"}),
+                );
+            }
+            Ok(())
+        },
+        unexpected,
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            let (start, ok) = (rows[save - 1].clone(), rows[save].clone());
+            rows.insert(save + 1, ok);
+            rows.insert(save + 1, start);
+            Ok(())
+        },
+        unexpected,
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows.insert(
+                compare,
+                json!({"action":"hotseat_staging","status":"OK","detail":"x"}),
+            );
+            Ok(())
+        },
+        unexpected,
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows.insert(
+                compare + 1,
+                json!({"action":"ingame_unblock","status":"UNKNOWN","detail":"x"}),
+            );
+            Ok(())
+        },
+        unexpected,
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows.push(json!({"action":"judge","status":"OK","detail":"5/5 checks passed"}));
+            Ok(())
+        },
+        "after the diagnostic observation",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows[0]["detail"] = json!("another scenario");
+            Ok(())
+        },
+        "start record of this scenario",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            let at = rows
+                .iter()
+                .position(|r| r["action"] == "judge")
+                .context("judge")?;
+            rows.remove(at);
+            Ok(())
+        },
+        "judge record",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows.pop();
+            Ok(())
+        },
+        "exit 3",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows.swap(compare, compare + 1);
+            Ok(())
+        },
+        unexpected,
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            rows[compare]["status"] = json!("FAIL");
+            Ok(())
+        },
+        "failed driver observation retained",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            let mut started: Value =
+                serde_json::from_str(rows[compare]["detail"].as_str().context("detail")?)?;
+            started["code"] = json!("return true");
+            rows[compare]["detail"] = json!(started.to_string());
+            Ok(())
+        },
+        "executed step does not match",
+    )?;
+    // A relaunch before the first step and a UI-recovery note inside a step are no operations.
+    let original = records(&run)?;
+    let mut rows = original.clone();
+    rows.insert(compare + 1, json!({"action":"ingame_unblock","status":"OK","detail":"closed X after an InGame timeout; retry 1/3"}));
+    rows.insert(
+        1,
+        json!({"action":"launch","status":"OK","detail":"Civ VI relaunched"}),
+    );
+    rows.insert(
+        1,
+        json!({"action":"launch","status":"START","detail":"Civ VI is not running"}),
+    );
+    write_rows(run.dir.path(), &rows)?;
+    let admitted = verify(&repo, run.dir.path());
+    write_rows(run.dir.path(), &original)?;
+    assert_eq!(admitted?["verified_count"], probe.cases.len());
+    Ok(())
+}
+
+/// Both save frames are read field by field: exact keys and types, the 66
+/// catalogue flags with exactly the chosen flag on, the ledger with 22 houses and
+/// its history, the same cities and yields on both sides and in the clean-state
+/// Core snapshots, and one turn throughout.
+#[test]
+fn save_frames_are_typed_complete_and_match_each_other_and_the_clean_state() -> Result<()> {
+    let probe = first()?;
+    let run = simulate(&probe, "")?;
+    let repo = Repository::checked_in();
+    verify(&repo, run.dir.path())?;
+    let chosen = probe.cases[3].oath.clone();
+    let unknown = format!("{}X", &chosen[..chosen.len() - 1]);
+    let other_city = "the UI frame shows other cities or yields than the Core frame";
+    let selected_reason = format!("the selected flag of {chosen} is not saved");
+    type Edit = Box<dyn Fn(&str) -> String>;
+    let swap =
+        |from: String, to: String| -> Edit { Box::new(move |b: &str| b.replacen(&from, &to, 1)) };
+    let cases: Vec<(bool, bool, Edit, &str)> = vec![
+        // (core side, UI side, edit, reason)
+        (
+            true,
+            false,
+            swap(
+                format!("{chosen}8:number:1"),
+                format!("{unknown}8:number:0"),
+            ),
+            "saved flags differ from the 66 catalogue oaths",
+        ),
+        (
+            true,
+            false,
+            swap(
+                "JAC_OATH_ODA_AZUCHI8:number:0".into(),
+                "JAC_OATH_ODA_AZUCHX8:number:0".into(),
+            ),
+            "saved flags differ from the 66 catalogue oaths",
+        ),
+        (
+            true,
+            false,
+            swap(format!("{chosen}8:number:1"), format!("{chosen}8:number:0")),
+            selected_reason.as_str(),
+        ),
+        (
+            true,
+            false,
+            swap(
+                "JAC_OATH_ODA_AZUCHI8:number:0".into(),
+                "JAC_OATH_ODA_AZUCHI8:number:1".into(),
+            ),
+            "outside its house's choice",
+        ),
+        (
+            true,
+            false,
+            Box::new(|b: &str| retype_after(b, "JAC_OATH_ODA_AZUCHI")),
+            "saved oath flag must be a number",
+        ),
+        (
+            true,
+            false,
+            swap("14:string:history".into(), "14:string:histXry".into()),
+            "ledger lacks history",
+        ),
+        (
+            true,
+            false,
+            swap("12:string:start".into(), "12:string:stArt".into()),
+            "Core frame needs exactly the keys",
+        ),
+        (
+            true,
+            false,
+            swap(
+                "11:string:turn8:number:1".into(),
+                "11:string:turn8:number:2".into(),
+            ),
+            "disagree on the turn",
+        ),
+        (
+            true,
+            false,
+            Box::new(|b: &str| retype_after(b, "17:string:PRODUCTION")),
+            "Core yields must be a number",
+        ),
+        (
+            true,
+            false,
+            swap("12:string:FAITH".into(), "12:string:FAITX".into()),
+            "Core yields needs exactly the keys",
+        ),
+        (
+            true,
+            false,
+            swap("10:string:p21".into(), "10:string:q21".into()),
+            "house key must be p",
+        ),
+        (
+            true,
+            false,
+            swap("11:string:1001".into(), "11:string:1009".into()),
+            other_city,
+        ),
+        (
+            true,
+            false,
+            Box::new(|b: &str| bump_after(b, "9:string:id")),
+            other_city,
+        ),
+        (
+            false,
+            true,
+            swap(
+                "31:string:GetOverallGrowthModifier".into(),
+                "31:string:GetOverallGrowthModifiex".into(),
+            ),
+            "UI growth needs exactly the keys",
+        ),
+        (
+            false,
+            true,
+            Box::new(|b: &str| retype_after(b, "11:string:hash")),
+            "UI queue hash must be a number",
+        ),
+        (
+            false,
+            true,
+            swap(
+                "11:string:turn8:number:1".into(),
+                "11:string:turn8:number:2".into(),
+            ),
+            "disagree on the turn",
+        ),
+        (
+            false,
+            true,
+            Box::new(|b: &str| bump_after(b, "9:string:id")),
+            other_city,
+        ),
+        (
+            false,
+            true,
+            Box::new(|b: &str| bump_after(b, "17:string:PRODUCTION")),
+            other_city,
+        ),
+        (
+            false,
+            true,
+            swap("12:string:FAITH".into(), "12:string:FAITX".into()),
+            "UI yields needs exactly the keys",
+        ),
+        // The same gap or the same other city on both sides.
+        (
+            true,
+            true,
+            swap("12:string:FAITH".into(), "12:string:FAITX".into()),
+            "Core yields needs exactly the keys",
+        ),
+        (
+            true,
+            true,
+            swap("11:string:1001".into(), "11:string:1009".into()),
+            "the save frames differ from the observed clean state",
+        ),
+    ];
+    for (core, ui, edit, reason) in &cases {
+        rejects(
+            &run,
+            |rows| {
+                if *core {
+                    edit_frames(rows, &run, &probe, true, edit.as_ref())?;
+                }
+                if *ui {
+                    edit_frames(rows, &run, &probe, false, edit.as_ref())?;
+                }
+                Ok(())
+            },
+            reason,
+        )?;
+    }
+    // The clean-state and per-phase Core snapshots are evidence too.
+    let saved = record(&run, &probe, Role::Snapshot(Phase::Saved), "OK")?;
+    let loaded = record(&run, &probe, Role::Snapshot(Phase::Loaded), "OK")?;
+    let on = record(&run, &probe, Role::Snapshot(Phase::On(2)), "OK")?;
+    let measure = record(&run, &probe, Role::Measure(Phase::On(1)), "OK")?;
+    type Change = fn(&mut Value);
+    let snapshot_cases: Vec<(usize, Change, &str)> = vec![
+        (
+            saved,
+            |v| {
+                v["cities"][0]["production"] =
+                    json!(v["cities"][0]["production"].as_f64().unwrap_or_default() + 1.0)
+            },
+            "the save frames differ from the observed clean state",
+        ),
+        (
+            loaded,
+            |v| {
+                v["cities"][0]["city"] =
+                    json!(v["cities"][0]["city"].as_i64().unwrap_or_default() + 1)
+            },
+            "the save frames differ from the observed clean state",
+        ),
+        (saved, |v| v["turn"] = json!(2), "disagree on the turn"),
+        (
+            on,
+            |v| {
+                v["cities"][0]["production"] =
+                    json!(v["cities"][0]["production"].as_f64().unwrap_or_default() + 1.0)
+            },
+            "Core and UI observations differ in on_3",
+        ),
+        (
+            on,
+            |v| v["cities"][0]["food"] = json!("6"),
+            "Core snapshot food must be a finite number",
+        ),
+        (
+            on,
+            |v| v["cities"][0]["extra"] = json!(1),
+            "Core snapshot city needs exactly the fields",
+        ),
+        (
+            measure,
+            |v| v["cities"][0]["gold"] = json!("1.5"),
+            "measured gold must be a finite number",
+        ),
+        (
+            measure,
+            |v| v["cities"][0]["note"] = json!(true),
+            "measured city needs exactly the fields",
+        ),
+    ];
+    for (at, change, reason) in snapshot_cases {
+        rejects(&run, |rows| edit_return(&mut rows[at], change), reason)?;
+    }
+    Ok(())
+}
+
+/// The verifier recomputes from the samples, so neither a changed sample nor an
+/// optimistic in-game verdict or quantity line can make an oath pass alone.
+#[test]
+fn recorded_samples_and_lines_are_recomputed_and_disagreement_fails_closed() -> Result<()> {
+    let probe = first()?;
+    let run = simulate(&probe, "")?;
+    let repo = Repository::checked_in();
+    let clean = verify(&repo, run.dir.path())?;
+    let compared = record(&run, &probe, Role::Compare, "OK")?;
+    let original = records(&run)?;
+    let check = |rows: &[Value], case: usize| -> Result<()> {
+        write_rows(run.dir.path(), rows)?;
+        let report = verify(&repo, run.dir.path());
+        write_rows(run.dir.path(), &original)?;
+        let report = report?;
+        assert_eq!(
+            report["cases"][case]["quantity_and_native_save_verified"],
+            false
+        );
+        assert!(reasons(&report["cases"][case]).contains(&"lua_rust_disagreement".to_owned()));
+        assert_eq!(report["verified_count"], probe.cases.len() - 1);
+        Ok(())
+    };
+    // Core and UI agree on a changed sample the in-game comparison never saw.
+    let kind = probe.cases[2].effects[0].0.key();
+    let player = clean["cases"][2]["player"].as_i64().context("player")?;
+    let mut rows = original.clone();
+    for role in [Role::Measure(Phase::On(2)), Role::Snapshot(Phase::On(2))] {
+        edit_return(&mut rows[record(&run, &probe, role, "OK")?], |data| {
+            if let Some(city) = data["cities"]
+                .as_array_mut()
+                .and_then(|c| c.iter_mut().find(|c| c["owner"] == player))
+            {
+                city[kind] = json!(city[kind].as_f64().unwrap_or_default() + 0.5);
+            }
+        })?;
+    }
+    check(&rows, 2)?;
+    // Quantity lines must equal the Rust recomputation field by field.
+    type Change = fn(&mut Value);
+    let lines: [Change; 6] = [
+        |case| case["results"] = json!([]),
+        |case| {
+            let t = case["results"][0]["tolerance"].as_f64().unwrap_or_default();
+            case["results"][0]["tolerance"] = json!(t * 2.0)
+        },
+        |case| case["results"][0]["quantity_verified"] = json!(false),
+        |case| case["results"][0]["note"] = json!("extra"),
+        |case| case["results"][0]["off"] = json!("1"),
+        |case| {
+            let first = case["results"][0].clone();
+            case["results"]
+                .as_array_mut()
+                .into_iter()
+                .for_each(|r| r.push(first.clone()))
+        },
+    ];
+    for change in lines {
+        let mut rows = original.clone();
+        edit_return(&mut rows[compared], |data| change(&mut data["cases"][0]))?;
+        check(&rows, 0)?;
+    }
+    // An in-game failure the samples do not show still fails the oath.
+    let mut rows = original.clone();
+    edit_return(&mut rows[compared], |data| {
+        data["cases"][0]["quantity_verified"] = json!(false);
+        data["cases"][0]["reasons"] = json!(["leak:1:gold"]);
+        data["quantity_verified_count"] = json!(probe.cases.len() - 1);
+    })?;
+    check(&rows, 0)?;
+    // A verdict that contradicts its own reasons is not evidence at all.
+    rejects(
+        &run,
+        |rows| {
+            edit_return(&mut rows[compared], |data| {
+                data["cases"][0]["quantity_verified"] = json!(false)
+            })
+        },
+        "contradicts its reasons",
+    )?;
+    // The report carries the Rust lines, equal to the in-game ones here.
+    let line = &clean["cases"][0]["results"][0];
+    assert_eq!(line["reason"], "native_100_percent_reference_delta");
+    assert!(DETAIL_KEYS.iter().all(|k| line.get(*k).is_some()));
+    Ok(())
+}
+
+/// A saved ledger that is internally consistent but not the batch is rejected.
+#[test]
+fn saved_ledger_rejects_missing_or_foreign_choices() -> Result<()> {
+    let probe = first()?;
+    let human = &probe.cases[0].oath;
+    let civs = civs(&probe.scenario()?)?;
+    let ai = civs
+        .iter()
+        .position(|c| *c == probe.cases[1].civ)
+        .context("house")?;
+    let oda = civs
+        .iter()
+        .position(|c| c == "CIVILIZATION_JAC_ODA")
+        .context("Oda")?;
+    for (mutation, reason) in [
+        (
+            format!("l.houses.p{ai}.oathChosen=2"),
+            "lacks its saved golden choice",
+        ),
+        (
+            format!("l.houses.p{ai}.oathReign=2"),
+            "lacks its saved golden choice",
+        ),
+        (
+            format!("l.houses.p{ai}.age='HEROIC'"),
+            "lacks its saved golden choice",
+        ),
+        (
+            format!("l.houses.p{oda}.oaths={{JAC_OATH_ODA_TENKA_FUBU=true}}"),
+            "a house outside the batch has a saved oath",
+        ),
+        (
+            format!("l.houses.p{oda}.oathChosen=1"),
+            "a house outside the batch has a saved oath",
+        ),
+    ] {
+        let run = simulate(&probe, "")?;
+        // The same self-consistent Core frame before and after: flags follow the ledger.
+        run.game
+            .vm
+            .load(format!("CONTEXT='core'; PROPS.JAC_TODO134_SAVE_PROBE=nil; local l=PROPS.JAC_AGES_LEDGER\n{mutation}\nPROPS.JAC_AGES_LEDGER=l; for _,c in ipairs(CITIES) do JAC_Oaths_WritePlot(l.houses['p'..c.owner],PLOTS[c.plot]) end"))
+            .exec()?;
+        let text: String = run.game.vm.load(core_code(human, false)).eval()?;
+        let body = text
+            .split_once(':')
+            .and_then(|(_, rest)| rest.strip_suffix(END))
+            .context("frame")?
+            .to_owned();
+        rejects(
+            &run,
+            |rows| edit_frames(rows, &run, &probe, true, &|_| body.clone()),
+            reason,
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn verifier_rejects_altered_names_scenario_result_and_missing_scenario() -> Result<()> {
     let probe = first()?;
     let run = simulate(&probe, "")?;
     let repo = Repository::checked_in();
@@ -755,7 +1447,6 @@ fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Resul
     let load = record(&run, &probe, Role::Load, "OK")?;
     let core_after = record(&run, &probe, Role::CoreFrame { after: true }, "OK")?;
     let ui_before = record(&run, &probe, Role::UiFrame { after: false }, "OK")?;
-    let compare_start = record(&run, &probe, Role::Compare, "START")?;
     rejects(
         &run,
         |rows| {
@@ -763,88 +1454,59 @@ fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Resul
                 &mut rows[core_after],
                 "13:string:GOLDEN",
                 "13:string:GOLDEn",
-            )
+            );
+            Ok(())
         },
         "Core ledger, history, flags or yields changed",
     )?;
     rejects(
         &run,
-        |rows| replace(&mut rows[ui_before], "number:1", "number:2"),
+        |rows| {
+            replace(&mut rows[ui_before], "number:1", "number:2");
+            Ok(())
+        },
         "UI yields or growth changed",
     )?;
     rejects(
         &run,
-        |rows| replace(&mut rows[core_after], "|END-JAC-OATH-SAVE", ""),
+        |rows| {
+            replace(&mut rows[core_after], "|END-JAC-OATH-SAVE", "");
+            Ok(())
+        },
         "frame terminator missing",
     )?;
     rejects(
         &run,
-        |rows| replace(&mut rows[core_after], "|JAC_OATH_", "|9JAC_OATH_"),
+        |rows| {
+            replace(&mut rows[core_after], "|JAC_OATH_", "|9JAC_OATH_");
+            Ok(())
+        },
         "frame missing",
     )?;
     rejects(
         &run,
         |rows| {
-            let d = rows[ui_before]["detail"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
-            let (head, tail) = d.split_once("|batch-1|").unwrap_or_default();
-            let (length, body) = tail.split_once(':').unwrap_or_default();
-            rows[ui_before]["detail"] = json!(format!(
-                "{head}|batch-1|{}:{body}",
-                length.parse::<usize>().unwrap_or_default() + 1
-            ));
+            replace(&mut rows[ui_before], ":{", "0:{");
+            Ok(())
         },
         "incomplete frame return",
     )?;
     rejects(
         &run,
-        |rows| rows[save]["detail"] = json!("C:\\Saves\\JAC-Todo134-Batch-1-agent-01.Civ6Save"),
+        |rows| {
+            rows[save]["detail"] = json!("C:\\Saves\\JAC-Todo134-Batch-1-agent-01.Civ6Save");
+            Ok(())
+        },
         "recorded save name does not follow",
     )?;
     rejects(
         &run,
-        |rows| rows[load]["detail"] = json!("loaded other-save"),
+        |rows| {
+            rows[load]["detail"] = json!("loaded other-save");
+            Ok(())
+        },
         "load OK record does not name",
     )?;
-    rejects(
-        &run,
-        |rows| {
-            let row = rows[compare_start].clone();
-            rows.insert(compare_start, row);
-        },
-        "missing or duplicated driver record",
-    )?;
-    rejects(
-        &run,
-        |rows| rows.swap(compare_start, compare_start + 1),
-        "driver record order differs",
-    )?;
-    rejects(
-        &run,
-        |rows| rows[compare_start]["status"] = json!("FAIL"),
-        "failed driver observation retained",
-    )?;
-    rejects(
-        &run,
-        |rows| {
-            rows.pop();
-        },
-        "exit 3",
-    )?;
-    rejects(
-        &run,
-        |rows| {
-            let mut started: Value =
-                serde_json::from_str(rows[compare_start]["detail"].as_str().unwrap_or_default())
-                    .unwrap_or_default();
-            started["code"] = json!("return true");
-            rows[compare_start]["detail"] = json!(started.to_string());
-        },
-        "executed step does not match",
-    )?;
-    // The scenario and result files are evidence too.
     let scenario_path = run.dir.path().join("scenario.json");
     let original = fs::read_to_string(&scenario_path)?;
     for (from, to, reason) in [
@@ -870,10 +1532,11 @@ fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Resul
         ),
     ] {
         fs::write(&scenario_path, original.replacen(from, to, 1))?;
-        let error = format!("{:#}", verify(&repo, run.dir.path()).unwrap_err());
+        let outcome = verify(&repo, run.dir.path());
+        fs::write(&scenario_path, &original)?;
+        let error = format!("{:#}", outcome.err().context(from)?);
         assert!(error.contains(reason), "{from}: {error}");
     }
-    fs::write(&scenario_path, &original)?;
     let result_path = run.dir.path().join("result.json");
     let result = fs::read_to_string(&result_path)?;
     for (from, to) in [
@@ -885,9 +1548,10 @@ fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Resul
         ),
     ] {
         fs::write(&result_path, result.replacen(from, to, 1))?;
-        assert!(verify(&repo, run.dir.path()).is_err(), "{from}");
+        let outcome = verify(&repo, run.dir.path());
+        fs::write(&result_path, &result)?;
+        assert!(outcome.is_err(), "{from}");
     }
-    fs::write(&result_path, &result)?;
     verify(&repo, run.dir.path())?;
     fs::remove_file(&scenario_path)?;
     let error = format!("{:#}", verify(&repo, run.dir.path()).unwrap_err());
@@ -895,126 +1559,6 @@ fn verifier_rejects_altered_records_frames_names_and_missing_scenario() -> Resul
         error.contains("lacks the executed scenario.json"),
         "{error}"
     );
-    Ok(())
-}
-
-/// The verifier recomputes from the samples, so neither a changed sample nor an
-/// optimistic in-game verdict can make an oath pass alone.
-#[test]
-fn recorded_samples_are_recomputed_and_disagreement_fails_closed() -> Result<()> {
-    let probe = first()?;
-    let run = simulate(&probe, "")?;
-    let repo = Repository::checked_in();
-    let measured = record(&run, &probe, Role::Measure(Phase::On(2)), "OK")?;
-    let compared = record(&run, &probe, Role::Compare, "OK")?;
-    let original = records(&run)?;
-    let mut rows = original.clone();
-    let detail = rows[measured]["detail"]
-        .as_str()
-        .unwrap_or_default()
-        .to_owned();
-    let mut sample: Value = serde_json::from_str(
-        detail
-            .strip_prefix("ran Lua in InGame; return=")
-            .unwrap_or_default(),
-    )?;
-    let kind = probe.cases[2].effects[0].0.key();
-    let report = verify(&repo, run.dir.path())?;
-    let player = report["cases"][2]["player"].as_i64().context("player")?;
-    let city = sample["cities"]
-        .as_array_mut()
-        .context("cities")?
-        .iter_mut()
-        .find(|c| c["owner"] == player)
-        .context("own city")?;
-    city[kind] = json!(city[kind].as_f64().unwrap_or_default() + 0.5);
-    rows[measured]["detail"] = json!(format!("ran Lua in InGame; return={sample}"));
-    write_rows(run.dir.path(), &rows)?;
-    let changed = verify(&repo, run.dir.path())?;
-    let case = &changed["cases"][2];
-    assert_eq!(case["quantity_and_native_save_verified"], false);
-    assert!(case["reasons"]
-        .as_array()
-        .context("reasons")?
-        .contains(&json!("lua_rust_disagreement")));
-    assert_eq!(changed["verified_count"], probe.cases.len() - 1);
-    // An in-game verdict that contradicts its own reasons is not evidence.
-    let mut rows = original.clone();
-    replace(
-        &mut rows[compared],
-        "\"quantity_verified\":true,\"reasons\":[]",
-        "\"quantity_verified\":false,\"reasons\":[]",
-    );
-    write_rows(run.dir.path(), &rows)?;
-    assert!(format!("{:#}", verify(&repo, run.dir.path()).unwrap_err())
-        .contains("contradicts its reasons"));
-    // An in-game failure the samples do not show still fails the oath.
-    let mut rows = original.clone();
-    replace(
-        &mut rows[compared],
-        "\"quantity_verified\":true,\"reasons\":[]",
-        "\"quantity_verified\":false,\"reasons\":[\"leak:1:gold\"]",
-    );
-    replace(
-        &mut rows[compared],
-        "\"quantity_verified_count\":13",
-        "\"quantity_verified_count\":12",
-    );
-    write_rows(run.dir.path(), &rows)?;
-    let report = verify(&repo, run.dir.path())?;
-    assert_eq!(
-        report["cases"][0]["quantity_and_native_save_verified"],
-        false
-    );
-    assert_eq!(report["verified_count"], probe.cases.len() - 1);
-    Ok(())
-}
-
-/// The saved frame must show every batch choice and nothing else, read in Rust.
-#[test]
-fn saved_frame_rejects_missing_or_foreign_choices() -> Result<()> {
-    let probe = first()?;
-    let run = simulate(&probe, "")?;
-    let human = &probe.cases[0].oath;
-    let ai = &probe.cases[1];
-    let civs = civs(&run.scenario)?;
-    let ai_pid = civs.iter().position(|c| *c == ai.civ).context("house")?;
-    let oda = civs
-        .iter()
-        .position(|c| c == "CIVILIZATION_JAC_ODA")
-        .context("Oda")?;
-    let oda_oath = "JAC_OATH_ODA_TENKA_FUBU";
-    // A self-consistent saved state: the ledger edit is mirrored into every flag.
-    let frame_of = |game: &Game, mutation: &str| -> Result<String> {
-        game.vm.load(format!("CONTEXT='core'; PROPS.JAC_TODO134_SAVE_PROBE=nil; local l=PROPS.JAC_AGES_LEDGER\n{mutation}\nPROPS.JAC_AGES_LEDGER=l; for _,c in ipairs(CITIES) do JAC_Oaths_WritePlot(l.houses['p'..c.owner],PLOTS[c.plot]) end")).exec()?;
-        let text: String = game.vm.load(core_code(human, false)).eval()?;
-        Ok(text
-            .split_once(':')
-            .and_then(|(_, rest)| rest.strip_suffix(END))
-            .context("frame")?
-            .to_owned())
-    };
-    let clean = frame_of(&run.game, "")?;
-    saved_selections(&clean, &probe.cases)?;
-    for (mutation, reason) in [
-        (
-            format!("l.houses.p{ai_pid}.oaths={{}}"),
-            "lacks its saved golden choice",
-        ),
-        (
-            format!("l.houses.p{ai_pid}.age='NORMAL'"),
-            "lacks its saved golden choice",
-        ),
-        (
-            format!("l.houses.p{oda}.age='GOLDEN'; l.houses.p{oda}.oaths={{{oda_oath}=true}}"),
-            "a house outside the batch has a saved oath",
-        ),
-    ] {
-        let game = simulate(&probe, "")?.game;
-        let frame = frame_of(&game, &mutation)?;
-        let error = format!("{:#}", saved_selections(&frame, &probe.cases).unwrap_err());
-        assert!(error.contains(reason), "{mutation}: {error}");
-    }
     Ok(())
 }
 
