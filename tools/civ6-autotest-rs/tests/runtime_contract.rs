@@ -121,6 +121,16 @@ impl Backend for BundleGame {
 fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    // The fake game has its own installed MOD catalog. Never consult the
+    // developer's or CI runner's real game installation for this contract.
+    let mods = root.join("Mods");
+    let bundle = mods.join("Bundle0");
+    fs::create_dir_all(&bundle).unwrap();
+    fs::write(
+        bundle.join("Bundle0.modinfo"),
+        "<Mod id=\"dfa0717e-4d0b-4370-b693-27fc6758571b\" version=\"1\"/>",
+    )
+    .unwrap();
     let logs = root.join("logs");
     fs::create_dir(&logs).unwrap();
     for name in LOG_NAMES {
@@ -151,6 +161,7 @@ fn bundle0_runs_all_ten_actions_and_preserves_artifact_contract() {
         Arc::new(FakeClock::default()),
     );
     runner.auto_restart = false;
+    runner.mods_dir = mods;
     assert_eq!(runner.run().unwrap(), 0);
     let result: Value =
         serde_json::from_slice(&fs::read(output.join("result.json")).unwrap()).unwrap();
