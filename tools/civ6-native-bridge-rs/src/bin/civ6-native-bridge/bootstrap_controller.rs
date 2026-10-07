@@ -313,6 +313,17 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         let mut again = vec![0; size];
         read_remote(&game, native_address, &mut native)?;
         read_remote(&game, native_address, &mut again)?;
+        // Preserve both original observations even when they fail validation.
+        // Ongoing policy guards and sampled rows must not be reconstructed from
+        // another process or a later successful read after the owned game ends.
+        for (extension, bytes) in [("native-first.bin", &native), ("native-second.bin", &again)] {
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(req.output.with_extension(extension))
+                .and_then(|mut f| f.write_all(bytes))
+                .map_err(|e| format!("preserve native observation {extension}: {e}"))?;
+        }
         if native != again {
             return Err("native drained trace is not stable".into());
         }

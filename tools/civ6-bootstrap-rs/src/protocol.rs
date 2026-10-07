@@ -186,7 +186,10 @@ pub fn native_trace(b: &[u8]) -> Result<(), String> {
             || u(offset + 12)? != 0
             || u(offset + 16)? != 0
         {
-            return Err("native trace version/drop/in-flight differs".into());
+            return Err(format!(
+                "native trace header at {offset:#x}: magic={:#x} version={} dropped={} in_flight={}",
+                u(offset)?, u(offset + 4)?, u(offset + 12)?, u(offset + 16)?
+            ));
         }
         let count = u(offset + 8)? as usize;
         if count > capacity {
