@@ -1595,6 +1595,92 @@ fn departed_waiter_cancels_the_competition_deadline_during_a_running_child() {
 }
 
 #[test]
+fn lease_monitor_forwards_native_identity_within_the_probe_budget() {
+    struct NativeInspect {
+        time: f64,
+        inspections: Vec<(u32, f64)>,
+    }
+    impl Runner for NativeInspect {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("the lease monitor must not fall back to tasklist");
+        }
+        fn process_identity(
+            &mut self,
+            pid: u32,
+            timeout: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            self.inspections.push((pid, timeout));
+            Ok(Some(process::ProcessIdentity {
+                image: "live_chain.exe".into(),
+                created_filetime: None,
+            }))
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.time += seconds;
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    f.json(
+        "here/civ6.lock",
+        json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+    );
+    f.json("jobs/waiter/job.json", json!({"status":"running"}));
+    f.json(
+        "here/queue/waiter.json",
+        json!({"job":"waiter","live_chain":true,"pid":4321,"since":1000}),
+    );
+    let mut r = NativeInspect {
+        time: 1100.0,
+        inspections: vec![],
+    };
+    let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+    assert_eq!(
+        process::observe_lease(&mut r, &limit).unwrap(),
+        process::LeaseProbe::Contended(2800.0)
+    );
+    assert_eq!(r.inspections, vec![(4321, 2.0)]);
+    assert_eq!(limit.hard_deadline(), Some(2800.0));
+}
+
+#[test]
+#[cfg(windows)]
+fn holder_uses_pinned_creation_identity_instead_of_reopening_the_pid() {
+    struct NativeIdentity;
+    impl Runner for NativeIdentity {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            panic!("no process command expected");
+        }
+        fn process_identity(
+            &mut self,
+            _: u32,
+            _: f64,
+        ) -> Result<Option<process::ProcessIdentity>, String> {
+            Ok(Some(process::ProcessIdentity {
+                image: "live_chain.exe".into(),
+                created_filetime: Some(123),
+            }))
+        }
+        fn now(&mut self) -> f64 {
+            0.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    // This PID is synthetic. Success therefore requires the captured handle's
+    // creation identity, rather than a second real OpenProcess call.
+    let mut owner = json!({"live_chain":true,"pid":u32::MAX,"pid_created_filetime":123});
+    assert!(holder_alive(&mut NativeIdentity, &f.p, &owner).unwrap());
+    owner["pid_created_filetime"] = json!(124);
+    assert!(!holder_alive(&mut NativeIdentity, &f.p, &owner).unwrap());
+}
+
+#[test]
 fn slow_waiter_investigation_does_not_extend_the_absolute_lease() {
     struct SlowInspect(Fake);
     impl Runner for SlowInspect {
