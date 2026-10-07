@@ -345,6 +345,102 @@ fn price_only_updates_preserve_the_ui_payment_prefix_across_reload() {
     }
 }
 
+/// Pay every title through official notifications, then read the same
+/// Gameplay again. Loading alone must republish placement for the paid owner;
+/// no turn, Reconcile, Finalize or republish request follows the load.
+fn paid_then_reloaded(cost: u8, tamper: &str) -> Lua {
+    let lua = scene(cost);
+    exec(
+        &lua,
+        r#"
+        for step=1,COST-1 do promote(step) end
+        finalize(); completed()
+        DEF=GameInfo.Governors[ROW.GovernorType]
+        function placement(owner)
+            local p=Players[owner]
+            assert(p:GetProperty(904999)==true,'paid catalog not committed')
+            assert(p:GetProperty(904000+DEF.Index)==true and p:GetProperty(906000+DEF.Index)==true)
+            return p:GetProperty(905000+DEF.Index)
+        end
+        assert(placement(2)==true and placement(1)==false)
+        BEFORE={spent=Players[2].spent,destroys=DESTROYS,state=Game:GetProperty(KEY..'STATE')}
+        STORE_KEY='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
+    "#,
+    );
+    exec(&lua, tamper);
+    exec(
+        &lua,
+        r#"
+        OPENED={}
+        for owner=0,21 do
+            local p=Players[owner]; local setter=p.SetProperty
+            p.SetProperty=function(self,key,value)
+                if key==905000+DEF.Index and value==true then OPENED[owner]=true end
+                return setter(self,key,value)
+            end
+        end
+        RESET_CONTEXTS()
+        assert(loadstring(GAMEPLAY_SOURCE))()
+        assert(#REQUESTS==0,'load queued an operation')
+        assert(Players[2].spent==BEFORE.spent and DESTROYS==BEFORE.destroys,'load changed native payment')
+        assert(Game:GetProperty(KEY..'STATE')==BEFORE.state)
+    "#,
+    );
+    lua
+}
+
+#[test]
+fn reload_republishes_paid_placement_without_a_turn() {
+    for cost in 1..=3 {
+        let lua = paid_then_reloaded(cost, "");
+        exec(
+            &lua,
+            r#"
+            assert(placement(2)==true,'paid placement stayed closed after load')
+            assert(placement(1)==false and not OPENED[1],'other owner inherited payment')
+            local status=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(2,LEADER)
+            assert(status.active==true)
+        "#,
+        );
+    }
+}
+
+#[test]
+fn reload_keeps_placement_closed_without_a_complete_paid_receipt() {
+    let missing =
+        "local s=Game:GetProperty(STORE_KEY); s.people[LEADER]=nil; Game:SetProperty(STORE_KEY,s)";
+    let partial = "local s=Game:GetProperty(STORE_KEY); s.people[LEADER].acquired[COST]=nil; Game:SetProperty(STORE_KEY,s)";
+    let foreign = "Game:SetProperty(KEY..'OWNER',1)";
+    for cost in 1..=3 {
+        for tamper in [missing, partial, foreign] {
+            let lua = paid_then_reloaded(cost, tamper);
+            exec(
+                &lua,
+                r#"
+                for owner=0,21 do assert(not OPENED[owner],'incomplete receipt reopened placement') end
+            "#,
+            );
+        }
+    }
+}
+
+#[test]
+fn reload_closure_failure_never_reopens_saved_placement() {
+    for cost in 1..=3 {
+        let tamper = r#"
+            local getter=Players[2].GetProperty
+            Players[2].GetProperty=function(self,key)
+                if key==907002 then error('paid reset unavailable') end
+                return getter(self,key)
+            end"#;
+        let lua = paid_then_reloaded(cost, tamper);
+        exec(
+            &lua,
+            "for owner=0,21 do assert(not OPENED[owner],'placement reopened after failed closure') end",
+        );
+    }
+}
+
 #[test]
 fn finalize_payload_cannot_replace_saved_receipt_or_person_identity() {
     for payload in [

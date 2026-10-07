@@ -241,6 +241,13 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         ClosePaidAdmissionOwners();
     end
 end
+-- Load boundary. The forced pass closes every saved generation and lets a
+-- fresh store commit at its all-closed handshake. Only after that pass
+-- published, the normal pass revalidates the restored paid sets.
+local function InitializeProductionAdmission()
+    SyncProductionAdmission(true);
+    if normalPaidPublished then SyncProductionAdmission(false); end
+end
 -- Explicit synchronized refresh after a controller install/rebuild. The caller
 -- supplies no eligibility, payment, flag or native-generation authority.
 GameEvents.JAC_LeaderPersonaRepublish.Add(function(owner, params)
@@ -309,6 +316,10 @@ mod tests {
             &file[first..last],
             super::source(),
             "run generate-paid-glue before testing"
+        );
+        assert!(
+            file.ends_with("\nInitializeProductionAdmission();\n"),
+            "Gameplay must end with the generated load entry"
         );
     }
 }
