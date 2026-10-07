@@ -126,7 +126,8 @@ pub enum PromotionSubject<'a> {
 /// evolution TITLE of its saved cost; base, extra TITLEs, skills (bought via
 /// property, never PROMOTE) and anything after full payment are denied.
 /// Partial payment is allowed here, unlike the paid-assignment gate.
-/// Not connected to any runtime call site yet.
+/// The process-owned Windows runtime applies this to the two pinned natural
+/// CanPromote callers after their original call, using admission and catalog.
 pub fn restrict_promotion(
     original: u64,
     subject: PromotionSubject<'_>,

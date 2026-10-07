@@ -1,4 +1,5 @@
-//! Explicit process-lifetime owner of the existing three-entry composite.
+//! Explicit process-lifetime owner of appointment, property, assignment and
+//! the two pinned natural CanPromote callers.
 //! No timer uninstalls it. The single finite observation may expire or stop;
 //! its allocation, gateways and authority remain resident until process exit.
 //! Close/rebuild exports are control boundaries, NOT an observed reload hook.
@@ -17,6 +18,9 @@ pub static BRIDGE_RUNTIME_PROPERTY_GATEWAY: unsafe extern "system" fn() = proper
 #[unsafe(no_mangle)]
 pub static BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY: unsafe extern "system" fn() =
     assignment::assign_calibration_gateway;
+#[unsafe(no_mangle)]
+pub static BRIDGE_RUNTIME_PROMOTION_GATEWAY: unsafe extern "system" fn() =
+    promotion::runtime_promotion_gateway;
 static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 // One atomic word orders admission against closure. A successful stop cannot
@@ -516,6 +520,8 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         // trace ownership. Its ordinary restoration contract still applies.
         if PROPERTY_USED.load(Ordering::Acquire)
             || ASSIGN_USED.load(Ordering::Acquire)
+            || PROMOTION_USED.load(Ordering::Acquire)
+            || promotion::used()
             || HOOK.lock().map_or(true, |hook| hook.is_some())
             || JOINED_PROPERTY_HOOK
                 .lock()
@@ -540,6 +546,7 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         if gamecore.is_null()
             || !module_path(gamecore).is_some_and(|path| same_file(&path, GAMECORE))
             || pinned_gamecore(Path::new(GAMECORE), BridgeMode::ProductionAdmission).is_none()
+            || !promotion::verify(gamecore as usize)
         {
             return BridgeStatus::GameCoreIdentity as u32;
         }
@@ -571,6 +578,17 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         let Some(trace) = allocate_trace() else {
             return BridgeStatus::HookFailure as u32;
         };
+        // Restrict both promotion callers before publishing the property/
+        // appointment/assignment composite or enabling its session. While the
+        // catalog is absent, all original true promotion results stay closed.
+        if let Err(reason) = unsafe { promotion::install(gamecore as usize) } {
+            product_deactivate();
+            return if reason.starts_with("critical:") {
+                BridgeStatus::Critical
+            } else {
+                BridgeStatus::HookFailure
+            } as u32;
+        }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;
@@ -579,6 +597,9 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             // Storage stays alive for any already-fetched relay. No retry may
             // repoint it. guarded_install/composite restore the installed set.
             product_deactivate();
+            if unsafe { promotion::restore() }.is_err() {
+                return BridgeStatus::Critical as u32;
+            }
             return status as u32;
         }
         start_observation(config.max_seconds);
@@ -590,7 +611,10 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
     })
     .unwrap_or_else(|_| {
         product_deactivate();
-        BridgeStatus::Panic as u32
+        match unsafe { uninstall() } {
+            Err(reason) if reason != "bridge not installed" => BridgeStatus::Critical as u32,
+            _ => BridgeStatus::Panic as u32,
+        }
     })
 }
 
