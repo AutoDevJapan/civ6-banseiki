@@ -84,7 +84,8 @@ pub fn observe_lease(r: &mut impl Runner, limit: &LeaseLimit) -> Result<LeasePro
             deadline,
         },
         limit,
-    )?;
+    )
+    .map_err(|error| format!("Civ6 lease probe failed: {error}"))?;
     limit.record_probe(&probe);
     Ok(probe)
 }
@@ -211,6 +212,104 @@ pub trait Runner {
 }
 pub struct RealRunner;
 
+// Lease monitoring has a two-second budget. Spawning tasklist for every queued
+// PID can exhaust it on a busy machine and terminate a healthy driver.
+#[cfg(any(windows, test))]
+fn tasklist_pid(args: &[String]) -> Option<u32> {
+    if args.len() != 6
+        || !args[0].eq_ignore_ascii_case("tasklist")
+        || !args[1].eq_ignore_ascii_case("/FI")
+        || !args[3].eq_ignore_ascii_case("/FO")
+        || !args[4].eq_ignore_ascii_case("CSV")
+        || !args[5].eq_ignore_ascii_case("/NH")
+    {
+        return None;
+    }
+    args[2]
+        .strip_prefix("PID eq ")?
+        .parse::<u32>()
+        .ok()
+        .filter(|pid| *pid > 0)
+}
+
+#[cfg(windows)]
+fn native_pid_tasklist(pid: u32) -> Result<Output, String> {
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{
+            OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+        },
+    };
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if handle.is_null() {
+        let error = std::io::Error::last_os_error();
+        return if error.raw_os_error() == Some(87) {
+            Ok(Output::default())
+        } else {
+            Err(format!("inspect lease process {pid}: {error}"))
+        };
+    }
+    let mut buffer = vec![0u16; 32768];
+    let mut length = buffer.len() as u32;
+    let ok = unsafe { QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) };
+    let error = (ok == 0).then(std::io::Error::last_os_error);
+    unsafe { CloseHandle(handle) };
+    if let Some(error) = error {
+        return Err(format!("inspect lease process {pid} image: {error}"));
+    }
+    let path = String::from_utf16(&buffer[..length as usize]).map_err(|e| e.to_string())?;
+    let image = path
+        .rsplit(['\\', '/'])
+        .next()
+        .ok_or("empty process image")?;
+    Ok(Output {
+        code: 0,
+        stdout: format!("\"{image}\",\"{pid}\"\n"),
+        stderr: String::new(),
+    })
+}
+
+#[cfg(test)]
+mod pid_query_tests {
+    use super::*;
+
+    #[test]
+    fn native_query_only_accepts_the_existing_exact_pid_protocol() {
+        let args: Vec<String> = ["tasklist", "/FI", "PID eq 42", "/FO", "CSV", "/NH"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(tasklist_pid(&args), Some(42));
+        for filter in [
+            "PID eq 0",
+            "PID eq -1",
+            "PID eq 4294967296",
+            "PID eq 42 extra",
+            "IMAGENAME eq live_chain.exe",
+        ] {
+            let mut other = args.clone();
+            other[2] = filter.into();
+            assert_eq!(tasklist_pid(&other), None);
+        }
+        let mut extra = args;
+        extra.push("/V".into());
+        assert_eq!(tasklist_pid(&extra), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_query_reports_the_real_current_image_and_absent_pid() {
+        let pid = std::process::id();
+        let expected = std::env::current_exe().unwrap();
+        let image = expected.file_name().unwrap().to_str().unwrap();
+        assert_eq!(
+            native_pid_tasklist(pid).unwrap().stdout,
+            format!("\"{image}\",\"{pid}\"\n")
+        );
+        assert!(native_pid_tasklist(u32::MAX).unwrap().stdout.is_empty());
+    }
+}
+
 pub fn install_interrupt_handler() {
     #[cfg(windows)]
     unsafe {
@@ -258,6 +357,10 @@ fn interrupted() -> Result<(), String> {
 impl Runner for RealRunner {
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
+        #[cfg(windows)]
+        if let Some(pid) = tasklist_pid(&call.args) {
+            return native_pid_tasklist(pid);
+        }
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
         cmd.args(&call.args[1..])
             .envs(&call.env)
