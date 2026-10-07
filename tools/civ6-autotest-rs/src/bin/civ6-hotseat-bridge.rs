@@ -273,13 +273,10 @@ fn last_boot(frames: &[hs::Frame]) -> Result<&hs::Frame> {
 }
 
 fn last_open<'a>(frames: &'a [hs::Frame], scene: &str) -> Result<&'a hs::Frame> {
-    let latest = frames
-        .iter()
-        .filter(|f| {
-            f.scene == scene
-                && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_WAIT" || f.kind == "DIALOG_CLOSED")
-        })
-        .next_back();
+    let latest = frames.iter().rfind(|f| {
+        f.scene == scene
+            && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_WAIT" || f.kind == "DIALOG_CLOSED")
+    });
     latest
         .filter(|f| f.kind == "DIALOG_OPEN")
         .ok_or_else(|| Error::scenario("actual visible PlayerChange dialog was not witnessed"))
