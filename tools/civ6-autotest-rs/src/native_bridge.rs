@@ -2315,7 +2315,13 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
-    pub fn start_bootstrap(_: u32, _: f64, _: &Path, _: &serde_json::Value) -> Result<Self> {
+    pub fn start_bootstrap(
+        _: u32,
+        _: f64,
+        _: &Path,
+        _: &serde_json::Value,
+        _: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+    ) -> Result<Self> {
         Err(Error::input("bootstrap requires Windows x64"))
     }
     pub fn bootstrap_healthy(&self) -> Result<()> {

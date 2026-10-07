@@ -740,7 +740,11 @@ impl Backend for SystemBackend {
             .single_process(0.0)?
             .ok_or_else(|| Error::input("bootstrap game missing"))?;
         self.native_bootstrap = Some(crate::native_bridge::Session::start_bootstrap(
-            pid, started, output, step,
+            pid,
+            started,
+            output,
+            step,
+            Box::new(crate::restart::terminate_civ_process),
         )?);
         Ok(())
     }

@@ -1,20 +1,5 @@
 // Included inside native_bridge::platform to reuse its pinned process handle,
 // child transport, stop/reap and failure cleanup rather than clone a controller.
-fn close_bootstrap_game(pid: u32, started: f64) -> Result<()> {
-    let (_, target) = pinned_created(pid, started)?;
-    if unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0 {
-        return Ok(());
-    }
-    if unsafe { TerminateProcess(target.0, 1) } == 0
-        && unsafe { WaitForSingleObject(target.0, 0) } != WAIT_OBJECT_0
-    {
-        return Err(Error::input("bootstrap pinned game termination failed"));
-    }
-    if unsafe { WaitForSingleObject(target.0, 10_000) } != WAIT_OBJECT_0 {
-        return Err(Error::input("bootstrap pinned game exit unconfirmed"));
-    }
-    Ok(())
-}
 fn bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
     let bytes = std::fs::read(path.with_extension("bootstrap.bin"))?;
     civ6_bootstrap_rs::protocol::trace(&bytes, pid, created).map_err(Error::input)?;
@@ -35,7 +20,13 @@ fn bootstrap_terminal(path: &Path, pid: u32, created: u64) -> Result<()> {
     Ok(())
 }
 impl Session {
-    pub fn start_bootstrap(pid: u32, started: f64, output: &Path, step: &Value) -> Result<Self> {
+    pub fn start_bootstrap(
+        pid: u32,
+        started: f64,
+        output: &Path,
+        step: &Value,
+        close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+    ) -> Result<Self> {
         let (created, target) = pinned_created(pid, started)?;
         let name = step["name"]
             .as_str()
@@ -103,7 +94,7 @@ impl Session {
             started,
             target,
             BridgeMode::ProductionAdmission,
-            Box::new(close_bootstrap_game),
+            close_game,
             false,
             binary_pins,
             true,
