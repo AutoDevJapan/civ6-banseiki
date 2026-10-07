@@ -22,6 +22,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    ops::Range,
     path::Path,
 };
 
@@ -30,17 +31,10 @@ pub const BATCHES: usize = 3;
 const MIN_CASES: usize = 10;
 const CITIES: usize = 56;
 const END: &str = "|END-JAC-OATH-SAVE";
-/// Per-city values in comparison order: six yields, overall and other growth.
-const KEYS: [&str; 8] = [
-    "production",
-    "gold",
-    "science",
-    "culture",
-    "faith",
-    "food",
-    "growth",
-    "other_growth",
-];
+/// The six yields in comparison order.
+const KEYS: [&str; 6] = ["production", "gold", "science", "culture", "faith", "food"];
+/// The measured growth breakdown compared across phases, in the in-game order.
+const GROWTH: [&str; 5] = ["growth", "other_growth", "housing", "happiness", "loyalty"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Yield {
@@ -84,6 +78,11 @@ fn lua_string(value: &str) -> String {
 
 /// Every catalogue oath whose two effects are city yields, in catalogue order.
 pub fn eligible(repo: &Repository) -> Result<Vec<Case>> {
+    Ok(read_catalogue(repo)?.1)
+}
+
+/// The 66 catalogue oath keys, and its yield-only oaths in catalogue order.
+fn read_catalogue(repo: &Repository) -> Result<(BTreeSet<String>, Vec<Case>)> {
     let id = |value: &Value| -> Result<String> {
         let id = value.as_str().context("catalogue id")?;
         ensure!(
@@ -97,11 +96,13 @@ pub fn eligible(repo: &Repository) -> Result<Vec<Case>> {
     };
     let houses = oaths::catalogue(repo)?;
     ensure!(houses.len() == 22, "expected the 22 map houses");
-    let (mut cases, mut total) = (Vec::new(), 0);
+    let (mut keys, mut cases, mut total) = (BTreeSet::new(), Vec::new(), 0);
     for house in &houses {
         let house_id = id(&house["id"])?;
         for oath in house["oaths"].as_array().context("house oaths")? {
             total += 1;
+            let key = format!("JAC_OATH_{house_id}_{}", id(&oath["id"])?);
+            ensure!(keys.insert(key.clone()), "duplicate catalogue oath {key}");
             let effects = oath["effects"]
                 .as_array()
                 .context("oath effects")?
@@ -119,7 +120,7 @@ pub fn eligible(repo: &Repository) -> Result<Vec<Case>> {
             if let [Some(first), Some(second)] = effects[..] {
                 ensure!(first.0 != second.0, "an oath's effects use distinct yields");
                 cases.push(Case {
-                    oath: format!("JAC_OATH_{house_id}_{}", id(&oath["id"])?),
+                    oath: key,
                     civ: format!("CIVILIZATION_JAC_{house_id}"),
                     house: house_id.clone(),
                     effects: [first, second],
@@ -127,8 +128,11 @@ pub fn eligible(repo: &Repository) -> Result<Vec<Case>> {
             }
         }
     }
-    ensure!(total == 66, "expected the 66-oath catalogue");
-    Ok(cases)
+    ensure!(
+        total == 66 && keys.len() == 66,
+        "expected the 66-oath catalogue"
+    );
+    Ok((keys, cases))
 }
 
 /// Round-robin over the eligible oaths in catalogue order: a house has at most
@@ -360,15 +364,17 @@ return 'synthetic golden-age fixture for '..#CASES..' houses; no oath chosen'
 /// Core first: identity, all 66 flags and six yields of every real city. Rows
 /// use string keys, as every live-proven saved property does (`p0`, `plot123`).
 const SNAPSHOT: &str = r#"
-local snapshot={}; local count=0
+local snapshot,parts={},{}; local count=0
 for _,r in ipairs(cities()) do
  assert(flags_match(r),'Core oath flags differ from phase '..PHASE..' at plot '..r.index)
  local y={}
  for _,kind in ipairs(KINDS) do y[kind]=number(r.city:GetYield(yield_index(kind)),'Core '..kind) end
  count=count+1; snapshot['c'..count]={id=r.id,owner=r.owner,plot=r.index,y=y}
+ parts[count]=string.format('{"city":%d,"plot":%d,"owner":%d,"production":%.17g,"gold":%.17g,"science":%.17g,"culture":%.17g,"faith":%.17g,"food":%.17g}',r.id,r.index,r.owner,y.production,y.gold,y.science,y.culture,y.faith,y.food)
 end
-Game:SetProperty('JAC_TODO134_BATCH_CORE',{batch=BATCH,phase=PHASE,turn=Game.GetCurrentGameTurn(),count=count,cities=snapshot})
-return '{"scope":"core_identity_flags_and_yields","batch":'..BATCH..',"phase":"'..PHASE..'","cities":'..count..'}'
+local turn=Game.GetCurrentGameTurn()
+Game:SetProperty('JAC_TODO134_BATCH_CORE',{batch=BATCH,phase=PHASE,turn=turn,count=count,cities=snapshot})
+return '{"scope":"core_identity_flags_and_yields","batch":'..BATCH..',"phase":"'..PHASE..'","turn":'..turn..',"cities":['..table.concat(parts,',')..']}'
 "#;
 
 /// Waits until the UI shows the same flags and yields as the Core snapshot.
@@ -481,10 +487,12 @@ for i,name in ipairs(ORDER) do
  local rows=assert(S[name],'batch phase missing: '..name); assert(#rows==#base,'batch city inventory changed in '..name)
  for j,r in ipairs(rows) do local a=base[j]; assert(r.id==a.id and r.plot==a.plot and r.owner==a.owner,'batch city identity changed in '..name) end
 end
+-- The measured growth breakdown; food surplus follows food and is recorded only.
+local GROWTH={{'growth','growth'},{'other','other_growth'},{'housing','housing'},{'happiness','happiness'},{'loyalty','loyalty'}}
 local function differs(a,b)
  for _,kind in ipairs(KINDS) do if not close(a.y[kind],b.y[kind]) then return kind end end
- if not close(a.growth,b.growth) then return 'growth' end
- if not close(a.other,b.other) then return 'other_growth' end
+ for _,g in ipairs(GROWTH) do if not close(a[g[1]],b[g[1]]) then return g[2] end end
+ if a.occupied~=b.occupied then return 'occupied' end
  return nil
 end
 for i,a in ipairs(base) do
@@ -509,9 +517,12 @@ for ci,case in ipairs(CASES) do
   local kind=differs(prev[i],off[i]); if kind then fail('restore:'..a.id..':'..kind) end
   if a.owner==case.player then
    local drift=differs(a,prev[i]); if drift then fail('drift:'..a.id..':'..drift) end
-   -- As in the audit, overall growth may follow a food oath; the other-growth modifier may not.
    for _,k in ipairs(KINDS) do if amounts[k]==nil and not close(prev[i].y[k],on[i].y[k]) then fail('non_target:'..a.id..':'..k) end end
-   if not close(prev[i].other,on[i].other) then fail('non_target:'..a.id..':other_growth') end
+   for j=2,#GROWTH do local g=GROWTH[j]; if not close(prev[i][g[1]],on[i][g[1]]) then fail('non_target:'..a.id..':'..g[2]) end end
+   if prev[i].occupied~=on[i].occupied then fail('non_target:'..a.id..':occupied') end
+   -- Overall growth excludes food while a city grows (CityPanelOverview.lua:661-672); in a
+   -- deficit no growth bonus applies, so a food oath may move it only across that boundary.
+   if (amounts.food==nil or (prev[i].surplus>0 and on[i].surplus>0)) and not close(prev[i].growth,on[i].growth) then fail('non_target:'..a.id..':growth') end
    for _,e in ipairs(case.effects) do
     local av,bv=a.y[e.kind],on[i].y[e.kind]; local observed=bv-av
     local ref=S.reference[i].y[e.kind]; local hundred=ref-av
@@ -861,33 +872,122 @@ pub(crate) fn reported_step(values: &[f64]) -> Option<f64> {
     upper.map(|u| u + 0.00002)
 }
 
-/// One measured city: identity and the `KEYS` values.
+/// One measured city: identity, six yields and the measured growth breakdown.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Sample {
     pub city: i64,
     pub plot: i64,
     pub owner: i64,
-    pub values: [f64; 8],
+    pub yields: [f64; 6],
+    /// In `GROWTH` order: overall, other, housing, happiness, loyalty.
+    pub growth: [f64; 5],
+    /// Follows food; compared only where food decides whether growth bonuses apply.
+    pub surplus: f64,
+    pub occupied: bool,
 }
 
 fn close(a: f64, b: f64) -> bool {
     a.is_finite() && b.is_finite() && (a - b).abs() <= 0.00002
 }
 
+/// The first differing value in the in-game order; food surplus is not compared.
 fn differs(a: &Sample, b: &Sample) -> Option<&'static str> {
     (0..KEYS.len())
-        .find(|&k| !close(a.values[k], b.values[k]))
+        .find(|&k| !close(a.yields[k], b.yields[k]))
         .map(|k| KEYS[k])
+        .or_else(|| {
+            (0..GROWTH.len())
+                .find(|&k| !close(a.growth[k], b.growth[k]))
+                .map(|k| GROWTH[k])
+        })
+        .or_else(|| (a.occupied != b.occupied).then_some("occupied"))
 }
 
-/// Rust recomputation of the in-game comparison: per-case reasons (empty means
-/// verified). Calibration faults are errors, as they are assertions in game.
+/// One quantity line for an own city and effect, as the in-game comparison writes it.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Detail {
+    city: i64,
+    kind: Yield,
+    off: f64,
+    on: f64,
+    off_again: f64,
+    percent: i64,
+    reference: f64,
+    expected: Option<f64>,
+    observed: f64,
+    step: Option<f64>,
+    tolerance: Option<f64>,
+    verified: bool,
+    reason: &'static str,
+}
+
+const DETAIL_KEYS: [&str; 13] = [
+    "city",
+    "kind",
+    "off",
+    "on",
+    "off_again",
+    "expected_percent",
+    "reference_delta",
+    "expected_delta",
+    "observed_delta",
+    "reported_step_upper_bound",
+    "tolerance",
+    "quantity_verified",
+    "reason",
+];
+
+impl Detail {
+    fn json(&self) -> Value {
+        json!({"city":self.city,"kind":self.kind.key(),"off":self.off,"on":self.on,"off_again":self.off_again,
+            "expected_percent":self.percent,"reference_delta":self.reference,"expected_delta":self.expected,
+            "observed_delta":self.observed,"reported_step_upper_bound":self.step,"tolerance":self.tolerance,
+            "quantity_verified":self.verified,"reason":self.reason})
+    }
+
+    /// The in-game line has exactly these fields and values; numbers to print precision.
+    fn matches(&self, line: &Value) -> bool {
+        let same = |value: &Value, expected: f64| {
+            value
+                .as_f64()
+                .is_some_and(|v| (v - expected).abs() <= 1e-9 * expected.abs().max(1.0))
+        };
+        let optional = |value: &Value, expected: Option<f64>| match expected {
+            Some(expected) => same(value, expected),
+            None => value.is_null(),
+        };
+        exact_json(line, &DETAIL_KEYS, "quantity line").is_ok()
+            && line["city"].as_i64() == Some(self.city)
+            && line["kind"] == self.kind.key()
+            && same(&line["off"], self.off)
+            && same(&line["on"], self.on)
+            && same(&line["off_again"], self.off_again)
+            && line["expected_percent"].as_i64() == Some(self.percent)
+            && same(&line["reference_delta"], self.reference)
+            && optional(&line["expected_delta"], self.expected)
+            && same(&line["observed_delta"], self.observed)
+            && optional(&line["reported_step_upper_bound"], self.step)
+            && optional(&line["tolerance"], self.tolerance)
+            && line["quantity_verified"] == self.verified
+            && line["reason"] == self.reason
+    }
+}
+
+/// Rust recomputation of one case: reasons (empty means verified) and its lines.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Verdict {
+    pub reasons: Vec<String>,
+    pub details: Vec<Detail>,
+}
+
+/// Rust recomputation of the in-game comparison. Calibration faults are
+/// errors, as they are assertions in game; case faults only fail the case.
 pub(crate) fn evaluate(
     cases: &[Case],
     players: &[i64],
     order: &[Phase],
     samples: &BTreeMap<String, Vec<Sample>>,
-) -> Result<Vec<Vec<String>>> {
+) -> Result<Vec<Verdict>> {
     let get = |phase: Phase| {
         samples
             .get(&phase.name())
@@ -935,7 +1035,7 @@ pub(crate) fn evaluate(
         get(Phase::PrecisionOne)?,
         get(Phase::PrecisionTwo)?,
     );
-    let mut reasons = vec![Vec::new(); cases.len()];
+    let mut verdicts = vec![Verdict::default(); cases.len()];
     let mut leaked = vec![BTreeSet::new(); cases.len()];
     for (ci, case) in cases.iter().enumerate() {
         let (prev, on, off) = (
@@ -943,59 +1043,101 @@ pub(crate) fn evaluate(
             get(Phase::On(ci))?,
             get(Phase::Off(ci))?,
         );
-        let fail = &mut reasons[ci];
+        let food = case.effects.iter().any(|(kind, _)| *kind == Yield::Food);
+        let verdict = &mut verdicts[ci];
         let mut proven = [0; 2];
         for (i, a) in base.iter().enumerate() {
+            let fail = |verdict: &mut Verdict, what: &str, key: &str| {
+                verdict.reasons.push(format!("{what}:{}:{key}", a.city));
+            };
             if let Some(kind) = differs(&prev[i], &off[i]) {
-                fail.push(format!("restore:{}:{kind}", a.city));
+                fail(verdict, "restore", kind);
             }
             if a.owner != players[ci] {
                 if let Some(kind) = differs(&prev[i], &on[i]) {
-                    fail.push(format!("leak:{}:{kind}", a.city));
+                    fail(verdict, "leak", kind);
                     leaked[ci].insert(a.city);
                 }
                 continue;
             }
             if let Some(kind) = differs(a, &prev[i]) {
-                fail.push(format!("drift:{}:{kind}", a.city));
+                fail(verdict, "drift", kind);
             }
-            // Six yields, then other growth; overall growth may follow a food oath.
-            for slot in (0..6).chain([7]) {
+            for (slot, key) in KEYS.iter().enumerate() {
                 let target = case.effects.iter().any(|(kind, _)| *kind as usize == slot);
-                if !target && !close(prev[i].values[slot], on[i].values[slot]) {
-                    fail.push(format!("non_target:{}:{}", a.city, KEYS[slot]));
+                if !target && !close(prev[i].yields[slot], on[i].yields[slot]) {
+                    fail(verdict, "non_target", key);
                 }
+            }
+            for (slot, key) in GROWTH.iter().enumerate().skip(1) {
+                if !close(prev[i].growth[slot], on[i].growth[slot]) {
+                    fail(verdict, "non_target", key);
+                }
+            }
+            if prev[i].occupied != on[i].occupied {
+                fail(verdict, "non_target", "occupied");
+            }
+            // Overall growth excludes food while a city grows (CityPanelOverview.lua:661-672).
+            let growing = prev[i].surplus > 0.0 && on[i].surplus > 0.0;
+            if (!food || growing) && !close(prev[i].growth[0], on[i].growth[0]) {
+                fail(verdict, "non_target", GROWTH[0]);
             }
             for (e, (kind, amount)) in case.effects.iter().enumerate() {
                 let slot = *kind as usize;
-                let (av, observed) = (a.values[slot], on[i].values[slot] - a.values[slot]);
-                let hundred = reference[i].values[slot] - av;
-                if !(hundred.is_finite() && hundred > 0.03) {
-                    fail.push(format!("reference:{}:{}", a.city, kind.key()));
-                    continue;
-                }
-                let step = reported_step(&[
-                    av,
-                    reference[i].values[slot],
-                    one[i].values[slot],
-                    two[i].values[slot],
-                ]);
-                let amount = *amount as f64;
-                match step.map(|s| 2.0 * s * (1.0 + amount / 100.0) + 0.00004) {
-                    Some(tolerance) if tolerance < hundred * 0.005 => {
-                        if (observed - hundred * amount / 100.0).abs() <= tolerance {
-                            proven[e] += 1;
-                        } else {
-                            fail.push(format!("quantity:{}:{}", a.city, kind.key()));
+                let av = a.yields[slot];
+                let mut detail = Detail {
+                    city: a.city,
+                    kind: *kind,
+                    off: av,
+                    on: on[i].yields[slot],
+                    off_again: off[i].yields[slot],
+                    percent: *amount,
+                    reference: reference[i].yields[slot] - av,
+                    expected: None,
+                    observed: on[i].yields[slot] - av,
+                    step: None,
+                    tolerance: None,
+                    verified: false,
+                    reason: "reference_unmeasurable",
+                };
+                if !(detail.reference.is_finite() && detail.reference > 0.03) {
+                    fail(verdict, "reference", kind.key());
+                } else {
+                    detail.step = reported_step(&[
+                        av,
+                        reference[i].yields[slot],
+                        one[i].yields[slot],
+                        two[i].yields[slot],
+                    ]);
+                    let amount = *amount as f64;
+                    detail.tolerance = detail
+                        .step
+                        .map(|s| 2.0 * s * (1.0 + amount / 100.0) + 0.00004);
+                    match detail.tolerance {
+                        Some(tolerance) if tolerance < detail.reference * 0.005 => {
+                            let expected = detail.reference * amount / 100.0;
+                            detail.expected = Some(expected);
+                            if (detail.observed - expected).abs() <= tolerance {
+                                detail.verified = true;
+                                detail.reason = "native_100_percent_reference_delta";
+                                proven[e] += 1;
+                            } else {
+                                detail.reason = "wrong_quantity";
+                                fail(verdict, "quantity", kind.key());
+                            }
+                        }
+                        _ => {
+                            detail.reason = "native_reference_resolution_insufficient";
+                            fail(verdict, "resolution", kind.key());
                         }
                     }
-                    _ => fail.push(format!("resolution:{}:{}", a.city, kind.key())),
                 }
+                verdict.details.push(detail);
             }
         }
         for (e, (kind, _)) in case.effects.iter().enumerate() {
             if proven[e] == 0 {
-                fail.push(format!("unproven:{}", kind.key()));
+                verdict.reasons.push(format!("unproven:{}", kind.key()));
             }
         }
     }
@@ -1016,25 +1158,58 @@ pub(crate) fn evaluate(
         match (blamed.is_empty(), owner) {
             (false, _) => blamed
                 .iter()
-                .for_each(|&ci| reasons[ci].push(reason.clone())),
-            (true, Some(ci)) => reasons[ci].push(reason),
-            (true, None) => reasons
-                .iter_mut()
-                .for_each(|r| r.push(format!("simultaneous_unattributed:{}:{kind}", a.city))),
+                .for_each(|&ci| verdicts[ci].reasons.push(reason.clone())),
+            (true, Some(ci)) => verdicts[ci].reasons.push(reason),
+            (true, None) => verdicts.iter_mut().for_each(|v| {
+                v.reasons
+                    .push(format!("simultaneous_unattributed:{}:{kind}", a.city))
+            }),
         }
     }
-    Ok(reasons)
+    Ok(verdicts)
 }
 
-/// Driver completion details: one START equal to the executed step and one OK
-/// per step, in order, no retained failure, ending with the diagnostic exit 3.
-fn completions(records: &[Value], steps: &[Value]) -> Result<Vec<String>> {
+/// Records the runner writes that are no operation of the scenario: relaunching
+/// Civ VI before the first step, and closing a UI blocker before a Lua retry.
+fn lifecycle(record: &Value) -> bool {
+    matches!(
+        (record["action"].as_str(), record["status"].as_str()),
+        (Some("auto_restart"), Some("START" | "OK" | "SKIP"))
+            | (Some("launch"), Some("START" | "OK"))
+    )
+}
+
+fn recovery(record: &Value) -> bool {
+    matches!(
+        (record["action"].as_str(), record["status"].as_str()),
+        (
+            Some("ingame_unblock" | "options_menu_reconcile"),
+            Some("OK")
+        )
+    )
+}
+
+/// The runner's log read as a grammar: the start record naming this scenario,
+/// an optional relaunch, then for every step its START (equal to the executed
+/// step) and OK with only UI-recovery notes between, then the judge and the
+/// diagnostic exit 3. Any other record, such as an extra save or load, rejects.
+fn completions(records: &[Value], scenario: &Value) -> Result<Vec<String>> {
+    let steps = scenario["steps"].as_array().context("artifact steps")?;
     ensure!(
         !records.iter().any(|r| r["status"] == "FAIL"),
         "failed driver observation retained"
     );
+    let is = |record: Option<&Value>, action: &str, status: &str| {
+        record.is_some_and(|r| r["action"] == action && r["status"] == status)
+    };
+    let mut rows = records.iter().peekable();
+    let start = rows.next();
+    ensure!(
+        is(start, "start", "OK") && start.is_some_and(|r| r["detail"] == scenario["name"]),
+        "the run log does not begin with the start record of this scenario"
+    );
+    while rows.next_if(|r| lifecycle(r)).is_some() {}
     let mut details = Vec::new();
-    let mut last: Option<usize> = None;
     for (index, step) in steps.iter().enumerate() {
         let action = format!(
             "{}/{} {}",
@@ -1042,55 +1217,49 @@ fn completions(records: &[Value], steps: &[Value]) -> Result<Vec<String>> {
             steps.len(),
             step["action"].as_str().context("step action")?
         );
-        let (starts, oks) = (
-            records_of(records, &action, "START"),
-            records_of(records, &action, "OK"),
-        );
+        let start = rows.next();
         ensure!(
-            starts.len() == 1 && oks.len() == 1,
-            "missing or duplicated driver record: {action}"
+            is(start, &action, "START"),
+            "unexpected, missing or duplicated driver record at {action}"
         );
-        let started: Value =
-            serde_json::from_str(starts[0].1["detail"].as_str().context("start detail")?)?;
+        let started: Value = serde_json::from_str(
+            start
+                .and_then(|r| r["detail"].as_str())
+                .context("start detail")?,
+        )?;
         ensure!(
             &started == step,
             "executed step does not match the scenario: {action}"
         );
+        while rows.next_if(|r| recovery(r)).is_some() {}
+        let ok = rows.next();
         ensure!(
-            starts[0].0 < oks[0].0 && last.is_none_or(|prior| prior < starts[0].0),
-            "driver record order differs: {action}"
+            is(ok, &action, "OK"),
+            "unexpected, missing or duplicated driver record at {action}"
         );
-        last = Some(oks[0].0);
         details.push(
-            oks[0].1["detail"]
-                .as_str()
+            ok.and_then(|r| r["detail"].as_str())
                 .context("driver return")?
                 .to_owned(),
         );
     }
-    let observed: Vec<_> = records
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r["action"] == "diagnostic")
-        .collect();
     ensure!(
-        observed.len() == 1
-            && observed[0].1["status"] == "OBSERVED"
-            && observed[0].1["detail"]
-                .as_str()
-                .is_some_and(|d| d.ends_with("exit 3"))
-            && last.is_some_and(|l| l < observed[0].0),
+        is(rows.next(), "judge", "OK"),
+        "the run log lacks the judge record after the last step"
+    );
+    let observed = rows.next();
+    ensure!(
+        is(observed, "diagnostic", "OBSERVED")
+            && observed
+                .and_then(|r| r["detail"].as_str())
+                .is_some_and(|d| d.ends_with("exit 3")),
         "the run did not end as a completed diagnostic observation (exit 3)"
     );
+    ensure!(
+        rows.next().is_none(),
+        "unexpected driver record after the diagnostic observation"
+    );
     Ok(details)
-}
-
-fn records_of<'a>(records: &'a [Value], action: &str, status: &str) -> Vec<(usize, &'a Value)> {
-    records
-        .iter()
-        .enumerate()
-        .filter(|(_, r)| r["action"] == action && r["status"] == status)
-        .collect()
 }
 
 /// A length-prefixed frame between its exact marker and terminator.
@@ -1111,11 +1280,67 @@ fn frame<'a>(detail: &'a str, context: &str, marker: &str) -> Result<&'a str> {
     Ok(body)
 }
 
-fn measured(detail: &str, batch: usize, phase: Phase) -> Result<Vec<Sample>> {
+fn exact_json(value: &Value, keys: &[&str], what: &str) -> Result<()> {
+    let object = value
+        .as_object()
+        .with_context(|| format!("{what} is not an object"))?;
+    ensure!(
+        object.len() == keys.len() && keys.iter().all(|k| object.contains_key(*k)),
+        "{what} needs exactly the fields {keys:?}"
+    );
+    Ok(())
+}
+
+/// A driver return holding one JSON object with exactly `keys`.
+fn returned(detail: &str, context: &str, keys: &[&str], what: &str) -> Result<Value> {
     let body = detail
-        .strip_prefix("ran Lua in InGame; return=")
-        .context("measurement return missing")?;
-    let data: Value = serde_json::from_str(body)?;
+        .strip_prefix(&format!("ran Lua in {context}; return="))
+        .with_context(|| format!("{what} return missing"))?;
+    let value: Value =
+        serde_json::from_str(body).with_context(|| format!("{what} return is not JSON"))?;
+    exact_json(&value, keys, what)?;
+    Ok(value)
+}
+
+fn integer(value: &Value, key: &str, what: &str) -> Result<i64> {
+    value[key]
+        .as_i64()
+        .with_context(|| format!("{what} {key} must be an integer"))
+}
+
+fn finite(value: &Value, key: &str, what: &str) -> Result<f64> {
+    value[key]
+        .as_f64()
+        .filter(|v| v.is_finite())
+        .with_context(|| format!("{what} {key} must be a finite number"))
+}
+
+const SAMPLE_KEYS: [&str; 16] = [
+    "city",
+    "plot",
+    "owner",
+    "growth",
+    "other_growth",
+    "housing",
+    "happiness",
+    "food_surplus",
+    "occupied",
+    "loyalty",
+    "production",
+    "gold",
+    "science",
+    "culture",
+    "faith",
+    "food",
+];
+
+fn measured(detail: &str, batch: usize, phase: Phase) -> Result<Vec<Sample>> {
+    let data = returned(
+        detail,
+        "InGame",
+        &["batch", "phase", "cities"],
+        "measurement",
+    )?;
     ensure!(
         data["batch"] == batch && data["phase"] == phase.name().as_str(),
         "measurement belongs to another phase"
@@ -1124,26 +1349,23 @@ fn measured(detail: &str, batch: usize, phase: Phase) -> Result<Vec<Sample>> {
     ensure!(rows.len() == CITIES, "measurement lacks the 56 real cities");
     let mut samples = Vec::new();
     for row in rows {
-        let number = |key: &str| {
-            row[key]
-                .as_f64()
-                .filter(|v| v.is_finite())
-                .with_context(|| format!("finite measured {key}"))
-        };
-        for key in ["housing", "happiness", "food_surplus", "loyalty"] {
-            number(key)?;
+        exact_json(row, &SAMPLE_KEYS, "measured city")?;
+        let mut yields = [0.0; 6];
+        for (slot, key) in yields.iter_mut().zip(KEYS) {
+            *slot = finite(row, key, "measured")?;
         }
-        ensure!(row["occupied"].is_boolean(), "measured occupation");
-        let mut values = [0.0; 8];
-        for (slot, key) in values.iter_mut().zip(KEYS) {
-            *slot = number(key)?;
+        let mut growth = [0.0; 5];
+        for (slot, key) in growth.iter_mut().zip(GROWTH) {
+            *slot = finite(row, key, "measured")?;
         }
-        let int = |key: &str| row[key].as_i64().with_context(|| format!("measured {key}"));
         samples.push(Sample {
-            city: int("city")?,
-            plot: int("plot")?,
-            owner: int("owner")?,
-            values,
+            city: integer(row, "city", "measured")?,
+            plot: integer(row, "plot", "measured")?,
+            owner: integer(row, "owner", "measured")?,
+            yields,
+            growth,
+            surplus: finite(row, "food_surplus", "measured")?,
+            occupied: row["occupied"].as_bool().context("measured occupation")?,
         });
     }
     ensure!(
@@ -1153,48 +1375,375 @@ fn measured(detail: &str, batch: usize, phase: Phase) -> Result<Vec<Sample>> {
     Ok(samples)
 }
 
-/// The saved Core frame: every batch house holds exactly its golden choice, no
-/// other house holds one, and each real city carries exactly its own house's
-/// flag among 66. Returns each case's player and each city plot's (id, owner),
-/// read from the frame independently of the game's Lua.
-type Saved = (Vec<i64>, BTreeMap<i64, (i64, i64)>);
+const SNAPSHOT_KEYS: [&str; 9] = [
+    "city",
+    "plot",
+    "owner",
+    "production",
+    "gold",
+    "science",
+    "culture",
+    "faith",
+    "food",
+];
 
-fn saved_selections(core: &str, cases: &[Case]) -> Result<Saved> {
-    let frame = Frame::parse(core)?;
-    let keys = frame
-        .entries()?
+/// A Core snapshot as the driver recorded it: the turn and, by plot, each real
+/// city's (id, owner, six yields).
+struct Snapshot {
+    turn: i64,
+    cities: BTreeMap<i64, (i64, i64, [f64; 6])>,
+}
+
+fn snapshot(detail: &str, batch: usize, phase: Phase) -> Result<Snapshot> {
+    let data = returned(
+        detail,
+        "GameCore_Tuner",
+        &["scope", "batch", "phase", "turn", "cities"],
+        "Core snapshot",
+    )?;
+    ensure!(
+        data["scope"] == "core_identity_flags_and_yields"
+            && data["batch"] == batch
+            && data["phase"] == phase.name().as_str(),
+        "Core snapshot belongs to another phase"
+    );
+    let rows = data["cities"].as_array().context("Core snapshot cities")?;
+    let mut cities = BTreeMap::new();
+    for row in rows {
+        exact_json(row, &SNAPSHOT_KEYS, "Core snapshot city")?;
+        let mut yields = [0.0; 6];
+        for (slot, key) in yields.iter_mut().zip(KEYS) {
+            *slot = finite(row, key, "Core snapshot")?;
+        }
+        let plot = integer(row, "plot", "Core snapshot")?;
+        let city = (
+            integer(row, "city", "Core snapshot")?,
+            integer(row, "owner", "Core snapshot")?,
+            yields,
+        );
+        ensure!(
+            cities.insert(plot, city).is_none(),
+            "Core snapshot repeats a plot"
+        );
+    }
+    ensure!(
+        cities.len() == CITIES,
+        "Core snapshot lacks the 56 real cities"
+    );
+    Ok(Snapshot {
+        turn: integer(&data, "turn", "Core snapshot")?,
+        cities,
+    })
+}
+
+/// Same real cities with the same six yields, by plot.
+fn same_cities<'a>(
+    a: impl IntoIterator<Item = (i64, i64, i64, &'a [f64; 6])>,
+    b: impl IntoIterator<Item = (i64, i64, i64, &'a [f64; 6])>,
+) -> bool {
+    let (a, b): (Vec<_>, Vec<_>) = (a.into_iter().collect(), b.into_iter().collect());
+    a.len() == b.len()
+        && a.iter().zip(&b).all(|(x, y)| {
+            (x.0, x.1, x.2) == (y.0, y.1, y.2) && (0..6).all(|k| close(x.3[k], y.3[k]))
+        })
+}
+
+fn snapshot_cities(s: &Snapshot) -> impl Iterator<Item = (i64, i64, i64, &[f64; 6])> {
+    s.cities
         .iter()
-        .map(|(k, _, _)| k.text())
-        .collect::<Result<BTreeSet<_>>>()?;
+        .map(|(plot, (city, owner, yields))| (*plot, *city, *owner, yields))
+}
+
+/// Typed readers for the canonical `ser` frames.
+fn entries<'a>(frame: &'a Frame, what: &str) -> Result<&'a [(Frame, Frame, Range<usize>)]> {
+    frame
+        .entries()
+        .with_context(|| format!("{what} is not a table"))
+}
+
+fn field<'a>(frame: &'a Frame, key: &str, what: &str) -> Result<Option<&'a Frame>> {
+    Ok(entries(frame, what)?
+        .iter()
+        .find(|(k, _, _)| matches!(k, Frame::Str(s) if s == key))
+        .map(|(_, value, _)| value))
+}
+
+fn required<'a>(frame: &'a Frame, key: &str, what: &str) -> Result<&'a Frame> {
+    field(frame, key, what)?.with_context(|| format!("{what} lacks {key}"))
+}
+
+/// Exactly `keys` (duplicates are already rejected by the parser), in that order.
+fn exact<'a>(frame: &'a Frame, keys: &[&str], what: &str) -> Result<Vec<&'a Frame>> {
+    let table = entries(frame, what)?;
     ensure!(
-        keys == BTreeSet::from(["cities", "ledger", "oath", "start", "turn"]),
-        "Core frame lacks oath, turn, start, ledger or cities"
+        table.len() == keys.len()
+            && table
+                .iter()
+                .all(|(k, _, _)| matches!(k, Frame::Str(s) if keys.contains(&s.as_str()))),
+        "{what} needs exactly the keys {keys:?}"
     );
+    keys.iter().map(|key| required(frame, key, what)).collect()
+}
+
+fn int(frame: &Frame, what: &str) -> Result<i64> {
+    match frame {
+        Frame::Num(_) => frame
+            .int()
+            .with_context(|| format!("{what} must be an integer")),
+        _ => bail!("{what} must be a number"),
+    }
+}
+
+fn num(frame: &Frame, what: &str) -> Result<f64> {
+    match frame {
+        Frame::Num(n) => Ok(*n),
+        _ => bail!("{what} must be a number"),
+    }
+}
+
+fn text<'a>(frame: &'a Frame, what: &str) -> Result<&'a str> {
+    frame
+        .text()
+        .with_context(|| format!("{what} must be a string"))
+}
+
+fn plot_key(key: &Frame) -> Result<i64> {
+    let text = text(key, "city key")?;
+    let plot: i64 = text.parse().context("city key must be a plot index")?;
     ensure!(
-        frame.get("oath")?.text()? == cases[0].oath,
-        "Core frame belongs to another human oath"
+        plot >= 0 && plot.to_string() == text,
+        "city key must be a canonical plot index"
     );
-    let ledger = frame.get("ledger")?;
+    Ok(plot)
+}
+
+const UPPER: [&str; 6] = ["PRODUCTION", "GOLD", "SCIENCE", "CULTURE", "FAITH", "FOOD"];
+const GROWTH_METHODS: [&str; 6] = [
+    "GetOverallGrowthModifier",
+    "GetOtherGrowthModifier",
+    "GetHousingGrowthModifier",
+    "GetHappinessGrowthModifier",
+    "GetFoodSurplus",
+    "GetLoyaltyGrowthModifier",
+];
+
+fn frame_yields(frame: &Frame, what: &str) -> Result<[f64; 6]> {
+    let mut out = [0.0; 6];
+    for (slot, value) in out.iter_mut().zip(exact(frame, &UPPER, what)?) {
+        *slot = num(value, what)?;
+    }
+    Ok(out)
+}
+
+struct House {
+    civ: String,
+    age: String,
+    chosen: Option<i64>,
+    reign: Option<i64>,
+    oaths: Vec<(String, bool)>,
+}
+
+struct CoreCity {
+    id: i64,
+    owner: i64,
+    flags: BTreeMap<String, i64>,
+    yields: [f64; 6],
+}
+
+/// The save probe's Core frame: oath, turn, start, the ledger with its 22
+/// houses and judgement history, and 56 cities with the 66 catalogue flags and
+/// six yields, every field typed.
+struct CoreFrame {
+    oath: String,
+    turn: i64,
+    start: i64,
+    houses: BTreeMap<i64, House>,
+    cities: BTreeMap<i64, CoreCity>,
+}
+
+fn core_frame(body: &str, oaths: &BTreeSet<String>) -> Result<CoreFrame> {
+    let frame = Frame::parse(body)?;
+    let top = exact(
+        &frame,
+        &["cities", "ledger", "oath", "start", "turn"],
+        "Core frame",
+    )?;
+    let ledger = top[1];
     ensure!(
-        ledger.get("reign")?.int()? == 1,
+        int(required(ledger, "reign", "ledger")?, "ledger reign")? == 1,
         "saved ledger left the fixture reign"
     );
-    let houses = ledger.get("houses")?.entries()?;
-    ensure!(houses.len() == 22, "saved ledger needs the 22 houses");
-    let mut civs = BTreeMap::new();
-    for (key, house, _) in houses {
+    entries(
+        required(ledger, "history", "ledger")?,
+        "ledger judgement history",
+    )?;
+    let mut houses = BTreeMap::new();
+    for (key, house, _) in entries(required(ledger, "houses", "ledger")?, "ledger houses")? {
+        let key = text(key, "house key")?;
         let id: i64 = key
-            .text()?
             .strip_prefix('p')
-            .context("house key")?
-            .parse()?;
-        civs.insert(id, house);
+            .and_then(|n| n.parse().ok())
+            .filter(|n: &i64| *n >= 0 && format!("p{n}") == key)
+            .context("house key must be p and a player id")?;
+        let optional = |name: &str| -> Result<Option<i64>> {
+            field(house, name, "house")?
+                .map(|v| int(v, name))
+                .transpose()
+        };
+        let oaths = match field(house, "oaths", "house")? {
+            None => Vec::new(),
+            Some(table) => entries(table, "house oaths")?
+                .iter()
+                .map(|(oath, chosen, _)| match chosen {
+                    Frame::Bool(chosen) => Ok((text(oath, "oath key")?.to_owned(), *chosen)),
+                    _ => bail!("a saved oath choice must be boolean"),
+                })
+                .collect::<Result<_>>()?,
+        };
+        houses.insert(
+            id,
+            House {
+                civ: text(required(house, "civ", "house")?, "house civ")?.to_owned(),
+                age: text(required(house, "age", "house")?, "house age")?.to_owned(),
+                chosen: optional("oathChosen")?,
+                reign: optional("oathReign")?,
+                oaths,
+            },
+        );
     }
+    ensure!(houses.len() == 22, "saved ledger needs the 22 houses");
+    let mut cities = BTreeMap::new();
+    for (key, city, _) in entries(top[0], "Core cities")? {
+        let value = exact(city, &["flags", "id", "owner", "yields"], "Core city")?;
+        let mut flags = BTreeMap::new();
+        for (oath, flag, _) in entries(value[0], "Core flags")? {
+            let flag = int(flag, "saved oath flag")?;
+            ensure!(flag == 0 || flag == 1, "a saved oath flag must be 0 or 1");
+            flags.insert(text(oath, "flag key")?.to_owned(), flag);
+        }
+        ensure!(
+            flags.keys().eq(oaths.iter()),
+            "saved flags differ from the 66 catalogue oaths"
+        );
+        let city = CoreCity {
+            id: int(value[1], "Core city id")?,
+            owner: int(value[2], "Core city owner")?,
+            flags,
+            yields: frame_yields(value[3], "Core yields")?,
+        };
+        cities.insert(plot_key(key)?, city);
+    }
+    ensure!(
+        cities.len() == CITIES,
+        "Core frame lacks the 56 real cities"
+    );
+    Ok(CoreFrame {
+        oath: text(top[2], "Core oath")?.to_owned(),
+        turn: int(top[4], "Core turn")?,
+        start: int(top[3], "Core start turn")?,
+        houses,
+        cities,
+    })
+}
+
+/// The batch UI frame: turn and 56 cities with id, owner, six yields, the six
+/// official growth values and the build queue hash, every field typed.
+struct UiFrame {
+    turn: i64,
+    cities: BTreeMap<i64, (i64, i64, [f64; 6])>,
+}
+
+fn ui_frame(body: &str) -> Result<UiFrame> {
+    let frame = Frame::parse(body)?;
+    let top = exact(&frame, &["cities", "turn"], "UI frame")?;
+    let mut cities = BTreeMap::new();
+    for (key, city, _) in entries(top[0], "UI cities")? {
+        let value = exact(
+            city,
+            &["growth", "id", "owner", "queue", "yields"],
+            "UI city",
+        )?;
+        for growth in exact(value[0], &GROWTH_METHODS, "UI growth")? {
+            num(growth, "UI growth value")?;
+        }
+        int(exact(value[3], &["hash"], "UI queue")?[0], "UI queue hash")?;
+        let row = (
+            int(value[1], "UI city id")?,
+            int(value[2], "UI city owner")?,
+            frame_yields(value[4], "UI yields")?,
+        );
+        cities.insert(plot_key(key)?, row);
+    }
+    ensure!(cities.len() == CITIES, "UI frame lacks the 56 real cities");
+    Ok(UiFrame {
+        turn: int(top[1], "UI turn")?,
+        cities,
+    })
+}
+
+/// Each case's player and each city plot's (id, owner), read from the save.
+type Saved = (Vec<i64>, BTreeMap<i64, (i64, i64)>);
+
+/// The typed save frames against each other, the clean-state Core snapshots
+/// taken just before the save and just after the reload, and the batch: every
+/// batch house holds exactly its golden choice and each of its cities exactly
+/// that flag among the 66; no other house or flag holds anything.
+fn saved_state(
+    core: &CoreFrame,
+    ui: &UiFrame,
+    clean: [&Snapshot; 2],
+    cases: &[Case],
+) -> Result<Saved> {
+    ensure!(
+        core.oath == cases[0].oath,
+        "Core frame belongs to another human oath"
+    );
+    ensure!(
+        core.turn == ui.turn
+            && (1..=core.turn).contains(&core.start)
+            && clean.iter().all(|s| s.turn == core.turn),
+        "save frames and clean-state observations disagree on the turn"
+    );
+    let core_cities: Vec<_> = core
+        .cities
+        .iter()
+        .map(|(plot, c)| (*plot, c.id, c.owner, &c.yields))
+        .collect();
+    ensure!(
+        same_cities(
+            core_cities.iter().copied(),
+            ui.cities
+                .iter()
+                .map(|(plot, (id, owner, yields))| (*plot, *id, *owner, yields))
+        ),
+        "the UI frame shows other cities or yields than the Core frame"
+    );
+    for snapshot in clean {
+        ensure!(
+            same_cities(core_cities.iter().copied(), snapshot_cities(snapshot)),
+            "the save frames differ from the observed clean state"
+        );
+    }
+    let owners: BTreeSet<i64> = core.cities.values().map(|c| c.owner).collect();
+    ensure!(
+        core.houses.keys().copied().collect::<BTreeSet<_>>() == owners,
+        "saved houses differ from the owners of the real cities"
+    );
+    ensure!(
+        core.houses
+            .values()
+            .map(|h| h.civ.as_str())
+            .collect::<BTreeSet<_>>()
+            .len()
+            == core.houses.len(),
+        "two saved houses share a civilization"
+    );
     let mut players = Vec::new();
     for case in cases {
-        let found: Vec<i64> = civs
+        let found: Vec<i64> = core
+            .houses
             .iter()
-            .filter(|(_, h)| h.get("civ").and_then(Frame::text).ok() == Some(case.civ.as_str()))
+            .filter(|(_, h)| h.civ == case.civ)
             .map(|(id, _)| *id)
             .collect();
         ensure!(
@@ -1205,49 +1754,37 @@ fn saved_selections(core: &str, cases: &[Case]) -> Result<Saved> {
         players.push(found[0]);
     }
     ensure!(players[0] == 0, "the human batch house is not player 0");
-    for (id, house) in &civs {
-        let oaths = match house.get("oaths") {
-            Ok(oaths) => oaths.entries()?,
-            Err(_) => &[],
-        };
+    for (id, house) in &core.houses {
         match players.iter().position(|p| p == id) {
             Some(ci) => ensure!(
-                house.get("age")?.text()? == "GOLDEN"
-                    && house.get("oathChosen")?.int()? == 1
-                    && oaths.len() == 1
-                    && oaths[0].0 == Frame::Str(cases[ci].oath.clone())
-                    && oaths[0].1 == Frame::Bool(true),
+                house.age == "GOLDEN"
+                    && house.chosen == Some(1)
+                    && house.reign == Some(1)
+                    && house.oaths == [(cases[ci].oath.clone(), true)],
                 "batch house {} lacks its saved golden choice",
                 cases[ci].house
             ),
             None => ensure!(
-                oaths.is_empty(),
+                house.oaths.is_empty() && house.chosen.is_none(),
                 "a house outside the batch has a saved oath"
             ),
         }
     }
-    let cities = frame.get("cities")?.entries()?;
-    ensure!(
-        cities.len() == CITIES,
-        "saved frame lacks the 56 real cities"
-    );
     let mut owned = vec![0; cases.len()];
-    let mut identity = BTreeMap::new();
-    for (plot, city, _) in cities {
-        let owner = city.get("owner")?.int()?;
-        identity.insert(plot.text()?.parse()?, (city.get("id")?.int()?, owner));
-        let case = players.iter().position(|p| *p == owner);
+    for (plot, city) in &core.cities {
+        let case = players.iter().position(|p| *p == city.owner);
         if let Some(ci) = case {
             owned[ci] += 1;
-        }
-        let flags = city.get("flags")?.entries()?;
-        ensure!(flags.len() == 66, "a saved city lacks the 66 oath flags");
-        for (oath, flag, _) in flags {
-            let on = case.is_some_and(|ci| cases[ci].oath == oath.text().unwrap_or_default());
             ensure!(
-                flag.int()? == i64::from(on),
-                "saved flag {} differs from the batch selection",
-                oath.text()?
+                city.flags.get(&cases[ci].oath) == Some(&1),
+                "the selected flag of {} is not saved at plot {plot}",
+                cases[ci].oath
+            );
+        }
+        for (oath, flag) in &city.flags {
+            ensure!(
+                *flag == 0 || case.is_some_and(|ci| cases[ci].oath == *oath),
+                "saved flag {oath} is on at plot {plot} outside its house's choice"
             );
         }
     }
@@ -1255,20 +1792,27 @@ fn saved_selections(core: &str, cases: &[Case]) -> Result<Saved> {
         owned.iter().all(|n| *n > 0),
         "a batch house has no saved city"
     );
+    let identity = core
+        .cities
+        .iter()
+        .map(|(plot, c)| (*plot, (c.id, c.owner)))
+        .collect();
     Ok((players, identity))
 }
 
 struct Compared {
     verified: bool,
     reasons: Vec<String>,
-    results: Value,
+    lines: Vec<Value>,
 }
 
 fn compared(detail: &str, probe: &Probe, players: &[i64]) -> Result<Vec<Compared>> {
-    let body = detail
-        .strip_prefix("ran Lua in InGame; return=")
-        .context("comparison return missing")?;
-    let data: Value = serde_json::from_str(body)?;
+    let data = returned(
+        detail,
+        "InGame",
+        &["batch", "quantity_verified_count", "cases"],
+        "comparison",
+    )?;
     let rows = data["cases"].as_array().context("compared cases")?;
     ensure!(
         data["batch"] == probe.batch && rows.len() == probe.cases.len(),
@@ -1276,12 +1820,24 @@ fn compared(detail: &str, probe: &Probe, players: &[i64]) -> Result<Vec<Compared
     );
     let mut out = Vec::new();
     for (i, (row, case)) in rows.iter().zip(&probe.cases).enumerate() {
+        exact_json(
+            row,
+            &[
+                "oath",
+                "house",
+                "player",
+                "selection_path",
+                "quantity_verified",
+                "reasons",
+                "results",
+            ],
+            "compared case",
+        )?;
         ensure!(
             row["oath"] == case.oath.as_str()
                 && row["house"] == case.house.as_str()
-                && row["player"] == players[i]
-                && row["selection_path"] == selection_path(i)
-                && row["results"].is_array(),
+                && row["player"].as_i64() == Some(players[i])
+                && row["selection_path"] == selection_path(i),
             "in-game comparison describes another case"
         );
         let reasons = row["reasons"]
@@ -1300,11 +1856,15 @@ fn compared(detail: &str, probe: &Probe, players: &[i64]) -> Result<Vec<Compared
         out.push(Compared {
             verified,
             reasons,
-            results: row["results"].clone(),
+            lines: row["results"]
+                .as_array()
+                .context("in-game results")?
+                .clone(),
         });
     }
     ensure!(
-        data["quantity_verified_count"] == out.iter().filter(|c| c.verified).count(),
+        data["quantity_verified_count"].as_u64()
+            == Some(out.iter().filter(|c| c.verified).count() as u64),
         "in-game verified count differs"
     );
     Ok(out)
@@ -1385,7 +1945,7 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         .lines()
         .map(serde_json::from_str)
         .collect::<std::result::Result<Vec<Value>, _>>()?;
-    let details = completions(&records, actual)?;
+    let details = completions(&records, &scenario)?;
     let at = |role: Role| -> Result<usize> { Ok(offset + probe.position(role)?) };
     let saved_name = recorded_save_name(&details[at(Role::Save)?], &actual[at(Role::Save)?])?;
     ensure!(
@@ -1417,15 +1977,31 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         frames[0].1 == frames[1].1,
         "UI yields or growth changed across save/load"
     );
-    ensure!(
-        Frame::parse(frames[1].1)?.get("cities")?.entries()?.len() == CITIES,
-        "UI frame lacks the 56 real cities"
-    );
-    let (players, identity) = saved_selections(frames[1].0, &probe.cases)?;
+    let (oaths, _) = read_catalogue(repo)?;
+    let core = core_frame(frames[1].0, &oaths)?;
+    let observed = |phase: Phase| -> Result<Snapshot> {
+        snapshot(&details[at(Role::Snapshot(phase))?], batch, phase)
+    };
+    let (players, identity) = saved_state(
+        &core,
+        &ui_frame(frames[1].1)?,
+        [&observed(Phase::Saved)?, &observed(Phase::Loaded)?],
+        &probe.cases,
+    )?;
     let order = schedule(probe.cases.len());
     let mut samples = BTreeMap::new();
     for phase in &order {
         let rows = measured(&details[at(Role::Measure(*phase))?], batch, *phase)?;
+        let snapshot = observed(*phase)?;
+        ensure!(
+            snapshot.turn == core.turn
+                && same_cities(
+                    snapshot_cities(&snapshot),
+                    rows.iter().map(|s| (s.plot, s.city, s.owner, &s.yields))
+                ),
+            "Core and UI observations differ in {}",
+            phase.name()
+        );
         samples.insert(phase.name(), rows);
     }
     ensure!(
@@ -1449,9 +2025,15 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         ),
     ];
     for (i, case) in probe.cases.iter().enumerate() {
-        let agree = game[i].reasons == rust[i];
-        let ok = game[i].verified && rust[i].is_empty() && agree;
-        let mut reasons = rust[i].clone();
+        let agree = game[i].reasons == rust[i].reasons
+            && game[i].lines.len() == rust[i].details.len()
+            && rust[i]
+                .details
+                .iter()
+                .zip(&game[i].lines)
+                .all(|(detail, line)| detail.matches(line));
+        let ok = game[i].verified && rust[i].reasons.is_empty() && agree;
+        let mut reasons = rust[i].reasons.clone();
         if !agree {
             reasons.push("lua_rust_disagreement".into());
         }
@@ -1471,7 +2053,8 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
             .iter()
             .map(|(kind, amount)| json!({"kind":kind.key(),"expected_percent":amount}))
             .collect();
-        cases.push(json!({"oath":case.oath,"house":case.house,"civilization":case.civ,"player":players[i],"selection_path":selection_path(i),"effects":effects,"quantity_and_native_save_verified":ok,"reasons":reasons,"in_game_reasons":game[i].reasons,"results":game[i].results,"remaining":left}));
+        let results: Vec<_> = rust[i].details.iter().map(Detail::json).collect();
+        cases.push(json!({"oath":case.oath,"house":case.house,"civilization":case.civ,"player":players[i],"selection_path":selection_path(i),"effects":effects,"quantity_and_native_save_verified":ok,"reasons":reasons,"in_game_reasons":game[i].reasons,"results":results,"remaining":left}));
     }
     Ok(json!({
         "batch": batch,
