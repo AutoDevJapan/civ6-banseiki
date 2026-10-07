@@ -326,6 +326,22 @@ fn exit_sync_barrier_runs_after_process_exit_and_propagates_failure() {
 }
 
 #[test]
+fn missing_sync_executable_closes_game_then_refuses_unobserved_completion() {
+    let f = Fixture::new(true);
+    let source = f
+        .paths
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(source, "fixture").unwrap();
+    let mut r = Model::new([true, false]);
+    let error = chain::close_civ6_with_paths(&mut r, &f.paths).unwrap_err();
+    assert!(error.contains("executable is missing"));
+    assert!(!r.running.iter().any(|running| *running));
+    assert_eq!(r.count("taskkill"), 0);
+}
+
+#[test]
 fn ingame_context_is_used_when_frontend_is_not_unique() {
     let f = Fixture::new(true);
     for states in ["1: InGame\n", "1: FrontEnd\n2: frontend\n3: ingame\n"] {

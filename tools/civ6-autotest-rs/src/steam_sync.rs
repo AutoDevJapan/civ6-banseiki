@@ -23,6 +23,8 @@ pub struct Monitor {
     path: PathBuf,
     offset: u64,
     partial: String,
+    prefix: Vec<u8>,
+    prefix_initialized: bool,
     pub states: BTreeMap<u32, SyncState>,
     pub evidence: Vec<String>,
 }
@@ -34,6 +36,8 @@ impl Monitor {
             Err(e) => return Err(e.into()),
         };
         Ok(Self {
+            prefix: read_prefix(&path, 256)?,
+            prefix_initialized: true,
             path,
             offset,
             ..Self::default()
@@ -46,7 +50,15 @@ impl Monitor {
             Err(e) => return Err(e.into()),
         };
         let len = file.metadata()?.len();
-        if len < self.offset {
+        let prefix = read_prefix(
+            &self.path,
+            if self.prefix_initialized {
+                self.prefix.len() as u64
+            } else {
+                256
+            },
+        )?;
+        if len < self.offset || (self.prefix_initialized && prefix != self.prefix) {
             if self.pending() {
                 return Err(Error::input(
                     "Steam cloud log rotated during pending sync; completion cannot be proven",
@@ -57,7 +69,11 @@ impl Monitor {
             self.states.clear();
             self.evidence
                 .push("cloud_log rotated; observing new generation".into());
+            self.prefix = read_prefix(&self.path, 256)?;
+        } else if !self.prefix_initialized {
+            self.prefix = prefix;
         }
+        self.prefix_initialized = true;
         if len - self.offset > 4 * 1024 * 1024 {
             return Err(Error::input(
                 "Steam cloud log grew beyond bounded observation; refusing to discard sync events",
@@ -104,6 +120,17 @@ impl Monitor {
     }
 }
 
+fn read_prefix(path: &Path, limit: u64) -> Result<Vec<u8>> {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let mut prefix = Vec::new();
+    file.take(limit).read_to_end(&mut prefix)?;
+    Ok(prefix)
+}
+
 pub fn classify(line: &str) -> Option<(u32, SyncState)> {
     let rest = line.split_once("[AppID ")?.1;
     let (id, text) = rest.split_once(']')?;
@@ -114,11 +141,19 @@ pub fn classify(line: &str) -> Option<(u32, SyncState)> {
         return None;
     }
     let lower = text.to_ascii_lowercase();
-    let state = if lower.contains("conflict") {
+    let state = if lower.contains("conflict detected")
+        || lower.contains("sync conflict")
+        || lower.contains("files are in conflict")
+    {
         SyncState::Conflict
-    } else if lower.contains("offline") {
+    } else if lower.contains("sync offline") || lower.contains("cannot sync while offline") {
         SyncState::Offline
-    } else if lower.contains("failed") || lower.contains("syncfailed") {
+    } else if lower.contains("byieldingbuildfilelisttosync failed")
+        || lower.contains("syncfailed")
+        || lower.contains("sync failed")
+        || lower.contains("upload failed")
+        || lower.contains("download failed")
+    {
         SyncState::Failed
     } else if lower.contains("upload complete in build list")
         || lower.contains("download complete in build list")
@@ -198,5 +233,37 @@ mod tests {
         std::fs::write(&path, "[AppID 289070] Successfully synced\n").unwrap();
         assert!(m.poll().is_err());
         assert!(m.pending());
+    }
+    #[test]
+    fn longer_replacement_log_cannot_clear_pending_sync() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud_log.txt");
+        std::fs::write(&path, "old generation\n").unwrap();
+        let mut m = Monitor::new(path.clone()).unwrap();
+        m.feed("[AppID 289070] Starting sync (up,)\n");
+        std::fs::write(
+            path,
+            "new generation with longer prefix\n[AppID 289070] Upload complete in build list\n",
+        )
+        .unwrap();
+        assert!(m.poll().is_err());
+        assert!(m.pending());
+    }
+    #[test]
+    fn filenames_and_scan_messages_are_not_sync_failures() {
+        for line in [
+            "[AppID 289070] Persisting file JAC-failed-conflict-offline.Civ6Save to the cloud",
+            "[AppID 241100] Failed to find optional controller template",
+        ] {
+            assert_eq!(classify(line), None);
+        }
+        assert_eq!(
+            classify("[AppID 289070] Sync conflict detected"),
+            Some((289070, SyncState::Conflict))
+        );
+        assert_eq!(
+            classify("[AppID 289070] Cannot sync while offline"),
+            Some((289070, SyncState::Offline))
+        );
     }
 }

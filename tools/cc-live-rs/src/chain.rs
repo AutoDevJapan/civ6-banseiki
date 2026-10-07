@@ -139,7 +139,7 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
     let source = p
         .live()
         .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
-    let offset = if source.is_file() && sync_tool.is_file() {
+    let offset = if source.is_file() {
         match fs::metadata(&cloud_log) {
             Ok(m) => Some(m.len()),
             Err(e) if e.kind() == ErrorKind::NotFound => Some(0),
@@ -149,8 +149,12 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
         None
     };
     let outcome = close_civ6_outcome(r, p)?;
+    r.print(&format!("CIV6_CLOSE outcome={outcome}"))?;
     if outcome != "absent" {
         if let Some(offset) = offset {
+            if !sync_tool.is_file() {
+                return Err("Steam sync helper source exists but its executable is missing; game closed, refusing an unobserved sync".into());
+            }
             let journal = p
                 .temp
                 .join(format!("civ6-steam-exit-{}.jsonl", std::process::id()));
@@ -173,6 +177,8 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
                     out.stdout, out.stderr
                 ));
             }
+        } else {
+            r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
         }
     }
     Ok(())

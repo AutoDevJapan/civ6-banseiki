@@ -66,12 +66,20 @@ fn run(args: Args) -> Result<()> {
                 "Steam exit sync failed; local saves retained; see steam-sync journal",
             ));
         }
-        if start.elapsed().as_secs_f64() >= 3.0 && !m.pending() {
+        if start.elapsed().as_secs_f64() >= 10.0 && !m.pending() && !m.states.is_empty() {
             steam_sync::journal(&journal, "exit_sync_complete", &m)?;
             return Ok(());
         }
         if start.elapsed().as_secs_f64() >= args.timeout {
-            steam_sync::journal(&journal, "exit_sync_timeout", &m)?;
+            steam_sync::journal(
+                &journal,
+                if m.states.is_empty() {
+                    "exit_sync_no_events"
+                } else {
+                    "exit_sync_timeout"
+                },
+                &m,
+            )?;
             return Err(Error::input(
                 "Steam exit sync did not finish within the deadline",
             ));
