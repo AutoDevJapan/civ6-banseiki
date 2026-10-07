@@ -936,8 +936,7 @@ fn fixed_japan_map_query_is_retained_for_sp_and_ai_but_bypassed_for_mp_humans() 
 #[test]
 fn hotseat_scenario_uses_two_distinct_people_in_their_actual_shared_civilization() {
     let scenario =
-        read_json(root().join("tools/civ6-autotest/scenarios/banseiki-pool-hotseat.json"))
-            .unwrap();
+        read_json(root().join("tools/civ6-autotest/scenarios/banseiki-pool-hotseat.json")).unwrap();
     let configure = scenario["steps"]
         .as_array()
         .unwrap()
