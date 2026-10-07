@@ -32,8 +32,10 @@ impl CompositeTrace {
     }
     pub(super) unsafe fn initialize_at(trace: *mut Self) {
         unsafe {
-            ptr::addr_of_mut!((*trace).joined).write(JoinedTrace::default());
-            ptr::addr_of_mut!((*trace).joined.property).write(PropertyTrace::production_scoped());
+            JoinedTrace::initialize_at(
+                ptr::addr_of_mut!((*trace).joined),
+                BridgeMode::ProductionAdmission,
+            );
             AssignCalibrationTrace::initialize_at(ptr::addr_of_mut!((*trace).assignment));
             let rows = ptr::addr_of_mut!((*trace).effective_rax).cast::<AtomicU64>();
             for n in 0..assignment::ASSIGN_CAPACITY {

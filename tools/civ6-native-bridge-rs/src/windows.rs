@@ -30,6 +30,8 @@ mod composite;
 pub use composite::CompositeTrace;
 #[path = "windows/runtime.rs"]
 mod runtime;
+#[path = "windows/trace_init.rs"]
+mod trace_init;
 pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
@@ -3011,7 +3013,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         }
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
-            unsafe { ptr::write(trace, SharedTrace::default()) };
+            unsafe { SharedTrace::initialize_at(trace) };
             unsafe { install_at(entry, trace, disk_bytes) }
         }
         BridgeMode::PromotionCall => {
@@ -3024,23 +3026,20 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                 return BridgeStatus::HookFailure;
             }
             let trace = config.trace_address as *mut PromotionTrace;
-            unsafe { ptr::write(trace, PromotionTrace::default()) };
+            unsafe { PromotionTrace::initialize_at(trace) };
             let callee = unsafe { (module as *mut u8).add(PINNED_PROMOTION_CALLEE_RVA) };
             unsafe { install_promotion_call(entry, callee, trace, promotion_window.unwrap()) }
         }
         BridgeMode::CanEverCalibration => {
             let trace = config.trace_address as *mut CalibrationTrace;
-            unsafe { ptr::write(trace, CalibrationTrace::default()) };
+            unsafe { CalibrationTrace::initialize_at(trace) };
             unsafe { install_calibration_at(entry, trace, disk_bytes) }
         }
         BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission => {
             let trace = config.trace_address as *mut JoinedTrace;
-            unsafe { ptr::write(trace, JoinedTrace::default()) };
+            unsafe { JoinedTrace::initialize_at(trace, mode) };
             joined_deactivate();
             product_deactivate();
-            if mode == BridgeMode::ProductionAdmission {
-                unsafe { ptr::write(&mut (*trace).property, PropertyTrace::production_scoped()) };
-            }
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
             if composite_requested {
@@ -3115,12 +3114,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             let trace = config.trace_address as *mut PropertyTrace;
             unsafe {
-                ptr::write(
+                PropertyTrace::initialize_at(
                     trace,
-                    match mode {
-                        BridgeMode::PropertyScoped => PropertyTrace::scoped(),
-                        BridgeMode::PropertyAdmissionScoped => PropertyTrace::admission_scoped(),
-                        _ => PropertyTrace::default(),
+                    if mode == BridgeMode::Property {
+                        0
+                    } else {
+                        mode as u32
                     },
                 )
             };
