@@ -67,14 +67,20 @@
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
-    <ReplaceUIScript id="JAC_JapanMapScale_HotseatStagingContext">
-      <Properties>
-        <LuaContext>StagingRoom</LuaContext>
-        <LuaReplace>UI/StagingRoom.lua</LuaReplace>
-      </Properties>
+    <ReplaceUIScript id="JAC_JapanMapScale_Staging_20km_Historical" criteria="JAC_Japan_20km_Historical">
+      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
+    </ReplaceUIScript>
+    <ReplaceUIScript id="JAC_JapanMapScale_Staging_15km_Historical" criteria="JAC_Japan_15km_Historical">
+      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
+    </ReplaceUIScript>
+    <ReplaceUIScript id="JAC_JapanMapScale_Staging_20km_Settlers" criteria="JAC_Japan_20km_Settlers">
+      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
+    </ReplaceUIScript>
+    <ReplaceUIScript id="JAC_JapanMapScale_Staging_15km_Settlers" criteria="JAC_Japan_15km_Settlers">
+      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
     </ReplaceUIScript>
     <ImportFiles id="JAC_JapanMapScale_HotseatStaging">
-      <File>UI/StagingRoom.lua</File>
+      <File>UI/JAC_JapanStagingRoom.lua</File>
       <File>UI/JAC_JapanHotseatLimits.lua</File>
     </ImportFiles>
     <UpdateDatabase id="JAC_JapanMapScale_Config">
@@ -160,7 +166,7 @@
     </AddGameplayScripts>
   </InGameActions>
   <Files>
-    <File>UI/StagingRoom.lua</File>
+    <File>UI/JAC_JapanStagingRoom.lua</File>
     <File>UI/JAC_JapanHotseatLimits.lua</File>
     <File>Data/JAC_Japan_20km_Castles.sql</File>
     <File>Data/JAC_Japan_15km_Castles.sql</File>

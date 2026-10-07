@@ -3,7 +3,7 @@ use mlua::Lua;
 use regex::Regex;
 
 const LIMITS: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanHotseatLimits.lua";
-const STAGING: &str = "poc/JAC_PoC_JapanMapScale/UI/StagingRoom.lua";
+const STAGING: &str = "poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.lua";
 
 fn fixture() -> Lua {
     let lua = new_lua();
@@ -141,33 +141,73 @@ fn frontend_imports_the_real_staging_context_and_scoped_helper() {
         .collect();
     assert_eq!(
         files,
-        ["UI/StagingRoom.lua", "UI/JAC_JapanHotseatLimits.lua"]
+        [
+            "UI/JAC_JapanStagingRoom.lua",
+            "UI/JAC_JapanHotseatLimits.lua"
+        ]
     );
-    let replacement = doc
+    let frontend = doc
         .descendants()
-        .find(|node| {
-            node.has_tag_name("ReplaceUIScript")
-                && node.attribute("id") == Some("JAC_JapanMapScale_HotseatStagingContext")
-        })
+        .find(|node| node.has_tag_name("FrontEndActions"))
         .unwrap();
-    assert!(replacement
-        .parent()
-        .unwrap()
-        .has_tag_name("FrontEndActions"));
-    assert_eq!(
-        replacement
+    let replacements: Vec<_> = frontend
+        .children()
+        .filter(|node| node.has_tag_name("ReplaceUIScript"))
+        .collect();
+    assert_eq!(replacements.len(), 4);
+    let mut maps = std::collections::BTreeSet::new();
+    for replacement in replacements {
+        assert_eq!(
+            replacement
+                .descendants()
+                .find(|node| node.has_tag_name("LuaContext"))
+                .unwrap()
+                .text(),
+            Some("StagingRoom")
+        );
+        assert_eq!(
+            replacement
+                .descendants()
+                .find(|node| node.has_tag_name("LuaReplace"))
+                .unwrap()
+                .text(),
+            Some("UI/JAC_JapanStagingRoom.lua")
+        );
+        let criteria_id = replacement.attribute("criteria").unwrap();
+        let criteria = doc
             .descendants()
-            .find(|node| node.has_tag_name("LuaContext"))
-            .unwrap()
-            .text(),
-        Some("StagingRoom")
-    );
-    assert_eq!(
-        replacement
+            .find(|node| node.has_tag_name("Criteria") && node.attribute("id") == Some(criteria_id))
+            .unwrap();
+        assert_eq!(
+            criteria
+                .descendants()
+                .find(|node| node.has_tag_name("RuleSetInUse"))
+                .unwrap()
+                .text(),
+            Some("RULESET_JAC_BANSEIKI")
+        );
+        let matches = criteria
             .descendants()
-            .find(|node| node.has_tag_name("LuaReplace"))
-            .unwrap()
-            .text(),
-        Some("UI/StagingRoom.lua")
-    );
+            .find(|node| node.has_tag_name("ConfigurationValueMatches"))
+            .unwrap();
+        let field = |name| {
+            matches
+                .children()
+                .find(|node| node.has_tag_name(name))
+                .unwrap()
+                .text()
+                .unwrap()
+        };
+        assert_eq!(field("Group"), "Map");
+        assert_eq!(field("ConfigurationId"), "MAP_SCRIPT");
+        maps.insert(field("Value").to_owned());
+    }
+    let expected: std::collections::BTreeSet<_> =
+        ["20km", "15km", "20km_Settlers", "15km_Settlers"]
+            .map(|name| {
+                format!("{{403be889-1455-4de7-967b-ad54c0ff3431}}Maps/JAC_Japan_{name}.Civ6Map")
+            })
+            .into();
+    assert_eq!(maps, expected);
+    assert!(!manifest.contains("UI/StagingRoom.lua"));
 }
