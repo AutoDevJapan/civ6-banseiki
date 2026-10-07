@@ -27,6 +27,20 @@ fn banseiki() -> Value {
     .unwrap()
 }
 
+fn japan_settlers() -> Value {
+    serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/multiplayer-japan-15km-settlers-hotseat-growth.json"
+    ))
+    .unwrap()
+}
+
+fn japan_settlers_source() -> Value {
+    serde_json::from_str(include_str!(
+        "../../civ6-autotest/scenarios/japan-map-15km-settlers.json"
+    ))
+    .unwrap()
+}
+
 #[test]
 fn persisted_process_creation_time_preserves_every_bit() {
     for bits in [0x41dab117910d2b48_u64, 0x41dab117910d2b49_u64] {
@@ -426,6 +440,245 @@ fn banseiki_hotseat_keeps_the_original_growth_oracle_and_save_load_sequence() {
     .unwrap();
     let prepared: Value = serde_json::from_slice(&fs::read(&bundle.scenario).unwrap()).unwrap();
     hs::verify_installed(&bundle, &prepared, output.path()).unwrap();
+}
+
+#[test]
+fn japan_hotseat_preserves_the_map_roster_and_original_21_step_contract() {
+    let variant = japan_settlers();
+    let source = banseiki();
+    let map = japan_settlers_source();
+    assert_eq!(variant["session_type"], "hotseat");
+    assert_eq!(variant["strict_lua_errors"], true);
+    assert_eq!(variant["steps"].as_array().unwrap().len(), 21);
+    let mut mods = map["steps"][0].clone();
+    mods["exclusive_user_mods"] = json!(true);
+    assert_eq!(variant["steps"][0], mods);
+    assert_eq!(mods["ids"].as_array().unwrap().len(), 5);
+    assert_eq!(
+        mods["disable_ids"],
+        json!(["dfa0717e-4d0b-4370-b693-27fc6758571b"])
+    );
+    let mut configure = map["steps"][1].clone();
+    configure["players"][1]["human"] = json!(true);
+    assert_eq!(variant["steps"][1], configure);
+    let players = configure["players"].as_array().unwrap();
+    assert_eq!(players.len(), 22);
+    for (pid, player) in players.iter().enumerate() {
+        assert_eq!(player["human"], json!(pid < 2));
+    }
+    for index in 2..21 {
+        if index != 3 {
+            assert_eq!(
+                variant["steps"][index],
+                source["steps"][index],
+                "step {}",
+                index + 1
+            );
+        }
+    }
+    assert_eq!(
+        variant["steps"][3]["capture_as"],
+        source["steps"][3]["capture_as"]
+    );
+    assert!(variant["steps"][3]["code"]
+        .as_str()
+        .unwrap()
+        .ends_with(source["steps"][3]["code"].as_str().unwrap()));
+    hs::check_scenario(&original()).unwrap();
+    hs::check_scenario(&source).unwrap();
+    hs::check_scenario(&variant).unwrap();
+}
+
+#[test]
+fn japan_hotseat_generated_bundle_accepts_only_the_registered_source() {
+    let source = japan_settlers();
+    let output = tempfile::tempdir().unwrap();
+    let mod_id = "78ea4ad5-d526-4ca0-bd0e-cc4519261719";
+    let bundle = hs::prepare(&source, output.path(), test_nonce(), mod_id).unwrap();
+    let prepared: Value = serde_json::from_slice(&fs::read(&bundle.scenario).unwrap()).unwrap();
+    let mut expected = source.clone();
+    expected["steps"][0]["ids"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!(mod_id));
+    expected["hotseat_bridge_nonce"] = json!(test_nonce());
+    assert_eq!(prepared, expected);
+    hs::check_scenario(&prepared).unwrap();
+    hs::verify_installed(&bundle, &prepared, output.path()).unwrap();
+    let plan_path = output
+        .path()
+        .join("JAC_Test_HotseatBridge/UI/JAC_HotseatPlan.lua");
+    let plan = fs::read_to_string(&plan_path).unwrap();
+    for step in hs::QUERY_STEPS {
+        assert!(plan.contains(source["steps"][step - 1]["code"].as_str().unwrap()));
+    }
+    // Neither a raw nor a generated scenario may relax map, roster or growth checks.
+    for registered in [source, prepared.clone()] {
+        for (pointer, replacement) in [
+            ("/steps/1/map_file", json!("Maps/Other.Civ6Map")),
+            ("/steps/1/map_size", json!("MAPSIZE_SMALL")),
+            ("/steps/1/city_states", json!(1)),
+            ("/steps/1/ruleset", json!("RULESET_EXPANSION_2")),
+            ("/steps/1/players/1/human", json!(false)),
+            ("/steps/1/players/2/human", json!(true)),
+            (
+                "/steps/1/players/21/leader",
+                json!("LEADER_JAC_ODA_NOBUHIDE"),
+            ),
+            ("/steps/1/players/21/civ", json!("CIVILIZATION_JAC_ODA")),
+            ("/steps/0/exclusive_user_mods", json!(false)),
+            ("/steps/0/disable_ids", json!([])),
+            ("/steps/3/code", banseiki()["steps"][3]["code"].clone()),
+            ("/steps/4/code", json!("return 'fabricated growth'")),
+            ("/steps/11/equals_capture", json!("INITIAL_RECORDS")),
+            ("/steps/20/equals_capture", json!("MID_ROUND")),
+            ("/steps/8/name", json!("different-save")),
+        ] {
+            let mut changed = registered.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            assert!(hs::check_scenario(&changed).is_err(), "{pointer}");
+        }
+        let mut changed = registered.clone();
+        changed["steps"][1]["players"]
+            .as_array_mut()
+            .unwrap()
+            .truncate(2);
+        assert!(hs::check_scenario(&changed).is_err());
+        let mut changed = registered.clone();
+        changed["steps"][0]["ids"].as_array_mut().unwrap().remove(4);
+        assert!(hs::check_scenario(&changed).is_err());
+        let mut changed = registered.clone();
+        changed["steps"][1]["players"]
+            .as_array_mut()
+            .unwrap()
+            .swap(2, 3);
+        assert!(hs::check_scenario(&changed).is_err());
+        let mut changed = registered.clone();
+        changed["steps"][4]["code"] = json!(changed["steps"][4]["code"]
+            .as_str()
+            .unwrap()
+            .replace("count~=2", "count<1"));
+        assert!(hs::check_scenario(&changed).is_err());
+    }
+    let mut wrong_bundle = bundle.clone();
+    wrong_bundle.nonce = "0".repeat(32);
+    if wrong_bundle.nonce == bundle.nonce {
+        wrong_bundle.nonce = "1".repeat(32);
+    }
+    assert!(hs::verify_installed(&wrong_bundle, &prepared, output.path()).is_err());
+    fs::write(plan_path, plan.replace("if humans~=2", "if humans<1")).unwrap();
+    assert!(hs::verify_installed(&bundle, &prepared, output.path()).is_err());
+}
+
+// Fixture data comes from the existing single-player map, independently of the new probe.
+fn japan_initial_state(growth_count: usize) -> Lua {
+    let lua = Lua::new();
+    let roster = lua.create_table().unwrap();
+    for (pid, player) in japan_settlers_source()["steps"][1]["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let entry = lua.create_table().unwrap();
+        entry
+            .set("leader", player["leader"].as_str().unwrap())
+            .unwrap();
+        entry.set("civ", player["civ"].as_str().unwrap()).unwrap();
+        roster.set(pid, entry).unwrap();
+    }
+    lua.globals().set("roster", roster).unwrap();
+    lua.globals().set("growthCount", growth_count).unwrap();
+    lua.load(r#"
+      Game={GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 0 end,
+        GetProperty=function(_,key) assert(key=='JAC_POC_GROWTHUI_INITIALIZED'); return true end}
+      GameConfiguration={IsHotseat=function() return true end,GetStartTurn=function() return 0 end}
+      Map={GetGridSize=function() return 204,88 end}
+      GameInfo={Units={UNIT_SETTLER={Index=1}}}
+      Players={}; PlayerConfigurations={}; majors={}; state={}
+      for pid=0,21 do
+        local id=pid; local entry=roster[id]
+        local s={alive=true,human=id<2,cities=0,settlers=1,leader=entry.leader,civ=entry.civ}
+        state[id]=s
+        local units={}
+        for uid=1,growthCount do
+          local unitID=uid
+          units[uid]={GetID=function() return unitID end,
+            GetUnitType=function() return unitID<=s.settlers and 1 or 2 end,
+            GetProperty=function(_,key)
+              assert(key=='JAC_POC_GROWTHUI_WARLORD')
+              if id<2 then return {Level=1,XP=0,Personality='calm',Trait='steady',Equipment={'spear'}} end
+            end}
+        end
+        local p={GetID=function() return id end,IsAlive=function() return s.alive end,
+          IsHuman=function() return s.human end,IsTurnActive=function() return id==0 end,
+          GetCities=function() return {GetCount=function() return s.cities end} end,
+          GetUnits=function() return {Members=function()
+            local i=0; return function() i=i+1; if units[i] then return i,units[i] end end
+          end} end}
+        Players[id]=p; majors[pid+1]=p
+        PlayerConfigurations[id]={GetLeaderTypeName=function() return s.leader end,
+          GetCivilizationTypeName=function() return s.civ end}
+      end
+      PlayerManager={GetAliveMajors=function() return majors end}
+    "#).exec().unwrap();
+    lua
+}
+
+#[test]
+fn japan_initial_probe_reads_all_22_majors_and_rejects_roster_or_start_mismatches() {
+    let data = japan_settlers();
+    let code = data["steps"][3]["code"].as_str().unwrap();
+    let lua = japan_initial_state(2);
+    assert_eq!(lua.load(code).eval::<String>().unwrap(), "0|0");
+    for (change, expected_error) in [
+        (
+            "Map.GetGridSize=function() return 154,67 end",
+            "map grid mismatch",
+        ),
+        ("table.remove(majors)", "major count"),
+        ("state[21].alive=false", "missing major 21"),
+        ("majors[22]=majors[1]", "unexpected major slot"),
+        ("state[21].cities=1", "premade cities in slot 21"),
+        ("state[21].settlers=0", "settler count in slot 21"),
+        ("state[21].settlers=2", "settler count in slot 21"),
+        ("state[1].human=false", "human/AI mismatch in slot 1"),
+        ("state[21].human=true", "human/AI mismatch in slot 21"),
+        (
+            "state[21].leader=state[0].leader",
+            "leader mismatch in slot 21",
+        ),
+        (
+            "state[21].civ=state[0].civ",
+            "civilization mismatch in slot 21",
+        ),
+    ] {
+        let lua = japan_initial_state(2);
+        lua.load(change).exec().unwrap();
+        let error = lua.load(code).eval::<String>().unwrap_err().to_string();
+        assert!(error.contains(expected_error), "{change}: {error}");
+    }
+}
+
+#[test]
+fn japan_growth_probe_keeps_exactly_two_records_per_human() {
+    let data = japan_settlers();
+    let code = data["steps"][4]["code"].as_str().unwrap();
+    let result = japan_initial_state(2).load(code).eval::<String>().unwrap();
+    assert_eq!(result.split('|').count(), 6); // turn, active player and all four records
+    for count in [1, 3] {
+        let error = japan_initial_state(count)
+            .load(code)
+            .eval::<String>()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!(
+                "expected 2 growth records for player 0, got {count}"
+            )),
+            "{error}"
+        );
+    }
 }
 
 #[test]
