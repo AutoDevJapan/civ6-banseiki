@@ -2708,19 +2708,17 @@ impl Runner {
             Err(e) if e.kind == ErrorKind::Interrupted => {
                 self.result_passed = false;
                 self.failure = Some(format!("KeyboardInterrupt: {e}"));
+                self.record_failure(None, None, &e);
                 interruption = Some(e);
                 130
             }
             Err(e) => {
                 self.result_passed = false;
                 self.failure = Some(e.to_string());
-                fs::write(
-                    self.output.join("failure.json"),
-                    serde_json::to_vec_pretty(&crate::reliability::failure_boundary(
-                        None, None, &e,
-                    ))?,
-                )?;
-                self.log("run", "FAIL", &e.to_string())?;
+                self.record_failure(None, None, &e);
+                if let Err(log_error) = self.log("run", "FAIL", &e.to_string()) {
+                    eprintln!("Original failure: {e}; writing step log failed: {log_error}");
+                }
                 1
             }
         };
@@ -2750,6 +2748,17 @@ impl Runner {
             Err(e)
         } else {
             Ok(code)
+        }
+    }
+    fn record_failure(&self, step: Option<&Value>, index: Option<usize>, error: &Error) {
+        let boundary = crate::reliability::failure_boundary(step, index, error);
+        let written = serde_json::to_vec_pretty(&boundary)
+            .map_err(Error::from)
+            .and_then(|bytes| {
+                fs::write(self.output.join("failure.json"), bytes).map_err(Error::from)
+            });
+        if let Err(write_error) = written {
+            eprintln!("Original failure: {error}; writing failure.json failed: {write_error}");
         }
     }
     fn run_inner(&mut self) -> Result<i32> {
@@ -2831,18 +2840,13 @@ impl Runner {
                 }
                 Err(e) => {
                     self.failure = Some(e.to_string());
-                    fs::write(
-                        self.output.join("failure.json"),
-                        serde_json::to_vec_pretty(&crate::reliability::failure_boundary(
-                            Some(step),
-                            Some(i),
-                            &e,
-                        ))?,
-                    )?;
+                    self.record_failure(Some(step), Some(i), &e);
                     if e.kind == ErrorKind::Interrupted {
                         return Err(e);
                     }
-                    self.log(&action, "FAIL", &e.to_string())?;
+                    if let Err(log_error) = self.log(&action, "FAIL", &e.to_string()) {
+                        eprintln!("Original failure: {e}; writing step log failed: {log_error}");
+                    }
                     return Ok(1);
                 }
             }
@@ -2863,6 +2867,18 @@ impl Runner {
             if self.result_passed { "OK" } else { "FAIL" },
             &format!("{passed}/{} checks passed", self.result_checks.len()),
         )?;
+        if !self.result_passed {
+            let failed = self
+                .result_checks
+                .iter()
+                .filter(|c| !c.passed)
+                .map(|c| format!("{}: {}", c.name, c.detail))
+                .collect::<Vec<_>>()
+                .join("; ");
+            let error = Error::scenario(format!("Log checks failed: {failed}"));
+            self.failure = Some(error.to_string());
+            self.record_failure(Some(&json!({"action":"judge"})), None, &error);
+        }
         Ok(if self.result_passed { 0 } else { 1 })
     }
     fn write_baseline(&self) -> Result<()> {

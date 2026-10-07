@@ -372,6 +372,41 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
 }
 
 #[test]
+fn failure_record_write_error_keeps_original_cause_and_disconnects() {
+    for preflight in [true, false] {
+        let f = Fixture::new();
+        let output = f.output.clone();
+        let mut backend = f.backend();
+        if preflight {
+            backend.on_require_process = Some(Box::new(move || {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::input("original process failure"))
+            }));
+        } else {
+            backend.on_lua = Box::new(move |_, _, _| {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::lua("original Lua failure"))
+            });
+        }
+        let mut runner = f.runner(
+            scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+            backend,
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert!(f.trace().disconnects > 0);
+        let result: Value =
+            serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+        assert!(result["failure"].as_str().unwrap().contains(if preflight {
+            "original process failure"
+        } else {
+            "original Lua failure"
+        }));
+        assert_eq!(result["passed"], false);
+    }
+}
+
+#[test]
 fn test_failed_cold_start_is_reported_before_tuner_access() {
     let f = Fixture::new();
     let mut backend = f.backend();
