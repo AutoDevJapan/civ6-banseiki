@@ -171,6 +171,8 @@ pub mod events;
 #[cfg(test)]
 mod hero_tests;
 pub mod oath_effect_audit;
+pub mod oath_expiry_probe;
+pub mod oath_save_probe;
 pub mod oaths;
 pub mod reigns;
 pub mod trees;

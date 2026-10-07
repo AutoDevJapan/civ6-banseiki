@@ -54,7 +54,20 @@ cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin genera
 cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-save-probes -- --verify <実機資料フォルダー>
 ```
 
-出力先には新規ファイルを要求し、原シナリオや過去の証跡を上書きしない。資料の確認は生成した元手順、正式保存と読込の同じ名前、各操作の順番と重複、実行器の完走と全ログ判定、Core/UIの保存前後を照合する。共有実機の起動手順の追加と保存名の共通接尾辞を認めるが、比較するLua手順は変更できない。この試験は診断専用で終了3となり、数量と保存だけを検証する。自然な改元での失効と他家の特殊建造は未達のままなので、ToDo134全体の受入成功には数えない。実機結果は未取得。
+出力先には新規ファイルを要求し、原シナリオや過去の証跡を上書きしない。資料の確認は生成した元手順、正式保存と読込の同じ名前、各操作の順番と重複、実行器の完走と全ログ判定、Core/UIの保存前後を照合する。共有実機の起動手順の追加と保存名の共通接尾辞を認めるが、比較するLua手順は変更できない。Coreの記録には実際の `GameConfiguration.GetStartTurn()` を含め、実際に書かれた保存名は保存操作の完了記録（`NAME.Civ6Save` の経路）から読み、実行器の接尾辞の規則と読込の完了記録 `loaded NAME` に一致することを要求する。開始ターンや保存の経路を持たない古い資料は補完せず不合格にする。この試験は診断専用で終了3となり、数量と保存だけを検証する。自然な改元での失効と他家の特殊建造は未達のままなので、ToDo134全体の受入成功には数えない。実機結果は未取得。
+
+### 自然な改元での誓約の失効
+
+`generate-oath-expiry-probes` は、上の保存試験が成功した実機資料だけを入力にする（資料の確認は保存試験と同じ処理を共有する）。読込後のCoreの記録を長さと型付きの鍵で解釈し、保存時の絶対ターン・開始ターン・台帳の元号・旧履歴を取り出す。次の改元の期日は、SSOTの改元表から `Eras_XP1` の長さ×速度の倍率（最低2手番）と日付順で独立に計算し、ゲーム内でも製品の `JAC_Sengoku_Ages.lua` と同じ式で計算して一致を要求する。保存された `ledger.nextDue` は数量試験の人工的な開始（元号1・黄金のみ）の前の値のことがあるため使わない。
+
+生成するシナリオは、元の `enable_mods`、記録された保存名の `exact_name` 読込、保存前後と同じCoreの照合、期日の照合の後、既存の `fast_forward`（`test_mode`）で期日の1手番前まで進める。飛ばすのはエンジンの手番だけで、台帳・年代・元号・誓約・旗・履歴・イベントは書き換えない。実際に飛ばした手番数は実行器の `test_mode.skipped_turns` に記録され、`continuous_performance_valid` は false のまま。期日へは画面側とCoreの準備完了を待ってから公式の終了要求1回だけで進め、ちょうど1手番後を待つ。期日では、製品の `OnGameTurnStarted` による判定が1回だけ行われ（新しい履歴1件、旧履歴は不変、全22家の結果）、人間の選択が空・期限が翌手番・全都市の旧誓約の旗が0であることを確認する。AIはこの改元で既定の選択を受けるので、人間の条件はAIに当てはめない（英雄の年代は3つすべて、選択肢が無い家は選択なし）。翌手番は補助の確認で、人間に既定の選択が合法に入ること（同じ誓約が再び選ばれてもよい）と、判定の記録が変わらないことを確かめる。
+
+```powershell
+& $gate run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-expiry-probes -- --check
+& $gate run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-expiry-probes -- --from-artifacts <保存試験の実機資料フォルダー> --output D:/CC/Work/todo134/new-expiry-probe.json
+```
+
+検査は製品の `JAC_Sengoku_Ages.lua` と `JAC_Sengoku_Oaths.lua` をLua 5.1で実行し、誓約と改元のデータは製品のSQLとSSOTから読む（`cargo test ... --lib oath_expiry_probe`）。出力は診断専用（`diagnostic_only: true`、`task_accepted: false`）で、台帳と旗による失効だけを確かめる。失効の前後の実数の産出・生産量、他家の特殊建造、失効試験の実機資料の確認は `remaining` に残す。実機結果は未取得。
 
 最初に `capabilities.json` を実行する。GameCore_TunerとInGameで、各APIの存在、呼出成否、戻り値の型、有限数値か、値、エラーをJSONにする。不明な `GetBaseYield`、`GetYieldModifier`、`GetProductionModifier` はこの診断だけで呼び、数値が返っても単位と適用範囲の確認が済むまで数量受入には使わない。
 
