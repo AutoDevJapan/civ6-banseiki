@@ -5,6 +5,28 @@ use std::{
     time::{Duration, Instant},
 };
 
+// No other test in this process admits bootstrap trace records. The native
+// gateway fixtures run in their own child process and never use this trace.
+#[test]
+fn closed_bootstrap_observation_rejects_late_records_without_count_underflow() {
+    let flight = RecordFlight::try_enter().expect("initial recording lease");
+    OBSERVATION.close();
+    assert!(
+        !OBSERVATION.drained(),
+        "accepted write must still be drained"
+    );
+    drop(flight);
+    assert!(OBSERVATION.drained());
+    let before = TRACE.reserved.load(Ordering::Acquire);
+    for _ in 0..128 {
+        assert!(RecordFlight::try_enter().is_none());
+        record(1, 0, 0, 0, 0, 0, 0);
+        assert!(OBSERVATION.drained(), "rejected lease must not decrement");
+    }
+    assert_eq!(TRACE.reserved.load(Ordering::Acquire), before);
+    assert_eq!(TRACE.dropped.load(Ordering::Acquire), 0);
+}
+
 #[unsafe(no_mangle)]
 static BOOT_FIXTURE_ORIGINAL_CALLS: AtomicU64 = AtomicU64::new(0);
 #[unsafe(no_mangle)]

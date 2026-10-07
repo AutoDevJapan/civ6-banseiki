@@ -43,6 +43,11 @@ static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
 static OBSERVATION: crate::observation::ObservationGate =
     crate::observation::ObservationGate::new(true);
 struct RecordFlight;
+impl RecordFlight {
+    fn try_enter() -> Option<Self> {
+        OBSERVATION.try_acquire().then(|| Self)
+    }
+}
 impl Drop for RecordFlight {
     fn drop(&mut self) {
         OBSERVATION.release();
@@ -116,10 +121,9 @@ fn record(
     generation: u64,
     status: u32,
 ) {
-    if !OBSERVATION.try_acquire() {
+    let Some(_flight) = RecordFlight::try_enter() else {
         return;
-    }
-    let _flight = RecordFlight;
+    };
     let seq = TRACE.reserved.fetch_add(1, Ordering::AcqRel);
     let Some(row) = TRACE.rows.get(seq as usize) else {
         TRACE.dropped.fetch_add(1, Ordering::Relaxed);
@@ -479,17 +483,21 @@ fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
         return Err("target loader/factory-before-context boundary differs".into());
     }
     s.core = core;
-    TRACE.core.store(core as u64, Ordering::Release);
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE.core.store(core as u64, Ordering::Release);
+    }
     record(13, 0, 0, core, 0x24b52d, 0, 0);
     record(0, 0, 0, 0, 0, 0, 0);
     let status = unsafe { (s.install)((&mut s.config as *mut RuntimeConfig).cast()) };
     LAST_STATUS.store(status as usize, Ordering::Release);
-    TRACE
-        .runtime_trace
-        .store(s.config.trace_address, Ordering::Release);
-    TRACE
-        .runtime_trace_size
-        .store(s.config.trace_size as u64, Ordering::Release);
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE
+            .runtime_trace
+            .store(s.config.trace_address, Ordering::Release);
+        TRACE
+            .runtime_trace_size
+            .store(s.config.trace_size as u64, Ordering::Release);
+    }
     record(1, 0, 0, 0, 0, 0, status);
     if status != 0 {
         return Err("deferred Mode6 Install failed before factory".into());
@@ -629,10 +637,12 @@ fn prepare(input: Prepare) -> Result<(), String> {
         _source: source,
         _hooks: vec![a, b, c],
     });
-    TRACE.pid.store(input.pid as u64, Ordering::Release);
-    TRACE
-        .filetime
-        .store(input.created_filetime, Ordering::Release);
+    if let Some(_flight) = RecordFlight::try_enter() {
+        TRACE.pid.store(input.pid as u64, Ordering::Release);
+        TRACE
+            .filetime
+            .store(input.created_filetime, Ordering::Release);
+    }
     record(
         12,
         menu_core,
