@@ -1000,7 +1000,8 @@ mod platform {
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
-        _binary_pins: (std::fs::File, std::fs::File),
+        _binary_pins: Vec<std::fs::File>,
+        bootstrap: bool,
     }
 
     impl Session {
@@ -1032,7 +1033,7 @@ mod platform {
             name: &str,
             seconds: u64,
             mode: &str,
-            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
             let resident_runtime = mode == "paid-assignment-runtime";
             let mode = match mode {
@@ -1106,7 +1107,7 @@ mod platform {
                 "process_pid":pid,"process_created_filetime":created,"product_acceptance":false}),
             )?;
             manifest.flush()?;
-            let mut child = Command::new(executable)
+            let child = Command::new(executable)
                 .args([
                     "--pid",
                     &pid.to_string(),
@@ -1142,6 +1143,34 @@ mod platform {
                 .env("CIV6_AUTOTEST_RUNNER_PATH", &runner)
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
+            Self::from_child(
+                child,
+                artifact,
+                pid,
+                created,
+                started,
+                target,
+                mode,
+                close_game,
+                resident_runtime,
+                vec![controller_pin, dll_pin],
+                false,
+            )
+        }
+        #[allow(clippy::too_many_arguments)]
+        fn from_child(
+            mut child: Child,
+            artifact: PathBuf,
+            pid: u32,
+            created: u64,
+            started: f64,
+            target: PinnedTarget,
+            mode: BridgeMode,
+            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            resident_runtime: bool,
+            binary_pins: Vec<std::fs::File>,
+            bootstrap: bool,
+        ) -> Result<Self> {
             let input = child.stdin.take();
             let Some(stdout) = child.stdout.take() else {
                 let close = close_game(pid, started);
@@ -1188,10 +1217,11 @@ mod platform {
                 mode,
                 assignment_subject: None,
                 resident_runtime,
-                _binary_pins: (controller_pin, dll_pin),
+                _binary_pins: binary_pins,
+                bootstrap,
             };
             match session.lines.recv_timeout(Duration::from_secs(30)) {
-                Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
+                Ok(line) if line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
                 _ => {
                     let close = session.close_target();
                     if unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0 {
@@ -1252,6 +1282,10 @@ mod platform {
                     "native bridge failed: {}",
                     stderr.trim()
                 )));
+            }
+            if self.bootstrap {
+                bootstrap_terminal(&self.artifact, self.pid, self.created)?;
+                return Ok(self.artifact.clone());
             }
             if self.resident_runtime {
                 validate_runtime_receipt(
@@ -1339,6 +1373,11 @@ mod platform {
             outcome
         }
     }
+
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/native_bootstrap_session.rs"
+    ));
 
     impl Drop for Session {
         fn drop(&mut self) {
@@ -1469,10 +1508,11 @@ mod platform {
                 mode: BridgeMode::ProductionAdmission,
                 assignment_subject: None,
                 resident_runtime: true,
-                _binary_pins: (
+                bootstrap: false,
+                _binary_pins: vec![
                     std::fs::File::open(&artifact).unwrap(),
                     std::fs::File::open(&artifact).unwrap(),
-                ),
+                ],
             };
             let outcome = session.stop_inner();
             session.finished = true;
@@ -2284,6 +2324,18 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn start_bootstrap(
+        _: u32,
+        _: f64,
+        _: &Path,
+        _: &serde_json::Value,
+        _: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+    ) -> Result<Self> {
+        Err(Error::input("bootstrap requires Windows x64"))
+    }
+    pub fn bootstrap_healthy(&self) -> Result<()> {
+        Err(Error::input("bootstrap requires Windows x64"))
+    }
     pub fn select_assignment_subject(
         &mut self,
         _: u32,

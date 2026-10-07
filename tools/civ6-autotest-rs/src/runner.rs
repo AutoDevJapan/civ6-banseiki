@@ -124,6 +124,18 @@ pub trait Backend: Send {
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
+    fn start_native_bootstrap(&mut self, _output: &Path, _step: &Value) -> Result<()> {
+        Err(Error::input("bootstrap unavailable"))
+    }
+    fn stop_native_bootstrap(&mut self) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
+    fn check_native_bootstrap(&mut self) -> Result<()> {
+        Ok(())
+    }
+    fn native_bootstrap_health(&self) -> Result<()> {
+        Ok(())
+    }
     fn select_native_assignment_subject(
         &mut self,
         _: u32,
@@ -695,6 +707,7 @@ pub struct SystemBackend {
     native_bridge: Option<crate::native_bridge::Session>,
     native_runtime: Option<crate::native_bridge::Session>,
     native_order: Option<crate::native_order::Session>,
+    native_bootstrap: Option<crate::native_bridge::Session>,
 }
 impl Backend for SystemBackend {
     fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
@@ -707,6 +720,56 @@ impl Backend for SystemBackend {
         let game = pin.game;
         self.startup_pin = Some(pin);
         Ok(Some(game))
+    }
+    fn native_bootstrap_health(&self) -> Result<()> {
+        match &self.native_bootstrap {
+            Some(s) => s.bootstrap_healthy(),
+            None => Ok(()),
+        }
+    }
+    fn start_native_bootstrap(&mut self, output: &Path, step: &Value) -> Result<()> {
+        if self.native_bootstrap.is_some()
+            || self.native_bridge.is_some()
+            || self.native_trace.is_some()
+            || self.native_runtime.is_some()
+            || self.native_order.is_some()
+        {
+            return Err(Error::scenario("another native session is active"));
+        }
+        let (pid, started) = self
+            .single_process(0.0)?
+            .ok_or_else(|| Error::input("bootstrap game missing"))?;
+        self.native_bootstrap = Some(crate::native_bridge::Session::start_bootstrap(
+            pid,
+            started,
+            output,
+            step,
+            Box::new(crate::restart::terminate_civ_process),
+        )?);
+        Ok(())
+    }
+    fn stop_native_bootstrap(&mut self) -> Result<Option<PathBuf>> {
+        match self.native_bootstrap.as_mut() {
+            Some(s) => {
+                let r = s.stop().map(Some);
+                if r.is_ok() {
+                    self.native_bootstrap = None;
+                }
+                r
+            }
+            None => Ok(None),
+        }
+    }
+    fn check_native_bootstrap(&mut self) -> Result<()> {
+        if self.native_bootstrap.is_some() {
+            let (pid, started) = self
+                .single_process(0.0)?
+                .ok_or_else(|| Error::input("bootstrap target disappeared"))?;
+            let s = self.native_bootstrap.as_ref().unwrap();
+            s.bootstrap_healthy()?;
+            s.verify_current_process(pid, started)?;
+        }
+        Ok(())
     }
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         crate::live_lease::environment_budget()
@@ -820,6 +883,7 @@ impl Backend for SystemBackend {
             || self.native_bridge.is_some()
             || self.native_runtime.is_some()
             || self.native_order.is_some()
+            || self.native_bootstrap.is_some()
         {
             return Err(Error::scenario("native governor trace already active"));
         }
@@ -862,6 +926,7 @@ impl Backend for SystemBackend {
             || self.native_trace.is_some()
             || self.native_runtime.is_some()
             || self.native_order.is_some()
+            || self.native_bootstrap.is_some()
         {
             return Err(Error::scenario("another native observation is active"));
         }
@@ -899,6 +964,7 @@ impl Backend for SystemBackend {
             || self.native_bridge.is_some()
             || self.native_trace.is_some()
             || self.native_runtime.is_some()
+            || self.native_bootstrap.is_some()
         {
             return Err(Error::scenario("another native observation owns this game"));
         }
@@ -1185,6 +1251,7 @@ impl Runner {
     pub fn remaining(&self, deadline: f64) -> Result<f64> {
         crate::time::check_interrupt()?;
         self.backend.check_native_order()?;
+        self.backend.native_bootstrap_health()?;
         let lease = self.backend.live_lease_budget()?;
         let v = deadline - self.clock.now();
         if v <= 0.0 {
@@ -2083,14 +2150,13 @@ impl Runner {
                     self.bind_persona_launch()?;
                     if pin_process && startup.launch_requested {
                         startup.process = self.backend.pin_startup_process(hwnd)?;
-                        if self.persona_runtime_restart {
-                            if startup.process.is_none()
-                                || startup.process != self.persona_launched_process
-                            {
-                                return Err(Error::input(
-                                    "persona window differs from the bound launch process",
-                                ));
-                            }
+                        if self.persona_runtime_restart
+                            && (startup.process.is_none()
+                                || startup.process != self.persona_launched_process)
+                        {
+                            return Err(Error::input(
+                                "persona window differs from the bound launch process",
+                            ));
                         }
                     }
                     self.backend.require_dx11(hwnd)?;
@@ -2731,6 +2797,7 @@ impl Runner {
         step: &Value,
         mut check_owner: impl FnMut() -> Result<()>,
     ) -> Result<String> {
+        self.backend.check_native_bootstrap()?;
         let action = text(step, "action");
         if action == "manual" {
             self.backend.manual(text(step, "prompt"))?;
@@ -2770,6 +2837,40 @@ impl Runner {
             _ => {}
         }
         match action {
+            "start_native_bootstrap" => {
+                let seconds = step["max_seconds"]
+                    .as_u64()
+                    .filter(|seconds| (1..=300).contains(seconds))
+                    .ok_or_else(|| Error::scenario("bootstrap duration must be 1..300 seconds"))?;
+                // Refuse before FrontEnd requests or controller spawn: a
+                // pre-mutation lease refusal must not enter READY recovery.
+                if self
+                    .backend
+                    .live_lease_budget()?
+                    .is_some_and(|remaining| remaining <= seconds as f64 + 45.0)
+                {
+                    return Err(Error::input(
+                        "live_chain lease cannot cover bootstrap observation",
+                    ));
+                }
+                self.lua(
+                    "FrontEnd",
+                    "assert(UI.IsInFrontEnd(),'fresh MainMenu required'); return true",
+                    self.budget(deadline, 5.0)?,
+                )?;
+                self.backend.start_native_bootstrap(&self.output, step)?;
+                Ok("bootstrap prepared; target runtime not yet installed".into())
+            }
+            "stop_native_bootstrap" => {
+                let path = self
+                    .backend
+                    .stop_native_bootstrap()?
+                    .ok_or_else(|| Error::scenario("bootstrap is not active"))?;
+                Ok(format!(
+                    "bootstrap observation stopped; resident code retained; {}",
+                    path.display()
+                ))
+            }
             "start_native_can_ever_trace"
             | "start_native_can_ever_calibration"
             | "start_native_assign_calibration"
@@ -3466,6 +3567,7 @@ impl Runner {
         Ok(target.display().to_string())
     }
     fn load_step(&mut self, step: &Value, timeout: f64, deadline: f64) -> Result<String> {
+        self.backend.check_native_bootstrap()?;
         let name = if step["checkpoint"] == true {
             checkpoint::resolve(&self.saves, &self.checkpoint_logical(step)?)?
         } else {
@@ -3549,6 +3651,7 @@ impl Runner {
         self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
         self.accept_hotseat_turn(deadline, true)?;
         self.activate_persona_runtime(deadline)?;
+        self.backend.check_native_bootstrap()?;
         if step["metrics"] == true {
             let seconds = self.clock.now() - started;
             let turn = parse_integer(&self.lua(
@@ -3719,7 +3822,8 @@ impl Runner {
         let autoplay_owner = uuid::Uuid::new_v4().simple().to_string();
         let start_code=format!("if AutoplayManager.IsActive() then error('autoplay already active') end\n{start_line}local human = Game.GetLocalPlayer()\nif human < 0 then error('no local human player to return to') end\nJAC_AUTOTEST_AUTO_OWNER = '{autoplay_owner}'\nif JAC_AUTOTEST_AUTO_HANDLER then LuaEvents.AutoPlayEnd.Remove(JAC_AUTOTEST_AUTO_HANDLER) end\nJAC_AUTOTEST_AUTO_DONE = false\nJAC_AUTOTEST_AUTO_HANDLER = function() if JAC_AUTOTEST_AUTO_OWNER == '{autoplay_owner}' then JAC_AUTOTEST_AUTO_DONE = true end end\nLuaEvents.AutoPlayEnd.Add(JAC_AUTOTEST_AUTO_HANDLER)\nAutoplayManager.SetTurns({turns})\nAutoplayManager.SetReturnAsPlayer(human)\nAutoplayManager.SetObserveAsPlayer(PlayerTypes.NONE)\nAutoplayManager.SetActive(true)\nreturn tostring(startTurn) .. '|' .. tostring(human)");
         let mut autoplay_attempted = false;
-        let execution = (|| -> Result<(i64, AutoplayStatus, Option<i64>, Option<usize>, bool)> {
+        type AutoplayExecution = (i64, AutoplayStatus, Option<i64>, Option<usize>, bool);
+        let execution = (|| -> Result<AutoplayExecution> {
             let (pid, initial_memory, started) = if options.record_metrics {
                 let process = self.backend.single_process(30.0)?.ok_or_else(|| {
                     Error::scenario("Civ VI process disappeared before metrics sampling")
@@ -4196,6 +4300,11 @@ impl Runner {
             self.result_passed = false;
             self.failure = Some(format!("native CanEver bridge cleanup: {e}"));
             println!("Native CanEver bridge cleanup failed: {e}");
+        }
+        if let Err(e) = self.backend.stop_native_bootstrap() {
+            code = 1;
+            self.result_passed = false;
+            self.failure = Some(format!("bootstrap cleanup: {e}"));
         }
         if !self.result_passed && self.failure.is_none() {
             self.failure = Some("Run did not finish".into());

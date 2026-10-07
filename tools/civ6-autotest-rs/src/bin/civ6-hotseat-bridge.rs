@@ -273,13 +273,10 @@ fn last_boot(frames: &[hs::Frame]) -> Result<&hs::Frame> {
 }
 
 fn last_open<'a>(frames: &'a [hs::Frame], scene: &str) -> Result<&'a hs::Frame> {
-    let latest = frames
-        .iter()
-        .filter(|f| {
-            f.scene == scene
-                && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_WAIT" || f.kind == "DIALOG_CLOSED")
-        })
-        .last();
+    let latest = frames.iter().rfind(|f| {
+        f.scene == scene
+            && (f.kind == "DIALOG_OPEN" || f.kind == "DIALOG_WAIT" || f.kind == "DIALOG_CLOSED")
+    });
     latest
         .filter(|f| f.kind == "DIALOG_OPEN")
         .ok_or_else(|| Error::scenario("actual visible PlayerChange dialog was not witnessed"))
@@ -352,11 +349,11 @@ fn step(bundle_path: &Path, logs: &Path, saves: &Path, number: usize, timeout: f
         )));
     }
     let required_turn = match number {
-        4 | 5 | 6 => 3,
-        7 | 8 | 9 | 10 => 6,
+        4..=6 => 3,
+        7..=10 => 6,
         12 | 13 => 11,
-        14 | 15 | 16 => 13,
-        17 | 18 | 19 => 16,
+        14..=16 => 13,
+        17..=19 => 16,
         21 => 20,
         _ => return Err(Error::scenario("unsupported hotseat command")),
     };

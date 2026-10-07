@@ -167,12 +167,8 @@ fn well_formed(person: &Persona) -> bool {
 }
 
 fn balance(owner: u32, snapshot: &Snapshot) -> Option<(u32, bool)> {
-    let Some(titles) = snapshot.titles.get(&owner) else {
-        return None;
-    };
-    let Some(available) = titles.earned.checked_sub(titles.spent) else {
-        return None;
-    };
+    let titles = snapshot.titles.get(&owner)?;
+    let available = titles.earned.checked_sub(titles.spent)?;
     let mut native_paid = 0u32;
     for person in snapshot
         .personas

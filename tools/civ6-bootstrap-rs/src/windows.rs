@@ -8,7 +8,7 @@ use std::{
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering},
         Mutex,
     },
 };
@@ -26,6 +26,7 @@ mod hotpatch;
 const GAME_ROOT: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI";
 const RELEASE: usize = 0xf7110;
 const SET: usize = 0xf7830;
+const LOADER: usize = 0xf8510;
 const HOLDER: usize = 0x22d6070;
 const CONTEXT: usize = 0x22d60c0;
 type Api = unsafe extern "system" fn(*mut c_void) -> u32;
@@ -34,9 +35,19 @@ type Api = unsafe extern "system" fn(*mut c_void) -> u32;
 static BOOT_RELEASE_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 #[unsafe(no_mangle)]
 static BOOT_SET_CONTINUE: AtomicUsize = AtomicUsize::new(0);
+#[unsafe(no_mangle)]
+static BOOT_LOADER_CONTINUE: AtomicUsize = AtomicUsize::new(0);
 static STATE: Mutex<Option<Resident>> = Mutex::new(None);
 static CALLS: AtomicU64 = AtomicU64::new(0);
 static LAST_STATUS: AtomicUsize = AtomicUsize::new(0);
+static OBSERVING: AtomicBool = AtomicBool::new(true);
+static RECORD_FLIGHTS: AtomicU32 = AtomicU32::new(0);
+struct RecordFlight;
+impl Drop for RecordFlight {
+    fn drop(&mut self) {
+        RECORD_FLIGHTS.fetch_sub(1, Ordering::Release);
+    }
+}
 #[repr(C)]
 struct TraceRow {
     sequence: AtomicU64,
@@ -67,7 +78,7 @@ pub struct Trace {
     rows: [TraceRow; 128],
 }
 static TRACE: Trace = Trace {
-    version: 1,
+    version: 2,
     capacity: 128,
     pid: AtomicU64::new(0),
     filetime: AtomicU64::new(0),
@@ -105,6 +116,14 @@ fn record(
     generation: u64,
     status: u32,
 ) {
+    if !OBSERVING.load(Ordering::Acquire) {
+        return;
+    }
+    RECORD_FLIGHTS.fetch_add(1, Ordering::AcqRel);
+    let _flight = RecordFlight;
+    if !OBSERVING.load(Ordering::Acquire) {
+        return;
+    }
     let seq = TRACE.reserved.fetch_add(1, Ordering::AcqRel);
     let Some(row) = TRACE.rows.get(seq as usize) else {
         TRACE.dropped.fetch_add(1, Ordering::Relaxed);
@@ -165,16 +184,27 @@ core::arch::global_asm!(
     ".seh_endprologue",
     "jmp qword ptr [rip + BOOT_SET_CONTINUE]",
     ".seh_endproc",
+    ".globl boot_loader_original",
+    ".seh_proc boot_loader_original",
+    "boot_loader_original:",
+    "sub rsp,0x248",
+    ".seh_stackalloc 0x248",
+    ".seh_endprologue",
+    "jmp qword ptr [rip + BOOT_LOADER_CONTINUE]",
+    ".seh_endproc",
 );
 // Native callees are not proven noexcept; their unwind may cross this wrapper.
 extern "system-unwind" {
     fn boot_release_original(a: usize, b: usize) -> usize;
     fn boot_set_original(a: usize, b: usize) -> usize;
+    fn boot_loader_original(a: usize, b: usize) -> usize;
 }
 
 struct Resident {
     exe: usize,
     core: usize,
+    install: Api,
+    stop: Api,
     close: Api,
     rebuild: Api,
     phase: Phase,
@@ -313,6 +343,12 @@ fn event(
 ) -> Result<Option<u64>, String> {
     let mut lock = STATE.lock().map_err(|_| "resident mutex poisoned")?;
     let s = lock.as_mut().ok_or("resident not prepared")?;
+    if s.phase == Phase::Prepared {
+        // Menu BaseContext has no XP2 runtime authority. Original menu
+        // transitions run untouched until the target loader returns.
+        record(15, receiver, usize::MAX, incoming, ret as u64, 0, 0);
+        return Ok(None);
+    }
     if module("GameCore_XP2_FinalRelease.dll") != s.core {
         return Err("pinned Core base changed".into());
     }
@@ -420,6 +456,65 @@ extern "system-unwind" fn set_entry(receiver: usize, incoming: usize, ret: usize
     result
 }
 
+fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
+    let mut lock = STATE.lock().map_err(|_| "resident lock")?;
+    let s = lock.as_mut().ok_or("resident absent")?;
+    if s.phase != Phase::Prepared || result & 0xff == 0 {
+        return Ok(());
+    }
+    let core = module("GameCore_XP2_FinalRelease.dll");
+    if core == 0 {
+        return Ok(());
+    } // A Base/other loader is not target activation.
+    let core_path = path(core)?;
+    if !same(
+        &core_path,
+        &Path::new(GAME_ROOT).join("DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll"),
+    ) {
+        return Err("target Core path differs".into());
+    }
+    let _core_file = fixed_hash(&core_path, CORE_SHA)?;
+    if caller(s.exe, ret, LOADER)? != 0x24b52d
+        || ptr_at(s.exe + 0x22d60d8)? != core
+        || ptr_at(s.exe + 0x22d64e8)? != core + 0x752d50
+        || ptr_at(s.exe + CONTEXT)? != 0
+        || read(core + 0x752d50, 5)? != [0xe9, 0x0b, 0xcf, 0xe3, 0xff]
+    {
+        return Err("target loader/factory-before-context boundary differs".into());
+    }
+    s.core = core;
+    TRACE.core.store(core as u64, Ordering::Release);
+    record(13, 0, 0, core, 0x24b52d, 0, 0);
+    record(0, 0, 0, 0, 0, 0, 0);
+    let status = unsafe { (s.install)((&mut s.config as *mut RuntimeConfig).cast()) };
+    LAST_STATUS.store(status as usize, Ordering::Release);
+    TRACE
+        .runtime_trace
+        .store(s.config.trace_address, Ordering::Release);
+    TRACE
+        .runtime_trace_size
+        .store(s.config.trace_size as u64, Ordering::Release);
+    record(1, 0, 0, 0, 0, 0, status);
+    if status != 0 {
+        return Err("deferred Mode6 Install failed before factory".into());
+    }
+    s.phase = Phase::Open;
+    if !OBSERVING.load(Ordering::Acquire) && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+        return Err("deferred observation stop failed".into());
+    }
+    Ok(())
+}
+extern "system-unwind" fn loader_entry(argument: usize, unused: usize, ret: usize) -> usize {
+    let result = unsafe { boot_loader_original(argument, unused) };
+    let error = unsafe { GetLastError() };
+    if !std::panic::catch_unwind(|| target_loader_return(result, ret)).is_ok_and(|r| r.is_ok()) {
+        LAST_STATUS.store(usize::MAX, Ordering::Release);
+        std::process::abort();
+    }
+    unsafe { SetLastError(error) };
+    result
+}
+
 fn prepare(input: Prepare) -> Result<(), String> {
     if input.version != VERSION
         || input.size as usize != size_of::<Prepare>()
@@ -443,20 +538,24 @@ fn prepare(input: Prepare) -> Result<(), String> {
         return Err("not pinned game EXE".into());
     }
     let _exe_pin = fixed_hash(&exe_path, EXE_SHA)?;
-    let core = module("GameCore_XP2_FinalRelease.dll");
-    let core_path = path(core)?;
-    if core == 0
+    if module("GameCore_XP2_FinalRelease.dll") != 0 {
+        return Err("cold preparation refuses an already-loaded target Core".into());
+    }
+    let menu_core = module("GameCore_Base_FinalRelease.dll");
+    let core_path = path(menu_core)?;
+    if menu_core == 0
         || !same(
             &core_path,
-            &Path::new(GAME_ROOT)
-                .join("DLC/Expansion2/Binaries/Win64/GameCore_XP2_FinalRelease.dll"),
+            &Path::new(GAME_ROOT).join("Base/Binaries/Win64Steam/GameCore_Base_FinalRelease.dll"),
         )
     {
         return Err("Core path differs".into());
     }
-    let _core_file = fixed_hash(&core_path, CORE_SHA)?;
-    if ptr_at(exe + CONTEXT)? != input.expected_context as usize
-        || !typed(core, input.expected_context as usize)
+    let _core_file = fixed_hash(&core_path, MENU_CORE_SHA)?;
+    if input.expected_menu_context == 0
+        || ptr_at(exe + CONTEXT)? != input.expected_menu_context as usize
+        || ptr_at(input.expected_menu_context as usize)? != menu_core + 0x79e020
+        || ptr_at(exe + 0x22d64e8)? != menu_core + 0x58dd30
     {
         return Err("MainMenu context identity differs".into());
     }
@@ -465,6 +564,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
     let install = api(bridge, b"BridgeRuntimeInstall\0")?;
     let close = api(bridge, b"BridgeRuntimeClose\0")?;
     let rebuild = api(bridge, b"BridgeRuntimeRebuild\0")?;
+    let stop = api(bridge, b"BridgeRuntimeStopObservation\0")?;
     // Own the lifetime of saved API addresses before any runtime invocation.
     // Mode6 also pins itself, but a file handle alone is not a module reference.
     let mut runtime_module = std::ptr::null_mut();
@@ -492,6 +592,7 @@ fn prepare(input: Prepare) -> Result<(), String> {
     }
     BOOT_RELEASE_CONTINUE.store(exe + RELEASE + 2, Ordering::Release);
     BOOT_SET_CONTINUE.store(exe + SET + 5, Ordering::Release);
+    BOOT_LOADER_CONTINUE.store(exe + LOADER + 7, Ordering::Release);
     let a = hotpatch::prepare(
         exe + RELEASE,
         &[0x40, 0x53, 0x48, 0x83, 0xec, 0x20],
@@ -502,7 +603,12 @@ fn prepare(input: Prepare) -> Result<(), String> {
         &[0x48, 0x89, 0x5c, 0x24, 8, 0x57, 0x48, 0x83, 0xec, 0x20],
         set_entry as *const () as usize,
     )?;
-    let mut config = RuntimeConfig {
+    let c = hotpatch::prepare(
+        exe + LOADER,
+        &[0x48, 0x81, 0xec, 0x48, 0x02, 0, 0],
+        loader_entry as *const () as usize,
+    )?;
+    let config = RuntimeConfig {
         version: 0x03240001,
         size: 40,
         pid: input.pid,
@@ -515,7 +621,9 @@ fn prepare(input: Prepare) -> Result<(), String> {
     // Publish retained responsibility before the first runtime mutation.
     *lock = Some(Resident {
         exe,
-        core,
+        core: 0,
+        install,
+        stop,
         close,
         rebuild,
         phase: Phase::Prepared,
@@ -523,33 +631,26 @@ fn prepare(input: Prepare) -> Result<(), String> {
         close_tid: 0,
         config,
         _source: source,
-        _hooks: vec![a, b],
+        _hooks: vec![a, b, c],
     });
     TRACE.pid.store(input.pid as u64, Ordering::Release);
     TRACE
         .filetime
         .store(input.created_filetime, Ordering::Release);
-    TRACE.core.store(core as u64, Ordering::Release);
-    record(0, 0, 0, 0, 0, 0, 0);
-    let status = unsafe { install((&mut config as *mut RuntimeConfig).cast()) };
-    LAST_STATUS.store(status as usize, Ordering::Release);
-    TRACE
-        .runtime_trace
-        .store(config.trace_address, Ordering::Release);
-    TRACE
-        .runtime_trace_size
-        .store(config.trace_size as u64, Ordering::Release);
-    record(1, 0, 0, 0, 0, 0, status);
-    if status != 0 {
-        return Err("Mode6 Install failed; owner must stop/reap this candidate process".into());
-    }
+    record(
+        12,
+        menu_core,
+        input.expected_menu_context as usize,
+        0,
+        0,
+        0,
+        0,
+    );
     let s = lock.as_mut().unwrap();
-    s.config = config;
-    s.phase = Phase::Open;
     for hook in &s._hooks {
         hook.publish()?;
     }
-    record(11, 0, 0, 0, 0, 0, 0); // Both EXE entries published; still no product proof.
+    record(11, 0, 0, 0, 0, 0, 0); // Prepared entries, not XP2/Mode6 readiness.
     Ok(())
 }
 
@@ -584,6 +685,28 @@ pub extern "system" fn RustBridgeBootstrapTrace() -> *const c_void {
 #[unsafe(no_mangle)]
 pub extern "system" fn RustBridgeBootstrapTraceSize() -> usize {
     size_of::<Trace>()
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn RustBridgeBootstrapStopObservation(_: *mut c_void) -> u32 {
+    std::panic::catch_unwind(|| -> Result<(), ()> {
+        OBSERVING.store(false, Ordering::Release);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while RECORD_FLIGHTS.load(Ordering::Acquire) != 0 {
+            if std::time::Instant::now() >= deadline {
+                return Err(());
+            }
+            std::thread::yield_now();
+        }
+        let lock = STATE.lock().map_err(|_| ())?;
+        let s = lock.as_ref().ok_or(())?;
+        if s.phase != Phase::Prepared && unsafe { (s.stop)(std::ptr::null_mut()) } != 0 {
+            return Err(());
+        }
+        Ok(())
+    })
+    .ok()
+    .and_then(Result::ok)
+    .map_or(1, |_| 0)
 }
 
 #[cfg(test)]
