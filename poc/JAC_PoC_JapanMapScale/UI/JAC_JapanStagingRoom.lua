@@ -1,6 +1,9 @@
 -- Frontend does not accept the gameplay map criteria. Keep the installed UI,
 -- and change only its two twelve-slot clamps in this Lua context.
 include("JAC_JapanHotseatLimits")
+-- Frontend globals can be cleared when returning from a saved game. Keep
+-- the callback alive with the math wrapper rather than resolving it again.
+local hotseatMaxPlayers = JAC_JapanHotseatMaxPlayers
 local originalMath = math
 local contextMath = {}
 for key, value in pairs(originalMath) do contextMath[key] = value end
@@ -11,7 +14,7 @@ math.min = function(...)
   if select('#', ...) == 2 then
     local first, second = ...
     if first == 22 and second == 12 then
-      local limit = JAC_JapanHotseatMaxPlayers(second)
+      local limit = hotseatMaxPlayers(second)
       if not scopeReported then
         print('JAC_JP_HS|SCOPE|' .. tostring(GameConfiguration.IsHotseat()) .. '|' ..
           tostring(GameConfiguration.GetValue('RULESET')) .. '|' ..

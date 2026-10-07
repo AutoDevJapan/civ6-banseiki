@@ -86,6 +86,14 @@ fn stock_callbacks_get_twenty_two_and_keep_dynamic_context_changes() {
     );
 }
 #[test]
+fn save_load_keeps_the_limits_callback_after_frontend_globals_are_cleared() {
+    let lua = wrapped_fixture();
+    exec(
+        &lua,
+        "JAC_JapanHotseatMaxPlayers=nil;OnShow();assert(ReadMax()==22);hotseat=false;OnShow();assert(ReadMax()==12)",
+    );
+}
+#[test]
 fn wrapper_keeps_original_math_and_unrelated_minimums_unchanged() {
     let lua = wrapped_fixture();
     exec(
@@ -149,13 +157,28 @@ fn frontend_xml_binds_stock_wrappers_without_unsupported_replacement_actions() {
         Some("JAC_JapanMainMenu")
     );
     let main = read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.xml");
+    // Independent installed 1.0.12.68 XML, with line endings and trailing
+    // whitespace normalized (SHA-256 of the original bytes:
+    // d522f102c3b0bf9182ccc08ea60a58fde596b8d628fabd1f2baea9512357e667).
+    // Including MainMenu and adding another StagingRoom duplicated its events
+    // and let saved games open the original twelve-slot context in live05.
+    let stock_main = read_repo("tools/civ6-lua-tests-rs/fixtures/frontend/MainMenu-1.0.12.68.xml");
+    assert_eq!(
+        main.replace(
+            "FileName=\"JAC_JapanStagingRoom\"",
+            "FileName=\"StagingRoom\""
+        ),
+        stock_main
+    );
     let main = roxmltree::Document::parse(&main).unwrap();
+    assert!(!main
+        .descendants()
+        .any(|n| n.has_tag_name("Include") && n.attribute("File") == Some("MainMenu")));
     assert_eq!(
         main.descendants()
-            .find(|n| n.has_tag_name("Include"))
-            .unwrap()
-            .attribute("File"),
-        Some("MainMenu")
+            .filter(|n| n.has_tag_name("LuaContext") && n.attribute("ID") == Some("StagingRoom"))
+            .count(),
+        1
     );
     assert_eq!(
         main.descendants()
