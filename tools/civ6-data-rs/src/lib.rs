@@ -167,6 +167,7 @@ pub mod asset_dependencies;
 pub mod cascade;
 #[cfg(test)]
 mod data_tests;
+pub mod ethiopia;
 pub mod events;
 #[cfg(test)]
 mod hero_tests;

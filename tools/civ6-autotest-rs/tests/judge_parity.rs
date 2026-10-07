@@ -177,7 +177,7 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     assert!(ids.contains("E4117D8C-4112-4F75-9A50-7D159E361FA4"));
     assert_eq!(
         ids.len(),
-        14,
+        15,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -563,6 +563,10 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-hotseat-growth.json",
                 "multiplayer-japan-15km-settlers-hotseat-growth.json",
                 "mod-selection-rollback.json",
+                "banseiki-pool-hotseat.json",
+                "banseiki-pool-single-player.json",
+                "banseiki-pool-bridge.json",
+                "banseiki-pool-random-bridge.json",
                 "reliability-seed.json",
                 "reliability-cycle.json",
             ]

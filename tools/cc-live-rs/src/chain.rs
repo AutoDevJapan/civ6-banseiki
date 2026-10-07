@@ -1442,9 +1442,17 @@ fn cli_once(
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
+        let restored = if game_closed {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                deployment::restore(r, p, &p.live())
+            }))
+            .unwrap_or_else(|_| Err("ruleset restoration panicked".into()))
+        } else {
+            Ok(())
+        };
         let released = delete_owned_handle(file, &path, r, &token);
         lock_released = released.is_ok();
-        match (closed, released) {
+        match (closed.and(restored), released) {
             (Err(close), Err(release)) => Err(format!("{close}; release failed: {release}")),
             (Err(error), _) | (_, Err(error)) => Err(error),
             _ => Ok(()),

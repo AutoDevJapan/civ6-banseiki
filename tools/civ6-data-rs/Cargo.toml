@@ -3,6 +3,11 @@ name = "civ6-data-rs"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# Requires a licensed local Civ6 installation. Hosted CI runs the hermetic
+# converter/oracle fixtures; this opt-in suite fails if official data is absent.
+installed-game-data = []
+
 [dependencies]
 civ6-autotest-rs = { path = "../civ6-autotest-rs" }
 anyhow = "1"
