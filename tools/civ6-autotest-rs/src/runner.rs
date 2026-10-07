@@ -2960,17 +2960,21 @@ impl Runner {
         }
         match action {
             "start_native_bootstrap" => {
-                let seconds = step["max_seconds"]
-                    .as_u64()
-                    .filter(|seconds| (1..=300).contains(seconds))
-                    .ok_or_else(|| Error::scenario("bootstrap duration must be 1..300 seconds"))?;
+                let (_, controller_seconds) = civ6_bootstrap_rs::protocol::Request::durations(step)
+                    .map_err(Error::scenario)?;
+                // The new controller deadline starts after preparation. Reserve
+                // this entire remaining step budget as well as the stop budget;
+                // legacy bounded observations retain their existing contract.
+                let preparation_seconds = if step.get("controller_seconds").is_some() {
+                    self.remaining(deadline)?
+                } else {
+                    0.0
+                };
                 // Refuse before FrontEnd requests or controller spawn: a
                 // pre-mutation lease refusal must not enter READY recovery.
-                if self
-                    .backend
-                    .live_lease_budget()?
-                    .is_some_and(|remaining| remaining <= seconds as f64 + 45.0)
-                {
+                if self.backend.live_lease_budget()?.is_some_and(|remaining| {
+                    remaining <= controller_seconds as f64 + preparation_seconds + 45.0
+                }) {
                     return Err(Error::input(
                         "live_chain lease cannot cover bootstrap observation",
                     ));

@@ -9,6 +9,8 @@ pub struct Request {
     pub pid: u32,
     pub created: u64,
     pub seconds: u32,
+    /// Owning controller lifetime; native telemetry still uses `seconds`.
+    pub controller_seconds: u32,
     pub runtime: PathBuf,
     pub runtime_sha: String,
     pub bootstrap: PathBuf,
@@ -26,6 +28,22 @@ pub fn digest(value: &str) -> Result<[u8; 32], String> {
     Ok(b)
 }
 impl Request {
+    pub fn durations(v: &Value) -> Result<(u32, u32), String> {
+        let seconds = v["max_seconds"]
+            .as_u64()
+            .filter(|n| (1..=300).contains(n))
+            .ok_or("max_seconds must be 1..300")? as u32;
+        let controller = match v.get("controller_seconds") {
+            None => seconds,
+            Some(value) => value
+                .as_u64()
+                .filter(|n| *n >= u64::from(seconds) && *n <= 1800)
+                .ok_or("controller_seconds must cover telemetry and be at most 1800")?
+                as u32,
+        };
+        Ok((seconds, controller))
+    }
+
     pub fn parse(v: &Value) -> Result<Self, String> {
         let map = v.as_object().ok_or("request object required")?;
         let fields = [
@@ -38,11 +56,14 @@ impl Request {
             "bootstrap_dll",
             "bootstrap_sha256",
             "output",
+            "controller_seconds",
         ];
-        if map.len() != fields.len()
-            || map.keys().any(|k| !fields.contains(&k.as_str()))
-            || v["schema"] != "todo880-bootstrap-controller-v2"
-        {
+        let fields = match v["schema"].as_str() {
+            Some("todo880-bootstrap-controller-v2") => &fields[..9],
+            Some("todo880-bootstrap-controller-v3") => &fields[..],
+            _ => return Err("bootstrap request schema/fields".into()),
+        };
+        if map.len() != fields.len() || map.keys().any(|k| !fields.contains(&k.as_str())) {
             return Err("bootstrap request schema/fields".into());
         }
         let num = |k: &str| {
@@ -62,14 +83,12 @@ impl Request {
             digest(s)?;
             Ok(s.to_ascii_lowercase())
         };
-        let seconds = u32::try_from(num("max_seconds")?).map_err(|_| "seconds overflow")?;
-        if seconds > 300 {
-            return Err("max_seconds must be 1..300".into());
-        }
+        let (seconds, controller_seconds) = Self::durations(v)?;
         Ok(Self {
             pid: u32::try_from(num("pid")?).map_err(|_| "PID overflow")?,
             created: num("created_filetime")?,
             seconds,
+            controller_seconds,
             runtime: file("runtime_dll")?,
             runtime_sha: sha("runtime_sha256")?,
             bootstrap: file("bootstrap_dll")?,
@@ -77,6 +96,20 @@ impl Request {
             output: file("output")?,
         })
     }
+}
+
+/// One schema builder for offline validation and the actual controller child.
+pub fn scenario_request(step: &Value, pid: u32, created: u64, output: &std::path::Path) -> Value {
+    let mut value = json!({"schema":"todo880-bootstrap-controller-v2","pid":pid,
+        "created_filetime":created,"max_seconds":step["max_seconds"],
+        "runtime_dll":step["runtime_dll"],"runtime_sha256":step["runtime_sha256"],
+        "bootstrap_dll":step["bootstrap_dll"],"bootstrap_sha256":step["bootstrap_sha256"],
+        "output":output});
+    if let Some(controller) = step.get("controller_seconds") {
+        value["schema"] = json!("todo880-bootstrap-controller-v3");
+        value["controller_seconds"] = controller.clone();
+    }
+    value
 }
 pub fn word(b: &[u8], offset: usize) -> Result<u64, String> {
     Ok(u64::from_le_bytes(
@@ -310,6 +343,54 @@ pub fn native_trace(b: &[u8], log: Option<&[u8]>, pid: u32, created: u64) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn controller_budget_is_independent_bounded_and_legacy_requests_stay_exact() {
+        let temp = std::env::temp_dir();
+        let mut step = json!({"max_seconds":300,"runtime_dll":temp.join("runtime.dll"),
+            "runtime_sha256":"a".repeat(64),"bootstrap_dll":temp.join("bootstrap.dll"),
+            "bootstrap_sha256":"b".repeat(64)});
+        let output = temp.join("controller-budget.jsonl");
+        let old = scenario_request(&step, 1, 2, &output);
+        let parsed = Request::parse(&old).unwrap();
+        assert_eq!((parsed.seconds, parsed.controller_seconds), (300, 300));
+        for duration in [300, 1500, 1800] {
+            step["controller_seconds"] = json!(duration);
+            let request = scenario_request(&step, 1, 2, &output);
+            let parsed = Request::parse(&request).unwrap();
+            assert_eq!((parsed.seconds, parsed.controller_seconds), (300, duration));
+            let mut wrong_version = request.clone();
+            wrong_version["schema"] = old["schema"].clone();
+            assert!(Request::parse(&wrong_version).is_err());
+            let mut incomplete = request;
+            incomplete
+                .as_object_mut()
+                .unwrap()
+                .remove("controller_seconds");
+            assert!(Request::parse(&incomplete).is_err());
+        }
+        for duration in [
+            json!(0),
+            json!(299),
+            json!(1801),
+            json!(-1),
+            json!(1500.5),
+            json!("1500"),
+            Value::Null,
+        ] {
+            step["controller_seconds"] = duration;
+            assert!(Request::parse(&scenario_request(&step, 1, 2, &output)).is_err());
+        }
+        step["controller_seconds"] = json!(1500);
+        step["max_seconds"] = json!(301);
+        assert!(
+            Request::parse(&scenario_request(&step, 1, 2, &output)).is_err(),
+            "controller time never extends native observation limits"
+        );
+        let mut unknown = old;
+        unknown["controller_second"] = json!(1500);
+        assert!(Request::parse(&unknown).is_err());
+    }
     #[test]
     fn portable_request_requires_both_explicit_dll_hashes() {
         let p = std::env::temp_dir();

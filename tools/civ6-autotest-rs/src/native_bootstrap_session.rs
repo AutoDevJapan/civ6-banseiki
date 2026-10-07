@@ -50,7 +50,7 @@ impl Session {
             ));
         }
         let artifact = output.join(format!("{name}.jsonl"));
-        let request = serde_json::json!({"schema":"todo880-bootstrap-controller-v2","pid":pid,"created_filetime":created,"max_seconds":step["max_seconds"],"runtime_dll":step["runtime_dll"],"runtime_sha256":step["runtime_sha256"],"bootstrap_dll":step["bootstrap_dll"],"bootstrap_sha256":step["bootstrap_sha256"],"output":artifact});
+        let request = civ6_bootstrap_rs::protocol::scenario_request(step, pid, created, &artifact);
         civ6_bootstrap_rs::protocol::Request::parse(&request).map_err(Error::scenario)?;
         if artifact.exists() {
             return Err(Error::scenario("bootstrap artifact exists"));

@@ -31,7 +31,14 @@ fn insufficient_bootstrap_lease_refuses_before_frontend_or_controller_start() {
         }
     }
     let temp = tempfile::tempdir().unwrap();
-    for remaining in [1.0, 104.99, 105.0] {
+    for (remaining, controller) in [
+        (1.0, None),
+        (104.99, None),
+        (105.0, None),
+        (400.0, Some(1500)),
+        (1545.0, Some(1500)),
+        (1600.0, Some(1500)),
+    ] {
         let mut runner = Runner::with_backend(
             json!({"name":"pre-start lease refusal","steps":[]}),
             temp.path().into(),
@@ -41,12 +48,54 @@ fn insufficient_bootstrap_lease_refuses_before_frontend_or_controller_start() {
             Box::new(Lease(remaining)),
             std::sync::Arc::new(SystemClock),
         );
-        let error = runner
-            .run_step(&json!({"action":"start_native_bootstrap","max_seconds":60}))
-            .unwrap_err();
+        let mut step = json!({"action":"start_native_bootstrap","max_seconds":60});
+        if let Some(seconds) = controller {
+            step["controller_seconds"] = json!(seconds);
+        }
+        let error = runner.run_step(&step).unwrap_err();
         assert_eq!(
             error.message,
             "live_chain lease cannot cover bootstrap observation"
+        );
+    }
+}
+
+#[test]
+fn invalid_controller_budget_is_refused_before_bootstrap_start() {
+    struct Never;
+    impl Backend for Never {
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            _: &serde_json::Value,
+        ) -> Result<()> {
+            panic!("invalid duration must not start a controller");
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    for seconds in [
+        json!(0),
+        json!(59),
+        json!(1801),
+        json!("1500"),
+        serde_json::Value::Null,
+    ] {
+        let mut runner = Runner::with_backend(
+            json!({"name":"invalid duration","steps":[]}),
+            temp.path().into(),
+            temp.path().into(),
+            temp.path().into(),
+            4318,
+            Box::new(Never),
+            std::sync::Arc::new(SystemClock),
+        );
+        assert_eq!(
+            runner
+                .run_step(&json!({"action":"start_native_bootstrap",
+            "max_seconds":60,"controller_seconds":seconds}))
+                .unwrap_err()
+                .message,
+            "controller_seconds must cover telemetry and be at most 1800"
         );
     }
 }

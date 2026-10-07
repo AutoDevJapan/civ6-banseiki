@@ -269,7 +269,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             });
             let _ = tx.send(r);
         });
-        let deadline = Instant::now() + Duration::from_secs(req.seconds as u64);
+        let deadline = Instant::now() + Duration::from_secs(req.controller_seconds as u64);
         loop {
             if !alive(&runner) || !alive(&game) {
                 return Err("pinned runner/game exited".into());
@@ -284,7 +284,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
             if Instant::now() >= deadline {
-                return Err("bootstrap observation deadline before explicit stop".into());
+                return Err("bootstrap controller deadline before explicit stop".into());
             }
         }
         if remote_call(
@@ -351,7 +351,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         }
         write_json(
             &mut writer,
-            json!({"type":"bootstrap_stop","pid":req.pid,"created_filetime":req.created,"observation_stopped":true,"resident_code_retained":true,"product_acceptance":false}),
+            json!({"type":"bootstrap_stop","pid":req.pid,"created_filetime":req.created,"observation_stopped":true,"resident_code_retained":true,"runtime_observation_seconds":req.seconds,"controller_seconds":req.controller_seconds,"product_acceptance":false}),
         )?;
         job.disarm_after_verified_operation()?;
         Ok(())

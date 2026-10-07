@@ -34,7 +34,12 @@ pub fn validate(data: &Value) -> Result<()> {
                             .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b))
                 })
                 .ok_or_else(|| Error::scenario("bootstrap name invalid"))?;
-            let request = json!({"schema":"todo880-bootstrap-controller-v2","pid":1,"created_filetime":1,"max_seconds":step["max_seconds"],"runtime_dll":step["runtime_dll"],"runtime_sha256":step["runtime_sha256"],"bootstrap_dll":step["bootstrap_dll"],"bootstrap_sha256":step["bootstrap_sha256"],"output":std::env::temp_dir().join(format!("{name}.jsonl"))});
+            let request = civ6_bootstrap_rs::protocol::scenario_request(
+                step,
+                1,
+                1,
+                &std::env::temp_dir().join(format!("{name}.jsonl")),
+            );
             civ6_bootstrap_rs::protocol::Request::parse(&request).map_err(Error::scenario)?;
             open = true;
             used = true;
@@ -101,6 +106,63 @@ pub fn scene(
     crate::scenario::validate_scenario(&output)?;
     Ok(output)
 }
+
+/// Add only resident setup/telemetry stop. Every original operation, assertion,
+/// save/load and judge setting survives unchanged and in its original order.
+/// This is an explicit bootstrap trial, not proof of a retail autostart path.
+pub fn original_scene(
+    original: &Value,
+    runtime: &str,
+    runtime_sha: &str,
+    bootstrap: &str,
+    bootstrap_sha: &str,
+) -> Result<Value> {
+    crate::scenario::validate_scenario(original)?;
+    let source = original["steps"]
+        .as_array()
+        .ok_or_else(|| Error::scenario("original scene steps missing"))?;
+    let world = source
+        .iter()
+        .position(|step| matches!(step["action"].as_str(), Some("start_game" | "load")))
+        .ok_or_else(|| Error::scenario("original scene has no world start/load"))?;
+    if source.iter().any(|step| {
+        let action = step["action"].as_str().unwrap_or("");
+        action.starts_with("start_native_") || action.starts_with("stop_native_")
+    }) {
+        return Err(Error::scenario("original scene already has a native owner"));
+    }
+    let restarts: Vec<_> = source
+        .iter()
+        .enumerate()
+        .filter(|(_, step)| step["action"] == "restart_game")
+        .map(|(index, _)| index)
+        .collect();
+    if restarts.len() > 1 || restarts.first().is_some_and(|index| *index >= world) {
+        return Err(Error::scenario(
+            "original scene changes process after world start",
+        ));
+    }
+    let mut steps = source[..world].to_vec();
+    if restarts.is_empty() {
+        let before_setup = steps
+            .iter()
+            .position(|step| step["action"] != "enable_mods")
+            .unwrap_or(steps.len());
+        steps.insert(before_setup, json!({"action":"restart_game"}));
+    }
+    steps.push(
+        json!({"action":"start_native_bootstrap","name":"original-resident",
+        "max_seconds":300,"controller_seconds":1500,"runtime_dll":runtime,
+        "runtime_sha256":runtime_sha,"bootstrap_dll":bootstrap,
+        "bootstrap_sha256":bootstrap_sha,"timeout":40}),
+    );
+    steps.extend_from_slice(&source[world..]);
+    steps.push(json!({"action":"stop_native_bootstrap","timeout":45}));
+    let mut output = original.clone();
+    output["steps"] = json!(steps);
+    crate::scenario::validate_scenario(&output)?;
+    Ok(output)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +195,66 @@ mod tests {
         let mut missing = start();
         missing.as_object_mut().unwrap().remove("bootstrap_sha256");
         assert!(validate(&json!({"steps":[{"action":"restart_game"},missing,stop]})).is_err());
+    }
+
+    #[test]
+    fn resident_trial_preserves_every_original_persona_acceptance_value() {
+        let original: Value = serde_json::from_str(include_str!(
+            "../../civ6-autotest/scenarios/leader-persona-15km.json"
+        ))
+        .unwrap();
+        let p = std::env::temp_dir();
+        let output = original_scene(
+            &original,
+            p.join("runtime.dll").to_str().unwrap(),
+            &"a".repeat(64),
+            p.join("bootstrap.dll").to_str().unwrap(),
+            &"b".repeat(64),
+        )
+        .unwrap();
+        let steps = output["steps"].as_array().unwrap();
+        let kept: Vec<_> = steps
+            .iter()
+            .filter(|step| {
+                !matches!(
+                    step["action"].as_str(),
+                    Some("restart_game" | "start_native_bootstrap" | "stop_native_bootstrap")
+                )
+            })
+            .cloned()
+            .collect();
+        assert_eq!(kept, *original["steps"].as_array().unwrap());
+        assert_eq!(steps.len(), kept.len() + 3);
+        let mut restored = output;
+        restored["steps"] = json!(kept);
+        assert_eq!(restored, original, "judge and all other fields survive");
+    }
+
+    #[test]
+    fn resident_trial_keeps_a_fresh_restart_and_refuses_conflicting_owners() {
+        let p = std::env::temp_dir();
+        let build = |input: &Value| {
+            original_scene(
+                input,
+                p.join("runtime.dll").to_str().unwrap(),
+                &"a".repeat(64),
+                p.join("bootstrap.dll").to_str().unwrap(),
+                &"b".repeat(64),
+            )
+        };
+        let original = json!({"name":"fresh","judge_profile":"generic","steps":[
+            {"action":"restart_game"},{"action":"start_game"}]});
+        let output = build(&original).unwrap();
+        assert_eq!(output["steps"].as_array().unwrap().len(), 4);
+        assert_eq!(output["steps"][0], original["steps"][0]);
+        assert_eq!(output["steps"][2], original["steps"][1]);
+        for steps in [
+            json!([{ "action":"start_game" },{ "action":"restart_game" }]),
+            json!([{ "action":"restart_game" },{ "action":"restart_game" },{ "action":"start_game" }]),
+            json!([{ "action":"restart_game" },{ "action":"start_native_order_capture" },{ "action":"start_game" }]),
+            json!([{ "action":"restart_game" }]),
+        ] {
+            assert!(build(&json!({"name":"conflict","steps":steps})).is_err());
+        }
     }
 }
