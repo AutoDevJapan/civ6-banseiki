@@ -697,8 +697,28 @@ impl Runner {
     ) -> Result<String> {
         self.send_frontend_request_checked(code, deadline, 5.0, check_owner)
     }
+    /// Same single-send rule as `send_frontend_transition_checked`, in a named frontend state.
+    pub fn send_state_transition_checked(
+        &mut self,
+        state: &str,
+        code: &str,
+        deadline: f64,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        self.send_state_request_checked(state, code, deadline, 5.0, check_owner)
+    }
     fn send_frontend_request_checked(
         &mut self,
+        code: &str,
+        deadline: f64,
+        request_seconds: f64,
+        check_owner: impl FnMut() -> Result<()>,
+    ) -> Result<String> {
+        self.send_state_request_checked("FrontEnd", code, deadline, request_seconds, check_owner)
+    }
+    fn send_state_request_checked(
+        &mut self,
+        state: &str,
         code: &str,
         deadline: f64,
         request_seconds: f64,
@@ -708,7 +728,7 @@ impl Runner {
             deadline,
             |this| {
                 check_owner()?;
-                this.lua("FrontEnd", code, this.budget(deadline, request_seconds)?)
+                this.lua(state, code, this.budget(deadline, request_seconds)?)
             },
             |error| error.kind == ErrorKind::Tuner,
         )

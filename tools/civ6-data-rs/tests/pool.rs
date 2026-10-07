@@ -1,17 +1,26 @@
 use civ6_data_rs::{pool, Repository};
 use serde_json::{json, Value};
 
+fn row_mut<'a>(data: &'a mut Value, id: &str) -> &'a mut Value {
+    data["characters"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|row| row["id"] == id)
+        .unwrap()
+}
+
 fn catalogue() -> Value {
     Repository::checked_in().json(pool::DATA_PATH).unwrap()
 }
 
 #[test]
-fn checked_in_first_batch_is_valid_and_proposed() {
+fn checked_in_roster_is_valid_and_adopted() {
     pool::validate(&catalogue()).unwrap();
 }
 
 #[test]
-fn rejects_invalid_records_without_weakening_the_first_batch_contract() {
+fn rejects_invalid_records_without_weakening_the_roster_contract() {
     let cases: Vec<(&str, &str, Value, &str)> = vec![
         (
             "JAC_POOL_H001",
@@ -43,7 +52,7 @@ fn rejects_invalid_records_without_weakening_the_first_batch_contract() {
             "JAC_POOL_H001",
             "category",
             json!("軍師"),
-            "武将: expected 40",
+            "武将: expected 120",
         ),
         (
             "JAC_POOL_H001",
@@ -95,16 +104,16 @@ fn rejects_missing_or_unknown_fields_and_non_objects() {
         let mut data = catalogue();
         match kind {
             0 => {
-                data["characters"][0]
+                row_mut(&mut data, "JAC_POOL_H001")
                     .as_object_mut()
                     .unwrap()
                     .remove("faction");
             }
             1 => {
-                data["characters"][0]["typo"] = json!("unexpected");
+                row_mut(&mut data, "JAC_POOL_H001")["typo"] = json!("unexpected");
             }
             2 => {
-                data["characters"][0] = json!([]);
+                *row_mut(&mut data, "JAC_POOL_H001") = json!([]);
             }
             _ => {
                 data["typo"] = json!(true);
@@ -136,12 +145,13 @@ fn historical_source_records_must_be_complete() {
         ),
     ] {
         let mut data = catalogue();
-        data["characters"][0]["sources"][0][field] = value;
+        row_mut(&mut data, "JAC_POOL_H001")["sources"][0][field] = value;
         let error = format!("{:#}", pool::validate(&data).unwrap_err());
         assert!(error.contains(expected), "{field}: {error}");
     }
     let mut data = catalogue();
-    data["characters"][20]["sources"] = data["characters"][0]["sources"].clone();
+    row_mut(&mut data, "JAC_POOL_O001")["sources"] =
+        row_mut(&mut data, "JAC_POOL_H001")["sources"].clone();
     assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("new rows must have none"));
 }
 
@@ -149,7 +159,7 @@ fn historical_source_records_must_be_complete() {
 fn rejects_incomplete_catalogue_and_premature_approval() {
     for (field, value) in [
         ("target_size", json!(100)),
-        ("status", json!("承認済み")),
+        ("status", json!("方向確認待ち")),
         ("schema_version", json!(2)),
     ] {
         let mut data = catalogue();
@@ -158,13 +168,13 @@ fn rejects_incomplete_catalogue_and_premature_approval() {
     }
     let mut data = catalogue();
     data["characters"].as_array_mut().unwrap().pop();
-    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("contain 100"));
+    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("contain 300"));
     let mut data = catalogue();
     for row in data["characters"].as_array_mut().unwrap() {
         row["leader_candidate"] = json!(false);
     }
     assert!(format!("{:#}", pool::validate(&data).unwrap_err())
-        .contains("two distinct leader candidates"));
+        .contains("every adopted character must be a leader candidate"));
     let mut data = catalogue();
     for row in data["characters"].as_array_mut().unwrap() {
         if row["region"] == "北海道" {
@@ -222,11 +232,11 @@ fn identity_source_and_coverage_regressions_are_rejected() {
         ),
     ] {
         let mut data = catalogue();
-        data["characters"][0][field] = value;
+        row_mut(&mut data, "JAC_POOL_H001")[field] = value;
         assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains(expected));
     }
     let mut data = catalogue();
-    data["characters"][0]["sources"][0]
+    row_mut(&mut data, "JAC_POOL_H001")["sources"][0]
         .as_object_mut()
         .unwrap()
         .remove("facts");
@@ -234,12 +244,13 @@ fn identity_source_and_coverage_regressions_are_rejected() {
         format!("{:#}", pool::validate(&data).unwrap_err()).contains("missing or unknown field")
     );
     let mut data = catalogue();
-    data["characters"][0]["origin"] = json!("新規");
-    data["characters"][0]["id"] = json!("JAC_POOL_O099");
-    data["characters"][0]["faction"] = json!("架空の領主");
-    data["characters"][0]["sources"] = json!([]);
+    let row = row_mut(&mut data, "JAC_POOL_H001");
+    row["origin"] = json!("新規");
+    row["id"] = json!("JAC_POOL_O999");
+    row["faction"] = json!("架空の領主");
+    row["sources"] = json!([]);
     assert!(
-        format!("{:#}", pool::validate(&data).unwrap_err()).contains("20 historical and 80 new")
+        format!("{:#}", pool::validate(&data).unwrap_err()).contains("60 historical and 240 new")
     );
     let mut data = catalogue();
     for row in data["characters"].as_array_mut().unwrap() {
@@ -249,7 +260,7 @@ fn identity_source_and_coverage_regressions_are_rejected() {
     }
     assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("all seven eras"));
     let mut data = catalogue();
-    data["characters"][20]["faction"] = json!("伊達家");
+    row_mut(&mut data, "JAC_POOL_O001")["faction"] = json!("伊達家");
     assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("marked 架空"));
     let mut data = catalogue();
     for row in data["characters"].as_array_mut().unwrap() {
@@ -261,7 +272,7 @@ fn identity_source_and_coverage_regressions_are_rejected() {
 }
 
 #[test]
-fn existing_leader_mapping_refers_to_the_same_registered_person() {
+fn existing_leader_mappings_cover_each_registered_person_exactly_once() {
     let data = catalogue();
     let mapped: Vec<_> = data["characters"]
         .as_array()
@@ -269,13 +280,95 @@ fn existing_leader_mapping_refers_to_the_same_registered_person() {
         .iter()
         .filter(|r| !r["existing_leader_id"].is_null())
         .collect();
-    assert_eq!(mapped.len(), 1);
-    assert_eq!(mapped[0]["name"], "毛利元就");
-    let leader = mapped[0]["existing_leader_id"].as_str().unwrap();
-    let text = Repository::checked_in()
+    assert_eq!(mapped.len(), 22);
+    let repo = Repository::checked_in();
+    let sql = repo
         .read("poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql")
-        .unwrap();
-    assert!(text.contains(&format!(
-        "('{leader}', 'LOC_{leader}_NAME', 'LEADER_DEFAULT'"
-    )));
+        .unwrap()
+        + &repo
+            .read("poc/JAC_PoC_CustomCivs/Data/JAC_CustomCivs_Gameplay.sql")
+            .unwrap();
+    let mut expected = std::collections::BTreeSet::new();
+    for caps in regex::Regex::new(r"\('(?P<id>LEADER_JAC_[A-Z0-9_]+)',\s*'KIND_LEADER'\)")
+        .unwrap()
+        .captures_iter(&sql)
+    {
+        expected.insert(caps["id"].to_string());
+    }
+    let actual: std::collections::BTreeSet<_> = mapped
+        .iter()
+        .map(|r| r["existing_leader_id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(expected, actual);
+    for row in mapped {
+        let leader = row["existing_leader_id"].as_str().unwrap();
+        assert!(sql.contains(&format!(
+            "('{leader}', 'LOC_{leader}_NAME', 'LEADER_DEFAULT'"
+        )));
+        let tag = format!("LOC_{leader}_NAME");
+        let mut names = Vec::new();
+        for file in ["JAC_Japan1534_Text.xml", "JAC_CustomCivs_Text.xml"] {
+            let xml = repo
+                .read(format!("poc/JAC_PoC_CustomCivs/Text/{file}"))
+                .unwrap();
+            let document = roxmltree::Document::parse(&xml).unwrap();
+            for node in document.descendants().filter(|n| {
+                n.has_tag_name("Row")
+                    && n.attribute("Tag") == Some(tag.as_str())
+                    && n.attribute("Language") == Some("ja_JP")
+            }) {
+                let name = node
+                    .children()
+                    .find(|n| n.has_tag_name("Text"))
+                    .and_then(|n| n.text())
+                    .unwrap();
+                names.push(name.to_owned());
+            }
+        }
+        assert_eq!(
+            names,
+            vec![row["name"].as_str().unwrap()],
+            "Japanese name for {leader}"
+        );
+    }
+    assert!(data["characters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r["id"] == "JAC_POOL_H008"
+            && r["name"] == "毛利元就"
+            && r["existing_leader_id"] == "LEADER_JAC_MORI_MOTONARI"));
+}
+
+#[test]
+fn original_person_ids_and_names_remain_stable_even_if_the_roster_is_reordered() {
+    let data = catalogue();
+    let identities: Vec<Value> =
+        serde_json::from_str(include_str!("first-batch-identities.json")).unwrap();
+    assert_eq!(identities.len(), 100);
+    for identity in identities {
+        let row = data["characters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == identity["id"])
+            .unwrap();
+        assert_eq!(
+            row["name"], identity["name"],
+            "stable identity {}",
+            identity["id"]
+        );
+    }
+    let mut reordered = data;
+    reordered["characters"].as_array_mut().unwrap().reverse();
+    pool::validate(&reordered).unwrap();
+    row_mut(&mut reordered, "JAC_POOL_H060")["id"] = json!("JAC_POOL_H061");
+    assert!(format!("{:#}", pool::validate(&reordered).unwrap_err()).contains("without gaps"));
+}
+
+#[test]
+fn region_allocation_cannot_be_changed_by_relabeling_one_person() {
+    let mut data = catalogue();
+    row_mut(&mut data, "JAC_POOL_H001")["era"] = json!("中世");
+    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("territory allocation"));
 }
