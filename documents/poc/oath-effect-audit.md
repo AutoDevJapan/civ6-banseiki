@@ -43,6 +43,19 @@ Rust生成器は[誓約カタログ](data/sengoku-oaths.json)の22家×3件を�
 
 ## 初回の能力診断と検査
 
+### 数量確認後の正式保存・再読込
+
+`generate-oath-save-probes` は、現在の66本の数量シナリオを読み、その数量合格の最後の手順を保持して正式保存・メニュー終了・再読込を追加する。元の生成JSONと製品MODは変更しない。保存前に全22家の台帳と旧履歴、全56都市の66旗と実産出をゲーム側で記録し、読込後に一致を要求する。画面側の実産出・成長値・対象の建造進捗と費用は、保存前後の実行器の戻り値を比較する。UIの変数が読込後にも残ることは前提にしない。
+
+```powershell
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-save-probes -- --check
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-save-probes -- --oath JAC_OATH_ODA_TENKA_FUBU --output D:/CC/Work/todo134/new-save-probe.json
+# 実機停止解除後、統合担当がlive_chainから生成したシナリオを実行する。
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin generate-oath-save-probes -- --verify <実機資料フォルダー>
+```
+
+出力先には新規ファイルを要求し、原シナリオや過去の証跡を上書きしない。資料の確認は生成した元手順、正式保存と読込の同じ名前、各操作の順番と重複、実行器の完走と全ログ判定、Core/UIの保存前後を照合する。共有実機の起動手順の追加と保存名の共通接尾辞を認めるが、比較するLua手順は変更できない。この試験は診断専用で終了3となり、数量と保存だけを検証する。自然な改元での失効と他家の特殊建造は未達のままなので、ToDo134全体の受入成功には数えない。実機結果は未取得。
+
 最初に `capabilities.json` を実行する。GameCore_TunerとInGameで、各APIの存在、呼出成否、戻り値の型、有限数値か、値、エラーをJSONにする。不明な `GetBaseYield`、`GetYieldModifier`、`GetProductionModifier` はこの診断だけで呼び、数値が返っても単位と適用範囲の確認が済むまで数量受入には使わない。
 
 CargoはこのPCのゲートを通す。実機を起動しない検査は次のとおり。
