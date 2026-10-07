@@ -467,6 +467,12 @@ pub fn romanize(reading: &str) -> Result<String> {
 }
 
 fn sql(text: &str) -> String {
+    // Ledger metadata is original-language data, not display text. Keep its UTF-8
+    // bytes exactly while SQL source contains only ASCII; UI labels use LOC tags.
+    if !text.is_ascii() {
+        let hex: String = text.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        return format!("CAST(X'{hex}' AS TEXT)");
+    }
     format!("'{}'", text.replace('\'', "''"))
 }
 

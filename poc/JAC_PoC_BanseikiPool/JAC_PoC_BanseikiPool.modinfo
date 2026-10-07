@@ -67,32 +67,11 @@
 			<File>Data/JAC_BanseikiPool_Colors.xml</File>
 		</UpdateColors>
 		<ImportFiles id="JAC_BanseikiPool_SetupFiles">
+			<Properties><LoadOrder>500</LoadOrder></Properties>
 			<File>UI/JAC_PoolSetup.lua</File>
-			<File>UI/JAC_Pool_AdvancedSetup.lua</File>
-			<File>UI/JAC_Pool_HostGame.lua</File>
-			<File>UI/JAC_Pool_StagingRoom.lua</File>
+			<File>UI/JAC_Stock_SetupParameters.lua</File>
+			<File>UI/SetupParameters.lua</File>
 		</ImportFiles>
-		<ReplaceUIScript id="JAC_BanseikiPool_AdvancedSetup">
-			<Properties>
-				<LoadOrder>100</LoadOrder>
-				<LuaContext>AdvancedSetup</LuaContext>
-				<LuaReplace>UI/JAC_Pool_AdvancedSetup.lua</LuaReplace>
-			</Properties>
-		</ReplaceUIScript>
-		<ReplaceUIScript id="JAC_BanseikiPool_HostGame">
-			<Properties>
-				<LoadOrder>100</LoadOrder>
-				<LuaContext>HostGame</LuaContext>
-				<LuaReplace>UI/JAC_Pool_HostGame.lua</LuaReplace>
-			</Properties>
-		</ReplaceUIScript>
-		<ReplaceUIScript id="JAC_BanseikiPool_StagingRoom">
-			<Properties>
-				<LoadOrder>100</LoadOrder>
-				<LuaContext>StagingRoom</LuaContext>
-				<LuaReplace>UI/JAC_Pool_StagingRoom.lua</LuaReplace>
-			</Properties>
-		</ReplaceUIScript>
 	</FrontEndActions>
 	<Files>
 		<File>JAC_PoC_BanseikiPool.dep</File>
@@ -105,8 +84,7 @@
 		<File>Text/JAC_BanseikiPool_Text.xml</File>
 		<File>Scripts/JAC_BanseikiPool.lua</File>
 		<File>UI/JAC_PoolSetup.lua</File>
-		<File>UI/JAC_Pool_AdvancedSetup.lua</File>
-		<File>UI/JAC_Pool_HostGame.lua</File>
-		<File>UI/JAC_Pool_StagingRoom.lua</File>
+		<File>UI/JAC_Stock_SetupParameters.lua</File>
+		<File>UI/SetupParameters.lua</File>
 	</Files>
 </Mod>
