@@ -130,6 +130,40 @@ fn test_load_wait_presses_begin_game_through_loadscreen_lua_without_focus() {
 }
 
 #[test]
+fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
+    for reached_ingame in [true, false] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("OnActivateButtonClicked") {
+                Err(Error::unknown(
+                    "loading context disappeared after Begin Game",
+                ))
+            } else if code.contains("Game.GetLocalPlayer") {
+                Ok(reached_ingame.to_string())
+            } else {
+                Ok("true".into())
+            }
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        ready(&f, &mut runner);
+        let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
+        if reached_ingame {
+            result.unwrap();
+        } else {
+            error_has(
+                result.unwrap_err(),
+                ErrorKind::Scenario,
+                "outcome undecidable",
+            );
+        }
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+        assert!(f.trace().presses.is_empty());
+    }
+}
+
+#[test]
 fn test_load_wait_never_sends_escape_before_load_complete_log() {
     let f = Fixture::new();
     let mut runner = f.direct_runner(json!({}), f.backend());
@@ -404,6 +438,25 @@ fn failure_record_write_error_keeps_original_cause_and_disconnects() {
         }));
         assert_eq!(result["passed"], false);
     }
+}
+
+#[test]
+fn interrupted_step_keeps_its_original_boundary_through_finalization() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_lua = Box::new(|_, _, _| Err(Error::interrupted("stop during Lua request")));
+    let mut runner = f.runner(
+        scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+        backend,
+    );
+    runner.auto_restart = false;
+    assert_eq!(runner.run().unwrap_err().kind, ErrorKind::Interrupted);
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert_eq!(result["failure_boundary"]["step"], 1);
+    assert_eq!(result["failure_boundary"]["action"], "ui_lua");
+    assert_eq!(result["failure_boundary"]["error_kind"], "Interrupted");
+    assert!(f.trace().disconnects > 0);
 }
 
 #[test]
