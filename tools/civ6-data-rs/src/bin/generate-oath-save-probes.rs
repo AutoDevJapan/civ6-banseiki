@@ -585,14 +585,14 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
             false
         );
         let count = original.len();
-        for mutation in 0..10 {
+        for mutation in 0..11 {
             let mut rows = original.clone();
             match mutation {
                 0 => {
                     rows[count - 1]["detail"] = json!(rows[count - 1]["detail"]
                         .as_str()
                         .unwrap()
-                        .replace("{ui}", "{different}"))
+                        .replace("{ui}", "{uI}"))
                 }
                 1 => {
                     rows.remove(count - 6);
@@ -628,11 +628,17 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
                             .replace("{ui}", "{u}"));
                     }
                 }
-                _ => {
+                9 => {
                     rows[count - 1]["detail"] = json!(rows[count - 1]["detail"]
                         .as_str()
                         .unwrap()
                         .replace("|END-JAC-OATH-SAVE", ""));
+                }
+                _ => {
+                    rows[count - 3]["detail"] = json!(rows[count - 3]["detail"]
+                        .as_str()
+                        .unwrap()
+                        .replace("{core}", "{corE}"));
                 }
             }
             write_rows(temp.path(), &rows)?;
