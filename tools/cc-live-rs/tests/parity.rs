@@ -2738,14 +2738,20 @@ fn merge_pr_posts_marks_ready_and_squashes_in_order() {
     let f = Fixture::new();
     let md = f.root.join("comment.md");
     fs::write(&md, "検証済み\n").unwrap();
-    let mut r = Fake::outputs(&[("url\n", "", 0), ("", "", 0), ("", "", 0)]);
+    let mut r = Fake::outputs(&[
+        ("url\n", "", 0),
+        ("true", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("MERGED", "", 0),
+    ]);
     assert_eq!(
         review::merge_cli(&mut r, &f.p, &["3".into(), path(md)]).unwrap(),
         0
     );
     assert_eq!(r.printed, vec!["url", "merged"]);
-    assert_eq!(r.calls[1].args[2], "ready");
-    assert_eq!(r.calls[2].args.last().unwrap(), "--squash");
+    assert_eq!(r.calls[2].args[2], "ready");
+    assert_eq!(r.calls[3].args.last().unwrap(), "--squash");
     assert_eq!(
         read_json(f.p.temp.join("c3.json")).unwrap(),
         json!({"body":"検証済み\n"})
@@ -2765,11 +2771,17 @@ fn failed_review_launch_never_reports_success() {
 
 #[test]
 fn merge_stops_at_each_failed_external_stage() {
-    for failed in 0..3 {
+    for failed in 0..5 {
         let f = Fixture::new();
         let comment = f.root.join("comment.md");
         fs::write(&comment, "検証済み").unwrap();
-        let mut r = Fake::outputs(&[("url", "", 0), ("", "", 0), ("", "", 0)]);
+        let mut r = Fake::outputs(&[
+            ("url", "", 0),
+            ("true", "", 0),
+            ("", "", 0),
+            ("", "", 0),
+            ("MERGED", "", 0),
+        ]);
         r.replies[failed] = Ok(Output {
             code: 41,
             stderr: "stage denied".into(),
@@ -3207,4 +3219,89 @@ fn ready_scheduler_item_counts_as_competitor_and_blocks_requeued_chain() {
         json!({"pid":123,"since":2800,"long":0,"fifo":true}),
     );
     assert!(!my_turn(&mut r, &f.p, &me).unwrap());
+}
+
+#[test]
+fn review_launch_failure_or_missing_job_id_never_returns_success() {
+    let f = Fixture::new();
+    let facts = f.root.join("facts.txt");
+    fs::write(&facts, "検証済み").unwrap();
+    let mut rejected = Fake::outputs(&[("", "launch rejected", 17)]);
+    let error = review::cli(
+        &mut rejected,
+        &f.p,
+        &["name".into(), "122".into(), path(&facts)],
+    )
+    .unwrap_err();
+    assert!(error.contains("review launch failed (exit 17)"));
+    assert!(error.contains("launch rejected"));
+    assert_eq!(rejected.calls.len(), 1);
+    assert!(rejected.printed.is_empty());
+    let mut empty = Fake::success();
+    assert!(review::cli(
+        &mut empty,
+        &f.p,
+        &["name".into(), "122".into(), path(&facts)]
+    )
+    .unwrap_err()
+    .contains("no job id"));
+    assert!(empty.printed.is_empty());
+}
+
+#[test]
+fn merge_stops_at_each_failed_stage_and_keeps_the_original_error() {
+    let f = Fixture::new();
+    let md = f.root.join("comment.md");
+    fs::write(&md, "検証済み").unwrap();
+    for (failed_at, stage) in [
+        (0, "review comment post"),
+        (1, "PR draft query"),
+        (2, "PR ready"),
+        (3, "PR merge"),
+        (4, "PR merge verification"),
+    ] {
+        let mut replies = vec![
+            ("url", "", 0),
+            ("true", "", 0),
+            ("", "", 0),
+            ("", "", 0),
+            ("MERGED", "", 0),
+        ];
+        replies[failed_at] = ("", "original reason", 17);
+        let mut r = Fake::outputs(&replies);
+        let error = review::merge_cli(&mut r, &f.p, &["122".into(), path(&md)]).unwrap_err();
+        assert!(error.contains(stage), "{error}");
+        assert!(error.contains("exit 17"));
+        assert!(error.contains("original reason"));
+        assert_eq!(r.calls.len(), failed_at + 1);
+        assert!(!r.printed.iter().any(|message| message == "merged"));
+    }
+}
+
+#[test]
+fn already_ready_pr_skips_conversion_and_pending_merge_is_not_success() {
+    let f = Fixture::new();
+    let md = f.root.join("comment.md");
+    fs::write(&md, "検証済み").unwrap();
+    for state in ["MERGED", "OPEN"] {
+        let mut r = Fake::outputs(&[
+            ("url", "", 0),
+            ("false", "", 0),
+            ("", "", 0),
+            (state, "", 0),
+        ]);
+        let result = review::merge_cli(&mut r, &f.p, &["122".into(), path(&md)]);
+        assert_eq!(r.calls.len(), 4);
+        assert!(!r
+            .calls
+            .iter()
+            .any(|call| call.args.iter().any(|arg| arg == "ready")));
+        if state == "MERGED" {
+            assert_eq!(result.unwrap(), 0);
+            assert_eq!(r.printed.last().unwrap(), "merged");
+        } else {
+            assert!(result.unwrap_err().contains("not confirmed"));
+            assert!(!r.printed.iter().any(|message| message == "merged"));
+        }
+    }
 }

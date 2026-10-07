@@ -41,7 +41,7 @@ fn stopped_mod_turn_handler_cannot_pass_after_the_base_game_advances() {
 #[test]
 fn malformed_restored_mod_state_cannot_match_the_saved_snapshot() {
     let lua = Lua::new();
-    lua.load("Game={GetCurrentGameTurn=function() return 11 end,GetProperty=function() return {FirstTurn=2,LastTurn=11,TurnsSeen='5'} end}").exec().unwrap();
+    lua.load("Game={GetCurrentGameTurn=function() return 11 end,GetProperty=function() return {FirstTurn=2,LastTurn=11,TurnsSeen='5'} end}; GameInfo={GlobalParameters={JAC_POC_BUNDLE0_VERSION={Value=1}}}").exec().unwrap();
     let data = cycle();
     let error = lua
         .load(data["steps"][9]["code"].as_str().unwrap())
@@ -50,4 +50,28 @@ fn malformed_restored_mod_state_cannot_match_the_saved_snapshot() {
     assert!(error
         .to_string()
         .contains("invalid minimal mod state after reload"));
+}
+
+#[test]
+fn missing_or_changed_mod_database_after_reload_cannot_pass_with_saved_properties() {
+    let data = cycle();
+    for database in [
+        "{}",
+        "{JAC_POC_BUNDLE0_VERSION={Value=2}}",
+        "{JAC_POC_BUNDLE0_VERSION={Value=1}}",
+    ] {
+        let lua = Lua::new();
+        lua.load(format!("Game={{GetCurrentGameTurn=function() return 11 end,GetProperty=function() return {{FirstTurn=2,LastTurn=11,TurnsSeen=5}} end}}; GameInfo={{GlobalParameters={database}}}")).exec().unwrap();
+        let result = lua
+            .load(data["steps"][9]["code"].as_str().unwrap())
+            .eval::<String>();
+        if database.contains("Value=1") {
+            assert_eq!(result.unwrap(), "11|2|11|5");
+        } else {
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("database missing after reload"));
+        }
+    }
 }
