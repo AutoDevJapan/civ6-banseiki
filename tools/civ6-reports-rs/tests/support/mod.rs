@@ -6,20 +6,6 @@ use std::{
 };
 use tempfile::TempDir;
 
-pub fn root() -> PathBuf {
-    // Default CLI output belongs to the executable's checkout. A shared Cargo
-    // target can be inside a different checkout from the fixture source.
-    for start in [
-        std::env::current_exe().unwrap(),
-        std::env::current_dir().unwrap(),
-    ] {
-        if let Some(root) = start.ancestors().find(|path| path.join(".git").exists()) {
-            return root.to_path_buf();
-        }
-    }
-    source_root()
-}
-
 pub fn source_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

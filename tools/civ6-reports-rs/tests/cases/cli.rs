@@ -245,10 +245,10 @@ fn research_and_generator_cli_arguments_and_outputs_match() {
     // tests verify that default inference follows its executable; this parser
     // contract checks the explicitly selected repository without that layout
     // assumption or writing a generated artifact into the other checkout.
-    let selected = scenario::repository_root(Some(&support::root())).unwrap();
+    let selected = scenario::repository_root(Some(&support::source_root())).unwrap();
     assert_eq!(
         scenario::output_in_repository(&selected),
-        support::root()
+        support::source_root()
             .canonicalize()
             .unwrap()
             .join("tools/civ6-autotest/scenarios/court-arbitration-ai.json")
