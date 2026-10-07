@@ -43,6 +43,9 @@ const ORIGINAL_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-hotseat-growth.json");
 const BANSEIKI_SCENARIO: &str =
     include_str!("../../civ6-autotest/scenarios/multiplayer-banseiki-hotseat-growth.json");
+const JAPAN_SETTLERS_SCENARIO: &str = include_str!(
+    "../../civ6-autotest/scenarios/multiplayer-japan-15km-settlers-hotseat-growth.json"
+);
 const POOL_MOD_ID: &str = "c8fb8042-8e3e-4b35-b02a-781947194700";
 /// Growth queries whose captured value also carries the pool record.
 pub const POOL_RECORD_STEPS: [usize; 6] = [5, 8, 12, 15, 17, 21];
@@ -59,6 +62,7 @@ pub const POOL_RANDOM_PREGAME_RESULT: &str =
 pub enum Canonical {
     Growth,
     BanseikiGrowth,
+    JapanSettlers,
     Pool,
     PoolRandom,
 }
@@ -108,7 +112,7 @@ pub fn pool_scenario(random: bool) -> Value {
     data
 }
 
-fn registered() -> [(Canonical, Value); 4] {
+fn registered() -> [(Canonical, Value); 5] {
     [
         (
             Canonical::Growth,
@@ -120,6 +124,10 @@ fn registered() -> [(Canonical, Value); 4] {
         ),
         (Canonical::Pool, pool_scenario(false)),
         (Canonical::PoolRandom, pool_scenario(true)),
+        (
+            Canonical::JapanSettlers,
+            serde_json::from_str(JAPAN_SETTLERS_SCENARIO).unwrap(),
+        ),
     ]
 }
 

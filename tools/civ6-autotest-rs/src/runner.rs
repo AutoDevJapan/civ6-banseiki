@@ -1,4 +1,4 @@
-use crate::tuner::state_name_eq;
+use crate::tuner::{state_available, state_name_eq, state_position};
 use crate::{
     judge, metrics, scenario,
     time::{Clock, SystemClock},
@@ -598,7 +598,7 @@ impl Runner {
                 "state" => {
                     let budget = self.budget(end, 5.0)?;
                     self.states(budget)
-                        .map(|s| s.iter().any(|v| state_name_eq(v, text(condition, "name"))))
+                        .map(|s| state_available(&s, text(condition, "name")))
                 }
                 "lua" => {
                     let budget = self.budget(end, 5.0)?;
@@ -763,10 +763,7 @@ impl Runner {
         let query_deadline = deadline.min(self.clock.now() + 30.0);
         let states =
             self.retry_idempotent(query_deadline, |r| r.states(r.budget(query_deadline, 5.0)?))?;
-        if !states
-            .iter()
-            .any(|s| state_name_eq(s, "InGameTopOptionsMenu"))
-        {
+        if !state_available(&states, "InGameTopOptionsMenu") {
             return Ok(false);
         }
         if self.options_menu_hidden(query_deadline)? {
@@ -851,11 +848,7 @@ impl Runner {
         self.retry_idempotent(deadline, |r| r.dismiss_advisor_once(deadline))
     }
     pub fn dismiss_advisor_once(&mut self, deadline: f64) -> Result<bool> {
-        if !self
-            .states(self.budget(deadline, 5.0)?)?
-            .iter()
-            .any(|s| state_name_eq(s, "AdvisorPopup"))
-        {
+        if !state_available(&self.states(self.budget(deadline, 5.0)?)?, "AdvisorPopup") {
             return Ok(false);
         }
         let dismissed = self.lua(
@@ -875,7 +868,7 @@ impl Runner {
         let states = self.states(self.budget(deadline, 5.0)?)?;
         let mut closed = vec![];
         for (state, call, label) in POPUP_CLOSERS {
-            if states.iter().any(|s| state_name_eq(s, state))
+            if state_available(&states, state)
                 && self.lua(
                     state,
                     &format!("if ContextPtr:IsHidden() then return false end\n{call}\nreturn true"),
@@ -1040,7 +1033,7 @@ impl Runner {
                     return Ok(menu);
                 }
                 let states = self.states(self.budget(deadline, 5.0)?)?;
-                if states.iter().any(|s| state_name_eq(s, "My2K")) {
+                if state_available(&states, "My2K") {
                     // Rechecking visibility/title makes a lost acknowledgment safe:
                     // a cleared instance cannot acknowledge the message a second time.
                     let dismissed = self.lua(
@@ -1340,10 +1333,9 @@ impl Runner {
         if let Some((pid, started)) = old {
             let graceful = (|| -> Result<bool> {
                 let states = self.states(self.budget(deadline, 5.0)?)?;
-                let state = states
-                    .iter()
-                    .find(|s| state_name_eq(s, "FrontEnd"))
-                    .or_else(|| states.iter().find(|s| state_name_eq(s, "InGame")));
+                let state = state_position(states.iter().map(String::as_str), "FrontEnd")
+                    .or_else(|| state_position(states.iter().map(String::as_str), "InGame"))
+                    .map(|position| &states[position]);
                 if let Some(state) = state {
                     match self.lua(
                         state,
@@ -1457,7 +1449,7 @@ impl Runner {
                     Err(e) if retryable(&e) => vec![],
                     Err(e) => return Err(e),
                 };
-                if states.iter().any(|s| state_name_eq(s, "LoadScreen")) {
+                if state_available(&states, "LoadScreen") {
                     let begin = self.lua(
                         "LoadScreen",
                         "OnActivateButtonClicked()\nreturn true",
@@ -1485,11 +1477,7 @@ impl Runner {
                 self.disconnect();
             }
             let check = (|| -> Result<bool> {
-                if self
-                    .states(self.budget(end, 5.0)?)?
-                    .iter()
-                    .any(|s| state_name_eq(s, "InGame"))
-                {
+                if state_available(&self.states(self.budget(end, 5.0)?)?, "InGame") {
                     if self.lua(
                         "InGame",
                         "return Game ~= nil and Game.GetLocalPlayer() >= 0",
@@ -1666,7 +1654,7 @@ impl Runner {
                 self.log("hotseat_staging_states", "OBSERVED", &observed)?;
                 reported = observed;
             }
-            if states.iter().any(|s| state_name_eq(s, "StagingRoom")) {
+            if state_available(&states, "StagingRoom") {
                 let ready = self.lua("StagingRoom", "return not ContextPtr:IsHidden() and Controls.ReadyButton ~= nil and not Controls.ReadyButton:IsDisabled()", self.budget(deadline, 5.0)?);
                 match ready {
                     Ok(v) if v == "true" => {
