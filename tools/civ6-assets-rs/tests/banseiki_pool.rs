@@ -1251,8 +1251,8 @@ fn mod_lists_every_file_and_imports_the_shared_frontend_module() {
     let installed = game_dir().join("Base/Assets/UI/Scripts/SetupParameters.lua");
     if installed.is_file() {
         assert_eq!(
-            read(&mod_dir().join("UI/JAC_Stock_SetupParameters.lua")),
-            read(&installed)
+            read(&mod_dir().join("UI/JAC_Stock_SetupParameters.lua")).replace("\r\n", "\n"),
+            read(&installed).replace("\r\n", "\n")
         );
     }
     let dep = read(&mod_dir().join("JAC_PoC_BanseikiPool.dep"));

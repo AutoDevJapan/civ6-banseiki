@@ -168,6 +168,7 @@ pub mod cascade;
 #[cfg(test)]
 mod data_tests;
 pub mod events;
+pub mod ethiopia;
 #[cfg(test)]
 mod hero_tests;
 pub mod oaths;
