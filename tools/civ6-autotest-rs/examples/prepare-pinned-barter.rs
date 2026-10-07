@@ -14,6 +14,114 @@ const SCENE_SHA: &str = "99fb9e5f20e897414403434504d0c0e9aad3f546577e5b650bea153
 const JOB: &str = "20261006-171922-orch-todo-1665";
 const LIVE: &str = "C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live";
 const SALE_SHA: &str = "e84d34a97d4c10406b97dcf4e22716ab788453d282e76b6ccac10a86c9bc43cc";
+const RECOVERY_OUT: &str =
+    "D:/CC/Work/todo1665/20261007-current/pinned-border-sale-load-recovery-live.json";
+const RECOVERY_ROOT: &str = "D:/CC/Work/todo1665/20261007-current";
+const SAVE_SHA: &str = "6529c3edefbd5db0a36c5bfb6c23ae066c78fee52448c7d3954c1d6dfbd10487";
+const MOD_IDS: &str = "26c967d0-c10d-4eeb-8aaf-c83dc7e621e7,403be889-1455-4de7-967b-ad54c0ff3431,4873eb62-8ccc-4574-b784-dda455e74e68,4a72b1c0-958b-4bd5-81e4-a094f86ce643,7696e937-2044-4f3c-8e13-4e27632e2710,8424840c-92ef-4426-a9b4-b4e0cb818049,91cf7b65-54bb-4f69-a452-19a65527cde2,ba3a1c58-9287-4654-a22f-85f9e6841e9b,bba3a0d2-8f08-4715-9263-00a773e6ae86,bd7a82c5-6b38-4b69-a7f5-8dc9af534249";
+fn audit_failed_load(
+    scene: &Value,
+    raw: &str,
+    result: &Value,
+    claim: &Value,
+) -> Result<(), String> {
+    let rows: Vec<Value> = raw
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
+    let steps = scene["steps"]
+        .as_array()
+        .ok_or("prior scene steps missing")?;
+    if steps.len() != 28 || steps[0] != json!({"action":"restart_game","timeout":420})
+        || steps[1]["action"] != "load" || steps[1]["save_sha256"] != SAVE_SHA
+        || steps[1]["resume_once"] != true || rows.len() != 5
+        || rows[0]["action"] != "start" || rows[0]["status"] != "OK"
+        || rows[1]["action"] != "1/28 restart_game" || rows[1]["status"] != "START"
+        || rows[2]["action"] != "1/28 restart_game" || rows[2]["status"] != "OK"
+        || rows[3]["action"] != "2/28 load" || rows[3]["status"] != "START"
+        || rows[4]["action"] != "2/28 load" || rows[4]["status"] != "FAIL"
+        || result["passed"] != false || result["completed_steps"] != 1
+        || result["checks"] != json!([])
+        || result["failure"] != format!("2/28 load: {}", rows[4]["detail"].as_str().ok_or("failure detail missing")?)
+        || claim["sha256"] != SAVE_SHA || claim["save"] != steps[1]["name"]
+        || claim["output"] != "C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live\\tools/civ6-autotest/artifacts/todo880-citizen-12-07"
+    { return Err("prior run does not prove a stopped load before all transaction operations".into()); }
+    for (row, step) in [(1, 0), (3, 1)] {
+        let sent: Value =
+            serde_json::from_str(rows[row]["detail"].as_str().ok_or("START detail missing")?)
+                .map_err(|e| e.to_string())?;
+        if sent != steps[step] {
+            return Err("prior START differs from pinned scene".into());
+        }
+    }
+    Ok(())
+}
+fn recovery_admission() -> Result<Value, Box<dyn std::error::Error>> {
+    let pinned = [
+        (
+            "border-sale-live-15/steps.jsonl",
+            "1e972c199a6900978d17bd3050e8aae767ce5ef33ea544c975ef798413bb23d8",
+        ),
+        (
+            "border-sale-live-15/result.json",
+            "c74d67b443cab03e05fb5d9dfbfa923a9f55785f2e9601c41cef23ca6ee06746",
+        ),
+        (
+            "pinned-border-sale-live.json",
+            "6934ff56280bd5491c516ca36e8d976b98e62b90089cabc41212a9852e8575c1",
+        ),
+        (
+            "barter-pinned-live-14/steps.jsonl",
+            "6dbcecd10f9cd686be881ca7204d3508cb193bc217c976809b3ee0aeea8458b8",
+        ),
+    ];
+    let mut bytes = Vec::new();
+    for (path, hash) in pinned {
+        let data = std::fs::read(Path::new(RECOVERY_ROOT).join(path))?;
+        if format!("{:x}", Sha256::digest(&data)) != hash {
+            return Err(format!("recovery evidence changed: {path}").into());
+        }
+        bytes.push(data);
+    }
+    let scene: Value = serde_json::from_slice(&bytes[2])?;
+    let result: Value = serde_json::from_slice(&bytes[1])?;
+    let saves =
+        Path::new("C:/Users/makhmeto/Documents/My Games/Sid Meier's Civilization VI/Saves/Single");
+    let claim_path = saves.join(format!("resume-once-{SAVE_SHA}.json"));
+    let claim: Value = serde_json::from_slice(&std::fs::read(&claim_path)?)?;
+    audit_failed_load(&scene, std::str::from_utf8(&bytes[0])?, &result, &claim)?;
+    let save = saves.join(format!(
+        "{}.Civ6Save",
+        claim["save"].as_str().ok_or("save missing")?
+    ));
+    if format!("{:x}", Sha256::digest(std::fs::read(&save)?)) != SAVE_SHA {
+        return Err("latest save changed".into());
+    }
+    let mods: Vec<Value> = std::str::from_utf8(&bytes[3])?
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()?;
+    if mods
+        .iter()
+        .filter(|r| {
+            r["action"] == "4/25 ui_lua"
+                && r["status"] == "OK"
+                && r["detail"]
+                    == format!("ran Lua in InGame; return=ACTIVE_MOD_INPUTS_VERIFIED:{MOD_IDS}")
+        })
+        .count()
+        != 1
+    {
+        return Err("preserved active mod set differs".into());
+    }
+    Ok(
+        json!({"prior_artifact":"todo880-citizen-12-07","source_hashes":pinned,
+        "claim":claim,"save_sha256":SAVE_SHA,"all_prior_started_operations_match":true,
+        "transaction_steps_started":0,"old_claim_preserved":true,"new_admission":"create_new recovery output and admission file",
+        "mods":MOD_IDS.split(',').collect::<Vec<_>>()}),
+    )
+}
 fn output_for_hash(hash: &str) -> Result<&'static str, String> {
     match hash {
         SCENE_SHA => Ok("D:/CC/Work/todo1665/20261007-current/pinned-barter-live.json"),
@@ -162,7 +270,13 @@ fn extra_inputs() -> Result<Value, String> {
     }
     Ok(json!({"rows":rows,"excluded_modules":modules}))
 }
+#[cfg(test)]
 fn mod_guard(inventory: &Value) -> String {
+    mod_guard_expected(inventory, None)
+}
+fn mod_guard_expected(inventory: &Value, expected: Option<&str>) -> String {
+    let verify = expected.map_or(String::new(), |ids| format!(
+        "assert(table.concat(ids,',')=='{ids}','active mods differ; expected={ids}; actual='..table.concat(ids,','))"));
     let entries = inventory["excluded_modules"]
         .as_array()
         .unwrap()
@@ -183,7 +297,9 @@ for _,m in ipairs(active)do
  ids[#ids+1]=id
 end
 assert(#ids==#active and boundary,'active mods sparse/required Boundary missing')
-table.sort(ids);return 'ACTIVE_MOD_INPUTS_VERIFIED:'..table.concat(ids,',')
+table.sort(ids)
+{verify}
+return 'ACTIVE_MOD_INPUTS_VERIFIED:'..table.concat(ids,',')
 "#
     )
 }
@@ -215,6 +331,31 @@ fn reported_binary(log: &str, name: &str, manifest: &Path, executable: &Path) ->
                     .is_some_and(|s| same_path(s, executable))
         })
 }
+fn prepare_scene(scene: &mut Value, recovery: bool, inventory: &Value) -> Result<(), String> {
+    scene["steps"]
+        .as_array_mut()
+        .ok_or("steps")?
+        .insert(0, json!({"action":"restart_game","timeout":420}));
+    if recovery {
+        // The old resume-once claim remains intact. The new output is admitted
+        // only after auditing every event in the stopped prior run.
+        scene["steps"][1]
+            .as_object_mut()
+            .ok_or("load missing")?
+            .remove("resume_once");
+        scene["steps"].as_array_mut().unwrap().insert(
+            1,
+            json!({"action":"enable_mods",
+            "ids":MOD_IDS.split(',').collect::<Vec<_>>(),"exclusive_user_mods":true}),
+        );
+    }
+    scene["steps"].as_array_mut().unwrap().insert(
+        if recovery { 4 } else { 3 },
+        json!({"action":"ui_lua","state_name":"InGame",
+        "code":mod_guard_expected(inventory, recovery.then_some(MOD_IDS)),"preserve_diplomacy_session":true}),
+    );
+    civ6_autotest_rs::scenario::validate_scenario(scene).map_err(|e| e.to_string())
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.len() != 3 {
@@ -222,10 +363,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let bytes = std::fs::read(&args[2])?;
     let mut scene = check_input(&args, &bytes)?;
-    let output = output_for_hash(&format!("{:x}", Sha256::digest(&bytes)))?;
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let recovery = match std::env::var("CIV6_BORDER_SALE_LOAD_RECOVERY").as_deref() {
+        Err(std::env::VarError::NotPresent) => false,
+        Ok("1") => true,
+        _ => return Err("invalid recovery option".into()),
+    };
+    if recovery && hash != SALE_SHA {
+        return Err("recovery only supports the unsent border sale".into());
+    }
+    let output = if recovery {
+        RECOVERY_OUT
+    } else {
+        output_for_hash(&hash)?
+    };
+    if Path::new(output).exists() {
+        return Err("prepared output already exists; no repeat admission".into());
+    }
     let lock_path = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
     let lock: Value = serde_json::from_slice(&std::fs::read(lock_path)?)?;
     check_lock(&lock, &std::env::var("CODEX_JOB_ID")?)?;
+    let admission = if recovery {
+        Some(recovery_admission()?)
+    } else {
+        None
+    };
     // Maintenance is also checked by live_chain before it invokes its preparer.
     let maintenance = Path::new("D:/CC/Tools/civ6-live/reliability-maintenance.json");
     if maintenance.exists() {
@@ -300,17 +462,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if extra_inputs()? != inventory {
         return Err("untracked input inventory changed during preparation".into());
     }
-    scene["steps"]
-        .as_array_mut()
-        .ok_or("steps")?
-        .insert(0, json!({"action":"restart_game","timeout":420}));
-    // Read-only guard after load/wait, before any barter witness or mutation.
-    scene["steps"].as_array_mut().unwrap().insert(
-        3,
-        json!({"action":"ui_lua","state_name":"InGame",
-        "code":mod_guard(&inventory),"preserve_diplomacy_session":true}),
-    );
-    civ6_autotest_rs::scenario::validate_scenario(&scene)?;
+    if recovery && Some(recovery_admission()?) != admission {
+        return Err("recovery admission changed during preparation".into());
+    }
+    prepare_scene(&mut scene, recovery, &inventory)?;
     let mut run = 6;
     let artifacts = loop {
         let p = Path::new(LIVE).join(format!(
@@ -325,12 +480,136 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .write(true)
         .create_new(true)
         .open(output)?;
+    if let Some(admission) = admission {
+        let proof = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(output.replace(".json", "-recovery-admission.json"))?;
+        serde_json::to_writer_pretty(&proof, &admission)?;
+        proof.sync_all()?;
+    }
     serde_json::to_writer_pretty(&out, &scene)?;
     out.sync_all()?;
     eprintln!("PINNED GAME {HEAD}; historical-save diagnostic; integration acceptance=false");
     println!("{output}");
     println!("{}", artifacts.display());
     Ok(())
+}
+#[cfg(test)]
+mod load_recovery_tests {
+    use super::*;
+    fn fixture() -> (Value, String, Value, Value) {
+        // Original, unedited -07 records are embedded so CI needs no game,
+        // drive letter, user profile, or external diagnostic directory.
+        (
+            serde_json::from_str(include_str!(
+                "../tests/fixtures/border-sale-load-failure/scene.json"
+            ))
+            .unwrap(),
+            include_str!("../tests/fixtures/border-sale-load-failure/steps.jsonl").to_owned(),
+            serde_json::from_str(include_str!(
+                "../tests/fixtures/border-sale-load-failure/result.json"
+            ))
+            .unwrap(),
+            serde_json::from_str(include_str!(
+                "../tests/fixtures/border-sale-load-failure/claim.json"
+            ))
+            .unwrap(),
+        )
+    }
+    #[test]
+    fn actual_stopped_load_has_no_transaction_steps_and_complete_evidence() {
+        let (scene, raw, result, claim) = fixture();
+        audit_failed_load(&scene, &raw, &result, &claim).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(raw.as_bytes())),
+            "1e972c199a6900978d17bd3050e8aae767ce5ef33ea544c975ef798413bb23d8"
+        );
+    }
+    #[test]
+    fn any_extra_send_or_event_rejects_recovery() {
+        let (scene, raw, result, claim) = fixture();
+        let raw = format!("{raw}{{\"action\":\"3/28 ui_lua\",\"status\":\"START\",\"detail\":\"SendWorkingDeal\"}}\n");
+        assert!(audit_failed_load(&scene, &raw, &result, &claim).is_err());
+    }
+    #[test]
+    fn truncated_transcript_and_changed_sent_load_are_rejected() {
+        let (scene, raw, result, claim) = fixture();
+        let truncated = raw.lines().take(4).collect::<Vec<_>>().join("\n");
+        assert!(audit_failed_load(&scene, &truncated, &result, &claim).is_err());
+        assert!(
+            audit_failed_load(&scene, &raw.replace(SAVE_SHA, SALE_SHA), &result, &claim).is_err()
+        );
+    }
+    #[test]
+    fn completed_load_and_unrelated_claim_do_not_authorize_recovery() {
+        let (scene, raw, mut result, mut claim) = fixture();
+        result["completed_steps"] = json!(2);
+        assert!(audit_failed_load(&scene, &raw, &result, &claim).is_err());
+        result["completed_steps"] = json!(1);
+        claim["output"] = json!("other run");
+        assert!(audit_failed_load(&scene, &raw, &result, &claim).is_err());
+    }
+    #[test]
+    fn recovery_activates_measured_mods_before_load_and_preserves_all_sale_steps() {
+        let (mut original, _, _, _) = fixture();
+        // Remove only the preparer's guard and restart from the actual fixture;
+        // retain all original sale payloads and the exact load step.
+        original["steps"].as_array_mut().unwrap().remove(3);
+        original["steps"].as_array_mut().unwrap().remove(0);
+        let inventory = json!({"excluded_modules":[{"id":"3f9ce208-1092-4141-935c-e5359a8abd93"}]});
+        let mut scene = original.clone();
+        prepare_scene(&mut scene, true, &inventory).unwrap();
+        let steps = scene["steps"].as_array().unwrap();
+        assert_eq!(steps.len(), 29);
+        assert_eq!(steps[1]["action"], "enable_mods");
+        assert_eq!(steps[2]["save_sha256"], SAVE_SHA);
+        assert!(steps[2].get("resume_once").is_none());
+        assert_eq!(steps[3], original["steps"][1]);
+        assert_eq!(&steps[5..], &original["steps"].as_array().unwrap()[2..]);
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("preview.json"),
+            serde_json::to_vec_pretty(&scene).unwrap(),
+        )
+        .unwrap();
+        println!(
+            "RECOVERY_SCENE_JSON:{}",
+            serde_json::to_string(&scene).unwrap()
+        );
+    }
+    #[test]
+    fn exact_recovery_mod_set_rejects_missing_extra_and_duplicate_mods() {
+        let lua = mlua::Lua::new();
+        let inv = json!({"excluded_modules":[]});
+        let code = mod_guard_expected(&inv, Some(MOD_IDS));
+        let make = |ids: Vec<&str>| {
+            format!(
+                "Modding={{GetActiveMods=function()return {{{}}}end}}",
+                ids.iter()
+                    .map(|id| format!("{{Id='{id}'}}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
+        let ids: Vec<_> = MOD_IDS.split(',').collect();
+        lua.load(make(ids.clone())).exec().unwrap();
+        assert_eq!(
+            lua.load(&code).eval::<String>().unwrap(),
+            format!("ACTIVE_MOD_INPUTS_VERIFIED:{MOD_IDS}")
+        );
+        let mut missing = ids.clone();
+        missing.remove(0);
+        let mut extra = ids.clone();
+        extra.push("unrelated");
+        let mut duplicate = ids.clone();
+        duplicate.push(ids[0]);
+        for changed in [missing, extra, duplicate] {
+            lua.load(make(changed)).exec().unwrap();
+            let error = lua.load(&code).exec().unwrap_err().to_string();
+            assert!(error.contains("active mods differ; expected="), "{error}");
+        }
+    }
 }
 #[test]
 fn changed_scenario_and_unowned_chain_are_rejected() {

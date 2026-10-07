@@ -1,0 +1,190 @@
+{
+  "name": "New peer21 border sale financing; no captive equalization replay",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {
+      "action": "restart_game",
+      "timeout": 420
+    },
+    {
+      "action": "load",
+      "name": "JAC-Barter-Captive-Offer-d7c7af495d2d4a43a6b2a4f366421215-0000000000000005",
+      "exact_name": true,
+      "timeout": 300,
+      "save_sha256": "6529c3edefbd5db0a36c5bfb6c23ae066c78fee52448c7d3954c1d6dfbd10487",
+      "resume_once": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return Players[0] and Players[0]:IsTurnActive() and ExposedMembers.JAC_PersonaBoundary~=nil",
+        "preserve_diplomacy_session": true
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "\nlocal blocked={['3f9ce208-1092-4141-935c-e5359a8abd93']=true};local active=assert(Modding.GetActiveMods(),'active mods unavailable')\nassert(type(active)=='table' and #active>0,'active mods empty/not array')\nfor k in pairs(active)do assert(type(k)=='number' and k%1==0 and k>=1 and k<=#active,'active mods not array')end\nlocal ids={};local boundary=false\nfor _,m in ipairs(active)do\n assert(type(m)=='table' and type(m.Id)=='string' and m.Id~='','mod ID missing')\n local id=string.lower(m.Id);assert(not blocked[id],'untracked module active: '..id)\n if id=='4a72b1c0-958b-4bd5-81e4-a094f86ce643'then boundary=true end\n ids[#ids+1]=id\nend\nassert(#ids==#active and boundary,'active mods sparse/required Boundary missing')\ntable.sort(ids);return 'ACTIVE_MOD_INPUTS_VERIFIED:'..table.concat(ids,',')\n",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local B=assert(ExposedMembers.JAC_PersonaBoundary);\nlocal function integer(v,min)\n return type(v)=='number' and v==v and v>=min and v<9007199254740992 and v==math.floor(v)\nend\nlocal function copy(v)\n if type(v)~='table' then\n  assert(v==nil or type(v)=='string' or type(v)=='boolean' or\n   (type(v)=='number' and v==v and math.abs(v)<math.huge),'non-scalar witness');\n  return v\n end\n local r={}; for k,a in pairs(v) do\n  assert(type(k)=='string' or type(k)=='number','non-scalar witness key'); r[k]=copy(a)\n end; return r\nend\nlocal function history(h,id,turn)\n assert(type(h)=='table' and h.id==id and h.turn==turn and\n  integer(h.operation,0) and integer(h.plot,0) and h.initial==1 and h.escape==-1,\n  'preserved native failure differs');\n return {id=h.id,turn=h.turn,operation=h.operation,plot=h.plot,\n  initial=h.initial,escape=h.escape}\nend\nlocal function sameHistory(a,b)\n return a and b and a.id==b.id and a.turn==b.turn and\n  a.operation==b.operation and a.plot==b.plot and\n  a.initial==b.initial and a.escape==b.escape\nend\nlocal function histories()\n local a=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'),'third archive missing');\n local s=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE'),'third state missing');\n local post=assert(s.missionPost,'third mission post missing');\n local ack=assert(Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK'),'third native mission acknowledgement missing');\n local event=assert(Game:GetProperty('JAC_BOUNDARY_ENEMY_MISSION'),'third event missing');\n assert((post.histories=='UI' or post.histories=='CORE') and ack.observed and\n  ack.observed.preserved,'third history provenance or native acknowledgement missing');\n local h={history(a.histories[1],0,23),history(a.histories[2],1,45),\n  history(ack.observed.mission,2,62)};\n assert(event.attacker==0 and event.id==2 and event.turn==62 and\n  sameHistory(h[1],ack.observed.preserved[1]) and sameHistory(h[2],ack.observed.preserved[2]) and\n  ack.observed and sameHistory(h[3],ack.observed.mission),\n  'third mission lineage differs');\n local d=Players[0]:GetDiplomacy();\n for i=0,2 do\n  local n=assert(d:GetMission(0,i),'native mission history missing');\n  assert(sameHistory(h[i+1],{id=i,turn=n.CompletionTurn,operation=n.Operation,\n   plot=n.PlotIndex,initial=n.InitialResult,escape=n.EscapeResult}),\n   'native mission history changed')\n end\n return h\nend\nlocal function ids(deal)\n assert(deal and type(deal.GetItemCount)=='function','native working deal unavailable');\n local out={}; for item in deal:Items() do out[#out+1]=item:GetID() end\n assert(#out==deal:GetItemCount() and #out<=8,'native deal enumeration differs');\n return out\nend\nlocal function outgoing()\n return assert(DealManager.GetWorkingDeal(DealDirection.OUTGOING,0,1),\n  'native outgoing working deal missing')\nend\nlocal function rosterSnapshot()\n local s=B.ReadEnemy(); local r=assert(s.spyRoster,'UI native roster missing');\n assert(s.turn==Game.GetCurrentGameTurn() and s.attacker==0 and s.owner==1 and\n  s.retry and s.retry.current==3 and s.retry.spyID==1048586 and\n  s.spy and s.spy.id==1048586 and s.spy.owner==0 and\n  s.neutralizationMission==false,'third mission state changed');\n local h=histories();\n assert(s.missions['0/2'] and sameHistory(h[3],s.missions['0/2']),\n  'UI third mission differs');\n local out={turn=s.turn,capacity=Players[0]:GetDiplomacy():GetSpyCapacity(),\n  referencePresent=s.spy.present,\n  map={},activeOffMap={},captured={},offMap={},physical=r.physicalCount,\n  histories=h};\n for _,v in ipairs(r.map) do out.map[#out.map+1]={id=v.id,owner=v.owner,\n  unitType=v.unitType,x=v.x,y=v.y,level=v.level,name=v.name} end\n for _,v in ipairs(r.activeOffMap) do out.activeOffMap[#out.activeOffMap+1]=\n  {name=v.name,level=v.level,returnTurn=v.returnTurn,x=v.x,y=v.y} end\n for _,v in ipairs(r.offMap) do out.offMap[#out.offMap+1]=\n  {name=v.name,level=v.level,returnTurn=v.returnTurn,x=v.x,y=v.y} end\n for _,v in ipairs(r.captured) do out.captured[#out.captured+1]=\n  {captor=v.captor,name=v.name,level=v.level,nameIndex=v.nameIndex} end\n return out\nend\n\n\nassert(JAC_BorderSale1665==nil,'sale instance exists')\nlocal F={};JAC_BorderSale1665=F\nlocal KEY='JAC_BOUNDARY_BORDER_SALE_62_21_V1';local WKEY='JAC_BorderSale1665Witness'\nlocal KEYS={'JAC_BOUNDARY_GROUP_EXCHANGE_62','JAC_BOUNDARY_FIXED_OFFER_62_V1','JAC_BOUNDARY_BARTER_OFFER_62_V1'}\nlocal x={version=1,peer=21,phase='INIT',statements={}}\nlocal function quote(s)return '\"'..tostring(s):gsub('[%z\\1-\\31\\\\\"]',function(c)\n if c=='\"'then return '\\\\\"'end;if c=='\\\\'then return '\\\\\\\\'end;return string.format('\\\\u%04x',string.byte(c))end)..'\"'end\nlocal function serial(v,d)\n assert(d<40,'depth');local t=type(v);if t=='nil'then return 'null'elseif t=='string'then return quote(v)\n elseif t=='boolean'or t=='number'then return tostring(v)end;assert(t=='table','scalar/table required')\n local k={};for a in pairs(v)do k[#k+1]=a end;table.sort(k,function(a,b)return tostring(a)<tostring(b)end)\n local r={};for _,a in ipairs(k)do r[#r+1]=quote(a)..':'..serial(v[a],d+1)end;return '{'..table.concat(r,',')..'}'\nend\nlocal function equal(a,b)return serial(a,0)==serial(b,0)end\nlocal function read(fn)local ok,v=pcall(fn);if ok then return {status='OK',kind=type(v),value=v}end;return {status='ERROR',error=tostring(v)}end\nlocal function witness()ExposedMembers[WKEY]=copy(x)end\nlocal function gold(id)return Players[id]:GetTreasury():GetGoldBalance()end\nlocal function deal(dir)return assert(DealManager.GetWorkingDeal(dir,0,21))end\nlocal function items(dir)\n local d=deal(dir);local r={};for i in d:Items()do assert(#r<8,'item limit');r[#r+1]={id=i:GetID(),kind=i:GetType(),\n  from=i:GetFromPlayerID(),to=i:GetToPlayerID(),sub=i:GetSubType(),duration=i:GetDuration(),amount=i:GetAmount(),\n  valid=i:IsValid(),unacceptable=i:IsUnacceptable(),locked=i:IsLocked()}end\n assert(#r==d:GetItemCount(),'item enumeration');return r\nend\nlocal function intact()\n if Game.GetCurrentGameTurn()~=62 then return false end\n for _,k in ipairs(KEYS)do if not equal(Game:GetProperty(k),x.past[k])then return false end end\n return equal(rosterSnapshot(),x.roster)\nend\nlocal function guard()\n assert(Game.GetLocalPlayer()==0 and Players[0]:IsHuman() and not Players[21]:IsHuman() and\n Players[0]:IsTurnActive() and Players[21]:IsAlive() and Players[0]:GetDiplomacy():HasMet(21) and\n not Players[0]:GetDiplomacy():IsAtWarWith(21) and intact(),'roles/lineage changed')\nend\nlocal function session()\n local id=DiplomacyManager.FindOpenSessionID(0,21)\n assert(id~=nil and id==x.sessionID and DiplomacyManager.GetSessionInfo(id).FromPlayer==0,'owned session differs');return id\nend\nlocal function replies(action)\n local r={};for _,v in ipairs(x.statements)do local ok,k=pcall(DiplomacyManager.GetKeyName,v.StatementType)\n  if ok and k=='MAKE_DEAL' and v.from==21 and v.to==0 and v.Initiator==0 and v.SessionID==x.sessionID and\n   v.RespondingToDealAction==action then r[#r+1]=v end end;return r\nend\nlocal function ui(button)\n session();local c=assert(ContextPtr:LookUpControl('/InGame/DiplomacyDealView'))\n local b=assert(ContextPtr:LookUpControl('/InGame/DiplomacyDealView/'..button))\n return {contextHidden=c:IsHidden(),hidden=b:IsHidden(),disabled=b:IsDisabled(),pending=DealManager.HasPendingDeal(0,21),\n  valid=deal(DealDirection.OUTGOING):Validate(),unacceptable=deal(DealDirection.OUTGOING):HasUnacceptableItems(),\n  equal=DealManager.AreWorkingDealsEqual(0,21)}\nend\nlocal function permitted(v)return v.contextHidden==false and v.hidden==false and v.disabled==false and v.pending==false and\n v.valid==DealValidationResult.VALID and v.unacceptable==false end\nlocal function terms(dir,requireGold)\n local rows=items(dir);local border,n,amount=0,0,nil\n for _,r in ipairs(rows)do assert(r.valid==true and r.unacceptable==false,'term invalid/unacceptable')\n  if r.kind==DealItemTypes.AGREEMENTS then assert(r.from==0 and r.to==21 and r.sub==-242352742 and r.duration==30 and r.locked==true,'locked border changed');border=border+1\n  elseif r.kind==DealItemTypes.GOLD then assert(r.from==21 and r.to==0 and r.duration==0 and integer(r.amount,1) and r.amount<=math.floor(x.peerGold),'unsafe money');n=n+1;amount=r.amount\n  else error('unexpected sale term')end end\n assert(border==1 and ((requireGold and n==1 and #rows==2)or(not requireGold and n==0 and #rows==1)),'sale shape changed')\n return {rows=rows,amount=amount}\nend\nEvents.DiplomacyStatement.Add(function(from,to,k)\n if x.closed or not x.openIntent or type(k)~='table' or not ((from==0 and to==21)or(from==21 and to==0))then return end\n if #x.statements>=64 then x.overflow=true;return end\n local r={from=from,to=to};for _,a in ipairs({'SessionID','Initiator','StatementType','StatementSubType','DealAction','RespondingToDealAction'})do r[a]=k[a]end;x.statements[#x.statements+1]=r\nend)\nfunction F.Prepare()\n assert(x.phase=='INIT' and Game:GetProperty(KEY)==nil,'sale already exists')\n local p=assert(Game:GetProperty(KEYS[3]));assert(p.phase=='FINAL_CHECK' and p.closed==true and p.skipped==true and\n p.result.stage=='NOT_SUBMITTED' and p.result.returned==false and p.acceptAttempted==nil,'latest unsent barter outcome required')\n x.past={};for _,k in ipairs(KEYS)do x.past[k]=copy(assert(Game:GetProperty(k)))end\n x.roster=rosterSnapshot();assert(x.roster.capacity==3 and #x.roster.captured==3 and #x.roster.map==0 and #x.roster.activeOffMap==0,'roster changed')\n guard();assert(not DealManager.HasPendingDeal(0,21) and DiplomacyManager.FindOpenSessionID(0,21)==nil and\n #items(DealDirection.OUTGOING)==0 and #items(DealDirection.INCOMING)==0,'existing deal/session')\n x.gold=gold(0);x.peerGold=gold(21);assert(x.gold==61.6953125 and x.peerGold>=1,'funding baseline changed')\n x.borderBefore=Players[21]:GetDiplomacy():HasOpenBordersFrom(0);assert(x.borderBefore==false,'border already active')\n local n=0;for _,c in ipairs(assert(DealManager.GetPossibleDealItems(0,21,DealItemTypes.AGREEMENTS,deal(DealDirection.OUTGOING))))do\n  if c.SubType==-242352742 then assert(c.Duration==30 and(c.IsValid==true or c.IsValid==1)and c.ValidationResult==DealValidationResult.VALID,'candidate invalid');n=n+1 end end\n assert(n==1,'measured border candidate changed')\n x.nonce='border-sale21:'..tostring(UI.GetElapsedTime())..':62';x.phase='PREPARED';witness();return x.phase\nend\nfunction F.Open()\n guard();assert(x.phase=='PREPARED' and not x.openIntent and Game:GetProperty(KEY).nonce==x.nonce,'open intent differs')\n assert(not DealManager.HasPendingDeal(0,21) and DiplomacyManager.FindOpenSessionID(0,21)==nil and\n  #items(DealDirection.OUTGOING)==0 and #items(DealDirection.INCOMING)==0 and gold(0)==x.gold and gold(21)==x.peerGold,'state changed before open')\n x.openIntent=true;local a=assert(deal(DealDirection.OUTGOING):AddItemOfType(DealItemTypes.AGREEMENTS,0));a:SetSubType(-242352742);a:SetDuration(30);a:SetLocked(true)\n x.original=terms(DealDirection.OUTGOING,false);x.openAt=UI.GetElapsedTime();DiplomacyManager.RequestSession(0,21,'MAKE_DEAL');return 'BORDER_OPENED'\nend\nfunction F.InspectReady()\n local id=DiplomacyManager.FindOpenSessionID(0,21);if id~=nil then assert(DiplomacyManager.GetSessionInfo(id).FromPlayer==0);x.sessionID=id end\n if UI.GetElapsedTime()-x.openAt>=30 or x.overflow then return true end\n if id==nil or DealManager.HasPendingDeal(0,21)or #replies(DealProposalAction.INSPECT)==0 then return false end\n local v=read(function()return ui('EqualizeDeal')end);return v.status=='OK' and permitted(v.value)\nend\nfunction F.ArmQuote()\n guard();assert(F.InspectReady() and x.phase=='PREPARED')\n x.inspection={responses=replies(DealProposalAction.INSPECT),ui=read(function()return ui('EqualizeDeal')end),terms=read(function()return terms(DealDirection.OUTGOING,false)end)}\n x.quoteAllowed=not x.overflow and #x.inspection.responses==1 and x.inspection.ui.status=='OK' and permitted(x.inspection.ui.value) and\n x.inspection.terms.status=='OK' and gold(0)==x.gold and gold(21)==x.peerGold\n x.phase='QUOTE_INTENT';witness();return x.quoteAllowed and 'NEW_QUOTE_PERMITTED' or 'NOT_PERMITTED'\nend\nfunction F.QuoteOnce()\n guard();assert(x.phase=='QUOTE_INTENT' and not x.quoteAttempted and not x.quoteSkipped)\n local p=assert(Game:GetProperty(KEY));assert(p.phase==x.phase and p.nonce==x.nonce and p.quoteAllowed==x.quoteAllowed and equal(p.inspection,x.inspection))\n if not x.quoteAllowed then x.quoteSkipped=true;witness();return 'QUOTE_NOT_SENT'end\n local observed=replies(DealProposalAction.INSPECT)\n if x.overflow or #observed~=1 or not equal(observed,x.inspection.responses)then\n  x.quoteSkipped=true;x.quoteSkipReason='INSPECTION_CHANGED_AFTER_SAVE';x.quoteSkipResponses=copy(observed);witness();return 'QUOTE_NOT_SENT_RESPONSE_CHANGED'\n end\n session();assert(permitted(ui('EqualizeDeal')) and gold(0)==x.gold and gold(21)==x.peerGold)\n -- Native IN->OUT copying may renumber IDs; terms() validates all economic\n -- fields. Preserve both ID sets without treating an ID as the price.\n x.beforeQuoteTerms=terms(DealDirection.OUTGOING,false)\n x.quoteAttempted=true;x.quoteAt=UI.GetElapsedTime();witness()\n local ok,e=pcall(DealManager.SendWorkingDeal,DealProposalAction.EQUALIZE,0,21);if not ok then x.quoteError=tostring(e)end;return 'NEW_PEER_QUOTE_ONCE_OR_UNKNOWN'\nend\nfunction F.QuoteReady()\n if x.quoteSkipped then return true end;assert(x.quoteAttempted)\n if x.quoteError or x.overflow or UI.GetElapsedTime()-x.quoteAt>=30 then return true end\n local r=replies(DealProposalAction.EQUALIZE);if #r==0 or DealManager.HasPendingDeal(0,21)then return false end\n if #r~=1 then return true end\n local a=r[1].DealAction;if a~=DealProposalAction.ACCEPTED and a~=DealProposalAction.ADJUSTED and a~=DealProposalAction.PROPOSED then return true end\n local v=read(function()return ui('AcceptDeal')end);return v.status=='OK' and permitted(v.value) and v.value.equal==true\nend\nfunction F.RecordQuote()\n guard();assert(x.phase=='QUOTE_INTENT' and F.QuoteReady())\n x.quote={responses=replies(DealProposalAction.EQUALIZE),ui=read(function()return ui('AcceptDeal')end),\n outgoingRaw=read(function()return items(DealDirection.OUTGOING)end),incomingRaw=read(function()return items(DealDirection.INCOMING)end),\n outgoing=read(function()return terms(DealDirection.OUTGOING,true)end),incoming=read(function()return terms(DealDirection.INCOMING,true)end)}\n local q=x.quote;local a=#q.responses==1 and q.responses[1].DealAction or nil\n x.acceptAllowed=x.quoteAttempted==true and not x.quoteError and not x.overflow and\n (a==DealProposalAction.ACCEPTED or a==DealProposalAction.ADJUSTED or a==DealProposalAction.PROPOSED)and\n q.ui.status=='OK' and permitted(q.ui.value)and q.ui.value.equal==true and q.outgoing.status=='OK' and q.incoming.status=='OK' and\n q.outgoing.value.amount==q.incoming.value.amount and gold(0)==x.gold and gold(21)==x.peerGold\n if x.acceptAllowed then x.amount=q.outgoing.value.amount end;x.phase='QUOTED';witness();return x.acceptAllowed and 'LEGAL_FINANCE_QUOTE' or 'NO_SAFE_QUOTE'\nend\nfunction F.AcceptOnce()\n guard();assert(x.phase=='QUOTED' and not x.acceptAttempted and not x.acceptSkipped)\n local p=assert(Game:GetProperty(KEY));assert(p.phase==x.phase and p.nonce==x.nonce and equal(p.quote,x.quote) and p.acceptAllowed==x.acceptAllowed and p.amount==x.amount)\n if not x.acceptAllowed then x.acceptSkipped=true;witness();return 'ACCEPT_NOT_SENT'end\n local observed=replies(DealProposalAction.EQUALIZE)\n if x.overflow or #observed~=1 or not equal(observed,x.quote.responses)then\n  x.acceptSkipped=true;x.acceptSkipReason='QUOTE_CHANGED_AFTER_SAVE';x.acceptSkipResponses=copy(observed);witness();return 'ACCEPT_NOT_SENT_RESPONSE_CHANGED'\n end\n session();local u=ui('AcceptDeal');assert(permitted(u)and u.equal==true and gold(0)==x.gold and gold(21)==x.peerGold)\n assert(equal(terms(DealDirection.OUTGOING,true),x.quote.outgoing.value)and equal(terms(DealDirection.INCOMING,true),x.quote.incoming.value),'quoted terms changed')\n x.acceptAttempted=true;x.acceptAt=UI.GetElapsedTime();witness()\n local ok,e=pcall(DealManager.SendWorkingDeal,DealProposalAction.ACCEPTED,0,21);if not ok then x.acceptError=tostring(e)end;return 'SALE_ACCEPTED_ONCE_OR_UNKNOWN'\nend\nlocal function settlement()\n return {funded=false,gold=read(function()return gold(0)end),peerGold=read(function()return gold(21)end),\n border=read(function()return Players[21]:GetDiplomacy():HasOpenBordersFrom(0)end),pending=read(function()return DealManager.HasPendingDeal(0,21)end),\n lineage=read(intact),roster=read(rosterSnapshot)}\nend\nlocal function funded(r)\n return x.acceptAttempted==true and not x.acceptError and not x.overflow and r.lineage.status=='OK' and r.lineage.value==true and\n r.gold.status=='OK' and r.gold.value==x.gold+x.amount and r.peerGold.status=='OK' and r.peerGold.value==x.peerGold-x.amount and\n r.border.status=='OK' and r.border.value==true and r.pending.status=='OK' and r.pending.value==false\nend\nfunction F.Complete()\n if x.acceptSkipped then return true end;assert(x.acceptAttempted)\n return x.acceptError~=nil or UI.GetElapsedTime()-x.acceptAt>=30 or funded(settlement())\nend\nfunction F.Publish()\n assert(x.phase=='QUOTED' and F.Complete());x.result=settlement();x.result.funded=funded(x.result)\n x.result.stage=x.result.funded and 'FUNDED_NATIVE' or(x.acceptSkipped and 'NOT_SUBMITTED' or 'UNKNOWN');x.phase='OUTCOME';witness();return x.result.stage\nend\nfunction F.Close()\n assert(x.phase=='OUTCOME' and not x.closed);x.cleanup=read(function()local id=DiplomacyManager.FindOpenSessionID(0,21)\n if id~=nil then session();DiplomacyManager.CloseSession(id)end;return true end);x.closed=true;witness();return 'CLOSED_OR_UNKNOWN'\nend\nfunction F.Evidence()local e=copy(x);e.saved=read(function()return Game:GetProperty(KEY)end);e.current=settlement();e.current.funded=funded(e.current);return serial(e,0)end\nfunction F.Final()\n local p=assert(Game:GetProperty(KEY));local r=settlement();r.funded=funded(r)\n assert(x.closed and p.phase=='OUTCOME' and p.recordAnomaly==nil and p.result.funded==true and equal(p.result,x.result) and r.funded,\n 'normal border sale not proven: '..serial(r,0));return serial(r,0)\nend\nreturn F.Prepare()\n",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal w=assert(ExposedMembers.JAC_BorderSale1665Witness);assert(w.phase=='PREPARED' and w.peer==21 and w.version==1)\nlocal function same(a,b,d)if d>40 or type(a)~=type(b)then return false end;if type(a)~='table'then return a==b end\n for k,v in pairs(a)do if not same(v,b[k],d+1)then return false end end;for k in pairs(b)do if a[k]==nil then return false end end;return true end\nlocal p=Game:GetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1');if 'ABSENT'=='ABSENT'then assert(p==nil)else assert(p and p.nonce==w.nonce and p.phase=='ABSENT')end\nlocal intact=Game.GetCurrentGameTurn()==62;for k,v in pairs(w.past)do if not same(Game:GetProperty(k),v,0)then intact=false end end\nif 'PREPARED'=='OUTCOME'then if not intact then w.recordAnomaly='PAST_OR_TURN_CHANGED';w.result.funded=false;w.result.stage='UNKNOWN_RECORD_ANOMALY'end\nelse assert(intact,'past changed')end;Game:SetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1',w);return w.phase\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.Open()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return JAC_BorderSale1665.InspectReady()",
+        "preserve_diplomacy_session": true
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.ArmQuote()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal w=assert(ExposedMembers.JAC_BorderSale1665Witness);assert(w.phase=='QUOTE_INTENT' and w.peer==21 and w.version==1)\nlocal function same(a,b,d)if d>40 or type(a)~=type(b)then return false end;if type(a)~='table'then return a==b end\n for k,v in pairs(a)do if not same(v,b[k],d+1)then return false end end;for k in pairs(b)do if a[k]==nil then return false end end;return true end\nlocal p=Game:GetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1');if 'PREPARED'=='ABSENT'then assert(p==nil)else assert(p and p.nonce==w.nonce and p.phase=='PREPARED')end\nlocal intact=Game.GetCurrentGameTurn()==62;for k,v in pairs(w.past)do if not same(Game:GetProperty(k),v,0)then intact=false end end\nif 'QUOTE_INTENT'=='OUTCOME'then if not intact then w.recordAnomaly='PAST_OR_TURN_CHANGED';w.result.funded=false;w.result.stage='UNKNOWN_RECORD_ANOMALY'end\nelse assert(intact,'past changed')end;Game:SetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1',w);return w.phase\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.QuoteOnce()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return JAC_BorderSale1665.QuoteReady()",
+        "preserve_diplomacy_session": true
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.RecordQuote()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal w=assert(ExposedMembers.JAC_BorderSale1665Witness);assert(w.phase=='QUOTED' and w.peer==21 and w.version==1)\nlocal function same(a,b,d)if d>40 or type(a)~=type(b)then return false end;if type(a)~='table'then return a==b end\n for k,v in pairs(a)do if not same(v,b[k],d+1)then return false end end;for k in pairs(b)do if a[k]==nil then return false end end;return true end\nlocal p=Game:GetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1');if 'QUOTE_INTENT'=='ABSENT'then assert(p==nil)else assert(p and p.nonce==w.nonce and p.phase=='QUOTE_INTENT')end\nlocal intact=Game.GetCurrentGameTurn()==62;for k,v in pairs(w.past)do if not same(Game:GetProperty(k),v,0)then intact=false end end\nif 'QUOTED'=='OUTCOME'then if not intact then w.recordAnomaly='PAST_OR_TURN_CHANGED';w.result.funded=false;w.result.stage='UNKNOWN_RECORD_ANOMALY'end\nelse assert(intact,'past changed')end;Game:SetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1',w);return w.phase\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.AcceptOnce()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "wait_for",
+      "timeout": 120,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "return JAC_BorderSale1665.Complete()",
+        "preserve_diplomacy_session": true
+      }
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.Publish()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "GameCore_Tuner",
+      "code": "\nlocal w=assert(ExposedMembers.JAC_BorderSale1665Witness);assert(w.phase=='OUTCOME' and w.peer==21 and w.version==1)\nlocal function same(a,b,d)if d>40 or type(a)~=type(b)then return false end;if type(a)~='table'then return a==b end\n for k,v in pairs(a)do if not same(v,b[k],d+1)then return false end end;for k in pairs(b)do if a[k]==nil then return false end end;return true end\nlocal p=Game:GetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1');if 'QUOTED'=='ABSENT'then assert(p==nil)else assert(p and p.nonce==w.nonce and p.phase=='QUOTED')end\nlocal intact=Game.GetCurrentGameTurn()==62;for k,v in pairs(w.past)do if not same(Game:GetProperty(k),v,0)then intact=false end end\nif 'OUTCOME'=='OUTCOME'then if not intact then w.recordAnomaly='PAST_OR_TURN_CHANGED';w.result.funded=false;w.result.stage='UNKNOWN_RECORD_ANOMALY'end\nelse assert(intact,'past changed')end;Game:SetProperty('JAC_BOUNDARY_BORDER_SALE_62_21_V1',w);return w.phase\n"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Border-Sale-21",
+      "exact_name": true,
+      "checkpoint": true,
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.Close()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.Evidence()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "return JAC_BorderSale1665.Final()",
+      "preserve_diplomacy_session": true
+    },
+    {
+      "action": "exit_to_menu"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{"at":"2026-10-07T18:33:12.943192+00:00","action":"start","status":"OK","detail":"New peer21 border sale financing; no captive equalization replay"}
+{"at":"2026-10-07T18:33:12.950109+00:00","action":"1/28 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}
+{"at":"2026-10-07T18:33:49.282374+00:00","action":"1/28 restart_game","status":"OK","detail":"Civ VI relaunched via Steam; opening skipped with a left click; main menu visible and ready"}
+{"at":"2026-10-07T18:33:49.282793+00:00","action":"2/28 load","status":"START","detail":"{\"action\":\"load\",\"name\":\"JAC-Barter-Captive-Offer-d7c7af495d2d4a43a6b2a4f366421215-0000000000000005\",\"exact_name\":true,\"timeout\":300,\"save_sha256\":\"6529c3edefbd5db0a36c5bfb6c23ae066c78fee52448c7d3954c1d6dfbd10487\",\"resume_once\":true}"}
+{"at":"2026-10-07T18:38:49.293283+00:00","action":"2/28 load","status":"FAIL","detail":"Timed out after 300s entering the game; last: FireTuner に接続できません（応答待ちがタイムアウト）"}

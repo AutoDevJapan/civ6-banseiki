@@ -1,0 +1,62 @@
+{
+  "scenario": "New peer21 border sale financing; no captive equalization replay",
+  "passed": false,
+  "test_mode": null,
+  "completed_steps": 1,
+  "failure": "2/28 load: Timed out after 300s entering the game; last: FireTuner に接続できません（応答待ちがタイムアウト）",
+  "checks": [],
+  "metrics": {
+    "autoplay": [],
+    "turn_summary": {
+      "observed_turns": 0,
+      "missed_turns": 0,
+      "duration_seconds": {
+        "count": 0,
+        "min": null,
+        "median": null,
+        "p95": null,
+        "max": null
+      },
+      "working_set_bytes": {
+        "count": 0,
+        "min": null,
+        "median": null,
+        "p95": null,
+        "max": null,
+        "first": null,
+        "last": null,
+        "growth": null
+      },
+      "private_bytes": {
+        "count": 0,
+        "min": null,
+        "median": null,
+        "p95": null,
+        "max": null,
+        "first": null,
+        "last": null,
+        "growth": null
+      }
+    },
+    "groups": {},
+    "save_load": {
+      "csv": null,
+      "samples": [],
+      "save_bytes": {
+        "count": 0,
+        "min": null,
+        "median": null,
+        "p95": null,
+        "max": null,
+        "growth": null
+      },
+      "load_seconds": {
+        "count": 0,
+        "min": null,
+        "median": null,
+        "p95": null,
+        "max": null
+      }
+    }
+  }
+}
