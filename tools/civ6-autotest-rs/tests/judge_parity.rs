@@ -557,6 +557,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-return-boundary.json",
                 "absorption-normal-admission.json",
                 "absorption-envoy-api.json",
+                "absorption-official-product.json",
                 "absorption-product-small-human.json",
                 "absorption-product-small-ai.json",
                 "absorption-product-merger-human.json",
@@ -567,6 +568,8 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "multiplayer-banseiki-hotseat-growth.json",
                 "multiplayer-hotseat-growth.json",
                 "mod-selection-rollback.json",
+                "reliability-seed.json",
+                "reliability-cycle.json",
             ]
             .into_iter()
             .map(str::to_string),
