@@ -1,5 +1,6 @@
 //! Synchronous Gameplay acquisition sets and the retained private diagnostic.
 pub mod mp_hotseat;
+pub mod mp_setup_read;
 mod normal;
 pub mod scenario;
 pub mod sp_reassign;

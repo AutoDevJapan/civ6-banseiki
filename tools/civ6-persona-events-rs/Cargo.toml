@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 serde_json = "1"
+roxmltree = "0.21"
 
 [dev-dependencies]
 mlua = { version = "0.11", features = ["lua51", "vendored"] }
