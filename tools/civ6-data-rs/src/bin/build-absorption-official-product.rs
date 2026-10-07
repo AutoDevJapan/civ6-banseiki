@@ -415,7 +415,7 @@ local function Unregistered()
   end
 end
 local function NativeAssets(stage)
-  local o=R.Copy(assert(ExposedMembers.JAC_OfficialProductNativeAssets,'native UI asset observation absent'))
+  local o=R.Copy((assert(ExposedMembers.JAC_OfficialProductNativeAssets,'native UI asset observation absent')))
   local city=assert(Players[t.To]:GetCities():GetCapitalCity(),'actual recipient capital absent')
   assert(o.Turn==Game.GetCurrentGameTurn() and o.Owner==t.To and o.City==city:GetID() and o.X==city:GetX() and o.Y==city:GetY(),
     'native asset observation has wrong turn or actual city identity')
@@ -2078,6 +2078,12 @@ JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},PlayerFaithBalance=functio
     fn run(mutation: &str, code: &str) -> Result<mlua::Result<()>> {
         let lua = Lua::new();
         lua.load(WORLD).exec()?;
+        lua.load(include_str!(
+            "../../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua"
+        ))
+        .exec()?;
+        lua.load("JAC_AbsorptionGameplay.Rules.Copy=JAC_AbsorptionRules.Copy")
+            .exec()?;
         lua.load(mutation).exec()?;
         Ok(lua.load(format!("{P1}\n{CORE}\n{code}")).exec())
     }

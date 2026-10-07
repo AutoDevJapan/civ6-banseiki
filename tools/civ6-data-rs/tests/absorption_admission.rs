@@ -87,6 +87,12 @@ fn world() -> mlua::Result<Lua> {
         "#,
     )
     .exec()?;
+    lua.load(include_str!(
+        "../../../poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Rules.lua"
+    ))
+    .exec()?;
+    lua.load("JAC_AbsorptionGameplay.Rules.Copy=JAC_AbsorptionRules.Copy")
+        .exec()?;
     load(&lua)?;
     Ok(lua)
 }

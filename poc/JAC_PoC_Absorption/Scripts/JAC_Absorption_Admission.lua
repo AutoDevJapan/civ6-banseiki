@@ -317,7 +317,7 @@ function N.ReplaceOffer(previousID, offer)
   if request.ReplacedBy then
     assert(request.Status == 'CANCELLED' and request.ReplacedBy == offer.ID,
       'previous offer already has a different replacement')
-    local published = R.Copy(assert(s.Offers[offer.ID], 'replacement offer missing'))
+    local published = R.Copy((assert(s.Offers[offer.ID], 'replacement offer missing')))
     -- A replay must not undo a newer relation review on the same demands.
     published.RelationsReviewed = offer.RelationsReviewed
     assert(R.Equal(published,offer), 'replacement ID reused with changed demands')
