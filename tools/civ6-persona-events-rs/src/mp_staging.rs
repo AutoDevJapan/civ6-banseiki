@@ -37,7 +37,7 @@ const SETTER: &str = "g_currentMaxPlayers = math.min(newMaxPlayers, MAX_EVER_PLA
 const SCOPED_SETTER: &str = "g_currentMaxPlayers = math.min(newMaxPlayers, JAC_StagingCap());";
 const CHANGE: &str = "if(g_currentMaxPlayers ~= newMaxPlayers) then";
 const SCOPED_CHANGE: &str =
-    "if(g_currentMaxPlayers ~= math.min(newMaxPlayers, JAC_StagingCap())) then";
+    "if(g_currentMaxPlayers ~= newMaxPlayers or g_currentMaxPlayers ~= math.min(newMaxPlayers, JAC_StagingCap())) then";
 const SHOW: &str = "g_currentMaxPlayers = math.min(MapConfiguration.GetMaxMajorPlayers(), 12);";
 const SCOPED_SHOW: &str = "SetCurrentMaxPlayers(MapConfiguration.GetMaxMajorPlayers());";
 pub const STATUS: &str = r#"
@@ -49,7 +49,7 @@ function JAC_Staging22Status()
   humans=g_hotseatNumHumanPlayers,ai=g_hotseatNumAIPlayers,
   readyDisabled=Controls.ReadyButton:IsDisabled(),visible=not ContextPtr:IsHidden()}
 end
-print('[JAC_STAGE22] registered staging22/v1 stock=e05b89a60e9d79cf2161e196cd0e0ce8e3a236443070359dc1cf9393c563133e')
+print('[JAC_STAGE22] loaded staging22/v1 stock=e05b89a60e9d79cf2161e196cd0e0ce8e3a236443070359dc1cf9393c563133e')
 "#;
 fn once(s: &str, old: &str, new: &str) -> Result<String, String> {
     if s.matches(old).count() != 1 {

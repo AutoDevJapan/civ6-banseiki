@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (label,code) in [
         ("22 initial/reentry","OnShow();assert(g_currentMaxPlayers==22 and not disabled and launches==0);OnShow();assert(g_currentMaxPlayers==22 and not disabled)"),
         ("sameMax out of scope","map='OtherMap.lua';OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==12 and disabled and g_badPlayerForMapSize)"),
+        ("Pangaea20 retains original refresh","map='Pangaea.lua';maximum=20;local before=rebuilt;OnMapMaxMajorPlayersChanged(20);OnMapMaxMajorPlayersChanged(20);assert(g_currentMaxPlayers==12 and rebuilt==before+2);maximum=22"),
         ("sameMax back in scope","map='{403be889-1455-4de7-967b-ad54c0ff3431}Maps/JAC_Japan_15km.Civ6Map';OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==22 and not disabled)"),
         ("ruleset refresh","ruleset='RULESET_EXPANSION_2';OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==12);ruleset='RULESET_JAC_BANSEIKI';OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==22)"),
         ("network session refresh","hotseat=false;OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==12);hotseat=true;OnShow();assert(g_currentMaxPlayers==22)"),
@@ -104,6 +105,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("map cap still obeyed","maximum=20;OnMapMaxMajorPlayersChanged(20);assert(g_currentMaxPlayers==20 and disabled);maximum=22;OnMapMaxMajorPlayersChanged(22);assert(g_currentMaxPlayers==22 and not disabled)"),
         ("no autonomous launch and original one click","assert(launches==0 and readyWrites==0);OnReadyButton();assert(launches==1 and readyWrites==1)"),
     ]{lua.load(code).exec()?;println!("PASS {label}");}
-    println!("PASS stock22 rejection reproduced; 5 official gate/Ready bodies preserved; 10 real-source Lua51 cases; no game");
+    println!("PASS stock22 rejection reproduced; 5 official gate/Ready bodies preserved; 11 real-source Lua51 cases; no game");
     Ok(())
 }
