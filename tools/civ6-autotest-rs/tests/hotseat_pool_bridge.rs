@@ -73,6 +73,8 @@ fn installed_witness_is_identified_by_its_run_id_without_overwriting_another_tas
     )
     .unwrap();
     hs::verify_installed(&bundle, &prepared, &mods).unwrap();
+    fs::write(other.join("JAC_Test_HotseatBridge.modinfo"), "<unfinished").unwrap();
+    hs::verify_installed(&bundle, &prepared, &mods).unwrap();
     fs::write(installed.join("UI/JAC_HotseatPlan.lua"), "tampered").unwrap();
     assert!(hs::verify_installed(&bundle, &prepared, &mods).is_err());
 }

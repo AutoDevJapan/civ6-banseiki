@@ -103,6 +103,29 @@ fn named_state_transition_preserves_the_state_and_never_replays_sent_commands() 
         .send_state_transition_checked("HostGame", "pool RANDOM", 0.0, || Ok(()))
         .is_err());
     assert!(h.calls().is_empty());
+    let mut attempts = 0;
+    let fake = FakeBackend::new().lua(move |_, _| {
+        attempts += 1;
+        if attempts == 1 {
+            Err(Error::tuner("not sent"))
+        } else {
+            Ok("true".into())
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    assert_eq!(
+        h.runner
+            .send_state_transition_checked("HostGame", "pool RANDOM", 5.0, || Ok(()))
+            .unwrap(),
+        "true"
+    );
+    assert_eq!(
+        h.calls(),
+        [
+            ("HostGame".into(), "pool RANDOM".into()),
+            ("HostGame".into(), "pool RANDOM".into())
+        ]
+    );
 }
 
 #[test]

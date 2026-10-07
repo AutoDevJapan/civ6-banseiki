@@ -320,9 +320,12 @@ pub fn verify_installed(bundle: &Bundle, data: &Value, mods: &Path) -> Result<()
         if !path.is_dir() || !manifest.is_file() {
             continue;
         }
-        let text = fs::read_to_string(&manifest)?;
-        let doc = roxmltree::Document::parse(text.trim_start_matches('\u{feff}'))
-            .map_err(|e| Error::scenario(format!("Invalid hotseat manifest: {e}")))?;
+        let Ok(text) = fs::read_to_string(&manifest) else {
+            continue;
+        };
+        let Ok(doc) = roxmltree::Document::parse(text.trim_start_matches('\u{feff}')) else {
+            continue;
+        };
         if doc
             .root_element()
             .attribute("id")
