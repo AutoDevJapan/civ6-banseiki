@@ -91,7 +91,10 @@ fn wrapper_keeps_original_math_and_unrelated_minimums_unchanged() {
     exec(
         &lua,
         r#"
- assert(math~=original_math and original_math.min(22,12)==12)
+      assert(math~=original_math and original_math.min(22,12)==12)
+      for key,value in pairs(original_math) do
+        if key~='min' then assert(rawget(math,key)==value) end
+      end
  assert(math.min(22,12)==22)
  assert(math.min(22,12,9)==9 and math.min(22,11)==11)
  assert(math.min(23,12)==12 and math.min(-5,12)==-5)
@@ -104,40 +107,21 @@ fn wrapper_keeps_original_math_and_unrelated_minimums_unchanged() {
     exec(&new_lua(), "assert(math.min(22,12)==12)");
 }
 #[test]
-fn frontend_binds_thin_wrapper_without_gameplay_criteria_or_filename_shadow() {
+fn frontend_xml_binds_stock_wrappers_without_unsupported_replacement_actions() {
     let manifest = read_repo("poc/JAC_PoC_JapanMapScale/JAC_PoC_JapanMapScale.modinfo");
     let doc = roxmltree::Document::parse(&manifest).unwrap();
     let frontend = doc
         .descendants()
         .find(|n| n.has_tag_name("FrontEndActions"))
         .unwrap();
-    let replacements: Vec<_> = frontend
+    assert!(!frontend
         .children()
-        .filter(|n| n.has_tag_name("ReplaceUIScript"))
-        .collect();
-    assert_eq!(replacements.len(), 1);
-    let replacement = replacements[0];
-    assert!(replacement.attribute("criteria").is_none());
-    assert_eq!(
-        replacement
-            .descendants()
-            .find(|n| n.has_tag_name("LuaContext"))
-            .unwrap()
-            .text(),
-        Some("StagingRoom")
-    );
-    assert_eq!(
-        replacement
-            .descendants()
-            .find(|n| n.has_tag_name("LuaReplace"))
-            .unwrap()
-            .text(),
-        Some("UI/JAC_JapanStagingRoom.lua")
-    );
+        .any(|n| n.has_tag_name("ReplaceUIScript")));
     let imports = frontend
         .children()
         .find(|n| n.has_tag_name("ImportFiles"))
         .unwrap();
+    assert!(imports.attribute("criteria").is_none());
     let files: Vec<_> = imports
         .children()
         .filter(|n| n.has_tag_name("File"))
@@ -146,13 +130,56 @@ fn frontend_binds_thin_wrapper_without_gameplay_criteria_or_filename_shadow() {
     assert_eq!(
         files,
         [
+            "UI/FrontEnd.xml",
+            "UI/JAC_JapanMainMenu.xml",
+            "UI/JAC_JapanMainMenu.lua",
+            "UI/JAC_JapanStagingRoom.xml",
             "UI/JAC_JapanStagingRoom.lua",
             "UI/JAC_JapanHotseatLimits.lua"
         ]
     );
-    assert!(!manifest.contains("UI/StagingRoom.lua"));
+    let front = read_repo("poc/JAC_PoC_JapanMapScale/UI/FrontEnd.xml");
+    let front = roxmltree::Document::parse(&front).unwrap();
+    assert_eq!(
+        front
+            .descendants()
+            .find(|n| n.has_tag_name("LuaContext") && n.attribute("ID") == Some("MainMenu"))
+            .unwrap()
+            .attribute("FileName"),
+        Some("JAC_JapanMainMenu")
+    );
+    let main = read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.xml");
+    let main = roxmltree::Document::parse(&main).unwrap();
+    assert_eq!(
+        main.descendants()
+            .find(|n| n.has_tag_name("Include"))
+            .unwrap()
+            .attribute("File"),
+        Some("MainMenu")
+    );
+    assert_eq!(
+        main.descendants()
+            .find(|n| n.has_tag_name("LuaContext") && n.attribute("ID") == Some("StagingRoom"))
+            .unwrap()
+            .attribute("FileName"),
+        Some("JAC_JapanStagingRoom")
+    );
+    let stage = read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanStagingRoom.xml");
+    let stage = roxmltree::Document::parse(&stage).unwrap();
+    assert_eq!(
+        stage
+            .descendants()
+            .find(|n| n.has_tag_name("Include"))
+            .unwrap()
+            .attribute("File"),
+        Some("StagingRoom")
+    );
+    assert_eq!(
+        read_repo("poc/JAC_PoC_JapanMapScale/UI/JAC_JapanMainMenu.lua").trim(),
+        "include(\"MainMenu\")"
+    );
     let source = read_repo(STAGING);
     new_lua().load(&source).into_function().unwrap();
-    assert!(source.lines().count() < 30);
     assert!(source.contains("include(\"StagingRoom\")"));
+    assert!(!manifest.contains("UI/StagingRoom.lua"));
 }

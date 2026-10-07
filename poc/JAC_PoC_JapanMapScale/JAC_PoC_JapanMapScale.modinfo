@@ -67,10 +67,11 @@
     </Criteria>
   </ActionCriteria>
   <FrontEndActions>
-    <ReplaceUIScript id="JAC_JapanMapScale_HotseatStagingContext">
-      <Properties><LuaContext>StagingRoom</LuaContext><LuaReplace>UI/JAC_JapanStagingRoom.lua</LuaReplace></Properties>
-    </ReplaceUIScript>
     <ImportFiles id="JAC_JapanMapScale_HotseatStaging">
+      <File>UI/FrontEnd.xml</File>
+      <File>UI/JAC_JapanMainMenu.xml</File>
+      <File>UI/JAC_JapanMainMenu.lua</File>
+      <File>UI/JAC_JapanStagingRoom.xml</File>
       <File>UI/JAC_JapanStagingRoom.lua</File>
       <File>UI/JAC_JapanHotseatLimits.lua</File>
     </ImportFiles>
@@ -157,6 +158,10 @@
     </AddGameplayScripts>
   </InGameActions>
   <Files>
+    <File>UI/FrontEnd.xml</File>
+    <File>UI/JAC_JapanMainMenu.xml</File>
+    <File>UI/JAC_JapanMainMenu.lua</File>
+    <File>UI/JAC_JapanStagingRoom.xml</File>
     <File>UI/JAC_JapanStagingRoom.lua</File>
     <File>UI/JAC_JapanHotseatLimits.lua</File>
     <File>Data/JAC_Japan_20km_Castles.sql</File>

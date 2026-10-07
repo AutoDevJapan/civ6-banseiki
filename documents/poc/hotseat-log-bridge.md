@@ -175,3 +175,7 @@ cargo run --locked --manifest-path tools/Cargo.toml --bin civ6-hotseat-bridge --
 `ReplaceUIScript` で `StagingRoom` と包みのファイルを結び付ける。Frontendが受け付けない地図条件は付けず、実行時のLuaで対象を判定する。読み込むファイルには独自の名前を付け、本体の `StagingRoom.lua` をファイル名で覆わない。Rustの検査は、実際の包みと人数判定をLua 5.1で実行し、本体と同じ二つの制限式、設定の切り替え、元の数学関数と無関係な引数の保持、画面登録を確認する。
 
 実機02は再起動前の検証用MOD配置にも間に合わなかったため、設定やHostを送らず終了した。次の配置は、チェーンがRustのビルドを呼ぶ段階で同期的に行う。共有枠、pushしたソースのtree、登録済みの21手順、検証用の四ファイルを確認してから本来のビルドへ進める。ゲームが既に動いていれば止まり、再起動後の配置で代替しない。画面の登録、22枠の開始、自然成長と二回の保存読込は、この修正後の実機で確認する。元21手順の件数やターン、経験値、比較条件は緩めない。
+
+実機03は再起動前の四ファイル配置を確認し、Hostを一度送ったが、再びプレイヤー12〜21が無効とされて開始できなかった。Frontendの置換登録は画面の読み込みに有効な形になっていなかった。原ログと生成物を保全し、ゲームと共有枠を終了した。
+
+次の候補は、公開されている [Enhanced Community FrontEndの登録](https://github.com/yofabronecoforo/C6ECFE/blob/main/ecfe.modinfo) と [画面XMLの結び付け](https://github.com/yofabronecoforo/C6ECFE/blob/main/ecfe/ui/enhancedmainmenu.xml) を一次資料として、FrontendからMainMenuとStagingRoomの包みをXMLで結び付ける。レイアウトとLuaは本体をIncludeし、Frontendの本体XMLはMainMenuの読み込み先だけを変更する。色・フォントの属性も本体を維持する。元の数学関数の全フィールドを別のテーブルへコピーし、pairsとrawgetによる参照も保つ。読み込みと最初の対象判定をログへ残し、登録が有効になったかを実機で区別する。この候補の実機はこの担当の四回目で、追加の試行は開始しない。

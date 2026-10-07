@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContextDefaults Name="MainMenu" ColorSet="BodyTextCool" Style="FontNormal22" FontStyle="Stroke">
+  <Include File="MainMenu"/>
+  <LuaContext ID="StagingRoom" FileName="JAC_JapanStagingRoom" Hidden="1"/>
+</ContextDefaults>
