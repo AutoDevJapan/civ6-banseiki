@@ -19,8 +19,10 @@ pub static BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY: unsafe extern "system" fn() =
     assignment::assign_calibration_gateway;
 static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
-static RECORDING: AtomicBool = AtomicBool::new(false);
-static SAMPLE_FLIGHTS: AtomicU32 = AtomicU32::new(0);
+// One atomic word orders admission against closure. A successful stop cannot
+// miss a writer between a separate enabled check and counter increment.
+const SAMPLE_CLOSED: u32 = 1 << 31;
+static SAMPLE_STATE: AtomicU32 = AtomicU32::new(SAMPLE_CLOSED);
 static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
 // Reset stamp and invocation generation change in ONE cmpxchg16b. A reset
 // paused after its phase CAS cannot advance generation after a newer reset.
@@ -348,7 +350,7 @@ pub(super) fn payment_after_catalog(owner: usize, ticket: u32) -> bool {
         && STATE[owner].load() == snapshot
 }
 
-/// Acquisition/recheck makes observation stop drain only sampled callbacks.
+/// The closed bit and active writer count share a single linearization point.
 /// No hook waits, allocates or takes a lock. Rows are never reset or redirected.
 pub(super) fn sample_begin() -> bool {
     if !owned() {
@@ -356,22 +358,18 @@ pub(super) fn sample_begin() -> bool {
     }
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     if now >= DEADLINE_MS.load(Ordering::Acquire) {
-        RECORDING.store(false, Ordering::Release);
+        SAMPLE_STATE.fetch_or(SAMPLE_CLOSED, Ordering::AcqRel);
     }
-    if !RECORDING.load(Ordering::Acquire) {
-        return false;
-    }
-    SAMPLE_FLIGHTS.fetch_add(1, Ordering::AcqRel);
-    if !RECORDING.load(Ordering::Acquire) {
-        SAMPLE_FLIGHTS.fetch_sub(1, Ordering::Release);
-        return false;
-    }
-    true
+    SAMPLE_STATE
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
+            (state < SAMPLE_CLOSED - 1).then_some(state + 1)
+        })
+        .is_ok()
 }
 
 pub(super) fn sample_end() {
     if owned() {
-        SAMPLE_FLIGHTS.fetch_sub(1, Ordering::Release);
+        SAMPLE_STATE.fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -389,9 +387,9 @@ fn stop_observation() -> BridgeStatus {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput;
     }
-    RECORDING.store(false, Ordering::Release);
+    SAMPLE_STATE.fetch_or(SAMPLE_CLOSED, Ordering::AcqRel);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    while SAMPLE_FLIGHTS.load(Ordering::Acquire) != 0 {
+    while SAMPLE_STATE.load(Ordering::Acquire) != SAMPLE_CLOSED {
         if std::time::Instant::now() >= deadline {
             return BridgeStatus::Critical;
         }
@@ -440,7 +438,7 @@ pub(super) fn start_observation(seconds: u32) {
     INSTALLED.store(true, Ordering::Release);
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     DEADLINE_MS.store(now + u64::from(seconds) * 1000, Ordering::Release);
-    RECORDING.store(true, Ordering::Release);
+    SAMPLE_STATE.store(0, Ordering::Release);
 }
 
 #[cfg(test)]

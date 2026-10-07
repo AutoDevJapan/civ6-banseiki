@@ -1300,12 +1300,16 @@ unsafe extern "system" fn calibration_begin(
         return null_mut();
     }
     let trace = unsafe { &*trace };
-    trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    if !runtime::owned() {
+        trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    }
     let row = if production {
         // A per-call stack object carries the decision even after the prefix
         // observation sample fills. Never use shared telemetry as authority.
         if scratch.is_null() {
-            trace.in_flight.fetch_sub(1, Ordering::Release);
+            if !runtime::owned() {
+                trace.in_flight.fetch_sub(1, Ordering::Release);
+            }
             return null_mut();
         }
         unsafe { ptr::write(scratch, CalibrationRow::default()) };
@@ -1463,6 +1467,9 @@ unsafe extern "system" fn calibration_end(
     if !trace.is_null() {
         let trace = unsafe { &*trace };
         if trace.reserved == BridgeMode::ProductionAdmission as u32 && runtime::sample_begin() {
+            if runtime::owned() {
+                trace.in_flight.fetch_add(1, Ordering::AcqRel);
+            }
             let slot = runtime::next_slot(&trace.next, CALIBRATION_CAPACITY);
             if slot < CALIBRATION_CAPACITY {
                 let target = &trace.rows[slot];
@@ -1486,9 +1493,14 @@ unsafe extern "system" fn calibration_end(
             } else {
                 trace.dropped.fetch_add(1, Ordering::Relaxed);
             }
+            if runtime::owned() {
+                trace.in_flight.fetch_sub(1, Ordering::Release);
+            }
             runtime::sample_end();
         }
-        trace.in_flight.fetch_sub(1, Ordering::Release);
+        if !runtime::owned() {
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+        }
     }
     result
 }
@@ -1651,6 +1663,9 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         return;
     }
     let trace = unsafe { &*trace };
+    // Every write to the exported observation, including filtered/in_flight,
+    // belongs to this writer lease. Authority still consumes unsampled calls.
+    let sampled = runtime::sample_begin();
     #[cfg(test)]
     if trace.scope == BridgeMode::JoinedAdmission as u32
         && returned != 0
@@ -1673,11 +1688,15 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
             && product_reset_owner(key_id).is_none()
             && !(composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id)))
     {
-        trace.filtered.fetch_add(1, Ordering::Relaxed);
+        if sampled {
+            trace.filtered.fetch_add(1, Ordering::Relaxed);
+            runtime::sample_end();
+        }
         return;
     }
-    trace.in_flight.fetch_add(1, Ordering::AcqRel);
-    let sampled = runtime::sample_begin();
+    if sampled {
+        trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    }
     let slot = if sampled {
         runtime::next_slot(&trace.next, TRACE_CAPACITY)
     } else {
@@ -1722,9 +1741,9 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     if slot >= TRACE_CAPACITY {
         if sampled {
             trace.dropped.fetch_add(1, Ordering::Relaxed);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
             runtime::sample_end();
         }
-        trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
     }
     let row = &trace.rows[slot];

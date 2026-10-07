@@ -378,6 +378,11 @@ mod tests {
     }
 
     #[test]
+    fn runtime_stopped_observation_is_immutable_while_authority_keeps_running() {
+        owned_child(true, "stop-freeze");
+    }
+
+    #[test]
     fn runtime_old_reset_cannot_roll_back_committed_owner() {
         owned_child(true, "reset-race");
     }
@@ -687,6 +692,84 @@ mod tests {
             assign_call(this, person, 0, sentinel & !255),
             sentinel & !255
         );
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("stop-freeze") {
+            // A native appointment can straddle the observation boundary.
+            // Its invocation-local authority must finish without touching the
+            // frozen exported allocation, including the in-flight headers.
+            let mut scratch = CalibrationRow::default();
+            let pending_can = unsafe { calibration_begin(this, 77, 0, &mut scratch) };
+            assert!(!pending_can.is_null());
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            let snapshot = || {
+                let mut bytes = vec![0u8; std::mem::size_of::<CompositeTrace>()];
+                let mut copied = 0;
+                assert_ne!(
+                    unsafe {
+                        ReadProcessMemory(
+                            GetCurrentProcess(),
+                            trace_pointer.cast(),
+                            bytes.as_mut_ptr().cast(),
+                            bytes.len(),
+                            &mut copied,
+                        )
+                    },
+                    0
+                );
+                assert_eq!(copied, bytes.len());
+                bytes
+            };
+            let frozen = snapshot();
+            assert_eq!(unsafe { calibration_end(pending_can, 1, 77, this) }, 1);
+            assert_eq!(snapshot(), frozen, "appointment end after stop");
+            for _ in 0..32 {
+                // The original property getter returns unchanged for both
+                // selected and unrelated keys after stop. The selected key
+                // still changes the actual appointment authority.
+                publish(PRODUCTION_ALLOW_BASE + 77, false);
+                assert_eq!(can_call(this, 77), 0);
+                publish(PRODUCTION_ALLOW_BASE + 77, true);
+                assert_eq!(can_call(this, 77), 1);
+                assert_eq!(get(receiver, 123), raw_tag as u64);
+                let mut fence = runtime::CallFence::default();
+                let pending_assign = unsafe {
+                    assignment::assign_calibration_begin(this, person, 0, sentinel, 0, &mut fence)
+                };
+                assert_eq!(snapshot(), frozen, "pending assignment after stop");
+                assert_eq!(
+                    unsafe {
+                        assignment::assign_calibration_end(
+                            pending_assign,
+                            sentinel,
+                            this,
+                            person,
+                            &fence,
+                        )
+                    },
+                    sentinel
+                );
+                unsafe {
+                    ptr::write_volatile(flags.as_mut_ptr().add(7), 0);
+                }
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel & !255);
+                unsafe {
+                    ptr::write_volatile(flags.as_mut_ptr().add(7), 1);
+                }
+                assert_eq!(assign_call(this, person, 0, sentinel), sentinel);
+                assert_eq!(snapshot(), frozen, "all trace bytes remain frozen");
+            }
+            assert!(PRODUCT_ACTIVE.load(Ordering::Acquire));
+            assert_eq!(trace.joined.property.dropped.load(Ordering::Acquire), 0);
+            assert_eq!(trace.joined.property.in_flight.load(Ordering::Acquire), 0);
+            assert_eq!(
+                trace.joined.calibration.in_flight.load(Ordering::Acquire),
+                0
+            );
+            assert_eq!(trace.assignment.in_flight.load(Ordering::Acquire), 0);
+            return;
+        }
         if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("reset-race") {
             for stage in [1, 2] {
                 runtime::RESET_STAGE.store(stage, Ordering::Release);
