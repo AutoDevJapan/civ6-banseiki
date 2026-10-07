@@ -707,8 +707,9 @@ fn effect_lua(case: &Case) -> String {
 }
 
 // Plot properties can reach the UI before its cached growth values. Wait for
-// an actual change on every owned city, then compare a Core snapshot with the
-// UI. The acceptance calculation still rejects wrong amounts and residues.
+// Core exposes plot flags and yields, while growth modifiers are UI-only.
+// Acknowledge the Core operation before polling the full UI yield/growth read.
+// The acceptance calculation still rejects wrong amounts and residues.
 const GROWTH_UPDATED: &str = r#"
 local previous=assert(JAC_OATH_AUDIT and JAC_OATH_AUDIT[__PREVIOUS__],'previous growth observation missing')
 assert(#previous.own>0,'previous growth city inventory missing')
@@ -717,11 +718,44 @@ for _,row in ipairs(previous.own) do
  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
  assert(city:GetOwner()==row.owner and plot:GetIndex()==row.plot,'growth city identity changed')
  if (plot:GetProperty(__OATH__..'_ON') or 0)~=__FLAG__ then return false end
+ -- Read yields before growth, as the official CitySupport data collector does.
+ -- Polling only the cached other-growth getter never updated in live31.
+ for _,kind in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do
+  local yield=city:GetYield(GameInfo.Yields['YIELD_'..kind].Index)
+  assert(type(yield)=='number' and yield==yield and yield>-math.huge and yield<math.huge,'growth prerequisite yield is not finite')
+ end
  local value=city:GetGrowth():GetOtherGrowthModifier()
  assert(type(value)=='number' and value==value and value>-math.huge and value<math.huge,'growth observation is not finite')
  if value==row.other then return false end
 end
 return true
+"#;
+
+const GROWTH_CORE_SNAPSHOT: &str = r#"
+local oath=__OATH__; local phase=__PHASE__; local desired=__FLAG__
+local own,foreign={},{}
+for _,player in ipairs(PlayerManager.GetAliveMajors()) do
+ for _,city in player:GetCities():Members() do
+  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+  assert(city:GetOwner()==player:GetID() and plot:GetOwner()==player:GetID(),'Core growth city owner changed')
+  local expected=player:GetID()==0 and desired or 0
+  local count=0
+  for row in GameInfo.JAC_SengokuOaths() do
+   count=count+1
+   assert((plot:GetProperty(row.OathType..'_ON') or 0)==(row.OathType==oath and expected or 0),'Core oath flags differ')
+  end
+  assert(count==66,'Core oath inventory changed')
+  local record={id=city:GetID(),owner=city:GetOwner(),plot=plot:GetIndex(),flag=expected,y={}}
+  for _,kind in ipairs({'production','gold','science','culture','faith','food'}) do
+   record.y[kind]=number(city:GetYield(GameInfo.Yields['YIELD_'..string.upper(kind)].Index),'Core '..kind)
+  end
+  local group=player:GetID()==0 and own or foreign; group[#group+1]=record
+ end
+end
+table.sort(own,function(a,b) return a.plot<b.plot end); table.sort(foreign,function(a,b) return a.plot<b.plot end)
+assert(#own>0 and #foreign>0 and #own+#foreign==56,'Core city inventory changed')
+Game:SetProperty('JAC_TODO134_GROWTH_CORE',{oath=oath,phase=phase,turn=Game.GetCurrentGameTurn(),snapshot={own=own,foreign=foreign}})
+return '{"scope":"core_identity_flags_and_yields_only","growth_api_used":false,"phase":"'..phase..'","cities":56}'
 "#;
 
 const GROWTH_CORE_MATCH: &str = r#"
@@ -734,11 +768,7 @@ for _,group in ipairs({core.snapshot.own,core.snapshot.foreign}) do
   local city=assert(Players[row.owner]:GetCities():FindID(row.id),'Core growth city disappeared')
   local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
   assert(city:GetOwner()==row.owner and plot:GetIndex()==row.plot,'Core/UI growth city identity changed')
-  local growth=city:GetGrowth()
-  for _,pair in ipairs({{'growth','GetOverallGrowthModifier'},{'other','GetOtherGrowthModifier'},{'housing','GetHousingGrowthModifier'},{'happiness','GetHappinessGrowthModifier'},{'surplus','GetFoodSurplus'},{'loyalty','GetLoyaltyGrowthModifier'}}) do
-   if growth[pair[2]](growth)~=row[pair[1]] then return false end
-  end
-  if city:IsOccupied()~=row.occupied then return false end
+  if (plot:GetProperty(__OATH__..'_ON') or 0)~=row.flag then return false end
   for _,kind in ipairs({'production','gold','science','culture','faith','food'}) do
    if city:GetYield(GameInfo.Yields['YIELD_'..string.upper(kind)].Index)~=row.y[kind] then return false end
   end
@@ -762,14 +792,15 @@ fn measure_steps(steps: &mut Vec<Value>, case: &Case, phase: &str) {
                 case,
                 &[("__PREVIOUS__", &lua_string(previous)), ("__FLAG__", flag)],
             );
-            steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":updated}}));
-            let core = format!(
-                "JAC_OATH_AUDIT=JAC_OATH_AUDIT or {{}}; local function observe()\n{LUA_HELPERS}\n{measure}\nend\nlocal report=observe(); Game:SetProperty('JAC_TODO134_GROWTH_CORE',{{oath={},phase={quoted},turn=Game.GetCurrentGameTurn(),snapshot=JAC_OATH_AUDIT[{quoted}]}}); return report",
-                lua_string(&case.oath)
+            let core = substitute(
+                GROWTH_CORE_SNAPSHOT,
+                case,
+                &[("__PHASE__", &quoted), ("__FLAG__", flag)],
             );
-            steps.push(ui("GameCore_Tuner", core));
+            steps.push(ui("GameCore_Tuner", format!("{LUA_HELPERS}\n{core}")));
             let synced = substitute(GROWTH_CORE_MATCH, case, &[("__PHASE__", &quoted)]);
             steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":synced}}));
+            steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":updated}}));
         }
     }
     steps.push(ui("InGame", measure));

@@ -6,10 +6,12 @@ use mlua::{Lua, Value as LuaValue};
 fn growth_wait_rejects_previous_values_and_requires_every_owned_city_to_update() -> Result<()> {
     let lua = Lua::new();
     lua.load(r#"
-values={0,0}; flag=1
+values={0,0}; flag=1; yield_reads=0
+GameInfo={Yields={}}; for i,name in ipairs({'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}) do GameInfo.Yields['YIELD_'..name]={Index=i} end
 JAC_OATH_AUDIT={baseline={own={{id=1,plot=11,owner=0,other=0},{id=2,plot=12,owner=0,other=0}}}}
 Players={[0]={GetCities=function() return {FindID=function(_,id) return {
  GetOwner=function() return 0 end,GetX=function() return id end,GetY=function() return 0 end,
+ GetYield=function() yield_reads=yield_reads+1; return 2 end,
  GetGrowth=function() return {GetOtherGrowthModifier=function() return values[id] end} end
 } end} end}}
 Map={GetPlot=function(x) return {GetIndex=function() return x+10 end,GetProperty=function() return flag end} end}
@@ -19,6 +21,7 @@ Map={GetPlot=function(x) return {GetIndex=function() return x+10 end,GetProperty
         .replace("__OATH__", "'JAC_OATH_ODA_TSUSHIMA'")
         .replace("__FLAG__", "1");
     assert!(!lua.load(&code).eval::<bool>()?);
+    assert_eq!(lua.load("return yield_reads").eval::<i64>()?, 6);
     lua.load("values[1]=0.046875").exec()?;
     assert!(!lua.load(&code).eval::<bool>()?);
     lua.load("values[2]=0.046875").exec()?;
@@ -40,7 +43,7 @@ fn growth_core_ui_wait_rejects_stale_phase_and_foreign_metric_mismatches() -> Re
 local names={'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}
 GameInfo={Yields={}}; for i,name in ipairs(names) do GameInfo.Yields['YIELD_'..name]={Index=i} end
 local function row(id,owner)
- return {id=id,owner=owner,plot=100*owner+id,growth=1,other=0.046875,housing=1,happiness=0,surplus=2,loyalty=1,occupied=false,y={production=2,gold=2,science=2,culture=2,faith=2,food=2}}
+ return {id=id,owner=owner,plot=100*owner+id,flag=owner==0 and 1 or 0,growth=1,other=0.046875,housing=1,happiness=0,surplus=2,loyalty=1,occupied=false,y={production=2,gold=2,science=2,culture=2,faith=2,food=2}}
 end
 actual={[0]={row(1,0),row(2,0)},[1]={}}
 core={oath='JAC_OATH_ODA_TSUSHIMA',phase='selected',turn=4,snapshot={own={row(1,0),row(2,0)},foreign={}}}
@@ -49,14 +52,15 @@ Game={GetCurrentGameTurn=function() return 4 end,GetProperty=function() return c
 Players={}
 for owner=0,1 do local o=owner; Players[o]={GetCities=function() return {FindID=function(_,id)
  local r=actual[o][id]; if not r then return nil end
- return {GetOwner=function() return o end,GetX=function() return id end,GetY=function() return o end,
+ return {GetID=function() return id end,GetOwner=function() return o end,GetX=function() return id end,GetY=function() return o end,
  IsOccupied=function() return r.occupied end,GetYield=function() return r.y.production end,
- GetGrowth=function() return {GetOverallGrowthModifier=function() return r.growth end,
+ GetGrowth=function() assert(not forbid_growth,'growth API is UI-only'); return {GetOverallGrowthModifier=function() return r.growth end,
  GetOtherGrowthModifier=function() return r.other end,GetHousingGrowthModifier=function() return r.housing end,
  GetHappinessGrowthModifier=function() return r.happiness end,GetFoodSurplus=function() return r.surplus end,
  GetLoyaltyGrowthModifier=function() return r.loyalty end} end}
 end} end} end
-Map={GetPlot=function(x,y) return {GetIndex=function() return 100*y+x end} end}
+Map={GetPlot=function(x,y) return {GetIndex=function() return 100*y+x end,GetOwner=function() return y end,
+ GetProperty=function(_,name) return name=='JAC_OATH_ODA_TSUSHIMA_ON' and actual[y][x].flag or 0 end} end}
 "#).exec()?;
     let code = GROWTH_CORE_MATCH
         .replace("__PHASE__", "'selected'")
@@ -64,16 +68,40 @@ Map={GetPlot=function(x,y) return {GetIndex=function() return 100*y+x end} end}
     assert!(lua.load(&code).eval::<bool>()?);
     for change in [
         "core.phase='off'",
-        "actual[0][2].other=0",
-        "actual[1][54].growth=0.99609375",
+        "actual[0][2].flag=0",
+        "actual[1][54].flag=1",
         "actual[1][54].y.production=2.00390625",
     ] {
         lua.load(change).exec()?;
         assert!(!lua.load(&code).eval::<bool>()?, "accepted {change}");
-        lua.load("core.phase='selected'; actual[0][2].other=0.046875; actual[1][54].growth=1; actual[1][54].y.production=2").exec()?;
+        lua.load("core.phase='selected'; actual[0][2].flag=1; actual[1][54].flag=0; actual[1][54].y.production=2").exec()?;
     }
     lua.load("core.turn=5").exec()?;
     assert!(lua.load(&code).eval::<bool>().is_err());
+    // Execute the real Core snapshot with growth explicitly unavailable, as
+    // in live33. It may use only identity, flags and verified yield getters.
+    lua.load(r#"
+forbid_growth=true
+Game.SetProperty=function(_,name,value) assert(name=='JAC_TODO134_GROWTH_CORE'); core=value end
+GameInfo.JAC_SengokuOaths=function() local i=0; return function() i=i+1; if i<=66 then return {OathType=i==1 and 'JAC_OATH_ODA_TSUSHIMA' or ('OTHER_'..i)} end end end
+for owner=0,1 do local o=owner; Players[o].GetID=function() return o end
+ local original=Players[o].GetCities
+ Players[o].GetCities=function() local cities=original()
+  cities.Members=function() local i=0; return function() i=i+1; if actual[o][i] then return i,cities:FindID(i) end end end
+  return cities
+ end
+end
+PlayerManager={GetAliveMajors=function() return {Players[0],Players[1]} end}
+"#).exec()?;
+    let snapshot = GROWTH_CORE_SNAPSHOT
+        .replace("__PHASE__", "'selected'")
+        .replace("__OATH__", "'JAC_OATH_ODA_TSUSHIMA'")
+        .replace("__FLAG__", "1");
+    let report = lua
+        .load(format!("{LUA_HELPERS}\n{snapshot}"))
+        .eval::<String>()?;
+    assert!(report.contains("\"growth_api_used\":false"));
+    assert!(lua.load(&code).eval::<bool>()?);
     Ok(())
 }
 
@@ -99,21 +127,25 @@ fn all_growth_measurements_use_update_and_core_ui_gates_before_acceptance() -> R
                         })
                 })
                 .unwrap();
-            assert_eq!(steps[index - 3]["action"], "wait_for");
-            assert!(steps[index - 3]["condition"]["code"]
-                .as_str()
-                .unwrap()
-                .contains("if value==row.other then return false end"));
-            assert_eq!(steps[index - 2]["state_name"], "GameCore_Tuner");
-            assert!(steps[index - 2]["code"]
+            assert_eq!(steps[index - 3]["state_name"], "GameCore_Tuner");
+            assert!(steps[index - 3]["code"]
                 .as_str()
                 .unwrap()
                 .contains("Game:SetProperty('JAC_TODO134_GROWTH_CORE'"));
+            assert!(!steps[index - 3]["code"]
+                .as_str()
+                .unwrap()
+                .contains("GetGrowth"));
+            assert_eq!(steps[index - 2]["action"], "wait_for");
+            assert!(steps[index - 2]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains("core.snapshot.foreign"));
             assert_eq!(steps[index - 1]["action"], "wait_for");
             assert!(steps[index - 1]["condition"]["code"]
                 .as_str()
                 .unwrap()
-                .contains("core.snapshot.foreign"));
+                .contains("if value==row.other then return false end"));
             checked += 1;
         }
     }
