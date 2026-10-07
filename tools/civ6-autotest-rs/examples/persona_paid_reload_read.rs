@@ -25,6 +25,7 @@ local a=assert(Game:GetProperty('JAC_PERSONA_SCENARIO_CITY_A'))
 local city=assert(CityManager.GetCity(0,a),'saved city A absent')
 out.cityA=a; out.canAssign=gs:CanAssignGovernor(def.Hash,city)
 assert(type(out.canAssign)=='boolean','assignment query missing')
+if expected_can_assign~=nil then assert(out.canAssign==expected_can_assign,'paid placement permission was not restored') end
 local assigned=g:GetAssignedCity(); out.assignedCity=assigned and assigned:GetID() or 'none'
 out.established=g:IsEstablished(); out.turnsOnSite=g:GetTurnsOnSite()
 for _,c in p:GetCities():Members() do out.cities[#out.cities+1]={id=c:GetID(),owner=c:GetOwner()} end
@@ -52,6 +53,16 @@ struct Args {
     bootstrap: PathBuf,
     #[arg(long)]
     output: PathBuf,
+    /// Require the paid Governor to be assignable on both loads, without assigning it.
+    #[arg(long)]
+    expect_assignable: bool,
+}
+
+fn read_code(expect_assignable: bool) -> String {
+    format!(
+        "local expected_can_assign={}\n{READ}",
+        if expect_assignable { "true" } else { "nil" }
+    )
 }
 
 fn digest(path: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
@@ -65,12 +76,13 @@ fn scene(
     runtime_sha: &str,
     bootstrap: &str,
     bootstrap_sha: &str,
+    expect_assignable: bool,
 ) -> Value {
     let original: Value = serde_json::from_str(ORIGINAL).unwrap();
     let load =
         json!({"action":"load","name":name,"exact_name":true,"save_sha256":save_sha,"timeout":300});
     let wait = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0] and Players[0]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages() and type(ExposedMembers.JAC_LeaderPersona)=='table'"}});
-    let read = json!({"action":"ui_lua","state_name":"InGame","code":READ,"timeout":30});
+    let read = json!({"action":"ui_lua","state_name":"InGame","code":read_code(expect_assignable),"timeout":30});
     json!({"name":"Read-only paid Governor: cold saved-world load and same-process reload; not assignment acceptance","judge_profile":"generic","strict_lua_errors":true,"steps":[
         original["steps"][0],{"action":"restart_game"},
         {"action":"start_native_bootstrap","name":"paid-reload-native","max_seconds":300,"runtime_dll":runtime,"runtime_sha256":runtime_sha,"bootstrap_dll":bootstrap,"bootstrap_sha256":bootstrap_sha,"timeout":40},
@@ -95,6 +107,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &digest(&runtime)?,
         bootstrap.to_str().ok_or("bootstrap path is not UTF-8")?,
         &digest(&bootstrap)?,
+        args.expect_assignable,
     );
     civ6_autotest_rs::scenario::validate_scenario(&data)?;
     let mut output = fs::OpenOptions::new()
@@ -122,6 +135,7 @@ mod tests {
             &"b".repeat(64),
             b.to_str().unwrap(),
             &"c".repeat(64),
+            false,
         );
         civ6_autotest_rs::scenario::validate_scenario(&s).unwrap();
         assert_eq!(s["steps"].as_array().unwrap().len(), 11);
@@ -168,6 +182,20 @@ PAID=true;ALLOWED=false;QUERIES=0
         let allowed = lua.load(READ).eval::<String>().unwrap();
         assert!(allowed.contains("[\"canAssign\"]=true"));
         assert_eq!(lua.globals().get::<u32>("QUERIES").unwrap(), 2);
+        lua.load("ALLOWED=false").exec().unwrap();
+        assert!(lua
+            .load(read_code(true))
+            .eval::<String>()
+            .unwrap_err()
+            .to_string()
+            .contains("paid placement permission was not restored"));
+        lua.load("ALLOWED=true").exec().unwrap();
+        assert!(lua
+            .load(read_code(true))
+            .eval::<String>()
+            .unwrap()
+            .contains("[\"canAssign\"]=true"));
+        assert_eq!(lua.globals().get::<u32>("QUERIES").unwrap(), 4);
         lua.load("PAID=false").exec().unwrap();
         assert!(lua
             .load(READ)
@@ -175,6 +203,6 @@ PAID=true;ALLOWED=false;QUERIES=0
             .unwrap_err()
             .to_string()
             .contains("saved payment promotion absent"));
-        assert_eq!(lua.globals().get::<u32>("QUERIES").unwrap(), 2);
+        assert_eq!(lua.globals().get::<u32>("QUERIES").unwrap(), 4);
     }
 }
