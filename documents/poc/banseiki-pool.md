@@ -28,33 +28,41 @@ Rustの生成器が設定SQL、ゲームSQL、表示文、アイコン、色、�
 | 外交画面 | Civilization VIの汎用指導者画像、Firaxis Games | 本体の `Base/ArtDefs/FallbackLeaders.artdef` の `ART_LEADER_DEFAULT` | 本体の `LeaderFallbackImages.blp` を参照。画像データの再配布なし |
 | 背景 | 本体の人物を含まない文明背景と既存22家の背景 | 本体の指導者背景、CustomCivsの既存背景 | 既存の背景キーを参照。22家の制作・出典は [肖像記録](leader-portraits.md) |
 
-## エチオピアの読込互換処理
+## 公式DLCの読込互換処理
 
 おまかせ版の実機07は人間2人・AI2人の4席をRANDOMへ設定できたが、ゲーム開始時にGameplayのエラー44件でDBが巻き戻された。原ログの内訳は外部キーの参照不整合42行と制約失敗2件。メネリクの除外、席の固定、乱数の変更で回避しない。
 
 公式 `DLC/Ethiopia/Ethiopia.modinfo:17–20` の `Ethiopia` 条件は `any=1` だが、`LeaderPlayable` のExpansion1とExpansion2の項目の間にコンマがなく、空白になっている。`RuleSetInUse` は公式3種だけなので万世紀では成立しない。対して `Ethiopia_Expansion2:29–32` はExpansion2のメネリクを正しく指定し、`EthiopiaGameplay_XP2:86–89` だけが読み込まれる。一次ログの `Modding.log:2013,3165–3167,3293–3295` はこの適用と巻戻しを記録し、`Database.log` は外交街区、エチオピア文明、改善、部隊の定義欠落を示す。
 
-原ログは `C:/Users/makhmeto/AppData/Local/Temp/codex-owned-9df875669d9c9f372c9fc9f7a2547a49/random/{Database.log,Modding.log}`。2026-10-07に読んだ公式modinfoのSHA256はEthiopiaが `28361c4b5817051d68511918b6694022a8e256e499d7d60352ddc2afa06e3633`、Babylonが `af4fdc5eda796e168c5434dfb2d546d0e6c57725ad2baa06a563d59d27030141`。公式DLCのmodinfoを `LeaderPlayable` の項目間の空白に限って調べたところ、同じ誤りはBabylonの `Babylon.modinfo:19` にもあった。Babylonの互換処理は今回追加していない。
+原ログは `C:/Users/makhmeto/AppData/Local/Temp/codex-owned-9df875669d9c9f372c9fc9f7a2547a49/random/{Database.log,Modding.log}`。2026-10-07に読んだ公式modinfoのSHA256はEthiopiaが `28361c4b5817051d68511918b6694022a8e256e499d7d60352ddc2afa06e3633`、Babylonが `af4fdc5eda796e168c5434dfb2d546d0e6c57725ad2baa06a563d59d27030141`。公式DLCのmodinfoを `LeaderPlayable` の項目間の空白に限って調べたところ、同じ誤りはBabylonの `Babylon.modinfo:19` にもあった。生成器はこの2つを共通のDLC定義・XMLコンパイラ・配置用manifestで扱う。
 
 公式 `Base/Assets/Database/Modding.sql:205–213` は他MODのファイルやコンポーネントを参照する `ComponentReferences.URI` を定義している。しかし、今回確認した公式modinfoにはその指定例がなく、スキーマだけではXMLの指定形式・参照先の条件を無視できるか・重複適用を防げるかを確定できない。公式参照方式が不可能と証明したわけではない。実機を使わない今回の範囲では、その形式を推測して採用せず、公式データをGitや配布物へ追加しない生成方式にした。
 
-Rustの `banseiki-ethiopia-prepare` は、利用者のインストール済み公式XMLを読み、`JAC_PoC_BanseikiRuleset` の配置用コピーを作る。追跡中のMODと公式インストールは変更しない。Ethiopiaのゲームモード用データ・画像・翻訳をコピーせず、基本8ファイルとXP2の2ファイルだけからSQLを生成する。コピーには元のMODと同じIDを保ち、元のフォルダに代えて配置する。生成物には公式由来のデータが含まれるため、Gitへ追加したり配布したりしない。Ethiopiaがない環境では元のMODを使う。
+Rustの `banseiki-ethiopia-prepare` は、インストール済み公式XMLを読み、`JAC_PoC_BanseikiRuleset` の配置用コピーを作る。呼出し名は互換維持し、Rust APIは `ethiopia::prepare_local_dlc_mod(repo, game, output, refresh)` とする。追跡中のMODと公式インストールは変更しない。Ethiopiaは基本8ファイル＋XP2の2ファイル、Babylonは基本8ファイル＋XP2の1ファイルを、それぞれ公式modinfoのコンポーネントから個別に取得する。Babylonの根拠は `Babylon.modinfo:119–128,166–168`。ゲームモード用データ・画像・翻訳は追加しない。生成物には公式由来のデータが含まれるため、Gitへ追加したり配布したりしない。
+
+Babylonの非モードの交差データは `Babylon.modinfo:34–37,169–171` の `BabylonGameplay_GranColombia_Maya` だけを別SQLで扱う。マハーヴィハーラからマヤの天文台への隣接参照があるため、公式の `ModInUse` 条件を保持し、Babylon有効・万世紀・Expansion2の条件も付ける。公式3ルールセットの指定を万世紀へ読み替える以外に、交差条件を緩めない。相手DLCを基盤MODの依存にはせず、ゲームモード全体の機能も追加しない。
 
 ```text
-cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin banseiki-ethiopia-prepare -- --game-dir "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI" --output "<新しい配置用MODフォルダの絶対パス>"
+cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin banseiki-ethiopia-prepare -- --game-dir "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI" --output "<live/tools/target/local-mods/JAC_PoC_BanseikiRuleset の絶対パス>" --refresh
 ```
 
-生成したコピーのSQLは「万世紀」「Expansion2のゲームコア」「Ethiopia有効」の全条件が成立したときだけ読み込む。メネリクを選ばない試合でも、外交街区などの共通データを補う。公式コンポーネントのLoadOrderは0、互換処理は1、戦国ツリーは200。互換処理の中で基本データを追加してからXP2を再適用するため、先に公式XP2だけが読まれた試合で失われたUpdateも復元する。先に基本データがあっても、キーのある行は `INSERT OR IGNORE`、キーのない行は同じ内容の存在判定で二重追加を防ぐ。`REPLACE` による関連行の削除は使わない。
+生成したコピーのSQLは「万世紀」「Expansion2のゲームコア」「対象DLC有効」の全条件が成立したときだけ読み込む。EthiopiaとBabylonの `ModIsEnabled` は別の条件とし、両方有効でなければ動かない形にはしない。メネリクを選ばない試合でも外交街区などの共通データを補う。指導者の候補やFrontEndの設定処理は変えない。未導入DLCのSQLはmanifestへ登録せず、Ethiopiaなし・Babylonのみ・両方なしでも配置用の基盤MODを作れる。配置用manifestからBabylonの強制依存を外し、既存の英雄モード入口にはBabylon有効の条件を加える。
 
-この方式には、Ethiopiaを使う配置の前にRust生成器を実行する工程が必要である。追跡中のMODをそのまま配置しても今回の修正は入らない。直接参照方式の確認と、既存の配置手順への自動接続は未実施であり、本工程は静的検査済みの配置用MODを作る範囲とする。
+公式コンポーネントのLoadOrderは0、基本＋XP2の互換処理は1、Babylonの交差処理は2、戦国ツリーは200。互換処理の中で基本データを追加してからXP2を再適用するため、先に公式XP2だけが読まれた試合で失われたUpdateも復元する。先に基本データがあっても、キーのある行は `INSERT OR IGNORE`、キーのない行は同じ内容の存在判定で二重追加を防ぐ。`REPLACE` による関連行の削除は使わない。
 
-回帰検査は `cargo test --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --test ethiopia`。3件が成功した。全環境で条件の組合せと、SQLの値・既存行・キーのない行・再実行を調べる。Windowsでは公式Ethiopia XMLを必須入力とし、既存の本体＋XP2のDB定義へ独立したXML処理で読み込んだ結果と全テーブルを照合する。未読込、基本だけ、基本＋XP2、XP2だけの4状態と二重実行を比較する。XP2だけでは参照不整合42行を再現し、補完後の新しい不整合は0行。挿入順で変わるHashを除く全データが正常な公式読込と一致し、二重実行前後はHashを含めて一致した。
+shared shipの実機準備から上のCLIを毎回 `--refresh` で呼ぶ契約とし、親側では `Mods/JAC_PoC_BanseikiRuleset` のジャンクションを `live/tools/target/local-mods/JAC_PoC_BanseikiRuleset` の生成物へ接続する。初回でも `--refresh` は使える。生成器自身はジャンクションを作らず、追跡sourceにも書き込まない。この有限変更の検査は生成器とCLIまでであり、親側の接続・全件検査・実機検証は統合後に行う。手動配置だけを前提とした工程ではない。
+
+新規作成時に `JAC_LocalDlc_Owner.json` へ生成器名・形式版・元MODのID・生成ファイル一覧を記録する。更新時は所有マーカーと出力modinfoのIDを確認し、出力ルート／配下のリンクやジャンクション、一覧外のファイルがあれば書き込む前に拒否する。`--refresh` のない呼出しは既存出力を拒否する。マーカーのない旧生成物も自動で引き取らない。削除・権限変更はせず、元MODや公式XMLの変更から毎回コンパイルし直す。DLCがなくなったときは以前のSQLを無効なコメントへ更新してmanifestから外す。元sourceからなくなったファイルは削除せず出力に残すが、現在のmanifestには再登録しない。
+
+回帰検査は `cargo test --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --test ethiopia`。全環境で条件の分離、DLCの導入有無4通り、SQLの値・既存行・キーのない行・再実行、所有拒否、元MODと公式XMLの更新反映、同じ入力による同じ生成結果、互換名CLIの `--refresh` を調べる。Windowsでは公式Ethiopia・Babylon XMLを必須入力とし、独立したXML処理で読み込んだ結果と全テーブルを照合する。それぞれ未読込、基本だけ、基本＋XP2、XP2だけの4状態と二重実行を比較する。EthiopiaのXP2だけでは参照不整合42行を再現し、補完後の新しい不整合は0行。挿入順で変わるHashを除く全データが正常な公式読込と一致し、二重実行前後はHashを含めて一致する。Babylonの交差処理も公式GranColombia/Mayaデータで照合し、ジャンクション拒否は実際の検査用ジャンクションで確認する。
 
 比較用DBは本体＋XP2の既存資料を使い、そこで省略されていたKindsの `InsertOrIgnore` はインストール済み公式XMLから読み込む。外部キーを有効にし、ゲームと同じ遅延検査と削除の連鎖を使う。ゲームコアが登録するCollectionType／EffectTypeの定義はXMLにないため、この2列のFKは検査対象に含めず、値そのものを公式XMLとの全データ比較で検査する。その他の既存資料の不足は開始時の不整合との差分で区別する。このDB検査を実機の全DB検証や読み込み成功とは扱わない。
 
 実機07の4人RANDOMによる開始・手番・保存・再読込、実際のmodinfo条件評価は別の実機検証が必要である。
 
-この実装を加えた全Rust・Lua検査は117対象・1,481件が成功し、失敗・省略・絞り込みは0件だった。公式Luaとの一致検査でLF／CRLFだけの差を検出したため、その比較の改行をそろえた。Lua本体は変更していない。生成器も専用worktree内で実行し、`tools/target/ethiopia-compatible` に配置用コピーを作成した。追加SQLの参照と、宣言した18ファイルすべての存在を確認した。このコピーを実機へ配置する操作は行っていない。
+エチオピア補完までの `d9e608f3` では全Rust・Lua検査117対象・1,481件が成功し、失敗・省略・絞り込みは0件だった。公式Luaとの一致検査でLF／CRLFだけの差を検出したため、その比較の改行をそろえた。Lua本体は変更していない。旧配置用コピーでは追加SQLと宣言した18ファイルの存在を確認済み。
+
+Babylonと更新処理を加えた有限変更では、関連検査9件が成功し、対象検査と互換名CLIのClippyは `-D warnings` で成功した。変更したRustの整形も確認した。インストール済み両DLCからCLIで実生成・更新し、全ファイルのSHA256が同じ入力の再生成前後で一致した。宣言した20ファイルの欠落も0件。全workspace・shared shipの接続・実機4試行・Lunaレビューは、親PR126が統合後に実施する範囲である。今回の検査成功をそれらの成功として扱わない。
 
 ## 検証
 
