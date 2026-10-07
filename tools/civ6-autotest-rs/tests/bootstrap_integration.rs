@@ -16,6 +16,42 @@ fn cold_start_without_either_observer_allows_the_existing_startup_budget() {
 }
 
 #[test]
+fn insufficient_bootstrap_lease_refuses_before_frontend_or_controller_start() {
+    struct Lease(f64);
+    impl Backend for Lease {
+        fn live_lease_budget(&self) -> Result<Option<f64>> {
+            Ok(Some(self.0))
+        }
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            _: &serde_json::Value,
+        ) -> Result<()> {
+            panic!("lease refusal must precede controller startup");
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    for remaining in [1.0, 104.99, 105.0] {
+        let mut runner = Runner::with_backend(
+            json!({"name":"pre-start lease refusal","steps":[]}),
+            temp.path().into(),
+            temp.path().into(),
+            temp.path().into(),
+            4318,
+            Box::new(Lease(remaining)),
+            std::sync::Arc::new(SystemClock),
+        );
+        let error = runner
+            .run_step(&json!({"action":"start_native_bootstrap","max_seconds":60}))
+            .unwrap_err();
+        assert_eq!(
+            error.message,
+            "live_chain lease cannot cover bootstrap observation"
+        );
+    }
+}
+
+#[test]
 fn either_observer_failure_interrupts_the_shared_step_budget() {
     struct Ended(bool);
     impl Backend for Ended {

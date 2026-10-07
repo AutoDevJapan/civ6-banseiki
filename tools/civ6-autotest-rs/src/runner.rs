@@ -2838,6 +2838,21 @@ impl Runner {
         }
         match action {
             "start_native_bootstrap" => {
+                let seconds = step["max_seconds"]
+                    .as_u64()
+                    .filter(|seconds| (1..=300).contains(seconds))
+                    .ok_or_else(|| Error::scenario("bootstrap duration must be 1..300 seconds"))?;
+                // Refuse before FrontEnd requests or controller spawn: a
+                // pre-mutation lease refusal must not enter READY recovery.
+                if self
+                    .backend
+                    .live_lease_budget()?
+                    .is_some_and(|remaining| remaining <= seconds as f64 + 45.0)
+                {
+                    return Err(Error::input(
+                        "live_chain lease cannot cover bootstrap observation",
+                    ));
+                }
                 self.lua(
                     "FrontEnd",
                     "assert(UI.IsInFrontEnd(),'fresh MainMenu required'); return true",
