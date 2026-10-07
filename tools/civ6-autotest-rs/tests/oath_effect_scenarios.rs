@@ -125,6 +125,7 @@ fn all_66_oath_scenarios_and_first_capability_diagnosis_pass_driver_schema() {
         ("queue_quarter_control_scenario", 25),
         ("queue_unit_type_control_scenario", 1),
         ("queue_tag_era_control_scenario", 1),
+        ("queue_tag_era_prerequisite_scenario", 1),
     ] {
         let path = inventory[key]
             .as_str()

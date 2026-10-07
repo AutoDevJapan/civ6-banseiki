@@ -409,3 +409,84 @@ UI={CanEndTurn=function()return can_end end,HasSentTurnComplete=function()return
     }
     Ok(())
 }
+
+#[test]
+fn prerequisite_fixture_and_missing_reference_fail_before_more_turns() -> Result<()> {
+    let vm = Lua::new();
+    let reset = r#"
+optin=1
+GameConfiguration={GetValue=function()return optin end}
+GameInfo={Units={UNIT_SPEARMAN={PrereqTech='TECH_JAC_SENGOKU_IRON_FORGING'}},Technologies={TECH_JAC_SENGOKU_IRON_FORGING={EraType='ERA_ANCIENT'}}}
+JAC_QUEUE_CAL={samples={[2]={slot='off_before',percent=100,delta=462},[3]={slot='on',percent=100,delta=923}}}
+"#;
+    vm.load(reset).exec()?;
+    vm.load(PREREQUISITE_GUARD).exec()?;
+    vm.load(format!("{LUA_HELPERS}\n{POSITIVE_REFERENCE}"))
+        .eval::<String>()?;
+    for mutation in [
+        "optin=0",
+        "GameInfo.Units.UNIT_SPEARMAN.PrereqTech=nil",
+        "GameInfo.Units.UNIT_SPEARMAN.PrereqCivic='CIVIC_OTHER'",
+        "GameInfo.Technologies.TECH_JAC_SENGOKU_IRON_FORGING.EraType='ERA_CLASSICAL'",
+    ] {
+        vm.load(reset).exec()?;
+        vm.load(mutation).exec()?;
+        assert!(vm.load(PREREQUISITE_GUARD).exec().is_err(), "{mutation}");
+    }
+    for mutation in [
+        "JAC_QUEUE_CAL.samples[3].delta=462",
+        "JAC_QUEUE_CAL.samples[3].delta=464",
+        "JAC_QUEUE_CAL.samples[3].delta=0/0",
+        "JAC_QUEUE_CAL.samples[3].slot='off_before'",
+        "JAC_QUEUE_CAL.samples[3].percent=15",
+    ] {
+        vm.load(reset).exec()?;
+        vm.load(mutation).exec()?;
+        assert!(
+            vm.load(format!("{LUA_HELPERS}\n{POSITIVE_REFERENCE}"))
+                .eval::<String>()
+                .is_err(),
+            "{mutation}"
+        );
+    }
+    let base = Repository::checked_in().json(super::super::BASE)?;
+    let control = tag_era_prerequisite_scenario(&base)?;
+    assert_eq!(control["prerequisite_fixture"], true);
+    assert_eq!(control["finite_turns"], 38);
+    let steps = control["steps"].as_array().unwrap();
+    assert!(steps[2]["code"]
+        .as_str()
+        .unwrap()
+        .contains("GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',1)"));
+    let position = steps
+        .iter()
+        .position(|s| {
+            s["code"]
+                .as_str()
+                .is_some_and(|c| c.contains("tag-era 100-percent reference missing"))
+        })
+        .unwrap();
+    assert!(steps[position - 1]["code"]
+        .as_str()
+        .unwrap()
+        .contains("state.index==3,"));
+    assert!(steps[position - 1]["code"]
+        .as_str()
+        .unwrap()
+        .contains("local stage=\"after\""));
+    for step in steps.iter().filter_map(|s| s["code"].as_str()) {
+        Lua::new().load(step).into_function()?;
+    }
+    for scenario in [
+        scenario(&base)?,
+        quarter_control_scenario(&base)?,
+        unit_type_control_scenario(&base)?,
+        tag_era_control_scenario(&base)?,
+    ] {
+        assert!(scenario["steps"][2]["code"]
+            .as_str()
+            .unwrap()
+            .contains("GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0)"));
+    }
+    Ok(())
+}

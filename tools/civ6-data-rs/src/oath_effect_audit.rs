@@ -76,6 +76,8 @@ fn meter_outputs() -> Outputs {
   <Row Tag="LOC_JAC_OATH_QUEUE_CALIBRATION" Language="ru_RU"><Text>Проверка производства военных юнитов</Text></Row>
 </LocalizedText></GameData>
 "#.to_owned();
+    let headroom_config = headroom_config.replace("</Parameters>", r#"<Row Key1="Ruleset" Key2="RULESET_JAC_BANSEIKI" ParameterId="JAC_OathTagEraPrerequisite" Name="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Domain="bool" DefaultValue="0" ConfigurationGroup="Game" ConfigurationId="JAC_TODO134_TAG_ERA_PREREQ" GroupId="AdvancedOptions" Visible="0" SupportsLANMultiplayer="0" SupportsInternetMultiplayer="0" SupportsHotSeat="0" SupportsPlayByCloud="0"/></Parameters>"#);
+    let headroom_text = headroom_text.replace("</LocalizedText>", r#"<Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="ja_JP"><Text>昇進分類校正用の研究前提</Text></Row><Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="en_US"><Text>Research prerequisite for promotion-era diagnostics</Text></Row><Row Tag="LOC_JAC_OATH_TAG_ERA_PREREQUISITE" Language="ru_RU"><Text>Технология для проверки производства по классу и эпохе</Text></Row></LocalizedText>"#);
     let modinfo = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <Mod id="{METER_ID}" version="1">
@@ -88,6 +90,10 @@ fn meter_outputs() -> Outputs {
 </Mod>
 "#
     );
+    let modinfo = modinfo
+        .replace("</ActionCriteria>", "<Criteria id=\"JAC_OathMeter_TagPrerequisite\"><RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse><ConfigurationValueMatches><Group>Game</Group><ConfigurationId>JAC_TODO134_TAG_ERA_PREREQ</ConfigurationId><Value>1</Value></ConfigurationValueMatches></Criteria></ActionCriteria>")
+        .replace("</InGameActions>", "<UpdateDatabase id=\"JAC_OathMeter_TagPrerequisite_Data\" criteria=\"JAC_OathMeter_TagPrerequisite\"><Properties><LoadOrder>460</LoadOrder></Properties><File>Data/TagEraPrerequisite.sql</File></UpdateDatabase></InGameActions>")
+        .replace("</Files>", "<File>Data/TagEraPrerequisite.sql</File></Files>");
     [
         (
             PathBuf::from(format!("{METER_DIR}/Text/Headroom.xml")),
@@ -105,6 +111,10 @@ fn meter_outputs() -> Outputs {
         (
             PathBuf::from(format!("{METER_DIR}/Data/QueueCalibration.sql")),
             calibration_sql,
+        ),
+        (
+            PathBuf::from(format!("{METER_DIR}/Data/TagEraPrerequisite.sql")),
+            "-- Separate opt-in: use an already granted Ancient prerequisite only in the promotion-era diagnosis.\nUPDATE Units SET PrereqTech='TECH_JAC_SENGOKU_IRON_FORGING', PrereqCivic=NULL WHERE UnitType='UNIT_SPEARMAN';\n".to_owned(),
         ),
         (
             PathBuf::from(format!("{METER_DIR}/JAC_PoC_OathMeter.modinfo")),
@@ -311,7 +321,7 @@ fn first_steps(base: &Value, civ: &str) -> Result<Vec<Value>> {
         player["human"] = json!(index == 0);
     }
     steps[2]["code"] = json!(format!(
-        "BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~={} then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'",
+        "GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0); BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~={} then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'",
         lua_string(civ)
     ));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":"local l=Game:GetProperty('JAC_AGES_LEDGER'); local p=Players[0]; return l and l.houses and l.houses.p0 and p and p:GetCities():GetCapitalCity()~=nil"}}));
@@ -1203,6 +1213,11 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
         PathBuf::from(format!("{DIR}/queue-tag-era-control.json")),
         format!("{}\n", serde_json::to_string_pretty(&tag_era_control)?),
     );
+    let tag_prerequisite = queue_calibration::tag_era_prerequisite_scenario(&base)?;
+    result.insert(
+        PathBuf::from(format!("{DIR}/queue-tag-era-prerequisite.json")),
+        format!("{}\n", serde_json::to_string_pretty(&tag_prerequisite)?),
+    );
     for case in cases {
         let scenario = selected_scenario(&base, &case)?;
         let path = format!("{DIR}/{}.json", case.oath.to_lowercase());
@@ -1225,7 +1240,7 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
             format!("{}\n", serde_json::to_string_pretty(&scenario)?),
         );
     }
-    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"queue_calibration_scenario":format!("{DIR}/queue-calibration.json"),"queue_quarter_control_scenario":format!("{DIR}/queue-quarter-control.json"),"queue_unit_type_control_scenario":format!("{DIR}/queue-unit-type-control.json"),"queue_tag_era_control_scenario":format!("{DIR}/queue-tag-era-control.json"),"oath_count":66,"house_count":22,"max_turns":16,
+    let manifest = json!({"live_verified":false,"capability_scenario":format!("{DIR}/capabilities.json"),"queue_calibration_scenario":format!("{DIR}/queue-calibration.json"),"queue_quarter_control_scenario":format!("{DIR}/queue-quarter-control.json"),"queue_unit_type_control_scenario":format!("{DIR}/queue-unit-type-control.json"),"queue_tag_era_control_scenario":format!("{DIR}/queue-tag-era-control.json"),"queue_tag_era_prerequisite_scenario":format!("{DIR}/queue-tag-era-prerequisite.json"),"oath_count":66,"house_count":22,"max_turns":16,
         "quantity_acceptance":"legacy_getyield_queue_denominator_unverified; raw_progress_calibration_diagnostic_only; all_66_live_unverified","diagnostic_mod":METER_ID,"scenarios":inventory});
     result.insert(
         PathBuf::from(INVENTORY),
@@ -1285,7 +1300,7 @@ mod tests {
     fn catalogue_cases_have_exact_live_selection_and_bounded_progress_checks() -> Result<()> {
         let repo = Repository::checked_in();
         let generated = outputs(&repo)?;
-        assert_eq!(generated.len(), 78);
+        assert_eq!(generated.len(), 80);
         let mut paths = BTreeSet::new();
         for case in cases(&repo)? {
             let path = PathBuf::from(format!("{DIR}/{}.json", case.oath.to_lowercase()));

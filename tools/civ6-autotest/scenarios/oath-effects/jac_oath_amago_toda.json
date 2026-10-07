@@ -142,7 +142,7 @@
     {
       "action": "ui_lua",
       "state_name": "HostGame",
-      "code": "GameConfiguration.SetValue('JAC_TODO134_QUEUE_HEADROOM',1); BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~=\"CIVILIZATION_JAC_AMAGO\" then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'"
+      "code": "GameConfiguration.SetValue('JAC_TODO134_QUEUE_HEADROOM',1); GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0); BuildHeadlessGameSetup(); g_GameParameters:FullRefresh(); if PlayerConfigurations[0]:GetCivilizationTypeName()~=\"CIVILIZATION_JAC_AMAGO\" then error('human house mismatch') end; HideGameSetup(); return 'audit setup built'"
     },
     {
       "action": "start_game",

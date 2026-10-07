@@ -322,6 +322,58 @@ pub(super) fn tag_era_control_scenario(base: &Value) -> Result<Value> {
     typed_control_scenario(base, true)
 }
 
+const PREREQUISITE_GUARD: &str = r#"
+assert(GameConfiguration.GetValue('JAC_TODO134_TAG_ERA_PREREQ')==1 or GameConfiguration.GetValue('JAC_TODO134_TAG_ERA_PREREQ')==true,'tag-era prerequisite fixture opt-in missing')
+local spear=assert(GameInfo.Units.UNIT_SPEARMAN)
+assert(spear.PrereqTech=='TECH_JAC_SENGOKU_IRON_FORGING' and spear.PrereqCivic==nil,'tag-era prerequisite fixture was not loaded')
+assert(assert(GameInfo.Technologies[spear.PrereqTech]).EraType=='ERA_ANCIENT','tag-era prerequisite is not Ancient')
+"#;
+
+const POSITIVE_REFERENCE: &str = r#"
+local data=assert(JAC_QUEUE_CAL)
+local off=assert(data.samples[2]); local on=assert(data.samples[3])
+assert(off.slot=='off_before' and on.slot=='on' and off.percent==100 and on.percent==100,'first reference phases changed')
+assert(finite(off.delta) and finite(on.delta) and on.delta>off.delta+2,'tag-era 100-percent reference missing; do not continue uninformative turns')
+return 'positive 100-percent reference confirmed for prerequisite fixture'
+"#;
+
+pub(super) fn tag_era_prerequisite_scenario(base: &Value) -> Result<Value> {
+    let mut data = tag_era_control_scenario(base)?;
+    let steps = data["steps"].as_array_mut().context("tag-era steps")?;
+    let setup = steps[2]["code"].as_str().context("host setup")?.replace(
+        "GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',0)",
+        "GameConfiguration.SetValue('JAC_TODO134_TAG_ERA_PREREQ',1)",
+    );
+    steps[2]["code"] = json!(setup);
+    let core_setup = steps
+        .iter_mut()
+        .find(|step| {
+            step["code"].as_str().is_some_and(|code| {
+                code.contains("calibration-only military modifiers attached but off")
+            })
+        })
+        .context("tag-era setup")?;
+    core_setup["code"] = json!(format!(
+        "{PREREQUISITE_GUARD}\n{}",
+        core_setup["code"].as_str().context("core setup code")?
+    ));
+    let after_reference = steps
+        .iter()
+        .position(|step| {
+            step["code"].as_str().is_some_and(|code| {
+                code.contains("local stage=\"after\"") && code.contains("state.index==3,")
+            })
+        })
+        .context("first 100-percent observation")?;
+    steps.insert(
+        after_reference + 1,
+        ui("InGame", POSITIVE_REFERENCE.to_owned()),
+    );
+    data["name"] = json!("研究済みの時代前提を持つ槍兵で昇進分類の生産補正を比較する診断");
+    data["prerequisite_fixture"] = json!(true);
+    Ok(data)
+}
+
 fn typed_control_scenario(base: &Value, tag_era: bool) -> Result<Value> {
     let mut data = scenario_with_control(base, 1)?;
     let steps = data["steps"].as_array_mut().context("calibration steps")?;

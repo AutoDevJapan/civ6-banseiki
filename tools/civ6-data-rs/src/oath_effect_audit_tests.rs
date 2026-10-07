@@ -715,6 +715,33 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     assert_eq!(calibration.attribute("DefaultValue"), Some("0"));
     assert_eq!(calibration.attribute("Visible"), Some("0"));
     assert_eq!(calibration.attribute("Key2"), Some("RULESET_JAC_BANSEIKI"));
+    let tag_prerequisite = config
+        .descendants()
+        .find(|n| n.attribute("ConfigurationId") == Some("JAC_TODO134_TAG_ERA_PREREQ"))
+        .context("tag prerequisite config")?;
+    assert_eq!(tag_prerequisite.attribute("DefaultValue"), Some("0"));
+    assert_eq!(tag_prerequisite.attribute("Visible"), Some("0"));
+    assert_eq!(
+        tag_prerequisite.attribute("Key2"),
+        Some("RULESET_JAC_BANSEIKI")
+    );
+    let tag_criteria = document
+        .descendants()
+        .find(|n| {
+            n.has_tag_name("Criteria") && n.attribute("id") == Some("JAC_OathMeter_TagPrerequisite")
+        })
+        .context("tag prerequisite criteria")?;
+    assert!(tag_criteria
+        .descendants()
+        .any(|n| n.has_tag_name("RuleSetInUse") && n.text() == Some("RULESET_JAC_BANSEIKI")));
+    assert!(tag_criteria.descendants().any(
+        |n| n.has_tag_name("ConfigurationId") && n.text() == Some("JAC_TODO134_TAG_ERA_PREREQ")
+    ));
+    assert!(document
+        .descendants()
+        .any(|n| n.has_tag_name("UpdateDatabase")
+            && n.attribute("id") == Some("JAC_OathMeter_TagPrerequisite_Data")
+            && n.attribute("criteria") == Some("JAC_OathMeter_TagPrerequisite")));
     let calibration_criteria = document
         .descendants()
         .find(|n| {
@@ -741,6 +768,7 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
     ] {
         assert_eq!(row.attribute(mode), Some("0"));
         assert_eq!(calibration.attribute(mode), Some("0"));
+        assert_eq!(tag_prerequisite.attribute(mode), Some("0"));
     }
     db.execute_batch("CREATE TABLE Units(UnitType TEXT PRIMARY KEY,Cost INTEGER); CREATE TABLE Buildings(BuildingType TEXT PRIMARY KEY,Cost INTEGER); INSERT INTO Units VALUES('UNIT_SPEARMAN',65),('UNIT_BUILDER',50),('UNIT_GALLEY',65),('UNIT_WARRIOR',40); INSERT INTO Buildings VALUES('BUILDING_WALLS',80),('BUILDING_CASTLE',100),('BUILDING_STAR_FORT',300),('BUILDING_MONUMENT',60),('BUILDING_GRANARY',65);")?;
     db.execute_batch(headroom)?;
@@ -807,6 +835,33 @@ fn reference_mod_has_only_explicit_scoped_inputs_and_all_valid_modifier_definiti
             |r| r.get::<_, i64>(0)
         )?,
         32768
+    );
+    db.execute_batch("ALTER TABLE Units ADD COLUMN PrereqTech TEXT; ALTER TABLE Units ADD COLUMN PrereqCivic TEXT; UPDATE Units SET PrereqTech='TECH_OTHER',PrereqCivic='CIVIC_OTHER' WHERE UnitType='UNIT_WARRIOR';")?;
+    let gated = &files[&PathBuf::from(format!("{METER_DIR}/Data/TagEraPrerequisite.sql"))];
+    db.execute_batch(gated)?;
+    assert_eq!(
+        db.query_row(
+            "SELECT PrereqTech,PrereqCivic,Cost FROM Units WHERE UnitType='UNIT_SPEARMAN'",
+            [],
+            |r| Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, i64>(2)?
+            ))
+        )?,
+        ("TECH_JAC_SENGOKU_IRON_FORGING".to_owned(), None, 131072)
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT PrereqTech,PrereqCivic,Cost FROM Units WHERE UnitType='UNIT_WARRIOR'",
+            [],
+            |r| Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?
+            ))
+        )?,
+        ("TECH_OTHER".to_owned(), "CIVIC_OTHER".to_owned(), 40)
     );
     Ok(())
 }
