@@ -19,6 +19,8 @@ end
 
 -- MapLeaders の22人との交差で、MPの台帳候補が失われないようにする。
 -- AIと他の地図・ルールセットの公式の問い合わせはそのまま実行する。
+assert(SetupParameters and SetupParameters.Data_Query and SetupParameters.Parameter_FilterValues,
+	"JAC_PoolSetup must be included after SetupParameters.lua")
 local BaseDataQuery = SetupParameters.Data_Query
 function SetupParameters:Data_Query(query)
 	local map = MapConfiguration.GetValue("MAP_SCRIPT")

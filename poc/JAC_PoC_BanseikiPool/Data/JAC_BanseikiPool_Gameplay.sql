@@ -324,7 +324,7 @@ INSERT INTO JAC_BanseikiPool (PersonID, LeaderType, CivilizationType, SourceLead
 CREATE TABLE JAC_BanseikiPoolLedger (
 	Version TEXT NOT NULL PRIMARY KEY,
 	Count INTEGER NOT NULL);
-INSERT INTO JAC_BanseikiPoolLedger (Version, Count) VALUES ('300:a849f9641c819dca', 300);
+INSERT INTO JAC_BanseikiPoolLedger (Version, Count) VALUES ('300:69277281d50d1b3c', 300);
 
 INSERT INTO Types (Type, Kind)
 SELECT LeaderType, 'KIND_LEADER' FROM JAC_BanseikiPool WHERE IsNew = 1 ORDER BY SortIndex;

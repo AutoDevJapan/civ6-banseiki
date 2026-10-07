@@ -483,11 +483,17 @@ fn esc(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// `<count>:<sha256 prefix>` of the PersonID -> LeaderType ledger, stored in each save.
+/// `<count>:<sha256 prefix>` of identities and saved gameplay assignments.
 pub fn ledger_version(people: &[Person]) -> String {
     let mut lines = String::new();
     for p in people {
-        lines.push_str(&format!("{}\t{}\n", p.id, p.leader));
+        lines.push_str(&format!(
+            "{}\t{}\t{}\t{}\n",
+            p.id,
+            p.leader,
+            p.civ,
+            p.trait_type()
+        ));
     }
     format!("{}:{}", people.len(), &sha256(lines.as_bytes())[..16])
 }

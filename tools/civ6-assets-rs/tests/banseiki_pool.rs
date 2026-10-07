@@ -933,6 +933,43 @@ fn fixed_japan_map_query_is_retained_for_sp_and_ai_but_bypassed_for_mp_humans() 
     }
 }
 
+#[test]
+fn hotseat_scenario_uses_two_distinct_people_in_their_actual_shared_civilization() {
+    let scenario =
+        read_json(&root().join("tools/civ6-autotest/scenarios/banseiki-pool-hotseat.json"))
+            .unwrap();
+    let configure = scenario["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["action"] == "configure")
+        .unwrap();
+    let configured = configure["players"].as_array().unwrap();
+    assert_eq!(configured.len(), 2);
+    let people = people();
+    let mut ids = BTreeSet::new();
+    let mut civs = BTreeSet::new();
+    for player in configured {
+        let p = people
+            .iter()
+            .find(|p| player["leader"] == p.leader)
+            .unwrap();
+        assert_eq!(player["civ"], p.civ);
+        assert_eq!(player["human"], true);
+        ids.insert(&p.id);
+        civs.insert(&p.civ);
+    }
+    assert_eq!(ids.len(), 2);
+    assert_eq!(civs.len(), 1);
+    let version = pool::ledger_version(&people);
+    let mut changed = people.clone();
+    changed[0].civ = "different".into();
+    assert_ne!(pool::ledger_version(&changed), version);
+    let mut changed = people.clone();
+    changed[0].trait_key = "different".into();
+    assert_ne!(pool::ledger_version(&changed), version);
+}
+
 const GAMEPLAY_PRELUDE: &str = r#"
 SETS = 0
 LOG = {}
