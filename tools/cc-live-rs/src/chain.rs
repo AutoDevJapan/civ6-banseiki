@@ -62,7 +62,13 @@ pub const REPORTER_COMMAND: &str = r#"
         if ($_.ExecutablePath -eq $expected) {
             $parent = Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue
             if (-not $parent -or $parent.ProcessName -notin @('CivilizationVI','CivilizationVI_DX12')) {
-                Stop-Process -Id $_.ProcessId -ErrorAction Stop
+                try {
+                    Stop-Process -Id $_.ProcessId -ErrorAction Stop
+                } catch {
+                    # The reporter can exit between enumeration and termination.
+                    # Keep access failures and other errors visible.
+                    if ($_.FullyQualifiedErrorId -notlike 'NoProcessFoundForGivenId,*') { throw }
+                }
             }
         }
     }
