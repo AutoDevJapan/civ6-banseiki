@@ -126,10 +126,14 @@ fn steam_sync_must_finish_before_relaunch_after_game_exit() {
     let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None, None], None));
     let sync_checks = Arc::new(Mutex::new(0));
     let checks = sync_checks.clone();
-    fake.on_sync = Box::new(move || {
+    fake.on_sync = Box::new(move |_| {
         let mut n = checks.lock().unwrap();
         *n += 1;
-        Ok(*n < 4)
+        Ok(if *n < 4 {
+            civ6_autotest_rs::steam_sync::SyncStatus::Pending
+        } else {
+            civ6_autotest_rs::steam_sync::SyncStatus::Idle
+        })
     });
     let checks = sync_checks.clone();
     fake.on_launch = Box::new(move || {
@@ -146,7 +150,7 @@ fn steam_sync_must_finish_before_relaunch_after_game_exit() {
 #[test]
 fn steam_sync_deadline_expiry_never_sends_a_launch() {
     let mut fake = FakeBackend::new().process(processes(&[Some((12, 100.0)), None], None));
-    fake.on_sync = Box::new(|| Ok(true));
+    fake.on_sync = Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Pending));
     let mut h = Harness::new(json!({}), fake);
     assert!(h.runner.restart_game(30.0).is_err());
     assert!(!h.events().contains(&"launch".into()));
@@ -174,6 +178,64 @@ fn an_active_steam_warning_suppresses_repeated_launch_requests() {
     h.runner.restart_game(120.0).unwrap();
     assert_eq!(h.events().iter().filter(|e| *e == "launch").count(), 1);
     assert!(h.clock.at() >= 65.0);
+}
+
+#[test]
+fn exit_and_prelaunch_failures_send_zero_uri_requests_for_every_failure_kind() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    for old in [None, Some((12, 100.0))] {
+        for failure in ["Failed", "Conflict", "Offline"] {
+            let mut fake = FakeBackend::new().process(processes(&[old, None, None], None));
+            fake.on_sync = Box::new(move |stage| {
+                assert_eq!(
+                    stage,
+                    if old.is_some() {
+                        Stage::Exit
+                    } else {
+                        Stage::Prelaunch
+                    },
+                    "{failure}"
+                );
+                Ok(SyncStatus::Failed)
+            });
+            let mut h = Harness::new(json!({}), fake);
+            assert!(h
+                .runner
+                .restart_game(120.0)
+                .unwrap_err()
+                .message
+                .contains("URI not sent"));
+            assert!(!h.events().contains(&"launch".into()));
+        }
+    }
+}
+
+#[test]
+fn issued_request_failure_allows_warning_recovery_without_uri_replay_after_45_seconds() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    let clock = Arc::new(ManualClock::default());
+    let waits = clock.clone();
+    let mut fake = FakeBackend::new().process(|_| Ok(None));
+    fake.on_sync = Box::new(|stage| {
+        Ok(if stage == Stage::LaunchIssued {
+            SyncStatus::Failed
+        } else {
+            SyncStatus::Idle
+        })
+    });
+    fake.on_warning = Box::new(|| Ok(true));
+    fake.on_window = Box::new(move |deadline| {
+        waits.advance(deadline - waits.at());
+        if waits.at() < 70.0 {
+            Err(Error::input("Steam still starting"))
+        } else {
+            Ok(123)
+        }
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock;
+    h.runner.launch_steam_and_wait(120.0).unwrap();
+    assert_eq!(h.events().iter().filter(|e| *e == "launch").count(), 1);
 }
 
 #[test]
@@ -515,7 +577,7 @@ impl civ6_autotest_rs::time::Clock for ClickClock {
 }
 
 #[test]
-fn test_steam_launch_retries_when_prior_session_blocks_first_uri() {
+fn test_steam_launch_waits_for_delayed_prior_session_without_replaying_uri() {
     let clock = Arc::new(ManualClock::default());
     let c = clock.clone();
     let mut windows = 0;
@@ -532,11 +594,11 @@ fn test_steam_launch_retries_when_prior_session_blocks_first_uri() {
     let mut h = Harness::new(json!({}), fake);
     h.runner.clock = clock;
     h.runner.launch_steam_and_wait(120.0).unwrap();
-    assert_eq!(h.events().iter().filter(|s| *s == "launch").count(), 2);
+    assert_eq!(h.events().iter().filter(|s| *s == "launch").count(), 1);
 }
 
 #[test]
-fn test_failed_new_launch_releases_its_helper_before_next_steam_request() {
+fn test_failed_new_launch_is_not_replayed_without_a_proven_new_attempt() {
     let clock = Arc::new(ManualClock::default());
     let state = Arc::new(Mutex::new((0, false)));
     let mut fake = FakeBackend::new().process(|_| Ok(None));
@@ -574,13 +636,13 @@ fn test_failed_new_launch_releases_its_helper_before_next_steam_request() {
     });
     let mut h = Harness::new(json!({}), fake);
     h.runner.clock = clock;
-    h.runner.launch_steam_and_wait(120.0).unwrap();
+    assert!(h.runner.launch_steam_and_wait(120.0).is_err());
     let events: Vec<_> = h
         .events()
         .into_iter()
         .filter(|event| event == "launch" || event == "closed failed launch helper")
         .collect();
-    assert_eq!(events, ["launch", "closed failed launch helper", "launch"]);
+    assert_eq!(events, ["launch"]);
 }
 
 #[test]
@@ -601,7 +663,7 @@ fn test_helper_cleanup_exhausting_deadline_sends_no_steam_request() {
 }
 
 #[test]
-fn test_four_launch_requests_still_wait_for_delayed_window_until_deadline() {
+fn test_single_launch_request_waits_for_delayed_window_until_deadline() {
     let clock = Arc::new(ManualClock::default());
     let wait_clock = clock.clone();
     let mut fake = FakeBackend::new().process(|_| Ok(None));
@@ -627,14 +689,11 @@ fn test_four_launch_requests_still_wait_for_delayed_window_until_deadline() {
         .into_iter()
         .filter(|event| event == "cleanup" || event == "launch")
         .collect();
-    assert_eq!(
-        events,
-        ["cleanup", "launch", "cleanup", "launch", "cleanup", "launch", "cleanup", "launch"]
-    );
+    assert_eq!(events, ["cleanup", "launch"]);
 }
 
 #[test]
-fn test_exhausted_launch_requests_fail_at_the_supplied_deadline() {
+fn test_single_unresolved_launch_fails_at_the_supplied_deadline() {
     let clock = Arc::new(ManualClock::default());
     let wait_clock = clock.clone();
     let mut fake = FakeBackend::new().process(|_| Ok(None));
@@ -648,11 +707,11 @@ fn test_exhausted_launch_requests_fail_at_the_supplied_deadline() {
     assert_eq!(error.kind, ErrorKind::Scenario);
     assert!(error
         .message
-        .contains("after 4 Steam launch attempts within the deadline"));
+        .contains("after 1 Steam launch attempts within the deadline"));
     assert_eq!(clock.at(), 420.0);
     assert_eq!(
         h.events().iter().filter(|event| *event == "launch").count(),
-        4
+        1
     );
 }
 

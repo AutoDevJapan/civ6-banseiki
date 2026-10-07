@@ -26,7 +26,18 @@ fn run(a: Args) -> Result<()> {
             &a.archive.ok_or_else(|| Error::input("archive required"))?,
             &a.state,
         ),
-        (false, true) => civ6_autotest_rs::save_isolation::restore(&profile, &a.state),
+        (false, true) => civ6_autotest_rs::save_isolation::retry_recovery_with(
+            &civ6_autotest_rs::time::SystemClock,
+            25.0,
+            || {
+                lease.check()?;
+                if civ6_autotest_rs::restart::single_civ_process(0.0)?.is_some() {
+                    return Err(Error::input("Civ6 appeared before autosave recovery"));
+                }
+                Ok(())
+            },
+            || civ6_autotest_rs::save_isolation::restore(&profile, &a.state),
+        ),
         _ => Err(Error::input("choose begin or restore")),
     }
 }

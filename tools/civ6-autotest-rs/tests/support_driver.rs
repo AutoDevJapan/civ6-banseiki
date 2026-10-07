@@ -73,7 +73,12 @@ pub struct FakeBackend {
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
-    pub on_sync: Box<dyn FnMut() -> Result<bool> + Send>,
+    pub on_sync: Box<
+        dyn FnMut(
+                civ6_autotest_rs::steam_sync::Stage,
+            ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus>
+            + Send,
+    >,
     pub on_warning: Box<dyn FnMut() -> Result<bool> + Send>,
     pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
 }
@@ -105,7 +110,7 @@ impl FakeBackend {
             on_exit: Box::new(|_| Ok(true)),
             on_require: Box::new(|| Ok(())),
             on_launch: Box::new(|| Ok(())),
-            on_sync: Box::new(|| Ok(false)),
+            on_sync: Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)),
             on_warning: Box::new(|| Ok(false)),
             on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
@@ -132,8 +137,11 @@ impl Default for FakeBackend {
     }
 }
 impl Backend for FakeBackend {
-    fn steam_sync_pending(&mut self) -> Result<bool> {
-        (self.on_sync)()
+    fn steam_sync_status(
+        &mut self,
+        stage: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        (self.on_sync)(stage)
     }
     fn steam_warning(&mut self, _: &Path) -> Result<bool> {
         (self.on_warning)()

@@ -75,6 +75,8 @@ struct Model {
     query_duration: f64,
     reporter_failed: bool,
     sync_code: i32,
+    mark_code: i32,
+    restore_code: i32,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
     printed: Vec<String>,
@@ -96,6 +98,8 @@ impl Model {
             query_duration: 0.0,
             reporter_failed: false,
             sync_code: 0,
+            mark_code: 0,
+            restore_code: 0,
             calls: vec![],
             sleeps: vec![],
             printed: vec![],
@@ -140,9 +144,25 @@ impl Runner for Model {
         }
         self.calls.push((self.time, call.clone()));
         match call.args[0].as_str() {
-            _ if call.args.get(1).is_some_and(|arg| arg == "--offset") => {
+            _ if call.args.get(1).is_some_and(|arg| arg == "--mark") => Ok(Output {
+                code: self.mark_code,
+                stdout: json!({"cloud":{},"process":{}}).to_string(),
+                ..Output::default()
+            }),
+            _ if call.args.get(1).is_some_and(|arg| arg == "--restore") => {
                 assert!(!self.running.iter().any(|running| *running));
-                assert!(call.args[2].parse::<u64>().is_ok());
+                if self.restore_code == 0 {
+                    fs::remove_file(&call.args[3]).unwrap();
+                }
+                Ok(Output {
+                    code: self.restore_code,
+                    stderr: "restore fixture".into(),
+                    ..Output::default()
+                })
+            }
+            _ if call.args.get(1).is_some_and(|arg| arg == "--cursor") => {
+                assert!(!self.running.iter().any(|running| *running));
+                assert!(serde_json::from_str::<serde_json::Value>(&call.args[2]).is_ok());
                 assert_eq!(call.args[3], "--journal");
                 assert!(call.kill_tree);
                 Ok(Output {
@@ -271,7 +291,7 @@ fn absent_game_does_not_resolve_or_start_tuner_or_kill() {
     assert_eq!(r.count("powershell"), 1);
     assert!(r.sleeps.is_empty());
     let mut r = Model::new([false; 2]);
-    chain::close_civ6(&mut r).unwrap();
+    chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
     assert_eq!(r.calls.len(), 3);
 }
 
@@ -315,14 +335,14 @@ fn exit_sync_barrier_runs_after_process_exit_and_propagates_failure() {
         let result = chain::close_civ6_with_paths(&mut r, &f.paths);
         assert_eq!(result.is_ok(), code == 0);
         assert_eq!(r.count("taskkill"), 0);
-        assert_eq!(r.count(&cc_live::path(&binary)), 1);
+        assert_eq!(r.count(&cc_live::path(&binary)), 2);
         if let Err(error) = result {
             assert!(error.contains("Steam exit sync did not finish"));
         }
     }
     let mut r = Model::new([false, false]);
     chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
-    assert_eq!(r.count(&cc_live::path(&binary)), 0);
+    assert_eq!(r.count(&cc_live::path(&binary)), 1);
 }
 
 #[test]
@@ -339,6 +359,91 @@ fn missing_sync_executable_closes_game_then_refuses_unobserved_completion() {
     assert!(error.contains("executable is missing"));
     assert!(!r.running.iter().any(|running| *running));
     assert_eq!(r.count("taskkill"), 0);
+}
+
+#[test]
+fn autosave_restore_follows_sync_barrier_even_when_sync_failed() {
+    let f = Fixture::new(true);
+    let source = f
+        .paths
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    fs::create_dir_all(source.parent().unwrap()).unwrap();
+    fs::write(source, "fixture").unwrap();
+    let sync = f
+        .paths
+        .live()
+        .join("tools/target/release/civ6-steam-sync.exe");
+    fs::write(&sync, "fixture").unwrap();
+    for code in [0, 1] {
+        let state = f.paths.here.join("reliability-auto-state.json");
+        fs::write(&state, "fixture").unwrap();
+        let mut r = Model::new([true, false]);
+        r.sync_code = code;
+        let result = chain::close_civ6_with_paths(&mut r, &f.paths);
+        assert_eq!(result.is_ok(), code == 0);
+        assert!(!state.exists());
+        let s = r
+            .calls
+            .iter()
+            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "--cursor"))
+            .unwrap();
+        let restore = r
+            .calls
+            .iter()
+            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "--restore"))
+            .unwrap();
+        assert!(s < restore);
+        let mark = r
+            .calls
+            .iter()
+            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "--mark"))
+            .unwrap();
+        let quit = r
+            .calls
+            .iter()
+            .position(|(_, c)| c.args.get(1).is_some_and(|a| a == "lua"))
+            .unwrap();
+        assert!(mark < quit && quit < s);
+    }
+    let state = f.paths.here.join("reliability-auto-state.json");
+    fs::write(&state, "fixture").unwrap();
+    let mut r = Model::new([true, false]);
+    r.mark_code = 1;
+    assert!(chain::close_civ6_with_paths(&mut r, &f.paths)
+        .unwrap_err()
+        .contains("cannot mark"));
+    assert!(!state.exists());
+    assert!(!r.running.iter().any(|alive| *alive));
+    assert!(!r
+        .calls
+        .iter()
+        .any(|(_, c)| c.args.get(1).is_some_and(|a| a == "--cursor")));
+}
+#[test]
+fn cleanup_only_restores_receipt_without_checkout_launch_or_touching_a_running_game() {
+    let f = Fixture::new(false);
+    let state = f.paths.here.join("reliability-auto-state.json");
+    fs::write(&state, "fixture").unwrap();
+    let mut r = Model::new([false, false]);
+    r.require_lock = Some(f.paths.here.join("civ6.lock"));
+    assert_eq!(
+        chain::cli(&mut r, &f.paths, &["--cleanup-only".into()]).unwrap(),
+        0
+    );
+    assert!(!state.exists());
+    assert!(!f.paths.here.join("civ6.lock").exists());
+    assert_eq!(r.count("taskkill"), 0);
+    assert!(!r
+        .calls
+        .iter()
+        .any(|(_, c)| c.args[0] == "git" || c.args[0].ends_with("ship.exe")));
+    let mut r = Model::new([true, false]);
+    assert!(chain::cli(&mut r, &f.paths, &["--cleanup-only".into()]).is_err());
+    assert_eq!(r.count("taskkill"), 0);
+    assert!(r.tuner_calls("lua").is_empty());
+    assert!(r.running[0]);
+    assert!(!f.paths.here.join("civ6.lock").exists());
 }
 
 #[test]

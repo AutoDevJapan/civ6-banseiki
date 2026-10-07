@@ -3,6 +3,47 @@
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, path::Path};
+/// Only Windows sharing/lock violations are retryable. Each retry revalidates
+/// the lease/game and recovery state, with one original deadline for all work.
+pub fn retry_recovery_with(
+    clock: &dyn crate::time::Clock,
+    seconds: f64,
+    mut check: impl FnMut() -> Result<()>,
+    mut recover: impl FnMut() -> Result<()>,
+) -> Result<()> {
+    if !seconds.is_finite() || seconds <= 0.0 {
+        return Err(Error::input(
+            "recovery retry budget must be finite and positive",
+        ));
+    }
+    let end = clock.now() + seconds;
+    let mut last_error = None;
+    loop {
+        if clock.now() >= end {
+            return Err(
+                last_error.unwrap_or_else(|| Error::input("autosave recovery deadline expired"))
+            );
+        }
+        check()?;
+        let result = recover();
+        match result {
+            Err(e)
+                if e.kind == crate::ErrorKind::Io
+                    && (e.message.contains("(os error 32)")
+                        || e.message.contains("(os error 33)")) =>
+            {
+                let left = end - clock.now();
+                if left <= 0.0 {
+                    return Err(e);
+                }
+                eprintln!("Autosave recovery sharing violation; waiting within the original deadline: {e}");
+                last_error = Some(e);
+                clock.sleep(left.min(0.25));
+            }
+            other => return other,
+        }
+    }
+}
 #[derive(Serialize, Deserialize)]
 struct State {
     original: std::path::PathBuf,
@@ -240,11 +281,36 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
                 "test autosave archive already exists; refusing overwrite",
             ));
         }
-        fs::rename(&s.original, &test)?;
+        fs::rename(&s.original, &test).map_err(|e| {
+            Error::new(
+                crate::ErrorKind::Io,
+                format!(
+                    "move test autosave folder {} to {}: {e}",
+                    s.original.display(),
+                    test.display()
+                ),
+            )
+        })?;
     }
     if s.existed {
         no_links(&backup)?;
-        fs::rename(&backup, &s.original)?;
+        fs::rename(&backup, &s.original).map_err(|e| {
+            Error::new(
+                crate::ErrorKind::Io,
+                format!(
+                    "restore original autosave folder {} to {}: {e}",
+                    backup.display(),
+                    s.original.display()
+                ),
+            )
+        })?;
+        if Some(digest(&s.original)?) != s.original_digest
+            || Some(identity(&s.original)?) != s.original_identity
+        {
+            return Err(Error::input(
+                "restored original autosave hash or identity differs; retaining recovery receipt",
+            ));
+        }
     }
     let mut phase = fs::OpenOptions::new().append(true).open(state)?;
     phase.write_all(b"{\"phase\":\"restored\"}\n")?;
@@ -256,6 +322,85 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(Default)]
+    struct RetryClock(std::sync::Mutex<f64>);
+    impl crate::time::Clock for RetryClock {
+        fn now(&self) -> f64 {
+            *self.0.lock().unwrap()
+        }
+        fn sleep(&self, n: f64) {
+            *self.0.lock().unwrap() += n;
+        }
+    }
+    #[test]
+    fn retry_recovers_transient_sharing_but_never_extends_deadline() {
+        use crate::time::Clock;
+        let clock = RetryClock::default();
+        let mut calls = 0;
+        let mut checks = 0;
+        retry_recovery_with(
+            &clock,
+            1.0,
+            || {
+                checks += 1;
+                Ok(())
+            },
+            || {
+                calls += 1;
+                if calls < 3 {
+                    Err(Error::new(crate::ErrorKind::Io, "locked (os error 32)"))
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(calls, 3);
+        assert_eq!(checks, 3);
+        assert_eq!(clock.now(), 0.5);
+        let clock = RetryClock::default();
+        let mut calls = 0;
+        assert!(retry_recovery_with(
+            &clock,
+            1.0,
+            || Ok(()),
+            || {
+                calls += 1;
+                Err(Error::new(crate::ErrorKind::Io, "locked (os error 33)"))
+            }
+        )
+        .is_err());
+        assert_eq!(clock.now(), 1.0);
+        assert_eq!(calls, 4);
+    }
+    #[test]
+    fn retry_stops_on_nonsharing_error_or_lost_lease() {
+        let clock = RetryClock::default();
+        let mut calls = 0;
+        assert!(retry_recovery_with(
+            &clock,
+            1.0,
+            || Ok(()),
+            || {
+                calls += 1;
+                Err(Error::new(crate::ErrorKind::Io, "denied (os error 5)"))
+            }
+        )
+        .is_err());
+        assert_eq!(calls, 1);
+        let mut calls = 0;
+        assert!(retry_recovery_with(
+            &clock,
+            1.0,
+            || Err(Error::input("lost lease")),
+            || {
+                calls += 1;
+                Ok(())
+            }
+        )
+        .is_err());
+        assert_eq!(calls, 0);
+    }
     #[test]
     fn original_identity_clears_leftover_receipt_after_restore_even_when_owner_data_changes() {
         let dir = tempfile::tempdir().unwrap();

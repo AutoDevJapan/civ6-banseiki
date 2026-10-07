@@ -18,72 +18,164 @@ pub enum SyncState {
     Offline,
 }
 
+/// Captured from one open handle; offsets alone cannot identify a log generation.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct LogCursor {
+    generation: Option<(u64, u64)>,
+    offset: u64,
+    prefix: Vec<u8>,
+    tail: Vec<u8>,
+}
+impl LogCursor {
+    pub fn mark(path: &Path) -> Result<Self> {
+        match File::open(path) {
+            Ok(mut file) => Self::capture(&mut file),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(e) => Err(e.into()),
+        }
+    }
+    fn capture(file: &mut File) -> Result<Self> {
+        let offset = file.metadata()?.len();
+        let prefix = read_at(file, 0, offset.min(256))?;
+        let tail = read_at(file, offset.saturating_sub(256), offset.min(256))?;
+        Ok(Self {
+            generation: Some(file_generation(file)?),
+            offset,
+            prefix,
+            tail,
+        })
+    }
+    fn validate(&self, file: &mut File) -> Result<u64> {
+        let len = file.metadata()?.len();
+        if self
+            .generation
+            .is_some_and(|id| file_generation(file).ok() != Some(id))
+            || len < self.offset
+            || read_at(file, 0, self.prefix.len() as u64)? != self.prefix
+            || read_at(
+                file,
+                self.offset.saturating_sub(self.tail.len() as u64),
+                self.tail.len() as u64,
+            )? != self.tail
+        {
+            return Err(Error::input(
+                "Steam log changed generation; re-mark required, no completion accepted",
+            ));
+        }
+        Ok(len)
+    }
+}
+fn read_at(file: &mut File, offset: u64, len: u64) -> Result<Vec<u8>> {
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    file.take(len).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 != len {
+        return Err(Error::input("Steam log shortened during observation"));
+    }
+    Ok(bytes)
+}
+#[cfg(windows)]
+fn file_generation(file: &File) -> Result<(u64, u64)> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok((
+        info.dwVolumeSerialNumber as u64,
+        ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+    ))
+}
+#[cfg(unix)]
+fn file_generation(file: &File) -> Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = file.metadata()?;
+    Ok((meta.dev(), meta.ino()))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExitMark {
+    pub cloud: LogCursor,
+    pub process: LogCursor,
+}
+impl ExitMark {
+    pub fn capture() -> Result<Self> {
+        let path = cloud_log();
+        Ok(Self {
+            cloud: LogCursor::mark(&path)?,
+            process: LogCursor::mark(&path.with_file_name("gameprocess_log.txt"))?,
+        })
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    Exit,
+    Prelaunch,
+    LaunchIssued,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SyncStatus {
+    Idle,
+    Pending,
+    Failed,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExitEvidence {
+    Waiting,
+    Failed,
+    SyncComplete,
+    ReleasedWithoutNewSyncRequest,
+}
+
 #[derive(Default, Debug)]
 pub struct Monitor {
     path: PathBuf,
-    offset: u64,
+    cursor: LogCursor,
     partial: String,
-    prefix: Vec<u8>,
-    prefix_initialized: bool,
+    discard_partial: bool,
     pub states: BTreeMap<u32, SyncState>,
     pub evidence: Vec<String>,
 }
 impl Monitor {
     pub fn new(path: PathBuf) -> Result<Self> {
-        let offset = match std::fs::metadata(&path) {
-            Ok(meta) => meta.len(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
-            Err(e) => return Err(e.into()),
-        };
-        Ok(Self {
-            prefix: read_prefix(&path, 256)?,
-            prefix_initialized: true,
-            path,
-            offset,
-            ..Self::default()
-        })
+        let cursor = LogCursor::mark(&path)?;
+        Ok(Self::from_cursor(path, cursor))
     }
     pub fn poll(&mut self) -> Result<()> {
         let mut file = match File::open(&self.path) {
             Ok(file) => file,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e)
+                if e.kind() == std::io::ErrorKind::NotFound && self.cursor.generation.is_none() =>
+            {
+                return Ok(())
+            }
             Err(e) => return Err(e.into()),
         };
-        let len = file.metadata()?.len();
-        let prefix = read_prefix(
-            &self.path,
-            if self.prefix_initialized {
-                self.prefix.len() as u64
-            } else {
-                256
-            },
-        )?;
-        if len < self.offset || (self.prefix_initialized && prefix != self.prefix) {
-            if self.pending() {
-                return Err(Error::input(
-                    "Steam cloud log rotated during pending sync; completion cannot be proven",
-                ));
-            }
-            self.offset = 0;
-            self.partial.clear();
-            self.states.clear();
-            self.evidence
-                .push("cloud_log rotated; observing new generation".into());
-            self.prefix = read_prefix(&self.path, 256)?;
-        } else if !self.prefix_initialized {
-            self.prefix = prefix;
-        }
-        self.prefix_initialized = true;
-        if len - self.offset > 4 * 1024 * 1024 {
+        let len = self.cursor.validate(&mut file)?;
+        if len - self.cursor.offset > 4 * 1024 * 1024 {
             return Err(Error::input(
                 "Steam cloud log grew beyond bounded observation; refusing to discard sync events",
             ));
         }
-        file.seek(SeekFrom::Start(self.offset))?;
-        let mut bytes = Vec::new();
-        file.take(len - self.offset).read_to_end(&mut bytes)?;
-        self.offset += bytes.len() as u64;
+        let bytes = read_at(&mut file, self.cursor.offset, len - self.cursor.offset)?;
+        self.cursor.validate(&mut file)?;
+        let mut cursor = self.cursor.clone();
+        cursor.generation = Some(file_generation(&file)?);
+        cursor.offset = len;
+        cursor.prefix = read_at(&mut file, 0, len.min(256))?;
+        cursor.tail = read_at(&mut file, len.saturating_sub(256), len.min(256))?;
+        self.cursor = cursor;
         self.partial.push_str(&String::from_utf8_lossy(&bytes));
+        if self.discard_partial {
+            let Some(end) = self.partial.find('\n') else {
+                return Ok(());
+            };
+            self.partial.drain(..=end);
+            self.discard_partial = false;
+        }
         if let Some(end) = self.partial.rfind('\n') {
             let lines = self.partial[..=end].to_owned();
             self.partial.drain(..=end);
@@ -91,10 +183,12 @@ impl Monitor {
         }
         Ok(())
     }
-    pub fn from_offset(path: PathBuf, offset: u64) -> Self {
+    pub fn from_cursor(path: PathBuf, cursor: LogCursor) -> Self {
+        let discard_partial = cursor.offset > 0 && cursor.tail.last() != Some(&b'\n');
         Self {
             path,
-            offset,
+            cursor,
+            discard_partial,
             ..Self::default()
         }
     }
@@ -118,17 +212,46 @@ impl Monitor {
             )
         })
     }
-}
-
-fn read_prefix(path: &Path, limit: u64) -> Result<Vec<u8>> {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e.into()),
-    };
-    let mut prefix = Vec::new();
-    file.take(limit).read_to_end(&mut prefix)?;
-    Ok(prefix)
+    pub fn status(&self) -> SyncStatus {
+        if self.failed() {
+            SyncStatus::Failed
+        } else if self.pending() {
+            SyncStatus::Pending
+        } else {
+            SyncStatus::Idle
+        }
+    }
+    pub fn for_stage(&self, stage: Stage, path: &Path) -> Result<SyncStatus> {
+        let status = self.status();
+        if status == SyncStatus::Failed && stage != Stage::LaunchIssued {
+            journal(
+                path,
+                if stage == Stage::Exit {
+                    "exit_sync_failed"
+                } else {
+                    "prelaunch_sync_failed"
+                },
+                self,
+            )?;
+            return Err(Error::input(
+                "Steam sync failed before launch; URI not sent; PC saves retained",
+            ));
+        }
+        Ok(status)
+    }
+    pub fn exit_evidence(&self, elapsed: f64, released: bool, game_absent: bool) -> ExitEvidence {
+        if self.failed() {
+            return ExitEvidence::Failed;
+        }
+        if self.pending() || elapsed < 10.0 {
+            return ExitEvidence::Waiting;
+        }
+        match self.states.get(&289070) {
+            Some(SyncState::Complete) => ExitEvidence::SyncComplete,
+            None if released && game_absent => ExitEvidence::ReleasedWithoutNewSyncRequest,
+            _ => ExitEvidence::Waiting,
+        }
+    }
 }
 
 pub fn classify(line: &str) -> Option<(u32, SyncState)> {
@@ -188,19 +311,28 @@ pub fn civ6_released(text: &str) -> bool {
     }
     released
 }
-pub fn fresh_release(offset: u64) -> Result<bool> {
+pub fn fresh_release(cursor: &LogCursor) -> Result<bool> {
     let path = cloud_log().with_file_name("gameprocess_log.txt");
+    fresh_release_at(&path, cursor)
+}
+fn fresh_release_at(path: &Path, cursor: &LogCursor) -> Result<bool> {
     let mut f = File::open(path)?;
-    let len = f.metadata()?.len();
-    if len < offset || len - offset > 1024 * 1024 {
+    let len = cursor.validate(&mut f)?;
+    if len - cursor.offset > 1024 * 1024 {
         return Err(Error::input(
             "Steam running-list log changed generation or exceeded the observation bound",
         ));
     }
-    f.seek(SeekFrom::Start(offset))?;
-    let mut bytes = Vec::new();
-    f.take(len - offset).read_to_end(&mut bytes)?;
-    Ok(civ6_released(&String::from_utf8_lossy(&bytes)))
+    let bytes = read_at(&mut f, cursor.offset, len - cursor.offset)?;
+    cursor.validate(&mut f)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let text = if cursor.offset > 0 && cursor.tail.last() != Some(&b'\n') {
+        text.split_once('\n').map_or("", |(_, tail)| tail)
+    } else {
+        &text
+    };
+    let complete = text.rfind('\n').map_or("", |end| &text[..=end]);
+    Ok(civ6_released(complete))
 }
 
 pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
@@ -211,7 +343,7 @@ pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
         .open(path)?;
     serde_json::to_writer(
         &mut file,
-        &serde_json::json!({"time":chrono::Utc::now(),"phase":phase,"cloud_log":monitor.path,"offset":monitor.offset,"states":monitor.states,"evidence":monitor.evidence}),
+        &serde_json::json!({"time":chrono::Utc::now(),"phase":phase,"cloud_log":monitor.path,"cursor":monitor.cursor,"states":monitor.states,"evidence":monitor.evidence}),
     )?;
     file.write_all(b"\n")?;
     file.sync_data()?;
@@ -221,6 +353,135 @@ pub fn journal(path: &Path, phase: &str, monitor: &Monitor) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stage_failures_are_journaled_and_only_issued_launch_can_recover() {
+        for failure in [
+            "Sync failed",
+            "Sync conflict detected",
+            "Cannot sync while offline",
+        ] {
+            for stage in [Stage::Exit, Stage::Prelaunch, Stage::LaunchIssued] {
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("journal");
+                let mut m = Monitor::default();
+                m.feed(&format!("[AppID 241100] {failure}\n"));
+                let result = m.for_stage(stage, &path);
+                if stage == Stage::LaunchIssued {
+                    assert_eq!(result.unwrap(), SyncStatus::Failed);
+                } else {
+                    assert!(result.unwrap_err().message.contains("URI not sent"));
+                    let v: serde_json::Value =
+                        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+                    assert_eq!(
+                        v["phase"],
+                        if stage == Stage::Exit {
+                            "exit_sync_failed"
+                        } else {
+                            "prelaunch_sync_failed"
+                        }
+                    );
+                    assert_eq!(v["evidence"][0], format!("[AppID 241100] {failure}"));
+                }
+            }
+        }
+    }
+    #[test]
+    fn controller_completion_requires_separate_civ6_evidence() {
+        let mut m = Monitor::default();
+        m.feed("[AppID 241100] Successfully synced\n");
+        assert_eq!(m.exit_evidence(12.0, false, true), ExitEvidence::Waiting);
+        assert_eq!(
+            m.exit_evidence(12.0, true, true),
+            ExitEvidence::ReleasedWithoutNewSyncRequest
+        );
+        assert_eq!(m.exit_evidence(9.0, true, true), ExitEvidence::Waiting);
+        assert_eq!(m.exit_evidence(12.0, true, false), ExitEvidence::Waiting);
+        m.feed("[AppID 289070] Starting sync\n");
+        assert_eq!(m.exit_evidence(12.0, true, true), ExitEvidence::Waiting);
+        m.feed("[AppID 289070] Successfully synced\n");
+        assert_eq!(
+            m.exit_evidence(12.0, true, true),
+            ExitEvidence::SyncComplete
+        );
+        for app in [289070, 241100] {
+            m.feed(&format!("[AppID {app}] Starting sync\n"));
+            assert_eq!(m.exit_evidence(12.0, true, true), ExitEvidence::Waiting);
+            m.feed(&format!("[AppID {app}] Sync failed\n"));
+            assert_eq!(m.exit_evidence(12.0, true, true), ExitEvidence::Failed);
+            m.feed(&format!("[AppID {app}] Successfully synced\n"));
+        }
+    }
+    #[test]
+    fn serialized_mark_rejects_exchange_before_first_poll_even_with_identical_prefix() {
+        for same_prefix in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("cloud");
+            let old = "old prefix padding\n".repeat(40);
+            std::fs::write(&path, &old).unwrap();
+            let cursor = LogCursor::mark(&path).unwrap();
+            let encoded = serde_json::to_string(&cursor).unwrap();
+            std::fs::rename(&path, dir.path().join("old")).unwrap();
+            let prefix = if same_prefix {
+                old.clone()
+            } else {
+                "new prefix padding\n".repeat(40)
+            };
+            std::fs::write(&path, prefix + "[AppID 289070] Successfully synced\n").unwrap();
+            let mut m = Monitor::from_cursor(path, serde_json::from_str(&encoded).unwrap());
+            assert!(m.poll().is_err());
+            assert!(m.states.is_empty());
+        }
+    }
+    #[test]
+    fn cursor_rejects_same_length_replacement_and_truncation() {
+        for replacement in ["same length\n", "short\n"] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("cloud");
+            std::fs::write(&path, "old content\n").unwrap();
+            let mut m = Monitor::new(path.clone()).unwrap();
+            std::fs::write(&path, replacement).unwrap();
+            assert!(m.poll().is_err());
+        }
+    }
+    #[test]
+    fn mark_inside_a_line_never_treats_old_partial_as_a_fresh_event() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cloud");
+        std::fs::write(&path, "old incomplete ").unwrap();
+        let mut m = Monitor::new(path.clone()).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(b"[AppID 289070] Successfully synced\n[AppID 289070] Starting ")
+            .unwrap();
+        m.poll().unwrap();
+        assert!(m.states.is_empty());
+        file.write_all(b"sync\n").unwrap();
+        m.poll().unwrap();
+        assert!(m.pending());
+    }
+    #[test]
+    fn process_mark_rejects_same_prefix_exchange_and_incomplete_release_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("process");
+        std::fs::write(&path, "original\n").unwrap();
+        let cursor = LogCursor::mark(&path).unwrap();
+        std::fs::rename(&path, dir.path().join("old")).unwrap();
+        std::fs::write(&path, "original\nRemove 289070 from running list\n").unwrap();
+        assert!(fresh_release_at(&path, &cursor).is_err());
+        use std::io::Write;
+        let cursor = LogCursor::mark(&path).unwrap();
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(b"Remove 289070 from running list").unwrap();
+        assert!(!fresh_release_at(&path, &cursor).unwrap());
+        file.write_all(b"\n").unwrap();
+        assert!(fresh_release_at(&path, &cursor).unwrap());
+    }
     #[test]
     fn running_list_release_requires_civ6_and_is_invalidated_by_a_new_process() {
         assert!(!civ6_released("[date] Remove 123 from running list"));

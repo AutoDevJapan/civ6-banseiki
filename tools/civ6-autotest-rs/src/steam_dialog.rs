@@ -17,6 +17,13 @@ pub struct Session {
     pub owner_floor: chrono::NaiveDateTime,
 }
 impl Session {
+    pub fn begin_if_running() -> Result<Option<Self>> {
+        let root = registered_root()?;
+        if !registered_running(&root)? {
+            return Ok(None);
+        }
+        Self::begin().map(Some)
+    }
     pub fn begin() -> Result<Self> {
         let root = registered_root()?;
         let offset = match std::fs::metadata(root.join("logs/console_log.txt")) {
@@ -123,7 +130,7 @@ pub fn console_proves(
     pending.len() == 1 && pending[0].0 == 289070
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 fn record(path: &Path, value: Value) -> Result<()> {
     use std::io::Write;
     let mut f = std::fs::OpenOptions::new()
@@ -134,6 +141,53 @@ fn record(path: &Path, value: Value) -> Result<()> {
     f.write_all(b"\n")?;
     f.sync_data()?;
     Ok(())
+}
+
+/// Stream replay history; Wait volume must not hide a dispatched selection.
+#[cfg(any(windows, test))]
+fn history(path: &Path, key: Option<&str>) -> Result<Option<Value>> {
+    use std::io::BufRead;
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let mut reader = std::io::BufReader::new(file);
+    let mut last = None;
+    loop {
+        let mut line = String::new();
+        let count = reader.by_ref().take(256 * 1024).read_line(&mut line)?;
+        if count == 0 {
+            return Ok(last);
+        }
+        if !line.ends_with('\n') {
+            return Err(Error::input("Steam warning journal is incomplete or record too large; refusing uncertain replay"));
+        }
+        let value: Value = serde_json::from_str(&line)?;
+        if key.is_some_and(|key| value["phase"] == "before" && value["key"] == key) {
+            return Err(Error::input(
+                "Steam warning action was already attempted; refusing replay",
+            ));
+        }
+        last = Some(value);
+    }
+}
+#[cfg(any(windows, test))]
+fn record_wait(path: &Path, event: Value) -> Result<()> {
+    let value = serde_json::json!({"phase":"wait","event":event});
+    if let Some(mut prior) = history(path, None)? {
+        prior["event"]
+            .as_object_mut()
+            .map(|event| event.remove("time"));
+        let mut comparable = value.clone();
+        comparable["event"]
+            .as_object_mut()
+            .map(|event| event.remove("time"));
+        if prior == comparable {
+            return Ok(());
+        }
+    }
+    record(path, value)
 }
 
 #[cfg(windows)]
@@ -343,6 +397,17 @@ mod win {
             .with_timezone(&chrono::Local)
             .naive_local();
         Ok((p.pid, p.started, floor))
+    }
+    pub fn registered_running(root: &Path) -> Result<bool> {
+        for (pid, _, name) in rows()? {
+            if name.eq_ignore_ascii_case("steam.exe") {
+                let pin = Pin::open(pid)?;
+                if location(&pin.image) == location(root.join("steam.exe")) {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
     }
     fn trusted(pid: u32, owner: &Pin, root: &Path, rows: &[(u32, u32, String)]) -> bool {
         if pid == owner.pid {
@@ -586,7 +651,7 @@ mod win {
         match action {
             Action::None => Ok(false),
             Action::Wait => {
-                record(journal, serde_json::json!({"phase":"wait","event":event}))?;
+                record_wait(journal, event)?;
                 Ok(true)
             }
             Action::Stop(reason) => {
@@ -602,30 +667,7 @@ mod win {
                 // Never resend a dispatched action, including after an unknown
                 // Invoke result or a journal failure after dispatch.
                 let key = format!("{}:{}:{}", window.hwnd, window.pid, window.pin.started);
-                let history = match std::fs::read_to_string(journal) {
-                    Ok(s) => s,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-                    Err(e) => return Err(e.into()),
-                };
-                if history.len() > 1024 * 1024 {
-                    return Err(Error::input(
-                        "Steam warning journal exceeds bounded replay check",
-                    ));
-                }
-                {
-                    for line in history.lines() {
-                        let v = serde_json::from_str::<Value>(line).map_err(|_| {
-                            Error::input(
-                                "Steam warning journal is incomplete; refusing uncertain replay",
-                            )
-                        })?;
-                        if v["phase"] == "before" && v["key"] == key {
-                            return Err(Error::input(
-                                "Steam warning action was already attempted; refusing replay",
-                            ));
-                        }
-                    }
-                }
+                history(journal, Some(&key))?;
                 record(
                     journal,
                     serde_json::json!({"phase":"before","key":key,"event":event}),
@@ -689,7 +731,11 @@ mod win {
 #[cfg(windows)]
 use win::identity as owner_identity;
 #[cfg(windows)]
-pub use win::{handle as handle_warning, probe, root as registered_root};
+pub use win::{handle as handle_warning, probe, registered_running, root as registered_root};
+#[cfg(not(windows))]
+fn registered_running(_: &Path) -> Result<bool> {
+    Ok(false)
+}
 #[cfg(not(windows))]
 pub fn registered_root() -> Result<PathBuf> {
     Err(Error::input("Steam warning recovery requires Windows"))
@@ -710,6 +756,37 @@ pub fn handle_warning(_: &Session, _: &Path) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn repeated_waits_do_not_fill_journal_or_erase_a_dispatched_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal");
+        for time in 0..2000 {
+            record_wait(
+                &path,
+                serde_json::json!({"time":time,"window":{"hwnd":1},"action":"Wait"}),
+            )
+            .unwrap();
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 1);
+        record(&path, serde_json::json!({"phase":"before","key":"1:2:3"})).unwrap();
+        assert!(history(&path, Some("1:2:3")).is_err());
+    }
+    #[test]
+    fn history_over_one_mib_still_detects_an_old_unknown_selection() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal");
+        record(&path, serde_json::json!({"phase":"before","key":"1:2:3"})).unwrap();
+        for i in 0..1100 {
+            record(
+                &path,
+                serde_json::json!({"phase":"wait","event":{"time":i,"body":"x".repeat(1024)}}),
+            )
+            .unwrap();
+        }
+        assert!(std::fs::metadata(&path).unwrap().len() > 1024 * 1024);
+        assert!(history(&path, Some("1:2:3")).is_err());
+        assert!(history(&path, Some("other")).is_ok());
+    }
     #[test]
     fn inherited_warning_uses_current_action_state_tied_to_steam_creation() {
         let floor =

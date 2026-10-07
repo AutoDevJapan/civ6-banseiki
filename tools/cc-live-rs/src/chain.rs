@@ -131,27 +131,80 @@ pub fn close_civ6(r: &mut impl Runner) -> Result<(), String> {
 
 /// The caller must hold the shared Civ6 lock for the entire close and wait.
 pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
-    let cloud_log = std::env::var_os("CIV6_STEAM_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("C:/Program Files (x86)/Steam"))
-        .join("logs/cloud_log.txt");
     let sync_tool = p.live().join("tools/target/release/civ6-steam-sync.exe");
     let source = p
         .live()
         .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
-    let offset = if source.is_file() {
-        match fs::metadata(&cloud_log) {
-            Ok(m) => Some(m.len()),
-            Err(e) if e.kind() == ErrorKind::NotFound => Some(0),
-            Err(e) => return Err(format!("cannot mark Steam sync before exit: {e}")),
+    let cursor = (|| -> Result<Option<String>, String> {
+        if source.is_file() && sync_tool.is_file() {
+            // Mark both files inside the native helper, before asking the game to exit.
+            let out = r.run(
+                Call::new(args(&[&path(&sync_tool), "--mark"]))
+                    .managed()
+                    .timeout(10.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "cannot mark Steam sync before exit: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+            let value: serde_json::Value = serde_json::from_str(out.stdout.trim())
+                .map_err(|e| format!("invalid Steam mark: {e}"))?;
+            if !value["cloud"].is_object() || !value["process"].is_object() {
+                return Err("Steam mark lacks generation cursors".into());
+            }
+            Ok(Some(out.stdout.trim().to_owned()))
+        } else {
+            Ok(None)
         }
-    } else {
-        None
-    };
-    let process_offset = fs::metadata(cloud_log.with_file_name("gameprocess_log.txt"))
-        .ok()
-        .map(|m| m.len());
+    })();
     let outcome = close_civ6_outcome(r, p)?;
+    r.print(&format!("CIV6_CLOSE outcome={outcome}"))?;
+    let sync_result = (|| -> Result<(), String> {
+        if outcome == "absent" {
+            return Ok(());
+        }
+        if source.is_file() {
+            let Some(cursor) = cursor? else {
+                return Err("Steam sync helper source exists but its executable is missing; game closed, refusing an unobserved sync".into());
+            };
+            let journal = p
+                .temp
+                .join(format!("civ6-steam-exit-{}.jsonl", std::process::id()));
+            let argv = args(&[
+                &path(sync_tool),
+                "--cursor",
+                &cursor,
+                "--journal",
+                &path(journal),
+            ]);
+            let out = r.run(
+                Call::new(argv)
+                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                    .managed()
+                    .timeout(50.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "Steam exit sync did not finish: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+        } else {
+            r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
+        }
+        Ok(())
+    })();
+    let restored = restore_autosaves(r, p);
+    match (sync_result, restored) {
+        (Ok(()), r) => r,
+        (Err(sync), Ok(())) => Err(sync),
+        (Err(sync), Err(recovery)) => Err(format!("{sync}; {recovery}")),
+    }
+}
+fn restore_autosaves(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
     let auto_state = p.here.join("reliability-auto-state.json");
     if auto_state.is_file() {
         let helper = p
@@ -176,42 +229,6 @@ pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), Strin
             ));
         }
         r.print("AUTOSAVE original folder restored; test autosaves retained with artifacts")?;
-    }
-    r.print(&format!("CIV6_CLOSE outcome={outcome}"))?;
-    if outcome != "absent" {
-        if let Some(offset) = offset {
-            if !sync_tool.is_file() {
-                return Err("Steam sync helper source exists but its executable is missing; game closed, refusing an unobserved sync".into());
-            }
-            let journal = p
-                .temp
-                .join(format!("civ6-steam-exit-{}.jsonl", std::process::id()));
-            let mut sync_args = args(&[
-                &path(sync_tool),
-                "--offset",
-                &offset.to_string(),
-                "--journal",
-                &path(journal),
-            ]);
-            if let Some(offset) = process_offset {
-                sync_args.extend(args(&["--process-offset", &offset.to_string()]));
-            }
-            let out = r.run(
-                Call::new(sync_args)
-                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
-                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
-                    .managed()
-                    .timeout(50.0),
-            )?;
-            if out.code != 0 {
-                return Err(format!(
-                    "Steam exit sync did not finish: {} {}",
-                    out.stdout, out.stderr
-                ));
-            }
-        } else {
-            r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
-        }
     }
     Ok(())
 }
@@ -1101,7 +1118,7 @@ impl<R: Runner> Runner for WithinDeadline<'_, R> {
     }
 }
 
-const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n-h, --help: show this help without acquiring the Civ6 lock.";
+const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n--cleanup-only: restore original autosaves under the shared lock; requires Civ6 absent, no checkout or launch.\n-h, --help: show this help without acquiring the Civ6 lock.";
 const CLEANUP_RESERVE_SECONDS: f64 = 240.0;
 #[derive(Default)]
 struct Options {
@@ -1110,6 +1127,7 @@ struct Options {
     stop: bool,
     reliability: bool,
     help: bool,
+    cleanup_only: bool,
 }
 impl Options {
     fn parse(a: &[String]) -> Result<Self, String> {
@@ -1120,6 +1138,7 @@ impl Options {
                 "--test-mode" => options.test_mode = true,
                 "--stop-on-failure" => options.stop = true,
                 "--reliability" => options.reliability = true,
+                "--cleanup-only" => options.cleanup_only = true,
                 _ if arg.starts_with('-') => return Err(format!("unknown argument: {arg}")),
                 _ => {
                     let (name, scenario) =
@@ -1138,7 +1157,15 @@ impl Options {
         if options.reliability && options.items.len() != 1 && !options.help {
             return Err("--reliability needs exactly one name:scenario.json".into());
         }
-        if options.items.is_empty() && !options.help {
+        if options.cleanup_only
+            && (!options.items.is_empty()
+                || options.reliability
+                || options.test_mode
+                || options.stop)
+        {
+            return Err("--cleanup-only takes no scenarios or other run flags".into());
+        }
+        if options.items.is_empty() && !options.help && !options.cleanup_only {
             return Err("at least one name:scenario.json is required; use --help for usage".into());
         }
         Ok(options)
@@ -1186,6 +1213,16 @@ fn main_owned(
     game_closed: &mut bool,
     cleanup_deadline: &mut Option<f64>,
 ) -> Result<i32, String> {
+    if options.cleanup_only {
+        if civ6_running(r)? {
+            return Err(
+                "cleanup-only requires a closed Civ6; refusing to close an unrelated game".into(),
+            );
+        }
+        restore_autosaves(r, p)?;
+        *game_closed = true;
+        return Ok(0);
+    }
     let mut first_failure = 0;
     for item in &options.items {
         *game_closed = false;
@@ -1654,7 +1691,13 @@ fn cli_once(
                 path.display()
             ));
         };
-        let closed = if game_closed {
+        let closed = if options.cleanup_only {
+            if game_closed {
+                Ok(())
+            } else {
+                Err("cleanup-only left the running game and saves untouched".into())
+            }
+        } else if game_closed {
             Ok(())
         } else {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match cleanup_deadline {
@@ -1670,7 +1713,7 @@ fn cli_once(
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
-        let restored = if game_closed {
+        let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 deployment::restore(r, p, &p.live())
             }))

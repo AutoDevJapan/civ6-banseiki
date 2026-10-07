@@ -1,3 +1,4 @@
+use crate::steam_sync::{ExitEvidence, Stage, SyncStatus};
 use crate::tuner::{state_available, state_name_eq, state_position};
 use crate::{
     judge, metrics, scenario,
@@ -20,8 +21,8 @@ pub trait Backend: Send {
     fn begin_steam_observation(&mut self, _journal: &Path) -> Result<()> {
         Ok(())
     }
-    fn steam_sync_pending(&mut self) -> Result<bool> {
-        Ok(false)
+    fn steam_sync_status(&mut self, _stage: Stage) -> Result<SyncStatus> {
+        Ok(SyncStatus::Idle)
     }
     fn steam_warning(&mut self, _journal: &Path) -> Result<bool> {
         Ok(false)
@@ -204,6 +205,8 @@ pub struct SystemBackend {
     steam_session: Option<crate::steam_dialog::Session>,
     steam_sync: Option<crate::steam_sync::Monitor>,
     steam_journal: Option<PathBuf>,
+    steam_exit_mark: Option<crate::steam_sync::LogCursor>,
+    steam_exit_wait_at: Option<std::time::Instant>,
     client: Option<crate::tuner::TunerClient>,
     startup_lease: Option<crate::startup::RecoveryLease>,
     launch_floor: Option<f64>,
@@ -216,19 +219,33 @@ impl Backend for SystemBackend {
         crate::steam_sync::journal(journal, "begin", &monitor)?;
         self.steam_sync = Some(monitor);
         self.steam_journal = Some(journal.to_owned());
-        self.steam_session = Some(crate::steam_dialog::Session::begin()?);
+        self.steam_exit_mark = Some(crate::steam_sync::LogCursor::mark(
+            &crate::steam_sync::cloud_log().with_file_name("gameprocess_log.txt"),
+        )?);
+        self.steam_exit_wait_at = None;
+        self.steam_session = crate::steam_dialog::Session::begin_if_running()?;
         Ok(())
     }
     fn steam_warning(&mut self, journal: &Path) -> Result<bool> {
+        if self.steam_session.is_none() {
+            self.steam_session = crate::steam_dialog::Session::begin_if_running()?;
+        }
         match &self.steam_session {
             Some(s) => crate::steam_dialog::handle_warning(s, journal),
             None => Ok(false),
         }
     }
-    fn steam_sync_pending(&mut self) -> Result<bool> {
+    fn steam_sync_status(&mut self, stage: Stage) -> Result<SyncStatus> {
         if let Some(monitor) = &mut self.steam_sync {
             let before = monitor.evidence.len();
-            monitor.poll()?;
+            if let Err(e) = monitor.poll() {
+                crate::steam_sync::journal(
+                    self.steam_journal.as_ref().unwrap(),
+                    "observation_invalid",
+                    monitor,
+                )?;
+                return Err(e);
+            }
             if before != monitor.evidence.len() {
                 crate::steam_sync::journal(
                     self.steam_journal.as_ref().unwrap(),
@@ -236,9 +253,29 @@ impl Backend for SystemBackend {
                     monitor,
                 )?;
             }
-            return Ok(monitor.pending());
+            let status = monitor.for_stage(stage, self.steam_journal.as_ref().unwrap())?;
+            if stage == Stage::Exit {
+                let released =
+                    crate::steam_sync::fresh_release(self.steam_exit_mark.as_ref().unwrap())?;
+                let absent = crate::restart::single_civ_process(0.0)?.is_none();
+                let elapsed = self
+                    .steam_exit_wait_at
+                    .get_or_insert_with(std::time::Instant::now)
+                    .elapsed()
+                    .as_secs_f64();
+                let evidence = monitor.exit_evidence(elapsed, released, absent);
+                let phase = match evidence {
+                    ExitEvidence::SyncComplete if absent => "exit_sync_complete",
+                    ExitEvidence::ReleasedWithoutNewSyncRequest => {
+                        "steam_released_without_new_sync_request"
+                    }
+                    _ => return Ok(SyncStatus::Pending),
+                };
+                crate::steam_sync::journal(self.steam_journal.as_ref().unwrap(), phase, monitor)?;
+            }
+            return Ok(status);
         }
-        Ok(false)
+        Ok(SyncStatus::Idle)
     }
     fn pin_startup_process(&mut self, hwnd: isize) -> Result<Option<crate::startup::GameProcess>> {
         let floor = self
@@ -1107,6 +1144,8 @@ impl Runner {
         Err(Error::scenario(format!("Main menu did not become ready after {timeout}s (Civ6 may be stuck while starting; check FireTuner is enabled and the game reached the main menu); last: {last}")))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
+        self.backend
+            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
         self.launch_startup_and_wait(deadline, false, false, &mut StartupAttempt::default())
     }
     fn launch_startup_and_wait(
@@ -1117,15 +1156,24 @@ impl Runner {
         startup: &mut StartupAttempt,
     ) -> Result<()> {
         let mut attempts = 0;
-        let mut next_launch = 0.0;
         let mut last = "no Civ VI process yet".to_string();
         while self.clock.now() < deadline {
             self.backend.startup_cancel_check()?;
             if recovery {
                 self.backend.check_startup_lock()?;
             }
-            let now = self.clock.now();
-            let syncing = self.backend.steam_sync_pending()?;
+            let stage = if attempts == 0 {
+                Stage::Prelaunch
+            } else {
+                Stage::LaunchIssued
+            };
+            let status = self.backend.steam_sync_status(stage)?;
+            if status == SyncStatus::Failed && stage != Stage::LaunchIssued {
+                return Err(Error::input(
+                    "Steam sync failed before launch; URI not sent",
+                ));
+            }
+            let syncing = status == SyncStatus::Pending;
             let present = match self.backend.single_process(0.0) {
                 Ok(v) => v.is_some(),
                 Err(e)
@@ -1142,10 +1190,7 @@ impl Runner {
             } else {
                 false
             };
-            if warning {
-                next_launch = now + 45.0;
-            }
-            if !present && !syncing && !warning && now >= next_launch && attempts < 4 {
+            if !present && !syncing && !warning && attempts == 0 {
                 let closed = self.backend.close_orphaned_reporters()?;
                 if !closed.is_empty() {
                     println!("Closed helpers from failed launch: {closed:?}");
@@ -1169,7 +1214,6 @@ impl Runner {
                 self.backend.launch()?;
                 startup.launch_requested = true;
                 attempts += 1;
-                next_launch = now + 45.0;
                 println!("Steam Civ VI launch attempt {attempts}");
             }
             match self
@@ -1437,7 +1481,14 @@ impl Runner {
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
-            while self.backend.steam_sync_pending()? {
+            loop {
+                match self.backend.steam_sync_status(Stage::Exit)? {
+                    SyncStatus::Idle => break,
+                    SyncStatus::Failed => {
+                        return Err(Error::input("Steam exit sync failed; URI not sent"))
+                    }
+                    SyncStatus::Pending => {}
+                }
                 self.remaining(deadline)?;
                 self.sleep_until(deadline, 0.5);
             }
