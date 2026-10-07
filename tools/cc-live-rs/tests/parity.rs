@@ -2487,7 +2487,7 @@ fn cancelled_build_child() {
     let marker = PathBuf::from(marker);
     match role.as_str() {
         "child" => {
-            Command::new(std::env::current_exe().unwrap())
+            let mut child = Command::new(std::env::current_exe().unwrap())
                 .args(["--ignored", "--exact", "cancelled_build_child"])
                 .env("CC_LIVE_TEST_BUILD_ROLE", "grandchild")
                 .creation_flags(CREATE_NO_WINDOW)
@@ -2496,6 +2496,9 @@ fn cancelled_build_child() {
                 .stderr(Stdio::null())
                 .spawn()
                 .unwrap();
+            // Reap normally if cancellation never arrives; the managed job owns both.
+            child.wait().unwrap();
+            return;
         }
         "grandchild" => {
             let pending = marker.with_extension("tmp");
