@@ -26,7 +26,8 @@ ExposedMembers.JAC_LeaderPersonaNativeRead = function(owner, leader)
         result.established = governor:IsEstablished();
         result.neutralized = governor:GetNeutralizedTurns();
         result.base = governor:HasPromotion(GameInfo.GovernorPromotions[row.BasePromotionType].Hash);
-        local cost = Game:GetProperty("JAC_PERSONA_" .. leader .. "_EVOLUTION_COST") or row.EvolutionCost;
+        local cost = JAC_PersonaTreeRules.EvolutionCost(leader);
+        if not cost then return nil; end
         result.surchargePaid = 0;
         for step = 1, cost - 1 do
             local payment = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
@@ -78,7 +79,8 @@ function JAC_AppointLeader(leader)
     local native = JAC_PersonaTreeRules.NativeGovernor(owner, leader);
     if not native then return false; end
     local surcharge = Get(leader, "EVOLUTION_SURCHARGE");
-    if type(surcharge) ~= "number" or surcharge < 0 then return false; end
+    local cost = JAC_PersonaTreeRules.EvolutionCost(leader);
+    if not cost or surcharge ~= cost - 1 then return false; end
     local stage = not native.appointed and "APPOINT" or
         (native.surchargePaid == surcharge and "FINALIZE" or
          "PROMOTE_" .. tostring(native.surchargePaid));
@@ -154,16 +156,16 @@ function JAC_RefreshPersonas()
             view.Name:SetText(Locale.Lookup(Get(leader, "NAME")));
             view.Status:SetText(Locale.Lookup("LOC_JAC_PERSONA_STATE_" .. state));
             view.Evolve:SetHide(state == "GOVERNOR");
-            local cost = Get(leader, "EVOLUTION_COST") or row.EvolutionCost;
+            local cost = JAC_PersonaTreeRules.EvolutionCost(leader);
             local governors = Players[owner]:GetGovernors();
             local available = math.max(0, governors:GetGovernorPoints() - governors:GetGovernorPointsSpent() -
                 JAC_PersonaTreeRules.ReservedAppointments(owner));
             local native = state == "GREAT_PERSON" and JAC_PersonaTreeRules.NativeGovernor(owner, leader);
             local noTitle = state == "GREAT_PERSON" and
-                (available < cost or not native or native.appointed);
-            view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost));
+                (not cost or available < cost or not native or native.appointed);
+            view.Evolve:SetText(Locale.Lookup("LOC_JAC_PERSONA_EVOLVE_COST", cost or "?"));
             view.Evolve:SetDisabled(not Active() or noTitle or state == "EVOLVING");
-            view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost, available));
+            view.Evolve:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_COST_HELP", cost or "?", available));
             view.Name:SetToolTipString(Locale.Lookup("LOC_JAC_PERSONA_PERSONALITY_" .. Get(leader, "PERSONALITY")) ..
                 " / " .. Locale.Lookup("LOC_JAC_PERSONA_TRAIT_" .. Get(leader, "TRAIT")));
             view.Evolve:RegisterCallback(Mouse.eLClick, function() JAC_EvolveLeader(leader); end);

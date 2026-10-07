@@ -171,7 +171,7 @@ fn invalid_saved_surcharge_rejects_even_after_full_native_payment() {
 }
 
 #[test]
-fn saved_cost_must_match_current_valid_definition_before_gameplay_read() {
+fn saved_cost_must_match_independent_joining_contract_before_gameplay_read() {
     for cost in 1..=3 {
         for bad in ["nil", "0", "-1", "'2'", "1.5", "4", "false", "0/0"] {
             let lua = scene(cost);
@@ -267,7 +267,7 @@ fn cost_one_requires_explicit_zero_and_recovery_finishes_once() {
 }
 
 #[test]
-fn wrong_owner_and_changed_definition_do_not_consume_person() {
+fn wrong_owner_is_rejected_and_price_only_change_keeps_joining_price() {
     let lua = scene(2);
     exec(
         &lua,
@@ -276,11 +276,73 @@ fn wrong_owner_and_changed_definition_do_not_consume_person() {
         finalize(1); retain(2)
         assert(Players[1]:GetProperty('JAC_PERSONA_RESULT')=='NOT_OWNED')
         ROW.EvolutionCost=3
-        finalize(); retain(2)
-        ROW.EvolutionCost=2
         finalize(); completed()
     "#,
     );
+}
+
+#[test]
+fn price_only_updates_preserve_the_ui_payment_prefix_across_reload() {
+    for cost in 1..=3 {
+        for new_price in (1..=3).filter(|price| *price != cost) {
+            let lua = scene(cost);
+            exec(
+                &lua,
+                &format!(
+                    r#"
+                ROW.EvolutionCost={new_price}
+                Game:SetProperty(KEY..'MERIT',37)
+                Game:SetProperty(KEY..'NODE_PRESERVED',1)
+                RESET_CONTEXTS()
+                assert(loadstring(GAMEPLAY_SOURCE))()
+                assert(ExposedMembers.JAC_LeaderPersona.EvolutionCost(LEADER)==COST)
+            "#
+                ),
+            );
+            lua.load(read_repo(
+                "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
+            ))
+            .exec()
+            .unwrap();
+            exec(
+                &lua,
+                r#"
+                retain(1)
+                for step=1,COST-1 do
+                    assert(JAC_AppointLeader(LEADER),'saved UI payment step was refused')
+                    assert(#REQUESTS==1 and REQUESTS[1].op==PlayerOperations.PROMOTE_GOVERNOR)
+                    assert(REQUESTS[1].params.promotion==GameInfo.GovernorPromotions[ROW.BasePromotionType..'_TITLE_'..step].Index)
+                    assert(deliver() and #REQUESTS==0)
+                    retain(step+1)
+                end
+                assert(JAC_AppointLeader(LEADER) and deliver())
+                completed()
+                assert(Game:GetProperty(KEY..'MERIT')==37 and Game:GetProperty(KEY..'NODE_PRESERVED')==1)
+                local def=GameInfo.Governors[ROW.GovernorType]
+                assert(Players[2]:GetProperty(901000+def.Index)==true,'saved appointment eligibility missing')
+                assert(Players[2]:GetProperty(905000+def.Index)==true,'saved placement eligibility missing')
+                assert(Players[1]:GetProperty(905000+def.Index)==false,'other owner inherited payment')
+                -- Assign through the shipped UI operation, then model native
+                -- establishment. A repriced saved person still earns one deed.
+                JAC_AssignLeader(LEADER,21); assert(deliver())
+                local gov=Players[2]:GetGovernors():GetGovernor(def.Hash)
+                gov.established=true; Players[2].human=true
+                GameInfo.JAC_PersonaTreeNodes=collection({},'NodeType')
+                GameInfo.JAC_PersonaTreePeople={[LEADER]={MeritProfile='MILITARY'}}
+                GameInfo.JAC_PersonaMeritRules={MILITARY={GOVERN_TURN=2}}
+                TURN=TURN+1
+                ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(2)
+                assert(Game:GetProperty(KEY..'MERIT')==39,'repricing stopped merit acquisition')
+                ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(2)
+                assert(Game:GetProperty(KEY..'MERIT')==39,'replayed turn duplicated merit')
+                ROW.EvolutionCost=COST
+                ExposedMembers.JAC_LeaderPersona.Reconcile()
+                assert(#REQUESTS==0 and DESTROYS==1 and Players[2].spent==COST)
+                assert(Game:GetProperty(KEY..'MERIT')==39)
+            "#,
+            );
+        }
+    }
 }
 
 #[test]

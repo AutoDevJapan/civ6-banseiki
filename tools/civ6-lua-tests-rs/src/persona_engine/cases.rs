@@ -9,7 +9,9 @@ function CASES.test_missing_native_reader_never_creates_or_removes_a_person()
  Game:SetProperty(key,before)
  join(); grant_titles(0,DATE); api.PrepareEvolution(0,DATE); NEWGOV(0,DATE)
  local paid=Game:GetProperty(key); Game:SetProperty(key,nil)
- eq('APPOINTMENT_PENDING',api.CompleteEvolution(0,DATE)); eq('EVOLVING',prop('STATE')); eq(0,DESTROYS)
+ -- Removing the whole store also removes the independent joining contract.
+ -- The receipt guard must stop before any native read or Great Person removal.
+ eq('TITLE_PAYMENT_PENDING',api.CompleteEvolution(0,DATE)); eq('EVOLVING',prop('STATE')); eq(0,DESTROYS)
  Game:SetProperty(key,paid)
  eq('EVOLVED',api.CompleteEvolution(0,DATE)); eq(2,Players[0].spent)
 end

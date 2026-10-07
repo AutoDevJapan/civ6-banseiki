@@ -188,6 +188,13 @@ fn persona_inventory_preserves_all_119_original_methods() {
         if file.ends_with("persona_boundary.rs") {
             assert!(actual.remove("persistent_gameplay_api_probe_only_records_published_members"));
         }
+        if file == "tools/civ6-data-rs/tests/persona.rs" {
+            // Register the price-update regression separately. The original
+            // 119-method correspondence and digest remain exact and unchanged.
+            assert!(
+                actual.remove("repricing_personas_keeps_the_original_official_payment_definitions")
+            );
+        }
         let expected: BTreeSet<String> = expected.into_iter().map(str::to_owned).collect();
         assert_eq!(actual, expected, "{}", source.display());
     }

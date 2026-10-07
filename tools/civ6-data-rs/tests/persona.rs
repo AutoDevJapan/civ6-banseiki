@@ -229,9 +229,9 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
     for person in rows(&people) {
         let governor = person[0].as_str().unwrap();
         let base = person[1].as_str().unwrap();
-        let cost = person[2].as_i64().unwrap();
+        let capacity = 3;
         let expected = std::iter::once(json!([base]))
-            .chain((1..cost).map(|step| json!([format!("{base}_TITLE_{step}")])))
+            .chain((1..capacity).map(|step| json!([format!("{base}_TITLE_{step}")])))
             .collect::<Vec<_>>();
         assert_eq!(
             query(
@@ -251,7 +251,7 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
             json!([[1, 0]]),
             "{base}"
         );
-        for step in 1..cost {
+        for step in 1..capacity {
             let payment = format!("{base}_TITLE_{step}");
             let prerequisite = if step == 1 {
                 base.to_owned()
@@ -265,10 +265,7 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
     }
     assert_eq!(
         count(&db, "SELECT COUNT(*) FROM JAC_PersonaTitlePayments"),
-        rows(&people)
-            .iter()
-            .map(|person| person[2].as_i64().unwrap() - 1)
-            .sum::<i64>()
+        2 * rows(&people).len() as i64
     );
     let leaders = q(
         &db,
@@ -380,6 +377,74 @@ fn test_native_bases_and_cost_only_payment_promotions_are_registered() {
             amount,
             "{modifier}"
         );
+    }
+}
+
+#[test]
+fn repricing_personas_keeps_the_original_official_payment_definitions() {
+    let legacy = open_snapshot(&fixture().before);
+    legacy
+        .execute_batch(include_str!(
+            "../../civ6-lua-tests-rs/fixtures/persona/persona-d21.sql"
+        ))
+        .unwrap();
+    let original = q(&legacy, "SELECT p.rowid-1,t.Hash,p.GovernorPromotionType,p.BaseAbility,p.Level FROM GovernorPromotions p JOIN Types t ON t.Type=p.GovernorPromotionType ORDER BY p.rowid");
+    let mut expected = None;
+    for new_price in 1..=3 {
+        let db = open_snapshot(&fixture().before);
+        let sql = Repository::checked_in()
+            .read(format!("{MOD}/Data/JAC_LeaderPersona.sql"))
+            .unwrap()
+            .replace(
+                "('BASE_TITLES', 1)",
+                &format!("('BASE_TITLES', {new_price})"),
+            )
+            .replace("('FAME_TITLE_WEIGHT', 1)", "('FAME_TITLE_WEIGHT', 0)")
+            .replace(
+                "('YOUTH_TITLE_SURCHARGE', 1)",
+                "('YOUTH_TITLE_SURCHARGE', 0)",
+            )
+            .replace(
+                "('REPRESENTATIVE_TITLE_SURCHARGE', 1)",
+                "('REPRESENTATIVE_TITLE_SURCHARGE', 0)",
+            );
+        db.execute_batch(&sql).unwrap();
+        assert_eq!(
+            q(&db, "SELECT DISTINCT EvolutionCost FROM JAC_LeaderPersonas"),
+            json!([[new_price]])
+        );
+        let definitions=q(&db,"SELECT p.rowid-1,t.Hash,p.GovernorPromotionType,p.BaseAbility,p.Level FROM GovernorPromotions p JOIN Types t ON t.Type=p.GovernorPromotionType ORDER BY p.rowid");
+        for definition in rows(&original) {
+            assert!(
+                rows(&definitions).contains(definition),
+                "d21 promotion Index/Hash changed: {definition}"
+            );
+        }
+        if let Some(prior) = &expected {
+            assert_eq!(
+                prior, &definitions,
+                "prices must not change payment definitions"
+            );
+        } else {
+            expected = Some(definitions);
+        }
+        let people = q(&db, "SELECT BasePromotionType,3 FROM JAC_LeaderPersonas");
+        for person in rows(&people) {
+            let base = person[0].as_str().unwrap();
+            let original = person[1].as_i64().unwrap();
+            for step in 1..original {
+                let payment = format!("{base}_TITLE_{step}");
+                assert_eq!(
+                    query(
+                        &db,
+                        "SELECT BaseAbility FROM GovernorPromotions WHERE GovernorPromotionType=?",
+                        params![payment]
+                    ),
+                    json!([[0]])
+                );
+                assert_eq!(query(&db,"SELECT ModifierId FROM GovernorPromotionModifiers WHERE GovernorPromotionType=?",params![payment]),json!([]));
+            }
+        }
     }
 }
 
