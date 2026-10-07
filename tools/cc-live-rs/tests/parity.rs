@@ -147,6 +147,59 @@ fn is_tuner(c: &Call) -> bool {
     })
 }
 
+const RUNNING_CIV6: &str = "\"CivilizationVI.exe\",\"11\"";
+const TUNER_STATES: &str = "Civilization VI\n0: FrontEnd\n1: InGame\n";
+const QUIT_LUA: &str = "Events.UserConfirmedClose()\nreturn true";
+
+fn normal_close() -> Fake {
+    Fake::outputs(&[
+        (RUNNING_CIV6, "", 0),
+        (TUNER_STATES, "", 0),
+        ("", "", 0), // Official quit event.
+        ("", "", 0), // DX11 disappeared.
+        ("", "", 0), // DX12 disappeared.
+        ("", "", 0), // Scoped reporter cleanup.
+    ])
+}
+
+fn assert_normal_closes(calls: &[Call], expected: usize) {
+    let quits: Vec<_> = calls
+        .iter()
+        .enumerate()
+        .filter(|(_, call)| is_tuner(call) && call.args.get(1).is_some_and(|arg| arg == "lua"))
+        .collect();
+    assert_eq!(quits.len(), expected);
+    assert!(!calls.iter().any(|call| call.args[0] == "taskkill"));
+    for (index, quit) in quits {
+        assert!(is_tuner(&calls[index - 1]));
+        assert_eq!(calls[index - 1].args[1], "states");
+        assert_eq!(
+            &quit.args[1..],
+            &args(&["lua", "--state", "FrontEnd", "--code", QUIT_LUA])
+        );
+        let observations: Vec<_> = calls[index + 1..]
+            .iter()
+            .take_while(|call| call.args[0] != "powershell")
+            .collect();
+        assert!(
+            observations.len() >= 2,
+            "verify both renderers before reporter cleanup"
+        );
+        assert!(observations.iter().all(|call| call.args[0] == "tasklist"));
+        let final_queries = &observations[observations.len() - 2..];
+        assert_eq!(final_queries[0].args[2], "IMAGENAME eq CivilizationVI.exe");
+        assert_eq!(
+            final_queries[1].args[2],
+            "IMAGENAME eq CivilizationVI_DX12.exe"
+        );
+        let reporter = &calls[index + 1 + observations.len()];
+        assert_eq!(
+            reporter.args,
+            args(&["powershell", "-NoProfile", "-Command", REPORTER_COMMAND])
+        );
+    }
+}
+
 // The six original Python unittest methods retain their names and all subcases.
 #[test]
 fn test_detection_accepts_either_renderer_and_not_similar_names() {
@@ -181,50 +234,82 @@ fn test_enumeration_failure_is_not_reported_as_absent() {
 }
 #[test]
 fn test_cleanup_kills_both_renderers_before_scoped_reporter_cleanup() {
-    let mut r = Fake::success();
-    close_civ6(&mut r).unwrap();
+    let f = Fixture::new();
+    let mut r = Fake::outputs(&[
+        (RUNNING_CIV6, "", 0),
+        ("", "tuner unavailable", 1),
+        (RUNNING_CIV6, "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+        ("", "", 0),
+    ]);
+    close_civ6_with_paths(&mut r, &f.p).unwrap();
+    assert!(is_tuner(&r.calls[1]));
+    assert_eq!(r.calls[1].args[1], "states");
     assert_eq!(
-        r.calls[0].args,
+        r.calls[2].args[0], "tasklist",
+        "recheck before force-killing"
+    );
+    assert_eq!(
+        r.calls[3].args,
         args(&["taskkill", "/IM", "CivilizationVI.exe", "/F"])
     );
     assert_eq!(
-        r.calls[1].args,
+        r.calls[4].args,
         args(&["taskkill", "/IM", "CivilizationVI_DX12.exe", "/F"])
     );
+    assert_eq!(r.calls[5].args[0], "tasklist");
+    assert_eq!(r.calls[6].args[0], "tasklist");
     assert_eq!(
-        r.calls.last().unwrap().args,
+        r.calls[7].args,
         args(&["powershell", "-NoProfile", "-Command", REPORTER_COMMAND])
     );
-    assert_eq!(r.calls.len(), 5);
-}
-#[test]
-fn test_failed_termination_stops_before_reporter_cleanup() {
-    let mut r = Fake::outputs(&[
-        ("", "access denied", 1),
-        ("", "access denied", 1),
-        ("\"CivilizationVI.exe\",\"11\"", "", 0),
-    ]);
-    r.times = VecDeque::from([0.0, 15.0]);
-    assert!(close_civ6(&mut r)
-        .unwrap_err()
-        .contains("refusing to continue"));
-    assert_eq!(r.calls.len(), 3);
+    assert_eq!(r.calls.len(), 8);
     assert!(r.sleeps.is_empty());
 }
 #[test]
-fn test_termination_waits_for_a_process_to_disappear() {
+fn test_failed_termination_stops_before_reporter_cleanup() {
+    let f = Fixture::new();
     let mut r = Fake::outputs(&[
+        (RUNNING_CIV6, "", 0),
+        ("", "tuner unavailable", 1),
+        (RUNNING_CIV6, "", 0),
+        ("", "access denied", 1),
+        ("", "access denied", 1),
+    ]);
+    r.replies
+        .extend(Fake::outputs(&[(RUNNING_CIV6, "", 0); 30]).replies);
+    assert!(close_civ6_with_paths(&mut r, &f.p)
+        .unwrap_err()
+        .contains("refusing to continue"));
+    assert_eq!(
+        r.calls
+            .iter()
+            .filter(|call| call.args[0] == "taskkill")
+            .count(),
+        2
+    );
+    assert!(!r.calls.iter().any(|call| call.args[0] == "powershell"));
+    assert_eq!(r.sleeps, vec![0.5; 30]);
+    assert_eq!(r.time, 15.0);
+}
+#[test]
+fn test_termination_waits_for_a_process_to_disappear() {
+    let f = Fixture::new();
+    let mut r = Fake::outputs(&[
+        (RUNNING_CIV6, "", 0),
+        (TUNER_STATES, "", 0),
         ("", "", 0),
-        ("", "", 0),
-        ("\"CivilizationVI.exe\",\"11\"", "", 0),
+        (RUNNING_CIV6, "", 0),
         ("", "", 0),
         ("", "", 0),
         ("", "", 0),
     ]);
-    r.times = VecDeque::from([0.0, 1.0]);
-    close_civ6(&mut r).unwrap();
+    close_civ6_with_paths(&mut r, &f.p).unwrap();
     assert_eq!(r.sleeps, vec![0.5]);
-    assert_eq!(r.calls.last().unwrap().args[0], "powershell");
+    assert_normal_closes(&r.calls, 1);
 }
 #[test]
 fn test_absent_game_avoids_tuner_and_kill() {
@@ -256,24 +341,28 @@ fn reporter_failure_aborts() {
 #[test]
 fn answering_game_is_still_closed_before_relaunch() {
     let f = Fixture::new();
-    let mut r = Fake::outputs(&[("\"CivilizationVI.exe\",\"11\"", "", 0)]);
-    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
-    assert!(is_tuner(&r.calls[1]));
-    assert_eq!(r.calls[2].args[0], "taskkill");
-    assert_eq!(r.sleeps, vec![45.0]);
+    let mut r = normal_close();
+    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "closed");
+    assert_normal_closes(&r.calls, 1);
+    assert!(r.sleeps.is_empty(), "no fixed 45-second delay after exit");
 }
 #[test]
-fn unresponsive_game_retries_tuner_three_times() {
+fn unresponsive_game_tries_tuner_once_before_forced_shutdown() {
     let f = Fixture::new();
     let mut r = Fake::outputs(&[
-        ("\"CivilizationVI.exe\",\"11\"", "", 0),
-        ("", "", 1),
-        ("", "", 1),
-        ("", "", 1),
+        (RUNNING_CIV6, "", 0),
+        ("", "unresponsive tuner", 1),
+        (RUNNING_CIV6, "", 0),
     ]);
-    ensure_responsive_civ6(&mut r, &f.p).unwrap();
-    assert_eq!(r.calls.iter().filter(|c| is_tuner(c)).count(), 3);
-    assert_eq!(r.sleeps, vec![10.0, 10.0, 10.0, 45.0]);
+    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
+    assert_eq!(r.calls.iter().filter(|c| is_tuner(c)).count(), 1);
+    assert_eq!(r.calls[2].args[0], "tasklist");
+    assert_eq!(r.calls[3].args[0], "taskkill");
+    assert_eq!(r.calls[4].args[0], "taskkill");
+    assert!(
+        r.sleeps.is_empty(),
+        "no probe retries or fixed post-exit delay"
+    );
 }
 #[test]
 fn long_run_boundaries() {
@@ -992,7 +1081,7 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
     }
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
-            if c.args[0] == "taskkill" {
+            if is_tuner(&c) && c.args[1] == "lua" {
                 // The verified DELETE handle stays open while cleanup runs.
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
@@ -1047,21 +1136,22 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
     }
     let f = Fixture::new();
     let mut r = Blocked {
-        fake: Fake::success(),
+        fake: running_before_prepare(),
         lock: f.p.here.join("civ6.lock"),
         ready: f.root.join("reader-ready"),
         release: f.root.join("reader-release"),
         child: None,
     };
     assert_eq!(failed_prepare_cli(&mut r, &f.p).unwrap(), 1);
+    assert_normal_closes(&r.fake.calls, 1);
     assert_eq!(r.fake.sleeps, vec![0.05]);
     assert_eq!(
         r.fake
             .calls
             .iter()
-            .filter(|c| c.args[0] == "taskkill")
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count(),
-        2
+        1
     );
     assert!(!r.lock.exists());
 }
@@ -1106,7 +1196,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     let f = Fixture::new();
     let peer = json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"peer-token"});
     let mut r = Swapped {
-        fake: Fake::success(),
+        fake: running_before_prepare(),
         lock: f.p.here.join("civ6.lock"),
         blocker: None,
         peer: peer.clone(),
@@ -1121,11 +1211,12 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
         r.fake
             .calls
             .iter()
-            .filter(|c| c.args[0] == "taskkill")
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count()
-            == 2,
+            == 1,
         "only the owned pre-prepare game may be closed; never the peer's game"
     );
+    assert_normal_closes(&r.fake.calls, 1);
     assert_eq!(r.fake.sleeps, vec![0.05]);
 }
 
@@ -1164,7 +1255,7 @@ fn release_reports_persistent_sharing_violation_and_keeps_the_lock() {
     }
     let f = Fixture::new();
     let mut r = Stuck {
-        fake: Fake::success(),
+        fake: running_before_prepare(),
         lock: f.p.here.join("civ6.lock"),
         blocker: None,
     };
@@ -1177,43 +1268,46 @@ fn release_reports_persistent_sharing_violation_and_keeps_the_lock() {
         r.fake
             .calls
             .iter()
-            .filter(|c| c.args[0] == "taskkill")
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count(),
-        2
+        1
     );
+    assert_normal_closes(&r.fake.calls, 1);
     drop(r.blocker.take());
     assert!(r.lock.exists());
 }
+const READY_PREPARE_REPLY: usize = 6;
+const READY_DRIVER_REPLY: usize = READY_PREPARE_REPLY + 1;
+const READY_CLEANUP_REPLY: usize = READY_DRIVER_REPLY + 1;
+
 fn ready_chain(f: &Fixture, run_code: i32) -> Fake {
     let prepare = format!(
         "{}\n{}\n",
         path(f.root.join("scenario.json")),
         path(f.root.join("artifacts"))
     );
-    Fake::outputs(&[
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        (&prepare, "", 0),
-        ("[OK] one\n[FAIL] two\nnoise\n", "", run_code),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-    ])
+    let mut r = normal_close();
+    r.replies.extend(
+        Fake::outputs(&[
+            (&prepare, "", 0),
+            ("[OK] one\n[FAIL] two\nnoise\n", "", run_code),
+        ])
+        .replies,
+    );
+    r.replies.extend(normal_close().replies);
+    r
 }
 fn before_prepare(prepare: (&str, &str, i32)) -> Fake {
-    Fake::outputs(&[
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        ("", "", 0),
-        prepare,
-    ])
+    // No game: two image queries and reporter cleanup before preparation.
+    Fake::outputs(&[("", "", 0), ("", "", 0), ("", "", 0), prepare])
+}
+fn running_before_prepare() -> Fake {
+    let mut r = normal_close();
+    r.replies.push_back(Ok(Output {
+        code: 1,
+        ..Output::default()
+    }));
+    r
 }
 fn failed_prepare_cli(r: &mut impl Runner, p: &Paths) -> Result<i32, String> {
     cli(r, p, &args(&["fixture:s.json", "--stop-on-failure"]))
@@ -1231,9 +1325,13 @@ fn chain_closes_game_after_each_run_and_on_exit() {
     assert!(scenario.kill_tree);
     assert_eq!(scenario.timeout, Some(1140.0));
     assert_eq!(scenario.args.last().unwrap(), "--test-mode");
+    assert_normal_closes(&r.calls, 2);
     assert_eq!(
-        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        4
+        r.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        2
     );
     assert!(r
         .printed
@@ -1310,7 +1408,7 @@ fn help_and_all_invalid_arguments_ignore_a_live_foreign_lock() {
 fn default_chain_retains_failure_even_after_a_later_success() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 7);
-    // pre-close + prepare + run + per-scenario close = 12 calls.
+    // Two normal closes (6 commands each), preparation and scenario = 14 calls.
     r.replies.extend(ready_chain(&f, 0).replies);
     assert_eq!(
         cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap(),
@@ -1351,7 +1449,7 @@ fn nonzero_preparation_with_two_paths_never_launches_a_driver() {
 fn preparation_execution_error_is_propagated_without_retry() {
     let f = Fixture::new();
     let mut r = before_prepare(("", "", 0));
-    r.replies[5] = Err("ship timed out".into());
+    r.replies[3] = Err("ship timed out".into());
     let error = cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap_err();
     assert!(error.contains("ship timed out"));
     assert_eq!(
@@ -1650,7 +1748,7 @@ fn dynamic_lease_deadline_is_shared_with_civ6_cleanup_and_lock_release() {
                     process::LEASE_YIELD
                 ));
             }
-            if c.args[0] == "taskkill" && self.driver_done {
+            if c.args[0] == "tasklist" && self.driver_done {
                 let timeout = c.timeout.unwrap();
                 self.timeouts.push(timeout);
                 assert!(timeout <= 0.050001);
@@ -1751,7 +1849,7 @@ fn failed_pr_api_is_an_error_even_if_it_prints_a_url() {
 fn driver_timeout_keeps_failure_log_and_releases_lock() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 0);
-    r.replies[6] = Err("command timed out\npartial startup diagnostic".into());
+    r.replies[READY_DRIVER_REPLY] = Err("command timed out\npartial startup diagnostic".into());
     let error = cli(&mut r, &f.p, &args(&["a:s.json", "b:s.json"])).unwrap_err();
     assert!(error.contains("timed out"));
     assert!(read_text(f.root.join("artifacts.log"))
@@ -1765,8 +1863,8 @@ fn driver_timeout_keeps_failure_log_and_releases_lock() {
 fn driver_and_cleanup_errors_are_both_reported() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 0);
-    r.replies[6] = Err("driver failed".into());
-    r.replies[7] = Err("cleanup failed".into());
+    r.replies[READY_DRIVER_REPLY] = Err("driver failed".into());
+    r.replies[READY_CLEANUP_REPLY] = Err("cleanup failed".into());
     let error = cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap_err();
     assert!(error.contains("driver failed"));
     assert!(error.contains("cleanup failed"));
@@ -1928,6 +2026,12 @@ struct ReliabilityRunner {
     tokens: Vec<String>,
     printed: Vec<String>,
     kills: usize,
+    quits: usize,
+    running: bool,
+    closing: bool,
+    exit_polls: usize,
+    exit_waits: usize,
+    time: f64,
     waited: usize,
     add_waiter: bool,
     fail_cleanup: bool,
@@ -1950,6 +2054,12 @@ impl ReliabilityRunner {
             tokens: vec![],
             printed: vec![],
             kills: 0,
+            quits: 0,
+            running: true,
+            closing: false,
+            exit_polls: 0,
+            exit_waits: 0,
+            time: 0.0,
             waited: 0,
             add_waiter: false,
             fail_cleanup: false,
@@ -1962,9 +2072,63 @@ impl Runner for ReliabilityRunner {
         1000.0
     }
     fn monotonic(&mut self) -> f64 {
-        0.0
+        self.time
     }
     fn run(&mut self, call: Call) -> Result<Output, String> {
+        if call.args[0] == "tasklist" && call.args[2] == "IMAGENAME eq CivilizationVI.exe" {
+            if self.closing {
+                if self.exit_polls > 0 {
+                    self.exit_polls -= 1;
+                } else {
+                    self.running = false;
+                    self.closing = false;
+                }
+            }
+            return Ok(Output {
+                stdout: if self.running {
+                    RUNNING_CIV6.into()
+                } else {
+                    String::new()
+                },
+                ..Output::default()
+            });
+        }
+        if is_tuner(&call) {
+            assert!(
+                self.p.here.join("civ6.lock").exists(),
+                "quit under the owned lock"
+            );
+            match call.args[1].as_str() {
+                "states" => {
+                    return Ok(Output {
+                        stdout: TUNER_STATES.into(),
+                        ..Output::default()
+                    })
+                }
+                "lua" => {
+                    assert!(self.running && !self.closing, "quit must not be replayed");
+                    assert_eq!(
+                        &call.args[1..],
+                        &args(&["lua", "--state", "FrontEnd", "--code", QUIT_LUA])
+                    );
+                    self.quits += 1;
+                    self.closing = true;
+                    self.exit_polls = 1;
+                    return Ok(Output::default());
+                }
+                _ => panic!("unexpected tuner command"),
+            }
+        }
+        if call.args[0] == "powershell" {
+            assert!(
+                !self.running && !self.closing,
+                "wait for exit before reporter cleanup"
+            );
+            if self.fail_cleanup && !self.artifacts.is_empty() {
+                self.fail_cleanup = false;
+                return Err("final cleanup denied".into());
+            }
+        }
         if call.args[0].ends_with("ship.exe") {
             let owner = read_json(self.p.here.join("civ6.lock"))?;
             assert_eq!(owner["fifo"], true);
@@ -1997,6 +2161,11 @@ impl Runner for ReliabilityRunner {
             });
         }
         if is_driver(&call) {
+            assert!(
+                !self.running,
+                "previous game must close before launching a scenario"
+            );
+            self.running = true;
             assert!(call.kill_tree && call.timeout.unwrap() <= 1560.0);
             let scenario = read_json(&call.args[1])?;
             assert_eq!(scenario["steps"][1]["name"], "JAC-Reliability-Seed-1971");
@@ -2015,9 +2184,7 @@ impl Runner for ReliabilityRunner {
         }
         if call.args[0] == "taskkill" {
             self.kills += 1;
-            if self.fail_cleanup && self.kills == 3 {
-                return Err("final cleanup denied".into());
-            }
+            panic!("a normally exiting model must not be force-killed");
         }
         Ok(Output::default())
     }
@@ -2038,7 +2205,17 @@ impl Runner for ReliabilityRunner {
         self.printed.push(s.into());
         Ok(())
     }
-    fn sleep(&mut self, _: f64) -> Result<(), String> {
+    fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+        self.time += seconds;
+        if self.closing {
+            assert_eq!(seconds, 0.5);
+            assert!(
+                self.p.here.join("civ6.lock").exists(),
+                "retain lock while awaiting exit"
+            );
+            self.exit_waits += 1;
+            return Ok(());
+        }
         assert!(!self.p.here.join("civ6.lock").exists());
         assert_eq!(self.artifacts.len(), 1);
         self.waited += 1;
@@ -2064,7 +2241,11 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         10
     );
     assert_eq!(r.printed.last().unwrap(), "RELIABILITY DONE 10/10");
-    assert_eq!(r.kills, 40);
+    assert_eq!(r.kills, 0);
+    // The initial pre-existing game and each of the ten scenario games exit.
+    // Later rounds start absent, so no redundant quit is sent at preparation.
+    assert_eq!(r.quits, 11);
+    assert_eq!(r.exit_waits, 11);
     assert_eq!(r.waited, 1);
     assert_eq!(
         r.artifacts
@@ -2136,7 +2317,7 @@ fn preparation_timeout_uses_the_budget_left_after_preparation_shutdown() {
     }
     impl Runner for SlowClose {
         fn run(&mut self, c: Call) -> Result<Output, String> {
-            if c.args[0] == "taskkill" && !self.advanced {
+            if c.args[0] == "tasklist" && !self.advanced {
                 self.advanced = true;
                 self.fake.time += 700.0;
             }
@@ -2205,7 +2386,9 @@ fn reliability_stops_at_first_failure_without_counting_later_successes() {
         7
     );
     assert_eq!(r.artifacts.len(), 2);
-    assert_eq!(r.kills, 8);
+    assert_eq!(r.kills, 0);
+    assert_eq!(r.quits, 3);
+    assert_eq!(r.exit_waits, 3);
     assert_eq!(
         r.printed
             .iter()
@@ -2379,9 +2562,13 @@ fn chain_passes_legacy_flags_and_artifact_paths_to_rust_driver() {
         .args
         .iter()
         .any(|a| a.contains("python") || a.ends_with(".py"))));
+    assert_normal_closes(&r.calls, 2);
     assert_eq!(
-        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        4
+        r.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        2
     );
     assert!(!f.p.here.join("civ6.lock").exists());
 }
@@ -2390,12 +2577,13 @@ fn chain_passes_legacy_flags_and_artifact_paths_to_rust_driver() {
 fn responsive_game_probe_uses_branch_rust_tuner() {
     let f = Fixture::new();
     rust_driver_fixture(&f);
-    let mut r = Fake::outputs(&[("\"CivilizationVI.exe\",\"11\"", "", 0)]);
-    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "killed");
+    let mut r = normal_close();
+    assert_eq!(ensure_responsive_civ6(&mut r, &f.p).unwrap(), "closed");
     let tuner = driver::tuner(&f.p, &f.p.live()).unwrap().remove(0);
     assert_eq!(r.calls[1].args, vec![tuner, "states".into()]);
     assert!(!r.calls.iter().any(is_driver));
-    assert_eq!(r.sleeps, vec![45.0]);
+    assert!(r.sleeps.is_empty());
+    assert_normal_closes(&r.calls, 1);
 }
 
 #[test]
@@ -2682,11 +2870,11 @@ fn preparation_failure_is_not_retried_and_keeps_the_original_error() {
 fn scenario_error_still_closes_and_releases() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 0);
-    r.replies[6] = Err("scenario spawn failed".into());
+    r.replies[READY_DRIVER_REPLY] = Err("scenario spawn failed".into());
     assert!(cli(&mut r, &f.p, &["a:s.json".into()])
         .unwrap_err()
         .contains("spawn failed"));
-    assert!(r.calls.iter().any(|c| c.args[0] == "taskkill"));
+    assert_normal_closes(&r.calls, 2);
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 #[test]
@@ -2916,14 +3104,18 @@ fn panic_still_closes_game_and_releases_lock() {
         }
     }
     let f = Fixture::new();
-    let mut r = PanicRunner(Fake::success());
+    let mut r = PanicRunner(running_before_prepare());
     assert!(failed_prepare_cli(&mut r, &f.p)
         .unwrap_err()
         .contains("panicked"));
     assert_eq!(
-        r.0.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        2
+        r.0.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        1
     );
+    assert_normal_closes(&r.0.calls, 1);
     assert!(!f.p.here.join("civ6.lock").exists());
 }
 
@@ -2961,11 +3153,11 @@ fn startup_failure_is_never_replayed_and_preserves_first_artifacts() {
         path(&artifacts)
     );
     let mut r = ready_chain(&f, 1);
-    r.replies[5] = Ok(Output {
+    r.replies[READY_PREPARE_REPLY] = Ok(Output {
         stdout: prepare,
         ..Output::default()
     });
-    r.replies[6] = Ok(Output {
+    r.replies[READY_DRIVER_REPLY] = Ok(Output {
         stdout: "[FAIL] 1/ restart_game".into(),
         code: 1,
         ..Output::default()
@@ -2977,9 +3169,13 @@ fn startup_failure_is_never_replayed_and_preserves_first_artifacts() {
         "first attempt"
     );
     assert_eq!(r.calls.iter().filter(|c| is_driver(c)).count(), 1);
+    assert_normal_closes(&r.calls, 2);
     assert_eq!(
-        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        4
+        r.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        2
     );
 }
 
@@ -2995,11 +3191,11 @@ fn recovered_startup_failure_does_not_launch_another_outer_retry() {
         path(&artifacts)
     );
     let mut r = ready_chain(&f, 1);
-    r.replies[5] = Ok(Output {
+    r.replies[READY_PREPARE_REPLY] = Ok(Output {
         stdout: prepare,
         ..Output::default()
     });
-    r.replies[6] = Ok(Output {
+    r.replies[READY_DRIVER_REPLY] = Ok(Output {
         stdout: "STARTUP_RECOVERY_ATTEMPTED\n[FAIL] 1/ restart_game".into(),
         code: 1,
         ..Output::default()
@@ -3029,9 +3225,13 @@ fn recovered_startup_failure_does_not_launch_another_outer_retry() {
         read_text(artifacts.join("diagnostic.json")).unwrap(),
         "saved before shutdown"
     );
+    assert_normal_closes(&r.calls, 2);
     assert_eq!(
-        r.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        4
+        r.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        2
     );
 }
 
@@ -3109,9 +3309,13 @@ fn broken_stdout_stops_before_scenario_and_still_cleans() {
             .count(),
         1
     );
+    assert_normal_closes(&r.0.calls, 1);
     assert_eq!(
-        r.0.calls.iter().filter(|c| c.args[0] == "taskkill").count(),
-        2
+        r.0.calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        1
     );
     assert!(!f.p.here.join("civ6.lock").exists());
 }
@@ -3206,13 +3410,14 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
             .count(),
         1
     );
+    assert_normal_closes(&r.fake.calls, 2);
     assert_eq!(
         r.fake
             .calls
             .iter()
-            .filter(|c| c.args[0] == "taskkill")
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count(),
-        4
+        2
     );
 }
 
