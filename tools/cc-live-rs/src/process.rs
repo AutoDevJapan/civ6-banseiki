@@ -236,11 +236,10 @@ fn tasklist_pid(args: &[String]) -> Option<u32> {
 fn native_pid_tasklist(pid: u32) -> Result<Output, String> {
     use windows_sys::Win32::{
         Foundation::CloseHandle,
-        System::Threading::{
-            OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-        },
+        System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
     };
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    // SYNCHRONIZE permits a zero-time read of this exact object's exit state.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | 0x00100000, 0, pid) };
     if handle.is_null() {
         let error = std::io::Error::last_os_error();
         return if error.raw_os_error() == Some(87) {
@@ -249,12 +248,41 @@ fn native_pid_tasklist(pid: u32) -> Result<Output, String> {
             Err(format!("inspect lease process {pid}: {error}"))
         };
     }
+    let result = native_pid_tasklist_handle(handle, pid);
+    unsafe { CloseHandle(handle) };
+    result
+}
+
+#[cfg(windows)]
+fn native_pid_tasklist_handle(
+    handle: windows_sys::Win32::Foundation::HANDLE,
+    pid: u32,
+) -> Result<Output, String> {
+    use windows_sys::Win32::{
+        Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT},
+        System::Threading::{QueryFullProcessImageNameW, WaitForSingleObject},
+    };
+    let exited = || match unsafe { WaitForSingleObject(handle, 0) } {
+        WAIT_OBJECT_0 => Ok(true),
+        WAIT_TIMEOUT => Ok(false),
+        _ => Err(format!(
+            "inspect lease process {pid} exit state: {}",
+            std::io::Error::last_os_error()
+        )),
+    };
+    if exited()? {
+        return Ok(Output::default());
+    }
     let mut buffer = vec![0u16; 32768];
     let mut length = buffer.len() as u32;
     let ok = unsafe { QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) };
     let error = (ok == 0).then(std::io::Error::last_os_error);
-    unsafe { CloseHandle(handle) };
     if let Some(error) = error {
+        // The handle pins the object, so PID reuse cannot turn this check into
+        // a query of a different process between image lookup and exit read.
+        if exited()? {
+            return Ok(Output::default());
+        }
         return Err(format!("inspect lease process {pid} image: {error}"));
     }
     let path = String::from_utf16(&buffer[..length as usize]).map_err(|e| e.to_string())?;
@@ -533,5 +561,31 @@ mod pid_query_tests {
             format!("\"{image}\",\"{pid}\"\n")
         );
         assert!(native_pid_tasklist(u32::MAX).unwrap().stdout.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_query_observes_exit_with_the_original_handle_still_pinned() {
+        use std::{
+            os::windows::{io::AsRawHandle, process::CommandExt},
+            process::{Command, Stdio},
+        };
+        if std::env::var_os("CC_LIVE_NATIVE_PID_TEST_CHILD").is_some() {
+            return;
+        }
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "process::pid_query_tests::native_query_observes_exit_with_the_original_handle_still_pinned"])
+            .env("CC_LIVE_NATIVE_PID_TEST_CHILD", "1")
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .spawn().unwrap();
+        let pid = child.id();
+        let handle = child.as_raw_handle();
+        assert!(child.wait().unwrap().success());
+        assert!(native_pid_tasklist_handle(handle, pid)
+            .unwrap()
+            .stdout
+            .is_empty());
+        assert!(native_pid_tasklist_handle(std::ptr::null_mut(), pid).is_err());
     }
 }
