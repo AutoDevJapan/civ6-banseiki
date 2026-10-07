@@ -40,6 +40,23 @@ fn extension_is(path: &Path, extension: &str) -> bool {
 }
 
 pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<PathBuf>> {
+    let dlc = std::env::var_os("CIV6_DLC_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(
+                "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/DLC",
+            )
+        });
+    enabled_mod_folders_with_dlc(scenario, mods_dir, &dlc)
+}
+
+/// Official DLC manifests live outside the user's MOD directory. They satisfy
+/// installation requirements but are not mutable MOD artwork/freshness inputs.
+pub fn enabled_mod_folders_with_dlc(
+    scenario: &Value,
+    mods_dir: &Path,
+    dlc_dir: &Path,
+) -> Result<Vec<PathBuf>> {
     let mut ids = BTreeSet::new();
     let steps = scenario
         .get("steps")
@@ -64,8 +81,20 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
         return Ok(Vec::new());
     }
     let mut found = BTreeMap::new();
-    for entry in fs::read_dir(mods_dir)? {
-        let entry = entry?;
+    let mut official = BTreeSet::new();
+    let mut entries = Vec::new();
+    for (root, is_official) in [(mods_dir, false), (dlc_dir, true)] {
+        match fs::read_dir(root) {
+            Ok(list) => {
+                for entry in list {
+                    entries.push((entry?, is_official));
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    for (entry, is_official) in entries {
         if !entry.path().is_dir() {
             continue;
         }
@@ -89,6 +118,9 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
                 .unwrap_or("")
                 .to_lowercase();
             if ids.contains(&id) {
+                if is_official {
+                    official.insert(id.clone());
+                }
                 if let Some(previous) = found.insert(id.clone(), folder.clone()) {
                     return Err(Error::input(format!(
                         "Duplicate installed mod ID {id}: {} and {}",
@@ -105,12 +137,17 @@ pub fn enabled_mod_folders(scenario: &Value, mods_dir: &Path) -> Result<Vec<Path
         .collect();
     if !missing.is_empty() {
         return Err(Error::input(format!(
-            "Scenario mod is not installed under {}: {}",
+            "Scenario mod is not installed under {} or official DLC directory {}: {}",
             mods_dir.display(),
+            dlc_dir.display(),
             missing.join(", ")
         )));
     }
-    Ok(ids.iter().map(|id| found[id].clone()).collect())
+    Ok(ids
+        .iter()
+        .filter(|id| !official.contains(*id))
+        .map(|id| found[id].clone())
+        .collect())
 }
 
 fn walk_files(folder: &Path) -> Result<Vec<PathBuf>> {
