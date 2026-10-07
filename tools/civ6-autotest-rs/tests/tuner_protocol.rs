@@ -114,7 +114,8 @@ const NAMED_STATES: &str = "3\0FrontEnd\x0017\0InGame\x0041\0GameCore_Tuner";
 #[test]
 fn japan_wrappers_receive_commands_at_the_observed_context_indices() {
     // Captured live04 indices: stock staging 17, wrapper staging 26, wrapper menu 27.
-    const JAPAN_STATES: &str = "17\0StagingRoom\026\0JAC_JapanStagingRoom\027\0JAC_JapanMainMenu";
+    const JAPAN_STATES: &str =
+        "17\0StagingRoom\x0026\0JAC_JapanStagingRoom\x0027\0JAC_JapanMainMenu";
     let fake = FakeTuner::start(LuaReply::Ok, JAPAN_STATES, false);
     let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
     client.run_lua("MainMenu", "return true", 1.0).unwrap();
@@ -134,15 +135,15 @@ fn japan_wrappers_receive_commands_at_the_observed_context_indices() {
 fn ambiguous_japan_wrappers_and_unregistered_suffixes_never_receive_commands() {
     for (states, requested) in [
         (
-            "17\0StagingRoom\026\0JAC_JapanStagingRoom\027\0jac_japanstagingroom",
+            "17\0StagingRoom\x0026\0JAC_JapanStagingRoom\x0027\0jac_japanstagingroom",
             "StagingRoom",
         ),
         (
-            "1\0MainMenu\026\0JAC_JapanMainMenu\027\0jac_japanmainmenu",
+            "1\0MainMenu\x0026\0JAC_JapanMainMenu\x0027\0jac_japanmainmenu",
             "MainMenu",
         ),
-        ("17\0StagingRoom\026\0stagingroom", "StagingRoom"),
-        ("1\0Other_MainMenu\02\0MainMenu_Custom", "MainMenu"),
+        ("17\0StagingRoom\x0026\0stagingroom", "StagingRoom"),
+        ("1\0Other_MainMenu\x002\0MainMenu_Custom", "MainMenu"),
     ] {
         let fake = FakeTuner::start(LuaReply::Ok, states, false);
         let mut client = TunerClient::connect(fake.port, 1.0).unwrap();
