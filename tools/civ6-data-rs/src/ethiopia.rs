@@ -276,7 +276,7 @@ fn manifest_with_patches(source: &str, patches: &[DatabasePatch]) -> Result<Stri
             .mod_in_use
             .map(|id| format!("\t\t\t<ModInUse>{id}</ModInUse>\n"))
             .unwrap_or_default();
-        criteria.push_str(&format!("\t\t<Criteria id=\"{id}\">\n\t\t\t<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>\n\t\t\t<GameCoreInUse>Expansion2</GameCoreInUse>\n\t\t\t<ModIsEnabled>{dlc_id}</ModIsEnabled>\n{extra}\t\t</Criteria>\n"));
+        criteria.push_str(&format!("\t\t<Criteria id=\"{id}\">\n\t\t\t<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>\n\t\t\t<GameCoreInUse>Expansion2</GameCoreInUse>\n\t\t\t<ModInUse>{dlc_id}</ModInUse>\n{extra}\t\t</Criteria>\n"));
         let file = patch.file();
         let order = if patch.mod_in_use.is_some() { 2 } else { 1 };
         actions.push_str(&format!("\t\t<UpdateDatabase id=\"{id}\" criteria=\"{id}\">\n\t\t\t<Properties><LoadOrder>{order}</LoadOrder></Properties>\n\t\t\t<File>{file}</File>\n\t\t</UpdateDatabase>\n"));
@@ -302,10 +302,7 @@ fn manifest_with_patches(source: &str, patches: &[DatabasePatch]) -> Result<Stri
         let original = &source[hero.range()];
         let updated = original.replace(
             "</Criteria>",
-            &format!(
-                "<ModIsEnabled>{}</ModIsEnabled>\n\t\t</Criteria>",
-                BABYLON.id
-            ),
+            &format!("<ModInUse>{}</ModInUse>\n\t\t</Criteria>", BABYLON.id),
         );
         output = output.replace(original, &updated);
     }

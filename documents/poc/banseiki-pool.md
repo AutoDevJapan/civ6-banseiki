@@ -30,6 +30,8 @@ Rustの生成器が設定SQL、ゲームSQL、表示文、アイコン、色、�
 
 ## 公式DLCの読込互換処理
 
+実機08では生成物への配置を確認したが、開始前に4つの条件が `Unhandled criterion` となり、補完アクションが適用されなかった。`ModIsEnabled` をゲーム中の条件へ流用していた。公式KublaiKhan/Vietnamの同条件はFrontEndActionsの設定だけで使われ、公式のゲーム中のDLC連携は `ModInUse` を使う。英雄入口を含む4条件を、ゲーム内容に参加しているDLCを判定する `ModInUse` へ統一した。相手DLCを判定する既存の交差条件も維持する。条件を模したDB検査だけでは、このエンジン側の受理を確認できなかった。実機08の原ログ・準備の記録・画面は `D:/CC/Work/todo1947/pool300-failure08-20261007-6308ada1` へハッシュ一致で保全した。
+
 おまかせ版の実機07は人間2人・AI2人の4席をRANDOMへ設定できたが、ゲーム開始時にGameplayのエラー44件でDBが巻き戻された。原ログの内訳は外部キーの参照不整合42行と制約失敗2件。メネリクの除外、席の固定、乱数の変更で回避しない。
 
 公式 `DLC/Ethiopia/Ethiopia.modinfo:17–20` の `Ethiopia` 条件は `any=1` だが、`LeaderPlayable` のExpansion1とExpansion2の項目の間にコンマがなく、空白になっている。`RuleSetInUse` は公式3種だけなので万世紀では成立しない。対して `Ethiopia_Expansion2:29–32` はExpansion2のメネリクを正しく指定し、`EthiopiaGameplay_XP2:86–89` だけが読み込まれる。一次ログの `Modding.log:2013,3165–3167,3293–3295` はこの適用と巻戻しを記録し、`Database.log` は外交街区、エチオピア文明、改善、部隊の定義欠落を示す。
@@ -46,7 +48,7 @@ Babylonの非モードの交差データは `Babylon.modinfo:34–37,169–171` 
 cargo run --locked --manifest-path tools/Cargo.toml -p civ6-data-rs --bin banseiki-ethiopia-prepare -- --game-dir "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI" --output "<live/tools/target/local-mods/JAC_PoC_BanseikiRuleset の絶対パス>" --refresh
 ```
 
-生成したコピーのSQLは「万世紀」「Expansion2のゲームコア」「対象DLC有効」の全条件が成立したときだけ読み込む。EthiopiaとBabylonの `ModIsEnabled` は別の条件とし、両方有効でなければ動かない形にはしない。メネリクを選ばない試合でも外交街区などの共通データを補う。指導者の候補やFrontEndの設定処理は変えない。未導入DLCのSQLはmanifestへ登録せず、Ethiopiaなし・Babylonのみ・両方なしでも配置用の基盤MODを作れる。配置用manifestからBabylonの強制依存を外し、既存の英雄モード入口にはBabylon有効の条件を加える。
+生成したコピーのSQLは「万世紀」「Expansion2のゲームコア」「対象DLC有効」の全条件が成立したときだけ読み込む。EthiopiaとBabylonの `ModInUse` は別の条件とし、両方有効でなければ動かない形にはしない。メネリクを選ばない試合でも外交街区などの共通データを補う。指導者の候補やFrontEndの設定処理は変えない。未導入DLCのSQLはmanifestへ登録せず、Ethiopiaなし・Babylonのみ・両方なしでも配置用の基盤MODを作れる。配置用manifestからBabylonの強制依存を外し、既存の英雄モード入口にはBabylon有効の条件を加える。
 
 公式コンポーネントのLoadOrderは0、基本＋XP2の互換処理は1、Babylonの交差処理は2、戦国ツリーは200。互換処理の中で基本データを追加してからXP2を再適用するため、先に公式XP2だけが読まれた試合で失われたUpdateも復元する。先に基本データがあっても、キーのある行は `INSERT OR IGNORE`、キーのない行は同じ内容の存在判定で二重追加を防ぐ。`REPLACE` による関連行の削除は使わない。
 

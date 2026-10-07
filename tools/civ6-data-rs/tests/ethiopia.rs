@@ -36,7 +36,7 @@ fn prepared_mod_is_limited_to_enabled_ethiopia_and_banseiki_xp2() {
         BTreeMap::from([
             ("RuleSetInUse", "RULESET_JAC_BANSEIKI"),
             ("GameCoreInUse", "Expansion2"),
-            ("ModIsEnabled", ethiopia::DLC_ID),
+            ("ModInUse", ethiopia::DLC_ID),
         ])
     );
     // No LeaderPlayable gate: non-selected Menelik must not disable shared districts.
@@ -50,7 +50,7 @@ fn prepared_mod_is_limited_to_enabled_ethiopia_and_banseiki_xp2() {
                 let applies = terms.iter().all(|(key, value)| match *key {
                     "RuleSetInUse" => *value == ruleset,
                     "GameCoreInUse" => *value == core,
-                    "ModIsEnabled" => enabled,
+                    "ModInUse" => enabled,
                     _ => panic!("unexpected criterion"),
                 });
                 assert_eq!(
@@ -732,7 +732,7 @@ fn optional_dlc_manifests_keep_candidates_and_split_enabled_conditions() {
                     BTreeMap::from([
                         ("RuleSetInUse", "RULESET_JAC_BANSEIKI"),
                         ("GameCoreInUse", "Expansion2"),
-                        ("ModIsEnabled", dlc.id)
+                        ("ModInUse", dlc.id)
                     ])
                 );
                 assert_eq!(criterion.attribute("any"), None);
@@ -744,13 +744,14 @@ fn optional_dlc_manifests_keep_candidates_and_split_enabled_conditions() {
         });
         if installed.iter().any(|d| d.name == "Babylon") {
             let cross = cross.unwrap();
+            let active: BTreeSet<_> = cross
+                .children()
+                .filter(|n| n.has_tag_name("ModInUse"))
+                .map(|n| n.text().unwrap())
+                .collect();
             assert_eq!(
-                cross
-                    .children()
-                    .find(|n| n.has_tag_name("ModInUse"))
-                    .unwrap()
-                    .text(),
-                Some(ethiopia::MAYA_ID)
+                active,
+                BTreeSet::from([ethiopia::BABYLON.id, ethiopia::MAYA_ID])
             );
             let action = doc
                 .descendants()
