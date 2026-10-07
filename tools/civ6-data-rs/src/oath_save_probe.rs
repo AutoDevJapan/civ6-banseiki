@@ -188,12 +188,66 @@ pub fn make_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     Ok(source)
 }
 
-/// The reviewed military-15 diagnostic, with an owned-process inverse-removal
+const GROWTH_FOCUS_RESYNC: &str = r#"
+-- Official CityPanel.lua:447-479 command parameters; resend existing values.
+-- This is an unverified cache refresh attempt, not an assertion of refresh.
+local core=assert(Game:GetProperty('JAC_TODO134_GROWTH_CORE'),'growth Core snapshot missing')
+local player=Game.GetLocalPlayer()
+assert(player==0 and core.turn==Game.GetCurrentGameTurn(),'focus resync owner or turn changed')
+local phase=assert(core.phase)
+assert(phase=='selected' or phase=='off' or phase=='restored','unexpected resync phase')
+local all=assert(JAC_OATH_AUDIT)
+all.focus_resync=all.focus_resync or {}
+assert(not all.focus_resync[phase],'focus resync must not be sent twice')
+local rows={}; local seen={}
+local yield=assert(GameInfo.Yields['YIELD_FOOD']).Index
+for _,row in ipairs(core.snapshot.own) do
+ assert(row.owner==player and not seen[row.id],'focus resync foreign or duplicate city')
+ local city=assert(Players[player]:GetCities():FindID(row.id),'focus resync city missing')
+ local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ assert(city:GetOwner()==player and plot:GetIndex()==row.plot,'focus resync city identity changed')
+ local citizens=assert(city:GetCitizens())
+ local favored=citizens:IsFavoredYield(yield); local ignored=citizens:IsDisfavoredYield(yield)
+ assert(type(favored)=='boolean' and type(ignored)=='boolean' and not (favored and ignored),'invalid citizen preferences')
+ rows[#rows+1]={id=row.id,plot=row.plot,owner=row.owner,favored=favored,ignored=ignored}
+ seen[row.id]=true
+end
+assert(#rows>0,'focus resync city inventory empty')
+-- Record before dispatch: a partial send cannot be silently replayed.
+all.focus_resync[phase]={turn=core.turn,rows=rows,sent=0}
+for _,row in ipairs(rows) do
+ local city=assert(Players[player]:GetCities():FindID(row.id))
+ for _,item in ipairs({{flag=0,value=row.favored},{flag=1,value=row.ignored}}) do
+  local parameters={}
+  parameters[CityCommandTypes.PARAM_FLAGS]=item.flag
+  parameters[CityCommandTypes.PARAM_YIELD_TYPE]=yield
+  parameters[CityCommandTypes.PARAM_DATA0]=item.value and 1 or 0
+  CityManager.RequestCommand(city,CityCommandTypes.SET_FOCUS,parameters)
+  all.focus_resync[phase].sent=all.focus_resync[phase].sent+1
+ end
+end
+return '{"phase":"'..phase..'","existing_focus_commands":'..all.focus_resync[phase].sent..',"refresh_proven":false}'
+"#;
+
+const GROWTH_FOCUS_UNCHANGED: &str = r#"
+local attempt=assert(JAC_OATH_AUDIT and JAC_OATH_AUDIT.focus_resync and JAC_OATH_AUDIT.focus_resync[core.phase],'focus resync not recorded')
+assert(attempt.turn==Game.GetCurrentGameTurn() and attempt.sent==2*#attempt.rows,'focus resync incomplete or turn changed')
+local yield=assert(GameInfo.Yields['YIELD_FOOD']).Index
+for _,row in ipairs(attempt.rows) do
+ local city=assert(Players[row.owner]:GetCities():FindID(row.id),'focus resync city disappeared')
+ local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ assert(city:GetOwner()==row.owner and plot:GetIndex()==row.plot,'focus resync city identity changed')
+ local citizens=assert(city:GetCitizens())
+ assert(citizens:IsFavoredYield(yield)==row.favored and citizens:IsDisfavoredYield(yield)==row.ignored,'focus resync changed citizen preferences')
+end
+"#;
+
+/// The military-15 or explicit growth cache diagnostic, with an owned-process inverse-removal
 /// candidate before any reference or oath is attached. Normal probes stay intact.
 pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     ensure!(
-        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU",
-        "the native candidate is limited to the reviewed military-15 probe"
+        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU" || entry["oath"] == "JAC_OATH_ODA_TSUSHIMA",
+        "the native candidate is limited to the military-15 and Tsushima diagnostics"
     );
     let mut probe = make_probe(repo, entry)?;
     let steps = probe["steps"].as_array_mut().context("probe steps")?;
@@ -212,9 +266,39 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
         }
     }
     ensure!(
-        conversions == 3,
+        conversions
+            == if entry["oath"] == "JAC_OATH_ODA_TSUSHIMA" {
+                1
+            } else {
+                3
+            },
         "native diagnostic comparison boundaries changed"
     );
+    if entry["oath"] == "JAC_OATH_ODA_TSUSHIMA" {
+        let original = std::mem::take(steps);
+        let mut refreshes = 0;
+        for mut step in original {
+            if let Some(code) = step["condition"]["code"].as_str() {
+                if code.contains("local core=Game:GetProperty('JAC_TODO134_GROWTH_CORE')") {
+                    refreshes += 1;
+                    let guarded = code.replace(
+                        "assert(core.turn==Game.GetCurrentGameTurn(),'growth observation turn changed')",
+                        &format!("assert(core.turn==Game.GetCurrentGameTurn(),'growth observation turn changed')\n{GROWTH_FOCUS_UNCHANGED}"),
+                    );
+                    ensure!(guarded != code, "growth phase guard anchor missing");
+                    // Acknowledge the current phase in the UI before dispatch.
+                    // A Core property may still be in transit after its setter.
+                    steps.push(step.clone());
+                    steps.push(
+                        json!({"action":"ui_lua","state_name":"InGame","code":GROWTH_FOCUS_RESYNC}),
+                    );
+                    step["condition"]["code"] = json!(guarded);
+                }
+            }
+            steps.push(step);
+        }
+        ensure!(refreshes == 3, "growth resync phase boundaries changed");
+    }
     ensure!(
         steps.len() > 5 && steps[3]["action"] == "start_game" && steps[4]["action"] == "wait_for",
         "native candidate startup boundary changed"
@@ -601,11 +685,121 @@ pub(crate) mod tests {
             .unwrap()
             .remove("native_exact_removal_candidate");
         assert_eq!(native, plain);
-        for entry in entries
-            .iter()
-            .filter(|entry| entry["oath"] != "JAC_OATH_ODA_TENKA_FUBU")
-        {
+        for entry in entries.iter().filter(|entry| {
+            entry["oath"] != "JAC_OATH_ODA_TENKA_FUBU" && entry["oath"] != "JAC_OATH_ODA_TSUSHIMA"
+        }) {
             assert!(make_native_probe(&repo, entry).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn growth_focus_diagnostic_keeps_plain_probe_and_all_three_numeric_waits() -> Result<()> {
+        let repo = Repository::checked_in();
+        let entry = catalogue(&repo)?
+            .into_iter()
+            .find(|e| e["oath"] == "JAC_OATH_ODA_TSUSHIMA")
+            .context("growth oath")?;
+        let plain = make_probe(&repo, &entry)?;
+        let native = make_native_probe(&repo, &entry)?;
+        let steps = native["steps"].as_array().context("native steps")?;
+        let focus_positions: Vec<_> = steps
+            .iter()
+            .enumerate()
+            .filter(|(_, step)| step["code"] == GROWTH_FOCUS_RESYNC)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(focus_positions.len(), 3);
+        assert_eq!(steps.len(), plain["steps"].as_array().unwrap().len() + 7);
+        for position in focus_positions {
+            assert_eq!(steps[position - 1]["action"], "wait_for");
+            assert!(steps[position - 1]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains("Core growth inventory incomplete"));
+            assert_eq!(steps[position - 2]["state_name"], "GameCore_Tuner");
+            assert_eq!(steps[position + 1]["action"], "wait_for");
+            assert!(steps[position + 1]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains(GROWTH_FOCUS_UNCHANGED));
+            assert!(steps[position + 2]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains("previous growth observation missing"));
+        }
+        assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 1);
+        assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 1);
+        assert_eq!(
+            steps
+                .iter()
+                .filter(|s| s["action"] == "oath_exact_removal")
+                .count(),
+            1
+        );
+        for step in steps {
+            if let Some(code) = step["code"]
+                .as_str()
+                .or_else(|| step["condition"]["code"].as_str())
+            {
+                mlua::Lua::new().load(code).into_function()?;
+            }
+        }
+        assert!(!plain.to_string().contains("focus_resync"));
+        Ok(())
+    }
+
+    #[test]
+    fn focus_resync_replays_only_existing_preferences_once_and_rejects_side_effects() -> Result<()>
+    {
+        let lua = mlua::Lua::new();
+        let fixture = r#"
+turn=5; sent={}; preferences={{favored=true,ignored=false},{favored=false,ignored=true}}
+core={phase='selected',turn=turn,snapshot={own={{id=1,owner=0,plot=10},{id=2,owner=0,plot=20}}}}
+Game={GetProperty=function() return core end,GetCurrentGameTurn=function() return turn end,GetLocalPlayer=function() return 0 end}
+GameInfo={Yields={YIELD_FOOD={Index=3}}}
+CityCommandTypes={PARAM_FLAGS='flags',PARAM_YIELD_TYPE='yield',PARAM_DATA0='value',SET_FOCUS=8}
+local cities={}
+for id=1,2 do local n=id; cities[n]={GetOwner=function() return 0 end,GetX=function() return 10*n end,GetY=function() return 0 end,
+ GetCitizens=function() return {IsFavoredYield=function(_,yield) assert(yield==3); return preferences[n].favored end,IsDisfavoredYield=function(_,yield) assert(yield==3); return preferences[n].ignored end} end} end
+Players={[0]={GetCities=function() return {FindID=function(_,id) return cities[id] end} end}}
+Map={GetPlot=function(x) return {GetIndex=function() return x end} end}
+CityManager={RequestCommand=function(city,kind,p) assert(kind==8); local id=city:GetX()/10; assert(p.yield==3); local field=p.flags==0 and 'favored' or 'ignored'; assert(p.value==(preferences[id][field] and 1 or 0)); sent[#sent+1]={id=id,flag=p.flags,value=p.value} end}
+JAC_OATH_AUDIT={}
+"#;
+        lua.load(fixture).exec()?;
+        lua.load(GROWTH_FOCUS_RESYNC).exec()?;
+        assert_eq!(lua.load("return #sent").eval::<i64>()?, 4);
+        lua.load(GROWTH_FOCUS_UNCHANGED).exec()?;
+        assert!(lua.load(GROWTH_FOCUS_RESYNC).exec().is_err());
+        assert_eq!(lua.load("return #sent").eval::<i64>()?, 4);
+        for mutation in [
+            "preferences[1].favored=false",
+            "turn=6",
+            "JAC_OATH_AUDIT.focus_resync.selected.sent=3",
+        ] {
+            lua.load(fixture).exec()?;
+            lua.load(GROWTH_FOCUS_RESYNC).exec()?;
+            lua.load(mutation).exec()?;
+            assert!(
+                lua.load(GROWTH_FOCUS_UNCHANGED).exec().is_err(),
+                "accepted {mutation}"
+            );
+        }
+        for mutation in [
+            "core.snapshot.own[2].owner=1",
+            "core.snapshot.own[2]=core.snapshot.own[1]",
+            "preferences[1].favored=1",
+            "preferences[1].ignored=true",
+            "core.turn=4",
+        ] {
+            lua.load(fixture).exec()?;
+            lua.load(mutation).exec()?;
+            assert!(
+                lua.load(GROWTH_FOCUS_RESYNC).exec().is_err(),
+                "accepted {mutation}"
+            );
+            assert_eq!(lua.load("return #sent").eval::<i64>()?, 0);
         }
         Ok(())
     }
