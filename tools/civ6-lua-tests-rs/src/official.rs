@@ -4,10 +4,12 @@
 
 use crate::{read_repo, repo_root};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
-use rusqlite::{functions::FunctionFlags, types::ValueRef, Connection};
+use rusqlite::{functions::FunctionFlags, types::ValueRef, Connection, MAIN_DB};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 pub fn register_hash(db: &Connection) {
@@ -45,21 +47,123 @@ pub fn register_hash(db: &Connection) {
     .unwrap();
 }
 
+/// Each call returns a fresh private in-memory database. Loading the SQL dump
+/// is expensive and nextest runs every test in its own process, so the loaded
+/// pre-MOD image is cached under the target dir, keyed by the dump's bytes.
 pub fn official_db() -> Connection {
     let path = repo_root().join("tools/civ6-lua-tests-rs/fixtures/official/pre_sengoku.sql.gz");
-    read_snapshot(&path)
+    let target = match std::env::var_os("CARGO_TARGET_DIR") {
+        // An absolute CARGO_TARGET_DIR replaces the base path in join.
+        Some(dir) => std::path::absolute(dir).expect("resolve Cargo target directory"),
+        None => repo_root().join("tools/target"),
+    };
+    cached_snapshot(&path, &target.join("civ6-official-cache")).0
 }
 
 fn read_snapshot(path: &Path) -> Connection {
-    let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-    let mut sql = String::new();
-    GzDecoder::new(bytes.as_slice())
-        .read_to_string(&mut sql)
-        .unwrap();
-    let db = Connection::open_in_memory().unwrap();
-    db.execute_batch(&sql).unwrap();
+    let db = load_sql(&read_source(path));
     register_hash(&db);
     db
+}
+
+fn read_source(path: &Path) -> Vec<u8> {
+    std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+fn load_sql(gz: &[u8]) -> Connection {
+    let mut sql = String::new();
+    GzDecoder::new(gz).read_to_string(&mut sql).unwrap();
+    let db = Connection::open_in_memory().unwrap();
+    db.execute_batch(&sql).unwrap();
+    db
+}
+
+fn cache_path(dir: &Path, gz: &[u8]) -> PathBuf {
+    let mut hash = Sha256::new();
+    for part in [
+        &b"rusqlite-0.37 format-v1"[..],
+        rusqlite::version().as_bytes(),
+        gz,
+    ] {
+        hash.update((part.len() as u64).to_le_bytes());
+        hash.update(part);
+    }
+    let hex: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    dir.join(format!("pre_sengoku-{hex}.sqlite"))
+}
+
+fn load_image(image: &[u8]) -> Result<Connection, String> {
+    let mut db = Connection::open_in_memory().map_err(|e| e.to_string())?;
+    db.deserialize_read_exact(MAIN_DB, image, image.len(), false)
+        .map_err(|e| e.to_string())?;
+    // Connection pragmas are not serialized; the SQL dump sets this first.
+    db.execute_batch("PRAGMA foreign_keys=OFF;")
+        .map_err(|e| e.to_string())?;
+    let check: String = db
+        .query_row("PRAGMA quick_check", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    if check != "ok" {
+        return Err(check);
+    }
+    Ok(db)
+}
+
+/// Returns the database and whether this call built the cached image.
+fn cached_snapshot(source: &Path, dir: &Path) -> (Connection, bool) {
+    let gz = read_source(source);
+    let path = cache_path(dir, &gz);
+    let loaded = || std::fs::read(&path).ok().and_then(|b| load_image(&b).ok());
+    let (db, built) = match loaded() {
+        Some(db) => (db, false),
+        None => {
+            std::fs::create_dir_all(dir).unwrap();
+            let lock = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(false)
+                .open(path.with_extension("lock"))
+                .unwrap();
+            lock.lock().unwrap();
+            // Another process may have published the image while we waited.
+            match loaded() {
+                Some(db) => (db, false),
+                None => (build_image(&gz, &path), true),
+            }
+        }
+    };
+    register_hash(&db);
+    (db, built)
+}
+
+/// Caller holds the cache lock. Replaces only a missing or malformed image.
+fn build_image(gz: &[u8], path: &Path) -> Connection {
+    let source = load_sql(gz);
+    let foreign_keys: bool = source
+        .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+        .unwrap();
+    assert!(
+        !foreign_keys,
+        "load_image assumes the dump turns foreign keys off"
+    );
+    let image = source.serialize(MAIN_DB).unwrap();
+    let pending = path.with_extension(format!("pending-{}", std::process::id()));
+    let publish = || -> std::io::Result<()> {
+        // Under the lock, a pending file with our pid is left over from a crash.
+        let _ = std::fs::remove_file(&pending);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&pending)?;
+        file.write_all(&image[..])?;
+        file.sync_all()?;
+        drop(file);
+        std::fs::rename(&pending, path)
+    };
+    if let Err(e) = publish() {
+        let _ = std::fs::remove_file(&pending);
+        eprintln!("official db cache not written to {}: {e}", path.display());
+    }
+    load_image(&image[..]).unwrap()
 }
 
 pub fn run_sengoku(db: &Connection) {
@@ -336,4 +440,157 @@ pub fn capture_snapshot(db: &Connection, output: &Path) {
     );
     run_sengoku(&restored);
     std::fs::rename(&pending, output).unwrap();
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+
+    const SQL: &str = "PRAGMA foreign_keys=OFF;
+        CREATE TABLE Types(Type TEXT PRIMARY KEY, Hash INTEGER);
+        CREATE TABLE Parent(Id INTEGER PRIMARY KEY);
+        CREATE TABLE Child(Id INTEGER REFERENCES Parent(Id), R REAL, B BLOB);
+        INSERT INTO Types VALUES('A', 7);
+        INSERT INTO Child VALUES(99, 1.5, X'00ff'), (NULL, NULL, NULL);
+        CREATE INDEX ChildR ON Child(R);
+        CREATE VIEW TypeView AS SELECT * FROM Types;
+        CREATE TRIGGER ParentAdded AFTER INSERT ON Parent BEGIN SELECT 1; END;";
+
+    struct Temp(PathBuf);
+    impl Temp {
+        fn new(name: &str) -> Self {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "civ6-official-cache-{name}-{}-{nonce}",
+                std::process::id()
+            ));
+            std::fs::create_dir(&dir).unwrap();
+            Temp(dir)
+        }
+    }
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Writes a dump in the fixture format and returns the dumped SQL.
+    fn fixture(path: &Path, sql: &str) -> String {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(sql).unwrap();
+        let dump = dump_sql(&db);
+        let mut gz = GzEncoder::new(std::fs::File::create(path).unwrap(), Compression::fast());
+        gz.write_all(dump.as_bytes()).unwrap();
+        gz.finish().unwrap();
+        dump
+    }
+
+    fn count(db: &Connection, table: &str) -> i64 {
+        db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn cached_image_matches_sql_loader_and_is_private() {
+        let temp = Temp::new("roundtrip");
+        let source = temp.0.join("a.sql.gz");
+        let dump = fixture(&source, SQL);
+        let (first, built) = cached_snapshot(&source, &temp.0);
+        assert!(built);
+        let image = std::fs::read(cache_path(&temp.0, &read_source(&source))).unwrap();
+        let (second, built) = cached_snapshot(&source, &temp.0);
+        assert!(!built);
+        assert_eq!(dump_sql(&read_snapshot(&source)), dump);
+        assert_eq!(dump_sql(&first), dump);
+        assert_eq!(dump_sql(&second), dump);
+        let fk: i64 = second
+            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 0);
+        let hashes: (i64, i64) = second
+            .query_row("SELECT Make_Hash('A'), Make_Hash('B')", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(hashes, (7, 8));
+
+        first
+            .execute("INSERT INTO Types VALUES('Z', 1)", [])
+            .unwrap();
+        assert_eq!(count(&first, "Types"), 2);
+        assert_eq!(count(&second, "Types"), 1);
+        assert_eq!(count(&cached_snapshot(&source, &temp.0).0, "Types"), 1);
+        drop(first);
+        let after = std::fs::read(cache_path(&temp.0, &read_source(&source))).unwrap();
+        assert!(image == after, "cached image changed after use");
+    }
+
+    #[test]
+    fn changed_source_uses_new_key_and_data() {
+        let temp = Temp::new("source-change");
+        let source = temp.0.join("a.sql.gz");
+        fixture(&source, SQL);
+        let old_key = cache_path(&temp.0, &read_source(&source));
+        cached_snapshot(&source, &temp.0);
+        let dump = fixture(&source, &format!("{SQL} INSERT INTO Types VALUES('C', 9);"));
+        assert_ne!(cache_path(&temp.0, &read_source(&source)), old_key);
+        let (db, built) = cached_snapshot(&source, &temp.0);
+        assert!(built);
+        assert_eq!(dump_sql(&db), dump);
+        assert_eq!(count(&db, "Types"), 2);
+    }
+
+    #[test]
+    fn malformed_image_is_rebuilt() {
+        let temp = Temp::new("malformed");
+        let source = temp.0.join("a.sql.gz");
+        let dump = fixture(&source, SQL);
+        let key = cache_path(&temp.0, &read_source(&source));
+        cached_snapshot(&source, &temp.0);
+        let good = std::fs::read(&key).unwrap();
+        for bad in [&b""[..], b"not sqlite", &good[..good.len() / 2]] {
+            std::fs::write(&key, bad).unwrap();
+            let (db, built) = cached_snapshot(&source, &temp.0);
+            assert!(built, "{} byte image was accepted", bad.len());
+            assert_eq!(dump_sql(&db), dump);
+            assert!(std::fs::read(&key).unwrap() == good);
+        }
+    }
+
+    #[test]
+    fn concurrent_callers_build_once_without_partial_files() {
+        let temp = Temp::new("concurrent");
+        let source = temp.0.join("a.sql.gz");
+        let dump = fixture(&source, SQL);
+        let builds = std::thread::scope(|s| {
+            let workers: Vec<_> = (0..8)
+                .map(|_| {
+                    s.spawn(|| {
+                        let (db, built) = cached_snapshot(&source, &temp.0);
+                        assert_eq!(dump_sql(&db), dump);
+                        built
+                    })
+                })
+                .collect();
+            workers
+                .into_iter()
+                .map(|w| w.join().unwrap())
+                .filter(|&built| built)
+                .count()
+        });
+        assert_eq!(builds, 1);
+        let mut names: Vec<_> = std::fs::read_dir(&temp.0)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        let key = cache_path(&temp.0, &read_source(&source));
+        let image = key.file_name().unwrap().to_str().unwrap();
+        let lock = key.with_extension("lock");
+        let lock = lock.file_name().unwrap().to_str().unwrap();
+        assert_eq!(names, ["a.sql.gz", lock, image]);
+    }
 }
