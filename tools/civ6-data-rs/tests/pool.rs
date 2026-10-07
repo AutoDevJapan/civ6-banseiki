@@ -129,6 +129,11 @@ fn historical_source_records_must_be_complete() {
             "invalid verification date",
         ),
         ("facts", json!(""), "facts"),
+        (
+            "verified_on",
+            json!("2026-+1-+7"),
+            "invalid verification date",
+        ),
     ] {
         let mut data = catalogue();
         data["characters"][0]["sources"][0][field] = value;
@@ -198,4 +203,79 @@ fn cli_checks_an_external_file_and_returns_failure_for_invalid_json() {
         .unwrap()
         .status
         .success());
+}
+
+#[test]
+fn identity_source_and_coverage_regressions_are_rejected() {
+    for (field, value, expected) in [
+        ("id", json!("JAC_POOL_H000"), "nonzero decimal digits"),
+        ("id", json!("JAC_POOL_H01"), "nonzero decimal digits"),
+        (
+            "existing_leader_id",
+            json!("LEADER/INVALID"),
+            "invalid existing_leader_id",
+        ),
+        (
+            "existing_leader_id",
+            json!("LEADER_JAC_MORI_MOTONARI"),
+            "duplicate existing_leader_id",
+        ),
+    ] {
+        let mut data = catalogue();
+        data["characters"][0][field] = value;
+        assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains(expected));
+    }
+    let mut data = catalogue();
+    data["characters"][0]["sources"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("facts");
+    assert!(
+        format!("{:#}", pool::validate(&data).unwrap_err()).contains("missing or unknown field")
+    );
+    let mut data = catalogue();
+    data["characters"][0]["origin"] = json!("新規");
+    data["characters"][0]["id"] = json!("JAC_POOL_O099");
+    data["characters"][0]["faction"] = json!("架空の領主");
+    data["characters"][0]["sources"] = json!([]);
+    assert!(
+        format!("{:#}", pool::validate(&data).unwrap_err()).contains("20 historical and 80 new")
+    );
+    let mut data = catalogue();
+    for row in data["characters"].as_array_mut().unwrap() {
+        if row["era"] == "古代" {
+            row["era"] = json!("中世");
+        }
+    }
+    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("all seven eras"));
+    let mut data = catalogue();
+    data["characters"][20]["faction"] = json!("伊達家");
+    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("marked 架空"));
+    let mut data = catalogue();
+    for row in data["characters"].as_array_mut().unwrap() {
+        if row["origin"] == "新規" && row["faction"].as_str().unwrap().starts_with("伊達家") {
+            row["faction"] = json!("架空の領主");
+        }
+    }
+    assert!(format!("{:#}", pool::validate(&data).unwrap_err()).contains("all 20 houses"));
+}
+
+#[test]
+fn existing_leader_mapping_refers_to_the_same_registered_person() {
+    let data = catalogue();
+    let mapped: Vec<_> = data["characters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| !r["existing_leader_id"].is_null())
+        .collect();
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(mapped[0]["name"], "毛利元就");
+    let leader = mapped[0]["existing_leader_id"].as_str().unwrap();
+    let text = Repository::checked_in()
+        .read("poc/JAC_PoC_CustomCivs/Data/JAC_Japan1534_Gameplay.sql")
+        .unwrap();
+    assert!(text.contains(&format!(
+        "('{leader}', 'LOC_{leader}_NAME', 'LEADER_DEFAULT'"
+    )));
 }

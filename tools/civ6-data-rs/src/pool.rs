@@ -34,6 +34,28 @@ const ERAS: [&str; 7] = ["古代", "中世", "戦国", "近世", "近現代", "�
 const TRAITS: [&str; 8] = [
     "武人", "鬼神", "策士", "魔神", "教者", "霊神", "凡人", "天才",
 ];
+const HOUSES: [&str; 20] = [
+    "伊達家",
+    "蘆名家",
+    "北条家",
+    "山内上杉家",
+    "武田家",
+    "長尾家",
+    "今川家",
+    "織田家",
+    "松平家",
+    "朝倉家",
+    "足利将軍家",
+    "三好家",
+    "六角家",
+    "本願寺",
+    "大内家",
+    "尼子家",
+    "毛利家",
+    "長宗我部家",
+    "大友家",
+    "島津家",
+];
 
 fn keys(value: &Value, expected: &[&str]) -> Result<()> {
     let object = value.as_object().context("expected JSON object")?;
@@ -62,7 +84,13 @@ fn date(s: &str) -> bool {
     let Some((month, day)) = tail.split_once('-') else {
         return false;
     };
-    if year.len() != 4 || month.len() != 2 || day.len() != 2 {
+    if year.len() != 4
+        || month.len() != 2
+        || day.len() != 2
+        || ![year, month, day]
+            .iter()
+            .all(|part| part.bytes().all(|b| b.is_ascii_digit()))
+    {
         return false;
     }
     let (Ok(y), Ok(m), Ok(d)) = (
@@ -114,6 +142,7 @@ pub fn validate(data: &Value) -> Result<()> {
     let mut leaders = BTreeSet::new();
     let mut regions = BTreeSet::new();
     let mut eras = BTreeSet::new();
+    let mut houses = BTreeSet::new();
     let mut counts = [0usize; 6];
     let mut historical = 0;
     let mut candidates = 0;
@@ -176,7 +205,15 @@ pub fn validate(data: &Value) -> Result<()> {
             let region = text(row, "region")?;
             ensure!(REGIONS.contains(&region), "unknown region {region}");
             regions.insert(region);
-            text(row, "faction")?;
+            let faction = text(row, "faction")?;
+            if origin == "新規" {
+                ensure!(faction.contains("架空"), "new faction must be marked 架空");
+                for house in HOUSES {
+                    if faction == format!("{house}（架空家臣）") {
+                        houses.insert(house);
+                    }
+                }
+            }
             text(row, "description")?;
             let category = text(row, "category")?;
             let position = CATEGORIES
@@ -261,6 +298,10 @@ pub fn validate(data: &Value) -> Result<()> {
     ensure!(
         ERAS.iter().all(|e| eras.contains(e)),
         "first batch must cover all seven eras"
+    );
+    ensure!(
+        HOUSES.iter().all(|h| houses.contains(h)),
+        "first batch must cover all 20 houses with fictional retainers"
     );
     Ok(())
 }

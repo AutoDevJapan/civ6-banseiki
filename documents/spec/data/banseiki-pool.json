@@ -22,7 +22,7 @@
           "publisher": "名古屋市博物館",
           "url": "https://www.museum.city.nagoya.jp/exhibition/special/past/tenji141025.html",
           "verified_on": "2026-10-07",
-          "facts": "尾張統一と岐阜・安土への本拠移転。"
+          "facts": "織田家の信長による尾張統一、岐阜・安土への本拠移転、天下統一に向けた活動。"
         }
       ]
     },
@@ -45,7 +45,7 @@
           "publisher": "名古屋市",
           "url": "https://www.city.nagoya.jp/kankou/bunka/1034457/1016040/1016042/1016046/1033653.html",
           "verified_on": "2026-10-07",
-          "facts": "尾張中村出身、信長に仕えたこと、全国統一。"
+          "facts": "尾張中村出身、信長への奉公、信長の統一事業の継承、全国統一と近世社会の形成への関与。"
         }
       ]
     },
@@ -68,7 +68,7 @@
           "publisher": "名古屋市博物館",
           "url": "https://www.museum.city.nagoya.jp/exhibition/special/past/tenji141025.html",
           "verified_on": "2026-10-07",
-          "facts": "関ヶ原での勝利と城下の移転。"
+          "facts": "関ヶ原での勝利、徳川家の政権、家康が清須から名古屋への城下移転を決めたこと。"
         }
       ]
     },
@@ -252,7 +252,7 @@
           "publisher": "姫路市",
           "url": "https://www.city.himeji.lg.jp/kanko/cmsfiles/contents/0000005/5242/kanbei_web.pdf",
           "verified_on": "2026-10-07",
-          "facts": "官兵衛孝高・如水の名、秀吉への協力と小田原での講和。"
+          "facts": "黒田家の官兵衛孝高・如水の名、秀吉への協力、播磨諸将への調略と小田原での講和。"
         }
       ]
     },
@@ -268,14 +268,14 @@
       "trait": "策士",
       "leader_candidate": false,
       "existing_leader_id": null,
-      "description": "美濃にゆかりを持ち、参謀として語られる戦国の人物。",
+      "description": "豊臣秀吉の軍師として知られ、垂井の菩提山城を居城とした戦国の人物。",
       "sources": [
         {
-          "title": "軍師サミット in 垂井",
+          "title": "菩提山城跡総合調査について",
           "publisher": "垂井町",
-          "url": "https://www.town.tarui.lg.jp/uploaded/attachment/2773.pdf",
+          "url": "https://www.town.tarui.lg.jp/page/8468.html",
           "verified_on": "2026-10-07",
-          "facts": "竹中半兵衛が参謀的な人物として紹介されている。"
+          "facts": "垂井町教育委員会が、豊臣秀吉の軍師として名高い竹中半兵衛の居城である菩提山城跡を調査している。"
         }
       ]
     },
@@ -309,19 +309,19 @@
       "origin": "史実",
       "era": "古代",
       "region": "近畿",
-      "faction": "天台宗",
+      "faction": "日本仏教（天台宗の詳細は追加調査）",
       "category": "僧侶",
       "trait": "教者",
       "leader_candidate": false,
       "existing_leader_id": null,
-      "description": "比叡山と天台宗の基盤を整え、空海から密教を学ぼうとした僧。",
+      "description": "空海のもとにいる弟子へ書物について問い、学びを求めた平安時代の僧。",
       "sources": [
         {
           "title": "最澄筆 尺牘（久隔帖）",
-          "publisher": "奈良国立博物館",
-          "url": "https://www.narahaku.go.jp/collection/_test/ja/648-0.html",
+          "publisher": "奈良国立博物館（文化庁・文化遺産オンライン）",
+          "url": "https://online.bunka.go.jp/heritages/detail/219210",
           "verified_on": "2026-10-07",
-          "facts": "813年の自筆書状、比叡山・天台宗の基盤整備、空海への学習の希望。"
+          "facts": "813年の最澄自筆書状。最澄が空海のもとにいる弟子へ書物の内容を問い合わせたこと。"
         }
       ]
     },
@@ -360,14 +360,14 @@
       "trait": "天才",
       "leader_candidate": false,
       "existing_leader_id": null,
-      "description": "平安時代の陰陽家で、後世の数々の伝説とは区別して扱う人物。",
+      "description": "平安時代の陰陽師で、賀茂氏と安倍氏による陰陽道の形成に関わった人物。",
       "sources": [
         {
-          "title": "上京区文化歴史スポット",
-          "publisher": "京都市上京区",
-          "url": "https://www.city.kyoto.lg.jp/kamigyo/cmsfiles/contents/0000012/12734/01_spot.pdf",
+          "title": "陰陽師と暦（第117回歴博フォーラム「陰陽師の誕生」）",
+          "publisher": "国立歴史民俗博物館",
+          "url": "https://www.rekihaku.ac.jp/assets/upload/2023_forum_117_pdf_01.pdf",
           "verified_on": "2026-10-07",
-          "facts": "晴明神社の説明に平安時代の陰陽家と記載。伝説の存在は異能の実証ではない。"
+          "facts": "10世紀後半に賀茂氏・安倍氏の陰陽道の基礎が形成され、11世紀に安倍晴明が陰陽師として認識されたこと。"
         }
       ]
     },
@@ -424,7 +424,7 @@
       "origin": "史実",
       "era": "近現代",
       "region": "近畿",
-      "faction": "無所属（研究者）",
+      "faction": "研究活動（所属組織は未確認）",
       "category": "一般ジョブUnit",
       "trait": "天才",
       "leader_candidate": false,
@@ -436,7 +436,7 @@
           "publisher": "南方熊楠顕彰館",
           "url": "https://www.minakata.org/?page_id=432",
           "verified_on": "2026-10-07",
-          "facts": "和歌山・田辺での採集と研究、神島の天然記念物指定への尽力。"
+          "facts": "熊楠の和歌山・田辺での植物や菌類・変形菌の採集と研究、神島の天然記念物指定への尽力。"
         }
       ]
     },
