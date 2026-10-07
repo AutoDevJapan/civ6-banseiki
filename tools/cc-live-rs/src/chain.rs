@@ -1218,24 +1218,31 @@ impl Options {
 /// Reserve bounded cleanup time and account for a competitor already waiting.
 /// A waiter arriving during the synchronous child run still waits at most one
 /// scenario window (30 minutes including preparation and cleanup).
-fn scenario_window(r: &mut impl Runner, p: &Paths, token: Option<&str>) -> Result<f64, String> {
-    let mut remaining = fairness::LEASE_SECONDS;
-    if let Some(token) = token {
+fn preparation_deadline(
+    r: &mut impl Runner,
+    p: &Paths,
+    lease: Option<&process::LeaseLimit>,
+) -> Result<f64, String> {
+    let anchor = r.monotonic();
+    let epoch = r.now();
+    let mut deadline = anchor + fairness::LEASE_SECONDS - CLEANUP_RESERVE_SECONDS;
+    if let Some(limit) = lease {
         let mut lock =
             fairness::Lock::open(p)?.ok_or("owned Civ6 lock unavailable before preparation")?;
-        if lock.info["lock_token"].as_str() != Some(token) {
+        if lock.info["lock_token"].as_str() != Some(limit.token.as_str()) {
             return Err("Civ6 lock ownership changed before preparation".into());
         }
         lock.expired(r, p, &fairness::todo_path(p))?;
         if let Some(since) = lock.info["competitor_since"].as_f64() {
-            remaining = remaining.min(fairness::LEASE_SECONDS - (r.now() - since).max(0.0));
+            let hard_deadline = anchor + fairness::LEASE_SECONDS - (epoch - since).max(0.0);
+            limit.record_probe(&process::LeaseProbe::Contended(hard_deadline));
+            deadline = deadline.min(limit.work_deadline().unwrap());
         }
     }
-    let remaining = remaining - CLEANUP_RESERVE_SECONDS;
-    if remaining <= 0.0 {
+    if deadline <= r.monotonic() {
         return Err("Civ6 lease has insufficient time for another scenario and cleanup".into());
     }
-    Ok(remaining)
+    Ok(deadline)
 }
 
 fn time_left(r: &mut impl Runner, deadline: f64) -> Result<f64, String> {
@@ -1273,8 +1280,11 @@ fn main_owned(
             yield_if_expired(r, p, token)?;
         }
         let (name, scenario) = item.split_once(':').ok_or("expected name:scenario.json")?;
-        let window = scenario_window(r, p, token)?;
-        let deadline = r.monotonic() + window;
+        // One lease spans preparation, the initial observation, the driver,
+        // and cleanup. Never replace already known contention with a fresh lease.
+        let lease = token.map(|token| process::LeaseLimit::new(p, token, CLEANUP_RESERVE_SECONDS));
+        let deadline = preparation_deadline(r, p, lease.as_ref())?;
+        let window = deadline - r.monotonic();
         *cleanup_deadline = Some(deadline + CLEANUP_RESERVE_SECONDS);
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["prepare_window_seconds"] = json!(window);
@@ -1378,9 +1388,8 @@ fn main_owned(
             argv.push("--test-mode".into());
         }
         let timeout = scenario_timeout;
-        let lease = token.map(|token| process::LeaseLimit::new(p, token, CLEANUP_RESERVE_SECONDS));
         if let Some(limit) = &lease {
-            process::observe_lease(r, limit)?;
+            process::monitor_lease(r, limit)?;
             if let Some(deadline) = limit.work_deadline() {
                 if r.monotonic() >= deadline {
                     return Err(format!(
@@ -1888,6 +1897,76 @@ mod source_manifest_tests {
 #[cfg(test)]
 mod queue_entry_tests {
     use super::*;
+
+    #[test]
+    fn preparation_contention_survives_the_first_driver_observation_timeout() {
+        struct Probe {
+            mono: f64,
+            budgets: Vec<f64>,
+        }
+        impl Runner for Probe {
+            fn now(&mut self) -> f64 {
+                self.mono + 1090.0
+            }
+            fn monotonic(&mut self) -> f64 {
+                self.mono
+            }
+            fn run(&mut self, call: Call) -> Result<Output, String> {
+                assert_eq!(call.args[0], "tasklist");
+                let budget = call.timeout.unwrap();
+                self.budgets.push(budget);
+                self.mono += budget;
+                Err("command timed out".into())
+            }
+            fn sleep(&mut self, _: f64) -> Result<(), String> {
+                panic!("no wait expected")
+            }
+            fn error(&mut self, _: &str) -> Result<(), String> {
+                Ok(())
+            }
+        }
+        let root = std::env::temp_dir().join(format!("cc-live-prepare-{}", new_lock_token()));
+        let p = Paths {
+            here: root.join("here"),
+            jobs: root.join("jobs"),
+            wt: root.join("wt"),
+            temp: root.join("temp"),
+            profile: root.join("user"),
+            python: "unused".into(),
+        };
+        fs::create_dir_all(p.here.join("queue")).unwrap();
+        fs::create_dir_all(p.jobs.join("waiter")).unwrap();
+        write_json(
+            p.here.join("civ6.lock"),
+            &json!({"lock_token":"owned","job":"owner","acquired_at":1000}),
+        )
+        .unwrap();
+        write_json(p.jobs.join("waiter/job.json"), &json!({"status":"running"})).unwrap();
+        let queue = p.here.join("queue/waiter.json");
+        write_json(&queue, &json!({"job":"waiter","since":1000})).unwrap();
+        let limit = process::LeaseLimit::new(&p, "owned", CLEANUP_RESERVE_SECONDS);
+        let mut r = Probe {
+            mono: 10.0,
+            budgets: vec![],
+        };
+        assert_eq!(
+            preparation_deadline(&mut r, &p, Some(&limit)).unwrap(),
+            1470.0
+        );
+        assert_eq!(limit.hard_deadline(), Some(1710.0));
+        // Preparation used nearly all its window; the first monitor must use
+        // this prior absolute deadline even when its peer query is unknown.
+        r.mono = 1469.0;
+        write_json(queue, &json!({"pid":4321,"since":1000})).unwrap();
+        let driver_limit = limit.clone();
+        assert!(process::monitor_lease(&mut r, &driver_limit)
+            .unwrap_err()
+            .contains(process::LEASE_YIELD));
+        assert_eq!(r.budgets, vec![1.0]);
+        assert_eq!(r.mono, 1470.0);
+        assert_eq!(driver_limit.hard_deadline(), Some(1710.0));
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn same_pid_registrations_have_distinct_paths_and_old_cleanup_keeps_new_entry() {
