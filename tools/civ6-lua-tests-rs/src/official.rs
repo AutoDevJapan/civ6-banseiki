@@ -93,7 +93,7 @@ fn load_sql(gz: &[u8]) -> Connection {
 fn cache_path(dir: &Path, gz: &[u8]) -> PathBuf {
     let mut hash = Sha256::new();
     for part in [
-        &b"rusqlite-0.37 format-v1"[..],
+        &b"rusqlite-0.37 format-v2-sha256"[..],
         rusqlite::version().as_bytes(),
         gz,
     ] {
@@ -101,7 +101,20 @@ fn cache_path(dir: &Path, gz: &[u8]) -> PathBuf {
         hash.update(part);
     }
     let hex: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
-    dir.join(format!("pre_sengoku-{hex}.sqlite"))
+    dir.join(format!("pre_sengoku-{hex}.sqlite-cache"))
+}
+
+// Publish the checksum and image in one file so readers cannot observe a
+// checksum from a different build. SQLite's structural checks alone do not
+// detect changed cell values in an otherwise valid database.
+fn load_cached_image(bytes: &[u8]) -> Result<Connection, String> {
+    let (expected, image) = bytes
+        .split_at_checked(32)
+        .ok_or("cached image has no SHA-256 header")?;
+    if &Sha256::digest(image)[..] != expected {
+        return Err("cached image checksum mismatch".into());
+    }
+    load_image(image)
 }
 
 fn load_image(image: &[u8]) -> Result<Connection, String> {
@@ -124,7 +137,11 @@ fn load_image(image: &[u8]) -> Result<Connection, String> {
 fn cached_snapshot(source: &Path, dir: &Path) -> (Connection, bool) {
     let gz = read_source(source);
     let path = cache_path(dir, &gz);
-    let loaded = || std::fs::read(&path).ok().and_then(|b| load_image(&b).ok());
+    let loaded = || {
+        std::fs::read(&path)
+            .ok()
+            .and_then(|b| load_cached_image(&b).ok())
+    };
     let (db, built) = match loaded() {
         Some(db) => (db, false),
         None => {
@@ -166,6 +183,7 @@ fn build_image(gz: &[u8], path: &Path) -> Connection {
             .write(true)
             .create_new(true)
             .open(&pending)?;
+        file.write_all(&Sha256::digest(&image[..]))?;
         file.write_all(&image[..])?;
         file.sync_all()?;
         drop(file);
@@ -591,6 +609,40 @@ mod cache_tests {
             assert_eq!(dump_sql(&db), dump);
             assert!(std::fs::read(&key).unwrap() == good);
         }
+    }
+
+    #[test]
+    fn structurally_valid_content_corruption_is_rebuilt() {
+        let temp = Temp::new("content-corruption");
+        let source = temp.0.join("a.sql.gz");
+        let dump = fixture(&source, SQL);
+        let key = cache_path(&temp.0, &read_source(&source));
+        cached_snapshot(&source, &temp.0);
+        let good = std::fs::read(&key).unwrap();
+        let altered = load_cached_image(&good).unwrap();
+        altered
+            .execute("UPDATE Types SET Hash = 999 WHERE Type = 'A'", [])
+            .unwrap();
+        let altered_image = altered.serialize(MAIN_DB).unwrap();
+        assert!(
+            load_image(&altered_image).is_ok(),
+            "SQLite structural check accepts changed data"
+        );
+        let mut bad = good[..32].to_vec();
+        bad.extend_from_slice(&altered_image);
+        std::fs::write(&key, bad).unwrap();
+
+        let (db, built) = cached_snapshot(&source, &temp.0);
+        assert!(
+            built,
+            "content corruption must regenerate from the original SQL"
+        );
+        assert_eq!(dump_sql(&db), dump);
+        assert_eq!(std::fs::read(&key).unwrap(), good);
+        assert!(
+            !cached_snapshot(&source, &temp.0).1,
+            "repaired image must be reusable"
+        );
     }
 
     #[test]
