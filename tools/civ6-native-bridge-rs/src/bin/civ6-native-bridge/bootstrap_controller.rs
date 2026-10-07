@@ -296,7 +296,12 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             return Err("bootstrap observation drain failed".into());
         }
         let (trace, bytes) = stable_trace(&game, address, req.pid, req.created)?;
-        fs::OpenOptions::new().write(true).create_new(true).open(req.output.with_extension("bootstrap.bin")).and_then(|mut f|f.write_all(&bytes)).map_err(|e|e.to_string())?;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(req.output.with_extension("bootstrap.bin"))
+            .and_then(|mut f| f.write_all(&bytes))
+            .map_err(|e| e.to_string())?;
         let native_address = trace["runtime_trace"]
             .as_u64()
             .ok_or("native trace missing")? as usize;
@@ -312,7 +317,12 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
             return Err("native drained trace is not stable".into());
         }
         wire::native_trace(&native)?;
-        fs::OpenOptions::new().write(true).create_new(true).open(req.output.with_extension("runtime.bin")).and_then(|mut f|f.write_all(&native)).map_err(|e|e.to_string())?;
+        fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(req.output.with_extension("runtime.bin"))
+            .and_then(|mut f| f.write_all(&native))
+            .map_err(|e| e.to_string())?;
         write_json(&mut writer, trace)?;
         if !alive(&game) || process_created(&game)? != req.created {
             return Err("resident game changed before stop".into());
