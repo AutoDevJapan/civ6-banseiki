@@ -195,7 +195,7 @@ fn real_sql_rebuild_preserves_d21_and_price_v1_saves_for_prices_123() {
     for version in 0..3 {
         for old in 1..=3 {
             let before = if version < 2 {
-                &old_default
+                old_default
             } else {
                 &rebuilt[usize::from(old - 1)]
             };
