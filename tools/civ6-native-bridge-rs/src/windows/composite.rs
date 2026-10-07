@@ -383,6 +383,11 @@ mod tests {
     }
 
     #[test]
+    fn unpublished_callback_cannot_enter_or_close_a_later_observation() {
+        owned_child(true, "publish-race");
+    }
+
+    #[test]
     fn runtime_stopped_observation_is_immutable_while_authority_keeps_running() {
         owned_child(true, "stop-freeze");
     }
@@ -529,6 +534,52 @@ mod tests {
         }
         .unwrap();
         let trace = unsafe { &*trace_pointer };
+        if is_runtime && std::env::var("JAC_RUNTIME_CASE").as_deref() == Ok("publish-race") {
+            runtime::SAMPLE_PUBLISH_PAUSE.store(true, Ordering::Release);
+            runtime::SAMPLE_PUBLISH_PAUSED.store(false, Ordering::Release);
+            runtime::SAMPLE_PUBLISH_RELEASE.store(false, Ordering::Release);
+            let worker = std::thread::spawn(runtime::sample_begin);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while !runtime::SAMPLE_PUBLISH_PAUSED.load(Ordering::Acquire)
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::yield_now();
+            }
+            let paused = runtime::SAMPLE_PUBLISH_PAUSED.load(Ordering::Acquire);
+            // Always release/reap the owned thread, even if setup did not reach
+            // the pause. No test panic leaves an in-process writer stranded.
+            if paused {
+                runtime::start_observation(MAX_ACTIVE_SECONDS);
+            }
+            runtime::SAMPLE_PUBLISH_RELEASE.store(true, Ordering::Release);
+            let sampled = worker.join().unwrap();
+            if sampled {
+                runtime::sample_end();
+            }
+            assert!(
+                paused,
+                "prepublication callback reached the controlled pause"
+            );
+            assert!(
+                !sampled,
+                "old callback must not enter the newly opened observation"
+            );
+            assert!(
+                runtime::sample_begin(),
+                "old callback must not close the new gate"
+            );
+            runtime::sample_end();
+            assert_eq!(
+                runtime::BridgeRuntimeStopObservation(null_mut()),
+                BridgeStatus::Ok as u32
+            );
+            assert!(
+                !runtime::sample_begin(),
+                "a real stop still rejects later callbacks"
+            );
+            assert_eq!(trace.joined.property.next.load(Ordering::Acquire), 0);
+            return;
+        }
         if is_runtime {
             runtime::start_observation(MAX_ACTIVE_SECONDS);
         }

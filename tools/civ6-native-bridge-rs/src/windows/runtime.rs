@@ -356,12 +356,33 @@ pub(super) fn sample_begin() -> bool {
     if !owned() {
         return true;
     }
+    // A callback entering during installation belongs to the unpublished
+    // phase. It may finish after initialization, but may not expire or enter
+    // that later observation using the old, zero deadline.
+    let installed = INSTALLED.load(Ordering::Acquire);
+    #[cfg(test)]
+    if SAMPLE_PUBLISH_PAUSE.swap(false, Ordering::AcqRel) {
+        SAMPLE_PUBLISH_PAUSED.store(true, Ordering::Release);
+        while !SAMPLE_PUBLISH_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+    }
+    if !installed {
+        return false;
+    }
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     if now >= DEADLINE_MS.load(Ordering::Acquire) {
         SAMPLE_GATE.close();
     }
     SAMPLE_GATE.try_acquire()
 }
+
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_RELEASE: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn sample_end() {
     if owned() {
