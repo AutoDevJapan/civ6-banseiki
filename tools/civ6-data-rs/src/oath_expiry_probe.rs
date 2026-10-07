@@ -95,10 +95,13 @@ fn parse_value(s: &[u8], at: &mut usize) -> Result<Frame> {
     );
     let length: usize = std::str::from_utf8(&s[*at..*at + digits])?.parse()?;
     *at += digits + 1;
+    let end = at
+        .checked_add(length)
+        .context("frame scalar length overflow")?;
     let body = s
-        .get(*at..*at + length)
+        .get(*at..end)
         .context("frame scalar shorter than its length")?;
-    *at += length;
+    *at = end;
     let (kind, text) = std::str::from_utf8(body)?
         .split_once(':')
         .context("frame scalar kind missing")?;
@@ -450,12 +453,19 @@ pub fn scenario(evidence: &Evidence, plan: &Plan) -> Result<Value> {
             .is_some_and(|s| s["action"] == "enable_mods"),
         "source scenario must start with its enable_mods step"
     );
+    let expected_core = format!(
+        "JAC_OATH_SAVE_CORE_AFTER|{}|{}:{}|END-JAC-OATH-SAVE",
+        plan.oath,
+        evidence.core_after.len(),
+        evidence.core_after
+    );
+    let loaded_core = format!("local observed=(function()\n{}\nend)(); assert(observed=={},'loaded save differs from original artifact Core record'); return observed", core_code(&plan.oath,true),lua_str(&expected_core));
     let mut steps = vec![
         source_steps[0].clone(),
         json!({"action":"load","name":plan.saved_name,"exact_name":true,"timeout":600}),
         loaded_ready(),
         // The loaded state must still be the verified frame, byte for byte.
-        lua(core_code(&plan.oath, true), "GameCore_Tuner"),
+        lua(loaded_core, "GameCore_Tuner"),
         lua(probe(plan, CALC), "GameCore_Tuner"),
     ];
     if plan.fast_forward() > 0 {

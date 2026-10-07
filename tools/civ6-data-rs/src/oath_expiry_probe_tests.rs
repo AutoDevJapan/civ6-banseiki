@@ -197,8 +197,15 @@ struct Setup {
 }
 
 fn setup() -> Result<Setup> {
+    setup_with_history(false)
+}
+
+fn setup_with_history(with_history: bool) -> Result<Setup> {
     let repo = Repository::checked_in();
     let vm = game(&repo)?;
+    if with_history {
+        vm.load("turn=START+66; local l=Game:GetProperty('JAC_AGES_LEDGER'); l.history.r1={turn=66,from=0,nested={note='旧:記録',value=7}}; Game:SetProperty('JAC_AGES_LEDGER',l)").exec()?;
+    }
     let before: String = vm.load(core_code(OATH, false)).eval()?;
     let body = before
         .split_once(':')
@@ -259,6 +266,42 @@ fn rejects(at: &str, mutation: &str, reason: &str) -> Result<()> {
 
 const H: &str = "local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l.houses.p0;";
 const SAVE: &str = " Game:SetProperty('JAC_AGES_LEDGER',l)";
+
+#[test]
+fn a_self_consistent_replaced_save_cannot_replace_the_original_evidence() -> Result<()> {
+    let s = setup()?;
+    s.vm.load("local l=Game:GetProperty('JAC_AGES_LEDGER'); l.replacement='same name, different state'; Game:SetProperty('JAC_AGES_LEDGER',l); props.JAC_TODO134_SAVE_PROBE=nil").exec()?;
+    s.vm.load(core_code(OATH, false)).eval::<String>()?;
+    // The substituted save and its internal snapshot agree, but not the original artifact.
+    s.vm.load(core_code(OATH, true)).eval::<String>()?;
+    let error = format!("{:#}", execute(&s, "", "").unwrap_err());
+    assert!(
+        error.contains("loaded save differs from original artifact Core record"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn existing_nonempty_history_survives_and_changes_are_rejected() -> Result<()> {
+    let s = setup_with_history(true)?;
+    assert_eq!(s.plan.history.len(), 1);
+    execute(&s, "", "")?;
+    let s = setup_with_history(true)?;
+    let error=format!("{:#}",execute(&s,"JAC_OATH_EXPIRY_DUE|","local l=Game:GetProperty('JAC_AGES_LEDGER'); l.history.r1.nested.value=8; Game:SetProperty('JAC_AGES_LEDGER',l)").unwrap_err());
+    assert!(error.contains("old judgement history changed"), "{error}");
+    Ok(())
+}
+
+#[test]
+fn oversized_lengths_return_errors_without_panicking() {
+    for text in [
+        format!("{}:string:x", usize::MAX),
+        format!("{{{}:string:x}}", usize::MAX),
+    ] {
+        assert!(Frame::parse(&text).is_err());
+    }
+}
 
 #[test]
 fn natural_due_expires_the_human_oath_and_a_legal_default_follows() -> Result<()> {
