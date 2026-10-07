@@ -9,6 +9,32 @@ struct State {
     archive: std::path::PathBuf,
     existed: bool,
     original_digest: Option<String>,
+    original_identity: Option<(u64, u64)>,
+}
+#[cfg(windows)]
+fn identity(path: &Path) -> Result<(u64, u64)> {
+    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+    };
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(0x02000000)
+        .open(path)?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+        return Err(std::io::Error::last_os_error().into());
+    }
+    Ok((
+        u64::from(info.dwVolumeSerialNumber),
+        (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow),
+    ))
+}
+#[cfg(unix)]
+fn identity(path: &Path) -> Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let m = fs::metadata(path)?;
+    Ok((m.dev(), m.ino()))
 }
 #[cfg(windows)]
 fn volume(path: &Path) -> Result<String> {
@@ -108,6 +134,11 @@ pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
     } else {
         None
     };
+    let original_identity = if existed {
+        Some(identity(&original)?)
+    } else {
+        None
+    };
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -119,6 +150,7 @@ pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
             archive: archive.clone(),
             existed,
             original_digest,
+            original_identity,
         },
     )?;
     file.write_all(b"\n")?;
@@ -145,10 +177,11 @@ pub fn begin(profile: &Path, archive: &Path, state: &Path) -> Result<()> {
 }
 pub fn restore(profile: &Path, state: &Path) -> Result<()> {
     let bytes = fs::read(state)?;
-    let split = bytes
-        .iter()
-        .position(|b| *b == b'\n')
-        .ok_or_else(|| Error::input("autosave state lacks a durable first record"))?;
+    let Some(split) = bytes.iter().position(|b| *b == b'\n') else {
+        // begin cannot rename until this complete first record is synced.
+        fs::remove_file(state)?;
+        return Ok(());
+    };
     let s: State = serde_json::from_slice(&bytes[..split])?;
     let restored = bytes[split + 1..]
         .split(|b| *b == b'\n')
@@ -156,6 +189,11 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
         .and_then(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
         .is_some_and(|v| v["phase"] == "restored");
     let moved_or_uncertain = bytes[split + 1..].iter().any(|b| !b.is_ascii_whitespace());
+    if !moved_or_uncertain && !s.archive.join("owner-auto-original").exists() {
+        // No rename completed, including a later user removal of auto/archive.
+        fs::remove_file(state)?;
+        return Ok(());
+    }
     let expected = profile
         .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single")
         .canonicalize()?
@@ -180,7 +218,7 @@ pub fn restore(profile: &Path, state: &Path) -> Result<()> {
     // A crash before the first rename leaves the original folder untouched.
     if s.existed && !backup.exists() {
         if !s.original.exists()
-            || (moved_or_uncertain && Some(digest(&s.original)?) != s.original_digest)
+            || (moved_or_uncertain && Some(identity(&s.original)?) != s.original_identity)
         {
             return Err(Error::input("original autosave archive is missing and current folder is not the original; keeping recovery record"));
         }
@@ -287,6 +325,7 @@ mod tests {
             archive,
             existed: true,
             original_digest: Some(digest(&original).unwrap()),
+            original_identity: Some(identity(&original).unwrap()),
         };
         fs::write(&state, serde_json::to_string(&s).unwrap() + "\n").unwrap();
         fs::write(original.join("save"), b"later legitimate owner save").unwrap();

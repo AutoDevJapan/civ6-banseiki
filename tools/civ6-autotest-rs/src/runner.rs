@@ -1142,6 +1142,9 @@ impl Runner {
             } else {
                 false
             };
+            if warning {
+                next_launch = now + 45.0;
+            }
             if !present && !syncing && !warning && now >= next_launch && attempts < 4 {
                 let closed = self.backend.close_orphaned_reporters()?;
                 if !closed.is_empty() {

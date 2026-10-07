@@ -536,6 +536,11 @@ mod win {
                 Err(e) if title.to_ascii_lowercase().contains("sync") || title.contains("同期") => {
                     return Err(e)
                 }
+                Err(e)
+                    if title.eq_ignore_ascii_case("steam") && session.console_proves_civ6()? =>
+                {
+                    return Err(e)
+                }
                 Err(_) => {} // An ordinary unreadable library is not a dialog.
             }
         }
@@ -550,6 +555,9 @@ mod win {
     pub fn handle(session: &Session, journal: &Path) -> Result<bool> {
         use crate::steam_policy::{decide, Action};
         let (_com, uia, owner, windows) = scan(session)?;
+        if windows.is_empty() {
+            return Ok(false);
+        }
         let proof = session.console_proves_civ6()?;
         let mut candidates = Vec::new();
         for window in &windows {
