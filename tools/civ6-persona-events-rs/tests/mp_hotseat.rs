@@ -255,36 +255,42 @@ fn active_owner_receipt_mismatch_partial_missing_and_unknown_gate_fail_closed() 
 
 #[test]
 fn cli_generates_exact_hotseat_scene_in_hidden_child() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../civ6-autotest/scenarios");
-    let path = std::env::temp_dir().join(format!(
-        "todo324-mp-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
+    for (mode, expected) in [
+        ("generate-mp-hotseat", scene()),
+        ("generate-mp-setup", setup_probe()),
+    ] {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../civ6-autotest/scenarios");
+        let path = std::env::temp_dir().join(format!(
+            "todo324-mp-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        let result = command
+            .arg(mode)
+            .arg(root.join("leader-persona-15km.json"))
+            .arg(root.join("multiplayer-banseiki-hotseat-growth.json"))
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let generated = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(generated, serde_json::to_string_pretty(&expected).unwrap());
     }
-    let result = command
-        .arg("generate-mp-hotseat")
-        .arg(root.join("leader-persona-15km.json"))
-        .arg(root.join("multiplayer-banseiki-hotseat-growth.json"))
-        .arg(&path)
-        .output()
-        .unwrap();
-    assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let generated = std::fs::read_to_string(&path).unwrap();
-    std::fs::remove_file(path).unwrap();
-    assert_eq!(generated, serde_json::to_string_pretty(&scene()).unwrap());
 }
 
 fn setup_probe() -> Value {
@@ -343,13 +349,13 @@ fn setup_world() -> Lua {
     let lua = Lua::new();
     let probe = setup_probe();
     lua.load(r#"
-map='Pangaea.lua';maximum=12;count=12;humans=2;active=0;turn=1;accounting=false
+map='Pangaea.lua';maximum=20;minimum=2;count=12;humans=2;active=0;turn=1;accounting=false
 UI={IsInFrontEnd=function()return true end}
 GameConfiguration={IsHotseat=function()return true end,GetRuleSet=function()return 'RULESET_JAC_BANSEIKI' end,
 GetParticipatingPlayerCount=function()return count+2 end,GetHiddenPlayerCount=function()return 2 end,GetValue=function()return 0 end,GetStartTurn=function()return 1 end,IsPaused=function()return false end}
-MapConfiguration={GetValue=function()return map end,GetMaxMajorPlayers=function()return maximum end}
+MapConfiguration={GetValue=function()return map end,GetMaxMajorPlayers=function()return maximum end,GetMinMajorPlayers=function()return minimum end}
 Game={GetLocalPlayer=function()return active end,GetCurrentGameTurn=function()return turn end,GetProperty=function()return accounting and {} or nil end}
-SlotStatus={SS_TAKEN=3,SS_COMPUTER=1};PlayerConfigurations={};Players={}
+SlotStatus={SS_TAKEN=3,SS_COMPUTER=1};CivilizationLevelTypes={CIVILIZATION_LEVEL_FULL_CIV=624367792};PlayerConfigurations={};Players={}
 PlayerManager={GetAliveMajorIDs=function()local t={};for i=0,count-1 do t[#t+1]=i end;return t end}
 ExposedMembers={} -- Pangaea does not satisfy LeaderPersona's map criteria.
 "#).exec().unwrap();
@@ -359,7 +365,7 @@ ExposedMembers={} -- Pangaea does not satisfy LeaderPersona's map criteria.
         .iter()
         .enumerate()
     {
-        lua.load(format!("do local id={id};PlayerConfigurations[id]={{GetLeaderTypeName=function()return '{}' end,GetCivilizationTypeName=function()return '{}' end,GetSlotStatus=function()return id<humans and 3 or 1 end}};Players[id]={{IsAlive=function()return true end,IsMajor=function()return true end,IsHuman=function()return id<humans end,IsTurnActive=function()return id==active end}} end",p["leader"].as_str().unwrap(),p["civ"].as_str().unwrap())).exec().unwrap();
+        lua.load(format!("do local id={id};PlayerConfigurations[id]={{GetLeaderTypeName=function()return '{}' end,GetCivilizationTypeName=function()return '{}' end,GetSlotStatus=function()return id<humans and 3 or 1 end,GetCivilizationLevelTypeID=function()return 624367792 end}};Players[id]={{IsAlive=function()return true end,IsMajor=function()return true end,IsHuman=function()return id<humans end,IsTurnActive=function()return id==active end}} end",p["leader"].as_str().unwrap(),p["civ"].as_str().unwrap())).exec().unwrap();
     }
     lua
 }
@@ -373,7 +379,7 @@ fn setup_proofs_reject_wrong_map_roster_and_activeplayer_without_persona_depende
     lua.load(post).exec().unwrap();
     for fault in [
         "map='JAC_Japan_15km.Civ6Map'",
-        "maximum=22",
+        "maximum=8",
         "count=22",
         "humans=3",
     ] {
@@ -392,6 +398,34 @@ fn setup_proofs_reject_wrong_map_roster_and_activeplayer_without_persona_depende
         lua.load(fault).exec().unwrap();
         assert!(lua.load(post).exec().is_err(), "{fault}");
     }
+}
+
+#[test]
+fn measured_map_maximum_is_distinct_from_stock_staging_slot_cap() {
+    let probe = setup_probe();
+    let pre = probe["steps"][3]["code"].as_str().unwrap();
+    for maximum in [12, 20, 22] {
+        let lua = setup_world();
+        lua.load(format!("maximum={maximum}")).exec().unwrap();
+        let result = lua.load(pre).eval::<String>().unwrap();
+        assert!(result.contains(&format!("mapMax={maximum} stagingMax=12")));
+    }
+    for fault in [
+        "maximum=nil",
+        "maximum='20'",
+        "maximum=11",
+        "minimum=13",
+        "PlayerConfigurations[12]=PlayerConfigurations[11]",
+        "PlayerConfigurations[5].GetCivilizationLevelTypeID=function()return 0 end",
+    ] {
+        let lua = setup_world();
+        lua.load(fault).exec().unwrap();
+        assert!(lua.load(pre).exec().is_err(), "{fault}");
+    }
+    // Non-full-civ slots are not counted by the official full-civ predicate.
+    let lua = setup_world();
+    lua.load("PlayerConfigurations[12]={GetSlotStatus=function()return 1 end,GetCivilizationLevelTypeID=function()return 0 end}").exec().unwrap();
+    lua.load(pre).exec().unwrap();
 }
 
 #[test]

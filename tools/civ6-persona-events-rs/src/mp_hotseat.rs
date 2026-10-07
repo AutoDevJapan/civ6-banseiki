@@ -313,8 +313,9 @@ end;return 'reconnected own paid permits and cross-owner denial'
     )
 }
 
-/// MP10 hit the stock StagingRoom twelve-slot limit before Ready. Isolate
-/// startup at that limit with the same six MODs and an ordinary generated map.
+/// MP10 logged occupied slots beyond stock StagingRoom's twelve-slot limit.
+/// Facts16 measured mapMax=20, configured12: mapMax is not the staging cap.
+/// Isolate startup with the same six MODs and an ordinary generated map.
 /// LeaderPersona actions require a fixed Japan map and do not apply here.
 /// Its API presence/absence is recorded, never used to accept basic startup.
 pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, String> {
@@ -344,14 +345,31 @@ assert(GameConfiguration.GetRuleSet()=='RULESET_JAC_BANSEIKI')
 local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')
 print('MP_SETUP12 MAP_SCRIPT type='..type(actualMap)..' value='..tostring(actualMap))
 assert(type(actualMap)=='string' and actualMap=='Pangaea.lua','ordinary generated Pangaea map required')
-assert(MapConfiguration.GetMaxMajorPlayers()==12,'map maximum differs from stock staging limit')
+-- Stock StagingRoom SetCurrentMaxPlayers/OnShow caps mapMax at12; it does
+-- not require mapMax==12. Facts16 measured numeric20 for Pangaea/Huge.
+local mapMax=MapConfiguration.GetMaxMajorPlayers()
+local mapMin=MapConfiguration.GetMinMajorPlayers()
+print('MP_SETUP12 LIMITS mapMax='..tostring(mapMax)..' type='..type(mapMax)..' mapMin='..tostring(mapMin)..' type='..type(mapMin))
+assert(type(mapMax)=='number' and mapMax>=0 and mapMax%1==0,'missing/invalid map maximum')
+assert(type(mapMin)=='number' and mapMin>=0 and mapMin%1==0,'missing/invalid map minimum')
+local stagingMax=math.min(mapMax,12);local stagingMin=math.max(mapMin,2)
+assert(#expected>=stagingMin,'roster below stock staging minimum')
 assert(GameConfiguration.GetParticipatingPlayerCount()==12+GameConfiguration.GetHiddenPlayerCount())
 assert(GameConfiguration.GetValue('CITY_STATE_COUNT')==0)
 for id=0,11 do local p=assert(PlayerConfigurations[id]);local e=expected[id+1]
  assert(p:GetLeaderTypeName()==e.leader and p:GetCivilizationTypeName()==e.civ)
  assert(p:GetSlotStatus()==(id<2 and SlotStatus.SS_TAKEN or SlotStatus.SS_COMPUTER),'human/AI slot mismatch')
 end
-return 'MP_SETUP12 PREFLIGHT map=Pangaea.lua max=12 majors=12 humans=0,1 ai=2..11; no Host sent by this read'
+local occupied=0
+for id=0,63 do local p=PlayerConfigurations[id];if p then
+ local slot=p:GetSlotStatus();local full=p:GetCivilizationLevelTypeID()==CivilizationLevelTypes.CIVILIZATION_LEVEL_FULL_CIV
+ if full and (slot==SlotStatus.SS_TAKEN or slot==SlotStatus.SS_COMPUTER) then
+  occupied=occupied+1;assert(id<stagingMax,'occupied full-civ index exceeds stock staging cap')
+  assert(id<12,'unexpected full-civ outside intended roster')
+ end
+end end
+assert(occupied==12,'actual occupied full-civ roster differs')
+return 'MP_SETUP12 PREFLIGHT map=Pangaea.lua mapMax='..mapMax..' stagingMax='..stagingMax..' majors=12 humans=0,1 ai=2..11; Host not sent; teams/Ready/ModReady and launch acceptance remain official StagingRoom checks; persona_actions=not_applicable'
 "#
     );
     let arrived = format!(
