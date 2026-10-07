@@ -124,6 +124,33 @@ fn read_error_does_not_break_original_ui_or_succeed() {
     assert_eq!(frames[0].kind, "STAGING_ERROR");
 }
 #[test]
+fn all_added_observation_failures_are_isolated_but_original_errors_propagate() {
+    let lua = world();
+    lua.load("GameConfiguration.GetValue=function()error('nonce reader failed')end;UpdateReadyButton();GameConfiguration.GetValue=function()return nonce end;UpdateReadyButton();assert(calls==2)").exec().unwrap();
+    let frames = hotseat_bridge::parse_frames(&logs(&lua), NONCE).unwrap();
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].kind, "STAGING_ERROR");
+    assert!(!logs(&lua).contains(&boundary::ready_marker(NONCE)));
+    let lua = world();
+    lua.load("print=function()error('logger failed')end;UpdateReadyButton();UpdateReadyButton();assert(calls==2)").exec().unwrap();
+    assert!(logs(&lua).is_empty());
+    let (normal, hotseat) = templates();
+    let lua = world();
+    lua.load("UpdateReadyButton=function()error('original UI failed')end")
+        .exec()
+        .unwrap();
+    lua.load(boundary::observer(&normal, &hotseat, NONCE).unwrap())
+        .exec()
+        .unwrap();
+    assert!(lua
+        .load("UpdateReadyButton()")
+        .exec()
+        .unwrap_err()
+        .to_string()
+        .contains("original UI failed"));
+    assert!(logs(&lua).is_empty());
+}
+#[test]
 fn finite_scene_sends_one_host_then_only_log_read_and_preserves22() {
     let (normal, hotseat) = templates();
     let s = boundary::build(&normal, &hotseat, NONCE).unwrap();

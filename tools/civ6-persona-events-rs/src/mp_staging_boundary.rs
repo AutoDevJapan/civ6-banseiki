@@ -89,9 +89,14 @@ local function observe()
  end
 end
 local original=UpdateReadyButton
+local observerFailed=false
 function UpdateReadyButton()
  original()
- observe()
+ -- Never hide an original UI failure. Only the added observer is isolated;
+ -- failure is sticky, cannot emit READY later, and is logged best-effort.
+ if observerFailed then return end
+ local ok,err=pcall(observe)
+ if not ok then observerFailed=true;pcall(emit,'STAGING_ERROR',0,tostring(err)) end
 end
 end
 "#,emitter=original_emitter(),serializer=SERIAL.replace("local function serial(v)","local function encodeValue(v)").replace("serial(k)","encodeValue(k)").replace("serial(v[k])","encodeValue(v[k])"),stock=cap::STOCK_SHA,ready_body=READY_BODY).replace("local encode=serial","local encode=encodeValue"))
