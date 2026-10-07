@@ -706,6 +706,75 @@ fn effect_lua(case: &Case) -> String {
     format!("{{{effects}}}")
 }
 
+// Plot properties can reach the UI before its cached growth values. Wait for
+// an actual change on every owned city, then compare a Core snapshot with the
+// UI. The acceptance calculation still rejects wrong amounts and residues.
+const GROWTH_UPDATED: &str = r#"
+local previous=assert(JAC_OATH_AUDIT and JAC_OATH_AUDIT[__PREVIOUS__],'previous growth observation missing')
+assert(#previous.own>0,'previous growth city inventory missing')
+for _,row in ipairs(previous.own) do
+ local city=assert(Players[row.owner]:GetCities():FindID(row.id),'growth city disappeared')
+ local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+ assert(city:GetOwner()==row.owner and plot:GetIndex()==row.plot,'growth city identity changed')
+ if (plot:GetProperty(__OATH__..'_ON') or 0)~=__FLAG__ then return false end
+ local value=city:GetGrowth():GetOtherGrowthModifier()
+ assert(type(value)=='number' and value==value and value>-math.huge and value<math.huge,'growth observation is not finite')
+ if value==row.other then return false end
+end
+return true
+"#;
+
+const GROWTH_CORE_MATCH: &str = r#"
+local core=Game:GetProperty('JAC_TODO134_GROWTH_CORE')
+if not core or core.phase~=__PHASE__ or core.oath~=__OATH__ then return false end
+assert(core.turn==Game.GetCurrentGameTurn(),'growth observation turn changed')
+assert(#core.snapshot.own>0 and #core.snapshot.foreign>0 and #core.snapshot.own+#core.snapshot.foreign==56,'Core growth inventory incomplete')
+for _,group in ipairs({core.snapshot.own,core.snapshot.foreign}) do
+ for _,row in ipairs(group) do
+  local city=assert(Players[row.owner]:GetCities():FindID(row.id),'Core growth city disappeared')
+  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+  assert(city:GetOwner()==row.owner and plot:GetIndex()==row.plot,'Core/UI growth city identity changed')
+  local growth=city:GetGrowth()
+  for _,pair in ipairs({{'growth','GetOverallGrowthModifier'},{'other','GetOtherGrowthModifier'},{'housing','GetHousingGrowthModifier'},{'happiness','GetHappinessGrowthModifier'},{'surplus','GetFoodSurplus'},{'loyalty','GetLoyaltyGrowthModifier'}}) do
+   if growth[pair[2]](growth)~=row[pair[1]] then return false end
+  end
+  if city:IsOccupied()~=row.occupied then return false end
+  for _,kind in ipairs({'production','gold','science','culture','faith','food'}) do
+   if city:GetYield(GameInfo.Yields['YIELD_'..string.upper(kind)].Index)~=row.y[kind] then return false end
+  end
+ end
+end
+return true
+"#;
+
+fn measure_steps(steps: &mut Vec<Value>, case: &Case, phase: &str) {
+    let quoted = lua_string(phase);
+    let measure = substitute(MEASURE, case, &[("__PHASE__", &quoted)]);
+    if case.effects.iter().any(|effect| effect.kind == "growth") {
+        if let Some((previous, flag)) = match phase {
+            "selected" => Some(("baseline", "1")),
+            "off" => Some(("selected", "0")),
+            "restored" => Some(("off", "1")),
+            _ => None,
+        } {
+            let updated = substitute(
+                GROWTH_UPDATED,
+                case,
+                &[("__PREVIOUS__", &lua_string(previous)), ("__FLAG__", flag)],
+            );
+            steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":updated}}));
+            let core = format!(
+                "JAC_OATH_AUDIT=JAC_OATH_AUDIT or {{}}; local function observe()\n{LUA_HELPERS}\n{measure}\nend\nlocal report=observe(); Game:SetProperty('JAC_TODO134_GROWTH_CORE',{{oath={},phase={quoted},turn=Game.GetCurrentGameTurn(),snapshot=JAC_OATH_AUDIT[{quoted}]}}); return report",
+                lua_string(&case.oath)
+            );
+            steps.push(ui("GameCore_Tuner", core));
+            let synced = substitute(GROWTH_CORE_MATCH, case, &[("__PHASE__", &quoted)]);
+            steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":synced}}));
+        }
+    }
+    steps.push(ui("InGame", measure));
+}
+
 fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     let mut steps = first_steps(base, &case.civ)?;
     let setup = steps[2]["code"].as_str().context("audit setup")?.to_owned();
@@ -745,26 +814,17 @@ fn selected_scenario(base: &Value, case: &Case) -> Result<Value> {
     ));
     steps.push(ui("DedicationPopup", substitute(POPUP, case, &[])));
     steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":format!("local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; return h and h.oathChosen==1 and h.oaths[{}]==true",lua_string(&case.oath))}}));
-    steps.push(ui(
-        "InGame",
-        substitute(MEASURE, case, &[("__PHASE__", "\"selected\"")]),
-    ));
+    measure_steps(&mut steps, case, "selected");
     steps.push(ui(
         "GameCore_Tuner",
         substitute(FLAG, case, &[("__FLAG__", "0")]),
     ));
-    steps.push(ui(
-        "InGame",
-        substitute(MEASURE, case, &[("__PHASE__", "\"off\"")]),
-    ));
+    measure_steps(&mut steps, case, "off");
     steps.push(ui(
         "GameCore_Tuner",
         substitute(FLAG, case, &[("__FLAG__", "1")]),
     ));
-    steps.push(ui(
-        "InGame",
-        substitute(MEASURE, case, &[("__PHASE__", "\"restored\"")]),
-    ));
+    measure_steps(&mut steps, case, "restored");
     steps.push(ui(
         "InGame",
         substitute(COMPARE, case, &[("__EFFECTS__", &effect_lua(case))]),

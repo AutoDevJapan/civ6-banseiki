@@ -3,6 +3,125 @@ use super::*;
 use mlua::{Lua, Value as LuaValue};
 
 #[test]
+fn growth_wait_rejects_previous_values_and_requires_every_owned_city_to_update() -> Result<()> {
+    let lua = Lua::new();
+    lua.load(r#"
+values={0,0}; flag=1
+JAC_OATH_AUDIT={baseline={own={{id=1,plot=11,owner=0,other=0},{id=2,plot=12,owner=0,other=0}}}}
+Players={[0]={GetCities=function() return {FindID=function(_,id) return {
+ GetOwner=function() return 0 end,GetX=function() return id end,GetY=function() return 0 end,
+ GetGrowth=function() return {GetOtherGrowthModifier=function() return values[id] end} end
+} end} end}}
+Map={GetPlot=function(x) return {GetIndex=function() return x+10 end,GetProperty=function() return flag end} end}
+"#).exec()?;
+    let code = GROWTH_UPDATED
+        .replace("__PREVIOUS__", "'baseline'")
+        .replace("__OATH__", "'JAC_OATH_ODA_TSUSHIMA'")
+        .replace("__FLAG__", "1");
+    assert!(!lua.load(&code).eval::<bool>()?);
+    lua.load("values[1]=0.046875").exec()?;
+    assert!(!lua.load(&code).eval::<bool>()?);
+    lua.load("values[2]=0.046875").exec()?;
+    assert!(lua.load(&code).eval::<bool>()?);
+    lua.load("flag=0").exec()?;
+    assert!(!lua.load(&code).eval::<bool>()?);
+    lua.load("flag=1; values[2]=0/0").exec()?;
+    assert!(lua.load(&code).eval::<bool>().is_err());
+    // Readiness does not bless the rounded amount or hide a residue.
+    lua.load("values[2]=-0.00390625").exec()?;
+    assert!(lua.load(&code).eval::<bool>()?);
+    Ok(())
+}
+
+#[test]
+fn growth_core_ui_wait_rejects_stale_phase_and_foreign_metric_mismatches() -> Result<()> {
+    let lua = Lua::new();
+    lua.load(r#"
+local names={'PRODUCTION','GOLD','SCIENCE','CULTURE','FAITH','FOOD'}
+GameInfo={Yields={}}; for i,name in ipairs(names) do GameInfo.Yields['YIELD_'..name]={Index=i} end
+local function row(id,owner)
+ return {id=id,owner=owner,plot=100*owner+id,growth=1,other=0.046875,housing=1,happiness=0,surplus=2,loyalty=1,occupied=false,y={production=2,gold=2,science=2,culture=2,faith=2,food=2}}
+end
+actual={[0]={row(1,0),row(2,0)},[1]={}}
+core={oath='JAC_OATH_ODA_TSUSHIMA',phase='selected',turn=4,snapshot={own={row(1,0),row(2,0)},foreign={}}}
+for i=1,54 do actual[1][i]=row(i,1); core.snapshot.foreign[i]=row(i,1) end
+Game={GetCurrentGameTurn=function() return 4 end,GetProperty=function() return core end}
+Players={}
+for owner=0,1 do local o=owner; Players[o]={GetCities=function() return {FindID=function(_,id)
+ local r=actual[o][id]; if not r then return nil end
+ return {GetOwner=function() return o end,GetX=function() return id end,GetY=function() return o end,
+ IsOccupied=function() return r.occupied end,GetYield=function() return r.y.production end,
+ GetGrowth=function() return {GetOverallGrowthModifier=function() return r.growth end,
+ GetOtherGrowthModifier=function() return r.other end,GetHousingGrowthModifier=function() return r.housing end,
+ GetHappinessGrowthModifier=function() return r.happiness end,GetFoodSurplus=function() return r.surplus end,
+ GetLoyaltyGrowthModifier=function() return r.loyalty end} end}
+end} end} end
+Map={GetPlot=function(x,y) return {GetIndex=function() return 100*y+x end} end}
+"#).exec()?;
+    let code = GROWTH_CORE_MATCH
+        .replace("__PHASE__", "'selected'")
+        .replace("__OATH__", "'JAC_OATH_ODA_TSUSHIMA'");
+    assert!(lua.load(&code).eval::<bool>()?);
+    for change in [
+        "core.phase='off'",
+        "actual[0][2].other=0",
+        "actual[1][54].growth=0.99609375",
+        "actual[1][54].y.production=2.00390625",
+    ] {
+        lua.load(change).exec()?;
+        assert!(!lua.load(&code).eval::<bool>()?, "accepted {change}");
+        lua.load("core.phase='selected'; actual[0][2].other=0.046875; actual[1][54].growth=1; actual[1][54].y.production=2").exec()?;
+    }
+    lua.load("core.turn=5").exec()?;
+    assert!(lua.load(&code).eval::<bool>().is_err());
+    Ok(())
+}
+
+#[test]
+fn all_growth_measurements_use_update_and_core_ui_gates_before_acceptance() -> Result<()> {
+    let repo = Repository::checked_in();
+    let base = repo.json(BASE)?;
+    let mut checked = 0;
+    for case in cases(&repo)? {
+        if !case.effects.iter().any(|effect| effect.kind == "growth") {
+            continue;
+        }
+        let data = selected_scenario(&base, &case)?;
+        let steps = data["steps"].as_array().unwrap();
+        for phase in ["selected", "off", "restored"] {
+            let pattern = format!("local phase={}", lua_string(phase));
+            let index = steps
+                .iter()
+                .position(|step| {
+                    step["state_name"] == "InGame"
+                        && step["code"].as_str().is_some_and(|code| {
+                            code.contains(&pattern) && code.contains("local function sample(c)")
+                        })
+                })
+                .unwrap();
+            assert_eq!(steps[index - 3]["action"], "wait_for");
+            assert!(steps[index - 3]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains("if value==row.other then return false end"));
+            assert_eq!(steps[index - 2]["state_name"], "GameCore_Tuner");
+            assert!(steps[index - 2]["code"]
+                .as_str()
+                .unwrap()
+                .contains("Game:SetProperty('JAC_TODO134_GROWTH_CORE'"));
+            assert_eq!(steps[index - 1]["action"], "wait_for");
+            assert!(steps[index - 1]["condition"]["code"]
+                .as_str()
+                .unwrap()
+                .contains("core.snapshot.foreign"));
+            checked += 1;
+        }
+    }
+    assert!(checked > 0);
+    Ok(())
+}
+
+#[test]
 fn every_native_production_snapshot_waits_for_the_shared_core_and_ui_contract() -> Result<()> {
     let repo = Repository::checked_in();
     let base = repo.json(BASE)?;
