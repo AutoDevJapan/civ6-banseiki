@@ -499,6 +499,8 @@ mode7の観測は、ownerとleaderを指定すると、そのゲームのUI定�
 
 両成功記録は、観測開始と停止、同じOSのPID・作成FILETIME、実復元先、本人の全昇進、使用済み称号差、都市ID/座標/所有者、原AL、UIと本体更新の両戻り先を検証器が照合した。ToDo1690の検証器修正72f33aa2は準備時のメニュー退出と観測後の最終退出を区別する。原stepsやtraceの行を消して検証を通していない。
 
+旧所有者位置の修正は[a044d71c](https://github.com/AutoDevJapan/civ6-banseiki/commit/a044d71c)と後節「費用2の全額保存と本体の所有者を読む位置」に記録している。識別拒否のtrace単体を所有者位置の確定根拠にはせず、固定GameCoreの公式APPOINT命令と読取修正を対応させる。本診断の公式PROMOTEは進化費用の残額支払いだけで、専攻技能の購入ではない。[SSOT 4.7](../spec/ssot/04-factions-characters.md)の技能昇進に功績を使う方式を変更・確定する結果にはしない。
+
 再照合時に、原成果物25ファイルと保全コピーの全SHA-256一致、費用2の全額保存と費用3の途中・全額保存の3本のSHA-256不変を確認した。費用2の全額保存SHAはB7062F934A3852BF71236DD7EFE7DCE7C9CE477E54C9E29A31398592E5635A61、費用3の途中保存はCAF2474559AA12E72E0D3C36BA76BB7C1C3301303D826A2D762243DF2C1ED8AB、全額保存は0F103DE6FC1C2310AB7549B8F35569C2326AD4C3893F8BD7EAF87A9C214C7468。詳細は`D:/CC/Work/todo1720/existing-payment-audit-20261008.json`へ記録した。
 
 初期固定67d7fdbdの未実行だった指定検査も、共有Cargoゲート経由で同じ候補に実行した。`cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets`は親119結果群・1,819件成功、失敗・ignored・親filteredは0、Lua全件、終了0。独立Win64子1件成功と内部36filteredは別集計である。その候補から生成器を改めてビルドし、費用2の35手順と費用3の38手順のJSONを新規生成、両方の`--check`終了0を確認した。出所と実行ファイル・JSONのSHAは`D:/CC/Work/todo1720/provenance.json`へ保存した。この旧候補を現用接続へ戻さず、生成JSONを既払いの原保存へ送ることもしない。最新公開の全件検査や新しい実機結果としては集計しない。
