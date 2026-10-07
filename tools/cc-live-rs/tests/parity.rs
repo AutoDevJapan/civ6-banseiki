@@ -2469,34 +2469,138 @@ fn missing_startup_helper_source_refuses_existing_stale_binary_before_build() {
 
 #[cfg(windows)]
 #[test]
+#[ignore]
+fn cancelled_build_child() {
+    use std::{
+        os::windows::process::CommandExt,
+        process::{Command, Stdio},
+        thread,
+        time::Duration,
+    };
+    // Only the parent test starts this worker; a plain `--ignored` run does nothing.
+    let (Ok(role), Some(marker)) = (
+        std::env::var("CC_LIVE_TEST_BUILD_ROLE"),
+        std::env::var_os("CC_LIVE_TEST_BUILD_MARKER"),
+    ) else {
+        return;
+    };
+    let marker = PathBuf::from(marker);
+    match role.as_str() {
+        "child" => {
+            let mut child = Command::new(std::env::current_exe().unwrap())
+                .args(["--ignored", "--exact", "cancelled_build_child"])
+                .env("CC_LIVE_TEST_BUILD_ROLE", "grandchild")
+                .creation_flags(CREATE_NO_WINDOW)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            // Reap normally if cancellation never arrives; the managed job owns both.
+            child.wait().unwrap();
+            return;
+        }
+        "grandchild" => {
+            let pending = marker.with_extension("tmp");
+            fs::write(&pending, std::process::id().to_string()).unwrap();
+            fs::rename(pending, marker).unwrap();
+        }
+        _ => return,
+    }
+    // Both stay alive until the managed job is cancelled; bounded if it never is.
+    thread::sleep(Duration::from_secs(60));
+}
+
+#[cfg(windows)]
+#[test]
 fn cancelled_build_waits_for_real_grandchildren_to_exit() {
+    use std::{
+        sync::{atomic::AtomicBool, Arc},
+        thread,
+        time::Duration,
+    };
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, GetLastError, ERROR_INVALID_PARAMETER},
+        Foundation::{CloseHandle, HANDLE},
         System::Threading::{GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
     };
+    const STILL_ACTIVE: u32 = 259;
     let f = Fixture::new();
+    let lock = f.json("here/civ6.lock", json!({"lock_token":"owned"}));
     let marker = f.root.join("grandchild.pid");
-    let escaped = path(&marker).replace('\'', "''");
-    let script = format!("$info = New-Object System.Diagnostics.ProcessStartInfo; $info.FileName = 'cmd.exe'; $info.Arguments = '/d /c ping 127.0.0.1 -n 31 > nul'; $info.UseShellExecute = $false; $info.CreateNoWindow = $true; $child = [System.Diagnostics.Process]::Start($info); [System.IO.File]::WriteAllText('{escaped}', [string]$child.Id); Start-Sleep -Seconds 30");
+    let done = Arc::new(AtomicBool::new(false));
+    // Cancel only after the grandchild runs and its handle is held, so a slow
+    // runner cannot cancel before it exists and its PID cannot be reused.
+    let watcher = {
+        let (marker, done) = (marker.clone(), done.clone());
+        thread::spawn(move || -> Result<usize, String> {
+            let pid: u32 = loop {
+                if let Ok(text) = fs::read_to_string(&marker) {
+                    break text
+                        .trim()
+                        .parse()
+                        .map_err(|e| format!("pid marker: {e}"))?;
+                }
+                if done.load(Ordering::SeqCst) {
+                    return Err("grandchild never became ready".into());
+                }
+                thread::sleep(Duration::from_millis(10));
+            };
+            let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            if handle.is_null() {
+                return Err(format!(
+                    "open grandchild {pid}: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+            let mut code = 0;
+            if unsafe { GetExitCodeProcess(handle, &mut code) } == 0 || code != STILL_ACTIVE {
+                unsafe { CloseHandle(handle) };
+                return Err(format!("grandchild exited before cancel (code {code})"));
+            }
+            // A changed lease owner makes the running build's monitor cancel it.
+            let owner = json!({"lock_token":"cancel-after-ready"}).to_string();
+            loop {
+                match fs::write(&lock, &owner) {
+                    Ok(()) => return Ok(handle as usize),
+                    // The monitor briefly holds the lock without write sharing.
+                    Err(e) if e.raw_os_error() == Some(32) && !done.load(Ordering::SeqCst) => {
+                        thread::sleep(Duration::from_millis(10))
+                    }
+                    Err(e) => {
+                        unsafe { CloseHandle(handle) };
+                        return Err(format!("signal cancel: {e}"));
+                    }
+                }
+            }
+        })
+    };
+    let exe = path(std::env::current_exe().unwrap());
     let result = process::RealRunner.run(
-        Call::new(args(&["powershell", "-NoProfile", "-Command", &script]))
-            .managed()
-            .timeout(5.0),
+        Call::new(args(&[
+            exe.as_str(),
+            "--ignored",
+            "--exact",
+            "cancelled_build_child",
+        ]))
+        .env("CC_LIVE_TEST_BUILD_ROLE", "child")
+        .env("CC_LIVE_TEST_BUILD_MARKER", path(&marker))
+        .managed()
+        .lease(&f.p, "owned", 0.0)
+        .timeout(60.0),
     );
-    assert!(result.unwrap_err().contains("timed out"));
-    let pid: u32 = read_text(marker).unwrap().parse().unwrap();
-    unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle.is_null() {
-            assert_eq!(GetLastError(), ERROR_INVALID_PARAMETER);
-        } else {
-            let mut code = 259;
-            let success = GetExitCodeProcess(handle, &mut code);
-            CloseHandle(handle);
-            assert_ne!(success, 0);
-            assert_ne!(code, 259, "Grandchild survived the cancelled build");
-        }
-    }
+    done.store(true, Ordering::SeqCst);
+    let handle = watcher
+        .join()
+        .unwrap()
+        .unwrap_or_else(|e| panic!("{e}; build result: {result:?}")) as HANDLE;
+    let mut code = STILL_ACTIVE;
+    let queried = unsafe { GetExitCodeProcess(handle, &mut code) };
+    unsafe { CloseHandle(handle) };
+    let error = result.unwrap_err();
+    assert!(error.contains("ownership changed"), "{error}");
+    assert_ne!(queried, 0);
+    // The job terminates with exit code 1; the grandchild's own exit would be 0.
+    assert_eq!(code, 1, "Grandchild survived the cancelled build");
 }
 
 #[test]
