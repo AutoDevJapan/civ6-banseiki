@@ -105,15 +105,19 @@ fn extract_token(payload: &str) -> &str {
 }
 
 fn send_split(connection: &mut TcpStream, tag: i32, payload: &str) {
+    try_send_split(connection, tag, payload).unwrap();
+}
+
+fn try_send_split(connection: &mut TcpStream, tag: i32, payload: &str) -> std::io::Result<()> {
     let body = payload.as_bytes();
     let mut wire = Vec::new();
     wire.extend_from_slice(&((body.len() + 1) as u32).to_le_bytes());
     wire.extend_from_slice(&tag.to_le_bytes());
     wire.extend_from_slice(body);
     wire.push(0);
-    connection.write_all(&wire[..3]).unwrap();
-    connection.write_all(&wire[3..9]).unwrap();
-    connection.write_all(&wire[9..]).unwrap();
+    connection.write_all(&wire[..3])?;
+    connection.write_all(&wire[3..9])?;
+    connection.write_all(&wire[9..])
 }
 
 fn tcp_pair() -> (TcpStream, TcpStream) {
@@ -177,6 +181,48 @@ fn unrelated_listener_cannot_complete_a_query_or_authorize_lua() {
     let received = server.join().unwrap();
     assert_eq!(received.len(), 1);
     assert_eq!(received[0].payload, "APP:");
+}
+
+#[test]
+fn a_timed_out_query_cannot_leave_a_late_reply_for_the_next_command() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = thread::spawn(move || {
+        let (mut connection, _) = listener.accept().unwrap();
+        connection.set_nodelay(true).unwrap();
+        connection
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut received = Vec::new();
+        for answer in ["Civilization VI", NAMED_STATES] {
+            received.push(recv_frame(&mut connection, None).unwrap());
+            send_split(&mut connection, HANDSHAKE, answer);
+        }
+        received.push(recv_frame(&mut connection, None).unwrap());
+        thread::sleep(Duration::from_millis(100));
+        let _ = try_send_split(&mut connection, HANDSHAKE, "3\0FrontEnd\099\0InGame");
+        while let Ok(frame) = recv_frame(&mut connection, None) {
+            let answer = if frame.tag == COMMAND {
+                format!("{}|OK|true", extract_token(&frame.payload))
+            } else {
+                NAMED_STATES.to_owned()
+            };
+            let tag = frame.tag;
+            received.push(frame);
+            let _ = try_send_split(&mut connection, tag, &answer);
+        }
+        received
+    });
+    let mut client = TunerClient::connect(port, 1.0).unwrap();
+    assert_eq!(client.list_states(0.02).unwrap_err().kind, ErrorKind::Tuner);
+    // Let the old reply reach the socket before a new command tries to read it.
+    thread::sleep(Duration::from_millis(150));
+    let result = client.run_lua("InGame", "return true", 0.2);
+    client.close();
+    let received = server.join().unwrap();
+    assert_eq!(result.unwrap_err().kind, ErrorKind::Tuner);
+    assert_eq!(received.len(), 3);
+    assert!(received.iter().all(|frame| frame.tag == HANDSHAKE));
 }
 
 #[test]

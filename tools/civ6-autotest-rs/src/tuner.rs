@@ -286,6 +286,16 @@ impl TunerClient {
     }
 
     fn request(&mut self, payload: &str, deadline: f64) -> Result<String> {
+        let result = self.request_reply(payload, deadline);
+        // Queries share one reply listener. A late or partial reply cannot be
+        // correlated with another query after a failure, so discard the socket.
+        if result.is_err() {
+            self.close();
+        }
+        result
+    }
+
+    fn request_reply(&mut self, payload: &str, deadline: f64) -> Result<String> {
         let bytes = frame_bytes(HANDSHAKE, payload)?;
         if timeout_duration(deadline).is_err() {
             return Err(Error::tuner(format!(
