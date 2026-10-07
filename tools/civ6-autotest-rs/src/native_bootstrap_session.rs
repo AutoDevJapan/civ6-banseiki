@@ -58,15 +58,18 @@ impl Session {
         // Keep the exact helper and both explicit DLLs immutable while the
         // shared Session owns startup, stop and failure recovery.
         use std::os::windows::fs::OpenOptionsExt;
-        let parsed = civ6_bootstrap_rs::protocol::Request::parse(&request)
-            .map_err(Error::scenario)?;
+        let parsed =
+            civ6_bootstrap_rs::protocol::Request::parse(&request).map_err(Error::scenario)?;
         let mut binary_pins = Vec::new();
         for (path, expected) in [
             (&executable, None),
             (&parsed.runtime, Some(parsed.runtime_sha.as_str())),
             (&parsed.bootstrap, Some(parsed.bootstrap_sha.as_str())),
         ] {
-            let file = std::fs::OpenOptions::new().read(true).share_mode(1).open(path)?;
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(path)?;
             let actual = format!("{:x}", Sha256::digest(std::fs::read(path)?));
             if let Some(expected) = expected {
                 verify_override_hash(Some(expected), &actual)?;

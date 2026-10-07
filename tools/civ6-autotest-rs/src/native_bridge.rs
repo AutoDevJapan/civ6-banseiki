@@ -1144,8 +1144,17 @@ mod platform {
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
             Self::from_child(
-                child, artifact, pid, created, started, target, mode, close_game,
-                resident_runtime, vec![controller_pin, dll_pin], false,
+                child,
+                artifact,
+                pid,
+                created,
+                started,
+                target,
+                mode,
+                close_game,
+                resident_runtime,
+                vec![controller_pin, dll_pin],
+                false,
             )
         }
         #[allow(clippy::too_many_arguments)]
