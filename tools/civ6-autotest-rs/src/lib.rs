@@ -1,5 +1,6 @@
 //! Civ VI scenario driver, with platform-independent protocol and artifact handling.
 pub mod capture;
+mod carrier_mp;
 pub mod carrier_sync;
 pub mod carrier_transport;
 pub mod click;
