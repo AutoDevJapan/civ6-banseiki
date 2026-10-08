@@ -1324,6 +1324,8 @@ impl Runner {
                     "a Civ6 process remains or appeared before the startup retry",
                 ));
             }
+            self.wait_steam_exit(self.clock.now() + 45.0, true)?;
+            report["steam_exit"] = json!({"status":"confirmed_before_retry"});
             report["retry"] = json!({"status":"started","attempt":2});
             self.write_startup_report(&directory, &report)?;
             let mut second = StartupAttempt::default();
@@ -1416,11 +1418,34 @@ impl Runner {
                 "pinned startup process changed; refusing shutdown",
             ));
         }
+        self.backend
+            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
         self.disconnect();
         self.backend.terminate(game.pid, game.started)?;
         let exited = self.backend.wait_exit(game.pid, self.clock.now() + 10.0)?;
         report["shutdown"] = json!({"status":if exited {"exited"}else{"pending"},"process":game});
+        if exited {
+            self.wait_steam_exit(self.clock.now() + 45.0, true)?;
+            report["steam_exit"] = json!({"status":"confirmed"});
+        }
         Ok(())
+    }
+    fn wait_steam_exit(&mut self, deadline: f64, recovery: bool) -> Result<()> {
+        loop {
+            self.backend.startup_cancel_check()?;
+            if recovery {
+                self.backend.check_startup_lock()?;
+            }
+            match self.backend.steam_sync_status(Stage::Exit)? {
+                SyncStatus::Idle => return Ok(()),
+                SyncStatus::Failed => {
+                    return Err(Error::input("Steam exit sync failed; URI not sent"))
+                }
+                SyncStatus::Pending => {}
+            }
+            self.remaining(deadline)?;
+            self.sleep_until(deadline, 0.5);
+        }
     }
     fn restart_game_attempt(
         &mut self,
@@ -1493,17 +1518,7 @@ impl Runner {
         self.remaining(deadline)?;
         if old.is_some() {
             self.clock.sleep(self.budget(deadline, 8.0)?);
-            loop {
-                match self.backend.steam_sync_status(Stage::Exit)? {
-                    SyncStatus::Idle => break,
-                    SyncStatus::Failed => {
-                        return Err(Error::input("Steam exit sync failed; URI not sent"))
-                    }
-                    SyncStatus::Pending => {}
-                }
-                self.remaining(deadline)?;
-                self.sleep_until(deadline, 0.5);
-            }
+            self.wait_steam_exit(deadline, recovery)?;
         }
         let settle = self.budget(deadline, 30.0)?;
         if self.backend.single_process(settle)?.is_some() {

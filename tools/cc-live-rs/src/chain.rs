@@ -139,8 +139,12 @@ fn close_civ6_with_evidence(
     evidence: &mut Value,
 ) -> Result<(), String> {
     static SERIAL: AtomicU64 = AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
     let journal = p.temp.join(format!(
-        "civ6-steam-exit-{}-{}.jsonl",
+        "civ6-steam-exit-{}-{stamp}-{}.jsonl",
         std::process::id(),
         SERIAL.fetch_add(1, Ordering::Relaxed)
     ));
@@ -174,7 +178,7 @@ fn close_civ6_with_evidence(
     })();
     let outcome = close_civ6_outcome(r, p)?;
     evidence["game_close_outcome"] = json!(outcome);
-    r.print(&format!("CIV6_CLOSE outcome={outcome}"))?;
+    let printed = r.print(&format!("CIV6_CLOSE outcome={outcome}"));
     let sync_result = (|| -> Result<(), String> {
         if outcome == "absent" {
             evidence["sync_phase"] = json!("not_needed_game_absent");
@@ -239,6 +243,8 @@ fn close_civ6_with_evidence(
     evidence["autosave_restore_error"] = json!(restored.as_ref().err());
     evidence["recovery_receipt_remaining"] =
         json!(p.here.join("reliability-auto-state.json").exists());
+    evidence["output_error"] = json!(printed.as_ref().err());
+    let sync_result = sync_result.and(printed);
     match (sync_result, restored) {
         (Ok(()), r) => r,
         (Err(sync), Ok(())) => Err(sync),

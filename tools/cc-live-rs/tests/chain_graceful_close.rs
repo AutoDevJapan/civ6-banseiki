@@ -78,6 +78,7 @@ struct Model {
     mark_code: i32,
     omit_sync_journal: bool,
     sync_phase: Option<&'static str>,
+    broken_output: bool,
     restore_code: i32,
     calls: Vec<(f64, Call)>,
     sleeps: Vec<f64>,
@@ -103,6 +104,7 @@ impl Model {
             mark_code: 0,
             omit_sync_journal: false,
             sync_phase: None,
+            broken_output: false,
             restore_code: 0,
             calls: vec![],
             sleeps: vec![],
@@ -288,6 +290,9 @@ impl Runner for Model {
         Ok(())
     }
     fn print(&mut self, text: &str) -> Result<(), String> {
+        if self.broken_output && text.starts_with("CIV6_CLOSE") {
+            return Err("output pipe closed".into());
+        }
         self.printed.push(text.into());
         Ok(())
     }
@@ -307,6 +312,26 @@ fn absent_game_does_not_resolve_or_start_tuner_or_kill() {
     let mut r = Model::new([false; 2]);
     chain::close_civ6_with_paths(&mut r, &f.paths).unwrap();
     assert_eq!(r.calls.len(), 3);
+}
+
+#[test]
+fn output_failure_does_not_skip_original_autosave_recovery() {
+    let f = Fixture::new(false);
+    let state = f.paths.here.join("reliability-auto-state.json");
+    fs::write(&state, "fixture").unwrap();
+    let mut r = Model::new([false, false]);
+    r.broken_output = true;
+    assert!(chain::close_civ6_with_paths(&mut r, &f.paths)
+        .unwrap_err()
+        .contains("output pipe closed"));
+    assert!(!state.exists());
+    assert_eq!(
+        r.calls
+            .iter()
+            .filter(|(_, call)| call.args.get(1).is_some_and(|arg| arg == "--restore"))
+            .count(),
+        1
+    );
 }
 
 #[test]
