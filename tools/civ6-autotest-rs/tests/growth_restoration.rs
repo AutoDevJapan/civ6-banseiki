@@ -29,6 +29,22 @@ fn restoration_compares_distinct_stages_without_changing_labels_or_records() {
 }
 
 #[test]
+fn changed_barrier_alone_or_changed_phase_alone_identifies_a_new_stage() {
+    for change_phase in [false, true] {
+        let (before, _) = pairs();
+        let mut after = before.clone();
+        for capture in &mut after {
+            if change_phase {
+                capture.phase = "after-load".into();
+            } else {
+                capture.barrier_tag = "new-boundary".into();
+            }
+        }
+        compare_restoration(&before, &after).unwrap();
+    }
+}
+
+#[test]
 fn matching_peers_with_the_same_duplicate_xp_still_fail_restoration() {
     let (before, mut after) = pairs();
     for capture in &mut after {

@@ -19,6 +19,18 @@ local initializedThisSession = false
 local newGameReported = false
 local waitingReported = false
 
+local function IsNetworkGame()
+	return GameConfiguration and GameConfiguration.IsNetworkMultiplayer
+		and GameConfiguration.IsNetworkMultiplayer() == true
+end
+
+local function ReportWaiting()
+	if not waitingReported then
+		print("[JAC_POC] waiting for human starting units and roster")
+		waitingReported = true
+	end
+end
+
 local function Log(message)
 	print("[JAC_POC] " .. message)
 end
@@ -63,14 +75,30 @@ local function InitializeNewGame()
 	end
 
 	local humans = HumanPlayers()
+	if IsNetworkGame() then
+		-- Official StagingRoom.lua uses GetParticipatingPlayerIDs and config:IsHuman.
+		-- Do not initialize only the peers whose gameplay objects already arrived.
+		if not GameConfiguration.GetParticipatingPlayerIDs or not PlayerConfigurations then
+			ReportWaiting()
+			return
+		end
+		local found, expected = {}, 0
+		for _, player in ipairs(humans) do found[player:GetID()] = true end
+		for _, id in ipairs(GameConfiguration.GetParticipatingPlayerIDs()) do
+			local config = PlayerConfigurations[id]
+			if not config or not config.IsHuman then ReportWaiting(); return end
+			if config:IsHuman() then
+				expected = expected + 1
+				if not found[id] then ReportWaiting(); return end
+			end
+		end
+		if expected == 0 or expected ~= #humans then ReportWaiting(); return end
+	end
 	-- Do not finalize a partial roster while a peer's starting units are pending.
 	-- Preflight before writing any unit records so a later retry cannot reset XP.
 	for _, player in ipairs(humans) do
 		if #SortedUnits(player) == 0 then
-			if not waitingReported then
-				Log("waiting for human starting units")
-				waitingReported = true
-			end
+			ReportWaiting()
 			return
 		end
 	end
@@ -108,6 +136,9 @@ end
 
 local function OnLoadScreenClose()
 	if not Game:GetProperty(INITIALIZED_KEY) then
+		-- Each network client closes its load screen at a different time. Saved
+		-- state is initialized only by the synchronized Gameplay turn event.
+		if IsNetworkGame() then return end
 		InitializeNewGame()
 		return
 	end
@@ -152,5 +183,7 @@ local function OnPlayerTurnStartComplete(playerID)
 	end
 end
 
-Events.LoadScreenClose.Add(OnLoadScreenClose)
+if Events and Events.LoadScreenClose and Events.LoadScreenClose.Add then
+	Events.LoadScreenClose.Add(OnLoadScreenClose)
+end
 GameEvents.PlayerTurnStartComplete.Add(OnPlayerTurnStartComplete)

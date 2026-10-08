@@ -20,6 +20,14 @@ impl Endpoint {
             local r={}; for k,x in pairs(v) do r[k]=copy(x) end; return r
           end
           turn=1; props={}; unitprops={[0]={},[1]={}}; present={[0]=true,[1]=true}
+          humans={[0]=true,[1]=true}; network=false; LOG={}
+          print=function(line) LOG[#LOG+1]=line end
+          GameConfiguration={IsNetworkMultiplayer=function() return network end,
+            GetParticipatingPlayerIDs=function() return {0,1} end}
+          PlayerConfigurations={}
+          for owner=0,1 do
+            local id=owner; PlayerConfigurations[id]={IsHuman=function() return true end}
+          end
           for owner=0,1 do
             unitprops[owner][65536]={}; unitprops[owner][131073]={}
           end
@@ -30,7 +38,7 @@ impl Endpoint {
           Players={}
           for owner=0,1 do
             local pid=owner
-            Players[pid]={GetID=function() return pid end, IsHuman=function() return true end,
+            Players[pid]={GetID=function() return pid end, IsHuman=function() return humans[pid] end,
               GetUnits=function() return {Members=function()
                 local ids=reversed and {131073,65536} or {65536,131073}
                 local n=0
@@ -97,6 +105,8 @@ impl Endpoint {
 
 #[test]
 fn independent_vms_agree_despite_local_player_and_enumeration_order() {
+    // Gameplay does not currently use GetLocalPlayer. Vary it to prevent a
+    // future initialization change from depending on the local client.
     let host = Endpoint::new(0, false, None);
     let guest = Endpoint::new(1, true, None);
     host.exec("loadscreen(); beginturn(0); beginturn(1)");
@@ -160,19 +170,73 @@ fn serialized_save_and_fresh_rejoin_preserve_records_and_duplicate_guard() {
 
 #[test]
 fn one_ready_human_cannot_finalize_initialization_before_the_other_has_units() {
-    let endpoint = Endpoint::new(0, false, None);
-    endpoint.exec("present[1]=false; loadscreen(); beginturn(0)");
-    assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"].is_null());
-    assert!(endpoint.record(0, 65536).is_null());
-    endpoint.exec("present[1]=true; beginturn(0); beginturn(1)");
-    for owner in 0..=1 {
-        assert_eq!(endpoint.record(owner, 65536)["XP"], 20);
-        assert_eq!(endpoint.record(owner, 131073)["XP"], 20);
+    for delayed in 0..=1 {
+        let endpoint = Endpoint::new(0, false, None);
+        endpoint.exec(&format!(
+            "present[{delayed}]=false; loadscreen(); beginturn(0)"
+        ));
+        assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"].is_null());
+        assert!(endpoint.record(0, 65536).is_null());
+        let waiting: bool = endpoint
+            .0
+            .load("return LOG[#LOG]:find('waiting for human',1,true)~=nil")
+            .eval()
+            .unwrap();
+        assert!(waiting);
+        endpoint.exec(&format!(
+            "present[{delayed}]=true; beginturn(0); beginturn(1)"
+        ));
+        for owner in 0..=1 {
+            assert_eq!(endpoint.record(owner, 65536)["XP"], 20);
+            assert_eq!(endpoint.record(owner, 131073)["XP"], 20);
+        }
+        assert_eq!(
+            endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"],
+            true
+        );
     }
+}
+
+#[test]
+fn network_load_timing_cannot_write_state_or_finalize_an_incomplete_human_roster() {
+    let host = Endpoint::new(0, false, None);
+    let peer = Endpoint::new(1, true, None);
+    for endpoint in [&host, &peer] {
+        endpoint.exec("network=true; humans[1]=false");
+    }
+    let before = host.state();
+    host.exec("loadscreen(); loadscreen()");
+    assert_eq!(before, host.state());
+    host.exec("beginturn(0)");
+    peer.exec("beginturn(0); loadscreen()");
+    assert_eq!(before, host.state());
+    assert_eq!(before, peer.state());
+    for endpoint in [&host, &peer] {
+        endpoint.exec("humans[1]=true; beginturn(0); beginturn(1)");
+    }
+    assert_eq!(host.state(), peer.state());
+    assert_eq!(host.record(1, 65536)["XP"], 20);
+}
+
+#[test]
+fn units_missing_for_an_ai_do_not_delay_initialization() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; humans[1]=false; present[1]=false; PlayerConfigurations[1].IsHuman=function() return false end; beginturn(0)");
     assert_eq!(
         endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"],
         true
     );
+    assert_eq!(endpoint.record(0, 65536)["XP"], 20);
+    assert!(endpoint.record(1, 65536).is_null());
+}
+
+#[test]
+fn gameplay_can_register_turn_handler_without_ui_loadscreen_event() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; Events.LoadScreenClose=nil; props={}");
+    endpoint.0.load(read_repo(SOURCE)).exec().unwrap();
+    endpoint.exec("beginturn(0); beginturn(1)");
+    assert_eq!(endpoint.record(1, 65536)["XP"], 20);
 }
 
 #[test]
