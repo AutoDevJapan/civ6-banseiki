@@ -30,7 +30,7 @@ jobs:
         run: cargo test --locked --manifest-path tools/Cargo.toml --workspace --all-targets
       - name: Remove test build artifacts before release build
         if: runner.os == 'Linux'
-        run: cargo clean --manifest-path tools/Cargo.toml --profile dev
+        run: cargo clean --manifest-path tools/Cargo.toml
       - name: Build all tools
         run: cargo build --locked --release --manifest-path tools/Cargo.toml --workspace --bins
       - name: Check existing scenario JSON
