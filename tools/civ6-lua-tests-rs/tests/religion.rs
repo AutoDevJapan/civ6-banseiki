@@ -2252,6 +2252,68 @@ fn multiplayer_ui_only_queues_local_actor_and_waits_for_engine_delivery() {
 }
 
 #[test]
+fn multiplayer_all_eight_choices_traverse_ui_player_operation_and_two_engine_receivers() {
+    for outcome in [
+        "SELL",
+        "CONCEAL",
+        "RESEARCH",
+        "HERESY",
+        "ARTIFACT",
+        "REVIVE",
+        "DIPLOMATIC_INCIDENT",
+        "ABSORB",
+    ] {
+        let a = network_discovery();
+        let b = network_discovery();
+        for h in [&a, &b] {
+            h.found(R2, 3, 1, 0);
+            if outcome == "ABSORB" {
+                h.bind_absorption();
+            }
+        }
+        a.exec("LOCAL_PLAYER=1; DEFER_OPERATIONS=true");
+        b.exec("LOCAL_PLAYER=0; ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('foreign UI observation') end");
+        let before = (a.snapshot(), a.eval("ENGINE"), a.writes());
+        let bridge: mlua::Table = a
+            .lua
+            .globals()
+            .get::<mlua::Table>("ExposedMembers")
+            .unwrap()
+            .get("JAC_RP_HeroUI")
+            .unwrap();
+        let send: Function = bridge.get("ResolveDiscovery").unwrap();
+        assert!(send
+            .call::<bool>((R1, "d", outcome, json_to_lua(&a.lua, &a.options(json!({})))))
+            .unwrap());
+        assert_eq!(
+            (a.snapshot(), a.eval("ENGINE"), a.writes()),
+            before,
+            "{outcome}: UI must not apply the effect"
+        );
+        assert_eq!(a.eval("#REQUESTS"), 1);
+        assert_eq!(a.eval("REQUESTS[1].actor"), 1);
+        assert_eq!(
+            a.eval("REQUESTS[1].params.OnStart"),
+            "JAC_ReligionOperation"
+        );
+        let packet = a.eval("REQUESTS[1].params");
+        for h in [&a, &b] {
+            let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
+            assert!(
+                receive.call::<bool>((1, packet.to_lua(&h.lua))).unwrap(),
+                "{outcome}"
+            );
+            let applied = (h.snapshot(), h.eval("ENGINE"), h.writes());
+            assert!(!receive.call::<bool>((1, packet.to_lua(&h.lua))).unwrap());
+            assert_eq!((h.snapshot(), h.eval("ENGINE"), h.writes()), applied);
+            assert_eq!(h.s()["discoveries"]["d"]["effects"], "APPLIED");
+        }
+        assert_eq!(a.snapshot(), b.snapshot(), "{outcome}");
+        assert_eq!(a.eval("ENGINE"), b.eval("ENGINE"), "{outcome}");
+    }
+}
+
+#[test]
 fn multiplayer_direct_revival_requires_material_and_city_owned_by_engine_actor() {
     let mut a = Harness::new();
     a.f();
