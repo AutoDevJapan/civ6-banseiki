@@ -560,6 +560,17 @@ impl Runner {
     fn budget(&self, deadline: f64, cap: f64) -> Result<f64> {
         Ok(self.remaining(deadline)?.min(cap))
     }
+    // This request budget is shorter than the enclosing step deadline. Only a
+    // pre-dispatch expiry is retryable; interruption keeps its original kind.
+    fn remaining_unsent(&self, deadline: f64, message: &str) -> Result<f64> {
+        self.remaining(deadline).map_err(|error| {
+            if error.kind == ErrorKind::Scenario {
+                Error::tuner(message)
+            } else {
+                error
+            }
+        })
+    }
     fn sleep_until(&self, deadline: f64, seconds: f64) {
         self.clock
             .sleep(seconds.min((deadline - self.clock.now()).max(0.0)));
@@ -587,13 +598,15 @@ impl Runner {
         let deadline = self.clock.now() + timeout;
         self.backend.require_single_process()?;
         let fetch = |this: &mut Self| -> Result<Vec<String>> {
-            let remaining = this.remaining(deadline).map_err(|_| {
-                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
-            })?;
+            let remaining = this.remaining_unsent(
+                deadline,
+                "FireTuner に接続できません（応答待ちがタイムアウト）",
+            )?;
             this.backend.connect(this.port, remaining)?;
-            let remaining = this.remaining(deadline).map_err(|_| {
-                Error::tuner("FireTuner に接続できません（応答待ちがタイムアウト）")
-            })?;
+            let remaining = this.remaining_unsent(
+                deadline,
+                "FireTuner に接続できません（応答待ちがタイムアウト）",
+            )?;
             this.backend.list_states(remaining)
         };
         match fetch(self) {
@@ -606,13 +619,12 @@ impl Runner {
     }
     pub fn lua(&mut self, state: &str, code: &str, timeout: f64) -> Result<String> {
         let deadline = self.clock.now() + timeout;
-        self.states(self.remaining(deadline)?)?;
-        let remaining = self.remaining(deadline).map_err(|_| {
-            Error::tuner("FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です")
-        })?;
+        let unsent = "FireTuner の応答待ちがタイムアウトし、Lua コマンドは未送信です";
+        self.states(self.remaining_unsent(deadline, unsent)?)?;
+        let remaining = self.remaining_unsent(deadline, unsent)?;
         self.backend.connect(self.port, remaining)?;
         // Connecting can consume the last budget; never mutate after it expired.
-        let remaining = self.remaining(deadline)?;
+        let remaining = self.remaining_unsent(deadline, unsent)?;
         self.backend.run_lua(state, code, remaining)
     }
     pub fn log_since_same_generation(&self, name: &str, baseline: &Value) -> Result<String> {

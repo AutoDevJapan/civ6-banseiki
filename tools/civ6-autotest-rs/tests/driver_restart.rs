@@ -296,6 +296,84 @@ fn late_prelaunch_pending_waits_before_the_single_uri() {
 }
 
 #[test]
+fn local_probe_budget_expiry_before_dispatch_is_unsent_tuner_error() {
+    let clock = Arc::new(ManualClock::default());
+    let consumed = clock.clone();
+    let mut connections = 0;
+    let mut fake = FakeBackend::new();
+    fake.on_connect = Box::new(move || {
+        connections += 1;
+        if connections == 2 {
+            consumed.advance(5.0);
+        }
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock;
+    let error = h.runner.lua("InGame", "mutating command", 5.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Tuner);
+    assert!(
+        h.calls().is_empty(),
+        "no Lua bytes after local budget expired"
+    );
+}
+
+#[test]
+fn pre_dispatch_budget_expiry_at_each_stage_never_sends_lua() {
+    for connection in [0, 1, 2] {
+        let clock = Arc::new(ManualClock::default());
+        let consumed = clock.clone();
+        let mut connections = 0;
+        let mut fake = FakeBackend::new();
+        fake.on_connect = Box::new(move || {
+            connections += 1;
+            if connections == connection {
+                consumed.advance(5.0);
+            }
+            Ok(())
+        });
+        let mut h = Harness::new(json!({}), fake);
+        h.runner.clock = clock;
+        let timeout = if connection == 0 { 0.0 } else { 5.0 };
+        assert_eq!(
+            h.runner
+                .lua("InGame", "mutating command", timeout)
+                .unwrap_err()
+                .kind,
+            ErrorKind::Tuner
+        );
+        assert!(h.calls().is_empty());
+    }
+}
+
+#[test]
+fn frontend_retries_local_unsent_timeout_within_original_startup_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let consumed = clock.clone();
+    let mut connections = 0;
+    let mut fake = FakeBackend::new();
+    fake.on_connect = Box::new(move || {
+        connections += 1;
+        if connections == 2 {
+            consumed.advance(5.0);
+        }
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    h.runner.wait_frontend_ready(20.0, false).unwrap();
+    assert!(clock.at() >= 5.0 && clock.at() < 20.0);
+    assert!(!h.events().contains(&"launch".into()));
+    assert_eq!(
+        h.calls()
+            .iter()
+            .filter(|(_, code)| code == "return UI.IsInFrontEnd()")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
     let mut fake = FakeBackend::new().process(processes(
         &[

@@ -73,6 +73,7 @@ pub struct FakeBackend {
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_connect: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_sync: Box<
         dyn FnMut(
                 civ6_autotest_rs::steam_sync::Stage,
@@ -110,6 +111,7 @@ impl FakeBackend {
             on_exit: Box::new(|_| Ok(true)),
             on_require: Box::new(|| Ok(())),
             on_launch: Box::new(|| Ok(())),
+            on_connect: Box::new(|| Ok(())),
             on_sync: Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)),
             on_warning: Box::new(|| Ok(false)),
             on_close_orphans: Box::new(|| Ok(Vec::new())),
@@ -148,7 +150,7 @@ impl Backend for FakeBackend {
     }
     fn connect(&mut self, _: u16, _: f64) -> Result<()> {
         self.events.lock().unwrap().push("connect".into());
-        Ok(())
+        (self.on_connect)()
     }
     fn disconnect(&mut self) {
         self.events.lock().unwrap().push("disconnect".into());
