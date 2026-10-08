@@ -137,6 +137,11 @@ local function effectsFor(info)
   if info.Tourism and info.Tourism~=0 then effects[#effects+1]='TOURISM '..info.Tourism end
   table.sort(effects);return effects
 end
+local function slotType(b,building,slot)
+  if not b.GetGreatWorkSlotType then return nil end
+  local definition=assert(GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(building,slot)],'inventory slot type definition')
+  return definition.GreatWorkSlotType
+end
 local function dense(list)
   assert(type(list)=='table','inventory array required');local n=#list;local count=0
   for k in pairs(list) do assert(type(k)=='number' and k==math.floor(k) and k>=1 and k<=n,'inventory sparse array');count=count+1 end
@@ -166,7 +171,7 @@ local function captureCore(core)
   local result={Cities={},Works={}}
   for _,d in ipairs(core) do
     local c=assert(CityManager.GetCityAt(d.X,d.Y));local b=c:GetBuildings()
-    if not b.GetNumGreatWorkSlots or not b.GetGreatWorkInSlot or not b.GetGreatWorkTypeFromIndex
+    if not b.GetNumGreatWorkSlots or not b.GetGreatWorkInSlot or not b.GetGreatWorkTypeFromIndex or not b.GetGreatWorkSlotType
       or not b.GetCreatorNameFromIndex or not b.GetTurnFromIndex or not Game.GetGreatWorkPlayer then return nil end
     local identity=c.GetCulturalIdentity and c:GetCulturalIdentity()
     local religion=c:GetReligion();local districts=c:GetDistricts()
@@ -186,7 +191,7 @@ local function captureCore(core)
           result.Works[#result.Works+1]={Index=index,Owner=d.Owner,CityID=d.ID,X=d.X,Y=d.Y,Building=building,
             BuildingType=buildingType,Slot=slot,GreatWorkType=info.GreatWorkType,ObjectType=info.GreatWorkObjectType,
             Name=info.Name,CreatorName=b:GetCreatorNameFromIndex(index),TurnCreated=b:GetTurnFromIndex(index),
-            CreatedByPlayer=Game.GetGreatWorkPlayer(index),Effects=effects}
+            CreatedByPlayer=Game.GetGreatWorkPlayer(index),Effects=effects,SlotType=slotType(b,building,slot)}
         end
       end
     end
@@ -253,6 +258,10 @@ local function validate(o,core)
     if native.GetGreatWorkTypeFromIndex then
       local actual=assert(GameInfo.GreatWorks[native:GetGreatWorkTypeFromIndex(w.Index)])
       assert(actual.GreatWorkType==w.GreatWorkType,'inventory Core type changed')
+    end
+    if w.SlotType~=nil then
+      assert(type(w.SlotType)=='string','inventory slot type shape')
+      if native.GetGreatWorkSlotType then assert(w.SlotType==slotType(native,w.Building,w.Slot),'inventory Core slot type changed') end
     end
     if native.GetCreatorNameFromIndex then assert(w.CreatorName==native:GetCreatorNameFromIndex(w.Index),'inventory Core creator changed') end
     if native.GetTurnFromIndex then assert(w.TurnCreated==native:GetTurnFromIndex(w.Index),'inventory Core creation turn changed') end
@@ -342,6 +351,7 @@ A.RecoverArchived=function(id,owner,token,original)
   if not ok then error(result,0) end
   return result
 end
+local diagnostics={}
 function NI.Tick()
   local pending=box().Requests
   for _,key in ipairs(R.Keys(pending)) do
@@ -366,7 +376,10 @@ function NI.Tick()
           if tx and q.Phase:match('^CITY_LOYALTY:') then return A.ApplyCityFriction(q.To) end
         end
       end)
-      if not ok and tostring(err)~='JAC_ABSORPTION_WAITING_UI' then print('[JAC_NATIVE_INVENTORY_RESUME_REJECTED] '..tostring(err)) end
+      if not ok and tostring(err)~='JAC_ABSORPTION_WAITING_UI' then
+        local marker=tostring(q.Nonce)..':'..tostring(err)
+        if diagnostics[key]~=marker then print('[JAC_NATIVE_INVENTORY_RESUME_REJECTED] '..tostring(err));diagnostics[key]=marker end
+      else diagnostics[key]=nil end
     end
   end
 end

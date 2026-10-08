@@ -3054,16 +3054,37 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
     and Multiplayer() then
     assert(JAC_CarrierMP, "native MP recovery binding unavailable")
     if not intent.NativeCarrier and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+      for _, key in ipairs({ "Index", "GreatWorkType", "ObjectType", "CreatorName",
+          "TurnCreated", "CreatedByPlayer", "Effects" }) do
+        assert(source[key] ~= nil, "native recovery original identity incomplete: " .. key)
+      end
       local locations = NativeWorkLocations(source.Index)
       assert(#locations == 1, "native recovery original is missing or duplicated")
       SameNativeWorkIdentity(source, locations[1])
+      local current = locations[1]
+      local humanPalace = current.BuildingType == "BUILDING_PALACE"
+        and Players[current.Owner] and Players[current.Owner]:IsHuman()
+      if current.Owner ~= source.Owner and current.Owner ~= owner and not humanPalace then
+        intent.Status, intent.WaitingFor = "WAITING_UI", "MP_SOURCE_OWNER_CHANGED"
+        intent.ObservationToken = token .. ":source-owner"
+        Save(state)
+        return false -- no new third-party custody loan from a stale archive
+      end
       intent.NativeSource = R.Copy(locations[1])
       -- A captured or legally rearranged original can already be in the
       -- recipient's compatible physical slot. The shared inventory proves
       -- this receipt; no additional MOVE or city loan is necessary.
       if locations[1].Owner == owner then
+        local compatible = false
+        for row in GameInfo.GreatWork_ValidSubTypes() do
+          if row.GreatWorkObjectType == current.ObjectType and row.GreatWorkSlotType == current.SlotType then
+            compatible = true
+          end
+        end
+        assert(compatible, "native recovery current slot is not compatible")
         intent.NativeTarget = R.Copy(locations[1])
-        intent.NativePhysicalMoved = true
+        intent.NativePhysicalMoved, intent.NativeAlreadyOwned = true, true
+        intent.ObservationToken, intent.WaitingFor = nil, nil
         Save(state)
         return true
       end
@@ -3196,12 +3217,13 @@ function A.RecoverArchived(id, owner, token, original)
   if record.Kind == "ITEM" then
     if record.NativeWork then
       local work
-      if intent.NativeCarrier and intent.NativeCarrier.MP then
+      if intent.NativeCarrier and intent.NativeCarrier.MP or intent.NativeAlreadyOwned then
         work = NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
           TargetSlot = intent.NativeTarget, Carrier = intent.NativeCarrier })
       else work = RecoveredNativeWork(record.NativeWork, owner) end
       record.NativeWork = R.Copy(work)
-      record.NativeOwnerMoves = (archived.NativeOwnerMoves or 0) + 1
+      local unchanged = intent.NativeAlreadyOwned and archived.NativeWork.Owner == owner
+      record.NativeOwnerMoves = (archived.NativeOwnerMoves or 0) + (unchanged and 0 or 1)
       record.City = { Owner = owner, X = work.X, Y = work.Y }
       record.NativeCustody = { Owner = owner, City = work.CityID,
         X = work.X, Y = work.Y, Building = work.Building, Slot = work.Slot }

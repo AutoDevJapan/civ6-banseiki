@@ -1182,6 +1182,7 @@ mod native_transport {
         lua.load(r#"
           CITIES[4].palace=true
           GameInfo.GreatWorks.GREATWORK_TEST=GameInfo.GreatWorks[4]
+          local _,guard=next(Players[1].units);assert(guard);guard.x=4
           CityManager.TransferCity(CITIES[8],0);TRANSFERS=0
           print=function(message) PALACE_DIAG=tostring(message) end
           Players[1].GetCities=function()
@@ -1291,7 +1292,7 @@ mod native_transport {
         }
         for lua in [&left, &right] {
             assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
-            lua.load("assert(TRANSFERS==2 and CITIES[4].owner==1 and CITIES[16].owner==2);local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Actor==1 and not c.MP.Loans[1].Issued and c.MP.Loans[2].ReturnIssued);assert(#JAC_AbsorptionGameplay.NativeWorkLocations(900)==1)").exec().unwrap();
+            lua.load("assert(TRANSFERS==2 and CITIES[4].owner==1 and CITIES[16].owner==2);local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Actor==1 and not c.MP.Loans[1].Issued and c.MP.Loans[2].ReturnIssued);assert(#JAC_AbsorptionGameplay.NativeWorkLocations(900)==1 and #c.MP.FinalActorObservation.Cities[1].State.UnitsOnCenter==1)").exec().unwrap();
         }
         assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
         assert_eq!(right.load("return UI_MOVES").eval::<i64>().unwrap(), 0);

@@ -53,6 +53,10 @@ local function Equal(a,b)
 end
 
 
+local function slotType(b,building,slot)
+  if not b.GetGreatWorkSlotType then return nil end
+  return assert(GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(building,slot)],'inventory UI slot type definition').GreatWorkSlotType
+end
 local function observe(q)
   if q.Actor~=Game.GetLocalPlayer() or q.Turn~=Game.GetCurrentGameTurn() then return end
   local player=Players[q.Actor];if not player or not player:IsHuman() or not player:IsTurnActive() then return end
@@ -76,7 +80,8 @@ local function observe(q)
           if definition.Tourism and definition.Tourism~=0 then effects[#effects+1]='TOURISM '..definition.Tourism end;table.sort(effects)
           o.Works[#o.Works+1]={Index=index,Owner=d.Owner,CityID=d.ID,X=d.X,Y=d.Y,Building=building,BuildingType=info.BuildingType,
             Slot=slot,GreatWorkType=definition.GreatWorkType,ObjectType=definition.GreatWorkObjectType,Name=definition.Name,
-            CreatorName=b:GetCreatorNameFromIndex(index),TurnCreated=b:GetTurnFromIndex(index),CreatedByPlayer=Game.GetGreatWorkPlayer(index),Effects=effects}
+            CreatorName=b:GetCreatorNameFromIndex(index),TurnCreated=b:GetTurnFromIndex(index),CreatedByPlayer=Game.GetGreatWorkPlayer(index),Effects=effects,
+            SlotType=slotType(b,building,slot)}
         end
       end
     end end

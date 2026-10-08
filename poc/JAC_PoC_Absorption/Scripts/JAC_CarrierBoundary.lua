@@ -185,7 +185,7 @@ local function eligible(l,actor)
     if capital and capital:GetX()==l.X and capital:GetY()==l.Y then return false end
   end
   return not A.NativeCarrierFriction(current)
-    and #A.ReadNativeCarrierCore(current,l).UnitsOnCenter==0
+    and (l.Owner==actor or #A.ReadNativeCarrierCore(current,l).UnitsOnCenter==0)
 end
 function MP.Preflight(tx)
   -- Scan every item before the first city loan, not only the next item.
@@ -360,7 +360,7 @@ function MP.Advance(state,c,preferred)
         local current=city(l)
         local core=A.ReadNativeCarrierCore(current,l)
         assert(core.HasBuilding and core.Name==l.CoreBefore.Name
-          and core.Population==l.CoreBefore.Population and #core.UnitsOnCenter==0,'MP Core city changed before borrowing')
+          and core.Population==l.CoreBefore.Population and (l.Owner==m.Actor or #core.UnitsOnCenter==0),'MP Core city changed before borrowing')
         if current:GetOwner()==l.Owner and l.Owner~=m.Actor then
           assert(eligible(l,m.Actor),'MP loan eligibility changed')
           counts[l.Owner]=(counts[l.Owner] or 0)+1
@@ -407,7 +407,7 @@ local function validateObservation(c,o,placement)
     if core.Slots~=nil then assert(observed.Slots==core.Slots,'MP reported Core slot count changed') end
     if core.Work~=nil then assert(observed.Work==core.Work,'MP reported Core work slot changed') end
     assert(observed.State.Name==core.Name and observed.State.Population==core.Population
-      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and #core.UnitsOnCenter==0,
+      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and (l.Owner==m.Actor or #core.UnitsOnCenter==0),
       'MP observation Core city changed')
     assert(Equal(observed.State.Faith,current:GetProperty(R.CITY_FAITH_KEY))
       and Equal(observed.State.Governance,current:GetProperty(R.GOVERNANCE_KEY)),'MP reported Core governance changed')

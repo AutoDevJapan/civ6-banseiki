@@ -33,6 +33,11 @@ fn world(local: i64, recipient: i64) -> Lua {
       Players[2]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{});Players[3]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{})
       GameInfo.GreatWorks={[4]={GreatWorkType='GREATWORK_TEST',GreatWorkObjectType='GREATWORKOBJECT_RELIC',Tourism=4}}
       GameInfo.GreatWorks.GREATWORK_TEST=GameInfo.GreatWorks[4]
+      GameInfo.GreatWorkSlotTypes={[1]={GreatWorkSlotType='GREATWORKSLOT_TEST'}}
+      GameInfo.GreatWork_ValidSubTypes=function()
+        local once=false;return function() if not once then once=true;return {
+          GreatWorkSlotType='GREATWORKSLOT_TEST',GreatWorkObjectType=GameInfo.GreatWorks[4].GreatWorkObjectType} end end
+      end
       GameInfo.GreatWork_YieldChanges=function() return function() return nil end end
       Game.GetGreatWorkPlayer=nil -- Core has no getter; UI supplies this value
       CORE_BUILDINGS={};UI_CITY_READERS={}
@@ -75,7 +80,7 @@ fn world(local: i64, recipient: i64) -> Lua {
               if UI_MISSING then return nil end
               for _,c in pairs(p.cities) do if c.id==cityID then
                 local b={HasBuilding=function(_,i) return i==1 and c.monument end,
-                  GetNumGreatWorkSlots=function() return GW_SLOT_COUNT or 1 end,
+                  GetNumGreatWorkSlots=function() return GW_SLOT_COUNT or 1 end,GetGreatWorkSlotType=function() return 1 end,
                   GetGreatWorkInSlot=function(_,_,slot) return c.x==UI_POS and slot==0 and 900 or -1 end,
                   GetGreatWorkTypeFromIndex=function() return 4 end,
                   GetCreatorNameFromIndex=function() return 'original creator' end,
@@ -169,7 +174,10 @@ fn recovery_shared_source_accepts_already_owned_original_without_move_or_loan() 
         for lua in [&b, &a] {
             assert!(receive(lua, &packet));
             assert!(receive(lua, &packet));
-            lua.load("local r=RECOVER();assert(r.Status=='COMPLETE' and r.NativeCarrier==nil and TRANSFERS==0 and MOVES==0);local item=Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(item.NativeWork.Index==900 and item.NativeWork.Owner==2 and item.NativeWork.X==12 and item.NativeOwnerMoves==2)").exec().unwrap();
+            lua.globals()
+                .set("EXPECTED_OWNER_MOVES", if same_owner { 1 } else { 2 })
+                .unwrap();
+            lua.load("local r=RECOVER();assert(r.Status=='COMPLETE' and r.NativeCarrier==nil and not r.ObservationToken and not r.WaitingFor and TRANSFERS==0 and MOVES==0);local item=Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(item.NativeWork.Index==900 and item.NativeWork.Owner==2 and item.NativeWork.X==12 and item.NativeOwnerMoves==EXPECTED_OWNER_MOVES)").exec().unwrap();
         }
         let canonical = "return JAC_AbsorptionRules.Canonical(Game.props)";
         assert_eq!(
@@ -263,6 +271,47 @@ fn pending_recovery_snapshot_token_cannot_change_asset_or_original() {
             "{change}: {err}"
         );
         lua.load("assert(TRANSFERS==0 and MOVES==0);local q=ExposedMembers.JAC_NativeInventory.GetPending()[1];assert(q.ID=='recovery:shared-original' and q.From==1 and q.To==2)").exec().unwrap();
+    }
+}
+
+#[test]
+fn recovered_source_changed_to_third_party_is_not_borrowed() {
+    for human in [false, true] {
+        let lua = world(2, 2);
+        archive_recovery(&lua, false);
+        lua.globals().set("THIRD_HUMAN", human).unwrap();
+        lua.load("UI_POS=16;Players[3].IsHuman=function() return THIRD_HUMAN end;assert(RECOVER().Status=='WAITING_UI')").exec().unwrap();
+        assert!(receive(&lua, &publish(&lua)));
+        lua.load("local r=JAC_AbsorptionGameplay.GetState().Recoveries['recovery:shared-original'];assert(r.Status=='WAITING_UI' and r.WaitingFor=='MP_SOURCE_OWNER_CHANGED' and r.NativeCarrier==nil and TRANSFERS==0 and MOVES==0);assert(Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900']==nil)").exec().unwrap();
+    }
+}
+
+#[test]
+fn already_owned_recovery_rejects_incompatible_slot_and_incomplete_old_identity() {
+    for incompatible in [false, true] {
+        let lua = world(2, 2);
+        archive_recovery(&lua, false);
+        if incompatible {
+            lua.load("GameInfo.GreatWorkSlotTypes[1].GreatWorkSlotType='GREATWORKSLOT_WRONG'")
+                .exec()
+                .unwrap();
+        } else {
+            lua.load("local s=JAC_AbsorptionGameplay.GetState();s.Archive['native-work:900'].NativeWork.CreatorName=nil;Game:SetProperty(JAC_AbsorptionRules.STATE_KEY,s)").exec().unwrap();
+        }
+        lua.load("assert(RECOVER().Status=='WAITING_UI')")
+            .exec()
+            .unwrap();
+        assert!(receive(&lua, &publish(&lua)));
+        lua.load("local r=JAC_AbsorptionGameplay.GetState().Recoveries['recovery:shared-original'];assert(r.Status~='COMPLETE' and TRANSFERS==0 and MOVES==0);assert(Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900']==nil)").exec().unwrap();
+        let reason = lua.globals().get::<String>("DIAG").unwrap();
+        assert!(
+            reason.contains(if incompatible {
+                "not compatible"
+            } else {
+                "identity incomplete"
+            }),
+            "{reason}"
+        );
     }
 }
 
@@ -412,6 +461,7 @@ fn consumed_inventory_requests_drop_large_snapshots_and_expire_next_turn() {
       Game.GetGreatWorkPlayer=function() return 1 end
       for x,b in pairs(CORE_BUILDINGS) do local position=x
         b.GetNumGreatWorkSlots=function() return 1 end
+        b.GetGreatWorkSlotType=function() return 1 end
         b.GetGreatWorkInSlot=function() return position==4 and 900 or -1 end
         b.GetGreatWorkTypeFromIndex=function() return 4 end
         b.GetCreatorNameFromIndex=function() return 'original creator' end
@@ -646,6 +696,7 @@ fn core_getters_win_and_reported_slot_definition_property_tampering_is_rejected(
       Game.GetGreatWorkPlayer=function() return 1 end
       for x,b in pairs(CORE_BUILDINGS) do local position=x
         b.GetNumGreatWorkSlots=function() return 1 end
+        b.GetGreatWorkSlotType=function() return 1 end
         b.GetGreatWorkInSlot=function() return position==4 and 900 or -1 end
         b.GetGreatWorkTypeFromIndex=function() return 4 end
         b.GetCreatorNameFromIndex=function() return 'original creator' end
