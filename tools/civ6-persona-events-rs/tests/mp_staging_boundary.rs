@@ -176,3 +176,45 @@ fn finite_scene_sends_one_host_then_only_log_read_and_preserves22() {
     }
     assert!(boundary::build(&normal, &hotseat, "bad").is_err());
 }
+
+#[test]
+fn template_identifiers_cannot_escape_lua_or_panic_any_roster_generator() {
+    for field in ["leader", "civ"] {
+        let prefix = if field == "leader" {
+            "LEADER_"
+        } else {
+            "CIVILIZATION_"
+        };
+        for bad in [
+            serde_json::json!(format!("{prefix}X'}}; injected=true; --")),
+            serde_json::json!(format!("{prefix}X\nerror('injected')")),
+            serde_json::json!(format!("{prefix}X\0")),
+            serde_json::json!(format!("{prefix}X\\")),
+            serde_json::json!(format!("{prefix}X\"")),
+            serde_json::json!(format!("{prefix}x")),
+            serde_json::json!(format!("{prefix}人")),
+            serde_json::json!(prefix),
+            serde_json::json!(false),
+            serde_json::json!(17),
+            serde_json::json!([]),
+            serde_json::json!({}),
+            Value::Null,
+        ] {
+            for human_input in [false, true] {
+                let (mut normal, mut hotseat) = templates();
+                if human_input {
+                    hotseat["steps"][1]["players"][0][field] = bad.clone();
+                } else {
+                    normal["steps"][1]["players"][5][field] = bad.clone();
+                }
+                assert!(civ6_persona_events_rs::mp_hotseat::build(&normal, &hotseat).is_err());
+                assert!(
+                    civ6_persona_events_rs::mp_hotseat::build_setup_probe(&normal, &hotseat)
+                        .is_err()
+                );
+                assert!(boundary::observer(&normal, &hotseat, NONCE).is_err());
+                assert!(boundary::build(&normal, &hotseat, NONCE).is_err());
+            }
+        }
+    }
+}

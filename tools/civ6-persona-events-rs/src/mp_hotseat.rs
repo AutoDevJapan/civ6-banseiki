@@ -7,6 +7,30 @@ use serde_json::{json, Value};
 pub const LEADERS: [&str; 2] = ["LEADER_JAC_DATE_TANEMUNE", "LEADER_JAC_HOJO_UJITSUNA"];
 pub const MID: &str = "JAC-Persona-Hotseat-Mid-Unpaid";
 pub const FULL: &str = "JAC-Persona-Hotseat-Both-Paid";
+/// Template identities are database identifiers, never executable Lua input.
+pub(crate) fn roster_literal(person: &Value) -> Result<String, String> {
+    let identifier = |field: &str, prefix: &str| -> Result<String, String> {
+        let name = person[field]
+            .as_str()
+            .ok_or_else(|| format!("{field} must be a database identifier string"))?;
+        if !name.starts_with(prefix)
+            || name.len() == prefix.len()
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return Err(format!("{field} must be an uppercase {prefix} identifier"));
+        }
+        // The validated ASCII alphabet has no JSON-only escapes; these quoted
+        // literals are also Lua 5.1 strings without executable delimiters.
+        serde_json::to_string(name).map_err(|e| e.to_string())
+    };
+    Ok(format!(
+        "{{leader={},civ={}}}",
+        identifier("leader", "LEADER_")?,
+        identifier("civ", "CIVILIZATION_")?
+    ))
+}
 pub const READ: &str = r#"
 local function person(owner, gate)
  local subject=assert(subjects[owner+1]);local leader=subject.leader
@@ -188,6 +212,9 @@ pub fn build(normal: &Value, hotseat: &Value) -> Result<Value, String> {
         .as_array()
         .filter(|p| p.len() == 2 && p.iter().all(|v| v["human"] == true))
         .ok_or("two PR121 human players required")?;
+    for person in full.iter().chain(humans.iter()) {
+        roster_literal(person)?;
+    }
     let mut roster = humans.clone();
     for p in full {
         if !humans.iter().any(|v| v["leader"] == p["leader"]) {
@@ -329,15 +356,14 @@ pub fn build_setup_probe(normal: &Value, hotseat: &Value) -> Result<Value, Strin
     // infer a map from defaults: request the official MP default explicitly.
     config["map_file"] = "Pangaea.lua".into();
     let roster = config["players"].as_array().unwrap();
-    let mut expected = String::from("local expected={\n");
-    for p in roster {
-        expected.push_str(&format!(
-            "{{leader='{}',civ='{}'}},\n",
-            p["leader"].as_str().unwrap(),
-            p["civ"].as_str().unwrap()
-        ));
-    }
-    expected.push_str("}\n");
+    let expected = format!(
+        "local expected={{\n{}\n}}\n",
+        roster
+            .iter()
+            .map(roster_literal)
+            .collect::<Result<Vec<_>, _>>()?
+            .join(",\n")
+    );
     let preflight = format!(
         r#"{expected}
 assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat FrontEnd required')

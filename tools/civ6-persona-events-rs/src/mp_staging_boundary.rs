@@ -40,14 +40,8 @@ pub fn observer(normal: &Value, hotseat: &Value, n: &str) -> Result<String, Stri
     }
     let expected = roster
         .iter()
-        .map(|p| {
-            format!(
-                "{{leader='{}',civ='{}'}}",
-                p["leader"].as_str().unwrap(),
-                p["civ"].as_str().unwrap()
-            )
-        })
-        .collect::<Vec<_>>()
+        .map(crate::mp_hotseat::roster_literal)
+        .collect::<Result<Vec<_>, _>>()?
         .join(",");
     Ok(format!(r#"
 do
