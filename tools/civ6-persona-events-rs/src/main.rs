@@ -4,6 +4,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     match args.first().map(String::as_str) {
+        Some("generate-admission-reload") if args.len()==7 => {
+            use sha2::{Digest,Sha256};
+            for (path,sha) in [(&args[2],&args[3]),(&args[4],&args[5])] {
+                if sha.len()!=64 || !sha.bytes().all(|c|c.is_ascii_hexdigit()) ||
+                   !PathBuf::from(path).is_absolute() || format!("{:x}",Sha256::digest(fs::read(path)?))!=sha.to_ascii_lowercase() {
+                    return Err("explicit DLL path/hash mismatch".into());
+                }
+            }
+            let template=serde_json::from_slice(&fs::read(&args[1])?)?;
+            let scene=civ6_persona_events_rs::admission_reload::build(&template,&args[2],&args[3],&args[4],&args[5])?;
+            use std::io::Write;
+            let bytes=serde_json::to_string_pretty(&scene)?;
+            let mut output=fs::OpenOptions::new().write(true).create_new(true).open(&args[6])?;
+            output.write_all(bytes.as_bytes())?;
+        }
         Some("generate-mp-staging-boundary") if args.len()==6 => {
             let normal=serde_json::from_slice(&fs::read(&args[2])?)?;
             let hotseat=serde_json::from_slice(&fs::read(&args[3])?)?;
@@ -74,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs generate-mp-staging-boundary STOCK.lua NORMAL.json HOTSEAT.json NONCE OUTPUTDIR | generate-mp-staging STOCK.lua OUTPUTDIR | generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup-read NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json [COST=2|3] | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs generate-admission-reload TEMPLATE.json RUNTIME.dll SHA256 BOOTSTRAP.dll SHA256 OUTPUT.json | generate-mp-staging-boundary STOCK.lua NORMAL.json HOTSEAT.json NONCE OUTPUTDIR | generate-mp-staging STOCK.lua OUTPUTDIR | generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup-read NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json [COST=2|3] | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
             )
         }
     }
