@@ -2361,9 +2361,6 @@ impl Runner {
                 }
                 self.remaining(deadline)?;
                 self.backend.authorize_game_control(None)?;
-                if self.persona_runtime_restart {
-                    self.persona_launch_requested = true;
-                }
                 match self.backend.steam_sync_status(Stage::Prelaunch)? {
                     SyncStatus::Idle => {}
                     SyncStatus::Pending => {
@@ -2375,6 +2372,9 @@ impl Runner {
                             "Steam sync failed before launch; URI not sent",
                         ))
                     }
+                }
+                if self.persona_runtime_restart {
+                    self.persona_launch_requested = true;
                 }
                 self.backend.launch()?;
                 startup.launch_requested = true;
@@ -2608,6 +2608,7 @@ impl Runner {
     fn wait_steam_exit(&mut self, deadline: f64, recovery: bool) -> Result<()> {
         loop {
             self.backend.startup_cancel_check()?;
+            self.backend.authorize_game_control(None)?;
             if recovery {
                 self.backend.check_startup_lock()?;
             }

@@ -1,13 +1,13 @@
 mod support_driver;
 use civ6_autotest_rs::startup_idle::{
-    self, AdapterCoverage, EngineReading, IDLE_SOURCE, IdleProof, IdleSample,
+    self, AdapterCoverage, EngineReading, IdleProof, IdleSample, IDLE_SOURCE,
 };
 use civ6_autotest_rs::{
-    Error, ErrorKind, Result,
     runner::{Backend, Runner},
     startup::{self, GameProcess, GpuClient, GpuSnapshot},
+    Error, ErrorKind, Result,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     fs,
     path::Path,
@@ -53,12 +53,10 @@ fn stale_or_missing_helper_identity_cannot_pass_the_driver_protocol() {
         json!({"protocol":1,"source_sha256":"leftover-helper"}),
         json!({"protocol":2,"source_sha256":startup::helper_identity()}),
     ] {
-        assert!(
-            startup::verify_helper_identity(&bad)
-                .unwrap_err()
-                .to_string()
-                .contains("does not match")
-        );
+        assert!(startup::verify_helper_identity(&bad)
+            .unwrap_err()
+            .to_string()
+            .contains("does not match"));
     }
 }
 
@@ -436,13 +434,11 @@ fn position(events: &[String], value: &str) -> usize {
 #[test]
 fn loading_timeout_diagnoses_before_shutdown_and_retries_once_with_new_budget() {
     let mut fixture = Fixture::new(|game| game.delay_on_retry = 19.0);
-    assert!(
-        fixture
-            .runner
-            .restart_game(20.0)
-            .unwrap()
-            .contains("retried once")
-    );
+    assert!(fixture
+        .runner
+        .restart_game(20.0)
+        .unwrap()
+        .contains("retried once"));
     let events = fixture.events();
     assert_eq!(count(&events, "launch"), 2);
     assert_eq!(count(&events, "reset:sent"), 1);
@@ -538,11 +534,9 @@ fn missing_or_lost_lock_prevents_shutdown_reset_and_retry_and_releases_guard() {
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
         assert_eq!(count(&events, "launch"), if deny_lock { 0 } else { 1 });
-        assert!(
-            !events
-                .iter()
-                .any(|e| e.starts_with("terminate:") || e.starts_with("reset:"))
-        );
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("terminate:") || e.starts_with("reset:")));
         assert_eq!(events.last().unwrap(), "lock:release");
         if !deny_lock {
             assert_eq!(fixture.report()["retry"]["status"], "not_started");
@@ -570,11 +564,9 @@ fn changed_pid_or_creation_time_is_never_terminated() {
         });
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
-        assert!(
-            !events
-                .iter()
-                .any(|e| e.starts_with("terminate:") || e.starts_with("reset:"))
-        );
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("terminate:") || e.starts_with("reset:")));
         assert_eq!(count(&events, "launch"), 1);
     }
 }
@@ -593,23 +585,19 @@ fn initial_cancellation_and_launch_or_window_or_executable_failure_do_not_recove
             assert_eq!(error.kind, ErrorKind::Interrupted);
         }
         let events = fixture.events();
-        assert!(
-            !events
-                .iter()
-                .any(|e| e.starts_with("diagnostics:") || e.starts_with("reset:"))
-        );
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("diagnostics:") || e.starts_with("reset:")));
         if mode == 0 {
             assert!(!events.iter().any(|e| e.starts_with("lock:")));
         } else {
             assert_eq!(count(&events, "lock:acquire"), 1);
             assert_eq!(events.last().unwrap(), "lock:release");
         }
-        assert!(
-            fs::read_dir(&fixture.runner.output)
-                .unwrap()
-                .next()
-                .is_none()
-        );
+        assert!(fs::read_dir(&fixture.runner.output)
+            .unwrap()
+            .next()
+            .is_none());
     }
 }
 
@@ -623,11 +611,9 @@ fn cancellation_after_diagnostics_does_not_reset_or_retry() {
     let events = fixture.events();
     assert_eq!(count(&events, "diagnostics:11"), 1);
     assert_eq!(count(&events, "launch"), 1);
-    assert!(
-        !events
-            .iter()
-            .any(|e| e.starts_with("terminate:") || e.starts_with("reset:"))
-    );
+    assert!(!events
+        .iter()
+        .any(|e| e.starts_with("terminate:") || e.starts_with("reset:")));
 }
 
 #[test]
@@ -640,11 +626,9 @@ fn menu_already_reached_and_invalid_tuner_configuration_do_not_recover() {
         fixture.runner.restart_game(20.0).unwrap_err();
         let events = fixture.events();
         assert_eq!(count(&events, "launch"), 1);
-        assert!(
-            !events
-                .iter()
-                .any(|e| e.starts_with("reset:") || e.starts_with("terminate:"))
-        );
+        assert!(!events
+            .iter()
+            .any(|e| e.starts_with("reset:") || e.starts_with("terminate:")));
         if invalid_config {
             assert_eq!(fixture.report()["result"], "recovery_refused");
         }

@@ -1,11 +1,10 @@
 mod support_driver;
 
 use civ6_autotest_rs::{
-    Error, ErrorKind, Result,
     restart::{self, LifecycleBackend},
-    scenario,
+    scenario, Error, ErrorKind, Result,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::{BTreeSet, VecDeque},
     sync::{Arc, Mutex},
@@ -125,11 +124,9 @@ fn test_wrong_steam_executable_stops_before_click_or_tuner() {
     let events = h.events();
     assert_eq!(events.iter().filter(|s| *s == "launch").count(), 1);
     assert!(events.contains(&"dx11:123".into()));
-    assert!(
-        !events
-            .iter()
-            .any(|s| s.starts_with("click:") || s.starts_with("lua:"))
-    );
+    assert!(!events
+        .iter()
+        .any(|s| s.starts_with("click:") || s.starts_with("lua:")));
 }
 
 #[test]
@@ -185,6 +182,37 @@ fn steam_sync_deadline_expiry_never_sends_a_launch() {
 }
 
 #[test]
+fn ownership_loss_during_normal_exit_sync_stops_before_another_poll_or_launch() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    let owned = Arc::new(Mutex::new(true));
+    let control = Arc::clone(&owned);
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
+    fake.on_control_check = Box::new(move || {
+        if *control.lock().unwrap() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::LiveLease,
+                "fixture owner changed during sync",
+            ))
+        }
+    });
+    let polls = Arc::new(Mutex::new(0));
+    let observed = Arc::clone(&polls);
+    fake.on_sync = Box::new(move |stage| {
+        assert_eq!(stage, Stage::Exit);
+        *observed.lock().unwrap() += 1;
+        *owned.lock().unwrap() = false;
+        Ok(SyncStatus::Pending)
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.restart_game(120.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(*polls.lock().unwrap(), 1);
+    assert!(!h.events().contains(&"launch".into()));
+}
+
+#[test]
 fn an_active_steam_warning_suppresses_repeated_launch_requests() {
     let clock_holder = Arc::new(Mutex::new(None::<Arc<ManualClock>>));
     let clock = clock_holder.clone();
@@ -228,13 +256,12 @@ fn exit_and_prelaunch_failures_send_zero_uri_requests_for_every_failure_kind() {
                 Ok(SyncStatus::Failed)
             });
             let mut h = Harness::new(json!({}), fake);
-            assert!(
-                h.runner
-                    .restart_game(120.0)
-                    .unwrap_err()
-                    .message
-                    .contains("URI not sent")
-            );
+            assert!(h
+                .runner
+                .restart_game(120.0)
+                .unwrap_err()
+                .message
+                .contains("URI not sent"));
             assert!(!h.events().contains(&"launch".into()));
         }
     }
@@ -285,13 +312,12 @@ fn sync_failure_during_helper_cleanup_wait_sends_no_uri() {
     });
     let mut h = Harness::new(json!({}), fake);
     h.runner.clock = clock;
-    assert!(
-        h.runner
-            .launch_steam_and_wait(120.0)
-            .unwrap_err()
-            .message
-            .contains("URI not sent")
-    );
+    assert!(h
+        .runner
+        .launch_steam_and_wait(120.0)
+        .unwrap_err()
+        .message
+        .contains("URI not sent"));
     assert!(!h.events().contains(&"launch".into()));
 }
 
@@ -421,11 +447,9 @@ fn repeated_unsent_probe_expiry_stops_at_original_frontend_deadline() {
     h.runner.clock = clock.clone();
     let error = h.runner.wait_frontend_ready(20.0, false).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
-    assert!(
-        error
-            .message
-            .contains("Main menu did not become ready after 20s")
-    );
+    assert!(error
+        .message
+        .contains("Main menu did not become ready after 20s"));
     // The fake connect deliberately ignores its supplied budget on the final
     // probe. The outer loop must stop instead of granting a new startup budget.
     assert!(clock.at() >= 20.0);
@@ -524,12 +548,10 @@ fn chain_mode_missing_mod_stops_before_any_launch_or_tuner_access() {
         serde_json::from_slice(&std::fs::read(h.runner.output.join("failure.json")).unwrap())
             .unwrap();
     assert_eq!(failure["stage"], "preflight");
-    assert!(
-        failure["message"]
-            .as_str()
-            .unwrap()
-            .contains("requested UUID")
-    );
+    assert!(failure["message"]
+        .as_str()
+        .unwrap()
+        .contains("requested UUID"));
 }
 
 #[test]
@@ -553,12 +575,10 @@ fn test_still_stale_after_restart_stops_before_first_step() {
     let rows = h.jsonl("steps.jsonl");
     assert_eq!(rows.last().unwrap()["action"], "run");
     assert_eq!(rows.last().unwrap()["status"], "FAIL");
-    assert!(
-        rows.last().unwrap()["detail"]
-            .as_str()
-            .unwrap()
-            .contains("still stale")
-    );
+    assert!(rows.last().unwrap()["detail"]
+        .as_str()
+        .unwrap()
+        .contains("still stale"));
     assert!(!rows.iter().any(|r| r["action"] == "1/1 pause"));
 }
 
@@ -663,16 +683,14 @@ fn test_connection_notification_acknowledges_once_in_each_language() {
     use civ6_autotest_rs::runner::DISMISS_2K_CONNECTION_MESSAGE;
     for title in ["Connection Issue", "接続の問題"] {
         let lua = connection_message_fixture(Some(title), title);
-        assert!(
-            lua.load(DISMISS_2K_CONNECTION_MESSAGE)
-                .eval::<bool>()
-                .unwrap()
-        );
-        assert!(
-            !lua.load(DISMISS_2K_CONNECTION_MESSAGE)
-                .eval::<bool>()
-                .unwrap()
-        );
+        assert!(lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
+        assert!(!lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
         assert_eq!(lua.globals().get::<u32>("RESPONSES").unwrap(), 1);
     }
 }
@@ -688,11 +706,10 @@ fn test_connection_notification_keeps_other_dialogs_open() {
         Some("Other Error"),
     ] {
         let lua = connection_message_fixture(title, "Connection Issue");
-        assert!(
-            !lua.load(DISMISS_2K_CONNECTION_MESSAGE)
-                .eval::<bool>()
-                .unwrap()
-        );
+        assert!(!lua
+            .load(DISMISS_2K_CONNECTION_MESSAGE)
+            .eval::<bool>()
+            .unwrap());
         assert_eq!(lua.globals().get::<u32>("RESPONSES").unwrap(), 0);
         assert!(!lua.globals().get::<bool>("HIDDEN").unwrap());
     }
@@ -920,11 +937,9 @@ fn test_single_unresolved_launch_fails_at_the_supplied_deadline() {
     h.runner.clock = clock.clone();
     let error = h.runner.launch_steam_and_wait(420.0).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Scenario);
-    assert!(
-        error
-            .message
-            .contains("after 1 Steam launch attempts within the deadline")
-    );
+    assert!(error
+        .message
+        .contains("after 1 Steam launch attempts within the deadline"));
     assert_eq!(clock.at(), 420.0);
     assert_eq!(
         h.events().iter().filter(|event| *event == "launch").count(),
@@ -996,12 +1011,10 @@ fn test_single_process_still_refuses_when_duplicates_persist() {
             .kind,
         ErrorKind::Input
     );
-    assert!(
-        restart::single_civ_process_with(&mut fake, 0.0)
-            .unwrap_err()
-            .to_string()
-            .contains("Multiple Civ VI processes")
-    );
+    assert!(restart::single_civ_process_with(&mut fake, 0.0)
+        .unwrap_err()
+        .to_string()
+        .contains("Multiple Civ VI processes"));
 }
 
 #[test]
@@ -1074,11 +1087,9 @@ fn test_restart_requests_ui_quit_before_steam_launch() {
     let mut h = Harness::new(json!({}), fake);
     h.runner.restart_game(360.0).unwrap();
     let calls = h.calls();
-    assert!(
-        calls
-            .iter()
-            .any(|(_, c)| c.contains("Events.UserConfirmedClose()"))
-    );
+    assert!(calls
+        .iter()
+        .any(|(_, c)| c.contains("Events.UserConfirmedClose()")));
     let events = h.events();
     assert!(position(&events, "lua:FrontEnd") < position(&events, "launch"));
     assert!(!events.iter().any(|s| s.starts_with("terminate:")));
@@ -1136,11 +1147,9 @@ fn test_restart_without_process_launches_then_waits_for_frontend() {
     assert!(position(&events, "launch") < position(&events, "window"));
     assert!(position(&events, "window") < position(&events, "click:"));
     assert!(position(&events, "click:") < position(&events, "lua:FrontEnd"));
-    assert!(
-        !events
-            .iter()
-            .any(|s| s == "close" || s.starts_with("terminate:"))
-    );
+    assert!(!events
+        .iter()
+        .any(|s| s == "close" || s.starts_with("terminate:")));
 }
 
 #[test]
@@ -1153,11 +1162,10 @@ fn test_restart_still_refuses_when_several_processes_persist() {
         h.runner.restart_game(360.0).unwrap_err().kind,
         ErrorKind::Input
     );
-    assert!(
-        !h.events()
-            .iter()
-            .any(|s| s == "launch" || s.starts_with("terminate:"))
-    );
+    assert!(!h
+        .events()
+        .iter()
+        .any(|s| s == "launch" || s.starts_with("terminate:")));
 }
 
 #[test]
@@ -1170,9 +1178,8 @@ fn test_run_launches_civ_when_not_running_and_first_step_needs_game() {
     prepare_run(&mut h);
     assert_eq!(h.runner.run().unwrap(), 0);
     let rows = h.jsonl("steps.jsonl");
-    assert!(
-        rows.iter()
-            .any(|r| r["action"] == "launch" && r["status"] == "START")
-    );
+    assert!(rows
+        .iter()
+        .any(|r| r["action"] == "launch" && r["status"] == "START"));
     assert_eq!(h.events().iter().filter(|s| *s == "launch").count(), 1);
 }
