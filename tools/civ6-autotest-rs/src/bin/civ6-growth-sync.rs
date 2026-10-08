@@ -19,6 +19,8 @@ struct Args {
 enum Command {
     /// Print the fixed read-only InGame query, without connecting to a game.
     Query,
+    /// Print the generated UI roster publisher; Gameplay does not call UI-only configuration APIs.
+    RosterUi,
     /// Run once against this machine's loopback FireTuner. Use only in an owned live_chain session.
     Capture {
         #[arg(long)]
@@ -46,6 +48,7 @@ enum Command {
 fn run(args: Args) -> Result<()> {
     match args.command {
         Command::Query => print!("{COLLECTION_QUERY}"),
+        Command::RosterUi => print!("{}", civ6_autotest_rs::growth_roster::UI_LUA),
         Command::Capture {
             endpoint,
             session,

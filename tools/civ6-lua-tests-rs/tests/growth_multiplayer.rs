@@ -20,14 +20,10 @@ impl Endpoint {
             local r={}; for k,x in pairs(v) do r[k]=copy(x) end; return r
           end
           turn=1; props={}; unitprops={[0]={},[1]={}}; present={[0]=true,[1]=true}
-          humans={[0]=true,[1]=true}; network=false; LOG={}
+          humans={[0]=true,[1]=true}; inactive={}; network=false; LOG={}
           print=function(line) LOG[#LOG+1]=line end
-          GameConfiguration={IsNetworkMultiplayer=function() return network end,
-            GetParticipatingPlayerIDs=function() return {0,1} end}
-          PlayerConfigurations={}
-          for owner=0,1 do
-            local id=owner; PlayerConfigurations[id]={IsHuman=function() return true end}
-          end
+          GameConfiguration={IsNetworkMultiplayer=function() return network end}
+          -- Frontend roster/configuration readers are deliberately absent in Gameplay.
           for owner=0,1 do
             unitprops[owner][65536]={}; unitprops[owner][131073]={}
           end
@@ -39,6 +35,7 @@ impl Endpoint {
           for owner=0,1 do
             local pid=owner
             Players[pid]={GetID=function() return pid end, IsHuman=function() return humans[pid] end,
+              IsTurnActive=function() return not inactive[pid] end,
               GetUnits=function() return {Members=function()
                 local ids=reversed and {131073,65536} or {65536,131073}
                 local n=0
@@ -56,7 +53,9 @@ impl Endpoint {
             return {Players[0],Players[1]}
           end}
           Events={LoadScreenClose={Add=function(f) loadscreen=f end}}
-          GameEvents={PlayerTurnStartComplete={Add=function(f) beginturn=f end}}
+          GameEvents={PlayerTurnStartComplete={Add=function(f) beginturn=f end},
+            OnPlayerTurnEnded={Add=function(f) endturn=f end},
+            JAC_GrowthRoster={Add=function(f) rosteroperation=f end}}
           function export()
             local units={}
             for owner=0,1 do for _,id in ipairs({65536,131073}) do
@@ -209,10 +208,15 @@ fn network_load_timing_cannot_write_state_or_finalize_an_incomplete_human_roster
     assert_eq!(before, host.state());
     host.exec("beginturn(0)");
     peer.exec("beginturn(0); loadscreen()");
-    assert_eq!(before, host.state());
-    assert_eq!(before, peer.state());
+    assert_eq!(host.state(), peer.state());
+    assert!(host.record(0, 65536).is_null());
     for endpoint in [&host, &peer] {
-        endpoint.exec("humans[1]=true; beginturn(0); beginturn(1)");
+        endpoint
+            .exec("assert(rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'}))");
+        assert!(endpoint.record(0, 65536).is_null());
+    }
+    for endpoint in [&host, &peer] {
+        endpoint.exec("humans[1]=true; beginturn(1)");
     }
     assert_eq!(host.state(), peer.state());
     assert_eq!(host.record(1, 65536)["XP"], 20);
@@ -221,7 +225,7 @@ fn network_load_timing_cannot_write_state_or_finalize_an_incomplete_human_roster
 #[test]
 fn units_missing_for_an_ai_do_not_delay_initialization() {
     let endpoint = Endpoint::new(0, false, None);
-    endpoint.exec("network=true; humans[1]=false; present[1]=false; PlayerConfigurations[1].IsHuman=function() return false end; beginturn(0)");
+    endpoint.exec("network=true; humans[1]=false; present[1]=false; beginturn(0); assert(rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0'}))");
     assert_eq!(
         endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"],
         true
@@ -235,36 +239,152 @@ fn gameplay_can_register_turn_handler_without_ui_loadscreen_event() {
     let endpoint = Endpoint::new(0, false, None);
     endpoint.exec("network=true; Events.LoadScreenClose=nil; props={}");
     endpoint.0.load(read_repo(SOURCE)).exec().unwrap();
-    endpoint.exec("beginturn(0); beginturn(1)");
+    endpoint.exec("beginturn(0); assert(rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'})); beginturn(1)");
     assert_eq!(endpoint.record(1, 65536)["XP"], 20);
 }
 
 #[test]
-fn unavailable_network_roster_api_has_a_distinct_diagnostic_and_no_partial_writes() {
+fn absent_ui_roster_does_not_cause_gameplay_to_call_frontend_apis_or_partially_initialize() {
     let endpoint = Endpoint::new(0, false, None);
-    endpoint.exec("network=true; GameConfiguration.GetParticipatingPlayerIDs=nil; beginturn(0)");
+    endpoint.exec("network=true; GameConfiguration.GetParticipatingPlayerIDs=function() error('UI-only API') end; beginturn(0)");
     let missing: bool = endpoint
         .0
-        .load("return LOG[#LOG]:find('network roster API unavailable',1,true)~=nil")
+        .load("return LOG[#LOG]:find('waiting for synchronized human roster',1,true)~=nil")
         .eval()
         .unwrap();
     assert!(missing);
     assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"].is_null());
     assert!(endpoint.record(0, 65536).is_null());
-    endpoint.exec("GameConfiguration.GetParticipatingPlayerIDs=function() return {0,1} end; beginturn(0); beginturn(1)");
+    endpoint.exec("assert(rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'})); beginturn(1)");
     assert_eq!(endpoint.record(1, 65536)["XP"], 20);
 }
 
 #[test]
 fn network_save_and_rejoin_keep_xp_even_without_new_initialization_apis() {
     let host = Endpoint::new(0, false, None);
-    host.exec("network=true; loadscreen(); beginturn(0); beginturn(1)");
+    host.exec("network=true; loadscreen(); beginturn(0); assert(rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'})); beginturn(1)");
     let serialized = serde_json::to_vec(&host.state()).unwrap();
     let saved: Json = serde_json::from_slice(&serialized).unwrap();
     for local in 0..=1 {
         let restored = Endpoint::new(local, true, Some(&saved));
         restored.exec("network=true; GameConfiguration.GetParticipatingPlayerIDs=nil; loadscreen(); beginturn(0); beginturn(1)");
         assert_eq!(saved, restored.state());
+    }
+}
+
+#[test]
+fn roster_catches_up_saved_start_receipts_without_losing_the_first_players_xp() {
+    let host = Endpoint::new(0, false, None);
+    host.exec("network=true; beginturn(0); endturn(0); beginturn(1)");
+    let waiting = host.state();
+    assert!(host.record(0, 65536).is_null());
+    let rejoined = Endpoint::new(1, true, Some(&waiting));
+    rejoined.exec("network=true; assert(rosteroperation(1,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'}))");
+    for owner in 0..=1 {
+        assert_eq!(rejoined.record(owner, 65536)["XP"], 20);
+        assert_eq!(rejoined.record(owner, 65536)["LastXPTurn"], 1);
+    }
+    let ready = rejoined.state();
+    rejoined.exec("assert(rosteroperation(1,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'})); beginturn(1)");
+    assert_eq!(ready, rejoined.state());
+}
+
+#[test]
+fn rejects_roster_spoof_stale_turn_malformed_ids_and_missing_known_human() {
+    for request in [
+        "rosteroperation(1,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn-1,Roster='0,1'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,,1'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='1,0'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,0'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,64'})",
+        "rosteroperation(0,{OnStart='JAC_GrowthRoster',Turn=turn,Roster='0,1',Actor=1})",
+    ] {
+        let endpoint = Endpoint::new(0, false, None);
+        endpoint.exec("network=true; beginturn(0)");
+        let before = endpoint.state();
+        let accepted: bool = endpoint.0.load(format!("return {request}")).eval().unwrap();
+        assert!(!accepted, "{request}");
+        assert_eq!(before, endpoint.state(), "{request}");
+    }
+}
+
+#[test]
+fn nil_or_inactive_roster_actor_cannot_seed_a_game() {
+    for actor in ["nil", "0", "99", "'0'"] {
+        let endpoint = Endpoint::new(0, false, None);
+        endpoint.exec("network=true");
+        let original = endpoint.state();
+        let accepted: bool = endpoint
+            .0
+            .load(format!(
+                "return rosteroperation({actor},{{Turn=turn,Roster='0,1'}})"
+            ))
+            .eval()
+            .unwrap();
+        assert!(!accepted);
+        assert_eq!(original, endpoint.state());
+    }
+}
+
+#[test]
+fn stale_active_receipt_cannot_authorize_a_player_who_already_ended_their_turn() {
+    let endpoint=Endpoint::new(0,false,None);
+    endpoint.exec("network=true; beginturn(0); inactive[0]=true");
+    let before=endpoint.state();
+    let accepted:bool=endpoint.0.load("return rosteroperation(0,{Turn=turn,Roster='0,1'})").eval().unwrap();
+    assert!(!accepted);
+    assert_eq!(before,endpoint.state());
+}
+
+#[test]
+fn actual_ui_roster_packet_replayed_into_both_gameplay_vms_initializes_once() {
+    let host = Endpoint::new(0, false, None);
+    let peer = Endpoint::new(1, true, None);
+    for endpoint in [&host, &peer] {
+        endpoint.exec("network=true; beginturn(0)");
+    }
+    let ui = new_lua();
+    ui.globals()
+        .set("PROPS", ui.to_value(&host.state()["properties"]).unwrap())
+        .unwrap();
+    ui.load(r#"
+      GameConfiguration={IsNetworkMultiplayer=function() return true end,
+        GetHumanPlayerIDs=function() return {1,62,0} end, GetObserverIDs=function() return {62} end}
+      Game={GetLocalPlayer=function() return 0 end,GetCurrentGameTurn=function() return 1 end,
+        GetProperty=function(_,key) return PROPS[key] end,SetProperty=function() error('UI wrote state') end}
+      ContextPtr={SetHide=function(_,hidden) assert(hidden) end}
+      PlayerOperations={EXECUTE_SCRIPT=77}; SENT={}
+      UI={GetElapsedTime=function() return 10 end,
+        RequestPlayerOperation=function(actor,kind,params)
+          assert(kind==77);SENT[#SENT+1]={actor=actor,params=params}
+        end}
+      Events={LoadScreenClose={Add=function(f) load=f end},
+        LocalPlayerTurnBegin={Add=function(f) begin=f end},
+        GameCoreEventPublishComplete={Add=function(f) publish=f end}}
+    "#).exec().unwrap();
+    ui.load(read_repo("poc/JAC_PoC_GrowthUI/UI/JAC_GrowthRoster.lua"))
+        .exec()
+        .unwrap();
+    ui.load("load(); publish(); assert(#SENT==1)")
+        .exec()
+        .unwrap();
+    let packet: Value = ui.load("return SENT[1]").eval().unwrap();
+    let packet: Json = ui.from_value(packet).unwrap();
+    assert_eq!(packet["actor"], 0);
+    assert_eq!(packet["params"]["Roster"], "0,1");
+    for endpoint in [&host, &peer] {
+        endpoint
+            .0
+            .globals()
+            .set("PACKET", endpoint.0.to_value(&packet).unwrap())
+            .unwrap();
+        endpoint.exec("assert(rosteroperation(PACKET.actor,PACKET.params)); assert(rosteroperation(PACKET.actor,PACKET.params)); beginturn(1)");
+    }
+    assert_eq!(host.state(), peer.state());
+    for owner in 0..=1 {
+        assert_eq!(host.record(owner, 65536)["XP"], 20);
     }
 }
 

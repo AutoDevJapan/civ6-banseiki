@@ -3,6 +3,9 @@ local INITIALIZED_KEY = "JAC_POC_GROWTHUI_INITIALIZED"
 local WARLORD_KEY = "JAC_POC_GROWTHUI_WARLORD"
 local XP_PER_TURN = 20 -- 成長式の検証用固定値。報酬量の仕様ではない。
 local NORMAL_LEVEL_CAP = 30
+local ROSTER_KEY = "JAC_POC_GROWTHUI_NETWORK_ROSTER"
+local ACTIVE_KEY = "JAC_POC_GROWTHUI_ACTIVE_TURNS"
+local PENDING_KEY = "JAC_POC_GROWTHUI_PENDING_STARTS"
 
 local PERSONALITIES = {
 	"JAC_PERSONALITY_BRAVE", "JAC_PERSONALITY_CALM", "JAC_PERSONALITY_CAREFUL",
@@ -77,27 +80,14 @@ local function InitializeNewGame()
 
 	local humans = HumanPlayers()
 	if IsNetworkGame() then
-		-- Official StagingRoom.lua uses GetParticipatingPlayerIDs and config:IsHuman.
-		-- Do not initialize only the peers whose gameplay objects already arrived.
-		if not GameConfiguration.GetParticipatingPlayerIDs or not PlayerConfigurations then
-			ReportWaiting("network roster API unavailable; growth initialization is pending")
-			return
-		end
-		local found, expected = {}, 0
+		local expected = Game:GetProperty(ROSTER_KEY)
+		if not expected then ReportWaiting("waiting for synchronized human roster"); return end
+		local found = {}
 		for _, player in ipairs(humans) do found[player:GetID()] = true end
-		for _, id in ipairs(GameConfiguration.GetParticipatingPlayerIDs()) do
-			local config = PlayerConfigurations[id]
-			if not config then ReportWaiting(); return end
-			if not config.IsHuman then
-				ReportWaiting("configured human getter unavailable; growth initialization is pending")
-				return
-			end
-			if config:IsHuman() then
-				expected = expected + 1
-				if not found[id] then ReportWaiting(); return end
-			end
+		for _, id in ipairs(expected) do
+			if not found[id] then ReportWaiting(); return end
 		end
-		if expected == 0 or expected ~= #humans then ReportWaiting(); return end
+		if #expected == 0 or #expected ~= #humans then ReportWaiting(); return end
 	end
 	-- Do not finalize a partial roster while a peer's starting units are pending.
 	-- Preflight before writing any unit records so a later retry cannot reset XP.
@@ -159,17 +149,13 @@ local function OnLoadScreenClose()
 	Log("restored count=" .. tostring(restored))
 end
 
-local function OnPlayerTurnStartComplete(playerID)
-	if not Game:GetProperty(INITIALIZED_KEY) then InitializeNewGame() end
-	if not Game:GetProperty(INITIALIZED_KEY) then return end
-
+local function ApplyGrowth(playerID, turn)
 	local player = Players[playerID]
 	if not player or not player:IsHuman() then return end
-	local turn = Game.GetCurrentGameTurn()
 	for _, unit in ipairs(SortedUnits(player)) do
 		local record = unit:GetProperty(WARLORD_KEY)
 		if record then
-			if record.LastXPTurn ~= turn then
+			if record.LastXPTurn == nil or record.LastXPTurn < turn then
 				record.XP = record.XP + XP_PER_TURN
 				while record.Level < NORMAL_LEVEL_CAP do
 					local needed = math.floor(30 * record.Level ^ 1.5 + 0.5)
@@ -185,7 +171,91 @@ local function OnPlayerTurnStartComplete(playerID)
 	end
 end
 
+local function CopyStarts(value)
+	local result = {}
+	for key, row in pairs(value or {}) do result[key] = {owner=row.owner, turn=row.turn} end
+	return result
+end
+
+local function DrainPending()
+	if not Game:GetProperty(INITIALIZED_KEY) then InitializeNewGame() end
+	if not Game:GetProperty(INITIALIZED_KEY) then return end
+	local rows = {}
+	for _, row in pairs(Game:GetProperty(PENDING_KEY) or {}) do rows[#rows+1] = row end
+	table.sort(rows, function(a,b) return a.turn < b.turn or a.turn == b.turn and a.owner < b.owner end)
+	for _, row in ipairs(rows) do ApplyGrowth(row.owner, row.turn) end
+	Game:SetProperty(PENDING_KEY, nil)
+end
+
+local function OnPlayerTurnStartComplete(playerID)
+	local p = type(playerID) == "number" and Players[playerID]
+	if not p then return end
+	local turn = Game.GetCurrentGameTurn()
+	if IsNetworkGame() then
+		local active = Game:GetProperty(ACTIVE_KEY) or {}; local nextActive = {}
+		for key,value in pairs(active) do nextActive[key] = value end
+		nextActive[tostring(playerID)] = turn
+		Game:SetProperty(ACTIVE_KEY, nextActive)
+		if not Game:GetProperty(INITIALIZED_KEY) then
+			local pending = CopyStarts(Game:GetProperty(PENDING_KEY))
+			pending[tostring(turn)..":"..tostring(playerID)] = {owner=playerID, turn=turn}
+			Game:SetProperty(PENDING_KEY, pending)
+			DrainPending()
+			return
+		end
+	elseif not Game:GetProperty(INITIALIZED_KEY) then InitializeNewGame() end
+	if Game:GetProperty(INITIALIZED_KEY) then ApplyGrowth(playerID, turn) end
+end
+
+local function ReceiveRoster(actor, params)
+	assert(IsNetworkGame() and type(params) == "table", "network roster operation required")
+	assert(type(actor) == "number" and actor == math.floor(actor) and actor >= 0 and actor <= 63,
+		"invalid roster engine actor")
+	for key in pairs(params) do
+		assert(key == "OnStart" or key == "Turn" or key == "Roster", "unexpected roster field")
+	end
+	assert((params.OnStart == nil or params.OnStart == "JAC_GrowthRoster")
+		and params.Turn == Game.GetCurrentGameTurn(), "stale roster operation")
+	assert(type(params.Roster) == "string" and #params.Roster <= 256, "invalid roster encoding")
+	local ids, prior, majors = {}, -1, {}
+	for _,p in ipairs(PlayerManager.GetAliveMajors()) do majors[p:GetID()] = p end
+	for text in params.Roster:gmatch("[^,]+") do
+		local id = tonumber(text)
+		assert(id and id == math.floor(id) and id >= 0 and id <= 63 and tostring(id) == text
+			and id > prior and majors[id], "invalid configured major player")
+		ids[#ids+1], prior = id, id
+	end
+	assert(#ids > 0 and table.concat(ids, ",") == params.Roster, "invalid roster list")
+	local listed = {}; for _,id in ipairs(ids) do listed[id] = true end
+	local active, selected = Game:GetProperty(ACTIVE_KEY) or {}, nil
+	for _,id in ipairs(ids) do
+		if active[tostring(id)] == params.Turn and majors[id]:IsHuman() then selected=id; break end
+	end
+	assert(selected ~= nil and actor == selected, "roster requires the active human engine actor")
+	assert(majors[actor]:IsTurnActive(), "roster actor no longer has the active turn")
+	for _,p in ipairs(HumanPlayers()) do assert(listed[p:GetID()], "human player omitted from roster") end
+	if Game:GetProperty(INITIALIZED_KEY) then return true end
+	local known = Game:GetProperty(ROSTER_KEY)
+	assert(not known or table.concat(known, ",") == params.Roster, "saved roster changed")
+	if not known then Game:SetProperty(ROSTER_KEY, ids) end
+	DrainPending()
+	return true
+end
+
 if Events and Events.LoadScreenClose and Events.LoadScreenClose.Add then
 	Events.LoadScreenClose.Add(OnLoadScreenClose)
 end
 GameEvents.PlayerTurnStartComplete.Add(OnPlayerTurnStartComplete)
+GameEvents.OnPlayerTurnEnded.Add(function(playerID)
+	if not IsNetworkGame() then return end
+	local nextActive = {}
+	for id,turn in pairs(Game:GetProperty(ACTIVE_KEY) or {}) do
+		if id ~= tostring(playerID) then nextActive[id] = turn end
+	end
+	Game:SetProperty(ACTIVE_KEY, nextActive)
+end)
+GameEvents.JAC_GrowthRoster.Add(function(actor, params)
+	local ok,result = pcall(ReceiveRoster, actor, params)
+	if not ok then print("[JAC_POC] network roster rejected: "..tostring(result)) end
+	return ok and result == true
+end)
