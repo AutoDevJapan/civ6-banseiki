@@ -5,7 +5,7 @@ use crate::{oath_save_probe, Repository};
 use anyhow::{ensure, Context, Result};
 use serde_json::{json, Value};
 
-pub const VERSION: &str = "mori-owned-harbor-v1";
+pub const VERSION: &str = "mori-owned-harbor-v2";
 
 const PREPARE: &str = r#"
 assert(not Game:GetProperty('JAC_TODO134_PORT_FIXTURE'),'port fixture may run only once')
@@ -18,6 +18,7 @@ local majors=PlayerManager.GetAliveMajors(); assert(#majors==22,'original houses
 local n=0; for _,owner in ipairs(majors) do for _ in owner:GetCities():Members() do n=n+1 end end
 assert(n==56,'port fixture may not create a city')
 local c=assert(p:GetCities():GetCapitalCity()); local center=assert(Map.GetPlot(c:GetX(),c:GetY()))
+assert(p:GetCities():GetCount()==1 and c:GetID()==65536,'port fixture requires the one original Mori city')
 assert(c:GetOwner()==0 and center:GetOwner()==0 and center:GetIndex()==12135,'expected original Mori capital')
 local port=assert(Map.GetPlotByIndex(11522))
 assert(port:GetX()==98 and port:GetY()==56 and port:GetOwner()==-1,'original unowned port site changed')
@@ -113,8 +114,12 @@ local m=assert(Game:GetProperty('JAC_TODO134_PORT_FIXTURE'))
 assert(m.turn==Game.GetCurrentGameTurn() and not m.completed,'port completion may run only once in the fixture turn')
 local c=assert(Players[0]:GetCities():FindID(m.city)); local port=assert(Map.GetPlotByIndex(m.port))
 assert(c:GetOwner()==0 and c:GetPopulation()==m.population and port:GetOwner()==0,'port fixture ownership or population changed')
-local belongs=false; for _,index in pairs(Map.GetCityPlots():GetPurchasedPlots(c)) do if index==m.port then belongs=true end end
-assert(belongs,'purchased plot belongs to a different city')
+-- PurchasedPlots is UI-only (live52). The preceding UI step verifies the
+-- purchase and legal placement. Core pins the only original city independently.
+assert(Players[0]:GetCities():GetCount()==1 and m.city==65536 and c:GetID()==65536,'original one-city owner changed')
+assert(m.center==12135 and m.port==11522,'fixed Mori port identity changed')
+local center=assert(Map.GetPlot(c:GetX(),c:GetY()))
+assert(center:GetOwner()==0 and center:GetIndex()==12135,'original capital plot changed')
 local harbor=assert(GameInfo.Districts.DISTRICT_HARBOR)
 assert(not c:GetDistricts():HasDistrict(harbor.Index),'port fixture may not overwrite a district')
 -- TunerCityPanel.lua: g_DistrictPlacement.Place, with placement construction 100.
@@ -363,7 +368,7 @@ mod tests {
     }
 
     const UI_STATE: &str = r#"
-turn=0; owner=-1; member=false; population=4; balance=1000; can=true; permitted=true; pillaged=false; built=false
+turn=0; owner=-1; member=false; population=4; balance=1000; can=true; permitted=true; pillaged=false; built=false;city_count=1
 requests=0; completions=0; mode=42; mode_changes=0
 m={city=65536,center=12135,port=11522,turn=0,population=4}
 Game={GetProperty=function()return m end,GetCurrentGameTurn=function()return turn end,GetLocalPlayer=function()return 0 end,SetProperty=function(_,_,value)m=value end}
@@ -375,7 +380,7 @@ queue={CanProduce=function()return permitted,{} end,CreateIncompleteDistrict=fun
 city={GetID=function()return 65536 end,GetOwner=function()return 0 end,GetX=function()return 99 end,GetY=function()return 59 end,
  GetPopulation=function()return population end,GetDistricts=function()return districts end,GetBuildQueue=function()return queue end,
  GetGold=function()return {GetPlotPurchaseCost=function()return 150 end} end}
-Players={[0]={IsTurnActive=function()return true end,GetCities=function()return {FindID=function(_,id)if id==65536 then return city end end}end,
+Players={[0]={IsTurnActive=function()return true end,GetCities=function()return {GetCount=function()return city_count end,FindID=function(_,id)if id==65536 then return city end end}end,
  GetTreasury=function()return {GetGoldBalance=function()return balance end}end}}
 port={GetOwner=function()return owner end,GetX=function()return 98 end,GetY=function()return 56 end,CanHaveDistrict=function()return permitted end}
 Map={GetPlotByIndex=function(id)assert(id==11522);return port end,GetPlot=function()return {GetOwner=function()return 0 end,GetIndex=function()return 12135 end}end,
@@ -463,7 +468,10 @@ PlayerManager={GetAliveMajors=function()local list={Players[0]};for i=1,21 do lo
         assert!(!vm.load(format!("{UI_COMMON}\n{OWNED}")).eval::<bool>()?);
         vm.load("owner=0").exec()?;
         assert!(!vm.load(format!("{UI_COMMON}\n{OWNED}")).eval::<bool>()?);
-        assert!(vm.load(COMPLETE).eval::<String>().is_err());
+        assert!(vm
+            .load(format!("{UI_COMMON}\n{PERMIT}"))
+            .eval::<String>()
+            .is_err());
         assert_eq!(vm.load("return completions").eval::<i64>()?, 0);
         vm.load("member=true").exec()?;
         assert!(vm.load(format!("{UI_COMMON}\n{OWNED}")).eval::<bool>()?);
@@ -474,9 +482,12 @@ PlayerManager={GetAliveMajors=function()local list={Players[0]};for i=1,21 do lo
             .is_err());
         vm.load("can=true").exec()?;
         vm.load(format!("{UI_COMMON}\n{PERMIT}")).eval::<String>()?;
+        vm.load("saved_city_plots=Map.GetCityPlots;Map.GetCityPlots=nil")
+            .exec()?;
         vm.load(COMPLETE).eval::<String>()?;
         assert_eq!(vm.load("return completions").eval::<i64>()?, 1);
         assert!(vm.load(COMPLETE).eval::<String>().is_err());
+        vm.load("Map.GetCityPlots=saved_city_plots").exec()?;
         vm.load("pillaged=true").exec()?;
         assert!(vm
             .load(format!("{UI_COMMON}\n{READY}"))
@@ -523,6 +534,46 @@ PlayerManager={GetAliveMajors=function()local list={Players[0]};for i=1,21 do lo
             );
             assert_eq!(vm.load("return requests").eval::<i64>()?, 0);
             assert_eq!(vm.load("return completions").eval::<i64>()?, 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn core_completion_rejects_other_city_or_owner_without_ui_only_getters() -> Result<()> {
+        for change in [
+            "city_count=2",
+            "owner=1",
+            "m.city=123",
+            "m.center=123",
+            "m.port=123",
+            "turn=1",
+            "population=3",
+        ] {
+            let vm = mlua::Lua::new();
+            vm.load(UI_STATE).exec()?;
+            vm.load("owner=0;member=true;Map.GetCityPlots=nil").exec()?;
+            vm.load(change).exec()?;
+            assert!(
+                vm.load(COMPLETE).eval::<String>().is_err(),
+                "accepted {change}"
+            );
+            assert_eq!(vm.load("return completions").eval::<i64>()?, 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn fixed_core_identity_is_rejected_even_when_lookup_returns_a_valid_object() -> Result<()> {
+        for (change,message) in [
+            ("m.city=123;city.GetID=function()return 123 end;Players[0].GetCities=function()return {GetCount=function()return 1 end,FindID=function()return city end}end", "original one-city owner changed"),
+            ("m.port=123;Map.GetPlotByIndex=function()return port end", "fixed Mori port identity changed"),
+            ("m.center=123;Map.GetPlot=function()return {GetOwner=function()return 0 end,GetIndex=function()return 123 end}end", "fixed Mori port identity changed"),
+        ] {
+            let vm=mlua::Lua::new();vm.load(UI_STATE).exec()?;
+            vm.load("owner=0;member=true;Map.GetCityPlots=nil").exec()?;vm.load(change).exec()?;
+            let error=vm.load(COMPLETE).eval::<String>().unwrap_err();
+            assert!(error.to_string().contains(message),"wrong guard rejected identity: {error}");
+            assert_eq!(vm.load("return completions").eval::<i64>()?,0);
         }
         Ok(())
     }

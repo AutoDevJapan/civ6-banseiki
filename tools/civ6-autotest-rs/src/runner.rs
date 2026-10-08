@@ -975,6 +975,42 @@ impl Runner {
             "Timed out waiting for options menu to close",
         ))
     }
+    /// A loading screen can finish before optional blocking UI appears. Keep
+    /// servicing only the existing options/advisor closers until the real human
+    /// start-complete flag arrives; do not end a turn or fabricate readiness.
+    pub fn wait_initial_human_ready(&mut self, deadline: f64) -> Result<()> {
+        while self.clock.now() < deadline {
+            let ready = self.retry_idempotent(deadline, |r| {
+                r.lua("InGame", HUMAN_TURN_READY_UI, r.budget(deadline, 5.0)?)
+            })?;
+            match ready.as_str() {
+                "true" => {
+                    self.log(
+                        "initial_human_ready",
+                        "OK",
+                        "actual human start complete and UI message queue idle",
+                    )?;
+                    return Ok(());
+                }
+                "false" => {}
+                _ => {
+                    return Err(Error::scenario(format!(
+                        "unexpected initial human readiness: {ready:?}"
+                    )))
+                }
+            }
+            let menu = self.close_options_menu(deadline)?;
+            let advisor = self.dismiss_advisor_once(deadline)?;
+            if menu || advisor {
+                self.log("initial_human_blocker", "CLOSED", &format!("options={menu}, advisor={advisor}; observing readiness without replaying game start"))?;
+            }
+            self.sleep_until(deadline, 0.5);
+        }
+        Err(Error::scenario(
+            "initial human start did not complete before the original game-start deadline",
+        ))
+    }
+
     pub fn dismiss_advisor(&mut self, deadline: f64) -> Result<bool> {
         self.retry_idempotent(deadline, |r| r.dismiss_advisor_once(deadline))
     }
@@ -2054,6 +2090,7 @@ impl Runner {
                     let owner_deadline = self.clock.now() + wait;
                     self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
                     self.check_start_turn(owner_deadline)?;
+                    self.wait_initial_human_ready(owner_deadline)?;
                     return Ok(
                         "owner pressed Start Game; single-player game reached InGame".into(),
                     );
@@ -2077,6 +2114,9 @@ impl Runner {
                 }
                 self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
                 self.check_start_turn(deadline)?;
+                if session == scenario::SessionType::SinglePlayer {
+                    self.wait_initial_human_ready(deadline)?;
+                }
                 self.accept_hotseat_turn(deadline, true)?;
                 Ok(match session {
                     scenario::SessionType::SinglePlayer => "single-player game reached InGame",

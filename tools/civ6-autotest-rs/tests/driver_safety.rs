@@ -897,7 +897,14 @@ fn test_transition_waits_after_unknown_reply_without_resending() {
         };
         assert_eq!(lua_count(&f, needle), 1);
         assert_eq!(f.trace().presses.len(), 1);
-        assert_eq!(lua_count(&f, "Game.GetLocalPlayer"), 1);
+        assert_eq!(
+            lua_count(&f, "return Game ~= nil and Game.GetLocalPlayer() >= 0"),
+            1
+        );
+        assert_eq!(
+            lua_count(&f, civ6_autotest_rs::runner::HUMAN_TURN_READY_UI),
+            usize::from(action == "start_game")
+        );
     }
 }
 

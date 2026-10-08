@@ -30,6 +30,71 @@ fn turn_backend() -> FakeBackend {
 }
 
 #[test]
+fn initial_human_wait_closes_late_blockers_without_starting_or_ending_a_turn() {
+    // A first empty popup query does not imply the next frame stays unblocked.
+    let state = Arc::new(Mutex::new((0usize, false, false, 0usize, 0usize)));
+    let g = state.clone();
+    let fake = FakeBackend::new()
+        .states(|| {
+            Ok(vec![
+                "InGame".into(),
+                "InGameTopOptionsMenu".into(),
+                "AdvisorPopup".into(),
+            ])
+        })
+        .lua(move |context, code| {
+            let mut s = g.lock().unwrap();
+            if context == "InGame" && code == HUMAN_TURN_READY_UI {
+                s.0 += 1;
+                return Ok((s.1 && s.2).to_string());
+            }
+            if context == "InGameTopOptionsMenu" {
+                if code.contains("OnReturn()") {
+                    s.1 = true;
+                    s.3 += 1;
+                    return Ok("true".into());
+                }
+                return Ok((s.0 < 2 || s.1).to_string());
+            }
+            if context == "AdvisorPopup" {
+                if s.0 >= 2 && !s.2 {
+                    s.2 = true;
+                    s.4 += 1;
+                    return Ok("true".into());
+                }
+                return Ok("false".into());
+            }
+            panic!("unexpected startup operation {context}: {code}");
+        });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.wait_initial_human_ready(10.0).unwrap();
+    let s = state.lock().unwrap();
+    assert!(s.0 >= 3);
+    assert_eq!((s.3, s.4), (1, 1));
+    assert_eq!(h.count_code("HostGame"), 0);
+    assert_eq!(h.count_code("ACTION_ENDTURN"), 0);
+    assert!(h.log().contains("initial_human_blocker"));
+    assert!(h.log().contains("initial_human_ready"));
+}
+
+#[test]
+fn initial_human_wait_stops_at_the_original_deadline_without_faking_complete() {
+    let fake = FakeBackend::new()
+        .states(|| Ok(vec!["InGame".into()]))
+        .lua(|context, code| {
+            assert_eq!(context, "InGame");
+            assert_eq!(code, HUMAN_TURN_READY_UI);
+            Ok("false".into())
+        });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.wait_initial_human_ready(2.0).unwrap_err();
+    assert!(error.message.contains("original game-start deadline"));
+    assert_eq!(h.count_code("HostGame"), 0);
+    assert_eq!(h.count_code("ACTION_ENDTURN"), 0);
+    assert!(!h.log().contains("actual human start complete"));
+}
+
+#[test]
 fn end_turn_closes_an_advisor_that_appears_after_the_only_request() {
     let state = Arc::new(Mutex::new((67_i64, false, 0_usize, 0_usize)));
     let game = state.clone();
