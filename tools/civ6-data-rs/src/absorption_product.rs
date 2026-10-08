@@ -41,6 +41,44 @@ end
 /// Terminal acceptance evidence shared by diagnostic and official product routes.
 /// A completed flow alone does not prove that its payer and asset transfer settled.
 pub const COMPLETION_EVIDENCE: &str = r#"
+local function TraceCompletionWait(flowID,offerID)
+  local A=JAC_AbsorptionGameplay
+  local f=JAC_AbsorptionFlowGameplay.Get(flowID)
+  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+  local e=s and s.Escrows and s.Escrows[offerID]
+  local tx=A.GetState().Transactions[flowID]
+  local trace={FlowID=flowID,OfferID=offerID,Phase=f and f.Phase,WaitingFor=f and f.WaitingFor,
+    FlowError=f and f.Error,EscrowStatus=e and e.Status,TransferStatus=tx and tx.Status,
+    TransferError=tx and tx.Error,AwaitingPreparation=tx and tx.AwaitingPreparation,
+    AwaitingFinalUI=tx and tx.AwaitingFinalUI,SourceReadyToken=tx and tx.SourceReadyToken,
+    SourceSpreadReads=tx and tx.SourceSpreadReads,NativeDealUI=tx and tx.NativeDealUI,
+    CityLoyaltyPending=tx and tx.CityLoyaltyPending,NativeWorks=tx and tx.NativeWorks}
+  local recipient=f and Players and Players[f.To]
+  if recipient then
+    trace.FlowOperation=recipient:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')
+    trace.ProductOperation=recipient:GetProperty('JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1')
+  end
+  if tx then
+    trace.UnitMapFrozen=tx.UnitMapFrozen;trace.SourceRosterMoved=tx.SourceRosterMoved
+    trace.Units={};trace.Cities={};trace.PlotCount=#(tx.Plots or {})
+    for _,u in ipairs(tx.Units or {}) do
+      trace.Units[#trace.Units+1]={ID=u.ID,Destination=u.Destination,KeepUnit=u.KeepUnit,
+        CandidateID=u.CandidateID,NativeRestored=u.NativeRestored,CoreStagedTurn=u.CoreStagedTurn,
+        TransferRestoredTurn=u.TransferRestoredTurn,PlacementComplete=u.PlacementComplete,
+        HeroSpawnIntent=u.HeroSpawnIntent,SpreadReads=u.SpreadReads}
+    end
+    for _,c in ipairs(tx.Cities or {}) do
+      trace.Cities[#trace.Cities+1]={ID=c.ID,X=c.X,Y=c.Y,TransferTurn=c.TransferTurn,
+        PropertiesPrepared=c.TransferredProperties~=nil}
+    end
+  end
+  local text=A.Canonical(trace)
+  JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}
+  if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then
+    print('JAC_PRODUCT_COMPLETION_WAIT '..text)
+    JAC_PRODUCT_COMPLETION_TRACE[flowID]=text
+  end
+end
 local function CompletionReady(flowID,offerID)
   local f=JAC_AbsorptionFlowGameplay.Get(flowID)
   local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
@@ -113,7 +151,7 @@ return 'all human choices already submitted'"#)},
             "code":format!("{view}local ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open());assert(ui.Resolve(),'normal resolution handler rejected');return 'normal human resolution submitted'")}));
     }
     steps.push(json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry",
-        "code":format!("{COMPLETION_EVIDENCE}\nlocal t=Game:GetProperty('{key}');return t and CompletionReady(t.FlowID,t.OfferID)")}}));
+        "code":format!("{COMPLETION_EVIDENCE}\nlocal t=Game:GetProperty('{key}');if t then TraceCompletionWait(t.FlowID,t.OfferID) end;return t and CompletionReady(t.FlowID,t.OfferID)")}}));
     let request = "local r=JAC_AbsorptionGameplay.RequestVerification(t.FlowID);t.VerificationToken=r and r.Token or nil;Game:SetProperty('".to_owned()+key+"',t);return 'request exact transferred-asset verification'";
     let published = json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry",
         "code":format!("local t=assert(Game:GetProperty('{key}'));local r=ExposedMembers.JAC_HeroReadAPI;return not t.VerificationToken or r and r.GetObservation and r.GetObservation(t.VerificationToken)~=nil")}});

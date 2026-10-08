@@ -2,6 +2,54 @@ use civ6_data_rs::{absorption_admission, absorption_product as product, Reposito
 use mlua::Lua;
 
 #[test]
+fn terminal_wait_records_changed_pending_state_without_advancing_transfer() -> anyhow::Result<()> {
+    let lua = Lua::new();
+    lua.load(format!(r#"
+local function canonical(v)
+  if type(v)~='table' then return tostring(v) end
+  local keys={{}};for k in pairs(v) do keys[#keys+1]=k end;table.sort(keys)
+  local out={{}};for _,k in ipairs(keys) do out[#out+1]=k..'='..canonical(v[k]) end
+  return '{{'..table.concat(out,',')..'}}'
+end
+local f={{From=1,To=2,Phase='APPLYING',WaitingFor='WAITING_UI'}}
+local e={{Status='HELD'}}
+local tx={{Status='WAITING_UI',AwaitingPreparation=true,SourceReadyToken='source:1',
+  SourceSpreadReads={{Person='observation:1'}},Units={{{{ID=3,PlacementComplete=false}}}},
+  Cities={{{{ID=4,X=5,Y=6,TransferTurn=7}}}},Plots={{1,2}}}}
+local state={{Transactions={{flow=tx}}}};local product={{Escrows={{offer=e}}}}
+local before=canonical({{f,e,state,product}})
+local lines={{}};print=function(line) lines[#lines+1]=line end
+Game={{GetProperty=function(_,key) assert(key=='JAC_ABSORPTION_PRODUCT_V1');return product end}}
+Players={{[2]={{GetProperty=function(_,key)
+  if key=='JAC_ABSORPTION_FLOW_LAST_OPERATION_V1' then return {{Accepted=false,Reason='rejected resolve'}} end
+  assert(key=='JAC_ABSORPTION_PRODUCT_LAST_OPERATION_V1');return {{Accepted=true,Nonce='product:1'}}
+end}}}}
+JAC_AbsorptionGameplay={{GetState=function() return state end,Canonical=canonical}}
+JAC_AbsorptionFlowGameplay={{Get=function(id) assert(id=='flow' or id=='missing');if id=='flow' then return f end end}}
+{}
+TraceCompletionWait('flow','offer');TraceCompletionWait('flow','offer')
+assert(#lines==1 and lines[1]:find('Phase=APPLYING',1,true)
+  and lines[1]:find('WaitingFor=WAITING_UI',1,true)
+  and lines[1]:find('EscrowStatus=HELD',1,true)
+  and lines[1]:find('SourceReadyToken=source:1',1,true)
+  and lines[1]:find('Reason=rejected resolve',1,true)
+  and lines[1]:find('PlacementComplete=false',1,true)
+  and lines[1]:find('TransferTurn=7',1,true) and lines[1]:find('PlotCount=2',1,true))
+assert(not CompletionReady('flow','offer'))
+assert(canonical({{f,e,state,product}})==before,'diagnostic changed saved transfer state')
+tx.AwaitingPreparation=false;tx.NativeWorks={{{{Carrier={{Phase='RETURN',BorrowIssued=true}}}}}}
+TraceCompletionWait('flow','offer');assert(#lines==2 and lines[2]:find('Phase=RETURN',1,true))
+f.Phase='RESULT';f.WaitingFor=nil;tx.Status='COMPLETE';e.Status='CONSUMED'
+TraceCompletionWait('flow','offer');assert(#lines==3 and CompletionReady('flow','offer'))
+TraceCompletionWait('missing','absent');assert(#lines==4 and not CompletionReady('missing','absent'))
+f.Phase='BLOCKED';f.Error='asset failure'
+TraceCompletionWait('flow','offer');assert(#lines==5 and lines[5]:find('FlowError=asset failure',1,true))
+local ok,err=pcall(CompletionReady,'flow','offer');assert(not ok and tostring(err):find('asset failure',1,true))
+"#, product::COMPLETION_EVIDENCE)).exec()?;
+    Ok(())
+}
+
+#[test]
 fn terminal_acceptance_rejects_partial_transfer_and_misattributed_settlement() -> anyhow::Result<()>
 {
     const FIXTURE: &str = r#"
