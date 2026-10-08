@@ -89,6 +89,64 @@ mod tests {
     use std::sync::{atomic::AtomicUsize, Arc};
 
     #[test]
+    fn pre_dispatch_interrupt_is_preserved_at_every_connection_boundary() {
+        let _exclusive = INTERRUPT_TEST_LOCK.lock().unwrap();
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                INTERRUPTED.store(false, Ordering::Relaxed);
+            }
+        }
+        let _reset = Reset;
+        struct Probe {
+            connection: usize,
+            interrupt_at: usize,
+        }
+        impl Backend for Probe {
+            fn require_single_process(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn connect(&mut self, _: u16, _: f64) -> Result<()> {
+                self.connection += 1;
+                if self.connection == self.interrupt_at {
+                    INTERRUPTED.store(true, Ordering::Relaxed);
+                }
+                Ok(())
+            }
+            fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+                Ok(vec!["InGame".into()])
+            }
+            fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+                panic!("Lua must not be dispatched after interruption")
+            }
+        }
+        for interrupt_at in [0, 1, 2] {
+            INTERRUPTED.store(interrupt_at == 0, Ordering::Relaxed);
+            let root = tempfile::tempdir().unwrap();
+            let mut runner = Runner::with_backend(
+                serde_json::json!({}),
+                root.path().into(),
+                root.path().into(),
+                root.path().into(),
+                4318,
+                Box::new(Probe {
+                    connection: 0,
+                    interrupt_at,
+                }),
+                Arc::new(SystemClock),
+            );
+            assert_eq!(
+                runner
+                    .lua("InGame", "mutating command", 5.0)
+                    .unwrap_err()
+                    .kind,
+                ErrorKind::Interrupted
+            );
+            assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+        }
+    }
+
+    #[test]
     fn pending_ctrl_c_allows_one_bounded_stop_and_stays_pending() {
         let _exclusive = INTERRUPT_TEST_LOCK.lock().unwrap();
         struct Reset;

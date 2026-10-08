@@ -81,6 +81,7 @@ struct State {
     alive: Option<(u32, f64)>,
     launches: usize,
     lock_held: bool,
+    steam_marks: usize,
 }
 #[derive(Clone, Copy)]
 enum LockLoss {
@@ -111,6 +112,7 @@ struct Game {
     pending_exit_at: Option<f64>,
     gpu: GpuSnapshot,
     idle: IdleProof,
+    sync_failure_after_shutdown: bool,
 }
 fn clear_gpu() -> GpuSnapshot {
     GpuSnapshot {
@@ -122,6 +124,28 @@ fn clear_gpu() -> GpuSnapshot {
     }
 }
 impl Backend for Game {
+    fn begin_steam_observation(&mut self, _: &Path) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        state.steam_marks += 1;
+        let mark = state.steam_marks;
+        state.events.push(format!("steam:mark:{mark}"));
+        Ok(())
+    }
+    fn steam_sync_status(
+        &mut self,
+        stage: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+        if stage == Stage::Exit && self.sync_failure_after_shutdown {
+            self.state
+                .lock()
+                .unwrap()
+                .events
+                .push("steam:exit_failed".into());
+            return Ok(SyncStatus::Failed);
+        }
+        Ok(SyncStatus::Idle)
+    }
     fn startup_cancel_check(&mut self) -> Result<()> {
         if self.interrupted {
             Err(Error::interrupted("fixture cancellation"))
@@ -338,6 +362,7 @@ impl Fixture {
             pending_exit_at: None,
             gpu: clear_gpu(),
             idle: clear_idle(),
+            sync_failure_after_shutdown: false,
         };
         configure(&mut game);
         let mut runner = Runner::with_backend(
@@ -368,6 +393,21 @@ impl Fixture {
             .unwrap();
         serde_json::from_slice(&fs::read(directory.path().join("recovery.json")).unwrap()).unwrap()
     }
+}
+
+#[test]
+fn startup_recovery_marks_before_shutdown_and_stops_before_second_uri_on_exit_failure() {
+    let mut fixture = Fixture::new(|game| game.sync_failure_after_shutdown = true);
+    let error = fixture.runner.restart_game(20.0).unwrap_err();
+    assert!(error.message.contains("Steam exit sync failed"));
+    let events = fixture.events();
+    assert_eq!(count(&events, "launch"), 1);
+    assert!(position(&events, "steam:mark:2") < position(&events, "terminate:11:101"));
+    assert!(position(&events, "terminate:11:101") < position(&events, "steam:exit_failed"));
+    assert!(!events.iter().any(|event| event.starts_with("reset:")));
+    assert_eq!(fixture.state.lock().unwrap().alive, None);
+    assert_eq!(fixture.report()["retry"]["status"], "not_started");
+    assert_eq!(events.last().unwrap(), "lock:release");
 }
 
 #[test]
