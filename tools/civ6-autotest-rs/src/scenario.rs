@@ -1,7 +1,7 @@
 pub use crate::session::SessionType;
 use crate::{Error, Result};
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
@@ -66,7 +66,9 @@ pub fn validate_test_mode(mode: &Value) -> Result<()> {
         || mode["skipped_turns"].as_i64().is_none_or(|n| n < 0)
         || mode["continuous_performance_valid"] != false
     {
-        return Err(Error::scenario("test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false"));
+        return Err(Error::scenario(
+            "test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false",
+        ));
     }
     Ok(())
 }
@@ -738,7 +740,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     _ => {
                         return Err(fail(
                             "wait_for needs a lua, log_line or state condition".into(),
-                        ))
+                        ));
                     }
                 }
             }
@@ -831,7 +833,11 @@ pub fn load_code(name: &str, session: SessionType) -> String {
             "Network.GetGameConfigurationSaveType()",
         ),
     };
-    format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{defaults}local ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type={save_type}, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.{})\nif ok == false then error('Network.LoadGame returned false') end\nreturn true", lua_string(name), session.server_type())
+    format!(
+        "if not UI.IsInFrontEnd() then error('main menu required') end\n{defaults}local ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type={save_type}, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.{})\nif ok == false then error('Network.LoadGame returned false') end\nreturn true",
+        lua_string(name),
+        session.server_type()
+    )
 }
 pub fn configure_code(step: &Value) -> String {
     configure_code_for_session(step, SessionType::SinglePlayer)
@@ -916,7 +922,10 @@ pub fn build_setup_code(step: &Value) -> String {
     lines.join("\n")
 }
 fn map_readback_code(file: &str, phase: &str) -> String {
-    format!("do local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')\nprint('JAC_MAP_READBACK phase={phase} type='..type(actualMap)..' value='..tostring(actualMap))\nassert(type(actualMap)=='string' and actualMap=={}, 'configured MAP_SCRIPT differs after {phase}') end",lua_string(file))
+    format!(
+        "do local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')\nprint('JAC_MAP_READBACK phase={phase} type='..type(actualMap)..' value='..tostring(actualMap))\nassert(type(actualMap)=='string' and actualMap=={}, 'configured MAP_SCRIPT differs after {phase}') end",
+        lua_string(file)
+    )
 }
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
     enable_mods_code_with_scope(ids, disabled, false)
@@ -927,7 +936,20 @@ pub fn enable_mods_code_with_scope(
     exclusive_user_mods: bool,
 ) -> String {
     let disabled = isolated_disabled_mods(ids, disabled);
-    format!("if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\nlocal exclusiveUserMods = {}\n{}",ids.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),disabled.iter().map(|s|lua_string(s)).collect::<Vec<_>>().join(", "),exclusive_user_mods,ENABLE_MODS_BODY)
+    format!(
+        "if not UI.IsInFrontEnd() then error('main menu required') end\nlocal enableIDs = {{{}}}\nlocal disableIDs = {{{}}}\nlocal exclusiveUserMods = {}\n{}",
+        ids.iter()
+            .map(|s| lua_string(s))
+            .collect::<Vec<_>>()
+            .join(", "),
+        disabled
+            .iter()
+            .map(|s| lua_string(s))
+            .collect::<Vec<_>>()
+            .join(", "),
+        exclusive_user_mods,
+        ENABLE_MODS_BODY
+    )
 }
 
 // A diagnostic that replaces production eligibility must never leak from the
@@ -1137,12 +1159,14 @@ mod native_trace_tests {
         assert!(
             validate_scenario(&scenario(vec![start.clone(), start.clone(), stop.clone()])).is_err()
         );
-        assert!(validate_scenario(&scenario(vec![
-            start.clone(),
-            json!({"action":"restart_game"}),
-            stop.clone()
-        ]))
-        .is_err());
+        assert!(
+            validate_scenario(&scenario(vec![
+                start.clone(),
+                json!({"action":"restart_game"}),
+                stop.clone()
+            ]))
+            .is_err()
+        );
         for bad in [0, 301] {
             let mut step = start.clone();
             step["max_seconds"] = json!(bad);
@@ -1187,19 +1211,23 @@ mod native_trace_tests {
         let mut extra = start.clone();
         extra["mode"] = json!("property");
         assert!(validate_scenario(&scenario(vec![extra, stop.clone()])).is_err());
-        assert!(validate_scenario(&scenario(vec![
-            start.clone(),
-            json!({"action":"end_turn","turns":1,"timeout":600}),
-            stop.clone()
-        ]))
-        .is_ok());
-        for lifecycle in ["restart_game", "exit_to_menu", "load"] {
-            assert!(validate_scenario(&scenario(vec![
+        assert!(
+            validate_scenario(&scenario(vec![
                 start.clone(),
-                json!({"action":lifecycle}),
+                json!({"action":"end_turn","turns":1,"timeout":600}),
                 stop.clone()
             ]))
-            .is_err());
+            .is_ok()
+        );
+        for lifecycle in ["restart_game", "exit_to_menu", "load"] {
+            assert!(
+                validate_scenario(&scenario(vec![
+                    start.clone(),
+                    json!({"action":lifecycle}),
+                    stop.clone()
+                ]))
+                .is_err()
+            );
         }
         assert!(validate_scenario(&scenario(vec![
             start,
@@ -1214,12 +1242,14 @@ mod native_trace_tests {
         let stop = json!({"action":"stop_native_promotion_call_trace"});
         let scenario = |steps: Vec<Value>| json!({"name":"promotion call","steps":steps});
         assert!(validate_scenario(&scenario(vec![start.clone(), stop.clone()])).is_ok());
-        assert!(validate_scenario(&scenario(vec![
-            start.clone(),
-            json!({"action":"end_turn","turns":1,"timeout":600}),
-            stop.clone()
-        ]))
-        .is_ok());
+        assert!(
+            validate_scenario(&scenario(vec![
+                start.clone(),
+                json!({"action":"end_turn","turns":1,"timeout":600}),
+                stop.clone()
+            ]))
+            .is_ok()
+        );
         for wrong in [
             "stop_native_can_ever_trace",
             "stop_native_property_trace",
@@ -1238,12 +1268,14 @@ mod native_trace_tests {
         let mut scope = start.clone();
         scope["scope"] = json!("all_promotions");
         assert!(validate_scenario(&scenario(vec![scope, stop.clone()])).is_err());
-        assert!(validate_scenario(&scenario(vec![
-            start,
-            json!({"action":"load","name":"other"}),
-            stop
-        ]))
-        .is_err());
+        assert!(
+            validate_scenario(&scenario(vec![
+                start,
+                json!({"action":"load","name":"other"}),
+                stop
+            ]))
+            .is_err()
+        );
     }
 
     #[test]
@@ -1256,11 +1288,13 @@ mod native_trace_tests {
             json!({"action":"ui_lua","state_name":"InGame","code":"return Game:GetProperty('JAC_TEST853_VALUE')"}),
             stop.clone()])).is_ok());
         assert!(validate_scenario(&scenario(vec![start.clone()])).is_err());
-        assert!(validate_scenario(&scenario(vec![
-            start.clone(),
-            json!({"action":"stop_native_can_ever_trace"})
-        ]))
-        .is_err());
+        assert!(
+            validate_scenario(&scenario(vec![
+                start.clone(),
+                json!({"action":"stop_native_can_ever_trace"})
+            ]))
+            .is_err()
+        );
         for action in [
             "save",
             "load",
@@ -1298,10 +1332,12 @@ mod native_trace_tests {
             assert!(validate_scenario(&scenario(vec![bad, stop.clone()])).is_err());
         }
         scoped["action"] = json!("start_native_can_ever_trace");
-        assert!(validate_scenario(&scenario(vec![
-            scoped,
-            json!({"action":"stop_native_can_ever_trace"})
-        ]))
-        .is_err());
+        assert!(
+            validate_scenario(&scenario(vec![
+                scoped,
+                json!({"action":"stop_native_can_ever_trace"})
+            ]))
+            .is_err()
+        );
     }
 }

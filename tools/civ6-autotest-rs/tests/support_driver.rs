@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use civ6_autotest_rs::{
+    Error, Result,
     runner::{Backend, Runner},
     time::Clock,
-    Error, Result,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::VecDeque,
     path::{Path, PathBuf},
@@ -77,6 +77,14 @@ pub struct FakeBackend {
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_connect: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_sync: Box<
+        dyn FnMut(
+                civ6_autotest_rs::steam_sync::Stage,
+            ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus>
+            + Send,
+    >,
+    pub on_warning: Box<dyn FnMut() -> Result<bool> + Send>,
     pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
 }
 impl Default for FakeBackend {
@@ -116,6 +124,9 @@ impl FakeBackend {
             on_exit: Box::new(|_| Ok(true)),
             on_require: Box::new(|| Ok(())),
             on_launch: Box::new(|| Ok(())),
+            on_connect: Box::new(|| Ok(())),
+            on_sync: Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)),
+            on_warning: Box::new(|| Ok(false)),
             on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
     }
@@ -160,9 +171,18 @@ impl Backend for FakeBackend {
     fn live_lease_budget(&self) -> Result<Option<f64>> {
         (self.on_lease)()
     }
+    fn steam_sync_status(
+        &mut self,
+        stage: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        (self.on_sync)(stage)
+    }
+    fn steam_warning(&mut self, _: &Path) -> Result<bool> {
+        (self.on_warning)()
+    }
     fn connect(&mut self, _: u16, _: f64) -> Result<()> {
         self.events.lock().unwrap().push("connect".into());
-        Ok(())
+        (self.on_connect)()
     }
     fn disconnect(&mut self) {
         self.events.lock().unwrap().push("disconnect".into());

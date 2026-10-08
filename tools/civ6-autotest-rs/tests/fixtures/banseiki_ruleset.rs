@@ -1,7 +1,7 @@
 use crate::support_fixture::{action, code, root, scenario, steps};
 use regex::Regex;
 use roxmltree::{Document, Node};
-use rusqlite::{params_from_iter, types::Value as SqlValue, Connection};
+use rusqlite::{Connection, params_from_iter, types::Value as SqlValue};
 use std::collections::{BTreeMap, BTreeSet};
 
 const DOMAIN: &str = "Players:Expansion2_Players";
@@ -215,20 +215,27 @@ fn duplicate_policy_and_runtime_scenario_cover_same_civilization() {
         .position(|step| action(step, "start_game"))
         .unwrap();
     let players = s[configure]["players"].as_array().unwrap();
-    assert!(players.iter().enumerate().any(|(i, left)| players[i + 1..]
-        .iter()
-        .any(|right| left["civ"] == right["civ"] && left["leader"] != right["leader"])));
-    assert!(s[configure + 1..start]
-        .iter()
-        .filter(|step| action(step, "ui_lua")
-            && ["FrontEnd", "HostGame"].contains(&step["state_name"].as_str().unwrap_or("")))
-        .any(
-            |step| code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_LEADERS')")
-                && code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_CIVILIZATIONS')")
-        ));
-    assert!(s[start + 1..].iter().any(|step| action(step, "ui_lua")
-        && step["state_name"] == "InGame"
-        && ["LEADER_GORGO", "LEADER_PERICLES", "CIVILIZATION_GREECE"]
+    assert!(players.iter().enumerate().any(|(i, left)| {
+        players[i + 1..]
             .iter()
-            .all(|needle| code(step).contains(needle))));
+            .any(|right| left["civ"] == right["civ"] && left["leader"] != right["leader"])
+    }));
+    assert!(
+        s[configure + 1..start]
+            .iter()
+            .filter(|step| action(step, "ui_lua")
+                && ["FrontEnd", "HostGame"].contains(&step["state_name"].as_str().unwrap_or("")))
+            .any(
+                |step| code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_LEADERS')")
+                    && code(step)
+                        .contains("GameConfiguration.GetValue('NO_DUPLICATE_CIVILIZATIONS')")
+            )
+    );
+    assert!(s[start + 1..].iter().any(|step| {
+        action(step, "ui_lua")
+            && step["state_name"] == "InGame"
+            && ["LEADER_GORGO", "LEADER_PERICLES", "CIVILIZATION_GREECE"]
+                .iter()
+                .all(|needle| code(step).contains(needle))
+    }));
 }

@@ -1,5 +1,5 @@
 //! Process lifecycle and MOD freshness checks for the Civ VI driver.
-use crate::{time::monotonic, Error, Result};
+use crate::{Error, Result, time::monotonic};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -556,9 +556,9 @@ mod win {
     use crate::click::{self, image_path, with_process};
     use std::ptr;
     use windows_sys::Win32::{
-        Foundation::{GetLastError, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+        Foundation::{ERROR_NO_MORE_FILES, GetLastError, INVALID_HANDLE_VALUE},
         System::Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW,
             TH32CS_SNAPPROCESS,
         },
     };

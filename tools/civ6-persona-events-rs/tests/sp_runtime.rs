@@ -72,36 +72,39 @@ UI={RequestPlayerOperation=function(owner,operation,args) assert(owner==0 and op
 
 #[test]
 fn generated_cli_file_exactly_matches_current_scenario_source() {
-    let output = std::env::temp_dir().join(format!(
-        "todo324-sp-runtime-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../civ6-autotest/scenarios/leader-persona-15km.json");
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    for cost in [2, 3] {
+        let output = std::env::temp_dir().join(format!(
+            "todo1433-sp-runtime-cost{cost}-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../civ6-autotest/scenarios/leader-persona-15km.json");
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-persona-events-rs"));
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        command.arg("generate-sp-runtime").arg(input).arg(&output);
+        if cost == 3 {
+            command.arg("3");
+        }
+        let status = command.status().unwrap();
+        assert!(status.success());
+        let actual = std::fs::read_to_string(&output).unwrap();
+        std::fs::remove_file(&output).unwrap();
+        let expected =
+            serde_json::to_string_pretty(&sp_runtime::build_with_cost(&template(), cost).unwrap())
+                .unwrap();
+        assert_eq!(
+            actual, expected,
+            "CLI scenario must match the current generator exactly"
+        );
     }
-    let status = command
-        .arg("generate-sp-runtime")
-        .arg(input)
-        .arg(&output)
-        .status()
-        .unwrap();
-    assert!(status.success());
-    let actual = std::fs::read_to_string(&output).unwrap();
-    std::fs::remove_file(&output).unwrap();
-    let expected = serde_json::to_string_pretty(&sp_runtime::build(&template()).unwrap()).unwrap();
-    assert_eq!(
-        actual, expected,
-        "CLI scenario must match the current generator exactly"
-    );
 }
 
 #[test]

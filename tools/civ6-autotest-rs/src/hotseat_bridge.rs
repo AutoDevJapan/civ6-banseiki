@@ -1,6 +1,6 @@
 //! Test-only hotseat witness bundle and strict Lua.log transport.
 //! No FireTuner command is sent from this module while a game is running.
-use crate::{judge, scenario, Error, Result};
+use crate::{Error, Result, judge, scenario};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -67,10 +67,8 @@ pub enum Canonical {
     PoolRandom,
 }
 
-const POOL_NAME: &str =
-    "Banseiki pool hotseat bridge: two ledger people of one civilization, growth and saved person records";
-const POOL_RANDOM_NAME: &str =
-    "Banseiki pool hotseat bridge: random leaders for two humans and two AI, growth and saved person records";
+const POOL_NAME: &str = "Banseiki pool hotseat bridge: two ledger people of one civilization, growth and saved person records";
+const POOL_RANDOM_NAME: &str = "Banseiki pool hotseat bridge: random leaders for two humans and two AI, growth and saved person records";
 /// Two humans (H040 and O008, both Oda), then the two AI of the random variant.
 const POOL_PLAYERS: &str = r#"[
   {"civ": "CIVILIZATION_JAC_ODA", "leader": "LEADER_JAC_ODA_NOBUHIDE", "human": true},

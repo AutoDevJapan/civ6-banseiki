@@ -672,10 +672,6 @@ fn official_dlc_is_checked_separately_from_mutable_mod_artwork() {
 }
 
 #[test]
-#[expect(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "Keep the existing atlas equality assertion and its owned path clone unchanged"
-)]
 fn atlas_images_missing_from_mod_packages_are_reported() {
     let temp = tempfile::tempdir().unwrap();
     let folder = temp.path().join("MyMod");
@@ -686,7 +682,7 @@ fn atlas_images_missing_from_mod_packages_are_reported() {
     let blp = folder.join("Icons.blp");
     fs::write(&blp, b"header JAC_Old36 pixels").unwrap();
     assert_eq!(
-        restart::missing_atlas_textures(&[folder.clone()]).unwrap(),
+        restart::missing_atlas_textures(std::slice::from_ref(&folder)).unwrap(),
         ["MyMod: JAC_Crests36"]
     );
     fs::write(&blp, b"JAC_Old36 JAC_Crests36").unwrap();

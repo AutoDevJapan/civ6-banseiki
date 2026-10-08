@@ -58,9 +58,15 @@ impl Runner {
         }
         // These two exact original113 predicates only read a Game property.
         // No other Lua condition, engine request or evolution is replayed.
-        if !matches!(condition["code"].as_str(),Some(
-            "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'" |
-            "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA_STATE')=='GOVERNOR'")) {return Ok(false);}
+        if !matches!(
+            condition["code"].as_str(),
+            Some(
+                "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"
+                    | "return Game:GetProperty('JAC_PERSONA_LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA_STATE')=='GOVERNOR'"
+            )
+        ) {
+            return Ok(false);
+        }
         self.remaining(deadline)?;
         let expected = self
             .resident_runtime_identity
@@ -273,7 +279,9 @@ impl Runner {
                 }
             }
         }
-        Err(Error::scenario("resident restart diagnostic accepts only the unchanged original113 contract and ship preparation"))
+        Err(Error::scenario(
+            "resident restart diagnostic accepts only the unchanged original113 contract and ship preparation",
+        ))
     }
     fn persona_transition(&self, row: Value) -> Result<()> {
         let mut file = OpenOptions::new()
@@ -742,9 +750,10 @@ mod tests {
             );
             r.persona_runtime_restart = true;
             let mut attempt = StartupAttempt::default();
-            assert!(r
-                .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
-                .is_err());
+            assert!(
+                r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+                    .is_err()
+            );
             assert!(r.persona_launch_requested);
             assert_eq!(r.resident_runtime_identity, None);
             let result = r.cleanup_persona_process();
@@ -792,9 +801,10 @@ mod tests {
         );
         r.persona_runtime_restart = true;
         let mut attempt = StartupAttempt::default();
-        assert!(r
-            .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
-            .is_err());
+        assert!(
+            r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+                .is_err()
+        );
         let error = r.cleanup_persona_process().unwrap_err();
         assert!(error.message.contains("outer live_chain cleanup required"));
         assert!(r.persona_launch_requested && r.persona_launched_process.is_none());
@@ -1070,9 +1080,11 @@ mod tests {
             merged["Lua.log"].contains("Runtime Error: bad")
                 && merged["Lua.log"].contains("replacement process")
         );
-        assert!(judge::judge(&merged, "generic", None, true)
-            .iter()
-            .any(|c| !c.passed));
+        assert!(
+            judge::judge(&merged, "generic", None, true)
+                .iter()
+                .any(|c| !c.passed)
+        );
         assert!(dir.path().join("persona-logs-0001/full-Lua.log").is_file());
     }
 
@@ -1114,9 +1126,11 @@ mod tests {
         writeln!(f, "Runtime Error: late JAC_PoC_LeaderPersona/script.lua").unwrap();
         drop(f);
         let logs = r.read_run_logs().unwrap();
-        assert!(judge::judge(&logs, "generic", None, true)
-            .iter()
-            .any(|c| !c.passed));
+        assert!(
+            judge::judge(&logs, "generic", None, true)
+                .iter()
+                .any(|c| !c.passed)
+        );
     }
 
     #[test]
@@ -1127,12 +1141,14 @@ mod tests {
         r.persona_runtime_restart = true;
         r.resident_runtime_identity = Some((7, 123));
         let condition = json!({"type":"lua","state_name":"InGame","code":"return Game:GetProperty('JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_STATE')=='GOVERNOR'"});
-        assert!(r
-            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
-            .unwrap());
-        assert!(!r
-            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 3)
-            .unwrap());
+        assert!(
+            r.reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
+                .unwrap()
+        );
+        assert!(
+            !r.reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 3)
+                .unwrap()
+        );
         for code in [
             "JAC_EvolveLeader('LEADER_JAC_ODA_NOBUHIDE'); return true",
             "UI.RequestPlayerOperation(0,1,{}); return true",
@@ -1140,14 +1156,16 @@ mod tests {
         ] {
             let mut bad = condition.clone();
             bad["code"] = code.into();
-            assert!(!r
-                .reconcile_persona_wait_read(&bad, r.clock.now() + 30.0, 0)
-                .unwrap());
+            assert!(
+                !r.reconcile_persona_wait_read(&bad, r.clock.now() + 30.0, 0)
+                    .unwrap()
+            );
         }
         r.resident_runtime_identity = Some((7, 124));
-        assert!(r
-            .reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
-            .is_err());
+        assert!(
+            r.reconcile_persona_wait_read(&condition, r.clock.now() + 30.0, 0)
+                .is_err()
+        );
         assert!(calls.lock().unwrap().is_empty());
     }
 
@@ -1200,35 +1218,39 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
     fn native_matrix_checks_all_owners_and_rejects_foreign_permission_and_unknown_getter() {
         let lua = model();
         assert_eq!(lua.load(READY).eval::<String>().unwrap(), "normal-v3-ready");
-        assert!(lua
-            .load(AUDIT)
-            .eval::<String>()
-            .unwrap()
-            .starts_with("turn=2|rows=484|"));
+        assert!(
+            lua.load(AUDIT)
+                .eval::<String>()
+                .unwrap()
+                .starts_with("turn=2|rows=484|")
+        );
         lua.load("properties.JAC_PERSONA_LEADER_0_OWNER=0; native['0:1001']=true")
             .exec()
             .unwrap();
-        assert!(lua
-            .load(AUDIT)
-            .eval::<String>()
-            .unwrap()
-            .contains("0:LEADER_0:1:true"));
+        assert!(
+            lua.load(AUDIT)
+                .eval::<String>()
+                .unwrap()
+                .contains("0:LEADER_0:1:true")
+        );
         lua.load("native['1:1001']=true").exec().unwrap();
-        assert!(lua
-            .load(AUDIT)
-            .eval::<String>()
-            .unwrap_err()
-            .to_string()
-            .contains("foreign or unjoined"));
+        assert!(
+            lua.load(AUDIT)
+                .eval::<String>()
+                .unwrap_err()
+                .to_string()
+                .contains("foreign or unjoined")
+        );
         lua.load("native['1:1001']=nil; native['2:1001']=1")
             .exec()
             .unwrap();
-        assert!(lua
-            .load(AUDIT)
-            .eval::<String>()
-            .unwrap_err()
-            .to_string()
-            .contains("native qualification unavailable"));
+        assert!(
+            lua.load(AUDIT)
+                .eval::<String>()
+                .unwrap_err()
+                .to_string()
+                .contains("native qualification unavailable")
+        );
         let lua = model();
         lua.load("rows[22]=nil").exec().unwrap();
         assert!(lua.load(AUDIT).eval::<String>().is_err());

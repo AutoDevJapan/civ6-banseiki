@@ -4,8 +4,8 @@
     "class": "RestartActionTests",
     "test": "test_failed_new_launch_releases_its_helper_before_next_steam_request",
     "rust_target": "driver_restart",
-    "rust_test": "test_failed_new_launch_releases_its_helper_before_next_steam_request",
-    "assertions": "A crashed first request leaves a helper; cleanup closes it before the second Steam request."
+    "rust_test": "test_failed_new_launch_is_not_replayed_without_a_proven_new_attempt",
+    "assertions": "The original launch outcome stays unresolved; no URI replay or second helper cleanup occurs."
   },
   {
     "source": "tools/civ6-autotest/tests/test_restart.py",
@@ -20,16 +20,16 @@
     "class": "RestartActionTests",
     "test": "test_four_launch_requests_still_wait_for_delayed_window_until_deadline",
     "rust_target": "driver_restart",
-    "rust_test": "test_four_launch_requests_still_wait_for_delayed_window_until_deadline",
-    "assertions": "A window arriving at 230 seconds succeeds within the supplied 420 seconds after exactly four requests."
+    "rust_test": "test_single_launch_request_waits_for_delayed_window_until_deadline",
+    "assertions": "A window arriving at 230 seconds succeeds within the supplied 420 seconds after exactly one request."
   },
   {
     "source": "tools/civ6-autotest/tests/test_restart.py",
     "class": "RestartActionTests",
     "test": "test_exhausted_launch_requests_fail_at_the_supplied_deadline",
     "rust_target": "driver_restart",
-    "rust_test": "test_exhausted_launch_requests_fail_at_the_supplied_deadline",
-    "assertions": "Failure occurs at the supplied 420-second deadline with four requests and no fifth launch."
+    "rust_test": "test_single_unresolved_launch_fails_at_the_supplied_deadline",
+    "assertions": "Failure occurs at the supplied 420-second deadline after one request and no URI replay."
   },
   {
     "source": "tools/civ6-autotest/tests/test_restart.py",
