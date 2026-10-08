@@ -6,6 +6,8 @@
     <Description>LOC_JAC_RP_MOD_DESCRIPTION</Description>
     <Authors>civ6-banseiki</Authors>
     <CompatibleVersions>2.0</CompatibleVersions>
+    <!-- Non-Hero choices use EXECUTE_SCRIPT. Native Hero claim/origin
+         verification remains UI-only; do not advertise full MP support. -->
     <SupportsMultiplayer>0</SupportsMultiplayer>
   </Properties>
   <Dependencies>

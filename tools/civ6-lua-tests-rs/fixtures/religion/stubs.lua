@@ -30,8 +30,21 @@ Game = {
 ExposedMembers = {}
 ENGINE = engine or {}
 FAIL_EFFECT, FAIL_SPAWN, BAD_CONVERSION = false, false, false
-GameEvents = { OnGameTurnStarted = { Add = function(f) TURN_HOOK = f end } }
-GameConfiguration = { GetValue = function() return HEROES_MODE end }
+GameEvents = { OnGameTurnStarted = { Add = function(f) TURN_HOOK = f end },
+  JAC_ReligionOperation = { Add = function(f) RELIGION_OPERATION = f end },
+  PlayerTurnStartComplete = { Add = function(f) RELIGION_TURN_START = f end },
+  OnPlayerTurnEnded = { Add = function(f) RELIGION_TURN_END = f end } }
+GameConfiguration = { GetValue = function() return HEROES_MODE end,
+  IsAnyMultiplayer = function() return MULTIPLAYER == true end }
+LOCAL_PLAYER, REQUESTS, HUMAN_ONE = 1, {}, true
+Game.GetLocalPlayer = function() return LOCAL_PLAYER end
+PlayerOperations = { EXECUTE_SCRIPT = 1 }
+UI = { RequestPlayerOperation = function(actor, op, params)
+  assert(actor == LOCAL_PLAYER and op == PlayerOperations.EXECUTE_SCRIPT)
+  assert(params.OnStart == 'JAC_ReligionOperation')
+  REQUESTS[#REQUESTS + 1] = { actor=actor, params=clone(params) }
+  if not DEFER_OPERATIONS then RELIGION_OPERATION(actor, clone(params)) end
+end }
 HEROES_MODE = true
 local function info(rows, key)
   local t = setmetatable({}, { __call = function()
@@ -166,7 +179,8 @@ for id = 0, 1 do
   Players[pid] = {
     GetID = function() return pid end, IsAlive = function() return e.alive end,
     IsTurnActive = function() return e.active ~= false end,
-    IsMajor = function() return e.major end, IsHuman = function() return pid == 0 end,
+    IsMajor = function() return e.major end,
+    IsHuman = function() return pid == 0 or MULTIPLAYER == true or HUMAN_ONE == true end,
     GetCities = function() return { GetCapitalCity = function() return e.city and capital or nil end,
       FindID = function(_, city) return e.city and cityObjects[tostring(city)] or nil end,
       Members = function() local key; return function()

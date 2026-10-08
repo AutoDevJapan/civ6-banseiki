@@ -5,6 +5,11 @@
 local KEY = "JAC_RP_STATE_V1"
 local SCHEMA = 1
 local RP = { PROPERTY_KEY = KEY, SCHEMA = SCHEMA }
+local ACTIVE_KEY = "JAC_RP_ACTIVE_TURNS_V1"
+
+local function multiplayer()
+  return GameConfiguration.IsAnyMultiplayer and GameConfiguration.IsAnyMultiplayer() == true
+end
 
 local function check(ok, message)
   if not ok then error("[JAC_RP] " .. message, 3) end
@@ -461,6 +466,10 @@ local function researchBoosts(p)
 end
 
 local function heroPlan(p, city)
+  -- Live religion-04 found no Gameplay claim/origin getters (see
+  -- documents/poc/religion-persistence.md, "これまでの結果と修正").
+  -- EXECUTE_SCRIPT cannot make each client's UI replica authoritative.
+  check(not multiplayer(), "native Heroes UI verification is not multiplayer-safe")
   check(GameConfiguration.GetValue("GAMEMODE_HEROES") == true
     or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1, "official Heroes & Legends mode required")
   local bridge = ExposedMembers.JAC_RP_HeroUI
@@ -776,6 +785,7 @@ end
 
 local heroObservations = {} -- diagnostic only; never saved or used for decisions
 function RP.CompleteHero(playerID)
+  check(not multiplayer(), "native Heroes UI verification is not multiplayer-safe")
   local state = read()
   local h = state.heroes[tostring(playerID)]
   check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
@@ -852,10 +862,89 @@ function RP.Export()
   return read()
 end
 
+-- Official BlackDeathScenario/UI/BlackDeathScenario_PopupHandler.lua:22-28:
+-- EXECUTE_SCRIPT invokes the named GameEvent on every client. The first
+-- argument is the ENGINE player actor, never an ID supplied in params.
+local function operation(actor, params)
+  check(type(params) == "table", "operation parameters required")
+  local allowed = { OnStart=true, Action=true, Turn=true, Revision=true,
+    Religion=true, Discovery=true, Outcome=true, City=true, Revival=true,
+    Community=true, Source=true, TargetReligion=true, TargetPlayer=true, Unit=true }
+  for key, value in pairs(params) do
+    check(allowed[key] and (type(value) == "string" or type(value) == "number"),
+      "unsupported operation parameter")
+  end
+  local p = player(actor)
+  -- Track official Gameplay events instead of consulting UI active-turn reads:
+  -- PiratesScenario_StartScript.lua:1621,1624. Persist for mid-turn reloads;
+  -- a map supports simultaneous turns without a UI-local current-player ID.
+  local active = Game:GetProperty(ACTIVE_KEY) or {}
+  check(p:IsHuman() and active[tostring(actor)] == Game.GetCurrentGameTurn(),
+    "operation requires the actor's active human turn")
+  count(params.Turn, "request turn")
+  count(params.Revision, "request revision")
+  local state = read()
+  check(params.Turn == Game.GetCurrentGameTurn() and params.Revision == state.revision,
+    "stale religion operation")
+  local religion = get(state, params.Religion)
+  if params.Action == "RESOLVE" then
+    identifier(params.Discovery, "discovery")
+    local d = religion.discoveries[params.Discovery]
+    check(d ~= nil and d.player == actor, "discovery not owned by engine actor")
+    RP.ResolveDiscovery(params.Religion, params.Discovery, params.Outcome, {
+      player=actor, city=params.City, revival=params.Revival, community=params.Community,
+      targetReligion=params.TargetReligion, targetPlayer=params.TargetPlayer })
+    return true
+  elseif params.Action == "REVIVE" then
+    RP.Revive(params.Religion, params.Revival, params.Source, params.Community, actor, params.City)
+    return true
+  elseif params.Action == "COMPLETE_HERO" then
+    local h = state.heroes[tostring(actor)]
+    check(h ~= nil and h.religion == params.Religion and h.discovery == params.Discovery
+      and h.unit == params.Unit, "hero receipt not owned by engine actor")
+    return RP.CompleteHero(actor)
+  end
+  error("[JAC_RP] unknown religion operation")
+end
+
+function RP.HandleOperation(actor, params)
+  local ok, result = pcall(operation, actor, params)
+  if not ok then print("[JAC_RP] operation rejected: " .. tostring(result)); return false end
+  return result
+end
+
+local function completeSingleplayerAIHero(actor)
+  -- AI cannot issue a local human UI operation. Preserve singleplayer AI
+  -- completion on its own engine turn events, never on another client's frame.
+  local p = Players[actor]
+  if multiplayer() or not p or p:IsHuman() then return end
+  local h = read().heroes[tostring(actor)]
+  if h and h.verification == "PENDING" then
+    local ok, result = pcall(RP.CompleteHero, actor)
+    if not ok then print("[JAC_RP] AI hero verification pending: " .. tostring(result)) end
+  end
+end
+
 -- The turn hook ONLY expires alliance restrictions; never replays effects.
 -- Official gameplay turn event: BlackDeathScenario.lua:64.
 if not JAC_RP_AdapterInclude then
   GameEvents.OnGameTurnStarted.Add(RP.RefreshReligiousAlliances)
+  GameEvents.JAC_ReligionOperation.Add(RP.HandleOperation)
+  GameEvents.PlayerTurnStartComplete.Add(function(actor)
+    if type(actor) ~= "number" or actor < 0 or Players[actor] == nil then return end
+    local active = copy(Game:GetProperty(ACTIVE_KEY) or {})
+    active[tostring(actor)] = Game.GetCurrentGameTurn()
+    Game:SetProperty(ACTIVE_KEY, active)
+    completeSingleplayerAIHero(actor)
+  end)
+  GameEvents.OnPlayerTurnEnded.Add(function(actor)
+    completeSingleplayerAIHero(actor)
+    local active = copy(Game:GetProperty(ACTIVE_KEY) or {})
+    if active[tostring(actor)] ~= nil then
+      active[tostring(actor)] = nil
+      Game:SetProperty(ACTIVE_KEY, active)
+    end
+  end)
   -- Read fresh on every call: old saves cannot inherit previous Lua locals.
   ExposedMembers.JAC_ReligionPersistence = RP
 end

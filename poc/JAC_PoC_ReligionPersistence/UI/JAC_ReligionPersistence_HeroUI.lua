@@ -2,7 +2,30 @@
 local pending = true -- resume verification once after loading a saved game.
 local elapsed, timedOut = {}, {}
 local frameChecks, publishedChecks = {}, {} -- read-only diagnostics, not saved
+local inFlight = {}
 local Bridge = {}
+-- Official BlackDeathScenario_PopupHandler.lua:22-28. Only the local human
+-- submits; spectators and other clients never submit for the receipt owner.
+local function send(params)
+  local actor = Game.GetLocalPlayer()
+  local p = Players[actor]
+  local rp = ExposedMembers.JAC_ReligionPersistence
+  if not p or not p:IsHuman() or not p:IsTurnActive() or not rp then return false end
+  params.OnStart, params.Turn = "JAC_ReligionOperation", Game.GetCurrentGameTurn()
+  params.Revision = rp.Export().revision
+  UI.RequestPlayerOperation(actor, PlayerOperations.EXECUTE_SCRIPT, params)
+  return true -- queued, not proof of applied effects
+end
+function Bridge.ResolveDiscovery(id, discovery, outcome, options)
+  options = options or {}
+  return send({ Action="RESOLVE", Religion=id, Discovery=discovery, Outcome=outcome,
+    City=options.city, Revival=options.revival, Community=options.community,
+    TargetReligion=options.targetReligion, TargetPlayer=options.targetPlayer })
+end
+function Bridge.Revive(id, revival, source, community, city)
+  return send({ Action="REVIVE", Religion=id, Revival=revival, Source=source,
+    Community=community, City=city })
+end
 function Bridge.VerificationDiagnostics(playerID)
   local key = tostring(playerID)
   return { elapsed = elapsed[key] or 0, timedOut = timedOut[key] == true,
@@ -31,6 +54,28 @@ function Bridge.Schedule(playerID)
   local key = tostring(playerID)
   pending, elapsed[key], timedOut[key] = true, 0, nil
 end
+local function complete(playerID)
+  -- Claim/origin getters were verified UI-only in religion-04. A sender's
+  -- replicated observations are not authority for a multiplayer reward.
+  if GameConfiguration.IsAnyMultiplayer and GameConfiguration.IsAnyMultiplayer() then return false end
+  if Game.GetLocalPlayer() ~= playerID then return false end
+  local rp = ExposedMembers.JAC_ReligionPersistence
+  local state = rp.Export()
+  local h = state.heroes[tostring(playerID)]
+  if not h or h.verification ~= "PENDING" then return true end
+  local info = Bridge.UnitInfo(playerID, h.unit)
+  if not info or not info.active or not info.hero or info.class ~= h.heroClass
+    or type(info.lifespan) ~= "number" or info.lifespan <= 0 or info.claim ~= playerID then return false end
+  local token = tostring(state.revision) .. ":" .. tostring(h.unit)
+  if inFlight[playerID] ~= token then
+    inFlight[playerID] = token
+    if not send({Action="COMPLETE_HERO", Religion=h.religion,
+      Discovery=h.discovery, Unit=h.unit}) then inFlight[playerID] = nil end
+  end
+  -- Wait for published Gameplay state; a queued operation may be rejected.
+  h = rp.Export().heroes[tostring(playerID)]
+  return h == nil or h.verification ~= "PENDING"
+end
 ExposedMembers.JAC_RP_HeroUI = Bridge
 ContextPtr:SetUpdate(function(dt)
   if not pending then return end
@@ -38,7 +83,8 @@ ContextPtr:SetUpdate(function(dt)
   if not rp then return end
   pending = false
   for playerID, h in pairs(rp.Export().heroes) do
-    if h.verification == "PENDING" and not timedOut[playerID] then
+    if tonumber(playerID) == Game.GetLocalPlayer()
+      and h.verification == "PENDING" and not timedOut[playerID] then
       if Players[tonumber(playerID)]:IsTurnActive() then
         elapsed[playerID] = (elapsed[playerID] or 0) + (dt or 0)
       end
@@ -47,7 +93,7 @@ ContextPtr:SetUpdate(function(dt)
         print("[JAC_RP] hero verification timed out for player=" .. playerID .. "; reservation retained")
       else
         frameChecks[playerID] = (frameChecks[playerID] or 0) + 1
-        local ok, applied = pcall(rp.CompleteHero, tonumber(playerID))
+        local ok, applied = pcall(complete, tonumber(playerID))
         if not ok then print("[JAC_RP] hero verification pending: " .. tostring(applied))
         elseif not applied then pending = true end
       end
@@ -62,6 +108,7 @@ end)
 Events.LoadScreenClose.Add(function()
   pending, elapsed, timedOut = true, {}, {}
   frameChecks, publishedChecks = {}, {}
+  inFlight = {}
   ContextPtr:SetHide(false)
   local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
   if tonumber(testFlag) == 1 then
@@ -74,17 +121,19 @@ end)
 -- publishes new state. A delayed replicated class/lifespan can then complete
 -- without a reload. CompleteHero persists APPLYING before paying the reward.
 Events.GameCoreEventPublishComplete.Add(function()
+  inFlight = {} -- rejected or not-yet-ready requests may retry on new core state
+  pending = true -- recheck the new local owner after handover/turn publication
   local rp = ExposedMembers.JAC_ReligionPersistence
   if not rp or next(timedOut) == nil then return end
   for playerID in pairs(timedOut) do
     local p = Players[tonumber(playerID)]
-    if p and p:IsTurnActive() then
+    if tonumber(playerID) == Game.GetLocalPlayer() and p and p:IsTurnActive() then
       local h = rp.Export().heroes[playerID]
       if not h or h.verification ~= "PENDING" then
         timedOut[playerID] = nil
       else
         publishedChecks[playerID] = (publishedChecks[playerID] or 0) + 1
-        local ok, applied = pcall(rp.CompleteHero, tonumber(playerID))
+        local ok, applied = pcall(complete, tonumber(playerID))
         if ok and applied then timedOut[playerID] = nil
         elseif not ok then print("[JAC_RP] hero verification on published state pending: " .. tostring(applied)) end
       end
