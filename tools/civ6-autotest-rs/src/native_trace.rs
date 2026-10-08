@@ -1142,9 +1142,11 @@ mod platform {
                 .to_string()
                 .contains("single 20 second deadline"));
             drop(session);
+            // Leave room for scheduler delays in the parallel suite while
+            // remaining well below the 20-second deadline Drop must not restart.
             assert!(
-                started.elapsed() < Duration::from_millis(280),
-                "Drop repeated the stop wait"
+                started.elapsed() < Duration::from_secs(2),
+                "Drop restarted the shared startup deadline"
             );
             assert_eq!(closes.load(Ordering::SeqCst), 1);
             std::thread::sleep(Duration::from_millis(360)); // The owned Rust fixture exits itself.

@@ -447,23 +447,17 @@ local function coreCheck(owner,o)
   local text,count=placeholderSet({offMap=records});
   assert(text==o.placeholdersText,'third spy Core placeholders differ'); source.offMap='CORE';
  end
- local all,any=true,false; source.captivesByCaptor={};
+ -- The official captured-spy roster is read by EspionageOverview.lua in the
+ -- UI context. Keep that source explicit; do not call its getters from this
+ -- synchronized Gameplay callback, where they may exist but be unsupported.
+ source.captives='UI'; source.captivesByCaptor={};
+ assert(type(o.captivesByCaptor)=='table','third spy UI captive groups unavailable');
  for id,expected in pairs(o.captivesByCaptor) do
-  local captorID=assert(tonumber(id),'third spy native captor ID differs');
-  local p=assert(Players[captorID],'third spy native captor missing'); local dip=p:GetDiplomacy();
-  if pair(dip,'GetNumSpiesCaptured','GetNthCapturedSpy') then
-   local captives={};
-   local held=dip:GetNumSpiesCaptured();
-   assert(integer(held,0) and held<=256,'third spy Core captive count unavailable');
-   for i=0,held-1 do local r=dip:GetNthCapturedSpy(captorID,i);
-    assert(type(r)=='table' and integer(r.OwningPlayer,0),'third spy Core captive owner unavailable');
-    if r.OwningPlayer==owner then captives[#captives+1]={captor=captorID,name=r.Name,level=r.Level,nameIndex=r.NameIndex} end
-   end
-   assert(captiveSet({captured=captives})==expected,'third spy Core captives differ');
-   source.captivesByCaptor[id]='CORE'; any=true;
-  else all=false; source.captivesByCaptor[id]='UI' end
+  local captorID=tonumber(id);
+  assert(integer(captorID,0) and tostring(captorID)==id and Players[captorID] and type(expected)=='string',
+   'third spy UI captive group differs');
+  source.captivesByCaptor[id]='UI';
  end
- if all then source.captives='CORE' elseif any then source.captives='CORE_AND_UI' end
  return source
 end
 function T.InstallCore(hooks)
