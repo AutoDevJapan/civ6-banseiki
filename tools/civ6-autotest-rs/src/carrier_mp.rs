@@ -100,13 +100,15 @@ local function restoreProperties(current,l)
   for k in pairs(before.PropertyKeys) do
     assert(catalog[k]==true,'MP saved property no longer registered')
     local v=before.Properties[k];local value=current:GetProperty(k)
-    assert(value==nil or Equal(value,v),'MP city property replaced during loan')
+    -- Preserve newer values written by Core callbacks or later turns.
+    -- The saved Core snapshot supplies only fields erased by the transfer.
     if value==nil and v~=nil then current:SetProperty(k,R.Copy(v)) end
   end
 end
 local function returnLoans(state,c)
-  local m=c.MP
+  local m=c.MP;local failures={}
   for _,l in ipairs(m.Loans) do
+    local ok,err=pcall(function()
     local current=city(l)
     -- Save current authoritative values before a transfer can clear them.
     -- Refresh only while still borrowed; a completed transfer must not replace
@@ -124,9 +126,15 @@ local function returnLoans(state,c)
     assert(current:GetOwner()==l.Owner,'MP return owner changed')
     assert(l.Owner==m.Actor or l.ReturnIssued or current:GetID()==l.ID,'MP original return identity changed')
     if l.FinalID then assert(current:GetID()==l.FinalID,'MP returned city identity changed') end
-    l.FinalID=current:GetID();restoreProperties(current,l)
+    l.FinalID=current:GetID()
+    if not l.RestoredCore then restoreProperties(current,l) end
     l.RestoredCore=R.Copy(A.ReadNativeCarrierCore(current,l));save(state)
+    end)
+    if not ok then l.ReturnError=tostring(err);failures[#failures+1]=l.ReturnError
+    else l.ReturnError=nil end
+    save(state)
   end
+  if #failures>0 then error(table.concat(failures,'; ')) end
 end
 local function attemptReturn(state,c)
   local ok,err=pcall(returnLoans,state,c)
@@ -138,6 +146,7 @@ end
 local function abort(state,c,reason)
   local m=c.MP
   assert(not m.Claimed or m.DispatchStatus=='REJECTED','MP unknown MOVE must be preserved')
+  m.AbortCycles=(m.AbortCycles or 0)+1
   m.AbortReason=reason;m.MoveCanceled=true
   phase(state,c,'ABORT_RETURN')
   return attemptReturn(state,c)
@@ -185,6 +194,7 @@ function MP.Advance(state,c,preferred)
   end
   if m.Phase=='ABORT_RETURN' or m.Phase=='RETURN' then return attemptReturn(state,c) end
   if m.Phase=='ABORT_DONE' then
+    if (m.AbortCycles or 0)>=3 then m.WaitingFor='MP_ABORT_LIMIT';save(state);return false end
     m.SourceCurrentID=city(m.Loans[1]):GetID()
     if m.FailedLoan==2 or m.DispatchStatus=='REJECTED' then
       m.RejectedCandidates[key(m.Loans[2])]=m.AbortReason
@@ -259,10 +269,21 @@ local function validateObservation(c,o,placement)
     if core.Religion~=nil then assert(Equal(observed.State.Religion,core.Religion),'MP reported Core religion changed') end
     -- Work slots, religion, loyalty, plots and global locations may be UI-only.
     -- Compare synchronized actor publications; do not read each peer UI cache.
-    if l.ActorBefore and m.Phase~='RECHECK' then
-      for _,field in ipairs({'Name','Assets','UnitsOnCenter','PurchasedPlots'}) do
-        assert(Equal(observed.State[field],l.ActorBefore.State[field]),'MP actor reports invariant city change: '..field)
+    if l.ActorBefore and m.Phase~='RECHECK' and m.Phase~='RESTORED' and m.Phase~='ABORT_RESTORED' then
+      local before=l.ActorBefore.State
+      assert(observed.State.Name==before.Name,'MP actor reports invariant city name change')
+      for name,asset in pairs(before.Assets) do
+        local now=assert(observed.State.Assets[name],'MP actor reports removed building/district')
+        if name=='Districts' then
+          for district,value in pairs(asset) do assert(Equal(now[district],value),'MP actor reports removed district') end
+        else
+          for slot,work in pairs(asset.Works or {}) do
+            if work~=-1 then assert(now.Works and now.Works[slot]==work,'MP actor reports unrelated work changed') end
+          end
+        end
       end
+      local plots={};for _,index in ipairs(observed.State.PurchasedPlots) do plots[index]=true end
+      for _,index in ipairs(before.PurchasedPlots) do assert(plots[index],'MP actor reports removed purchased plot') end
     end
     if m.Phase=='RESTORED' or m.Phase=='ABORT_RESTORED' then
       assert(l.RestoredCore,'MP trusted property restoration incomplete')
@@ -281,7 +302,9 @@ end
 local function reserved(state,c,l)
   for _,tx in pairs(state.Transactions) do for _,snap in ipairs(tx.NativeWorks or {}) do
     local other=snap.Carrier;local m=other and other.MP
-    if m and other.Token~=c.Token and m.Phase~='DONE' and m.Phase~='ABORT_DONE' then
+    local expired=m and (m.Phase=='SELECT' or m.Phase=='PREPARE')
+      and tx.Turn~=Game.GetCurrentGameTurn() and not (tx.Request and tx.Request.FlowPolicy)
+    if m and not expired and other.Token~=c.Token and m.Phase~='DONE' and m.Phase~='ABORT_DONE' then
       for _,busy in ipairs(m.Loans or {other.Source}) do
         if busy.X==l.X and busy.Y==l.Y then return true end
       end
@@ -350,10 +373,25 @@ local function receive(actor,p)
   local valid,err=pcall(validateObservation,c,o,placement)
   if not valid then
     if not m.Claimed and (m.Phase=='BORROWED' or m.Phase=='READY') then
-      abort(state,c,'invalid preclaim observation: '..tostring(err));return false
+      local malformed=type(o)~='table' or type(o.Cities)~='table' or #o.Cities~=2
+        or type(o.Locations)~='table' or #o.Locations~=1
+      local catalog=A.NativeCarrierPropertyKeys()
+      for _,observed in ipairs(type(o)=='table' and type(o.Cities)=='table' and o.Cities or {}) do
+        if type(observed)~='table' or type(observed.State)~='table'
+          or type(observed.Properties)~='table' or type(observed.PropertyKeys)~='table' then malformed=true
+        else
+          for key in pairs(observed.Properties) do if not catalog[key] then malformed=true end end
+          for key in pairs(observed.PropertyKeys) do if not catalog[key] then malformed=true end end
+        end
+      end
+      if m.StaleNonce~=m.Nonce then m.StaleNonce,m.StaleCount=m.Nonce,0 end
+      m.StaleCount=m.StaleCount+1;m.WaitingFor='MP_FRESH_OBSERVATION';save(state)
+      if malformed or m.StaleCount>=3 then abort(state,c,'invalid preclaim observation: '..tostring(err)) end
+      return false
     end
     error(err)
   end
+  m.StaleCount,m.StaleNonce,m.WaitingFor=nil,nil,nil
   m.Receipts=m.Receipts or {};m.Receipts[id]=true
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')
@@ -425,6 +463,7 @@ local function Observe(c)
   assert(identity)
   local m=c and c.MP
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
+  if m.WaitingFor=='MP_ABORT_LIMIT' then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
   if m.Phase=='SELECT' or m.Phase=='PREPARE' then

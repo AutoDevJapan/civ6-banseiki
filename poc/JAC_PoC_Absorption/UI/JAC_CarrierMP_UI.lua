@@ -65,6 +65,7 @@ local function Observe(c)
   assert(identity)
   local m=c and c.MP
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
+  if m.WaitingFor=='MP_ABORT_LIMIT' then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
   if m.Phase=='SELECT' or m.Phase=='PREPARE' then
