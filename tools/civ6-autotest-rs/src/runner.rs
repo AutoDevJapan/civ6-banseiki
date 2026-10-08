@@ -870,14 +870,16 @@ impl Backend for SystemBackend {
     }
     fn begin_steam_observation(&mut self, journal: &Path) -> Result<()> {
         let monitor = crate::steam_sync::Monitor::new(crate::steam_sync::cloud_log())?;
+        let exit_mark = crate::steam_sync::LogCursor::mark(
+            &crate::steam_sync::cloud_log().with_file_name("gameprocess_log.txt"),
+        )?;
+        let session = crate::steam_dialog::Session::begin_if_running()?;
         crate::steam_sync::journal(journal, "begin", &monitor)?;
         self.steam_sync = Some(monitor);
         self.steam_journal = Some(journal.to_owned());
-        self.steam_exit_mark = Some(crate::steam_sync::LogCursor::mark(
-            &crate::steam_sync::cloud_log().with_file_name("gameprocess_log.txt"),
-        )?);
+        self.steam_exit_mark = Some(exit_mark);
         self.steam_exit_wait_at = None;
-        self.steam_session = crate::steam_dialog::Session::begin_if_running()?;
+        self.steam_session = session;
         Ok(())
     }
     fn steam_warning(&mut self, journal: &Path) -> Result<bool> {
@@ -1513,8 +1515,8 @@ impl Runner {
         self.states(self.remaining_unsent(deadline, unsent)?)?;
         let remaining = self.remaining_unsent(deadline, unsent)?;
         self.backend.connect(self.port, remaining)?;
-        // Connecting or checking ownership can consume the last budget.
-        let _remaining = self.remaining_unsent(deadline, unsent)?;
+        // Connecting can consume the last budget; never mutate after it expired.
+        let remaining = self.remaining_unsent(deadline, unsent)?;
         if let Some(game) = game {
             self.backend
                 .authorize_game_control(Some(game))
@@ -1526,6 +1528,7 @@ impl Runner {
                     }
                 })?;
         }
+        // Ownership inspection can also consume the remaining step budget.
         let remaining = self.remaining_unsent(deadline, unsent)?;
         self.backend.run_lua(state, code, remaining)
     }
@@ -2296,17 +2299,34 @@ impl Runner {
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
         let result = (|| {
             self.backend.acquire_startup_lock()?;
-            self.backend
-                .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
-            self.launch_startup_and_wait(deadline, false, false, &mut StartupAttempt::default())
+            self.begin_steam_observation_until(deadline)?;
+            self.launch_startup_and_wait(deadline, false, &mut StartupAttempt::default())
         })();
         self.backend.release_startup_lock();
         result
     }
+    fn begin_steam_observation_until(&mut self, deadline: f64) -> Result<()> {
+        let retry_until = (self.clock.now() + 2.0).min(deadline);
+        loop {
+            self.remaining(deadline)?;
+            match self
+                .backend
+                .begin_steam_observation(&self.output.join("steam-sync.jsonl"))
+            {
+                Ok(()) => {
+                    self.remaining(deadline)?;
+                    return Ok(());
+                }
+                Err(e) if e.kind == ErrorKind::SteamLogBusy && self.clock.now() < retry_until => {
+                    self.clock.sleep(self.budget(retry_until, 0.05)?);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
     fn launch_startup_and_wait(
         &mut self,
         deadline: f64,
-        recovery: bool,
         pin_process: bool,
         startup: &mut StartupAttempt,
     ) -> Result<()> {
@@ -2316,9 +2336,6 @@ impl Runner {
             self.bind_persona_launch()?;
             self.backend.startup_cancel_check()?;
             self.backend.authorize_game_control(None)?;
-            if recovery {
-                self.backend.check_startup_lock()?;
-            }
             let stage = if attempts == 0 {
                 Stage::Prelaunch
             } else {
@@ -2367,9 +2384,6 @@ impl Runner {
                 }
                 self.remaining(deadline)?;
                 self.backend.authorize_game_control(None)?;
-                if self.persona_runtime_restart {
-                    self.persona_launch_requested = true;
-                }
                 match self.backend.steam_sync_status(Stage::Prelaunch)? {
                     SyncStatus::Idle => {}
                     SyncStatus::Pending => {
@@ -2383,6 +2397,9 @@ impl Runner {
                     }
                 }
                 self.backend.authorize_game_control(None)?;
+                if self.persona_runtime_restart {
+                    self.persona_launch_requested = true;
+                }
                 self.backend.launch()?;
                 startup.launch_requested = true;
                 self.bind_persona_launch()?;
@@ -2593,8 +2610,13 @@ impl Runner {
     ) -> Result<()> {
         self.backend.startup_cancel_check()?;
         self.backend.authorize_game_control(Some(game))?;
-        self.backend
-            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
+        self.backend.check_startup_lock()?;
+        if self.backend.single_process(0.0)? != Some((game.pid, game.started)) {
+            return Err(Error::input(
+                "pinned startup process changed; refusing shutdown",
+            ));
+        }
+        self.begin_steam_observation_until(self.clock.now() + 2.0)?;
         self.disconnect();
         self.backend.authorize_game_control(Some(game))?;
         self.backend.terminate(game.pid, game.started)?;
@@ -2609,6 +2631,7 @@ impl Runner {
     fn wait_steam_exit(&mut self, deadline: f64, recovery: bool) -> Result<()> {
         loop {
             self.backend.startup_cancel_check()?;
+            self.backend.authorize_game_control(None)?;
             if recovery {
                 self.backend.check_startup_lock()?;
             }
@@ -2631,17 +2654,13 @@ impl Runner {
     ) -> Result<String> {
         self.backend.startup_cancel_check()?;
         self.backend.authorize_game_control(None)?;
-        if recovery {
-            self.backend.check_startup_lock()?;
-        }
         let deadline = self.clock.now() + timeout;
         let settle = self.budget(deadline, 30.0)?;
         let old = self.backend.single_process(settle)?;
         if recovery && old.is_some() {
             return Err(Error::input("Civ6 appeared before the startup retry"));
         }
-        self.backend
-            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
+        self.begin_steam_observation_until(deadline)?;
         if let Some((pid, started)) = old {
             let game = crate::startup::GameProcess { pid, started };
             self.backend.authorize_game_control(Some(game))?;
@@ -2718,7 +2737,7 @@ impl Runner {
             println!("Closed orphan Civ VI helpers: {closed:?}");
             self.clock.sleep(self.budget(deadline, 8.0)?);
         }
-        self.launch_startup_and_wait(deadline, recovery, true, attempt)?;
+        self.launch_startup_and_wait(deadline, true, attempt)?;
         if self.owner_start {
             self.disconnect();
             self.wait_startup_frontend(self.remaining(deadline)?, false, attempt)?;
@@ -4563,7 +4582,8 @@ impl Runner {
             fs::create_dir_all(parent)?;
         }
         fs::create_dir(&self.output)?;
-        let scenario_name = text(&self.scenario, "name").to_owned();
+        // Logging mutably borrows the runner, so detach its name first.
+        let scenario_name = text(&self.scenario, "name").to_string();
         self.log("start", "OK", &scenario_name)?;
         let mut interruption = None;
         let mut code = match self.run_inner() {

@@ -80,8 +80,9 @@ struct State {
     events: Vec<String>,
     alive: Option<(u32, f64)>,
     launches: usize,
-    lock_held: bool,
+
     steam_marks: usize,
+    lock_held: bool,
 }
 #[derive(Clone, Copy)]
 enum LockLoss {

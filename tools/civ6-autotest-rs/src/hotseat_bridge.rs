@@ -853,10 +853,10 @@ impl<I: TransportIo> Controller<I> {
                         "BEFORE" => before = Some(WitnessSnapshot::parse(&frame.body)?),
                         "SAVE_RETURNED" => save_returned = true,
                         "RESULT" | "REQUESTED" | "SAVE_COMPLETE"
-                            if (frame.kind != "REQUESTED"
+                            if frame.kind != "REQUESTED"
                                 || answer
                                     .as_ref()
-                                    .is_none_or(|v: &(String, String)| v.0 != "SAVE_COMPLETE")) =>
+                                    .is_none_or(|v: &(String, String)| v.0 != "SAVE_COMPLETE") =>
                         {
                             answer = Some((frame.kind.clone(), frame.body.clone()))
                         }

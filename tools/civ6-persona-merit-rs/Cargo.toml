@@ -3,6 +3,9 @@ name = "civ6-persona-merit-rs"
 version = "0.1.0"
 edition.workspace = true
 
+[dependencies]
+civ6-persona-events-rs = { path = "../civ6-persona-events-rs" }
+
 [dev-dependencies]
 mlua = { version = "0.11", features = ["lua51", "vendored"] }
 serde_json = "1"
