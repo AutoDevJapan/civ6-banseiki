@@ -235,6 +235,17 @@ unsafe extern "system" {
 }
 
 static USED: AtomicBool = AtomicBool::new(false);
+/// No E8 operand can reach this allocation until ownership is transferred to
+/// a Slot. Failed RX protection/cache/range validation releases only this
+/// unpublished page; any potentially fetched relay stays owned for process life.
+struct UnpublishedRelay(*mut u8);
+impl Drop for UnpublishedRelay {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { VirtualFree(self.0.cast(), 0, MEM_RELEASE) };
+        }
+    }
+}
 struct Slot {
     call: *mut u8,
     original: [u8; 16],
@@ -350,6 +361,7 @@ unsafe fn install_sites(
             }
             let relay = unsafe { promotion_relay_near(call as usize) }
                 .ok_or("runtime promotion relay unavailable")?;
+            let mut unpublished = UnpublishedRelay(relay);
             let gateway = runtime_promotion_gateway as *const () as u64;
             unsafe {
                 ptr::copy_nonoverlapping([0xff, 0x25, 0, 0, 0, 0].as_ptr(), relay, 6);
@@ -372,6 +384,7 @@ unsafe fn install_sites(
                 protection: info.Protect,
                 _relay: relay,
             });
+            unpublished.0 = null_mut();
             let original_operand = u32::from_le_bytes(original[1..5].try_into().unwrap());
             let outcome = unsafe { exchange_promotion_operand(call, original_operand, operand) }?;
             let mut patched = original;

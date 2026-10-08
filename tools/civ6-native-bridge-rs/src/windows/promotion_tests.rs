@@ -12,6 +12,48 @@ pub(super) static END_RELEASE: AtomicBool = AtomicBool::new(false);
 const ORIGINAL: u64 = 0xaabb_ccdd_1122_3301;
 
 #[test]
+fn unpublished_relay_is_freed_but_transferred_storage_is_retained() {
+    if !child("unpublished_relay_is_freed_but_transferred_storage_is_retained") {
+        return;
+    }
+    let allocate = || {
+        let page = unsafe {
+            VirtualAlloc(
+                null_mut(),
+                CODE_PAGE,
+                MEM_COMMIT | MEM_RESERVE,
+                PAGE_EXECUTE_READWRITE,
+            )
+        }
+        .cast::<u8>();
+        assert!(!page.is_null());
+        page
+    };
+    let state = |page: *mut u8| {
+        let mut info: MEMORY_BASIC_INFORMATION = unsafe { std::mem::zeroed() };
+        assert_ne!(
+            unsafe { VirtualQuery(page.cast(), &mut info, std::mem::size_of_val(&info)) },
+            0
+        );
+        info.State
+    };
+    let page = allocate();
+    drop(UnpublishedRelay(page));
+    assert_eq!(state(page), windows_sys::Win32::System::Memory::MEM_FREE);
+    let page = allocate();
+    let mut unpublished = UnpublishedRelay(page);
+    unpublished.0 = null_mut(); // Same ownership boundary as Slot publication.
+    drop(unpublished);
+    assert_eq!(
+        state(page),
+        MEM_COMMIT,
+        "a potentially reached relay must survive"
+    );
+    // This fixture has published no call operand and is its sole page owner.
+    assert_ne!(unsafe { VirtualFree(page.cast(), 0, MEM_RELEASE) }, 0);
+}
+
+#[test]
 fn promotion_primary_image_matches_both_callers_arguments_and_untouched_callee() {
     if !Path::new(GAMECORE).is_file() {
         println!("fixed primary GameCore NOT AVAILABLE; witness check NOT EXECUTED");
