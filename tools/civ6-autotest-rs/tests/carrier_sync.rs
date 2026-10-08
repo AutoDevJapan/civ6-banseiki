@@ -1428,6 +1428,61 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_full_absorption_return_verifies_after_source_city_inheritance_and_next_turn() {
+        let lua = extended_world(2, "scatter");
+        lua.load(r#"
+          GameEvents.JAC_NativeInventory_Operation={Add=function() end}
+          GameInfo.GreatWorks.GREATWORK_TEST=GameInfo.GreatWorks[4]
+          Players[1].units={}
+          Players[1]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{})
+          local sourceCities=Players[1].GetCities
+          Players[1].GetCities=function()
+            local collection=sourceCities()
+            collection.GetCount=function() local n=0;for _ in pairs(Players[1].cities) do n=n+1 end;return n end
+            return collection
+          end
+          TEST_STATE_EDIT(function(s) s.Transactions={} end)
+          DealManager={EnactWorkingDeal=function() error('unexpected deal') end,
+            GetWorkingDeal=function() error('unexpected deal') end,
+            GetPossibleDealItems=function() error('unexpected deal') end}
+          GameInfo.JAC_AbsorptionOutcomes=function()
+            local rows={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+              {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}};local i=0
+            return function() i=i+1;return rows[i] end
+          end
+          PLAN={ID='full-native-return',From=1,To=2,Mode='MERGER',EntryConditionsMet=true,
+            RelationsResolved=true,Leader='RECRUIT',Units={},Assets={},NativeWorks={[900]={Outcome='RETURN',ReturnOwner=3}}}
+          function MP_OBSERVE()
+            return JAC_ObserveNativeCarrierMP(JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].NativeWorks[1].Carrier)
+          end
+        "#).exec().unwrap();
+        lua.load(transport::inventory_binding()).exec().unwrap();
+        lua.load("JAC_AbsorptionGameplay.Apply(PLAN)")
+            .exec()
+            .unwrap();
+        for _ in 0..12 {
+            if lua.load("return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'").eval::<bool>().unwrap() { break; }
+            if lua.load("return MP_OBSERVE()").eval::<bool>().unwrap() {
+                assert!(mp_receive(
+                    &lua,
+                    &lua.load("return MP_LAST()").eval::<String>().unwrap()
+                ));
+            }
+            lua.load("JAC_AbsorptionGameplay.Resume(PLAN.ID)")
+                .exec()
+                .unwrap();
+        }
+        lua.load(r#"
+          local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID]
+          assert(tx.Status=='COMPLETE' and TRANSFERS==6 and UI_MOVES==1)
+          assert(CITIES[4]:GetOwner()==2 and CITIES[8]:GetOwner()==2 and CITIES[16]:GetOwner()==3 and WORK_X==16)
+          CURRENT_TURN=CURRENT_TURN+1
+          assert(JAC_AbsorptionGameplay.Verify(PLAN.ID,false))
+          assert(TRANSFERS==6 and UI_MOVES==1)
+        "#).exec().unwrap();
+    }
+
+    #[test]
     fn mp_codec_round_trips_finite_double_bits_between_independent_vms() {
         let sender = ready();
         let receiver = ready();

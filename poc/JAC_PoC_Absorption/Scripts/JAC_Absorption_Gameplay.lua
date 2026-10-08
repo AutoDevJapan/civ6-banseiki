@@ -1457,6 +1457,9 @@ local function TransferAbsorbedCity(state, tx, snap)
   end
   city = assert(CityManager.GetCityAt(snap.X, snap.Y), "transfer removed city")
   assert(city:GetOwner() == tx.To, "city transfer did not change owner")
+  if snap.TransferredCityID then
+    assert(city:GetID() == snap.TransferredCityID, "transferred absorption city identity changed")
+  else snap.TransferredCityID = city:GetID(); Save(state) end
   return city
 end
 
@@ -1860,6 +1863,14 @@ end
 NativeWorkAtTarget = function(snap)
   local mp = snap.Carrier and snap.Carrier.MP
   if mp then
+    if JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+      assert(mp.Phase == "DONE", "MP work has no completed physical move")
+      local found = JAC_NativeInventory.Locations(snap.Source.Index)
+      assert(#found == 1, "MP shared inventory original missing or duplicated")
+      SameNativeWorkIdentity(snap.Source, found[1])
+      assert(SameNativeWorkSlot(found[1], snap.TargetSlot), "MP shared inventory target changed")
+      return R.Copy(found[1])
+    end
     assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
       "MP work requires a fresh synchronized actor observation")
     local work = assert(mp.FinalActorObservation.Locations[1])
@@ -1902,6 +1913,25 @@ end
 NativeWorkSourceEmpty = function(tx, snap)
   local mp = snap.Carrier and snap.Carrier.MP
   if mp then
+    if JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+      assert(mp.Phase == "DONE", "MP source has no completed physical move")
+      local source = assert(mp.FinalActorObservation.Cities[1])
+      local city = assert(CityManager.GetCityAt(source.X, source.Y))
+      local inherited = false
+      for _, mapped in ipairs(tx and tx.Cities or {}) do
+        if mapped.X == source.X and mapped.Y == source.Y then
+          local governance = city:GetProperty(R.GOVERNANCE_KEY)
+          inherited = mapped.TransferTurn ~= nil and mapped.TransferredCityID == city:GetID()
+            and city:GetOwner() == tx.To and governance and governance.ID == tx.ID
+        end
+      end
+      assert(inherited or city:GetOwner() == source.Owner and city:GetID() == source.ID,
+        "MP shared source city is unrelated to the completed move")
+      assert(city:GetBuildings():HasBuilding(snap.Carrier.Source.Building)
+        and WorkInSlot(city, snap.Carrier.Source.Building, snap.Carrier.Source.Slot) == -1,
+        "MP shared source slot was reused")
+      return
+    end
     assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
       "MP source requires a fresh synchronized actor observation")
     local source = assert(mp.FinalActorObservation.Cities[1])

@@ -204,7 +204,8 @@ function NI.ReadCity(city,method,building,slot)
   local row=assert(context.Cities[citykey(city:GetOwner(),city:GetID())],'shared inventory city missing')
   if method=='SLOTS' then return assert(row.Reads.SLOTS[building]) end
   if method=='WORK' then return assert(row.Reads.WORK[building][slot]) end
-  return R.Copy(assert(row.Reads[method],'unsupported shared city read'))
+  local value=assert(row.Reads[method],'unsupported shared city read')
+  return R.Copy(value)
 end
 function NI.Locations(index)
   assert(context,'shared inventory context required');local found={}

@@ -127,8 +127,15 @@ fn receive_as(lua: &Lua, packet: &str, actor: i64) -> bool {
 fn saved(lua: &Lua) -> String {
     lua.load(
         r#"
-      local s={Game=Game.props,Players={},Cities={},Plots={},Turn=CURRENT_TURN,Transfers=TRANSFERS}
-      for id,p in pairs(Players) do s.Players[id]=p.props end
+      local s={Game=Game.props,Players={},Units={},Cities={},Plots={},Turn=CURRENT_TURN,Transfers=TRANSFERS,
+        NextID=NEXT_ID,Spawns=SPAWNS,Kills=KILLS}
+      for id,p in pairs(Players) do
+        s.Players[id]=p.props;s.Units[id]={}
+        for unitID,u in pairs(p.units) do
+          local data={};for k,v in pairs(u) do if type(v)~='function' then data[k]=v end end
+          s.Units[id][unitID]=data
+        end
+      end
       for x,c in pairs(CITIES) do s.Cities[x]={Owner=c.owner,ID=c.id,Props=c.props,Population=c.pop,
         Loyalty=c.loyalty,Faith=c.faith,Monument=c.monument,Districts=c.districts} end
       for x,p in pairs(PLOTS) do s.Plots[x]={Owner=p.owner,City=p.city} end
@@ -143,7 +150,12 @@ fn loaded(local: i64, recipient: i64, data: &str) -> Lua {
     lua.globals().set("SAVE", data).unwrap();
     lua.load(r#"
       local s=JAC_NativeInventoryCodec.Decode(SAVE);Game.props=s.Game;CURRENT_TURN=s.Turn;TRANSFERS=s.Transfers
-      for id,p in pairs(Players) do p.props=s.Players[id];p.cities={} end
+      for id,p in pairs(Players) do p.props=s.Players[id];p.cities={};p.units={} end
+      for owner,units in pairs(s.Units) do for unitID,data in pairs(units) do
+        local u=UNIT(owner,unitID,GameInfo.Units[data.kind].UnitType,data.x)
+        for k,v in pairs(data) do u[k]=v end
+      end end
+      NEXT_ID=s.NextID;SPAWNS=s.Spawns;KILLS=s.Kills
       for x,d in pairs(s.Cities) do local c=CITIES[x];c.owner=d.Owner;c.id=d.ID;c.props=d.Props;c.pop=d.Population
         c.loyalty=d.Loyalty;c.faith=d.Faith;c.monument=d.Monument;c.districts=d.Districts
         Players[c.owner].cities[c.id]=c end
@@ -178,7 +190,7 @@ fn save_reconstruction_rejoin_and_lost_send_replay_preserve_one_city_transfer() 
     for peer in [&b, &a] {
         assert!(receive(peer, &final_observation));
         assert!(receive(peer, &final_observation));
-        peer.load("assert(JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE' and TRANSFERS==2 and MOVES==0)").exec().unwrap();
+        peer.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx and tx.Status=='COMPLETE' and TRANSFERS==2 and MOVES==0,tostring(tx and tx.Status)..' '..tostring(tx and tx.Error)..' '..tostring(DIAG))").exec().unwrap();
     }
     let rejoined = loaded(2, 3, &saved(&a));
     assert!(receive(&rejoined, &final_observation));
@@ -259,7 +271,7 @@ fn ui_only_city_loyalty_and_district_reads_are_synchronized_before_and_after_cha
     b.load("UI_POS=8").exec().unwrap();
     for _ in 0..12 {
         if a.load(
-            "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
+            "local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx,tostring(DIAG));return tx.Status=='COMPLETE'",
         )
         .eval::<bool>()
         .unwrap()
@@ -463,7 +475,7 @@ fn partial_snapshot_chunks_survive_load_reordering_and_do_not_commit_early() {
     }
     for _ in 0..4 {
         if a.load(
-            "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
+            "local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx,tostring(DIAG));return tx.Status=='COMPLETE'",
         )
         .eval::<bool>()
         .unwrap()
@@ -477,7 +489,7 @@ fn partial_snapshot_chunks_survive_load_reordering_and_do_not_commit_early() {
         }
     }
     for lua in [&a, &b] {
-        lua.load("assert(JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE' and TRANSFERS==2 and MOVES==0)").exec().unwrap();
+        lua.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx and tx.Status=='COMPLETE' and TRANSFERS==2 and MOVES==0,tostring(tx and tx.Status)..' '..tostring(tx and tx.Error)..' '..tostring(DIAG))").exec().unwrap();
     }
 }
 
@@ -523,7 +535,7 @@ fn two_vms_share_initial_and_city_observations_for_human_or_ai_recipient() {
                 assert!(receive(lua, &initial));
             }
             for _ in 0..4 {
-                let complete=left.load("return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'").eval::<bool>().unwrap();
+                let complete=left.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx,tostring(DIAG));return tx.Status=='COMPLETE'").eval::<bool>().unwrap();
                 if complete {
                     break;
                 }
