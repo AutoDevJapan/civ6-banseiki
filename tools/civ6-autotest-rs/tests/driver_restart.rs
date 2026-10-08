@@ -49,6 +49,54 @@ fn steam_restart_fixture(old: Option<(u32, f64)>) -> FakeBackend {
     fake
 }
 
+#[test]
+fn locked_steam_log_retries_before_launch_without_replaying_game_operations() {
+    let mut fake = steam_restart_fixture(None);
+    let tries = Arc::new(Mutex::new(0));
+    let observed = tries.clone();
+    fake.on_begin_steam = Box::new(move |_| {
+        let mut n = observed.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            Err(Error::new(ErrorKind::SteamLogBusy, "locked original log"))
+        } else {
+            Ok(())
+        }
+    });
+    let ready = tries.clone();
+    fake.on_launch = Box::new(move || {
+        assert_eq!(*ready.lock().unwrap(), 2);
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.launch_steam_and_wait(5.0).unwrap();
+    let events = h.events();
+    assert_eq!(*tries.lock().unwrap(), 2);
+    assert_eq!(events.iter().filter(|e| *e == "launch").count(), 1);
+    assert_eq!(h.clock.at(), 0.05);
+}
+
+#[test]
+fn persistent_log_lock_and_other_errors_stop_before_any_uri_at_original_deadline() {
+    for (kind, deadline, time) in [
+        (ErrorKind::SteamLogBusy, 10.0, 2.0),
+        (ErrorKind::SteamLogBusy, 0.1, 0.1),
+        (ErrorKind::Io, 10.0, 0.0),
+        (ErrorKind::Interrupted, 10.0, 0.0),
+        (ErrorKind::LiveLease, 10.0, 0.0),
+    ] {
+        let mut fake = steam_restart_fixture(None);
+        fake.on_begin_steam = Box::new(move |_| Err(Error::new(kind, "original failure")));
+        let mut h = Harness::new(json!({}), fake);
+        let error = h.runner.launch_steam_and_wait(deadline).unwrap_err();
+        assert!(!h.events().contains(&"launch".into()));
+        assert!((h.clock.at() - time).abs() < 0.00001);
+        if kind != ErrorKind::SteamLogBusy || deadline > 2.0 {
+            assert_eq!(error.kind, kind);
+        }
+    }
+}
+
 struct NativeFixture {
     ids: VecDeque<BTreeSet<u32>>,
     tail: BTreeSet<u32>,
