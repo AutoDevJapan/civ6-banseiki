@@ -245,6 +245,59 @@ end
 /// A production or yield-and-growth diagnostic, with an owned-process inverse-removal
 /// candidate before any reference or oath is attached. Normal probes stay intact.
 pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
+    make_native_probe_with_basis(repo, entry, NativeProductionBasis::Q8)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NativeProductionBasis {
+    // Preserve immutable probes produced before the naval/building correction.
+    Legacy,
+    Q8,
+}
+
+fn production_rate_to_q8(code: &str, targets: &[Value]) -> Result<String> {
+    const BINDING: &str = "local native_rate=";
+    ensure!(
+        code.matches(BINDING).count() == 1,
+        "native rate binding must occur exactly once"
+    );
+    let amount = targets
+        .iter()
+        .find_map(|target| {
+            let name = target["target"].as_str()?;
+            let amount = target["expected_percent"].as_i64()?;
+            let prefix = format!(
+                "local target={}; local amount={amount}; {BINDING}",
+                serde_json::to_string(name).ok()?
+            );
+            code.contains(&prefix).then_some(amount)
+        })
+        .context("native comparison does not match a catalogue production target")?;
+    let start = code.find(BINDING).unwrap() + BINDING.len();
+    let end = start
+        + code[start..]
+            .find('\n')
+            .context("native rate line boundary missing")?;
+    ensure!(
+        code[start..end].trim() == format!("{amount}/100"),
+        "unexpected legacy production rate expression"
+    );
+    let mut result = code.to_owned();
+    result.replace_range(
+        start..end,
+        &format!(
+            "{}/256",
+            crate::oath_effect_audit::native_percentage_raw(amount)
+        ),
+    );
+    Ok(result)
+}
+
+fn make_native_probe_with_basis(
+    repo: &Repository,
+    entry: &Value,
+    basis: NativeProductionBasis,
+) -> Result<Value> {
     ensure!(
         catalogue(repo)?.iter().any(|known| known == entry),
         "native diagnostic needs an unchanged catalogue entry"
@@ -273,20 +326,40 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     // Q8 observations belong only to the explicit memory diagnostic. Ordinary
     // numeric acceptance retains the catalogue percentage and its old bounds.
     let mut conversions = 0;
+    let mut rate_conversions = 0;
     for step in steps.iter_mut() {
         if let Some(code) = step["code"].as_str() {
             if code.contains("local native_diagnostic=false") {
                 conversions += 1;
-                step["code"] = json!(code.replace(
+                let mut converted = code.replace(
                     "local native_diagnostic=false",
-                    "local native_diagnostic=true"
-                ));
+                    "local native_diagnostic=true",
+                );
+                if naval_buildings
+                    && basis == NativeProductionBasis::Q8
+                    && converted.contains("local native_rate=")
+                {
+                    // Only generated production comparisons have this binding.
+                    // The normal catalogue and its decimal acceptance stay intact.
+                    converted = production_rate_to_q8(&converted, targets)?;
+                    rate_conversions += 1;
+                }
+                step["code"] = json!(converted);
             }
         }
     }
     ensure!(
         conversions == 1 + targets.len(),
         "native diagnostic comparison boundaries changed"
+    );
+    ensure!(
+        rate_conversions
+            == if naval_buildings && basis == NativeProductionBasis::Q8 {
+                targets.len()
+            } else {
+                0
+            },
+        "native production rate comparison count changed"
     );
     if growth {
         let original = std::mem::take(steps);
@@ -324,6 +397,9 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     };
     steps.insert(5, action);
     probe["native_exact_removal_candidate"] = json!(true);
+    if naval_buildings && basis == NativeProductionBasis::Q8 {
+        probe["native_production_basis"] = json!("q8-v2");
+    }
     civ6_autotest_rs::scenario::validate_scenario(&probe)?;
     Ok(probe)
 }
@@ -406,8 +482,13 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         !native || scenario["native_exact_removal_candidate"] == true,
         "invalid native candidate marker"
     );
+    let basis = match scenario.get("native_production_basis") {
+        None => NativeProductionBasis::Legacy,
+        Some(value) if native && value == "q8-v2" => NativeProductionBasis::Q8,
+        _ => bail!("unknown native production observation basis"),
+    };
     let expected = if native {
-        make_native_probe(repo, &entry)?
+        make_native_probe_with_basis(repo, &entry, basis)?
     } else {
         make_probe(repo, &entry)?
     };
@@ -431,7 +512,9 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
     let actual_steps = scenario["steps"].as_array().context("artifact steps")?;
     let expected_steps = expected["steps"].as_array().unwrap();
     ensure!(
-        scenario["diagnostic_only"] == true && scenario["save_probe"] == expected["save_probe"],
+        scenario["diagnostic_only"] == true
+            && scenario["save_probe"] == expected["save_probe"]
+            && scenario.get("native_production_basis") == expected.get("native_production_basis"),
         "artifact scope changed"
     );
     // Shipping can prepend lifecycle steps. It may not change the actual probe.
@@ -693,6 +776,25 @@ pub(crate) mod tests {
     use super::*;
 
     #[test]
+    fn production_rate_conversion_checks_bindings_and_tolerates_line_endings() -> Result<()> {
+        let targets = vec![json!({"target":"BUILDING_WALLS","expected_percent":20})];
+        for ending in ["\n", "\r\n", "  \r\n"] {
+            let code = format!("local target=\"BUILDING_WALLS\"; local amount=20; local native_rate=20/100{ending}local native_diagnostic=true\n");
+            assert!(production_rate_to_q8(&code, &targets)?.contains("local native_rate=51/256\n"));
+            for invalid in [
+                code.replace("20/100", "20/1000"),
+                code.replace("local amount=20", "local amount=15"),
+                code.replace("BUILDING_WALLS", "BUILDING_UNKNOWN"),
+                format!("{code}local native_rate=20/100\n"),
+                code.replace("local native_rate=", "local other_rate="),
+            ] {
+                assert!(production_rate_to_q8(&invalid, &targets).is_err());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn production_probes_bind_their_scope_and_preserve_all_quantity_and_save_steps() -> Result<()> {
         let repo = Repository::checked_in();
         let mut seen = BTreeSet::new();
@@ -710,7 +812,8 @@ pub(crate) mod tests {
             }
             seen.insert(kind.to_owned());
             let plain = make_probe(&repo, &entry)?;
-            let mut native = make_native_probe(&repo, &entry)?;
+            let mut native =
+                make_native_probe_with_basis(&repo, &entry, NativeProductionBasis::Legacy)?;
             let steps = native["steps"].as_array_mut().unwrap();
             let action = steps.remove(5);
             assert_eq!(action["action"], "oath_exact_removal");
@@ -1069,9 +1172,18 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
         native: bool,
         core: &str,
     ) -> Result<(tempfile::TempDir, Vec<Value>)> {
+        artifacts_for_basis(entry, native, core, NativeProductionBasis::Q8)
+    }
+
+    fn artifacts_for_basis(
+        entry: &Value,
+        native: bool,
+        core: &str,
+        basis: NativeProductionBasis,
+    ) -> Result<(tempfile::TempDir, Vec<Value>)> {
         let repo = Repository::checked_in();
         let mut scenario = if native {
-            make_native_probe(&repo, entry)?
+            make_native_probe_with_basis(&repo, entry, basis)?
         } else {
             make_probe(&repo, entry)?
         };
@@ -1168,6 +1280,60 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
             assert_eq!(result["task_accepted"], false);
             fs::write(&target, serde_json::to_vec(&plan_for_scope(Scope::Legacy))?)?;
             assert!(verify_artifacts(&repo, temp.path()).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn production_basis_versions_bind_source_and_preserve_old_failures() -> Result<()> {
+        use civ6_autotest_rs::oath_exact_removal::{plan_for_scope, Scope};
+        let repo = Repository::checked_in();
+        for oath in ["JAC_OATH_MORI_SETO_FLEETS", "JAC_OATH_MIYOSHI_IIMORI"] {
+            let entry = catalogue(&repo)?
+                .into_iter()
+                .find(|e| e["oath"] == oath)
+                .unwrap();
+            for basis in [NativeProductionBasis::Legacy, NativeProductionBasis::Q8] {
+                let (temp, _) = artifacts_for_basis(&entry, true, "{core}", basis)?;
+                let mut proof = plan_for_scope(Scope::NavalBuildingsV1);
+                proof["status"] = json!("applied");
+                proof["writes"] = json!(4);
+                proof["original_protections_restored"] = json!(true);
+                proof["pid"] = json!(42);
+                proof["creation_filetime"] = json!(123);
+                fs::write(
+                    temp.path()
+                        .join("oath-exact-removal-naval-buildings-v1.json"),
+                    serde_json::to_vec(&proof)?,
+                )?;
+                assert_eq!(
+                    verify_artifacts(&repo, temp.path())?["task_accepted"],
+                    false
+                );
+                let path = temp.path().join("scenario.json");
+                let original = fs::read(&path)?;
+                let mut scenario: Value = serde_json::from_slice(&original)?;
+                // A marker cannot relabel old decimal Lua as Q8, or vice versa.
+                if basis == NativeProductionBasis::Legacy {
+                    scenario["native_production_basis"] = json!("q8-v2");
+                } else {
+                    scenario
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("native_production_basis");
+                }
+                fs::write(&path, serde_json::to_vec(&scenario)?)?;
+                assert!(verify_artifacts(&repo, temp.path()).is_err());
+                scenario["native_production_basis"] = json!("unknown");
+                fs::write(&path, serde_json::to_vec(&scenario)?)?;
+                assert!(verify_artifacts(&repo, temp.path()).is_err());
+                fs::write(path, original)?;
+                let result_path = temp.path().join("result.json");
+                let mut result: Value = serde_json::from_slice(&fs::read(&result_path)?)?;
+                result["failure"] = json!("old actual rate failed nominal acceptance");
+                fs::write(result_path, serde_json::to_vec(&result)?)?;
+                assert!(verify_artifacts(&repo, temp.path()).is_err());
+            }
         }
         Ok(())
     }

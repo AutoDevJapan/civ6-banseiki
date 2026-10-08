@@ -762,11 +762,12 @@ fn effect_lua(case: &Case) -> String {
 
 /// Positive Amount conversion in GameCore XP2 SHA324c51e9: float32 Amount *
 /// 0.01f followed by the eight-bit fixed-point packing at RVA8D8D7A..8D8DB7
-/// (growth) and RVA8179EC..817A21 (military).
+/// (growth), RVA8179EC..817A21 (military), RVA7E8E97..7E8EDC
+/// (naval) and RVA8955F0..895640 (building production).
 /// GetOtherGrowthModifier and GetOverallGrowthModifier return that Q8 domain
 /// (RVA690A50/690AC0). This changes the observation basis, never the SQL Amount
 /// or the exact OFF restoration tolerance. Negative removal is a separate bug.
-fn native_percentage_raw(amount: i64) -> i64 {
+pub(crate) fn native_percentage_raw(amount: i64) -> i64 {
     ((amount as f32 * 0.01_f32) * 256.0_f32).trunc() as i64
 }
 

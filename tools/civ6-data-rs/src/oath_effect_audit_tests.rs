@@ -613,6 +613,92 @@ fn growth_uses_housing_formula_and_raw_yield_quantity_remains_unaccepted() -> Re
 }
 
 #[test]
+fn all_production_kinds_keep_native_q8_and_nominal_acceptance_separate() -> Result<()> {
+    let repo = Repository::checked_in();
+    let mut seen = std::collections::BTreeSet::new();
+    for case in cases(&repo)? {
+        let Some(effect) = case
+            .effects
+            .iter()
+            .find(|e| ["military", "naval", "walls"].contains(&e.kind.as_str()))
+        else {
+            continue;
+        };
+        seen.insert(effect.kind.clone());
+        for (target, amount) in production_expectations(&case) {
+            let normal = generated_code(
+                &case,
+                &format!(
+                    "local target={}; local amount={amount}",
+                    lua_string(&target)
+                ),
+            )?;
+            let entry = crate::oath_save_probe::catalogue(&repo)?
+                .into_iter()
+                .find(|entry| entry["oath"] == case.oath)
+                .context("catalogue entry")?;
+            if case.effects.iter().any(|e| e.kind == "growth") {
+                continue; // Native production probes explicitly reject mixed growth.
+            }
+            let native = crate::oath_save_probe::make_native_probe(&repo, &entry)?;
+            let diagnostic = native["steps"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|step| step["code"].as_str())
+                .find(|code| {
+                    code.contains(&format!(
+                        "local target={}; local amount={amount}",
+                        lua_string(&target)
+                    ))
+                })
+                .context("native production comparison")?;
+            let vm = Lua::new();
+            vm.load(PRODUCTION_OBSERVATIONS).exec()?;
+            let observe = |delta: f64| -> Result<()> {
+                vm.load(format!(
+                    "JAC_OATH_AUDIT.current.Target={0}; JAC_OATH_AUDIT.production[{0}]=audit_rows(4099,{delta},4101,4099,4103,4101)",
+                    lua_string(&target),
+                )).exec()?;
+                Ok(())
+            };
+            let raw = native_percentage_raw(amount);
+            observe((4103.0 * (1.0 + raw as f64 / 256.0)).round())?;
+            let result = decode(&vm, diagnostic)?;
+            assert_eq!(result["quantity_verified"], true, "{} {target}", case.oath);
+            assert_eq!(result["expected_on"], 1.0 + raw as f64 / 256.0);
+            if amount != 0 {
+                assert!(
+                    decode(&vm, &normal).is_err(),
+                    "native result blessed as nominal: {} {target}",
+                    case.oath
+                );
+                observe((4103.0 * (1.0 + amount as f64 / 100.0)).round())?;
+                assert_eq!(decode(&vm, &normal)?["quantity_verified"], true);
+                assert!(
+                    decode(&vm, diagnostic).is_err(),
+                    "nominal result blessed as Q8: {} {target}",
+                    case.oath
+                );
+            }
+            // Both paths retain the exact reversible OFF requirement.
+            vm.load(format!(
+                "JAC_OATH_AUDIT.production[{}]=audit_rows(4099,4921,4201,4099,4103,4101)",
+                lua_string(&target),
+            ))
+            .exec()?;
+            assert!(decode(&vm, &normal).is_err());
+            assert!(decode(&vm, diagnostic).is_err());
+        }
+    }
+    assert_eq!(
+        seen,
+        std::collections::BTreeSet::from(["military".into(), "naval".into(), "walls".into()])
+    );
+    Ok(())
+}
+
+#[test]
 fn native_q8_observation_does_not_replace_nominal_quantity_acceptance() -> Result<()> {
     let lua = Lua::new();
     lua.load(PRODUCTION_OBSERVATIONS).exec()?;
