@@ -2405,6 +2405,12 @@ fn multiplayer_ai_hero_without_owner_observation_chooses_legal_sale_without_ui_r
 }
 
 #[test]
+fn multiplayer_hero_ui_skips_saved_reservations_before_native_claim_arrives() {
+    let h = network_discovery();
+    h.exec("local export=rp.Export; rp.Export=function() local s=export(); s.heroes['0']={heroClass=10,verification='PENDING'}; return s end; DEFER_OPERATIONS=true; assert(ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=0})); assert(REQUESTS[1].params.HeroClass==11); rp.Export=function() local s=export(); s.heroes['0']={heroClass=10}; s.heroes['1']={heroClass=11}; return s end; assert(not ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=0})); assert(#REQUESTS==1)");
+}
+
+#[test]
 fn multiplayer_hero_owner_observation_completes_on_two_clients_without_receiver_ui_reads() {
     let mut a = network_discovery();
     let mut b = network_discovery();

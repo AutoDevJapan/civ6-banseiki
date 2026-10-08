@@ -330,12 +330,16 @@ fn nil_or_inactive_roster_actor_cannot_seed_a_game() {
 
 #[test]
 fn stale_active_receipt_cannot_authorize_a_player_who_already_ended_their_turn() {
-    let endpoint=Endpoint::new(0,false,None);
+    let endpoint = Endpoint::new(0, false, None);
     endpoint.exec("network=true; beginturn(0); inactive[0]=true");
-    let before=endpoint.state();
-    let accepted:bool=endpoint.0.load("return rosteroperation(0,{Turn=turn,Roster='0,1'})").eval().unwrap();
+    let before = endpoint.state();
+    let accepted: bool = endpoint
+        .0
+        .load("return rosteroperation(0,{Turn=turn,Roster='0,1'})")
+        .eval()
+        .unwrap();
     assert!(!accepted);
-    assert_eq!(before,endpoint.state());
+    assert_eq!(before, endpoint.state());
 }
 
 #[test]
@@ -356,6 +360,7 @@ fn actual_ui_roster_packet_replayed_into_both_gameplay_vms_initializes_once() {
         GetProperty=function(_,key) return PROPS[key] end,SetProperty=function() error('UI wrote state') end}
       ContextPtr={SetHide=function(_,hidden) assert(hidden) end}
       PlayerOperations={EXECUTE_SCRIPT=77}; SENT={}
+      Players={[0]={IsHuman=function() return true end,IsTurnActive=function() return true end}}
       UI={GetElapsedTime=function() return 10 end,
         RequestPlayerOperation=function(actor,kind,params)
           assert(kind==77);SENT[#SENT+1]={actor=actor,params=params}
@@ -386,6 +391,51 @@ fn actual_ui_roster_packet_replayed_into_both_gameplay_vms_initializes_once() {
     for owner in 0..=1 {
         assert_eq!(host.record(owner, 65536)["XP"], 20);
     }
+}
+
+#[test]
+fn changed_roster_after_ai_takeover_unblocks_initialization_and_saved_pending_growth() {
+    let host = Endpoint::new(0, false, None);
+    host.exec("network=true; present[1]=false; beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'})); turn=2; beginturn(0); humans[1]=false");
+    let saved = host.state();
+    let peer = Endpoint::new(1, true, Some(&saved));
+    peer.exec("network=true; humans[1]=false; present[1]=false");
+    for endpoint in [&host, &peer] {
+        endpoint.exec("assert(rosteroperation(0,{Turn=turn,Roster='0'}))");
+        assert_eq!(endpoint.record(0, 65536)["XP"], 10);
+        assert_eq!(endpoint.record(0, 65536)["Level"], 2);
+        assert_eq!(endpoint.record(0, 65536)["LastXPTurn"], 2);
+        assert!(endpoint.record(1, 65536).is_null());
+    }
+    assert_eq!(host.state(), peer.state());
+    let ready = host.state();
+    host.exec("beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0'}))");
+    assert_eq!(ready, host.state());
+}
+
+#[test]
+fn long_roster_wait_compacts_only_human_receipts_and_retains_all_growth() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; humans[1]=false; for t=1,100 do turn=t; beginturn(0); beginturn(0); beginturn(1) end");
+    let rows = endpoint.state()["properties"]["JAC_POC_GROWTHUI_PENDING_STARTS"].clone();
+    assert_eq!(rows.as_object().unwrap().len(), 1);
+    assert_eq!(rows["0"]["starts"], 100);
+    let peer = Endpoint::new(1, true, Some(&endpoint.state()));
+    peer.exec("network=true; humans[1]=false; assert(rosteroperation(0,{Turn=turn,Roster='0'}))");
+    // Reference the existing normal per-turn path for XP and level arithmetic.
+    let reference = Endpoint::new(0, false, None);
+    reference.exec("humans[1]=false; loadscreen(); for t=1,100 do turn=t; beginturn(0) end");
+    assert_eq!(peer.record(0, 65536), reference.record(0, 65536));
+    assert!(peer.state()["properties"]["JAC_POC_GROWTHUI_PENDING_STARTS"].is_null());
+}
+
+#[test]
+fn legacy_pending_rows_restore_without_losing_distinct_start_receipts() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; turn=3; props.JAC_POC_GROWTHUI_PENDING_STARTS={['1:0']={owner=0,turn=1},['2:0']={owner=0,turn=2}}; beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'}))");
+    assert_eq!(endpoint.record(0, 65536)["XP"], 30);
+    assert_eq!(endpoint.record(0, 65536)["Level"], 2);
+    assert_eq!(endpoint.record(0, 65536)["LastXPTurn"], 3);
 }
 
 #[test]

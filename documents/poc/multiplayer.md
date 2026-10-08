@@ -47,6 +47,8 @@ civ6-growth-sync compare host.json guest.json
 
 設定の人間一覧と観戦者一覧は画面側だけで読み、Rustから生成する空のUIコンテキストが公式 `EXECUTE_SCRIPT` で送る。Gameplayから画面専用の参加者一覧APIを呼ばない。受信側はエンジンが渡す要求者、現在の手番、主要文明のID、順序・重複・欠落を検査し、受理した一覧を保存する。初期化前に届いた手番開始も保存し、初期化後にターン・所有者順で一度だけ加算する。待機中の保存から新しい環境へ戻った場合も最初の人間の経験値を取りこぼさない。画面が送った実際の要求を独立した二つのGameplay環境へ渡す検査と、画面の登録・Rust生成物・CLI出力の一致を検査する。
 
+初期化前に人間枠がAIへ切り替わった場合は、活動中の人間が更新した設定一覧を同期要求で届ける。削除した枠がGameplayでも人間でなくなったことを確認し、人間の欠落を拒否する。待機中の手番記録は人間ごとに実際の開始回数と最後のターンへまとめ、長い待ちでも経験値を失わず保存量の増加を抑える。旧形式の保存記録も読み込む。同じ画面要求の未受理時は、ターン・実行者・一覧ごとに8回で再送を止めて診断し、次ターンまたは一覧変更で再試行する。
+
 APIの文脈は本体StagingRoomと、作者の[GameConfiguration実測一覧](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/Objects/GameConfiguration/GameConfiguration.md)を照合した。人間枠の読み取りはUI、ネットワーク判定はScriptとUIの双方で利用される。手番の再確認には[Playerの実測一覧](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/Objects/Player/Player.md)のScript・UI共通の `IsTurnActive` を使う。実エンジンの配送・表示・保存の確認は後日のプレイへ残す。
 
 同盟と家名には `clans_alliance_multiplayer.rs` の13検査を追加した。家名の状態変更は公式Gameplayのターンイベントで行い、存在しない同盟要求者を拒否する。独立した二環境で要求順・二重要求・所有者変更・保存再構成を照合する。ホットシートで同じ申し込み元から別の人間へ操作が移った場合も、申し込みを表示する。

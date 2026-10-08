@@ -182,7 +182,7 @@ for id = 0, 1 do
     GetID = function() return pid end, IsAlive = function() return e.alive end,
     IsTurnActive = function() return e.active ~= false end,
     IsMajor = function() return e.major end,
-    IsHuman = function() return pid == 0 or MULTIPLAYER == true or HUMAN_ONE == true end,
+    IsHuman = function() return pid == 0 or pid == 1 and (MULTIPLAYER == true or HUMAN_ONE == true) end,
     GetCities = function() return { GetCapitalCity = function() return e.city and capital or nil end,
       FindID = function(_, city) return e.city and cityObjects[tostring(city)] or nil end,
       Members = function() local key; return function()

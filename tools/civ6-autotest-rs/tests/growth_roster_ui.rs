@@ -15,6 +15,8 @@ fn publisher(local: i64) -> Lua {
       Game={GetLocalPlayer=function() return me end,GetCurrentGameTurn=function() return turn end,
         GetProperty=function(_,key) return props[key] end,SetProperty=function() error('UI wrote state') end}
       PlayerOperations={EXECUTE_SCRIPT=77}
+      Players={[0]={IsHuman=function() return true end,IsTurnActive=function() return not inactiveZero end},
+        [1]={IsHuman=function() return true end,IsTurnActive=function() return true end}}
       ContextPtr={SetHide=function(_,hidden) assert(hidden==true) end}
       UI={GetElapsedTime=function() return clock end,
         RequestPlayerOperation=function(actor,kind,params)
@@ -86,6 +88,31 @@ fn initialized_reload_and_singleplayer_never_publish_a_new_roster() {
             .unwrap();
         assert_eq!(count(&lua), 0);
     }
+}
+
+#[test]
+fn stale_active_mark_for_ended_player_does_not_prevent_the_current_human_from_publishing() {
+    let lua = publisher(1);
+    lua.load("inactiveZero=true; hooks.begin()").exec().unwrap();
+    assert_eq!(count(&lua), 1);
+    assert_eq!(first(&lua).0, 1);
+}
+
+#[test]
+fn permanently_rejected_roster_has_a_bounded_retry_budget_and_rearms_next_turn() {
+    let lua = publisher(0);
+    lua.load("for i=1,100 do clock=i*2; hooks.publish() end")
+        .exec()
+        .unwrap();
+    assert_eq!(count(&lua), 8);
+    lua.load("turn=2; props.JAC_POC_GROWTHUI_ACTIVE_TURNS['0']=2; hooks.begin()")
+        .exec()
+        .unwrap();
+    assert_eq!(count(&lua), 9);
+    lua.load("humans={0}; clock=clock+2; hooks.publish()")
+        .exec()
+        .unwrap();
+    assert_eq!(count(&lua), 10);
 }
 
 #[test]

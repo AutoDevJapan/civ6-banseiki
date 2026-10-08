@@ -149,14 +149,14 @@ local function OnLoadScreenClose()
 	Log("restored count=" .. tostring(restored))
 end
 
-local function ApplyGrowth(playerID, turn)
+local function ApplyGrowth(playerID, turn, starts)
 	local player = Players[playerID]
 	if not player or not player:IsHuman() then return end
 	for _, unit in ipairs(SortedUnits(player)) do
 		local record = unit:GetProperty(WARLORD_KEY)
 		if record then
 			if record.LastXPTurn == nil or record.LastXPTurn < turn then
-				record.XP = record.XP + XP_PER_TURN
+				record.XP = record.XP + XP_PER_TURN * (starts or 1)
 				while record.Level < NORMAL_LEVEL_CAP do
 					local needed = math.floor(30 * record.Level ^ 1.5 + 0.5)
 					if record.XP < needed then break end
@@ -173,7 +173,16 @@ end
 
 local function CopyStarts(value)
 	local result = {}
-	for key, row in pairs(value or {}) do result[key] = {owner=row.owner, turn=row.turn} end
+	-- Compact waiting receipts to one row per human, including old saved rows.
+	-- Keep the actual start count; a long initialization wait must not lose XP.
+	for _, row in pairs(value or {}) do
+		local key = tostring(row.owner)
+		local prior = result[key]
+		if prior then
+			prior.starts = prior.starts + (row.starts or 1)
+			prior.turn = math.max(prior.turn, row.turn)
+		else result[key] = {owner=row.owner, turn=row.turn, starts=row.starts or 1} end
+	end
 	return result
 end
 
@@ -181,9 +190,9 @@ local function DrainPending()
 	if not Game:GetProperty(INITIALIZED_KEY) then InitializeNewGame() end
 	if not Game:GetProperty(INITIALIZED_KEY) then return end
 	local rows = {}
-	for _, row in pairs(Game:GetProperty(PENDING_KEY) or {}) do rows[#rows+1] = row end
+	for _, row in pairs(CopyStarts(Game:GetProperty(PENDING_KEY))) do rows[#rows+1] = row end
 	table.sort(rows, function(a,b) return a.turn < b.turn or a.turn == b.turn and a.owner < b.owner end)
-	for _, row in ipairs(rows) do ApplyGrowth(row.owner, row.turn) end
+	for _, row in ipairs(rows) do ApplyGrowth(row.owner, row.turn, row.starts) end
 	Game:SetProperty(PENDING_KEY, nil)
 end
 
@@ -198,7 +207,13 @@ local function OnPlayerTurnStartComplete(playerID)
 		Game:SetProperty(ACTIVE_KEY, nextActive)
 		if not Game:GetProperty(INITIALIZED_KEY) then
 			local pending = CopyStarts(Game:GetProperty(PENDING_KEY))
-			pending[tostring(turn)..":"..tostring(playerID)] = {owner=playerID, turn=turn}
+			if p:IsHuman() then
+				local key = tostring(playerID)
+				local prior = pending[key]
+				if not prior or turn > prior.turn then
+					pending[key] = {owner=playerID, turn=turn, starts=(prior and prior.starts or 0)+1}
+				end
+			end
 			Game:SetProperty(PENDING_KEY, pending)
 			DrainPending()
 			return
@@ -229,15 +244,21 @@ local function ReceiveRoster(actor, params)
 	local listed = {}; for _,id in ipairs(ids) do listed[id] = true end
 	local active, selected = Game:GetProperty(ACTIVE_KEY) or {}, nil
 	for _,id in ipairs(ids) do
-		if active[tostring(id)] == params.Turn and majors[id]:IsHuman() then selected=id; break end
+		if active[tostring(id)] == params.Turn and majors[id]:IsHuman()
+			and majors[id]:IsTurnActive() then selected=id; break end
 	end
 	assert(selected ~= nil and actor == selected, "roster requires the active human engine actor")
 	assert(majors[actor]:IsTurnActive(), "roster actor no longer has the active turn")
 	for _,p in ipairs(HumanPlayers()) do assert(listed[p:GetID()], "human player omitted from roster") end
 	if Game:GetProperty(INITIALIZED_KEY) then return true end
 	local known = Game:GetProperty(ROSTER_KEY)
-	assert(not known or table.concat(known, ",") == params.Roster, "saved roster changed")
-	if not known then Game:SetProperty(ROSTER_KEY, ids) end
+	-- An authenticated active human may publish a changed configured roster.
+	-- Removed seats must already be nonhuman in Core; UI lag may still make
+	-- newly configured seats nonhuman, so initialization continues to wait.
+	for _,id in ipairs(known or {}) do
+		assert(listed[id] or not majors[id] or not majors[id]:IsHuman(), "human removed from saved roster")
+	end
+	if not known or table.concat(known, ",") ~= params.Roster then Game:SetProperty(ROSTER_KEY, ids) end
 	DrainPending()
 	return true
 end

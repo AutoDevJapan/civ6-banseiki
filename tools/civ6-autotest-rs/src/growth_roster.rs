@@ -5,7 +5,7 @@ ContextPtr:SetHide(true)
 local INIT = 'JAC_POC_GROWTHUI_INITIALIZED'
 local ROSTER = 'JAC_POC_GROWTHUI_NETWORK_ROSTER'
 local ACTIVE = 'JAC_POC_GROWTHUI_ACTIVE_TURNS'
-local last, diagnostic = nil, nil
+local last, diagnostic, attemptKey, attempts = nil, nil, nil, 0
 local function report(message)
   if diagnostic ~= message then print('[JAC_POC] '..message); diagnostic=message end
 end
@@ -28,15 +28,21 @@ local function publish()
   local turn,me=Game.GetCurrentGameTurn(),Game.GetLocalPlayer()
   local active=Game:GetProperty(ACTIVE) or {}; local selected
   for _,id in ipairs(ids) do
-    if active[tostring(id)]==turn then selected=id; break end
+    local p=Players[id]
+    if active[tostring(id)]==turn and p and p:IsHuman() and p:IsTurnActive() then selected=id; break end
   end
   if selected==nil or selected~=me then return end
   if not UI.RequestPlayerOperation or not PlayerOperations.EXECUTE_SCRIPT then
     report('network roster operation unavailable'); return
   end
   local now=UI.GetElapsedTime()
+  local key=tostring(turn)..':'..tostring(me)..':'..wire
+  if attemptKey~=key then attemptKey,attempts,last=key,0,nil end
+  if attempts>=8 then
+    report('network roster rejected or unacknowledged after 8 attempts; retry on next turn or roster change'); return
+  end
   if last and now-last<1 then return end
-  last=now
+  last,attempts=now,attempts+1
   UI.RequestPlayerOperation(me,PlayerOperations.EXECUTE_SCRIPT,
     {OnStart='JAC_GrowthRoster',Turn=turn,Roster=wire})
 end
