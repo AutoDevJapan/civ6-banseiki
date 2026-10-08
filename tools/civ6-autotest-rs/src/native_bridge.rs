@@ -132,7 +132,7 @@ mod platform {
     use std::os::windows::{ffi::OsStringExt, io::AsRawHandle, process::CommandExt};
     use std::process::{Child, ChildStdin, Command, Stdio};
     use std::sync::mpsc::{self, Receiver};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use windows_sys::Win32::Foundation::{
         CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
@@ -1153,6 +1153,7 @@ mod platform {
                 resident_runtime,
                 vec![controller_pin, dll_pin],
                 false,
+                None,
             )
         }
         #[allow(clippy::too_many_arguments)]
@@ -1168,6 +1169,7 @@ mod platform {
             resident_runtime: bool,
             binary_pins: Vec<std::fs::File>,
             bootstrap: bool,
+            readiness_deadline: Option<Instant>,
         ) -> Result<Self> {
             let input = child.stdin.take();
             let Some(stdout) = child.stdout.take() else {
@@ -1218,8 +1220,14 @@ mod platform {
                 _binary_pins: binary_pins,
                 bootstrap,
             };
-            match session.lines.recv_timeout(Duration::from_secs(30)) {
-                Ok(line) if line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
+            let wait = readiness_deadline.map_or(Duration::from_secs(30), |deadline| {
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_secs(30))
+            });
+            match session.lines.recv_timeout(wait) {
+                Ok(line) if readiness_deadline.is_none_or(|deadline| Instant::now() < deadline)
+                    && line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
                 _ => {
                     let close = session.close_target();
                     if unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0 {
@@ -1455,6 +1463,86 @@ mod platform {
             let handle = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, 0, child.id()) };
             assert!(!handle.is_null());
             PinnedTarget(handle)
+        }
+
+        #[test]
+        fn bootstrap_readiness_uses_remaining_step_deadline_and_preserves_peer() {
+            struct Fixture(Child);
+            impl Drop for Fixture {
+                fn drop(&mut self) {
+                    let _ = self.0.kill();
+                    let _ = self.0.wait();
+                }
+            }
+            let target = std::sync::Arc::new(std::sync::Mutex::new(Fixture(sleeping_child())));
+            let pid = target.lock().unwrap().0.id();
+            let pinned = test_target(&target.lock().unwrap().0);
+            let mut peer = Fixture(sleeping_child());
+            let controller = Command::new("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 20",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap();
+            let closed_target = target.clone();
+            let close = Box::new(move |actual, _| {
+                assert_eq!(actual, pid);
+                let mut target = closed_target.lock().unwrap();
+                target.0.kill()?;
+                target.0.wait()?;
+                Ok(())
+            });
+            let dir = tempfile::tempdir().unwrap();
+            let start = Instant::now();
+            let result = Session::from_child(
+                controller,
+                dir.path().join("bounded-ready.jsonl"),
+                pid,
+                1,
+                0.0,
+                pinned,
+                BridgeMode::ProductionAdmission,
+                close,
+                false,
+                Vec::new(),
+                true,
+                Some(start + Duration::from_millis(50)),
+            );
+            assert!(result.is_err());
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "must not use a fresh 30-second wait"
+            );
+            assert!(target.lock().unwrap().0.try_wait().unwrap().is_some());
+            assert!(peer.0.try_wait().unwrap().is_none());
+        }
+
+        #[test]
+        fn expired_bootstrap_preparation_refuses_before_process_or_file_access() {
+            let dir = tempfile::tempdir().unwrap();
+            let result = Session::start_bootstrap(
+                0,
+                0.0,
+                dir.path(),
+                &json!({}),
+                Box::new(|_, _| panic!("no fixture/game process may be closed")),
+                Instant::now() - Duration::from_secs(1),
+            );
+            match result {
+                Err(error) => assert_eq!(
+                    error.message,
+                    "bootstrap preparation deadline expired before process pin"
+                ),
+                Ok(_) => panic!("expired budget must not create a session"),
+            }
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
         }
 
         #[test]
@@ -2332,6 +2420,7 @@ impl Session {
         _: &Path,
         _: &serde_json::Value,
         _: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        _: std::time::Instant,
     ) -> Result<Self> {
         Err(Error::input("bootstrap requires Windows x64"))
     }

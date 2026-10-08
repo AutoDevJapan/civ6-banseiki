@@ -26,6 +26,7 @@ fn insufficient_bootstrap_lease_refuses_before_frontend_or_controller_start() {
             &mut self,
             _: &std::path::Path,
             _: &serde_json::Value,
+            _: std::time::Instant,
         ) -> Result<()> {
             panic!("lease refusal must precede controller startup");
         }
@@ -37,7 +38,7 @@ fn insufficient_bootstrap_lease_refuses_before_frontend_or_controller_start() {
         (105.0, None),
         (400.0, Some(1500)),
         (1545.0, Some(1500)),
-        (1600.0, Some(1500)),
+        (1580.0, Some(1500)),
     ] {
         let mut runner = Runner::with_backend(
             json!({"name":"pre-start lease refusal","steps":[]}),
@@ -68,6 +69,7 @@ fn invalid_controller_budget_is_refused_before_bootstrap_start() {
             &mut self,
             _: &std::path::Path,
             _: &serde_json::Value,
+            _: std::time::Instant,
         ) -> Result<()> {
             panic!("invalid duration must not start a controller");
         }
@@ -118,6 +120,7 @@ fn no_waiter_cannot_hide_the_native_controller_acquisition_deadline() {
             &mut self,
             _: &std::path::Path,
             _: &serde_json::Value,
+            _: std::time::Instant,
         ) -> Result<()> {
             panic!("acquisition deadline must refuse before controller startup");
         }
@@ -140,6 +143,72 @@ fn no_waiter_cannot_hide_the_native_controller_acquisition_deadline() {
         error.message,
         "live_chain lease cannot cover bootstrap observation"
     );
+}
+
+#[test]
+fn frontend_time_is_subtracted_from_the_same_bootstrap_preparation_deadline() {
+    use std::sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    };
+    struct Clock(AtomicU64);
+    impl civ6_autotest_rs::time::Clock for Clock {
+        fn now(&self) -> f64 {
+            self.0.load(Ordering::Relaxed) as f64
+        }
+        fn sleep(&self, _: f64) {}
+    }
+    struct Prepared {
+        clock: Arc<Clock>,
+        seen: Arc<AtomicBool>,
+    }
+    impl Backend for Prepared {
+        fn require_single_process(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+            Ok(vec!["FrontEnd".into()])
+        }
+        fn run_lua(&mut self, _: &str, _: &str, _: f64) -> Result<String> {
+            self.clock.0.fetch_add(2, Ordering::Relaxed);
+            Ok("true".into())
+        }
+        fn start_native_bootstrap(
+            &mut self,
+            _: &std::path::Path,
+            _: &serde_json::Value,
+            deadline: std::time::Instant,
+        ) -> Result<()> {
+            let left = deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .as_secs_f64();
+            assert!(
+                left > 2.0 && left <= 3.0,
+                "frontend used two seconds of the five-second step"
+            );
+            self.seen.store(true, Ordering::Relaxed);
+            Ok(())
+        }
+    }
+    let clock = Arc::new(Clock(AtomicU64::new(0)));
+    let seen = Arc::new(AtomicBool::new(false));
+    let temp = tempfile::tempdir().unwrap();
+    let mut runner = Runner::with_backend(
+        json!({"name":"shared preparation deadline","steps":[]}),
+        temp.path().into(),
+        temp.path().into(),
+        temp.path().into(),
+        4318,
+        Box::new(Prepared {
+            clock: clock.clone(),
+            seen: seen.clone(),
+        }),
+        clock,
+    );
+    runner
+        .run_step(&json!({"action":"start_native_bootstrap","max_seconds":60,"timeout":5}))
+        .unwrap();
+    assert!(seen.load(Ordering::Relaxed));
 }
 
 #[test]

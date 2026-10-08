@@ -143,7 +143,12 @@ pub trait Backend: Send {
     fn stop_native_bridge(&mut self) -> Result<Option<PathBuf>> {
         Ok(None)
     }
-    fn start_native_bootstrap(&mut self, _output: &Path, _step: &Value) -> Result<()> {
+    fn start_native_bootstrap(
+        &mut self,
+        _output: &Path,
+        _step: &Value,
+        _preparation_deadline: std::time::Instant,
+    ) -> Result<()> {
         Err(Error::input("bootstrap unavailable"))
     }
     fn stop_native_bootstrap(&mut self) -> Result<Option<PathBuf>> {
@@ -782,7 +787,12 @@ impl Backend for SystemBackend {
             None => Ok(()),
         }
     }
-    fn start_native_bootstrap(&mut self, output: &Path, step: &Value) -> Result<()> {
+    fn start_native_bootstrap(
+        &mut self,
+        output: &Path,
+        step: &Value,
+        preparation_deadline: std::time::Instant,
+    ) -> Result<()> {
         if self.native_bootstrap.is_some()
             || self.native_bridge.is_some()
             || self.native_trace.is_some()
@@ -800,6 +810,7 @@ impl Backend for SystemBackend {
             output,
             step,
             Box::new(crate::restart::terminate_civ_process),
+            preparation_deadline,
         )?);
         Ok(())
     }
@@ -2968,14 +2979,10 @@ impl Runner {
             "start_native_bootstrap" => {
                 let (_, controller_seconds) = civ6_bootstrap_rs::protocol::Request::durations(step)
                     .map_err(Error::scenario)?;
-                // The new controller deadline starts after preparation. Reserve
-                // this entire remaining step budget as well as the stop budget;
-                // legacy bounded observations retain their existing contract.
-                let preparation_seconds = if step.get("controller_seconds").is_some() {
-                    self.remaining(deadline)?
-                } else {
-                    0.0
-                };
+                // FrontEnd gets at most five seconds, then the *entire*
+                // preparation gets at most thirty. Both also share this step
+                // deadline. Reserve that real upper bound for v2 as well as v3.
+                let preparation_seconds = self.remaining(deadline)?.min(35.0);
                 // Refuse before FrontEnd requests or controller spawn: a
                 // pre-mutation lease refusal must not enter READY recovery.
                 if self
@@ -2994,7 +3001,10 @@ impl Runner {
                     "assert(UI.IsInFrontEnd(),'fresh MainMenu required'); return true",
                     self.budget(deadline, 5.0)?,
                 )?;
-                self.backend.start_native_bootstrap(&self.output, step)?;
+                let preparation_deadline = std::time::Instant::now()
+                    + std::time::Duration::from_secs_f64(self.remaining(deadline)?.min(30.0));
+                self.backend
+                    .start_native_bootstrap(&self.output, step, preparation_deadline)?;
                 Ok("bootstrap prepared; target runtime not yet installed".into())
             }
             "stop_native_bootstrap" => {

@@ -35,7 +35,13 @@ impl Session {
         output: &Path,
         step: &Value,
         close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        preparation_deadline: std::time::Instant,
     ) -> Result<Self> {
+        if std::time::Instant::now() >= preparation_deadline {
+            return Err(Error::scenario(
+                "bootstrap preparation deadline expired before process pin",
+            ));
+        }
         let (created, target) = pinned_created(pid, started)?;
         let name = step["name"]
             .as_str()
@@ -85,6 +91,13 @@ impl Session {
             }
             binary_pins.push(file);
         }
+        // File validation belongs to the same preparation budget as READY.
+        // If it consumed the budget, never spawn an injecting controller.
+        if std::time::Instant::now() >= preparation_deadline {
+            return Err(Error::scenario(
+                "bootstrap preparation deadline expired before controller spawn",
+            ));
+        }
         let child = Command::new(executable)
             .arg("bootstrap")
             .arg("--request")
@@ -110,6 +123,7 @@ impl Session {
             false,
             binary_pins,
             true,
+            Some(preparation_deadline),
         )
     }
     pub fn bootstrap_healthy(&self) -> Result<()> {
