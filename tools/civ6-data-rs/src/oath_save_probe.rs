@@ -242,26 +242,32 @@ for _,row in ipairs(attempt.rows) do
 end
 "#;
 
-/// The military-15 or a yield-and-growth diagnostic, with an owned-process inverse-removal
+/// A production or yield-and-growth diagnostic, with an owned-process inverse-removal
 /// candidate before any reference or oath is attached. Normal probes stay intact.
 pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     ensure!(
         catalogue(repo)?.iter().any(|known| known == entry),
         "native diagnostic needs an unchanged catalogue entry"
     );
-    let growth = entry["effects"]
+    let effects = entry["effects"].as_array().context("catalogue effects")?;
+    let targets = entry["production_targets"]
         .as_array()
-        .context("catalogue effects")?
-        .iter()
-        .any(|effect| effect["kind"] == "growth")
-        && entry["production_targets"]
-            .as_array()
-            .context("catalogue production targets")?
-            .is_empty();
+        .context("catalogue production targets")?;
+    let has_growth = effects.iter().any(|effect| effect["kind"] == "growth");
+    let growth = has_growth && targets.is_empty();
+    let production = !has_growth
+        && effects.iter().any(|effect| {
+            ["military", "naval", "walls"]
+                .iter()
+                .any(|kind| effect["kind"] == *kind)
+        });
     ensure!(
-        entry["oath"] == "JAC_OATH_ODA_TENKA_FUBU" || growth,
-        "the native candidate is limited to the military-15 and yield-and-growth diagnostics"
+        production || growth,
+        "the native candidate requires production without growth, or yield-and-growth without production"
     );
+    let naval_buildings = effects
+        .iter()
+        .any(|effect| effect["kind"] == "naval" || effect["kind"] == "walls");
     let mut probe = make_probe(repo, entry)?;
     let steps = probe["steps"].as_array_mut().context("probe steps")?;
     // Q8 observations belong only to the explicit memory diagnostic. Ordinary
@@ -279,7 +285,7 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
         }
     }
     ensure!(
-        conversions == if growth { 1 } else { 3 },
+        conversions == 1 + targets.len(),
         "native diagnostic comparison boundaries changed"
     );
     if growth {
@@ -311,7 +317,12 @@ pub fn make_native_probe(repo: &Repository, entry: &Value) -> Result<Value> {
         steps.len() > 5 && steps[3]["action"] == "start_game" && steps[4]["action"] == "wait_for",
         "native candidate startup boundary changed"
     );
-    steps.insert(5, json!({"action":"oath_exact_removal","timeout":30}));
+    let action = if naval_buildings {
+        json!({"action":"oath_exact_removal","timeout":30,"scope":"naval-buildings-v1"})
+    } else {
+        json!({"action":"oath_exact_removal","timeout":30})
+    };
+    steps.insert(5, action);
     probe["native_exact_removal_candidate"] = json!(true);
     civ6_autotest_rs::scenario::validate_scenario(&probe)?;
     Ok(probe)
@@ -401,29 +412,21 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         make_probe(repo, &entry)?
     };
     if native {
-        let proof = read("oath-exact-removal.json")?;
-        for (key, value) in civ6_autotest_rs::oath_exact_removal::plan()
-            .as_object()
-            .context("native plan")?
-        {
-            ensure!(
-                &proof[key] == value,
-                "native proof differs from the reviewed instruction plan: {key}"
-            );
-        }
-        ensure!(
-            (proof["status"] == "applied" && proof["writes"] == 4)
-                || (proof["status"] == "already_patched" && proof["writes"] == 0),
-            "native candidate did not complete"
-        );
-        ensure!(
-            proof["original_protections_restored"] == true
-                && proof["pid"].as_u64().is_some_and(|id| id > 0)
-                && proof["creation_filetime"]
-                    .as_u64()
-                    .is_some_and(|time| time > 0),
-            "native process or protection evidence missing"
-        );
+        let action = expected["steps"]
+            .as_array()
+            .context("expected native steps")?
+            .iter()
+            .find(|step| step["action"] == "oath_exact_removal")
+            .context("expected native scope")?;
+        let scope = civ6_autotest_rs::oath_exact_removal::Scope::from_step(action)?;
+        let proof = read(
+            if scope == civ6_autotest_rs::oath_exact_removal::Scope::Legacy {
+                "oath-exact-removal.json"
+            } else {
+                "oath-exact-removal-naval-buildings-v1.json"
+            },
+        )?;
+        verify_native_proof(&proof, scope)?;
     }
     let actual_steps = scenario["steps"].as_array().context("artifact steps")?;
     let expected_steps = expected["steps"].as_array().unwrap();
@@ -599,6 +602,35 @@ pub fn verify_artifacts(repo: &Repository, path: &Path) -> Result<Value> {
     )
 }
 
+fn verify_native_proof(
+    proof: &Value,
+    scope: civ6_autotest_rs::oath_exact_removal::Scope,
+) -> Result<()> {
+    for (key, value) in civ6_autotest_rs::oath_exact_removal::plan_for_scope(scope)
+        .as_object()
+        .context("native plan")?
+    {
+        ensure!(
+            &proof[key] == value,
+            "native proof differs from the reviewed instruction plan: {key}"
+        );
+    }
+    ensure!(
+        (proof["status"] == "applied" && proof["writes"] == 4)
+            || (proof["status"] == "already_patched" && proof["writes"] == 0),
+        "native candidate did not complete"
+    );
+    ensure!(
+        proof["original_protections_restored"] == true
+            && proof["pid"].as_u64().is_some_and(|id| id > 0)
+            && proof["creation_filetime"]
+                .as_u64()
+                .is_some_and(|time| time > 0),
+        "native process or protection evidence missing"
+    );
+    Ok(())
+}
+
 pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
     if args == ["--check"] {
         let vm = mlua::Lua::new();
@@ -661,6 +693,87 @@ pub(crate) mod tests {
     use super::*;
 
     #[test]
+    fn production_probes_bind_their_scope_and_preserve_all_quantity_and_save_steps() -> Result<()> {
+        let repo = Repository::checked_in();
+        let mut seen = BTreeSet::new();
+        for entry in catalogue(&repo)? {
+            let effects = entry["effects"].as_array().unwrap();
+            let kind = effects.iter().find_map(|effect| {
+                effect["kind"]
+                    .as_str()
+                    .filter(|kind| ["military", "naval", "walls"].contains(kind))
+            });
+            let Some(kind) = kind else { continue };
+            if effects.iter().any(|effect| effect["kind"] == "growth") {
+                assert!(make_native_probe(&repo, &entry).is_err());
+                continue;
+            }
+            seen.insert(kind.to_owned());
+            let plain = make_probe(&repo, &entry)?;
+            let mut native = make_native_probe(&repo, &entry)?;
+            let steps = native["steps"].as_array_mut().unwrap();
+            let action = steps.remove(5);
+            assert_eq!(action["action"], "oath_exact_removal");
+            if kind == "military" {
+                assert!(action.get("scope").is_none());
+            } else {
+                assert_eq!(action["scope"], "naval-buildings-v1");
+            }
+            for step in steps {
+                if let Some(code) = step["code"].as_str() {
+                    mlua::Lua::new().load(code).into_function()?;
+                    step["code"] = json!(code.replace(
+                        "local native_diagnostic=true",
+                        "local native_diagnostic=false"
+                    ));
+                }
+            }
+            native
+                .as_object_mut()
+                .unwrap()
+                .remove("native_exact_removal_candidate");
+            assert_eq!(native, plain, "{}", entry["oath"]);
+        }
+        assert_eq!(
+            seen,
+            BTreeSet::from(["military".into(), "naval".into(), "walls".into()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn native_proofs_reject_other_scopes_and_incomplete_application() -> Result<()> {
+        use civ6_autotest_rs::oath_exact_removal::{plan_for_scope, Scope};
+        for scope in [Scope::Legacy, Scope::NavalBuildingsV1] {
+            let mut proof = plan_for_scope(scope);
+            proof["status"] = json!("applied");
+            proof["writes"] = json!(4);
+            proof["original_protections_restored"] = json!(true);
+            proof["pid"] = json!(42);
+            proof["creation_filetime"] = json!(123);
+            verify_native_proof(&proof, scope)?;
+            let other = if scope == Scope::Legacy {
+                Scope::NavalBuildingsV1
+            } else {
+                Scope::Legacy
+            };
+            assert!(verify_native_proof(&proof, other).is_err());
+            for (key, value) in [
+                ("writes", json!(3)),
+                ("status", json!("failed")),
+                ("original_protections_restored", json!(false)),
+                ("pid", json!(0)),
+                ("creation_filetime", json!(0)),
+            ] {
+                let mut incomplete = proof.clone();
+                incomplete[key] = value;
+                assert!(verify_native_proof(&incomplete, scope).is_err(), "{key}");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn native_candidate_keeps_all_numeric_and_save_steps_and_refuses_other_oaths() -> Result<()> {
         let repo = Repository::checked_in();
         let entries = catalogue(&repo)?;
@@ -714,7 +827,12 @@ pub(crate) mod tests {
             let oath = entry["oath"].as_str().context("oath id")?;
             if !growth_oaths.contains(&oath) {
                 if oath != "JAC_OATH_ODA_TENKA_FUBU" {
-                    assert!(make_native_probe(&repo, &entry).is_err(), "{oath}");
+                    let effects = entry["effects"].as_array().unwrap();
+                    if effects.iter().any(|e| e["kind"] == "growth")
+                        || entry["production_targets"].as_array().unwrap().is_empty()
+                    {
+                        assert!(make_native_probe(&repo, &entry).is_err(), "{oath}");
+                    }
                 }
                 continue;
             }
@@ -943,7 +1061,20 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
     pub(crate) fn artifacts_with(core: &str) -> Result<(tempfile::TempDir, Vec<Value>)> {
         let repo = Repository::checked_in();
         let entry = catalogue(&repo)?.into_iter().next().unwrap();
-        let mut scenario = make_probe(&repo, &entry)?;
+        artifacts_for(&entry, false, core)
+    }
+
+    fn artifacts_for(
+        entry: &Value,
+        native: bool,
+        core: &str,
+    ) -> Result<(tempfile::TempDir, Vec<Value>)> {
+        let repo = Repository::checked_in();
+        let mut scenario = if native {
+            make_native_probe(&repo, entry)?
+        } else {
+            make_probe(&repo, entry)?
+        };
         let steps = scenario["steps"].as_array_mut().unwrap();
         steps.insert(0, json!({"action":"restart_game","timeout":420}));
         for s in steps
@@ -954,7 +1085,7 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
         }
         let oath = entry["oath"].as_str().unwrap();
         let count = steps.len();
-        let saved = "JAC-Todo134-Save-JAC_OATH_ODA_TENKA_FUBU-agent-01-0123456789ab";
+        let saved = format!("JAC-Todo134-Save-{oath}-agent-01-0123456789ab");
         let mut rows = Vec::new();
         for (offset, s) in steps.iter().enumerate() {
             let tail = if offset >= count - 8 {
@@ -1001,6 +1132,44 @@ for _,p in ipairs(players) do for _,c in p:GetCities():Members() do c.GetGrowth=
 
     fn artifacts() -> Result<(tempfile::TempDir, Vec<Value>)> {
         artifacts_with("{core}")
+    }
+
+    #[test]
+    fn production_verifier_reads_its_own_proof_file_and_rejects_legacy_evidence() -> Result<()> {
+        use civ6_autotest_rs::oath_exact_removal::{plan_for_scope, Scope};
+        let repo = Repository::checked_in();
+        for oath in ["JAC_OATH_MORI_SETO_FLEETS", "JAC_OATH_MIYOSHI_IIMORI"] {
+            let entry = catalogue(&repo)?
+                .into_iter()
+                .find(|e| e["oath"] == oath)
+                .context("production test catalogue row")?;
+            let (temp, _) = artifacts_for(&entry, true, "{core}")?;
+            let mut proof = plan_for_scope(Scope::NavalBuildingsV1);
+            proof["status"] = json!("applied");
+            proof["writes"] = json!(4);
+            proof["original_protections_restored"] = json!(true);
+            proof["pid"] = json!(42);
+            proof["creation_filetime"] = json!(123);
+            let target = temp
+                .path()
+                .join("oath-exact-removal-naval-buildings-v1.json");
+            fs::write(
+                temp.path().join("oath-exact-removal.json"),
+                serde_json::to_vec(&proof)?,
+            )?;
+            assert!(verify_artifacts(&repo, temp.path()).is_err());
+            fs::write(&target, serde_json::to_vec(&proof)?)?;
+            let result = verify_artifacts(&repo, temp.path())?;
+            assert_eq!(
+                result["native_q8_inverse_and_save_diagnostic_verified"],
+                true
+            );
+            assert_eq!(result["numeric_and_native_save_verified"], false);
+            assert_eq!(result["task_accepted"], false);
+            fs::write(&target, serde_json::to_vec(&plan_for_scope(Scope::Legacy))?)?;
+            assert!(verify_artifacts(&repo, temp.path()).is_err());
+        }
+        Ok(())
     }
 
     pub(crate) fn write_rows(path: &Path, rows: &[Value]) -> Result<()> {
