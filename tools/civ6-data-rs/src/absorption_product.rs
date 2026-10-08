@@ -75,7 +75,23 @@ local function TraceCompletionWait(flowID,offerID)
   local text=A.Canonical(trace)
   JAC_PRODUCT_COMPLETION_TRACE=JAC_PRODUCT_COMPLETION_TRACE or {}
   if JAC_PRODUCT_COMPLETION_TRACE[flowID]~=text then
-    print('JAC_PRODUCT_COMPLETION_WAIT '..text)
+    -- Civ6 truncates a print at 2047 bytes. Frame complete, single-line UTF-8
+    -- chunks so every asset remains observable, including escaped error text.
+    local escaped=text:gsub('\\','\\\\'):gsub('\r','\\r'):gsub('\n','\\n'):gsub('\t','\\t')
+    local chunks={};local first=1
+    while first<=#escaped do
+      local last=math.min(first+1499,#escaped)
+      while last<#escaped do
+        local byte=escaped:byte(last+1)
+        if byte<128 or byte>191 then break end
+        last=last-1
+      end
+      chunks[#chunks+1]=escaped:sub(first,last);first=last+1
+    end
+    JAC_PRODUCT_COMPLETION_TRACE_SERIAL=(JAC_PRODUCT_COMPLETION_TRACE_SERIAL or 0)+1
+    for i,chunk in ipairs(chunks) do
+      print('JAC_PRODUCT_COMPLETION_WAIT '..JAC_PRODUCT_COMPLETION_TRACE_SERIAL..' '..i..'/'..#chunks..' '..chunk)
+    end
     JAC_PRODUCT_COMPLETION_TRACE[flowID]=text
   end
 end

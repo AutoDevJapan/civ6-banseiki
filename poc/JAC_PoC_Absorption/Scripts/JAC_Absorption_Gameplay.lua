@@ -7,6 +7,7 @@ local unitRebinders, cityRebinders = {}, {}
 local adapters = {}
 
 local function Log(text) print("[JAC_ABSORPTION] " .. text) end
+local uiWaitReasons = {}
 local function State()
   local state = R.Copy(Game:GetProperty(R.STATE_KEY) or { Version = 1, Transactions = {}, Archive = {}, Recalls = {} })
   assert(state.Version == 1, "unsupported absorption save version")
@@ -2761,15 +2762,22 @@ function A.Resume(id)
   local ok, result = pcall(Execute, state, tx)
   if not ok then
     if tostring(result) == "JAC_ABSORPTION_WAITING_UI" or NativeUIStale(result) then
+      local reason = tostring(result)
+      if uiWaitReasons[id] ~= reason then
+        Log("waiting id=" .. id .. " reason=" .. reason)
+        uiWaitReasons[id] = reason
+      end
       tx.Status, tx.Error = "WAITING_UI", nil
       Save(state)
       return R.Copy(tx)
     end
     tx.Status, tx.Error = "BLOCKED", tostring(result)
+    uiWaitReasons[id] = nil
     Save(state)
     Log("blocked id=" .. id .. " reason=" .. tx.Error)
     error(tx.Error)
   end
+  uiWaitReasons[id] = nil
   return result
 end
 

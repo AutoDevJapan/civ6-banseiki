@@ -45,7 +45,32 @@ TraceCompletionWait('missing','absent');assert(#lines==4 and not CompletionReady
 f.Phase='BLOCKED';f.Error='asset failure'
 TraceCompletionWait('flow','offer');assert(#lines==5 and lines[5]:find('FlowError=asset failure',1,true))
 local ok,err=pcall(CompletionReady,'flow','offer');assert(not ok and tostring(err):find('asset failure',1,true))
+-- Emulate the measured Civ6 print limit, including multibyte text and errors
+-- containing physical line breaks. A truncated tail must fail this check.
+local long=string.rep('漢字🙂\\\r\n\t',600)..'TAIL確認'
+f.Error=long;local start=#lines+1
+TraceCompletionWait('flow','offer')
+local parts={{}};local total
+for i=start,#lines do
+  local line=lines[i]:sub(1,2047)
+  assert(#lines[i]<2047,'Civ6 would truncate diagnostic output')
+  assert(not line:find('\n',1,true) and not line:find('\r',1,true),'physical newline broke a frame')
+  local index,count,body=line:match('^JAC_PRODUCT_COMPLETION_WAIT %d+ (%d+)/(%d+) (.*)$')
+  index,count=tonumber(index),tonumber(count)
+  assert(index==i-start+1 and (not total or count==total),'diagnostic chunk order changed')
+  total=count;parts[index]=body
+  -- Rust below also checks each framed line independently for valid UTF-8.
+end
+assert(total>1 and #parts==total,'large record was not completely framed')
+local escaped=long:gsub('\\','\\\\'):gsub('\r','\\r'):gsub('\n','\\n'):gsub('\t','\\t')
+assert(table.concat(parts):find(escaped,1,true),'Unicode, escaped controls or final tail was lost')
+TraceCompletionWait('flow','offer');assert(#lines==start+total-1,'large unchanged record was logged again')
+CHUNK_LINES=lines
 "#, product::COMPLETION_EVIDENCE)).exec()?;
+    let lines: mlua::Table = lua.globals().get("CHUNK_LINES")?;
+    for line in lines.sequence_values::<mlua::String>() {
+        std::str::from_utf8(line?.as_bytes().as_ref())?;
+    }
     Ok(())
 }
 

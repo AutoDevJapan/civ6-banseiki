@@ -2,6 +2,54 @@ use anyhow::Context;
 use civ6_data_rs::{absorption_product, Repository};
 use mlua::Lua;
 use std::path::Path;
+
+#[test]
+fn native_read_waits_report_missing_identity_without_changing_getter_results() -> anyhow::Result<()>
+{
+    let lua = Lua::new();
+    lua.load(r#"
+local function event() return {Add=function() end} end
+Events={LoadScreenClose=event(),GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event()}
+include=function() end
+ExposedMembers={};PlayerOperations={};UI={};GameInfo={}
+local city={GetID=function() return 4 end,GetX=function() return 12 end,GetY=function() return 13 end}
+local cities={FindID=function(_,id) if id==4 then return city end end,
+  Members=function() return ipairs({city}) end}
+local unit={GetID=function() return 7 end,GetSpreadCharges=function() return 2 end}
+Players={[1]={GetCities=function() return cities end,GetUnits=function() return {Members=function() return ipairs({unit}) end} end}}
+TURN=10;Game={GetCurrentGameTurn=function() return TURN end,GetHeroesManager=function() return {} end}
+READ_LINES={};print=function(text) READ_LINES[#READ_LINES+1]=text end
+"#).exec()?;
+    lua.load(std::fs::read_to_string(
+        Repository::checked_in()
+            .root
+            .join("poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua"),
+    )?)
+    .exec()?;
+    lua.load(r#"
+local r=ExposedMembers.JAC_HeroReadAPI
+assert(r.ReadUnit(1,7,'SPREAD_CHARGES',10)==2 and #READ_LINES==0)
+assert(r.ReadUnit(1,7,'SPREAD_CHARGES',9)==nil)
+assert(r.ReadUnit(1,7,'SPREAD_CHARGES',9)==nil and #READ_LINES==1)
+assert(READ_LINES[1]:find('requestedTurn=9 uiTurn=10 reason=TURN_MISMATCH',1,true))
+assert(r.ReadUnit(1,7,'SPREAD_CHARGES',10)==2)
+assert(r.ReadUnit(1,7,'SPREAD_CHARGES',9)==nil and #READ_LINES==2,'successful read did not reset wait tracing')
+assert(r.ReadUnit(1,99,'SPREAD_CHARGES',10)==nil and #READ_LINES==3)
+assert(READ_LINES[3]:find('owner=1 id=99',1,true) and READ_LINES[3]:find('UNIT_MISSING',1,true))
+assert(r.ReadUnit(9,7,'SPREAD_CHARGES',10)==nil and #READ_LINES==4)
+assert(READ_LINES[4]:find('PLAYER_MISSING',1,true))
+for _,kind in ipairs({'RELIGIONS','DISTRICTS','LOYALTY','NATIVE_WORK'}) do
+  local ok,why
+  if kind=='NATIVE_WORK' then ok,why=pcall(r.ReadNativeWork,1,99,0)
+  else ok,why=pcall(r.ReadCity,1,99,kind) end
+  assert(not ok and tostring(why):find('UI city cache is not ready',1,true))
+  assert(tostring(why):find('owner=1 id=99 method='..kind,1,true)
+    and tostring(why):find('known=4@12,13',1,true),'missing city read lost requested or published identity')
+end
+"#).exec()?;
+    Ok(())
+}
+
 const SCREEN: &str = r#"
 local function event()
   local handlers={}

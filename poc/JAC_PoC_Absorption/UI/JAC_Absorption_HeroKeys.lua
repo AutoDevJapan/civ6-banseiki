@@ -4,6 +4,32 @@ local uiPlayers, uiGame = Players, Game
 include('JAC_CarrierMP_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
+local missingUnitReads = {}
+local function MissingUnitRead(owner, id, turn, current, reason)
+  local key = tostring(owner) .. ':' .. tostring(id)
+  local text = 'owner=' .. tostring(owner) .. ' id=' .. tostring(id)
+    .. ' requestedTurn=' .. tostring(turn) .. ' uiTurn=' .. tostring(current) .. ' reason=' .. reason
+  if missingUnitReads[key] ~= text then
+    print('[JAC_ABSORPTION_UI_READ_WAIT] ' .. text)
+    missingUnitReads[key] = text
+  end
+end
+local function PublishedCity(owner, id, method)
+  local cities = uiPlayers[owner]:GetCities()
+  local city = cities:FindID(id)
+  if not city then
+    local known = {}
+    pcall(function()
+      for _, current in cities:Members() do
+        known[#known+1] = current:GetID() .. '@' .. current:GetX() .. ',' .. current:GetY()
+      end
+    end)
+    table.sort(known)
+    error('UI city cache is not ready: owner=' .. tostring(owner) .. ' id=' .. tostring(id)
+      .. ' method=' .. method .. ' known=' .. table.concat(known, ';'), 0)
+  end
+  return city
+end
 local function PublishHeroKeys()
   if UnitPropertyKeys and type(UnitPropertyKeys.LifespanRemaining) == "number" then
     ExposedMembers.JAC_HeroLifespanKey = UnitPropertyKeys.LifespanRemaining
@@ -32,15 +58,18 @@ local function PublishHeroKeys()
     end
     reads.ReadUnit = function(owner, id, method, turn)
       assert(method == "SPREAD_CHARGES", "unsupported UI unit read")
-      if uiGame.GetCurrentGameTurn() ~= turn then return nil end
+      local current = uiGame.GetCurrentGameTurn()
+      if current ~= turn then MissingUnitRead(owner,id,turn,current,'TURN_MISMATCH');return nil end
       local player = uiPlayers[owner]
-      if not player then return nil end
+      if not player then MissingUnitRead(owner,id,turn,current,'PLAYER_MISSING');return nil end
       for _, unit in player:GetUnits():Members() do
         if unit:GetID() == id then
           assert(unit.GetSpreadCharges, "UI spread-charge getter unavailable")
+          missingUnitReads[tostring(owner) .. ':' .. tostring(id)] = nil
           return unit:GetSpreadCharges()
         end
       end
+      MissingUnitRead(owner,id,turn,current,'UNIT_MISSING')
       return nil
     end
     reads.ObserveUnit = function(token, owner, id, turn)
@@ -52,7 +81,7 @@ local function PublishHeroKeys()
       return uiPlayers[owner]:GetReligion():GetFaithBalance()
     end
     reads.ReadNativeWork = function(owner, id, index)
-      local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
+      local city = PublishedCity(owner, id, 'NATIVE_WORK')
       local buildings = city:GetBuildings()
       return { Type = buildings:GetGreatWorkTypeFromIndex(index),
         CreatorName = buildings:GetCreatorNameFromIndex(index),
@@ -107,7 +136,7 @@ local function PublishHeroKeys()
       return result
     end
     reads.ReadCity = function(owner, id, method, building, slot, extra)
-      local city = assert(uiPlayers[owner]:GetCities():FindID(id), "UI city cache is not ready")
+      local city = PublishedCity(owner, id, method)
       if method == "RELIGIONS" then
         local rows = {}
         for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
