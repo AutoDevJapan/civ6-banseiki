@@ -1110,7 +1110,9 @@ fn source_manifest(
         };
         let contents = match fs::read_to_string(&file) {
             Ok(text) => json!(text),
-            Err(error) if error.kind() == ErrorKind::NotFound => Value::Null,
+            Err(error) if error.kind() == ErrorKind::NotFound && relative != scenario_key => {
+                Value::Null
+            }
             Err(error) => return Err(format!("read SOURCE {}: {error}", file.display())),
         };
         files.insert(relative, contents);
@@ -1399,7 +1401,13 @@ fn main_owned(
                 }
             }
         }
-        *cleanup_deadline = Some(r.monotonic() + timeout + CLEANUP_RESERVE_SECONDS);
+        let cleanup_end = r.monotonic() + timeout + CLEANUP_RESERVE_SECONDS;
+        *cleanup_deadline = Some(
+            lease
+                .as_ref()
+                .and_then(|limit| limit.hard_deadline())
+                .map_or(cleanup_end, |deadline| cleanup_end.min(deadline)),
+        );
         if let Some(state) = reliability.as_deref_mut() {
             state.round()["scenario_budget_seconds"] = json!(scenario_timeout);
             state.round()["driver_timeout_seconds"] = json!(timeout);
@@ -1877,8 +1885,8 @@ mod source_manifest_tests {
         for (scenario, input) in [
             ("relative.json".to_owned(), directory.join("relative.json")),
             (
-                path(fixture.0.join("generated outside checkout.json")),
-                fixture.0.join("generated outside checkout.json"),
+                path(fixture.0.join("生成 入力.json")),
+                fixture.0.join("生成 入力.json"),
             ),
         ] {
             let text = "{\"name\":\"SHA固定の生成入力\",\"steps\":[]}\n";
@@ -1890,6 +1898,12 @@ mod source_manifest_tests {
                 text
             );
             assert_eq!(manifest["prepared_scenario"]["steps"][0]["seconds"], 1);
+            fs::remove_file(&input).unwrap();
+            assert!(
+                source_manifest(&mut GitOnly, &paths, &scenario, &path(&prepared), 30.0)
+                    .unwrap_err()
+                    .contains("read SOURCE")
+            );
         }
     }
 }
@@ -1965,6 +1979,15 @@ mod queue_entry_tests {
         assert_eq!(r.budgets, vec![1.0]);
         assert_eq!(r.mono, 1470.0);
         assert_eq!(driver_limit.hard_deadline(), Some(1710.0));
+        // Changes made by the driver's monitor must remain visible to cleanup.
+        assert_eq!(
+            limit.observation_deadline(),
+            driver_limit.observation_deadline()
+        );
+        assert!(limit.observation_deadline().is_some());
+        driver_limit.record_probe(&process::LeaseProbe::Clear);
+        assert_eq!(limit.hard_deadline(), None);
+        assert_eq!(limit.observation_deadline(), None);
         fs::remove_dir_all(root).unwrap();
     }
 

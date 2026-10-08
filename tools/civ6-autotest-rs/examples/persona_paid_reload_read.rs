@@ -187,6 +187,12 @@ mod tests {
         assert_eq!(s["steps"][3], s["steps"][7]);
         assert_eq!(s["steps"][3]["save_sha256"], "a".repeat(64));
         assert_eq!(s["steps"][3]["exact_name"], true);
+        for load in [3, 7] {
+            assert_eq!(s["steps"][load]["action"], "load");
+            assert_eq!(s["steps"][load + 1]["action"], "wait_for");
+            assert_eq!(s["steps"][load + 1]["condition"]["code"], READY);
+            assert_eq!(s["steps"][load + 2]["action"], "ui_lua");
+        }
         for step in s["steps"].as_array().unwrap() {
             assert!(!matches!(
                 step["action"].as_str(),
@@ -202,7 +208,10 @@ mod tests {
             "ChangeGovernorPoints",
             "SyncProductionAdmission",
         ] {
-            assert!(!READ.contains(denied), "{denied}");
+            assert!(
+                !READ.contains(denied) && !READY.contains(denied),
+                "{denied}"
+            );
         }
     }
 
