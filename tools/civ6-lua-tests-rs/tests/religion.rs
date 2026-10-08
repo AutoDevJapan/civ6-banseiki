@@ -2362,39 +2362,174 @@ fn multiplayer_saved_turn_authority_survives_load_and_expires_on_end_or_next_tur
 }
 
 #[test]
-fn multiplayer_native_hero_boundary_rejects_before_reading_ui_replica() {
+fn multiplayer_native_hero_requires_actor_proposal_before_reading_ui_replica() {
     let h = network_discovery();
     h.exec("ExposedMembers.JAC_RP_HeroUI.OriginBuilding=function() error('UI read') end; ExposedMembers.JAC_RP_HeroUI.ClaimPlayer=function() error('UI read') end");
     let request = network_request(&h, "RESOLVE", json!({"Outcome":"HERO","City":0}));
     assert_network_unchanged(&h, 1, &request);
-    assert!(h.truth("string.find(LOG[#LOG], 'not multiplayer%-safe')~=nil"));
+    assert!(h.truth("string.find(LOG[#LOG], 'requires an actor proposal',1,true)~=nil"));
     assert_eq!(h.eval("#REQUESTS"), 0);
     assert!(manifest_text().contains("<SupportsMultiplayer>0</SupportsMultiplayer>"));
 }
 
 #[test]
-fn multiplayer_pending_native_hero_never_pays_from_different_ui_observations() {
-    let mut a = Harness::new();
-    pending_hero(&a);
-    let mut b = Harness::new();
-    b.load(Some(a.export()), None, Some(a.eval("ENGINE")))
-        .unwrap();
-    a.exec("MULTIPLAYER=true; LOCAL_PLAYER=0; ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('UI read') end");
-    b.exec("MULTIPLAYER=true; LOCAL_PLAYER=1; ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() return {hero=true,class=10,claim=1,lifespan=99,active=true} end");
-    let request = network_request(&a, "COMPLETE_HERO", json!({"Unit":1}));
+fn multiplayer_hero_owner_observation_completes_on_two_clients_without_receiver_ui_reads() {
+    let mut a = network_discovery();
+    let mut b = network_discovery();
+    a.exec("DEFER_OPERATIONS=true; LOCAL_PLAYER=1; assert(ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=0}))");
+    b.exec("LOCAL_PLAYER=0; ExposedMembers.JAC_RP_HeroUI.OriginBuilding=function() error('foreign UI') end; ExposedMembers.JAC_RP_HeroUI.ClaimPlayer=function() error('foreign UI') end; ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('foreign UI') end");
+    let proposal = a.eval("REQUESTS[1].params");
     for h in [&mut a, &mut b] {
-        assert_network_unchanged(h, 0, &request);
-        assert_network_unchanged(h, 1, &request);
-        let before = (h.snapshot(), h.eval("ENGINE"));
-        h.exec("HERO_UI_TICK(0); HERO_UI_PUBLISH()");
-        assert_eq!((h.snapshot(), h.eval("ENGINE")), before);
-        assert_eq!(h.eval("#REQUESTS"), 0);
+        let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
+        assert!(receive.call::<bool>((1, proposal.to_lua(&h.lua))).unwrap());
+        assert_eq!(hero_verification(h), "PENDING");
+        assert_eq!(h.engine("1")["faith"], 500);
+        assert_eq!(h.export()["heroes"]["1"]["city"], 0);
+        assert_eq!(h.export()["heroes"]["1"]["player"], 1);
+        assert!(!receive.call::<bool>((1, proposal.to_lua(&h.lua))).unwrap());
         h.reload();
         h.exec("MULTIPLAYER=true");
-        assert_network_unchanged(h, 1, &request);
     }
     assert_eq!(a.snapshot(), b.snapshot());
     assert_eq!(a.eval("ENGINE"), b.eval("ENGINE"));
+    a.exec("LOCAL_PLAYER=1; DEFER_OPERATIONS=true; HERO_UI_TICK(0); HERO_UI_TICK(0)");
+    assert_eq!(a.eval("#REQUESTS"), 1);
+    assert_eq!(a.engine("1")["faith"], 500);
+    let observation = a.eval("REQUESTS[1].params");
+    for h in [&mut a, &mut b] {
+        h.exec("ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('receiver UI read') end; ExposedMembers.JAC_RP_HeroUI.ClaimPlayer=function() error('receiver UI read') end");
+        let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
+        assert!(!receive
+            .call::<bool>((0, observation.to_lua(&h.lua)))
+            .unwrap());
+        assert!(receive
+            .call::<bool>((1, observation.to_lua(&h.lua)))
+            .unwrap());
+        assert_eq!(hero_verification(h), "APPLIED");
+        assert_eq!(h.engine("1")["faith"], 532.5);
+        assert_eq!(
+            h.export()["heroes"]["1"]["claimIndependentlyVerified"],
+            false
+        );
+        let before = (h.snapshot(), h.eval("ENGINE"));
+        assert!(!receive
+            .call::<bool>((1, observation.to_lua(&h.lua)))
+            .unwrap());
+        assert_eq!((h.snapshot(), h.eval("ENGINE")), before);
+        h.reload();
+        h.exec("MULTIPLAYER=true");
+        let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
+        assert!(!receive
+            .call::<bool>((1, observation.to_lua(&h.lua)))
+            .unwrap());
+        assert_eq!(h.engine("1")["faith"], 532.5);
+    }
+    assert_eq!(a.snapshot(), b.snapshot());
+    assert_eq!(a.eval("ENGINE"), b.eval("ENGINE"));
+}
+
+fn hero_observation_request(h: &Harness) -> Json {
+    let hero = &h.export()["heroes"]["1"];
+    network_request(
+        h,
+        "COMPLETE_HERO",
+        json!({"Unit":hero["unit"].python_f64().unwrap() as u64,
+        "City":0,"ReservedTurn":17,"Token":hero["token"].as_str().unwrap(),
+        "ObservedClass":10,"ObservedClaim":1,"ObservedLifespan":30}),
+    )
+}
+
+#[test]
+fn multiplayer_hero_observation_rejects_invalid_fields_and_wrong_core_unit_before_payment() {
+    let h = network_discovery();
+    let proposal = network_request(
+        &h,
+        "RESOLVE",
+        json!({"Outcome":"HERO","City":0,
+        "HeroClass":10,"HeroClaim":-1}),
+    );
+    assert!(network_event(&h, 1, &proposal));
+    let request = hero_observation_request(&h);
+    for (key, value) in [
+        ("Unit", json!(2)),
+        ("City", json!(1)),
+        ("ReservedTurn", json!(16)),
+        ("Token", json!("old")),
+        ("ObservedClass", json!(11)),
+        ("ObservedClaim", json!(0)),
+        ("ObservedLifespan", json!(0)),
+        ("ObservedLifespan", json!(1.5)),
+        ("ObservedLifespan", json!("30")),
+        ("Revision", json!(0)),
+    ] {
+        let mut invalid = request.clone();
+        invalid[key] = value;
+        assert_network_unchanged(&h, 1, &invalid);
+    }
+    for core_change in [
+        "ENGINE['1'].units['1'].kind=5",
+        "ENGINE['1'].units['1'].owner=0",
+        "ENGINE['1'].units['1']=nil",
+    ] {
+        let bad = network_discovery();
+        assert!(network_event(&bad, 1, &proposal));
+        bad.exec(core_change);
+        assert_network_unchanged(&bad, 1, &request);
+    }
+    h.exec("RELIGION_TURN_END(1)");
+    assert_network_unchanged(&h, 1, &request);
+    h.exec("RELIGION_TURN_START(1); ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('Gameplay UI read') end");
+    assert!(network_event(&h, 1, &request));
+    assert_eq!(h.engine("1")["faith"], 532.5);
+}
+
+#[test]
+fn multiplayer_hero_proposal_rejects_foreign_source_city_and_duplicate_class() {
+    let h = network_discovery();
+    let request = network_request(
+        &h,
+        "RESOLVE",
+        json!({"Outcome":"HERO","City":0,
+        "HeroClass":10,"HeroClaim":-1}),
+    );
+    assert_network_unchanged(&h, 0, &request);
+    for (key, value) in [
+        ("City", json!(99)),
+        ("HeroClass", json!(999)),
+        ("HeroClaim", json!(0)),
+    ] {
+        let mut invalid = request.clone();
+        invalid[key] = value;
+        assert_network_unchanged(&h, 1, &invalid);
+    }
+    h.exec("ENGINE['0'].units['80']={id=80,kind=100,class=10,lifespan=30}");
+    assert_network_unchanged(&h, 1, &request);
+    h.exec("ENGINE['0'].units['80']=nil; ENGINE['1'].cities['0'].monument=false");
+    assert_network_unchanged(&h, 1, &request);
+    h.exec("ENGINE['1'].cities['0'].monument=true");
+    assert!(network_event(&h, 1, &request));
+}
+
+#[test]
+fn multiplayer_hero_interrupted_reward_never_replays_after_saved_resubmission() {
+    let mut h = network_discovery();
+    let proposal = network_request(
+        &h,
+        "RESOLVE",
+        json!({"Outcome":"HERO","City":0,
+        "HeroClass":10,"HeroClaim":-1}),
+    );
+    assert!(network_event(&h, 1, &proposal));
+    let request = hero_observation_request(&h);
+    h.exec("FAIL_WRITE_AT=WRITES+2");
+    assert!(!network_event(&h, 1, &request));
+    assert_eq!(hero_verification(&h), "APPLYING");
+    assert_eq!(h.engine("1")["faith"], 532.5);
+    h.reload();
+    h.exec("MULTIPLAYER=true");
+    assert_network_unchanged(&h, 1, &request);
+    let fresh = hero_observation_request(&h);
+    assert_network_unchanged(&h, 1, &fresh);
 }
 
 #[test]

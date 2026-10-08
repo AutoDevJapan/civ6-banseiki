@@ -67,6 +67,8 @@ GameInfo.HeroClasses = info({
   { Index = 10, HeroClassType = 'HEROCLASS_ANANSI', UnitType = 'UNIT_HERO_ANANSI', CreationProjectType = 'PROJECT_CREATE_HERO_ANANSI' },
   { Index = 11, HeroClassType = 'HEROCLASS_ARTHUR', UnitType = 'UNIT_HERO_ARTHUR', CreationProjectType = 'PROJECT_CREATE_HERO_ARTHUR' },
 }, 'HeroClassType')
+GameInfo.Projects = { PROJECT_CREATE_HERO_ANANSI={RequiredBuilding='BUILDING_MONUMENT'},
+  PROJECT_CREATE_HERO_ARTHUR={RequiredBuilding='BUILDING_MONUMENT'} }
 GameInfo.ProjectCompletionModifiers = info({
   { Index = 1, ProjectType = 'PROJECT_CREATE_HERO_ANANSI', ModifierId = 'MODIFIER_CREATE_HERO_ANANSI' },
   { Index = 2, ProjectType = 'PROJECT_CREATE_HERO_ARTHUR', ModifierId = 'MODIFIER_CREATE_HERO_ARTHUR' },
@@ -211,13 +213,15 @@ for id = 0, 1 do
       ChangeFavor = function(_, amount) if FAIL_EFFECT then error('effect refused') end; e.favor = e.favor + amount end } end,
     GetUnits = function() return {
       FindID = function(_, unit) local u = e.units[tostring(unit)]; return u and {
-        GetID = function() return u.id end, GetType = function() return u.kind end,
+        GetID = function() return u.id end, GetOwner = function() return u.owner or pid end,
+        GetType = function() return u.kind end,
         GetHeroClassType = function() return u.class or -1 end,
         GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end } end,
       Members = function() local key; return function()
         key = next(e.units, key); if key == nil then return end
         local u = e.units[key]; return u.id, {
-          GetID = function() return u.id end, GetType = function() return u.kind end,
+          GetID = function() return u.id end, GetOwner = function() return u.owner or pid end,
+          GetType = function() return u.kind end,
           GetHeroClassType = function() return u.class or -1 end,
           GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end }
       end end } end,

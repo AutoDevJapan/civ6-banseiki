@@ -18,9 +18,21 @@ local function send(params)
 end
 function Bridge.ResolveDiscovery(id, discovery, outcome, options)
   options = options or {}
-  return send({ Action="RESOLVE", Religion=id, Discovery=discovery, Outcome=outcome,
+  local params = { Action="RESOLVE", Religion=id, Discovery=discovery, Outcome=outcome,
     City=options.city, Revival=options.revival, Community=options.community,
-    TargetReligion=options.targetReligion, TargetPlayer=options.targetPlayer })
+    TargetReligion=options.targetReligion, TargetPlayer=options.targetPlayer }
+  if outcome == "HERO" then
+    local p = Players[Game.GetLocalPlayer()]
+    if not p or not p:IsHuman() or not p:IsTurnActive() then return false end
+    local candidates = {}
+    for row in GameInfo.HeroClasses() do
+      if Bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates+1] = row end
+    end
+    table.sort(candidates, function(a,b) return a.HeroClassType < b.HeroClassType end)
+    if not candidates[1] then return false end
+    params.HeroClass, params.HeroClaim = candidates[1].Index, -1
+  end
+  return send(params)
 end
 function Bridge.Revive(id, revival, source, community, city)
   return send({ Action="REVIVE", Religion=id, Revival=revival, Source=source,
@@ -55,9 +67,9 @@ function Bridge.Schedule(playerID)
   pending, elapsed[key], timedOut[key] = true, 0, nil
 end
 local function complete(playerID)
-  -- Claim/origin getters were verified UI-only in religion-04. A sender's
-  -- replicated observations are not authority for a multiplayer reward.
-  if GameConfiguration.IsAnyMultiplayer and GameConfiguration.IsAnyMultiplayer() then return false end
+  -- Only the legitimate receiver publishes scalar observations. Gameplay
+  -- independently checks its saved intent and real Unit; other peers need not
+  -- have received the same UI replica yet.
   if Game.GetLocalPlayer() ~= playerID then return false end
   local rp = ExposedMembers.JAC_ReligionPersistence
   local state = rp.Export()
@@ -69,8 +81,12 @@ local function complete(playerID)
   local token = tostring(state.revision) .. ":" .. tostring(h.unit)
   if inFlight[playerID] ~= token then
     inFlight[playerID] = token
+    local d = state.religions[h.religion].discoveries[h.discovery]
+    local city, reservedTurn = h.city or d.effect.city, h.reservedTurn or d.resolvedTurn
+    local reservationToken = h.token or h.religion .. ":" .. h.discovery .. ":" .. playerID .. ":" .. city .. ":" .. reservedTurn
     if not send({Action="COMPLETE_HERO", Religion=h.religion,
-      Discovery=h.discovery, Unit=h.unit}) then inFlight[playerID] = nil end
+      Discovery=h.discovery, Unit=h.unit, City=city, ReservedTurn=reservedTurn, Token=reservationToken,
+      ObservedClass=info.class, ObservedClaim=info.claim, ObservedLifespan=info.lifespan}) then inFlight[playerID] = nil end
   end
   -- Wait for published Gameplay state; a queued operation may be rejected.
   h = rp.Export().heroes[tostring(playerID)]
