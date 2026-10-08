@@ -796,7 +796,7 @@ mod native_transport {
     fn mp_review_preflight_checks_later_unsupported_items_before_any_loan() {
         for code in [
             "extra.Source.BuildingType='BUILDING_PALACE'",
-            "extra.Source.ObjectType='GREATWORKOBJECT_ARTIFACT'",
+            "extra.Source.X=8;extra.Source.CityID=CITIES[8].id",
         ] {
             let lua = mp_world(2, false);
             lua.load(format!("TEST_STATE_EDIT(function(s) local tx=s.Transactions.checkpoint;local extra=JAC_AbsorptionRules.Copy(tx.NativeWorks[1]);extra.Source.Index=901;{code};tx.NativeWorks[2]=extra end)")).exec().unwrap();
@@ -1413,6 +1413,256 @@ mod native_transport {
           function MP_OBSERVE() return JAC_ObserveNativeCarrierMP(EXT_CARRIER()) end
         "#).exec().unwrap();
         lua
+    }
+
+    fn artifact_world(local: i64, human: bool, recipient: i64) -> Lua {
+        let lua = mp_world(local, human);
+        lua.globals().set("ARTIFACT_RECIPIENT", recipient).unwrap();
+        lua.load(r#"
+          print=function(text) ARTIFACT_DIAG=text end
+          Players[1].IsTurnActive=function() return HUMAN_DONOR end
+          if ARTIFACT_RECIPIENT~=2 then
+            CityManager.TransferCity(CITIES[16],3);CityManager.TransferCity(CITIES[0],3)
+            local cities=Players[3].GetCities
+            Players[3].GetCities=function() local out=cities();out.GetCapitalCity=function() return CITIES[0] end;return out end
+          end
+          TRANSFERS=0;OTHER_CREATOR={[901]=1,[902]=0,[903]=3}
+          GameInfo.GreatWorks[4].GreatWorkObjectType='GREATWORKOBJECT_ARTIFACT'
+          GameInfo.GreatWorkSlotTypes[1].GreatWorkSlotType='GREATWORKSLOT_ARTIFACT'
+          GameInfo.GreatWork_ValidSubTypes=function()
+            local done=false;return function() if not done then done=true;return {
+              GreatWorkObjectType='GREATWORKOBJECT_ARTIFACT',GreatWorkSlotType='GREATWORKSLOT_ARTIFACT'} end end
+          end
+          Game.GetGreatWorkPlayer=function(index) return index==900 and 1 or assert(OTHER_CREATOR[index]) end
+          Game.GetGreatWorkDataFromIndex=function(index) return {CreatorName='original '..Game.GetGreatWorkPlayer(index),TurnCreated=3} end
+          for _,c in pairs(CITIES) do
+            local old=c.GetBuildings
+            c.GetBuildings=function(self)
+              local b=old(self)
+              b.GetNumGreatWorkSlots=function(_,building) return building==1 and 3 or 0 end
+              b.GetGreatWorkInSlot=function(_,building,slot)
+                if building~=1 then return -1 end
+                if slot==0 and c.x==WORK_X then return 900 end
+                if c.x==4 and slot>0 and slot<3 and LOST_OTHER~=900+slot
+                  and not (slot==1 and RELOCATED_OTHER) then return 900+slot end
+                if c.x==8 and slot==0 then return 903 end -- recipient-independent original
+                if c.x==16 and slot==1 and (DUPLICATE_OTHER or RELOCATED_OTHER) then return 901 end
+                if c.x==16 and slot==0 and OCCUPIED_TARGET then return 903 end
+                return -1
+              end
+              b.GetGreatWorkTypeFromIndex=function() return 4 end
+              b.GetCreatorNameFromIndex=function(_,index) return Game.GetGreatWorkDataFromIndex(index).CreatorName end
+              b.GetTurnFromIndex=function() return 3 end
+              return b
+            end
+          end
+          TEST_STATE_EDIT(function(s)
+            local tx=s.Transactions.checkpoint;local snap=tx.NativeWorks[1]
+            snap.Source=JAC_AbsorptionGameplay.NativeWorkLocations(900)[1]
+            snap.Source.BuildingType='BUILDING_TEST'
+            snap.Custodian=ARTIFACT_RECIPIENT==2 and 2 or 3;snap.Destination=ARTIFACT_RECIPIENT
+            tx.To=ARTIFACT_RECIPIENT==3 and 3 or 2
+          end)
+          ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots=function()
+            return {{Owner=ARTIFACT_RECIPIENT==2 and 2 or 3,City=CITIES[16].id,X=16,Y=0,
+              Building=1,Slot=0,SlotType='GREATWORKSLOT_ARTIFACT'}} end
+          UI.RequestPlayerOperation=function(actor,op,p)
+            local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+            assert(actor==LOCAL_PLAYER and actor==c.MP.Actor and Players[actor]:IsHuman())
+            if op=='script' then PACKETS[#PACKETS+1]=p;return true end
+            assert(op=='move' and p.owner==actor and p.index==900 and p.slot==0)
+            assert(CITIES[4].owner==actor and CITIES[16].owner==actor)
+            assert(p.source==CITIES[4].id and p.target==CITIES[16].id)
+            assert(CITIES[16]:GetBuildings():GetGreatWorkInSlot(1,0)==-1,'occupied target must never swap')
+            UI_MOVES=UI_MOVES+1
+            if UNKNOWN_MOVE then return nil end
+            WORK_X=16;return true
+          end
+          function MP_RECEIVE(raw)
+            local get,reads=Game.GetLocalPlayer,ExposedMembers.JAC_HeroReadAPI
+            Game.GetLocalPlayer=function() error('Gameplay local player fallback') end
+            ExposedMembers.JAC_HeroReadAPI=nil
+            local p=JAC_CarrierMP.Decode(raw)
+            local ok=TEST_MP_RECEIVE(p.Actor,p)
+            Game.GetLocalPlayer,ExposedMembers.JAC_HeroReadAPI=get,reads
+            return ok
+          end
+        "#).exec().unwrap();
+        lua
+    }
+
+    fn artifact_saved(lua: &Lua) -> String {
+        lua.load(r#"
+          local cities={};for x,c in pairs(CITIES) do cities[x]={Owner=c.owner,ID=c.id,Properties=c.props} end
+          return JAC_CarrierMP.Encode({State=JAC_AbsorptionGameplay.GetState(),Cities=cities,
+            Work=WORK_X,Transfers=TRANSFERS,Creators=OTHER_CREATOR})
+        "#).eval().unwrap()
+    }
+
+    fn artifact_loaded(local: i64, human: bool, recipient: i64, saved: &str) -> Lua {
+        let lua = artifact_world(local, human, recipient);
+        lua.globals().set("ARTIFACT_SAVED", saved).unwrap();
+        lua.load(
+            r#"
+          local saved=JAC_CarrierMP.Decode(ARTIFACT_SAVED)
+          for _,p in pairs(Players) do p.cities={} end
+          for x,record in pairs(saved.Cities) do
+            local c=CITIES[x];c.owner=record.Owner;c.id=record.ID;c.props=record.Properties
+            Players[c.owner].cities[x]=c
+          end
+          for _,plot in pairs(PLOTS) do if plot.city then plot.owner=CITIES[plot.city].owner end end
+          WORK_X=saved.Work;TRANSFERS=saved.Transfers;OTHER_CREATOR=saved.Creators
+          Game:SetProperty(JAC_AbsorptionGameplay.Rules.STATE_KEY,saved.State)
+        "#,
+        )
+        .exec()
+        .unwrap();
+        lua
+    }
+
+    #[test]
+    fn mp_artifact_full_source_empty_target_preserves_originals_and_replays_in_two_vms() {
+        for human in [false, true] {
+            for recipient in [2, 3, -1] {
+                let actor = if human && recipient == 3 { 1 } else { 2 };
+                let left = artifact_world(actor, human, recipient);
+                let mut right = artifact_world(3, human, recipient);
+                for lua in [&left, &right] {
+                    lua.load("MP_PLAN()").exec().unwrap();
+                }
+                for _ in 0..8 {
+                    let current=left.load("return JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP.Phase").eval::<String>().unwrap();
+                    if current == "DONE" {
+                        break;
+                    }
+                    if current == "DISPATCH" {
+                        assert!(!left.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                        right.load("WORK_X=16").exec().unwrap();
+                        right = artifact_loaded(3, human, recipient, &artifact_saved(&right));
+                    }
+                    assert!(left.load("return MP_OBSERVE()").eval::<bool>().unwrap(),
+                        "artifact phase={current} human={human} recipient={recipient} actor={actor}: {}",
+                        left.load("return tostring(ARTIFACT_DIAG)").eval::<String>().unwrap());
+                    let raw = left.load("return MP_LAST()").eval::<String>().unwrap();
+                    for lua in [&left, &right] {
+                        assert!(
+                            mp_receive(lua, &raw),
+                            "{current}: {}",
+                            lua.load("return tostring(ARTIFACT_DIAG)")
+                                .eval::<String>()
+                                .unwrap()
+                        );
+                        let state="return JAC_AbsorptionRules.Canonical(JAC_AbsorptionGameplay.GetState())";
+                        let before = lua.load(state).eval::<String>().unwrap();
+                        let _ = mp_receive(lua, &raw); // stale SELECT may reject; no second effect
+                        assert_eq!(before, lua.load(state).eval::<String>().unwrap());
+                    }
+                }
+                for lua in [&left, &right] {
+                    assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                    lua.load(r#"
+                      local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+                      assert(c.MP.Phase=='DONE' and WORK_X==16 and CITIES[4].owner==1 and CITIES[16].owner==c.Owner)
+                      for slot,index in ipairs({901,902}) do assert(CITIES[4]:GetBuildings():GetGreatWorkInSlot(1,slot)==index) end
+                      assert(#JAC_AbsorptionGameplay.NativeWorkLocations(900)==1)
+                      assert(#JAC_AbsorptionGameplay.NativeWorkLocations(901)==1 and OTHER_CREATOR[901]==1)
+                      assert(#JAC_AbsorptionGameplay.NativeWorkLocations(902)==1 and OTHER_CREATOR[902]==0)
+                      assert(#JAC_AbsorptionGameplay.NativeWorkLocations(903)==1)
+                    "#).exec().unwrap();
+                }
+                assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
+                assert_eq!(right.load("return UI_MOVES").eval::<i64>().unwrap(), 0);
+                let state =
+                    "return JAC_AbsorptionRules.Canonical(JAC_AbsorptionGameplay.GetState())";
+                assert_eq!(
+                    left.load(state).eval::<String>().unwrap(),
+                    right.load(state).eval::<String>().unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mp_artifact_unknown_send_rejoin_never_repeats_or_returns_loan() {
+        let left = artifact_world(2, false, 3);
+        left.load("MP_PLAN()").exec().unwrap();
+        mp_until(&left, "DISPATCH");
+        left.load("UNKNOWN_MOVE=true").exec().unwrap();
+        assert!(!left.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+        assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
+        let rejoin = artifact_loaded(2, false, 3, &artifact_saved(&left));
+        for _ in 0..3 {
+            let raw = mp_publish(&rejoin);
+            assert!(mp_receive(&rejoin, &raw));
+        }
+        rejoin.load(r#"
+          local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+          assert(c.MP.Phase=='DISPATCH' and c.MP.WaitingFor=='NATIVE_QUEUE_RESOLUTION')
+          assert(WORK_X==4 and TRANSFERS==2 and CITIES[4].owner==2 and CITIES[16].owner==2 and UI_MOVES==0)
+        "#).exec().unwrap();
+    }
+
+    #[test]
+    fn mp_artifact_occupied_target_and_unqualified_sender_never_send_move() {
+        let lua = artifact_world(2, false, 2);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "PREPARE");
+        let raw = mp_publish(&lua);
+        lua.globals().set("ARTIFACT_PACKET", raw.as_str()).unwrap();
+        lua.load("assert(not TEST_MP_RECEIVE(3,JAC_CarrierMP.Decode(ARTIFACT_PACKET)));assert(TRANSFERS==0)").exec().unwrap();
+        assert!(mp_receive(&lua, &raw));
+        mp_until(&lua, "DISPATCH");
+        // A slot changed after CLAIM. The actor must not enqueue a swap.
+        lua.load("OCCUPIED_TARGET=true").exec().unwrap();
+        assert!(!lua.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+        let raw = mp_publish(&lua);
+        assert!(!mp_receive(&lua, &raw));
+        lua.load("assert(UI_MOVES==0 and WORK_X==4 and TRANSFERS==1)")
+            .exec()
+            .unwrap();
+    }
+
+    #[test]
+    fn mp_artifact_partial_observation_and_changed_source_never_borrow() {
+        for corruption in ["p.Payload=p.Payload:sub(1,#p.Payload-1)",
+            "local o=JAC_CarrierMP.Decode(p.Payload);o.Locations[1].CreatedByPlayer=3;o.ArtifactWorks[900]=o.Locations;p.Payload=JAC_CarrierMP.Encode(o)"] {
+            let lua=artifact_world(2,false,2);
+            lua.load("MP_PLAN()").exec().unwrap();mp_until(&lua,"PREPARE");
+            let raw=mp_publish(&lua);lua.globals().set("ARTIFACT_PACKET",raw).unwrap();
+            let bad=lua.load(format!("local p=JAC_CarrierMP.Decode(ARTIFACT_PACKET);{corruption};return JAC_CarrierMP.Encode(p)")).eval::<String>().unwrap();
+            assert!(!mp_receive(&lua,&bad));
+            lua.load("assert(TRANSFERS==0 and UI_MOVES==0 and WORK_X==4)").exec().unwrap();
+        }
+    }
+
+    #[test]
+    fn mp_artifact_other_original_loss_relocation_duplicate_or_provenance_blocks_return() {
+        for corruption in [
+            "LOST_OTHER=901",
+            "OTHER_CREATOR[901]=3",
+            "DUPLICATE_OTHER=true",
+            "RELOCATED_OTHER=true",
+            "TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.MP.ArtifactOriginals=nil end)",
+        ] {
+            let lua = artifact_world(2, false, 3);
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            assert!(!lua.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+            lua.load(corruption).exec().unwrap();
+            let published=lua.load("return MP_OBSERVE()").eval::<bool>().unwrap();
+            let raw=if published {Some(lua.load("return MP_LAST()").eval::<String>().unwrap())} else {None};
+            if let Some(raw)=&raw {assert!(!mp_receive(&lua,raw),"{corruption}");}
+            else {assert!(lua.load("return tostring(ARTIFACT_DIAG):find('multiple source slots',1,true)~=nil").eval::<bool>().unwrap(),"{corruption}: {}",lua.load("return tostring(ARTIFACT_DIAG)").eval::<String>().unwrap());}
+            let rejoin = artifact_loaded(2, false, 3, &artifact_saved(&lua));
+            rejoin.load(corruption).exec().unwrap();
+            if let Some(raw)=&raw {assert!(!mp_receive(&rejoin,raw));}
+            else {assert!(!rejoin.load("return MP_OBSERVE()").eval::<bool>().unwrap());}
+            rejoin.load(r#"
+              local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+              assert(c.MP.Phase=='DISPATCH' and CITIES[4].owner==2 and CITIES[16].owner==2)
+              assert(TRANSFERS==2 and UI_MOVES==0 and WORK_X==16)
+            "#).exec().unwrap();
+        }
     }
 
     #[test]

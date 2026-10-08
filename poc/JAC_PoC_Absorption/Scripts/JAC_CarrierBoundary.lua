@@ -196,7 +196,6 @@ function MP.Preflight(tx)
         assert(snap.Carrier.MP and snap.Carrier.MP.Actor==snap.Source.Owner,
           'MP saved Palace carrier must retain its original owner as actor')
       end
-      assert(snap.Source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact cannot move to an empty museum')
       if not snap.Carrier then
         local s=snap.Source
         local actor=actorForWork(tx.To,s)
@@ -305,7 +304,6 @@ function MP.AdvanceSnap(state,tx,snap)
 end
 function MP.AdvanceRecovery(state,intent,source,owner,token)
   assert(Players[owner] and Players[owner]:IsAlive(),'MP recovery recipient must be alive')
-  assert(source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact recovery requires museum exchange proof')
   if not intent.NativeCarrier then
     local actor=actorForWork(owner,source)
     assert(source.BuildingType~='BUILDING_PALACE' or actor==source.Owner,
@@ -387,6 +385,62 @@ function MP.Advance(state,c,preferred)
   end
   return m.Phase=='DONE'
 end
+local function artifactOriginals(c,o,placement)
+  if c.Source.ObjectType~='GREATWORKOBJECT_ARTIFACT' then return end
+  local m=c.MP;local originals={[c.Index]=R.Copy(o.Locations[1])}
+  assert(m.Phase=='PREPARE' or type(m.ArtifactOriginals)=='table','MP artifact saved baseline missing')
+  assert(type(o.ArtifactWorks)=='table','MP artifact inventory publication missing')
+  assert(Equal(o.ArtifactWorks[c.Index],o.Locations),'MP artifact original publication differs')
+  for i,l in ipairs(m.Loans) do
+    local observed=o.Cities[i];local before=l.ActorBefore and l.ActorBefore.State
+    for name,asset in pairs(observed.State.Assets) do
+      for slot,index in pairs(asset.Works or {}) do
+        if index~=-1 then
+          assert(not originals[index],'MP artifact index duplicated in loan cities')
+          local locations=o.ArtifactWorks[index]
+          assert(type(locations)=='table' and #locations==1,'MP retained artifact missing or duplicated')
+          local work=locations[1];local definition
+          for row in GameInfo.Buildings() do if row.Index==work.Building then definition=row;break end end
+          assert(work.Index==index and definition and definition.BuildingType==name
+            and work.Owner==observed.Owner and work.CityID==observed.ID
+            and work.X==l.X and work.Y==l.Y and work.Slot==slot,'MP retained artifact slot changed')
+          for _,k in ipairs({'GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do
+            assert(work[k]~=nil,'MP retained artifact provenance missing: '..k)
+          end
+          -- Prefer an available direct Gameplay slot getter. Metadata/locations
+          -- below remain synchronized actor observations, not independent Core proof.
+          local core=A.ReadNativeCarrierCore(city(l),{X=l.X,Y=l.Y,Building=work.Building,Slot=slot})
+          if core.Work~=nil then assert(core.Work==index,'MP retained artifact differs from Core slot') end
+          originals[index]=R.Copy(work)
+        end
+      end
+    end
+    if before and m.Phase~='RECHECK' then
+      for name,asset in pairs(before.Assets) do
+        local now=assert(observed.State.Assets[name],'MP artifact building removed')
+        for slot,index in pairs(asset.Works or {}) do
+          -- NativeCarrierState already masks the selected source/destination
+          -- slot. Their physical contents were checked by validateObservation.
+          assert(now.Works and now.Works[slot]==index,'MP artifact swap or unrelated slot change')
+        end
+      end
+    end
+  end
+  for index in pairs(o.ArtifactWorks) do assert(originals[index],'MP artifact inventory has unrelated entry') end
+  if m.ArtifactOriginals and m.Phase~='RECHECK' then
+    for index,previous in pairs(m.ArtifactOriginals) do
+      local now=assert(originals[index],'MP original artifact disappeared')
+      for _,k in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do
+        assert(Equal(previous[k],now[k]),'MP original artifact provenance changed: '..k)
+      end
+      if index~=c.Index then
+        assert(previous.X==now.X and previous.Y==now.Y and previous.Building==now.Building
+          and previous.Slot==now.Slot,'MP unrelated artifact relocated')
+      end
+    end
+  end
+  return originals
+end
 local function validateObservation(c,o,placement)
   local m=c.MP
   assert(type(o)=='table' and type(o.Cities)=='table' and type(o.Locations)=='table','MP observation shape')
@@ -446,6 +500,7 @@ local function validateObservation(c,o,placement)
   assert(work.Owner==seen.Owner and work.CityID==seen.ID and work.X==l.X and work.Y==l.Y
     and work.Building==l.Building and work.Slot==l.Slot,'MP reported work slot changed')
   assert(o.Cities[i].Work==c.Index and o.Cities[3-i].Work==-1,'MP reported source/target mismatch')
+  return artifactOriginals(c,o,placement)
 end
 local function reserved(state,c,l)
   local function busy(other)
@@ -568,6 +623,10 @@ local function receive(actor,p)
   m.Receipts=m.Receipts or {};m.Receipts[id]=true
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')
+    if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+      m.ArtifactOriginals=R.Copy(err)
+      m.ArtifactEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
+    end
     for i,l in ipairs(m.Loans) do
       l.CoreBefore=R.Copy(A.ReadNativeCarrierCore(city(l),l))
       l.ActorBefore={State=R.Copy(o.Cities[i].State)}

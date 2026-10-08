@@ -93,6 +93,11 @@ local function Observe(c)
     p[PlayerOperations.PARAM_BUILDING_DEST]=c.MoveTarget.Building
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
+    if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+      local api=assert(ExposedMembers.JAC_Absorption)
+      local target=api.ReadNativeCarrier(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y),c.MP.Loans[2])
+      if target.Work~=-1 then status[c.MoveToken]='REJECTED';return false end
+    end
     local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
     status[c.MoveToken]=ok and result==false and 'REJECTED' or ok and result==true and 'ACCEPTED' or 'UNKNOWN'
     return false -- reconcile at a later native publication, not the send call
@@ -102,6 +107,16 @@ local function Observe(c)
   for _,l in ipairs(m.Loans or {}) do
     local current=assert(CityManager.GetCityAt(l.X,l.Y))
     o.Cities[#o.Cities+1]=api.ReadNativeCarrier(current,l)
+  end
+  if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+    o.ArtifactWorks={[c.Index]=o.Locations}
+    for _,observed in ipairs(o.Cities) do
+      for _,asset in pairs(observed.State.Assets) do
+        for _,index in pairs(asset.Works or {}) do
+          if index~=-1 and not o.ArtifactWorks[index] then o.ArtifactWorks[index]=api.ReadNativeLocations(index) end
+        end
+      end
+    end
   end
   if m.Phase=='READY' then
     if m.GrantSession~=session then return request(c,'ABORT',o) end

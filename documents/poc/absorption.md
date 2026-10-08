@@ -2,6 +2,26 @@
 
 ## MPキャリアのコード接続と信頼境界
 
+### Artifact個別MP MOVE：UI制約と現本体の直接移動を分離
+
+今回の接続は、借用可能な元都市と受取先都市を一時的に同じ適法人間Actorの所有へそろえ、元indexを空の適合枠へMOVE一回で移し、都市を返還する経路である。原本生成・Core Enact・占有枠とのswapは使わない。既存Artifact CITY継承の模擬検査や旧SP成功記録を新MP実通信成功とは扱わず、実機・実LAN0回を維持する。
+
+一次根拠は公式GreatWorksOverview.luaの七つのPlayerOperation引数と、[本体操作の作者解析](https://cru121.github.io/civ6-gamecore-reference/operations/player-operation/MOVE_GREAT_WORK.html)。現FinalRelease DLLのPlayer::Operations::Manager::Processも読み取り専用で照合した。MOVE hash `0x291d387e` のcaseはRVA `0x30e6ed`〜`0x30eade`。PARAM_PLAYER_ONEから得た同一Playerの都市集合で元と先のIDを検索し、先の指定建物・枠のindexを読んでから元indexをRemoveGreatWorkする (`0x30e8a0`〜`0x30e920`)。先が空なら `0x30e926` からswapを飛ばし、`0x30ea72` のAddGreatWorkToSlotで元indexを指定枠へ置く。このcaseには作品種別・museum満枠数・作成者履歴の条件は現れない。よって公式UIの「満枠Artifact博物館同士」の交換制約をCoreの直接MOVE禁止には読み替えない。
+
+先が占有されている場合は本体に交換分岐が存在するため、その分岐は製品で利用しない。Gameplayは共有観測の元枠・先空枠・枠適合を照合し、Actor UIは実際のMOVE要求直前にも空枠を確認する。外部操作が送信後のengine queueで先枠を埋める場合まで原子的に禁止する公開APIは確認していない。結果不明は再発行・早期都市返還をせず保全し、原indexと他作品の保持を観測できるまで進めない。交換後にcounter作品を元所有者から持ち去って成功扱いする経路はない。
+
+公開CanStartOperationにつながる本体CanStartは、request組立てとhandler検索の後、旧来のMOVE caseでは共通判定へ進む (`0x30c2a0`〜`0x30c369`)。共通判定 (`0x30c100`〜`0x30c293`) はActorの存在、活動状態、戦略操作が許されるphaseを扱い、手番外のMOVE hashを拒否する分岐がある。また人間とGame状態の条件を検査する分岐もあるが、単一フィールドの意味を推測して「MPでは無条件に許可」とは説明しない。Artifact満枠・先空枠条件はこの共通判定にはない。操作送信のエンジン側Actor認証・実配送同期範囲は実LANで未確認として残す。MOD側は保存された唯一の人間Actorの活動手番だけで送信し、Gameplay同期callbackがエンジンから受けたactor、phase、nonce、token、保存intentを検査する。PARAM_PLAYER_ONEも同じActorとし、AI本人への偽装はしない。
+
+実装はArtifactの一律拒否を、借用・枠・来歴・唯一性の検査に置き換えた。PREPAREで両都市の他の原作品のindex・元枠・来歴・効果と世界一件性を同期観測として保存する。以後の観測と都市返還前・返還後で原作品の欠落・重複・枠替え・来歴差替えを拒否する。読めるCore slot getterは優先して照合する。UI-only値を各peerの局所キャッシュからGameplayへ読み戻さず、保存されたActor観測として扱い、独立Core証拠とは表記しない。Artifactの借用途中記録にこのbaselineがない場合は推測して補完せず停止する。
+
+新規Lua51検査5件は、人間・AI元／人間・AI・自由都市先の6条件、二つの独立VM、実VMの保存再構成、重複RPC、結果不明送信・再参加で再MOVE0回、無資格送信者、途中Source変更・部分観測、CLAIM後の占有先、他原作品の欠落・重複・位置変更・来歴変更とbaseline欠落を扱う。旧源ではArtifact一律拒否を1FAILで再現した。関連実行の初回は9PASS1FAILだったが、残った重複負例は読取が同期送信前に停止する実診断を検査へ反映した。完了した既存回帰を重複実行せず、新規5件・必要回帰5件・Gameplay生成一致1件の計11件を照合する。旧失敗ログは保持する。
+
+ログは `scratch/native-deal-logs/artifact-move-red.log`、`artifact-protocol-final.log`（9PASS1FAIL）、`artifact-other-works-parity-final.log`、`artifact-other-works-relocation-final.log`。DLL証跡は `scratch/core-route-evidence/current-operation-move.asm`、`current-player-can-start.asm`、`current-player-process-entry.asm`。配布Gameplay/UIは今回のRust生成源から生成し、親の最新NI、receipt/prune、Human PalaceやSlotType修正はこの旧baseへコピーしていない。親での統合時は生成Luaを丸ごと上書きせず、RustのArtifact追加差分を最新源へ適用して再生成する。
+
+最新の最終関連10件を一度集約し、`artifact-protocol-10-final.log` で10PASS・失敗0・対象外53を確認した。別実行のGameplay生成一致1件も成功しており、今回の関連対象は計11件である。compiled CLIでscratchへ再生成したGameplay/UIと配布LuaのSHA256も一致し、rustfmtとgit diff --checkは成功した。全workspace・Clippy・実機は実行していない。
+
+首都・最後都市など借用不可の元都市、AI宮殿、容量不足の先、占有先との交換は未対応である。元ToDo996全体を完了としない。
+
 ### 初期一覧と通常CITY継承の共有観測
 
 初期作品一覧とキャリアの関連検査は75件すべて成功し、省略は0件だった。作品一覧16件とキャリア59件に、独立したLua 5.1環境、保存状態の再構成と再参加、部分送信、重複要求、無資格の実行者、都市継承後と翌ターンの照合を含む。配布LuaとRust生成源の一致も確認した。この結果は実LANの成功を意味せず、最終レビュー・全workspace・CIとマージは別に確認する。
