@@ -1,7 +1,10 @@
 //! Short live scenarios for the 66 house oaths. Generated Lua is test code, never a MOD script.
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 use crate::{oaths, Outputs, Repository};
 
@@ -411,6 +414,119 @@ for _,name in ipairs({'GetBuildingProgress','GetBuildingCost'}) do probe(q,'queu
 probe(q,'queue','GetProductionModifier',{},false); probe(c,'city','GetProductionModifier',{},false)
 return '{"context":'..jstr(__CONTEXT__)..',"owner":0,"city":'..c:GetID()..',"accepted":false,"yield_quantity_basis":"unresolved","production_quantity_basis":"requires_unmodified_observed_baseline","probes":['..table.concat(parts,',')..']}'
 "#;
+
+// Official Debug/Modifiers.ltp uses these GameEffects getters in GameCore_Tuner.
+// Retain getter errors and types; an unavailable method is never an inactive
+// modifier or an empty subject list. This does not infer native Apply ordering.
+const MODIFIER_INVENTORY: &str = r#"
+local oath=__OATH__; local context=__CONTEXT__; local phase=__PHASE__
+local function invoke(name,args)
+ local ok,f=pcall(function() return GameEffects and GameEffects[name] end)
+ if not ok then return {available=false,error=tostring(f)},nil end
+ if type(f)~='function' then return {available=false,lookup_type=type(f)},nil end
+ local success,v=pcall(f,unpack(args))
+ local info={available=true,call_ok=success,value_type=type(v)}
+ if not success then info.error=tostring(v)
+ elseif type(v)=='boolean' or type(v)=='string' then info.value=v
+ elseif type(v)=='number' then assert(v==v and v~=math.huge and v~=-math.huge,'nonfinite GameEffects value'); info.value=v
+ end
+ if success then return info,v end
+ return info,nil
+end
+local calls,rows,cities,unresolved,other={},{},{},{},{};local complete=true;local total=0
+local idInfo,ids=invoke('GetModifiers',{}); calls.modifiers=idInfo
+if not idInfo.available or not idInfo.call_ok or idInfo.value_type~='table' then complete=false end
+if ids~=nil then
+ assert(type(ids)=='table','modifier inventory is not a table')
+ local seen={}
+ for _,id in ipairs(ids) do
+  total=total+1
+  assert(type(id)=='number' and id==math.floor(id) and not seen[id],'invalid or duplicate instance ID');seen[id]=true
+  local di,def=invoke('GetModifierDefinition',{id})
+  if type(def)~='table' or type(def.Id)~='string' then
+   complete=false;unresolved[#unresolved+1]={instance=id,call=di}
+  elseif def.Id:sub(1,#oath+2)==oath..'_E' then
+   local row={instance=id,definition=def.Id,definition_call=di}
+   for _,method in ipairs({'GetModifierActive','GetModifierOwner','GetModifierSubjectCount','GetModifierTrackedObjectCount'}) do
+    row[method]=invoke(method,{id})
+    local info=row[method]
+    if not info.available or not info.call_ok or info.value_type~=(method=='GetModifierActive' and 'boolean' or 'number') then complete=false end
+   end
+   for _,method in ipairs({'GetModifierSubjects','GetModifierTrackedObjects'}) do
+    local info,objects=invoke(method,{id});local list={}
+    if not info.available or not info.call_ok or info.value_type~='table' then complete=false end
+    if objects~=nil then
+     assert(type(objects)=='table','modifier objects are not a table')
+     for _,object in ipairs(objects) do
+      assert(type(object)=='number' and object==math.floor(object),'invalid object ID')
+      local item={id=object}
+      for _,getter in ipairs({'GetObjectName','GetObjectType','GetObjectString','GetObjectsPlayerId'}) do
+       item[getter]=invoke(getter,{object})
+       if not item[getter].available or not item[getter].call_ok then complete=false end
+      end
+      list[#list+1]=item
+     end
+     table.sort(list,function(a,b) return a.id<b.id end)
+    end
+    row[method]={call=info,objects=list}
+   end
+   rows[#rows+1]=row
+  else
+   other[#other+1]={instance=id,definition=def.Id}
+  end
+ end
+ table.sort(rows,function(a,b) return a.instance<b.instance end)
+ table.sort(unresolved,function(a,b) return a.instance<b.instance end)
+ table.sort(other,function(a,b) return a.instance<b.instance end)
+end
+local cityOk,cityError=pcall(function()
+for _,p in ipairs(PlayerManager.GetAliveMajors()) do
+ for _,city in p:GetCities():Members() do
+  local plot=assert(Map.GetPlot(city:GetX(),city:GetY()))
+  assert(city:GetOwner()==p:GetID() and plot:GetOwner()==p:GetID(),'city identity mismatch')
+  local value=plot:GetProperty(oath..'_ON')
+  cities[#cities+1]={id=city:GetID(),owner=city:GetOwner(),plot=plot:GetIndex(),x=city:GetX(),y=city:GetY(),flag_type=type(value),flag=value}
+ end
+end
+end)
+local cityCall={call_ok=cityOk}
+if not cityOk then complete=false;cityCall.error=tostring(cityError) end
+table.sort(cities,function(a,b) return a.plot<b.plot end)
+return 'JAC_OATH_MODIFIER_INVENTORY|'..ser({oath=oath,context=context,phase=phase,turn=Game.GetCurrentGameTurn(),inventory_available=complete,total_instance_count=total,matching_instance_count=#rows,other_instance_count=#other,calls=calls,unresolved_definitions=unresolved,other_definitions=other,instances=rows,city_call=cityCall,cities=cities,quantity_accepted=false,product_accepted=false})
+"#;
+
+fn modifier_inventory_scenario(base: &Value, case: &Case) -> Result<Value> {
+    let mut steps = first_steps(base, &case.civ)?;
+    let capture = |steps: &mut Vec<Value>, phase: &str| {
+        for context in ["GameCore_Tuner", "InGame"] {
+            let code = substitute(
+                MODIFIER_INVENTORY,
+                case,
+                &[
+                    ("__CONTEXT__", &lua_string(context)),
+                    ("__PHASE__", &lua_string(phase)),
+                ],
+            );
+            steps.push(ui(
+                context,
+                format!("{}{code}", crate::oath_save_probe::HELPERS),
+            ));
+        }
+    };
+    capture(&mut steps, "baseline");
+    steps.push(ui("GameCore_Tuner", substitute(FIXTURE, case, &[])));
+    capture(&mut steps, "fixture_before_choice");
+    steps.push(ui("DedicationPopup", substitute(POPUP, case, &[])));
+    steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"GameCore_Tuner","code":format!("local l=Game:GetProperty('JAC_AGES_LEDGER'); local h=l and l.houses.p0; return h and h.oathChosen==1 and h.oaths[{}]==true",lua_string(&case.oath))}}));
+    capture(&mut steps, "selected");
+    for seconds in [1, 5] {
+        steps.push(json!({"action":"observe_for","seconds":seconds,"timeout":seconds+30}));
+        capture(&mut steps, &format!("selected_after_wait_{seconds}s"));
+    }
+    let result = json!({"name":"誓約の正式選択前後の有効Modifierと都市対象を観測する","diagnostic_only":true,"judge_profile":"generic","finite_turns":0,"modifier_inventory":{"oath":case.oath,"scope":"official-gameeffects-observation-v1","synthetic_inputs":["reign1_golden_age_fixture"],"quantity_accepted":false,"product_accepted":false,"native_ordering_proved":false},"steps":steps});
+    civ6_autotest_rs::scenario::validate_scenario(&result)?;
+    Ok(result)
+}
 
 fn capability_scenario(base: &Value) -> Result<Value> {
     let mut steps = first_steps(base, "CIVILIZATION_JAC_ODA")?;
@@ -1422,10 +1538,20 @@ pub fn outputs(repo: &Repository) -> Result<Outputs> {
 }
 
 pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
+    if args.len() == 2 && args[0] == "--modifier-inventory" {
+        let case = cases(repo)?
+            .into_iter()
+            .find(|case| case.oath == "JAC_OATH_ODA_TENKA_FUBU")
+            .context("military oath inventory fixture")?;
+        let scenario = modifier_inventory_scenario(&repo.json(BASE)?, &case)?;
+        crate::oath_save_probe::write_new(Path::new(&args[1]), &scenario)?;
+        println!("modifier inventory: observation only; quantity and product acceptance false");
+        return Ok(());
+    }
     let Some(check) = crate::parse_check_args(
         "generate-oath-effect-audit",
         args,
-        "Generate finite live oath-effect scenarios from the 66-entry catalogue.",
+        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory.",
     )?
     else {
         return Ok(());

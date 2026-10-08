@@ -3,6 +3,170 @@ use super::*;
 use mlua::{Lua, Value as LuaValue};
 
 #[test]
+fn modifier_inventory_preserves_false_and_distinguishes_unavailable_lists() -> Result<()> {
+    use crate::oath_expiry_probe::Frame;
+    let lua = Lua::new();
+    lua.load(r#"
+Game={GetCurrentGameTurn=function()return 1 end}
+PlayerManager={GetAliveMajors=function()return {} end}
+GameEffects={GetModifiers=function()return {17,18,19} end,
+ GetModifierDefinition=function(id)if id==19 then error('definition read failed') end;return {Id=id==17 and 'JAC_OATH_ODA_TENKA_FUBU_E1' or 'UNRELATED_OFFICIAL_MODIFIER'} end,
+ GetModifierActive=function()return false end,GetModifierOwner=function()return 0 end,
+ GetModifierSubjectCount=function()return 0 end,GetModifierTrackedObjectCount=function()return 0 end,
+ GetModifierSubjects=function()return {} end,GetModifierTrackedObjects=function()return {} end}
+"#).exec()?;
+    let code = MODIFIER_INVENTORY
+        .replace("__OATH__", "'JAC_OATH_ODA_TENKA_FUBU'")
+        .replace("__CONTEXT__", "'GameCore_Tuner'")
+        .replace("__PHASE__", "'baseline'");
+    let capture = || -> Result<Frame> {
+        let value: String = lua
+            .load(format!("{}{code}", crate::oath_save_probe::HELPERS))
+            .eval()?;
+        Frame::parse(
+            value
+                .strip_prefix("JAC_OATH_MODIFIER_INVENTORY|")
+                .context("inventory marker")?,
+        )
+    };
+    let observed = capture()?;
+    assert_eq!(observed.get("inventory_available")?, &Frame::Bool(false));
+    assert_eq!(observed.get("total_instance_count")?.int()?, 3);
+    assert_eq!(observed.get("other_instance_count")?.int()?, 1);
+    assert_eq!(
+        observed.get("other_definitions")?.entries()?[0]
+            .1
+            .get("definition")?
+            .text()?,
+        "UNRELATED_OFFICIAL_MODIFIER"
+    );
+    assert!(observed.get("unresolved_definitions")?.entries()?[0]
+        .1
+        .get("call")?
+        .get("error")?
+        .text()?
+        .contains("definition read failed"));
+    let instance = &observed.get("instances")?.entries()?[0].1;
+    assert_eq!(
+        instance.get("GetModifierActive")?.get("value")?,
+        &Frame::Bool(false)
+    );
+    assert_eq!(instance.get("GetModifierOwner")?.get("value")?.int()?, 0);
+    lua.load("GameEffects.GetModifiers=function()return {17,18} end")
+        .exec()?;
+    assert_eq!(capture()?.get("inventory_available")?, &Frame::Bool(true));
+    lua.load("GameEffects.GetModifierSubjects=function()return nil end")
+        .exec()?;
+    let observed = capture()?;
+    assert_eq!(observed.get("inventory_available")?, &Frame::Bool(false));
+    let instance = &observed.get("instances")?.entries()?[0].1;
+    assert_eq!(
+        instance
+            .get("GetModifierSubjects")?
+            .get("call")?
+            .get("value_type")?
+            .text()?,
+        "nil"
+    );
+    lua.load(r#"
+GameEffects.GetModifierSubjects=function()return {42} end
+GameEffects.GetObjectName=function()return 'city name' end
+GameEffects.GetObjectType=function()return 'City' end
+GameEffects.GetObjectString=function()error('debug description failed')end
+GameEffects.GetObjectsPlayerId=function()return 3 end
+local city={GetID=function()return 65536 end,GetOwner=function()return 3 end,GetX=function()return 8 end,GetY=function()return 9 end}
+PlayerManager.GetAliveMajors=function()return {{GetID=function()return 3 end,GetCities=function()return {Members=function()local used=false;return function()if not used then used=true;return 1,city end end end}end}}end
+Map={GetPlot=function()return {GetOwner=function()return 3 end,GetIndex=function()return 789 end,GetProperty=function()return 0 end}end}
+"#).exec()?;
+    let observed = capture()?;
+    assert_eq!(
+        observed.get("cities")?.entries()?[0].1.get("plot")?.int()?,
+        789
+    );
+    assert_eq!(
+        observed.get("cities")?.entries()?[0].1.get("flag")?.int()?,
+        0
+    );
+    assert_eq!(observed.get("inventory_available")?, &Frame::Bool(false));
+    let instance = &observed.get("instances")?.entries()?[0].1;
+    let object = &instance
+        .get("GetModifierSubjects")?
+        .get("objects")?
+        .entries()?[0]
+        .1;
+    assert_eq!(object.get("id")?.int()?, 42);
+    assert!(object
+        .get("GetObjectString")?
+        .get("error")?
+        .text()?
+        .contains("debug description failed"));
+    lua.load("GameEffects.GetModifiers=nil").exec()?;
+    let observed = capture()?;
+    assert_eq!(observed.get("inventory_available")?, &Frame::Bool(false));
+    assert_eq!(
+        observed.get("calls")?.get("modifiers")?.get("available")?,
+        &Frame::Bool(false)
+    );
+    lua.load(
+        "GameEffects=nil;PlayerManager.GetAliveMajors=function()error('city inventory failed')end",
+    )
+    .exec()?;
+    let observed = capture()?;
+    assert_eq!(observed.get("inventory_available")?, &Frame::Bool(false));
+    assert!(observed
+        .get("city_call")?
+        .get("error")?
+        .text()?
+        .contains("city inventory failed"));
+    Ok(())
+}
+
+#[test]
+fn modifier_inventory_scenario_is_observation_only_after_formal_choice() -> Result<()> {
+    let repo = Repository::checked_in();
+    let case = cases(&repo)?
+        .into_iter()
+        .find(|case| case.oath == "JAC_OATH_ODA_TENKA_FUBU")
+        .unwrap();
+    let scenario = modifier_inventory_scenario(&repo.json(BASE)?, &case)?;
+    let steps = scenario["steps"].as_array().unwrap();
+    assert_eq!(scenario["diagnostic_only"], true);
+    assert_eq!(scenario["modifier_inventory"]["quantity_accepted"], false);
+    assert_eq!(scenario["modifier_inventory"]["product_accepted"], false);
+    assert_eq!(
+        scenario["modifier_inventory"]["native_ordering_proved"],
+        false
+    );
+    assert!(steps.iter().all(|step| ![
+        "oath_exact_removal",
+        "autoplay",
+        "save",
+        "load",
+        "exit_to_menu"
+    ]
+    .contains(&step["action"].as_str().unwrap())));
+    assert_eq!(
+        steps
+            .iter()
+            .filter(|step| step["code"]
+                .as_str()
+                .is_some_and(|code| code.contains("real UI EXECUTE_SCRIPT")))
+            .count(),
+        1
+    );
+    let vm = Lua::new();
+    for step in steps {
+        if let Some(code) = step["code"]
+            .as_str()
+            .or_else(|| step["condition"]["code"].as_str())
+        {
+            vm.load(code).into_function()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn growth_wait_rejects_previous_values_and_requires_every_owned_city_to_update() -> Result<()> {
     let lua = Lua::new();
     lua.load(r#"
