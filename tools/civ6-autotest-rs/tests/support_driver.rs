@@ -55,6 +55,7 @@ type Lua = Box<dyn FnMut(&str, &str) -> Result<String> + Send>;
 type States = Box<dyn FnMut() -> Result<Vec<String>> + Send>;
 type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
+type NewestMod = Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>;
 
 pub struct FakeBackend {
     pub calls: Calls,
@@ -67,11 +68,19 @@ pub struct FakeBackend {
     pub on_dx11: Box<dyn FnMut(isize) -> Result<()> + Send>,
     pub on_memory: Box<dyn FnMut(u32) -> Result<Value> + Send>,
     pub on_mods: Box<dyn FnMut() -> Result<Vec<PathBuf>> + Send>,
-    pub on_newest: Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>,
+    pub on_newest: NewestMod,
     pub on_stale: Box<dyn FnMut() -> Result<Vec<String>> + Send>,
     pub on_exit: Box<dyn FnMut(u32) -> Result<bool> + Send>,
     pub on_require: Box<dyn FnMut() -> Result<()> + Send>,
     pub on_launch: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_connect: Box<dyn FnMut() -> Result<()> + Send>,
+    pub on_sync: Box<
+        dyn FnMut(
+                civ6_autotest_rs::steam_sync::Stage,
+            ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus>
+            + Send,
+    >,
+    pub on_warning: Box<dyn FnMut() -> Result<bool> + Send>,
     pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
 }
 impl FakeBackend {
@@ -102,6 +111,9 @@ impl FakeBackend {
             on_exit: Box::new(|_| Ok(true)),
             on_require: Box::new(|| Ok(())),
             on_launch: Box::new(|| Ok(())),
+            on_connect: Box::new(|| Ok(())),
+            on_sync: Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)),
+            on_warning: Box::new(|| Ok(false)),
             on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
     }
@@ -121,10 +133,24 @@ impl FakeBackend {
         self
     }
 }
+impl Default for FakeBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Backend for FakeBackend {
+    fn steam_sync_status(
+        &mut self,
+        stage: civ6_autotest_rs::steam_sync::Stage,
+    ) -> Result<civ6_autotest_rs::steam_sync::SyncStatus> {
+        (self.on_sync)(stage)
+    }
+    fn steam_warning(&mut self, _: &Path) -> Result<bool> {
+        (self.on_warning)()
+    }
     fn connect(&mut self, _: u16, _: f64) -> Result<()> {
         self.events.lock().unwrap().push("connect".into());
-        Ok(())
+        (self.on_connect)()
     }
     fn disconnect(&mut self) {
         self.events.lock().unwrap().push("disconnect".into());

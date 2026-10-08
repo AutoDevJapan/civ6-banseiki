@@ -119,23 +119,293 @@ fn csv_first(line: &str) -> String {
         line.split(',').next().unwrap_or("").into()
     }
 }
+const GRACEFUL_CLOSE_SECONDS: f64 = 30.0;
+const FORCED_CLOSE_SECONDS: f64 = 75.0;
+const CLOSE_POLL_SECONDS: f64 = 0.5;
+
 /// Called only by the chain while it holds the shared Civ6 lock.
+/// The CLI uses close_civ6_with_paths so the tuner belongs to its live worktree.
 pub fn close_civ6(r: &mut impl Runner) -> Result<(), String> {
-    for executable in CIV_EXECUTABLES {
-        r.run(Call::new(args(&["taskkill", "/IM", executable, "/F"])).timeout(30.0))?;
-    }
-    // taskkill can fail (e.g. access denied). Never treat that as a closed game,
-    // and allow a terminated process a short time to disappear from tasklist.
-    let deadline = r.monotonic() + 15.0;
-    while civ6_running(r)? {
-        if r.monotonic() >= deadline {
-            return Err(
-                "Civ6 did not exit after taskkill; refusing to continue the live scenario".into(),
-            );
+    close_civ6_with_paths(r, &Paths::default())
+}
+
+/// The caller must hold the shared Civ6 lock for the entire close and wait.
+pub fn close_civ6_with_paths(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
+    close_civ6_with_evidence(r, p, &mut json!({}))
+}
+fn close_civ6_with_evidence(
+    r: &mut impl Runner,
+    p: &Paths,
+    evidence: &mut Value,
+) -> Result<(), String> {
+    static SERIAL: AtomicU64 = AtomicU64::new(0);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let journal = p.temp.join(format!(
+        "civ6-steam-exit-{}-{stamp}-{}.jsonl",
+        std::process::id(),
+        SERIAL.fetch_add(1, Ordering::Relaxed)
+    ));
+    let sync_tool = p.live().join("tools/target/release/civ6-steam-sync.exe");
+    let source = p
+        .live()
+        .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+    let cursor = (|| -> Result<Option<String>, String> {
+        if source.is_file() && sync_tool.is_file() {
+            // Mark both files inside the native helper, before asking the game to exit.
+            let out = r.run(
+                Call::new(args(&[&path(&sync_tool), "--mark"]))
+                    .managed()
+                    .timeout(10.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "cannot mark Steam sync before exit: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+            let value: serde_json::Value = serde_json::from_str(out.stdout.trim())
+                .map_err(|e| format!("invalid Steam mark: {e}"))?;
+            if !value["cloud"].is_object() || !value["process"].is_object() {
+                return Err("Steam mark lacks generation cursors".into());
+            }
+            Ok(Some(out.stdout.trim().to_owned()))
+        } else {
+            Ok(None)
         }
-        r.sleep(0.5)?;
+    })();
+    let outcome = close_civ6_outcome(r, p)?;
+    evidence["game_close_outcome"] = json!(outcome);
+    let printed = r.print(&format!("CIV6_CLOSE outcome={outcome}"));
+    let sync_result = (|| -> Result<(), String> {
+        if outcome == "absent" {
+            evidence["sync_phase"] = json!("not_needed_game_absent");
+            return Ok(());
+        }
+        if source.is_file() {
+            let Some(cursor) = cursor? else {
+                return Err("Steam sync helper source exists but its executable is missing; game closed, refusing an unobserved sync".into());
+            };
+            evidence["sync_journal"] = json!(path(&journal));
+            let argv = args(&[
+                &path(sync_tool),
+                "--cursor",
+                &cursor,
+                "--journal",
+                &path(&journal),
+            ]);
+            let out = r.run(
+                Call::new(argv)
+                    .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                    .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                    .managed()
+                    .timeout(50.0),
+            )?;
+            if let Ok(text) = fs::read_to_string(&journal) {
+                if let Some(last) = text.lines().rfind(|line| !line.trim().is_empty()) {
+                    let event: Value = serde_json::from_str(last)
+                        .map_err(|e| format!("invalid exit journal: {e}"))?;
+                    evidence["sync_phase"] = event["phase"].clone();
+                }
+            }
+            if out.code != 0 {
+                return Err(format!(
+                    "Steam exit sync did not finish: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+            if !matches!(
+                evidence["sync_phase"].as_str(),
+                Some("exit_sync_complete" | "steam_released_without_new_sync_request")
+            ) {
+                return Err("Steam sync helper returned success without a valid terminal journal; refusing an unproven exit".into());
+            }
+        } else {
+            evidence["sync_phase"] = json!("legacy_helper_absent");
+            r.print("STEAM_SYNC skipped: previous live checkout has no helper source; the prepared acceptance checkout must contain it")?;
+        }
+        Ok(())
+    })();
+    evidence["sync_result"] = json!(if sync_result.is_ok() {
+        "success"
+    } else {
+        "failed"
+    });
+    evidence["sync_error"] = json!(sync_result.as_ref().err());
+    let restored = restore_autosaves(r, p);
+    evidence["autosave_restore_result"] = json!(if restored.is_ok() {
+        "success"
+    } else {
+        "failed"
+    });
+    evidence["autosave_restore_error"] = json!(restored.as_ref().err());
+    evidence["recovery_receipt_remaining"] =
+        json!(p.here.join("reliability-auto-state.json").exists());
+    evidence["output_error"] = json!(printed.as_ref().err());
+    let sync_result = sync_result.and(printed);
+    match (sync_result, restored) {
+        (Ok(()), r) => r,
+        (Err(sync), Ok(())) => Err(sync),
+        (Err(sync), Err(recovery)) => Err(format!("{sync}; {recovery}")),
     }
-    close_stale_civ6_reporters(r)
+}
+fn restore_autosaves(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
+    let auto_state = p.here.join("reliability-auto-state.json");
+    if auto_state.is_file() {
+        let helper = p
+            .live()
+            .join("tools/target/release/civ6-save-isolation.exe");
+        let out = r.run(
+            Call::new(args(&[
+                &path(helper),
+                "--restore",
+                "--state",
+                &path(auto_state),
+            ]))
+            .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+            .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+            .managed()
+            .timeout(30.0),
+        )?;
+        if out.code != 0 {
+            return Err(format!(
+                "owner autosave recovery failed: {} {}",
+                out.stdout, out.stderr
+            ));
+        }
+        r.print("AUTOSAVE original folder restored; test autosaves retained with artifacts")?;
+    }
+    Ok(())
+}
+
+fn close_civ6_outcome(r: &mut impl Runner, p: &Paths) -> Result<&'static str, String> {
+    if !civ6_running(r)? {
+        close_stale_civ6_reporters(r)?;
+        return Ok("absent");
+    }
+    let deadline = r.monotonic() + GRACEFUL_CLOSE_SECONDS;
+    let requested = request_graceful_close(
+        &mut WithinDeadline {
+            runner: r,
+            deadline,
+        },
+        p,
+    );
+    match requested {
+        Ok(()) => {
+            // Closing can disconnect FireTuner before it returns a Lua response.
+            // Only process disappearance proves that shutdown completed.
+            if wait_civ6_exit(r, deadline)? {
+                close_stale_civ6_reporters(r)?;
+                return Ok("closed");
+            }
+        }
+        Err(error) => r.print(&format!("Civ6 graceful close unavailable: {error}"))?,
+    }
+    // A failed request, or a process exiting exactly at the graceful deadline,
+    // must not cause us to force-kill a game which has already disappeared.
+    if !civ6_running(r)? {
+        close_stale_civ6_reporters(r)?;
+        return Ok("closed");
+    }
+    let deadline = r.monotonic() + FORCED_CLOSE_SECONDS;
+    let mut budget = WithinDeadline {
+        runner: r,
+        deadline,
+    };
+    for executable in CIV_EXECUTABLES {
+        budget.run(Call::new(args(&["taskkill", "/IM", executable, "/F"])).timeout(30.0))?;
+    }
+    // taskkill can fail (e.g. access denied). Never treat that as a closed game.
+    let exit_deadline = deadline.min(budget.monotonic() + 15.0);
+    if !wait_civ6_exit(&mut budget, exit_deadline)? {
+        return Err(
+            "Civ6 did not exit after taskkill; refusing to continue the live scenario".into(),
+        );
+    }
+    close_stale_civ6_reporters(&mut budget)?;
+    Ok("killed")
+}
+
+fn request_graceful_close(r: &mut impl Runner, p: &Paths) -> Result<(), String> {
+    let tuner = driver::tuner(p, &p.live())?;
+    let mut states = tuner.clone();
+    states.push("states".into());
+    let out = r.run(Call::new(states).timeout(10.0))?;
+    if out.code != 0 {
+        return Err(format!(
+            "FireTuner states failed: {}",
+            tail(&out.stderr, 300)
+        ));
+    }
+    // civ6-tuner prints an identity followed by `index: name` pairs. Select a
+    // unique official UI context, never an identity or a similarly named mod.
+    let states: Vec<_> = out
+        .stdout
+        .lines()
+        .filter_map(|line| {
+            let (index, name) = line.split_once(':')?;
+            index.trim().parse::<i64>().ok()?;
+            Some(name.trim())
+        })
+        .collect();
+    let state = ["FrontEnd", "InGame"]
+        .into_iter()
+        .find(|name| {
+            states
+                .iter()
+                .filter(|state| state.eq_ignore_ascii_case(name))
+                .count()
+                == 1
+        })
+        .ok_or("FireTuner has no unique FrontEnd or InGame context")?;
+    let mut argv = tuner;
+    argv.extend(args(&[
+        "lua",
+        "--state",
+        state,
+        "--code",
+        "Events.UserConfirmedClose()\nreturn true",
+    ]));
+    match r.run(Call::new(argv).timeout(15.0)) {
+        Ok(out) if out.code == 0 => {}
+        Ok(out) => r.print(&format!(
+            "Civ6 quit response unavailable (exit {}): {}",
+            out.code,
+            tail(&out.stderr, 300)
+        ))?,
+        Err(error) => r.print(&format!("Civ6 quit response unavailable: {error}"))?,
+    }
+    // The Lua call may have reached the game even when its response was lost.
+    // Do not resend it or force-kill before allowing the bounded exit wait.
+    Ok(())
+}
+
+fn wait_civ6_exit(r: &mut impl Runner, deadline: f64) -> Result<bool, String> {
+    loop {
+        if r.monotonic() >= deadline {
+            return Ok(false);
+        }
+        let running = civ6_running(&mut WithinDeadline {
+            runner: r,
+            deadline,
+        });
+        match running {
+            Ok(false) => return Ok(true),
+            Ok(true) => {}
+            // The first renderer query may use up the phase budget before
+            // the second can start. The caller rechecks before taskkill.
+            Err(_) if r.monotonic() >= deadline => return Ok(false),
+            Err(error) => return Err(error),
+        }
+        let left = deadline - r.monotonic();
+        if left <= 0.0 {
+            return Ok(false);
+        }
+        r.sleep(CLOSE_POLL_SECONDS.min(left))?;
+    }
 }
 /// Steam counts an orphaned Civ6 crash reporter as a running game.
 ///
@@ -159,28 +429,9 @@ pub fn close_stale_civ6_reporters(r: &mut impl Runner) -> Result<(), String> {
     }
     Ok(())
 }
-/// If a Civ6 process exists but FireTuner does not answer, close it so restart_game can relaunch (test PC only).
+/// Close the previous game under the shared lock before restart_game relaunches it.
 pub fn ensure_responsive_civ6(r: &mut impl Runner, p: &Paths) -> Result<&'static str, String> {
-    if !civ6_running(r)? {
-        close_stale_civ6_reporters(r)?;
-        return Ok("absent");
-    }
-    for _ in 0..3 {
-        let mut argv = driver::tuner(p, &p.live())?;
-        argv.push("states".into());
-        let out = r.run(Call::new(argv).timeout(30.0))?;
-        if out.code == 0 {
-            break;
-        }
-        r.sleep(10.0)?;
-    }
-    // A running-but-answering Civ6 still failed restart_game with "FireTuner に接続できません" twice (prosper-05/06);
-    // a fresh launch from "absent" works, so always start from a closed game.
-    close_civ6(r)?;
-    // 15 s was sometimes too short: restart_game then failed to reach FireTuner (unify-18/20/21).
-    r.sleep(45.0)?;
-    close_stale_civ6_reporters(r)?;
-    Ok("killed")
+    close_civ6_outcome(r, p)
 }
 /// Job records take precedence over a PID; the game and Steam cannot own a run.
 pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool, String> {
@@ -485,6 +736,7 @@ fn open_owned_lock(
 #[cfg(windows)]
 fn close_owned_after_release_error(
     r: &mut impl Runner,
+    p: &Paths,
     path: &Path,
     token: &str,
 ) -> Result<bool, String> {
@@ -500,8 +752,9 @@ fn close_owned_after_release_error(
     if !file_is_owned(&mut file, path, token)? {
         return Ok(false);
     }
-    let closed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6(r)))
-        .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
+    let closed =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6_with_paths(r, p)))
+            .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
     drop(file);
     closed?;
     Ok(true)
@@ -912,7 +1165,7 @@ impl<R: Runner> Runner for WithinDeadline<'_, R> {
     }
 }
 
-const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n-h, --help: show this help without acquiring the Civ6 lock.";
+const HELP: &str = "Usage: live_chain [--test-mode] [--stop-on-failure] [--reliability] name:scenario.json [...]\n--reliability: run exactly one scenario 10 times, release the lock after each run, stop on any failure.\n--cleanup-only: restore original autosaves under the shared lock; requires Civ6 absent, no checkout or launch.\n-h, --help: show this help without acquiring the Civ6 lock.";
 const CLEANUP_RESERVE_SECONDS: f64 = 240.0;
 #[derive(Default)]
 struct Options {
@@ -921,6 +1174,7 @@ struct Options {
     stop: bool,
     reliability: bool,
     help: bool,
+    cleanup_only: bool,
 }
 impl Options {
     fn parse(a: &[String]) -> Result<Self, String> {
@@ -931,6 +1185,7 @@ impl Options {
                 "--test-mode" => options.test_mode = true,
                 "--stop-on-failure" => options.stop = true,
                 "--reliability" => options.reliability = true,
+                "--cleanup-only" => options.cleanup_only = true,
                 _ if arg.starts_with('-') => return Err(format!("unknown argument: {arg}")),
                 _ => {
                     let (name, scenario) =
@@ -949,7 +1204,15 @@ impl Options {
         if options.reliability && options.items.len() != 1 && !options.help {
             return Err("--reliability needs exactly one name:scenario.json".into());
         }
-        if options.items.is_empty() && !options.help {
+        if options.cleanup_only
+            && (!options.items.is_empty()
+                || options.reliability
+                || options.test_mode
+                || options.stop)
+        {
+            return Err("--cleanup-only takes no scenarios or other run flags".into());
+        }
+        if options.items.is_empty() && !options.help && !options.cleanup_only {
             return Err("at least one name:scenario.json is required; use --help for usage".into());
         }
         Ok(options)
@@ -997,6 +1260,16 @@ fn main_owned(
     game_closed: &mut bool,
     cleanup_deadline: &mut Option<f64>,
 ) -> Result<i32, String> {
+    if options.cleanup_only {
+        if civ6_running(r)? {
+            return Err(
+                "cleanup-only requires a closed Civ6; refusing to close an unrelated game".into(),
+            );
+        }
+        restore_autosaves(r, p)?;
+        *game_closed = true;
+        return Ok(0);
+    }
     let mut first_failure = 0;
     for item in &options.items {
         *game_closed = false;
@@ -1020,10 +1293,13 @@ fn main_owned(
         } else {
             None
         };
-        close_civ6(&mut WithinDeadline {
-            runner: r,
-            deadline,
-        })?;
+        close_civ6_with_paths(
+            &mut WithinDeadline {
+                runner: r,
+                deadline,
+            },
+            p,
+        )?;
         drop(protection);
         *game_closed = true;
         let ship = std::env::var("CC_LIVE_SHIP").unwrap_or_else(|_| path(p.here.join("ship.exe")));
@@ -1130,6 +1406,45 @@ fn main_owned(
             .managed()
             .timeout(timeout);
         command.lease = lease.clone();
+        let auto_source = p
+            .live()
+            .join("tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs");
+        if options.reliability && !auto_source.is_file() && p.live().join(".git").exists() {
+            return Err("reliability checkout lacks autosave isolation source; refusing to run against original autosaves".into());
+        }
+        if options.reliability && auto_source.is_file() {
+            // begin can move the original folder before returning an error.
+            // Arm recovery before dispatch, including unknown/timeout outcomes.
+            *game_closed = false;
+            let auto = p
+                .live()
+                .join("tools/target/release/civ6-save-isolation.exe");
+            let state = p.here.join("reliability-auto-state.json");
+            let archive = Path::new(&artifacts)
+                .parent()
+                .ok_or("reliability artifact parent missing")?;
+            let out = r.run(
+                Call::new(args(&[
+                    &path(auto),
+                    "--begin",
+                    "--state",
+                    &path(state),
+                    "--archive",
+                    &path(archive),
+                ]))
+                .env("CIV6_LIVE_CHAIN_PID", std::process::id().to_string())
+                .env("CIV6_LIVE_LOCK_PATH", path(p.here.join("civ6.lock")))
+                .managed()
+                .timeout(30.0),
+            )?;
+            if out.code != 0 {
+                return Err(format!(
+                    "owner autosave isolation failed: {} {}",
+                    out.stdout, out.stderr
+                ));
+            }
+            r.print("AUTOSAVE isolated: original files will not be overwritten")?;
+        }
         let driver_started = r.monotonic();
         *game_closed = false;
         let execution = r.run(command);
@@ -1168,10 +1483,29 @@ fn main_owned(
             format!("{artifacts}.log"),
             &format!("{}{}", run.stdout, run.stderr),
         )?;
-        if let Err(error) = close_civ6(&mut WithinDeadline {
-            runner: r,
-            deadline: cleanup_deadline.unwrap(),
-        }) {
+        let mut exit_evidence = json!({});
+        let closed = close_civ6_with_evidence(
+            &mut WithinDeadline {
+                runner: r,
+                deadline: cleanup_deadline.unwrap(),
+            },
+            p,
+            &mut exit_evidence,
+        );
+        if let Some(state) = reliability.as_deref_mut() {
+            if let Some(journal) = exit_evidence["sync_journal"].as_str() {
+                if Path::new(journal).is_file() {
+                    let copy = Path::new(&artifacts).join("steam-exit.jsonl");
+                    fs::create_dir_all(&artifacts)
+                        .map_err(|e| format!("prepare exit evidence directory: {e}"))?;
+                    fs::copy(journal, &copy)
+                        .map_err(|e| format!("retain round exit evidence: {e}"))?;
+                    exit_evidence["artifact_journal"] = json!(path(copy));
+                }
+            }
+            state.round()["exit"] = exit_evidence;
+        }
+        if let Err(error) = closed {
             return Err(format!(
                 "driver exit {}; Civ6 close failed: {error}",
                 windows_exit_code(run.code)
@@ -1388,6 +1722,7 @@ fn cli_once(
     let path = p.here.join("civ6.lock");
     let mut lock_released = false;
     let cleanup_started = r.monotonic();
+    let mut cleanup_exit = json!(null);
     let cleanup_end = cleanup_deadline.unwrap_or_else(|| r.monotonic() + CLEANUP_RESERVE_SECONDS);
     let cleanup = (|| {
         let mut budget = WithinDeadline {
@@ -1403,7 +1738,7 @@ fn cli_once(
                 }
                 #[cfg(windows)]
                 {
-                    return match close_owned_after_release_error(r, &path, &token) {
+                    return match close_owned_after_release_error(r, p, &path, &token) {
                         Ok(true) => Err(release_error),
                         Ok(false) => Err(format!(
                             "{release_error}; lock ownership changed before fallback close"
@@ -1423,20 +1758,30 @@ fn cli_once(
                 path.display()
             ));
         };
-        let closed = if game_closed {
+        let closed = if options.cleanup_only {
+            if game_closed {
+                Ok(())
+            } else {
+                Err("cleanup-only did not close the running game; recovery is incomplete".into())
+            }
+        } else if game_closed {
             Ok(())
         } else {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match cleanup_deadline {
-                Some(deadline) => close_civ6(&mut WithinDeadline {
-                    runner: r,
-                    deadline,
-                }),
-                None => close_civ6(r),
+                Some(deadline) => close_civ6_with_evidence(
+                    &mut WithinDeadline {
+                        runner: r,
+                        deadline,
+                    },
+                    p,
+                    &mut cleanup_exit,
+                ),
+                None => close_civ6_with_evidence(r, p, &mut cleanup_exit),
             }))
             .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()))
         };
         game_closed = closed.is_ok();
-        let restored = if game_closed {
+        let restored = if game_closed && !options.cleanup_only {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 deployment::restore(r, p, &p.live())
             }))
@@ -1455,6 +1800,7 @@ fn cli_once(
     process::finish_cleanup();
     if let Some(state) = reliability {
         state.round()["cleanup"] = json!({"game_closed":game_closed,"lock_released":lock_released,
+            "exit":cleanup_exit,
             "status":if cleanup.is_ok() { "success" } else { "failed" },"error":cleanup.as_ref().err(),
             "elapsed_seconds":(r.monotonic() - cleanup_started).max(0.0)});
     }
@@ -1557,6 +1903,15 @@ mod unix_guard_tests {
     }
     impl Runner for RunnerWithWriter {
         fn run(&mut self, call: Call) -> Result<Output, String> {
+            if call.args[0] == "tasklist"
+                && call.args[2] == "IMAGENAME eq CivilizationVI.exe"
+                && self.kills == 0
+            {
+                return Ok(Output {
+                    stdout: "\"CivilizationVI.exe\",\"42\"".into(),
+                    ..Output::default()
+                });
+            }
             if call.args[0] == "taskkill" {
                 self.kills += 1;
                 if self.writer.is_none() {

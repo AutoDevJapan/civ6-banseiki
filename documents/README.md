@@ -69,6 +69,7 @@
 | [`rust-migration-incremental-inventory.json`](rust-migration-incremental-inventory.json) | 移行中に main へ追加された吸収・英雄・再起動の137項目 |
 | [`tooling/civ6-live-rust-driver.md`](tooling/civ6-live-rust-driver.md) | 共有の実機実行ツールを Rust 実行器へ接続する処理と変更差分 |
 | [`tooling/civ6-live-reliability.md`](tooling/civ6-live-reliability.md) | 基盤だけの最小保存読込を10回連続で確かめ、停止段階と元のエラーを記録する手順 |
+| [`tooling/civ6-steam-cloud.md`](tooling/civ6-steam-cloud.md) | Steamの同期警告による起動停止の原因、保存の分離と終了後の同期待ち |
 | [`tooling/civ6-live-reliability-2026-10-07.md`](tooling/civ6-live-reliability-2026-10-07.md) | 2026年10月6〜7日のPR別停止原因と基盤修正・実機確認の記録 |
 | [`tooling/civ6-startup-recovery.md`](tooling/civ6-startup-recovery.md) | 起動停止の実測、表示処理の復旧、オーバーレイの設定と3回連続起動の証拠 |
 | [`rust-driver/README.md`](rust-driver/README.md) | 実機ドライバーの214テストの対応、レビュー指摘への修正、統合するコミットの順序 |

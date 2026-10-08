@@ -37,7 +37,7 @@ pub fn type_id(value: &Value) -> bool {
 }
 pub fn validate_test_mode(mode: &Value) -> Result<()> {
     if !mode.is_object()
-        || !mode["skipped_turns"].as_i64().is_some_and(|n| n >= 0)
+        || mode["skipped_turns"].as_i64().is_none_or(|n| n < 0)
         || mode["continuous_performance_valid"] != false
     {
         return Err(Error::scenario("test_mode needs a nonnegative integer skipped_turns and continuous_performance_valid: false"));
@@ -89,7 +89,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             "judge_profile must be bundle0, generic, growth or japan_map",
         ));
     }
-    if profile == "growth" && !data["expected_units"].as_i64().is_some_and(|n| n > 0) {
+    if profile == "growth" && data["expected_units"].as_i64().is_none_or(|n| n <= 0) {
         return Err(Error::scenario(
             "growth scenario needs a positive expected_units count",
         ));
@@ -120,15 +120,14 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
-            "restart_game" => {
+            "restart_game"
                 if step
                     .as_object()
                     .unwrap()
                     .keys()
-                    .any(|k| k != "action" && k != "timeout")
-                {
-                    return Err(fail("restart_game only accepts timeout".into()));
-                }
+                    .any(|k| k != "action" && k != "timeout") =>
+            {
+                return Err(fail("restart_game only accepts timeout".into()));
             }
             "enable_mods" => {
                 bool_flags(&["exclusive_user_mods"])?;
@@ -160,9 +159,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         return Err(fail(format!("invalid {key}")));
                     }
                 }
-                if !step["seed"]
+                if step["seed"]
                     .as_i64()
-                    .is_some_and(|v| i32::try_from(v).is_ok())
+                    .is_none_or(|v| i32::try_from(v).is_err())
                 {
                     return Err(fail("seed must be a signed 32-bit integer".into()));
                 }
@@ -213,7 +212,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         "autoplay does not support hotseat; use end_turn".into(),
                     ));
                 }
-                if !step["turns"].as_i64().is_some_and(|n| n > 0) {
+                if step["turns"].as_i64().is_none_or(|n| n <= 0) {
                     return Err(fail("turns must be positive".into()));
                 }
                 bool_flags(&[
@@ -238,18 +237,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 for key in ["turns", "test_turns"] {
                     if step
                         .get(key)
-                        .is_some_and(|v| !v.as_i64().is_some_and(|n| n > 0))
+                        .is_some_and(|v| v.as_i64().is_none_or(|n| n <= 0))
                     {
                         return Err(fail(format!("{key} must be positive")));
                     }
                 }
             }
-            "choose_dedication" => {
-                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) {
-                    return Err(fail(
-                        "choose_dedication human must be an integer in [0, 63]".into(),
-                    ));
-                }
+            "choose_dedication"
+                if !step["human"].as_i64().is_some_and(|n| (0..64).contains(&n)) =>
+            {
+                return Err(fail(
+                    "choose_dedication human must be an integer in [0, 63]".into(),
+                ));
             }
             "carrier_checkpoint" | "carrier_exchange" => {
                 bool_flags(&["direct_apply"])?;
@@ -275,7 +274,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             }
             "ui_lua" => {
                 if !step["state_name"].is_string()
-                    || !step["code"].as_str().is_some_and(|s| !s.trim().is_empty())
+                    || step["code"].as_str().is_none_or(|s| s.trim().is_empty())
                 {
                     return Err(fail("ui_lua needs state_name and code".into()));
                 }
@@ -328,7 +327,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 match c["type"].as_str() {
                     Some("lua") => {
                         if !c["state_name"].is_string()
-                            || !c["code"].as_str().is_some_and(|s| !s.trim().is_empty())
+                            || c["code"].as_str().is_none_or(|s| s.trim().is_empty())
                         {
                             return Err(fail("Lua wait needs state_name and code".into()));
                         }
@@ -343,7 +342,7 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     Some("log_line") => {
                         if !c["log"].as_str().is_some_and(|s| {
                             ["Lua.log", "Database.log", "Modding.log"].contains(&s)
-                        }) || !c["contains"].as_str().is_some_and(|s| !s.is_empty())
+                        }) || c["contains"].as_str().is_none_or(|s| s.is_empty())
                         {
                             return Err(fail("log wait needs log and contains".into()));
                         }
@@ -355,19 +354,15 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     }
                 }
             }
-            "pause" => {
+            "pause"
                 if !step["seconds"]
                     .as_f64()
-                    .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0)
-                {
-                    return Err(fail("pause seconds must be in (0, 10]".into()));
-                }
+                    .is_some_and(|n| n.is_finite() && n > 0.0 && n <= 10.0) =>
+            {
+                return Err(fail("pause seconds must be in (0, 10]".into()));
             }
             "manual" => {
-                if !step["prompt"]
-                    .as_str()
-                    .is_some_and(|s| !s.trim().is_empty())
-                {
+                if step["prompt"].as_str().is_none_or(|s| s.trim().is_empty()) {
                     return Err(fail("manual step needs prompt".into()));
                 }
                 if step.get("timeout").is_some() {
