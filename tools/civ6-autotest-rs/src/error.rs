@@ -9,6 +9,7 @@ pub enum ErrorKind {
     Input,
     Capture,
     Io,
+    SteamLogBusy,
     Interrupted,
     LiveLease,
 }

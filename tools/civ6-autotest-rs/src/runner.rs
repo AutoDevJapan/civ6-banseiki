@@ -870,14 +870,16 @@ impl Backend for SystemBackend {
     }
     fn begin_steam_observation(&mut self, journal: &Path) -> Result<()> {
         let monitor = crate::steam_sync::Monitor::new(crate::steam_sync::cloud_log())?;
+        let exit_mark = crate::steam_sync::LogCursor::mark(
+            &crate::steam_sync::cloud_log().with_file_name("gameprocess_log.txt"),
+        )?;
+        let session = crate::steam_dialog::Session::begin_if_running()?;
         crate::steam_sync::journal(journal, "begin", &monitor)?;
         self.steam_sync = Some(monitor);
         self.steam_journal = Some(journal.to_owned());
-        self.steam_exit_mark = Some(crate::steam_sync::LogCursor::mark(
-            &crate::steam_sync::cloud_log().with_file_name("gameprocess_log.txt"),
-        )?);
+        self.steam_exit_mark = Some(exit_mark);
         self.steam_exit_wait_at = None;
-        self.steam_session = crate::steam_dialog::Session::begin_if_running()?;
+        self.steam_session = session;
         Ok(())
     }
     fn steam_warning(&mut self, journal: &Path) -> Result<bool> {
@@ -2293,14 +2295,32 @@ impl Runner {
         )))
     }
     pub fn launch_steam_and_wait(&mut self, deadline: f64) -> Result<()> {
-        self.backend
-            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
+        self.begin_steam_observation_until(deadline)?;
         let result = (|| {
             self.backend.acquire_startup_lock()?;
             self.launch_startup_and_wait(deadline, false, &mut StartupAttempt::default())
         })();
         self.backend.release_startup_lock();
         result
+    }
+    fn begin_steam_observation_until(&mut self, deadline: f64) -> Result<()> {
+        let retry_until = (self.clock.now() + 2.0).min(deadline);
+        loop {
+            self.remaining(deadline)?;
+            match self
+                .backend
+                .begin_steam_observation(&self.output.join("steam-sync.jsonl"))
+            {
+                Ok(()) => {
+                    self.remaining(deadline)?;
+                    return Ok(());
+                }
+                Err(e) if e.kind == ErrorKind::SteamLogBusy && self.clock.now() < retry_until => {
+                    self.clock.sleep(self.budget(retry_until, 0.05)?);
+                }
+                Err(e) => return Err(e),
+            }
+        }
     }
     fn launch_startup_and_wait(
         &mut self,
@@ -2592,8 +2612,7 @@ impl Runner {
                 "pinned startup process changed; refusing shutdown",
             ));
         }
-        self.backend
-            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
+        self.begin_steam_observation_until(self.clock.now() + 2.0)?;
         self.disconnect();
         self.backend.authorize_game_control(Some(game))?;
         self.backend.terminate(game.pid, game.started)?;
@@ -2636,8 +2655,7 @@ impl Runner {
         if recovery && old.is_some() {
             return Err(Error::input("Civ6 appeared before the startup retry"));
         }
-        self.backend
-            .begin_steam_observation(&self.output.join("steam-sync.jsonl"))?;
+        self.begin_steam_observation_until(deadline)?;
         if let Some((pid, started)) = old {
             let game = crate::startup::GameProcess { pid, started };
             self.backend.authorize_game_control(Some(game))?;
