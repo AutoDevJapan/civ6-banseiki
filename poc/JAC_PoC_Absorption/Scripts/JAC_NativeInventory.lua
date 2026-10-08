@@ -62,15 +62,23 @@ local function box() return R.Copy(Game:GetProperty(KEY) or {Version=1,Serial=0,
 local function save(b) assert(b.Version==1);Game:SetProperty(KEY,R.Copy(b)) end
 local function prune(b,turn)
   local changed=false
-  local transactions
+  local transactions,flows
   for key,q in pairs(b.Requests) do
     if q.Turn<turn then
       local terminal=q.Consumed
-      if not terminal and q.Phase~='FLOW_BEGIN' and q.Phase~='FLOW_CHECK'
-        and not q.Phase:match('^CITY_LOYALTY:') then
+      if not terminal and (q.Phase=='FLOW_BEGIN' or q.Phase=='FLOW_CHECK') then
+        if not flows then flows=(Game:GetProperty('JAC_ABSORPTION_FLOW_V1') or {}).Flows or {} end
+        local flow=flows[q.ID];terminal=not flow or flow.Phase=='DONE' or flow.Phase=='RESULT'
+      elseif not terminal and q.Phase:match('^CITY_LOYALTY:') then
+        local x,y=q.Phase:match('^CITY_LOYALTY:(%-?%d+):(%-?%d+):')
+        local city=x and CityManager.GetCityAt(tonumber(x),tonumber(y))
+        local governance=city and city:GetProperty(R.GOVERNANCE_KEY)
+        terminal=not governance or governance.ID~=q.ID
+          or not (governance.ImmediatePending or governance.FrictionPending)
+      elseif not terminal then
         if not transactions then transactions=(Game:GetProperty(R.STATE_KEY) or {}).Transactions or {} end
         local tx=transactions[q.ID]
-        terminal=not tx or tx.Status=='COMPLETE' or tx.Status=='CANCELLED'
+        terminal=not tx or tx.Status=='COMPLETE'
       end
       if terminal then b.Requests[key]=nil;changed=true end
     end

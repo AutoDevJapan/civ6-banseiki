@@ -314,11 +314,20 @@ fn ui_receipts_remain_small_and_terminal_unused_requests_expire() {
         Core={Blob=string.rep('x',16000)},Observation={Blob=string.rep('x',16000)}}
       box.Requests['still-active:CITY_COMMIT']={ID='still-active',From=1,To=3,Phase='CITY_COMMIT',Turn=5,
         Core={},CoreSignature='pending',Actor=2}
+      box.Requests['finished-flow:FLOW_BEGIN']={ID='finished-flow',Phase='FLOW_BEGIN',Turn=5,Core={Blob=string.rep('x',16000)}}
+      box.Requests['open-flow:FLOW_BEGIN']={ID='open-flow',Phase='FLOW_BEGIN',Turn=5,Core={},CoreSignature='pending',Actor=2}
+      box.Requests['native-city:CITY_LOYALTY:4:0:stale']={ID=PLAN.ID,Phase='CITY_LOYALTY:4:0:stale',Turn=5,Core={}}
+      box.Requests['loyalty-pending:CITY_LOYALTY:8:0:friction']={ID='loyalty-pending',Phase='CITY_LOYALTY:8:0:friction',Turn=5,
+        Core={},CoreSignature='pending',Actor=2}
+      CITIES[8]:SetProperty('JAC_ABSORPTION_GOVERNANCE_V1',{ID='loyalty-pending',FrictionPending={Turn=5}})
+      Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Flows={['finished-flow']={Phase='DONE'},['open-flow']={Phase='CHOICE'}}})
       local state=JAC_AbsorptionGameplay.GetState();state.Transactions['still-active']={Status='WAITING_UI'}
       Game:SetProperty('JAC_ABSORPTION_STATE_V1',state);Game:SetProperty('JAC_NATIVE_INVENTORY_V1',box)
       CURRENT_TURN=6;GameEvents.PlayerTurnStartComplete.Emit(2)
       box=Game:GetProperty('JAC_NATIVE_INVENTORY_V1')
       assert(box.Requests['native-city:SOURCE_CANCEL']==nil and box.Requests['still-active:CITY_COMMIT'])
+      assert(not box.Requests['finished-flow:FLOW_BEGIN'] and box.Requests['open-flow:FLOW_BEGIN'])
+      assert(not box.Requests['native-city:CITY_LOYALTY:4:0:stale'] and box.Requests['loyalty-pending:CITY_LOYALTY:8:0:friction'])
       assert(TRANSFERS==2 and MOVES==0)
     "#).exec().unwrap();
 }
