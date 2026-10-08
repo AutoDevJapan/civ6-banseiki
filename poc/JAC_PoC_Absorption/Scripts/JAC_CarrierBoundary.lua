@@ -92,7 +92,14 @@ local function Encode(v)
   local t=type(v)
   if t=='boolean' then return v and 'b1' or 'b0' end
   if t=='string' or t=='number' then
-    local s=tostring(v);return (t=='string' and 's' or 'n')..#s..':'..s
+    local s=v
+    if t=='number' then
+      assert(v==v and v~=math.huge and v~=-math.huge,'nonfinite observation number')
+      -- Lua 5.1 tostring uses too few digits for an IEEE-754 double. Keep
+      -- 17 significant digits and preserve the sign of a zero value.
+      if v==0 then s=1/v<0 and '-0' or '0' else s=string.format('%.17g',v) end
+    end
+    return (t=='string' and 's' or 'n')..#s..':'..s
   end
   assert(t=='table','unsupported observation value')
   local keys=JAC_AbsorptionRules.Keys(v);local parts={'t'..#keys..':'}
@@ -124,6 +131,10 @@ local function Decode(s)
   end
   local v=read(0);assert(at==#s+1,'trailing observation');return v
 end
+local function Equal(a,b)
+  if a==nil or b==nil then return a==b end
+  return Encode(a)==Encode(b)
+end
 
 
 local MP={Encode=Encode,Decode=Decode}
@@ -139,7 +150,7 @@ end
 local function restoreProperties(current,l)
   for k,v in pairs(l.Before.Properties) do
     local value=current:GetProperty(k)
-    assert(value==nil or R.Equal(value,v),'MP city property replaced during loan')
+    assert(value==nil or Equal(value,v),'MP city property replaced during loan')
     if value==nil then current:SetProperty(k,R.Copy(v)) end
   end
 end
@@ -239,7 +250,7 @@ local function validateObservation(c,o)
   assert(#o.Cities==2 and #o.Locations==1,'MP original missing or duplicated')
   local work=o.Locations[1]
   for _,k in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do
-    assert(c.Source[k]~=nil and R.Equal(work[k],c.Source[k]),'MP work provenance changed: '..k)
+    assert(c.Source[k]~=nil and Equal(work[k],c.Source[k]),'MP work provenance changed: '..k)
   end
   for i,l in ipairs(m.Loans) do
     local current=city(l);local observed=o.Cities[i]
@@ -255,8 +266,8 @@ local function validateObservation(c,o)
       and type(observed.State.Loyalty)=='number','MP incomplete city snapshot')
     assert(#observed.State.UnitsOnCenter==0,'MP loan center occupied')
     if l.Before then
-      assert(R.Equal(observed.State,l.Before.State),'MP borrowed city changed')
-      if m.Phase=='RESTORED' then assert(R.Equal(observed.Properties,l.Before.Properties),'MP properties not restored') end
+      assert(Equal(observed.State,l.Before.State),'MP borrowed city changed')
+      if m.Phase=='RESTORED' then assert(Equal(observed.Properties,l.Before.Properties),'MP properties not restored') end
     end
   end
   local compatible=false

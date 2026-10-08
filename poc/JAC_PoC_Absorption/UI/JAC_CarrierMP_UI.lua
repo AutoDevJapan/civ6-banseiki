@@ -5,7 +5,14 @@ local function Encode(v)
   local t=type(v)
   if t=='boolean' then return v and 'b1' or 'b0' end
   if t=='string' or t=='number' then
-    local s=tostring(v);return (t=='string' and 's' or 'n')..#s..':'..s
+    local s=v
+    if t=='number' then
+      assert(v==v and v~=math.huge and v~=-math.huge,'nonfinite observation number')
+      -- Lua 5.1 tostring uses too few digits for an IEEE-754 double. Keep
+      -- 17 significant digits and preserve the sign of a zero value.
+      if v==0 then s=1/v<0 and '-0' or '0' else s=string.format('%.17g',v) end
+    end
+    return (t=='string' and 's' or 'n')..#s..':'..s
   end
   assert(t=='table','unsupported observation value')
   local keys=JAC_AbsorptionRules.Keys(v);local parts={'t'..#keys..':'}
@@ -36,6 +43,10 @@ local function Decode(s)
     return v
   end
   local v=read(0);assert(at==#s+1,'trailing observation');return v
+end
+local function Equal(a,b)
+  if a==nil or b==nil then return a==b end
+  return Encode(a)==Encode(b)
 end
 
 

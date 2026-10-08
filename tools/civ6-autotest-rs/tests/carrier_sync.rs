@@ -621,7 +621,7 @@ mod native_transport {
           for _,u in pairs(Players[1].units) do u.x=8 end
           CityManager.TransferCity(CITIES[16],2);TRANSFERS=0
           JAC_AbsorptionGameplay.RegisterCityProperty('MP_TEST_PROPERTY')
-          CITIES[4]:SetProperty('MP_TEST_PROPERTY',{Value='復元'})
+          CITIES[4]:SetProperty('MP_TEST_PROPERTY',{Value='復元',Culture=123456789012345.67,Accumulation=1.0000000000000002})
           for _,c in pairs(CITIES) do
             local old=c.GetBuildings
             c.GetBuildings=function(self)
@@ -758,6 +758,8 @@ mod native_transport {
                   assert(CITIES[4]:GetOwner()==1 and CITIES[16]:GetOwner()==c.Owner)
                   assert(TRANSFERS==(c.Owner==2 and 2 or 4))
                   assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY').Value=='復元')
+                  assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY').Culture==123456789012345.67)
+                  assert(CITIES[4]:GetProperty('MP_TEST_PROPERTY').Accumulation==1.0000000000000002)
                   assert(#JAC_AbsorptionGameplay.NativeWorkLocations(900)==1 and WORK_X==16)
                   assert(JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].PhysicalMoved)
                   assert(not MP_OBSERVE())
@@ -770,6 +772,126 @@ mod native_transport {
                 right.load(state).eval::<String>().unwrap()
             );
         }
+    }
+
+    #[test]
+    fn mp_codec_round_trips_finite_double_bits_between_independent_vms() {
+        let sender = ready();
+        let receiver = ready();
+        let encode = sender
+            .load("return JAC_CarrierMP.Encode")
+            .eval::<Function>()
+            .unwrap();
+        let decode = receiver
+            .load("return JAC_CarrierMP.Decode")
+            .eval::<Function>()
+            .unwrap();
+        let mut values = vec![
+            0.0,
+            -0.0,
+            1.0000000000000002,
+            123456789012345.67,
+            f64::MIN_POSITIVE,
+            f64::MAX,
+            f64::from_bits(1),
+            f64::from_bits(0x000f_ffff_ffff_ffff),
+        ];
+        // Deterministic bit patterns exercise signs, exponents, and mantissas;
+        // avoid testing only decimal values exactly representable in 14 digits.
+        let mut bits = 0x19ad_66db_3479_d591u64;
+        for _ in 0..2048 {
+            bits = bits.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let value = f64::from_bits(bits);
+            if value.is_finite() {
+                values.push(value);
+            }
+        }
+        for value in values {
+            let wire = encode.call::<String>(value).unwrap();
+            let restored = decode.call::<f64>(wire.clone()).unwrap();
+            assert_eq!(restored.to_bits(), value.to_bits(), "{value:?}: {wire}");
+        }
+    }
+
+    #[test]
+    fn mp_codec_preserves_numeric_and_string_keys_and_nearby_double_keys() {
+        let sender = ready();
+        let receiver = ready();
+        let wire = sender
+            .load(
+                r#"
+          return JAC_CarrierMP.Encode({[1]='number',['1']='string',
+            [1.0000000000000002]='next',[1.0000000000000004]='next-next',
+            Culture=123456789012345.67,Accumulation=1.0000000000000002})
+        "#,
+            )
+            .eval::<String>()
+            .unwrap();
+        receiver.globals().set("CODEC_WIRE", wire).unwrap();
+        receiver
+            .load(
+                r#"
+          local v=JAC_CarrierMP.Decode(CODEC_WIRE)
+          assert(v[1]=='number' and v['1']=='string')
+          assert(v[1.0000000000000002]=='next' and v[1.0000000000000004]=='next-next')
+          assert(v.Culture==123456789012345.67 and v.Accumulation==1.0000000000000002)
+          local n=0;for _ in pairs(v) do n=n+1 end;assert(n==6)
+        "#,
+            )
+            .exec()
+            .unwrap();
+    }
+
+    #[test]
+    fn mp_codec_rejects_nonfinite_values_and_keys_in_both_directions() {
+        let lua = ready();
+        lua.load(
+            r#"
+          for _,v in ipairs({math.huge,-math.huge,0/0}) do
+            assert(not pcall(JAC_CarrierMP.Encode,v))
+            assert(not pcall(JAC_CarrierMP.Encode,{Culture=v}))
+          end
+          assert(not pcall(JAC_CarrierMP.Encode,{[math.huge]='invalid-key'}))
+          for _,s in ipairs({'inf','-inf','nan','1e999'}) do
+            assert(not pcall(JAC_CarrierMP.Decode,'n'..#s..':'..s))
+          end
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+
+    #[test]
+    fn mp_borrowed_city_observation_rejects_a_single_bit_double_change() {
+        let lua = mp_world(2, false);
+        lua.load("MP_PLAN()").exec().unwrap();
+        for _ in 0..2 {
+            let raw = mp_publish(&lua);
+            assert!(mp_receive(&lua, &raw));
+        }
+        let raw = mp_publish(&lua);
+        lua.globals().set("MP_RAW", raw).unwrap();
+        let bad = lua
+            .load(
+                r#"
+          local p=JAC_CarrierMP.Decode(MP_RAW);local o=JAC_CarrierMP.Decode(p.Payload)
+          local before=o.Cities[1].State.Loyalty
+          o.Cities[1].State.Loyalty=before-2^-46
+          assert(o.Cities[1].State.Loyalty~=before)
+          assert(tostring(o.Cities[1].State.Loyalty)==tostring(before))
+          p.Payload=JAC_CarrierMP.Encode(o);return JAC_CarrierMP.Encode(p)
+        "#,
+            )
+            .eval::<String>()
+            .unwrap();
+        assert!(!mp_receive(&lua, &bad));
+        lua.load("assert(UI_MOVES==0 and TRANSFERS==1)")
+            .exec()
+            .unwrap();
+        assert!(mp_receive(
+            &lua,
+            &lua.globals().get::<String>("MP_RAW").unwrap()
+        ));
     }
 
     #[test]
