@@ -2,6 +2,7 @@
 -- Share the engine's actual numeric enum value; never invent a replacement property.
 local uiPlayers, uiGame, uiCityManager = Players, Game, CityManager
 include('JAC_CarrierMP_UI')
+include('JAC_NativeInventory_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
 local missingUnitReads = {}
@@ -124,33 +125,46 @@ local function PublishHeroKeys()
     end
     reads.FindCompatibleNativeSlots = function(owner, objectType)
       assert(type(owner) == "number" and type(objectType) == "string", "native slot query requires owner and type")
-      local player = assert(uiPlayers[owner], "native slot owner is not published")
-      local compatible, slots = {}, {}
-      for row in GameInfo.GreatWork_ValidSubTypes() do
-        if row.GreatWorkObjectType == objectType then compatible[row.GreatWorkSlotType] = true end
-      end
-      for _, city in player:GetCities():Members() do
-        local buildings = city:GetBuildings()
-        for building in GameInfo.Buildings() do
-          if buildings:HasBuilding(building.Index)
-            and (not buildings.IsPillaged or not buildings:IsPillaged(building.Index)) then
-            for slot = 0, buildings:GetNumGreatWorkSlots(building.Index) - 1 do
-              local slotInfo = GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(building.Index, slot)]
-              if slotInfo and compatible[slotInfo.GreatWorkSlotType]
-                and buildings:GetGreatWorkInSlot(building.Index, slot) == -1 then
-                slots[#slots + 1] = { Owner = owner, City = city:GetID(), X = city:GetX(), Y = city:GetY(),
-                  Building = building.Index, Slot = slot, SlotType = slotInfo.GreatWorkSlotType }
+      local ok, value = pcall(function()
+        local player = assert(uiPlayers and uiPlayers[owner], "native slot owner is not published")
+        local compatible, slots = {}, {}
+        for row in GameInfo.GreatWork_ValidSubTypes() do
+          if row.GreatWorkObjectType == objectType then compatible[row.GreatWorkSlotType] = true end
+        end
+        for _, cached in player:GetCities():Members() do
+          local id, x, y = cached:GetID(), cached:GetX(), cached:GetY()
+          local currentSlots = ProtectedCityRead(owner, id, 'NATIVE_SLOTS', x, y, function(city)
+            local candidates = {}
+            local buildings = city:GetBuildings()
+            for building in GameInfo.Buildings() do
+              if buildings:HasBuilding(building.Index)
+                and (not buildings.IsPillaged or not buildings:IsPillaged(building.Index)) then
+                for slot = 0, buildings:GetNumGreatWorkSlots(building.Index) - 1 do
+                  local slotInfo = GameInfo.GreatWorkSlotTypes[buildings:GetGreatWorkSlotType(building.Index, slot)]
+                  if slotInfo and compatible[slotInfo.GreatWorkSlotType]
+                    and buildings:GetGreatWorkInSlot(building.Index, slot) == -1 then
+                    candidates[#candidates + 1] = { Owner = owner, City = city:GetID(), X = city:GetX(), Y = city:GetY(),
+                      Building = building.Index, Slot = slot, SlotType = slotInfo.GreatWorkSlotType }
+                  end
+                end
               end
             end
-          end
+            return candidates
+          end)
+          for _, slot in ipairs(currentSlots) do slots[#slots + 1] = slot end
         end
-      end
-      table.sort(slots, function(a, b)
-        if a.City ~= b.City then return a.City < b.City end
-        if a.Building ~= b.Building then return a.Building < b.Building end
-        return a.Slot < b.Slot
+        table.sort(slots, function(a, b)
+          if a.City ~= b.City then return a.City < b.City end
+          if a.Building ~= b.Building then return a.Building < b.Building end
+          return a.Slot < b.Slot
+        end)
+        return slots
       end)
-      return slots
+      if not ok then
+        if tostring(value):find('UI city cache is not ready', 1, true) then error(value, 0) end
+        CityReadWait(owner, nil, 'NATIVE_SLOTS', nil, nil, 'GETTER_ERROR: ' .. tostring(value))
+      end
+      return value
     end
     reads.ReadCarrierPlots = function(owner, id, x, y)
       return ProtectedCityRead(owner, id, 'CARRIER_PLOTS', x, y, function(city)
@@ -200,7 +214,9 @@ local function PublishHeroKeys()
       if type(requests) ~= 'table' then return false end
       for _, request in ipairs(requests) do
         local ok, value = pcall(function()
-          if request.Method == 'NATIVE_WORK' then
+          if request.Method == 'NATIVE_SLOTS' then
+            return reads.FindCompatibleNativeSlots(request.Owner, request.ObjectType)
+          elseif request.Method == 'NATIVE_WORK' then
             return reads.ReadNativeWork(request.Owner, request.ID, request.Index, request.X, request.Y)
           elseif request.Method == 'CARRIER_PLOTS' then
             return reads.ReadCarrierPlots(request.Owner, request.ID, request.X, request.Y)
@@ -394,9 +410,11 @@ local function ObservePendingHeroes()
     return flow and flow.Phase == "APPLYING"
   end
   local pendingPublication = false
+  local multiplayer = GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer()
   for _, tx in pairs(state and state.Transactions or {}) do
     local automatic = AutomaticFlow(tx.ID)
-    if automatic and tx.Status == 'WAITING_UI'
+    if not multiplayer and automatic and tx.Status == 'WAITING_UI'
       and (tx.AwaitingPreparation and not tx.SourceCityReads
         or tx.AwaitingFinalUI and not tx.FinalUI
         or tx.SourceRosterMoved and not tx.FinalUI and not tx.CityReadUI
@@ -410,26 +428,26 @@ local function ObservePendingHeroes()
         reads.ObserveUnit(read.Token, read.Owner, read.ID, read.Turn)
       end
       if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn
-        and reads.ObserveCityReads(tx.SourceCityReads) then
+        and (multiplayer or reads.ObserveCityReads(tx.SourceCityReads)) then
         reads.MarkPublished(tx.SourceReadyToken)
         if automatic then pendingPublication = true end
       end
     end
     local verification = tx.VerificationUI
-    if verification and uiGame.GetCurrentGameTurn() == verification.Turn
+    if not multiplayer and verification and uiGame.GetCurrentGameTurn() == verification.Turn
       and reads.ObserveCityReads(verification.Reads) then reads.MarkPublished(verification.Token) end
     local final = tx.FinalUI
-    if tx.AwaitingFinalUI and final and uiGame.GetCurrentGameTurn() == final.Turn
+    if not multiplayer and tx.AwaitingFinalUI and final and uiGame.GetCurrentGameTurn() == final.Turn
       and reads.ObserveCityReads(final.Reads) then
       reads.MarkPublished(final.Token)
       if automatic then pendingPublication = true end
     end
     local cityRead = tx.CityReadUI
-    if cityRead and reads.ObserveCityReads(cityRead.Reads) then
+    if not multiplayer and cityRead and reads.ObserveCityReads(cityRead.Reads) then
       reads.MarkPublished(cityRead.Token)
       if automatic then pendingPublication = true end
     end
-    if tx.CityLoyaltyPending and tx.CityLoyaltyPending.Owner ~= nil then
+    if not multiplayer and tx.CityLoyaltyPending and tx.CityLoyaltyPending.Owner ~= nil then
       reads.ObserveCity(tx.CityLoyaltyPending)
       if automatic and reads.GetObservation(tx.CityLoyaltyPending.Token) then pendingPublication = true end
     end

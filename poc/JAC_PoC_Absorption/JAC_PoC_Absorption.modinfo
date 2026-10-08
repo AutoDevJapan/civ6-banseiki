@@ -42,6 +42,7 @@
     <UpdateText id="JAC_Absorption_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Text.xml</File></UpdateText>
     <ImportFiles id="JAC_Absorption_Rules" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Rules.lua</File></ImportFiles>
     <ImportFiles id="JAC_CarrierMP_UI" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_CarrierMP_UI.lua</File></ImportFiles>
+    <ImportFiles id="JAC_NativeInventory_UI" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_NativeInventory_UI.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Flow_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Flow.lua</File><File>UI/JAC_AbsorptionFlow.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Engine_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Gameplay.lua</File><File>Scripts/JAC_Absorption_Admission.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Product_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Product.lua</File></ImportFiles>
@@ -51,6 +52,7 @@
     <ReplaceUIScript id="JAC_Absorption_Product_CityStates" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>220</LoadOrder><LuaContext>CityStates</LuaContext><LuaReplace>UI/JAC_Absorption_CityStates.lua</LuaReplace></Properties></ReplaceUIScript>
     <UpdateText id="JAC_Absorption_Admission_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Admission_Text.xml</File></UpdateText>
     <ImportFiles id="JAC_Absorption_Product_NativeRead" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_Absorption_ProductNativeRead.lua</File></ImportFiles>
+    <AddGameplayScripts id="JAC_NativeInventory" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>206</LoadOrder></Properties><File>Scripts/JAC_NativeInventory.lua</File></AddGameplayScripts>
   </InGameActions>
   <Files>
     <File>Config/JAC_Absorption_ArtifactTest.xml</File>
@@ -68,5 +70,6 @@
     <File>Text/JAC_Absorption_Admission_Text.xml</File>
     <File>UI/JAC_Absorption_ProductNativeRead.lua</File>
     <File>UI/JAC_CarrierMP_UI.lua</File>
+    <File>Scripts/JAC_NativeInventory.lua</File><File>UI/JAC_NativeInventory_UI.lua</File>
   </Files>
 </Mod>

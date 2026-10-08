@@ -81,6 +81,96 @@ fn setup() -> mlua::Result<Lua> {
 }
 
 #[test]
+fn stale_native_slot_collection_waits_reloads_and_requeries_real_provider_before_reserving()
+-> mlua::Result<()> {
+    let lua = setup()?;
+    lua.load(r#"
+      Players[1].units={};Players[1]:SetProperty(A.Rules.ROSTER_KEY,{})
+      GameInfo.GreatWorks[4].Index=4
+      GameInfo.GreatWorks.GREATWORK_TEST_RELIC=GameInfo.GreatWorks[4]
+      GameInfo.GreatWorkSlotTypes={[0]={GreatWorkSlotType='GREATWORKSLOT_RELIC'}}
+      GameInfo.GreatWork_ValidSubTypes=function() local once=false;return function()
+        if not once then once=true;return {GreatWorkObjectType='GREATWORKOBJECT_RELIC',
+          GreatWorkSlotType='GREATWORKSLOT_RELIC'} end end end
+      GameInfo.JAC_AbsorptionOutcomes=function()
+        local list={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+          {Kind='ITEM',Outcome='RETURN',Destination='RETURN'}};local i=0
+        return function() i=i+1;return list[i] end
+      end
+      UI_CITY_OBJECTS={}
+      for x,city in pairs(CITIES) do
+        local original=city.GetBuildings
+        UI_CITY_OBJECTS[x]=setmetatable({GetBuildings=function()
+          local b=original(city)
+          b.GetGreatWorkSlotType=function() return 0 end
+          b.GetGreatWorkTypeFromIndex=function() return 4 end
+          b.GetCreatorNameFromIndex=function() return CREATOR end
+          b.GetTurnFromIndex=function() return 2 end
+          return b
+        end},{__index=city})
+      end
+      CACHED_ID=16;SLOT_GETTERS=0
+      local real=UI_CITY_OBJECTS[16].GetBuildings
+      UI_CITY_OBJECTS[16].GetBuildings=function()
+        SLOT_GETTERS=SLOT_GETTERS+1;return real()
+      end
+      local cached={GetID=function() return CACHED_ID end,GetX=function() return 16 end,
+        GetY=function() return 0 end,GetBuildings=function() error('cached building getter used') end}
+      local uiPlayers=setmetatable({[2]=setmetatable({GetCities=function() return {
+        Members=function() return ipairs({cached}) end} end},{__index=Players[2]})},{__index=Players})
+      local function event() local handlers={};return {Add=function(fn) handlers[#handlers+1]=fn end,
+        Emit=function() for _,fn in ipairs(handlers) do fn() end end} end
+      Events={GameCoreEventPublishComplete=event(),LoadScreenClose=event(),LocalPlayerTurnBegin=event()}
+      UI_CONTEXT=setmetatable({Players=uiPlayers,CityManager={GetCityAt=function(x,y) return UI_CITY_OBJECTS[x] end},
+        Game=setmetatable({GetGreatWorkPlayer=function() return 0 end},{__index=Game}),
+        PlayerManager={GetAlive=function() return {} end}},{__index=_G})
+      PLAN={ID='slot-query',From=1,To=0,Mode='MERGER',EntryConditionsMet=true,RelationsResolved=true,
+        Leader='RECRUIT',NativeWorks={[900]={Outcome='RETURN',ReturnOwner=2}}}
+      DealDirection={OUTGOING=1};DealItemTypes={GREATWORK=2}
+      DealManager={GetWorkingDeal=function() error('deal must wait for selection proof') end,
+        GetPossibleDealItems=function() error('deal queried before selection proof') end,
+        EnactWorkingDeal=function() error('deal enacted before selection proof') end}
+    "#).exec()?;
+    let provider = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua");
+    lua.load(fs::read_to_string(provider).map_err(mlua::Error::external)?)
+        .set_environment(lua.globals().get::<mlua::Table>("UI_CONTEXT")?)
+        .exec()?;
+    lua.load(
+        r#"
+      local tx=A.Apply(PLAN)
+      assert(tx.Status=='WAITING_UI' and tx.CityReadUI and not tx.Error)
+      assert(tx.CityReadUI.Reads[1].Method=='NATIVE_SLOTS' and tx.CityReadUI.Reads[1].Owner==2)
+      assert(tx.NativeWorks[1].TargetSlot==nil and SLOT_GETTERS==0)
+      SAVED_REQUEST=A.Canonical(tx.Request);SAVED_QUERY=A.Canonical(tx.CityReadUI)
+      SAVED_SPAWNS,SAVED_TRANSFERS=SPAWNS,TRANSFERS
+      for i=1,3 do
+        Events.GameCoreEventPublishComplete.Emit()
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and SLOT_GETTERS==0)
+      end
+      Game.props=A.Rules.Copy(Game.props)
+    "#,
+    )
+    .exec()?;
+    load(&lua, "JAC_Absorption_Gameplay.lua")?;
+    lua.load(r#"
+      A=JAC_AbsorptionGameplay
+      assert(A.Canonical(A.GetState().Transactions[PLAN.ID].CityReadUI)==SAVED_QUERY)
+      Events.LoadScreenClose.Emit()
+      assert(A.Resume(PLAN.ID).Status=='WAITING_UI')
+      CACHED_ID=CITIES[16]:GetID();Events.GameCoreEventPublishComplete.Emit()
+      local state=A.GetState();local query=state.Transactions[PLAN.ID].CityReadUI
+      assert(ExposedMembers.JAC_HeroReadAPI.GetObservation(query.Token).Published and SLOT_GETTERS>0)
+      pcall(A.Resume,PLAN.ID) -- the deliberately unavailable deal is beyond this read-only test
+      local tx=A.GetState().Transactions[PLAN.ID]
+      assert(tx.NativeWorks[1].TargetSlot and tx.NativeWorks[1].TargetSlot.City==CITIES[16]:GetID())
+      assert(tx.NativeWorks[1].TargetSlot.X==16 and tx.NativeWorks[1].TargetSlot.Y==0)
+      assert(A.Canonical(tx.Request)==SAVED_REQUEST and SPAWNS==SAVED_SPAWNS and TRANSFERS==SAVED_TRANSFERS)
+      assert(WORK_CITIES[4] and not WORK_CITIES[16],'slot requery moved the original work')
+    "#).exec()
+}
+
+#[test]
 fn inherited_native_types_use_city_owner_change_without_individual_move() -> mlua::Result<()> {
     for object_type in [
         "GREATWORKOBJECT_ARTIFACT",

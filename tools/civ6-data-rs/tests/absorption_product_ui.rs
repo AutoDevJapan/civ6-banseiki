@@ -133,6 +133,64 @@ assert(ExposedMembers.JAC_HeroReadAPI.ReadCity(1,196610,'SLOTS',11,nil,nil,129,3
 }
 
 #[test]
+fn compatible_native_slots_read_physical_city_and_wait_for_every_identity_mismatch(
+) -> anyhow::Result<()> {
+    let lua = city_read_provider()?;
+    lua.load(r#"
+GameInfo.Buildings=function() local once=false;return function()
+  if not once then once=true;return {Index=11,BuildingType='BUILDING_REAL'} end end end
+GameInfo.GreatWorkSlotTypes={[0]={GreatWorkSlotType='SLOT_REAL'}}
+GameInfo.GreatWork_ValidSubTypes=function() local once=false;return function()
+  if not once then once=true;return {GreatWorkObjectType='OBJECT_REAL',GreatWorkSlotType='SLOT_REAL'} end end end
+local buildings=REAL.GetBuildings
+REAL.GetBuildings=function()
+  local b=buildings()
+  b.HasBuilding=function(_,id) return id==11 end;b.IsPillaged=function() return false end
+  b.GetGreatWorkSlotType=function(_,id,slot) assert(id==11);return 0 end
+  return b
+end
+CACHED={ID=196610,X=129,Y=35,GetID=function(s) return s.ID end,
+  GetX=function(s) return s.X end,GetY=function(s) return s.Y end,
+  GetBuildings=function() error('stale collection building getter used') end}
+Players[1].GetCities=function() return {Members=function() return ipairs({CACHED}) end,
+  FindID=function() return CACHED end} end
+local function query() return ExposedMembers.JAC_HeroReadAPI.FindCompatibleNativeSlots(1,'OBJECT_REAL') end
+local slots=query()
+assert(#slots==1 and slots[1].Owner==1 and slots[1].City==196610 and slots[1].X==129
+  and slots[1].Y==35 and slots[1].Slot==1 and slots[1].Building==11)
+for _,field in ipairs({'Owner','ID','X','Y'}) do
+  local original=REAL[field];REAL[field]=original+1
+  local count=GETTERS.SLOTS
+  local ok,why=pcall(query)
+  assert(not ok and tostring(why):find('UI city cache is not ready',1,true),field..' stale candidate accepted')
+  assert(GETTERS.SLOTS==count,'getter ran on a mismatched physical city')
+  REAL[field]=original
+end
+local request={Token='slots:query',Reads={{Owner=1,Method='NATIVE_SLOTS',ObjectType='OBJECT_REAL'}}}
+ExposedMembers.JAC_Absorption={GetState=function() return {Transactions={t={ID='t',CityReadUI=request}}} end,
+  GetUIPhase=function() end}
+CACHED.ID=16
+Events.GameCoreEventPublishComplete.Emit()
+assert(ExposedMembers.JAC_HeroReadAPI.GetObservation(request.Token)==nil,'old collection acquired publication')
+CACHED.ID=196610
+Events.GameCoreEventPublishComplete.Emit()
+assert(ExposedMembers.JAC_HeroReadAPI.GetObservation(request.Token).Published)
+for _,fault in ipairs({'missing','player','api','getter'}) do
+  local player,manager=Players[1],CityManager
+  if fault=='missing' then PHYSICAL=false elseif fault=='player' then Players[1]=nil
+  elseif fault=='api' then CityManager={} else FAULT='getter' end
+  Events.LoadScreenClose.Emit()
+  local ok,why=pcall(query)
+  assert(not ok and tostring(why):find('UI city cache is not ready',1,true),fault..' did not wait')
+  assert(ExposedMembers.JAC_HeroReadAPI.GetObservation(request.Token)==nil)
+  Players[1],CityManager,PHYSICAL,FAULT=player,manager,true,nil
+  Events.LoadScreenClose.Emit();assert(#query()==1)
+end
+"#).exec()?;
+    Ok(())
+}
+
+#[test]
 fn native_read_waits_report_missing_identity_without_changing_getter_results() -> anyhow::Result<()>
 {
     let lua = Lua::new();

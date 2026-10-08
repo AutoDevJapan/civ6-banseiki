@@ -799,6 +799,7 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Admission.lua",
             "Scripts/JAC_Absorption_Product.lua",
             "Scripts/JAC_CarrierBoundary.lua",
+            "Scripts/JAC_NativeInventory.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
@@ -807,7 +808,8 @@ fn package_manifest() {
             "UI/JAC_Absorption_AdmissionUI.lua",
             "UI/JAC_Absorption_CityStates.lua",
             "UI/JAC_Absorption_ProductNativeRead.lua",
-            "Text/JAC_Absorption_Admission_Text.xml"
+            "Text/JAC_Absorption_Admission_Text.xml",
+            "UI/JAC_NativeInventory_UI.lua",
         ])
     );
     for file in files {

@@ -3026,9 +3026,14 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     ))
     .map_err(mlua::Error::external)?;
     // The absorption entry owns its private modules. The independent carrier
-    // boundary receiver has its own context and must also load exactly once.
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 2);
-    for id in ["JAC_Absorption_Gameplay", "JAC_CarrierBoundary"] {
+    // boundary and inventory receivers have their own contexts and must also
+    // load exactly once.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 3);
+    for id in [
+        "JAC_Absorption_Gameplay",
+        "JAC_CarrierBoundary",
+        "JAC_NativeInventory",
+    ] {
         assert_eq!(
             manifest
                 .matches(&format!(
@@ -3042,6 +3047,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
     assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
+    assert!(manifest.contains("<File>Scripts/JAC_NativeInventory.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(

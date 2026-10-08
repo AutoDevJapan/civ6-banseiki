@@ -2,6 +2,10 @@
 -- EXECUTE_SCRIPT requests and reads detached snapshots; it never rolls.
 include("JAC_Absorption_Rules")
 local R = JAC_AbsorptionRules
+local function Multiplayer()
+  return GameConfiguration and type(GameConfiguration.IsAnyMultiplayer) == "function"
+    and GameConfiguration.IsAnyMultiplayer() == true
+end
 local A = assert(JAC_AbsorptionGameplay, "absorption engine must load first")
 local F = {}
 local KEY = "JAC_ABSORPTION_FLOW_V1"
@@ -57,7 +61,7 @@ end
 local function Clamp(value, lo, hi) return math.max(lo, math.min(hi, value)) end
 local function DebugAllowed()
   return Game:GetProperty(TEST_KEY) == 1 and GameConfiguration
-    and GameConfiguration.IsAnyMultiplayer and not GameConfiguration.IsAnyMultiplayer()
+    and GameConfiguration.IsAnyMultiplayer and not Multiplayer()
 end
 local function DebugState()
   if not DebugAllowed() then return nil end
@@ -138,7 +142,7 @@ local function Portrait(kind, unit, record)
   if unit then return "ICON_" .. GameInfo.Units[unit:GetType()].UnitType end
   return nil
 end
-local function Inventory(plan)
+local function InventoryLocal(plan)
   local roster, entries, linked = A.GetRoster(plan.From), {}, {}
   for id, record in pairs(roster) do
     if record.Unit and record.Unit.Owner == plan.From and record.Unit.ID >= 0 then
@@ -292,6 +296,15 @@ local function IsAllowed(entry, action)
   end
   return false
 end
+local function Inventory(plan, phase)
+  if Multiplayer() then
+    assert(JAC_NativeInventory, "native inventory binding unavailable")
+    if JAC_NativeInventory.HasContext() then return InventoryLocal(plan) end
+    return JAC_NativeInventory.With(plan, phase or "FLOW_BEGIN", function() return InventoryLocal(plan) end)
+  end
+  return InventoryLocal(plan)
+end
+
 local function RequireActor(actor, flow)
   assert(type(actor) == "number" and actor == flow.To, "only absorbing player can choose")
   assert(Players[actor] and Players[actor]:IsAlive(), "absorber is no longer alive")
@@ -358,7 +371,7 @@ local function RequireNativeHeroes()
   assert(required.HEROCLASS_JAC_WARLORD_A and required.HEROCLASS_JAC_WARLORD_B,
     "required Sengoku Hero classes are missing")
 end
-function F.Begin(plan)
+local function Begin(plan)
   assert(type(plan) == "table" and type(plan.ID) == "string" and plan.ID ~= "",
     "absorption flow ID required")
   assert(type(plan.From) == "number" and type(plan.To) == "number" and plan.From ~= plan.To,
@@ -435,6 +448,18 @@ function F.Begin(plan)
   if not Players[plan.To]:IsHuman() then return F.Resolve(plan.To, plan.ID) end
   return R.Copy(flow)
 end
+function F.Begin(plan)
+  if not Multiplayer() then return Begin(plan) end
+  local ok,result=pcall(function()
+    return JAC_NativeInventory.With(plan,"FLOW_BEGIN",function() return Begin(plan) end)
+  end)
+  if not ok and tostring(result)=="JAC_ABSORPTION_WAITING_UI" then
+    return {ID=plan.ID,From=plan.From,To=plan.To,Phase="WAITING_SNAPSHOT"}
+  end
+  if not ok then error(result,0) end
+  return result
+end
+
 function F.Select(actor, id, assetID, action, returnOwner)
   local state = State()
   local flow = assert(state.Flows[id], "unknown absorption flow")
@@ -471,7 +496,10 @@ local function InventoryStillMatches(flow)
   if not Players[flow.From]:IsAlive() or not Players[flow.To]:IsAlive() then
     return false, "absorption faction died before resolution"
   end
-  local entries, roster = Inventory(flow.Request)
+  local entries, roster
+  if Multiplayer() then
+    entries,roster=JAC_NativeInventory.With(flow.Request,"FLOW_CHECK",function() return InventoryLocal(flow.Request) end)
+  else entries,roster=Inventory(flow.Request) end
   local actual = {}
   for _, entry in ipairs(entries) do
     actual[#actual + 1] = { ID = entry.ID, Kind = entry.Kind,
@@ -858,6 +886,20 @@ end
 function F.ResumeWorldFor(actor, id, observationToken)
   local state = State()
   local world = assert(state.World[id], "unknown escaped world asset")
+  local recovery = A.GetState().Recoveries["recovery:" .. world.ID]
+  local carrier = recovery and recovery.NativeCarrier
+  if carrier and carrier.MP then
+    assert(world.Status == "CLAIMED" and type(observationToken) == "string"
+      and world.WaitingFor == observationToken and recovery.ObservationToken == observationToken,
+      "MP world recovery token is not pending")
+    assert(actor == carrier.MP.Actor and Players[actor] and Players[actor]:IsAlive()
+      and Players[actor]:IsHuman() and Players[actor]:IsTurnActive(),
+      "only the selected human executor can resume MP world recovery")
+    assert(carrier.Owner == world.Recipient and carrier.MP.Recovery == "recovery:" .. world.ID,
+      "MP world recipient differs from recovery reservation")
+    ClaimWorld(state, world, world.Recipient)
+    return R.Copy(world)
+  end
   assert(type(actor) == "number" and actor == world.Recipient
     and Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
     "only the reward recipient can resume world recovery")
