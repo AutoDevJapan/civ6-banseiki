@@ -474,6 +474,21 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
     else {
         return Ok(false);
     };
+    if let Some(result) = r.process_identity(pid as u32) {
+        let Some(identity) = result? else {
+            return Ok(false);
+        };
+        let image = identity.image;
+        return Ok((info["live_chain"] != true || live_chain_image(&image))
+            && !CIV_EXECUTABLES
+                .iter()
+                .chain(["FiraxisBugReporter.exe", "steam.exe"].iter())
+                .any(|excluded| image.eq_ignore_ascii_case(excluded))
+            && (info["live_chain"] != true
+                || info["pid_created_filetime"]
+                    .as_u64()
+                    .is_none_or(|expected| identity.created_filetime == expected)));
+    }
     let out = r.run(
         Call::new(args(&[
             "tasklist",
@@ -1144,6 +1159,19 @@ pub(crate) struct WithinDeadline<'a, R> {
     pub(crate) deadline: f64,
 }
 impl<R: Runner> Runner for WithinDeadline<'_, R> {
+    fn process_identity(
+        &mut self,
+        pid: u32,
+    ) -> Option<Result<Option<crate::process::ProcessIdentity>, String>> {
+        if let Err(error) = time_left(self.runner, self.deadline) {
+            return Some(Err(error));
+        }
+        let result = self.runner.process_identity(pid);
+        if let Err(error) = time_left(self.runner, self.deadline) {
+            return Some(Err(error));
+        }
+        result
+    }
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         let left = time_left(self.runner, self.deadline)?;
         call.timeout = Some(call.timeout.unwrap_or(left).min(left));
