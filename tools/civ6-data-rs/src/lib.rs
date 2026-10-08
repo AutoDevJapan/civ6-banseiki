@@ -175,6 +175,7 @@ pub mod oath_batch_probe;
 pub mod oath_effect_audit;
 pub mod oath_expiry_probe;
 pub mod oath_naval_port;
+pub mod oath_production_inventory;
 pub mod oath_save_probe;
 pub mod oaths;
 pub mod pool;

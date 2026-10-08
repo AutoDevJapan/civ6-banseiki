@@ -498,13 +498,20 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         }
         _ => bail!("unknown or incompatible naval port fixture"),
     };
-    let expected = if port {
+    let mut expected = if port {
         crate::oath_naval_port::make_probe(repo, &entry)?
     } else if native {
         make_native_probe_with_basis(repo, &entry, basis)?
     } else {
         make_probe(repo, &entry)?
     };
+    if let Some(scope) = scenario.get("production_inventory_scope") {
+        ensure!(
+            native && scope == crate::oath_production_inventory::VERSION,
+            "unknown production inventory scope"
+        );
+        expected = crate::oath_production_inventory::decorate(expected)?;
+    }
     if native {
         let action = expected["steps"]
             .as_array()
@@ -528,7 +535,9 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         scenario["diagnostic_only"] == true
             && scenario["save_probe"] == expected["save_probe"]
             && scenario.get("native_production_basis") == expected.get("native_production_basis")
-            && scenario.get("naval_port_fixture") == expected.get("naval_port_fixture"),
+            && scenario.get("naval_port_fixture") == expected.get("naval_port_fixture")
+            && scenario.get("production_inventory_scope")
+                == expected.get("production_inventory_scope"),
         "artifact scope changed"
     );
     // Shipping can prepend lifecycle steps. It may not change the actual probe.
@@ -691,12 +700,24 @@ pub fn verify_artifacts(repo: &Repository, path: &Path) -> Result<Value> {
     if native {
         remaining.extend(["nominal_percentage_quantity", "normal_product_integration"]);
     }
-    Ok(
-        json!({"oath":evidence.oath,"numeric_and_native_save_verified":!native,
+    let mut report = json!({"oath":evidence.oath,"numeric_and_native_save_verified":!native,
         "native_q8_inverse_and_save_diagnostic_verified":native,
         "saved_name":evidence.saved_name,"house_count":22,"city_count":56,
-        "flags_per_city":66,"task_accepted":false,"remaining":remaining}),
-    )
+        "flags_per_city":66,"task_accepted":false,"remaining":remaining});
+    append_production_inventory_counts(&mut report, &evidence)?;
+    Ok(report)
+}
+
+fn append_production_inventory_counts(report: &mut Value, evidence: &Evidence) -> Result<()> {
+    if evidence.source["production_inventory_scope"] == crate::oath_production_inventory::VERSION {
+        let frame = crate::oath_expiry_probe::Frame::parse(&evidence.core_after)?;
+        let count = frame.get("cities")?.entries()?.len();
+        ensure!(count >= 56, "expanded saved frame lost original cities");
+        report["city_count"] = json!(count);
+        report["original_city_count"] = json!(56);
+        report["new_foreign_city_count"] = json!(count - 56);
+    }
+    Ok(())
 }
 
 fn verify_native_proof(
@@ -803,7 +824,36 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
         )?;
         return Ok(());
     }
-    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal [--naval-harbor] | --startup-diagnostic] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
+    let dynamic_native = args.len() == 6
+        && args[0] == "--native-exact-removal"
+        && args[1] == "--dynamic-foreign-inventory"
+        && args[2] == "--oath"
+        && args[4] == "--output";
+    let dynamic_port = args.len() == 7
+        && args[0] == "--native-exact-removal"
+        && args[1] == "--naval-harbor"
+        && args[2] == "--dynamic-foreign-inventory"
+        && args[3] == "--oath"
+        && args[5] == "--output";
+    if dynamic_native || dynamic_port {
+        let name = if dynamic_port { &args[4] } else { &args[3] };
+        let entry = catalogue(repo)?
+            .into_iter()
+            .find(|e| e["oath"] == *name)
+            .context("unknown production oath")?;
+        let source = if dynamic_port {
+            crate::oath_naval_port::make_probe(repo, &entry)?
+        } else {
+            make_native_probe(repo, &entry)?
+        };
+        let output = if dynamic_port { &args[6] } else { &args[5] };
+        write_new(
+            Path::new(output),
+            &crate::oath_production_inventory::decorate(source)?,
+        )?;
+        return Ok(());
+    }
+    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal [--naval-harbor] [--dynamic-foreign-inventory] | --startup-diagnostic] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR; options must appear in the shown order")
 }
 
 pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
@@ -819,6 +869,35 @@ pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn saved_inventory_report_counts_canonical_frames_without_relabeling_legacy_evidence(
+    ) -> Result<()> {
+        let vm = mlua::Lua::new();
+        for count in [55, 56, 57] {
+            let core_after=vm.load(format!("{HELPERS}\nlocal cities={{}};for i=1,{count} do cities[tostring(i)]={{id=i,owner=i==1 and 0 or 1}} end;return ser({{cities=cities}})")).eval::<String>()?;
+            let mut evidence = Evidence {
+                oath: "test".into(),
+                source: json!({"production_inventory_scope":crate::oath_production_inventory::VERSION}),
+                saved_name: "test".into(),
+                core_after,
+            };
+            let mut report = json!({"city_count":56});
+            if count < 56 {
+                assert!(append_production_inventory_counts(&mut report, &evidence).is_err());
+            } else {
+                append_production_inventory_counts(&mut report, &evidence)?;
+                assert_eq!(report["city_count"], count);
+                assert_eq!(report["original_city_count"], 56);
+                assert_eq!(report["new_foreign_city_count"], count - 56);
+            }
+            evidence.source = json!({});
+            let mut legacy = json!({"city_count":56});
+            append_production_inventory_counts(&mut legacy, &evidence)?;
+            assert_eq!(legacy, json!({"city_count":56}));
+        }
+        Ok(())
+    }
 
     #[test]
     fn production_rate_conversion_checks_bindings_and_tolerates_line_endings() -> Result<()> {
