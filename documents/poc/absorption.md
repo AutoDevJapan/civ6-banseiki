@@ -22,6 +22,27 @@
 
 今回の限定実行は新規2件と生成一致・Lua51構文1件の計3件が成功した。負例の初回はfixtureに都市が二つ残り、移管回数一回という検査自身の条件で失敗した。最後都市一つに合わせて修正し、欠損による未完了と再発行0回を確認した。製品不具合のREDとしては数えない。ログは `scratch/native-deal-logs/ai-artifact-city.log`、`ai-artifact-city-missing.log`（旧失敗）、`ai-artifact-city-missing-final.log`、`ai-core-route-generated-parity.log`。製品Rust/Lua源は変更せず、既存668の関連24件や親の最新全件を再実行していない。新規実機と実LANは0回。
 
+### 宮殿CITY候補の追跡結果：旧所有者への配置と容量不足
+
+70e7305aの次案だけを追跡した。上記SHA256と一致するFinalRelease DLLで、都市移管関数をRVA `0x142db0` から実際のreturn `0x144760` まで読み取った。作者のfunction_indexにある旧関数サイズ4205を現ビルドの終端として使っていない。関数名は作者のsymbol-build対応表から取り、以下の呼出先・分岐・戻り値の使用は現DLL命令列で照合した。この読取はGameplayの実行・MP実通信の証明ではない。
+
+| 現DLLで確認した処理 | 保全条件への影響 |
+|---|---|
+| `0x142e31` で旧都市の所有者を保存する。旧capital flagの分岐 `0x1437b0` から、旧所有者IDと保存した建物枠を渡して `0x14394a` のFindandMovetoNewCapitalへ進む | 対象は受取人の都市ではなく、都市を失った側の新首都候補。受取人だけの適合空枠snapshotでは足りない |
+| FindandMovetoNewCapital (`0x142010`〜`0x14217e`) は旧所有者の残都市から人口が最大の非占領都市を候補にする。候補があればSetAsCapitalとAddPalaceを行う。Capital属性の建物枠ごとに、候補が存在する場合だけ `0x14211d` でAddGreatWorkを呼ぶ | 旧所有者の最後都市では候補がない。候補がある場合も、作品は原所有者の側へ配置される。指定受取人への宮殿原本移管をこの処理からは保証できない |
+| 候補の有無にかかわらず、宮殿等Capital属性の有効indexを出力リストへ追加する (`0x142122`〜`0x142147`)。Transferはそのリストの全indexをコピー済みの移管都市からRemoveGreatWorkする (`0x143df0`〜`0x143e04`) | 候補不在でも原枠から取り除く経路がある。元indexのグローバル記録を消す処理と混同せず、物理枠から失われる危険として扱う |
+| 新首都側のAddGreatWorkは空き適合枠がなければ配置せずreturnする。FindandMovetoNewCapitalはCanAddGreatWorkを先行せず、配置成功を検査せずにindexを除去リストへ追加する | 候補都市があるだけでは保全条件を満たさない。配置失敗時の再配置予約や取消を、この宮殿経路の命令列から確認できない |
+| 別の一般建物置換経路では `0x143fbc` のRemoveGreatWork後、受取人CultureのReceiveGreatWorkを `0x143fcc` で呼ぶ。次の命令は枠ループの増分で、boolの戻り値を検査しない | ReceiveGreatWorkの容量不足falseを都市移管自身は処理しない。DealのPostEnactが持つstranded indexの再試行を、通常CITYへ流用された保証として扱わない |
+| Lua TransferCity wrapperは都市・受取人・任意の数値transfer typeを読み、同じ本体Transferを呼ぶ。移管typeによる後段の分岐より前に上記の旧capital処理がある。Capital属性の建物自体も `0x143e48`〜`0x143e60` で別再配置経路を通らず外される | 検査したtype引数の取扱いから、宮殿indexを受取人へ保つモードは確認できない。未知type値、追加引数、AI本人偽装では解禁しない |
+
+公開Luaに現れるCityTransferTypes.BY_GIFTの使用例は公式 `Base/Assets/UI/Popups/RazeCity.lua:109` にあるが、これは最後の移管種別を読み取る例であり、宮殿保全モードを示すものではない。wrapperの第三引数を省略した場合はtype 0、明示nilの場合は命令列上 `0x9368ee51` を渡す違いも確認した。ハッシュの意味や安全性を推測して利用しない。どちらも同じ旧capital処理を迂回する根拠にはならない。
+
+[作者のAddGreatWork解析](https://github.com/cru121/civ6-gamecore-reference/blob/main/findings/functions/Buildings_AddGreatWork.md)と[ReceiveGreatWork解析](https://github.com/cru121/civ6-gamecore-reference/blob/main/findings/functions/Culture_ReceiveGreatWork.md)にある、前者の容量不足で無処理・後者のfalse返却を現DLLでも照合した。内部setterがLuaから公開される証拠には使わない。早期SPの宮殿消失記録を覆す結果ではなく、最後都市・容量不足で失われ得る具体的な命令経路を追加で特定した結果である。
+
+よって今回の「共有snapshot→TransferCity一回→唯一性照合」だけでAI宮殿を解禁する案は実装しない。事後照合は喪失を検出できても取り除かれた枠を復元できない。続ける場合に必要なのは、原indexを取り除く前に実行できる公式の保全操作、または本体が配置成功を確定してから原枠を除く公開経路である。旧所有者の新首都候補と空枠を観測するだけでは指定受取人への移動まで接続できない。元ToDo996のAI宮殿・Artifact個別移動・散逸・回収の未達を維持する。
+
+静的証跡は専用WTの `scratch/core-route-evidence/` の `current-transfer-wrapper.asm`、`current-city-transfer-full.asm`、`current-transfer-tail.asm`、`current-find-new-capital.asm`、`current-add-great-work.asm`、`current-receive-great-work.asm`。再取得は同SHAのDLLへ `llvm-objdump -d --start-address=<image base+RVA> --stop-address=<image base+終端RVA>` を使う。今回の追加は文書だけで、製品源変更・新しいCargo・実機起動は0件。
+
 ### Core原本取引の履歴境界と発行済み記録の照合
 
 81ec605aの新規Core取引は独立レビューのMustにより未受領とし、今回の修正では新規MP Enactを停止した。Creatorと現在Ownerの一致、NativeOwnerMoves未記録または0、MOD取引記録の不在、定期NI初期snapshotだけでは、同一手番に起きたvanilla A→B→Aを排除できない。ND.Originalは閉じた本体履歴を証明できずfalseを返し、fresh DEALを明示指定してもND.Preflightが発行前に拒否する。自動certificateや仮想履歴getterは追加しない。生成されたMP NativeDeal bindingにはEnactWorkingDealの呼出しがない。旧Core-private builderはSP等の既存経路のために保持し、UIへ公開しない。
