@@ -2369,7 +2369,39 @@ fn multiplayer_native_hero_requires_actor_proposal_before_reading_ui_replica() {
     assert_network_unchanged(&h, 1, &request);
     assert!(h.truth("string.find(LOG[#LOG], 'requires an actor proposal',1,true)~=nil"));
     assert_eq!(h.eval("#REQUESTS"), 0);
-    assert!(manifest_text().contains("<SupportsMultiplayer>0</SupportsMultiplayer>"));
+    assert!(manifest_text().contains("<SupportsMultiplayer>1</SupportsMultiplayer>"));
+}
+
+#[test]
+fn multiplayer_ai_hero_without_owner_observation_chooses_legal_sale_without_ui_reads() {
+    let mut h = network_discovery();
+    h.exec("Players[1].IsHuman=function() return false end; ExposedMembers.JAC_RP_HeroUI.OriginBuilding=function() error('AI UI read') end; ExposedMembers.JAC_RP_HeroUI.ClaimPlayer=function() error('AI UI read') end; ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('AI UI read') end");
+    // Change only the fixture's explorer job, before the AI makes a choice.
+    h.exec("PROPERTY_STORE.JAC_RP_STATE_V1.religions.JAC_RP_PLACEHOLDER_01.discoveries.d.job='KABUKIMONO'");
+    let request = network_request(
+        &h,
+        "RESOLVE",
+        json!({"Outcome":"HERO","City":0,
+        "HeroClass":10,"HeroClaim":-1}),
+    );
+    assert_network_unchanged(&h, 1, &request);
+    assert_eq!(
+        h.call(
+            "ResolveForAI",
+            vec![json!(R1), json!("d"), h.options(json!({}))]
+        ),
+        "SELL"
+    );
+    assert_eq!(h.engine("1")["gold"], 600);
+    assert_eq!(h.export()["heroes"], json!({}));
+    assert_eq!(h.eval("#REQUESTS"), 0);
+    h.reload();
+    h.exec("MULTIPLAYER=true; Players[1].IsHuman=function() return false end");
+    assert_eq!(h.engine("1")["gold"], 600);
+    h.rejected(
+        "ResolveForAI",
+        vec![json!(R1), json!("d"), h.options(json!({}))],
+    );
 }
 
 #[test]

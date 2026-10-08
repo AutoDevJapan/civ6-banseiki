@@ -6,9 +6,9 @@
     <Description>LOC_JAC_RP_MOD_DESCRIPTION</Description>
     <Authors>civ6-banseiki</Authors>
     <CompatibleVersions>2.0</CompatibleVersions>
-    <!-- Choices and owner Hero observations use EXECUTE_SCRIPT. Native claim
-         observations are not independently verified by Core; LAN QA remains. -->
-    <SupportsMultiplayer>0</SupportsMultiplayer>
+    <!-- Choices and owner Hero observations use EXECUTE_SCRIPT. Core checks
+         saved reservations and Units; native claims remain UI display evidence. -->
+    <SupportsMultiplayer>1</SupportsMultiplayer>
   </Properties>
   <Dependencies>
     <Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
