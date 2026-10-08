@@ -1483,6 +1483,32 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_codec_accepts_a_large_world_within_the_wire_byte_limit() {
+        let left = mp_world(2, false);
+        let right = mp_world(3, false);
+        let payload=left.load(r#"
+          local world={Cities={},Works={}}
+          for id=1,80 do
+            local city={Owner=id%22,ID=id,Buildings={},Properties={},SLOTS={},WORK={}}
+            for building=1,20 do
+              city.Buildings[building]=true;city.SLOTS[building]=3;city.WORK[building]={[0]=-1,[1]=-1,[2]=-1}
+              city.Properties['property:'..building]={Value=id+building,Registered=true}
+            end
+            world.Cities[id]=city
+            world.Works[id]={Index=id,Owner=id%22,CityID=id,CreatorName='original creator',Effects={'TOURISM 4'}}
+          end
+          return JAC_CarrierMP.Encode(world)
+        "#).eval::<String>().unwrap();
+        assert!(payload.len() < 1048576);
+        right.globals().set("LARGE_WORLD", payload.clone()).unwrap();
+        let roundtrip = right
+            .load("return JAC_CarrierMP.Encode(JAC_CarrierMP.Decode(LARGE_WORLD))")
+            .eval::<String>()
+            .unwrap();
+        assert_eq!(roundtrip, payload);
+    }
+
+    #[test]
     fn mp_codec_round_trips_finite_double_bits_between_independent_vms() {
         let sender = ready();
         let receiver = ready();

@@ -98,11 +98,25 @@ fn world(local: i64, recipient: i64) -> Lua {
       end
     "#).exec().unwrap();
     lua.load(transport::gameplay_binding()).exec().unwrap();
-    lua.load(transport::inventory_binding()).exec().unwrap();
+    lua.load(
+        fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeInventory.lua"),
+        )
+        .unwrap(),
+    )
+    .exec()
+    .unwrap();
     lua.load("JAC_NativeInventoryPacket=function(p) return JAC_NativeInventoryCodec.Encode(p) end")
         .exec()
         .unwrap();
-    lua.load(transport::inventory_ui_binding()).exec().unwrap();
+    lua.load(
+        fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/UI/JAC_NativeInventory_UI.lua"),
+        )
+        .unwrap(),
+    )
+    .exec()
+    .unwrap();
     lua
 }
 
@@ -238,6 +252,33 @@ fn single_player_turn_events_preserve_saved_mp_inventory_intents() {
           assert(before~=JAC_NativeInventoryCodec.Encode(Game:GetProperty('JAC_NATIVE_INVENTORY_V1')))
         "#).exec().unwrap();
     }
+}
+
+#[test]
+fn consumed_inventory_requests_drop_large_snapshots_and_expire_next_turn() {
+    let lua = world(2, 3);
+    lua.load(r#"
+      Game.GetGreatWorkPlayer=function() return 1 end
+      for x,b in pairs(CORE_BUILDINGS) do local position=x
+        b.GetNumGreatWorkSlots=function() return 1 end
+        b.GetGreatWorkInSlot=function() return position==4 and 900 or -1 end
+        b.GetGreatWorkTypeFromIndex=function() return 4 end
+        b.GetCreatorNameFromIndex=function() return 'original creator' end
+        b.GetTurnFromIndex=function() return 3 end
+      end
+      for index=1,24 do
+        JAC_NativeInventory.With({ID='completed:'..index,From=1,To=3,Extra=string.rep('x',16384)},
+          'TEST_METADATA',function() assert(#JAC_NativeInventory.Works(1)==1) end)
+      end
+      local box=Game:GetProperty('JAC_NATIVE_INVENTORY_V1');local count=0
+      for _,q in pairs(box.Requests) do
+        count=count+1;assert(q.Consumed and q.Core==nil and q.CoreSignature==nil and q.Observation==nil and q.Plan==nil)
+      end
+      assert(count==24 and #JAC_NativeInventoryCodec.Encode(box)<12000)
+      CURRENT_TURN=6;GameEvents.PlayerTurnStartComplete.Emit(2)
+      assert(next(Game:GetProperty('JAC_NATIVE_INVENTORY_V1').Requests)==nil)
+      assert(TRANSFERS==0 and MOVES==0 and #SENT==0)
+    "#).exec().unwrap();
 }
 
 #[test]
@@ -596,6 +637,10 @@ fn unauthorized_actor_and_changed_source_never_accept_snapshot() {
     lua.load("CITIES[4].pop=CITIES[4].pop+1").exec().unwrap();
     assert!(!receive(&lua, &raw));
     lua.load("assert(TRANSFERS==0 and MOVES==0)")
+        .exec()
+        .unwrap();
+    assert!(receive(&lua, &publish(&lua)));
+    lua.load("assert(TRANSFERS==2 and MOVES==0)")
         .exec()
         .unwrap();
 }

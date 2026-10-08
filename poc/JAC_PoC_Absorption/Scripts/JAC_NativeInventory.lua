@@ -21,7 +21,9 @@ local function Encode(v)
 end
 local function Decode(s)
   assert(type(s)=='string' and #s<=1048576,'observation size')
-  local at,budget=1,8192
+  -- Every decoded node consumes input bytes. The wire byte limit bounds
+  -- total work while allowing valid inventories with more than 8192 nodes.
+  local at,budget=1,#s
   local function read(depth)
     budget=budget-1;assert(budget>=0 and depth<=24,'observation complexity')
     local tag=s:sub(at,at);at=at+1
@@ -58,6 +60,22 @@ JAC_NativeInventoryCodec={Encode=Encode,Decode=Decode}
 local context
 local function box() return R.Copy(Game:GetProperty(KEY) or {Version=1,Serial=0,Requests={}}) end
 local function save(b) assert(b.Version==1);Game:SetProperty(KEY,R.Copy(b)) end
+local function prune(b,turn)
+  local changed=false
+  for key,q in pairs(b.Requests) do
+    if q.Consumed and q.Turn<turn then b.Requests[key]=nil;changed=true end
+  end
+  return changed
+end
+local function receiptPayload(q)
+  local receipt=q.Receipt
+  if receipt and not receipt.Parts and not receipt.Payload then
+    -- Older V1 saves retain the accepted observation/chunks with the receipt.
+    if q.Chunks then receipt.Parts=R.Copy(q.Chunks)
+    elseif q.Observation then receipt.Payload=Encode(q.Observation) end
+  end
+  return receipt
+end
 local function active(id)
   local p=Players[id];return p and p:IsAlive() and p:IsHuman() and p.IsTurnActive and p:IsTurnActive()
 end
@@ -212,14 +230,16 @@ function NI.With(plan,phase,fn)
   local id=assert(plan.ID)
   assert(type(id)=='string' and #id>0 and #id<=256 and type(plan.From)=='number'
     and type(plan.To)=='number' and plan.From~=plan.To and Players[plan.From] and Players[plan.To],'inventory intent contract')
-  local core=descriptors();local signature=Encode(core)
   if context and context.Request.ID==id and context.Request.Phase==phase then return fn() end
   local b=box();assert(b.Version==1,'inventory save version')
+  if prune(b,Game.GetCurrentGameTurn()) then save(b) end
+  local core=descriptors();local signature=Encode(core)
   local key=id..':'..phase;local q=b.Requests[key]
   if q then assert(q.From==plan.From and q.To==plan.To,'inventory intent identity changed') end
   if not q or q.Consumed or q.Turn~=Game.GetCurrentGameTurn() or q.CoreSignature~=signature then
     b.Serial=b.Serial+1
-    q={ID=id,From=plan.From,To=plan.To,Phase=phase,Nonce=b.Serial,Turn=Game.GetCurrentGameTurn(),Core=core,CoreSignature=signature,Plan=R.Copy(plan)}
+    q={ID=id,From=plan.From,To=plan.To,Phase=phase,Nonce=b.Serial,Turn=Game.GetCurrentGameTurn(),Core=core,CoreSignature=signature,
+      Plan=phase=='FLOW_BEGIN' and R.Copy(plan) or {ID=id,From=plan.From,To=plan.To}}
     local direct=captureCore(core)
     if direct then q.Observation=direct;q.EvidenceKind='DIRECT_CORE';validate(direct,core)
     else q.Actor=selected() end
@@ -239,7 +259,10 @@ function NI.With(plan,phase,fn)
   if not values[1] then error(values[2],0) end
   -- A later logical read gets another publication, even if only UI-only work
   -- positions changed and the Core descriptor signature remained identical.
-  b=box();b.Requests[key].Consumed=true;save(b)
+  b=box();local finished=assert(b.Requests[key]);finished.Consumed=true
+  receiptPayload(finished)
+  finished.Core=nil;finished.CoreSignature=nil;finished.Observation=nil;finished.Plan=nil
+  finished.Chunks=nil;finished.ChunkCount=nil;save(b)
   return unpack(values,2)
 end
 function NI.Works(owner)
@@ -262,7 +285,9 @@ function NI.Locations(index)
 end
 function NI.Tick()
   local pending=box().Requests
-  for _,key in ipairs(R.Keys(pending)) do local q=box().Requests[key]
+  for _,key in ipairs(R.Keys(pending)) do
+    local current=Game:GetProperty(KEY)
+    local q=current and current.Requests[key] and R.Copy(current.Requests[key])
     if q and q.Observation and not q.Consumed then
       local ok,err=pcall(function()
         if q.Phase=='FLOW_BEGIN' then return JAC_AbsorptionFlowGameplay.Begin(q.Plan) end
@@ -283,7 +308,11 @@ end
 function NI.Refresh()
   if not GameConfiguration or not GameConfiguration.IsAnyMultiplayer
     or not GameConfiguration.IsAnyMultiplayer() then return end
-  local b=box();local actor=selected();local turn=Game.GetCurrentGameTurn();local changed=false
+  local b=box();local turn=Game.GetCurrentGameTurn();local changed=prune(b,turn)
+  local needsDescriptor=false
+  for _,q in pairs(b.Requests) do if not q.Consumed and not q.Observation then needsDescriptor=true;break end end
+  if not needsDescriptor then if changed then save(b) end;NI.Tick();return end
+  local actor=selected()
   local core=descriptors();local signature=Encode(core)
   for _,key in ipairs(R.Keys(b.Requests)) do local q=b.Requests[key]
     if not q.Consumed and not q.Observation and (q.Actor~=actor or q.Turn~=turn or q.CoreSignature~=signature) then
@@ -306,15 +335,25 @@ local function receive(actor,p)
     assert(type(p.Part)=='number' and type(p.Parts)=='number' and p.Part==math.floor(p.Part)
       and p.Parts==math.floor(p.Parts) and p.Parts>=1 and p.Parts<=64 and p.Part>=1 and p.Part<=p.Parts
       and type(p.Payload)=='string' and #p.Payload>0 and #p.Payload<=16384,'inventory chunk contract')
+  end
+  if q.Receipt then
+    local receipt=receiptPayload(q)
+    if chunked then
+      assert(receipt.Parts and #receipt.Parts==p.Parts and receipt.Parts[p.Part]==p.Payload,'inventory duplicate chunk changed')
+    else assert(receipt.Payload==p.Payload,'inventory duplicate payload changed') end
+    return true
+  end
+  if chunked then
     assert(not q.ChunkCount or q.ChunkCount==p.Parts,'inventory chunk count changed')
     if q.Chunks and q.Chunks[p.Part] then
       assert(q.Chunks[p.Part]==p.Payload,'inventory duplicate chunk changed');return true
     end
   end
-  if q.Receipt then
-    assert(Equal(q.Observation,Decode(p.Payload)),'inventory duplicate payload changed');return true
+  local fresh=descriptors();local signature=Encode(fresh)
+  if signature~=q.CoreSignature then
+    b.Serial=b.Serial+1;q.Core=fresh;q.CoreSignature=signature;q.Nonce=b.Serial
+    q.Actor=selected();q.Chunks=nil;q.ChunkCount=nil;save(b);return false
   end
-  assert(Encode(descriptors())==q.CoreSignature,'inventory source changed')
   local payload=p.Payload
   if chunked then
     q.ChunkCount=p.Parts;q.Chunks=q.Chunks or {};q.Chunks[p.Part]=p.Payload
@@ -326,7 +365,9 @@ local function receive(actor,p)
   if direct then assert(Equal(direct,o),'inventory differs from available Core getters') end
   if q.Observation then assert(Equal(q.Observation,o),'inventory duplicate payload changed');return true end
   q.Observation=R.Copy(o);q.EvidenceKind=direct and 'DIRECT_CORE' or 'SYNCHRONIZED_ACTOR_OBSERVATION'
-  q.Receipt={Actor=actor,Nonce=q.Nonce,Turn=q.Turn};save(b);return true
+  q.Receipt={Actor=actor,Nonce=q.Nonce,Turn=q.Turn,
+    Parts=chunked and R.Copy(q.Chunks) or nil,Payload=not chunked and payload or nil}
+  q.Chunks=nil;q.ChunkCount=nil;save(b);return true
 end
 GameEvents.JAC_NativeInventory_Operation.Add(function(actor,p)
   local ok,result=pcall(receive,actor,p)

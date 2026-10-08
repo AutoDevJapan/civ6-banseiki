@@ -21,7 +21,9 @@ local function Encode(v)
 end
 local function Decode(s)
   assert(type(s)=='string' and #s<=1048576,'observation size')
-  local at,budget=1,8192
+  -- Every decoded node consumes input bytes. The wire byte limit bounds
+  -- total work while allowing valid inventories with more than 8192 nodes.
+  local at,budget=1,#s
   local function read(depth)
     budget=budget-1;assert(budget>=0 and depth<=24,'observation complexity')
     local tag=s:sub(at,at);at=at+1
