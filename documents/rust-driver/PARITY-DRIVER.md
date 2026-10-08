@@ -78,7 +78,7 @@ C:/Users/makhmeto/.cargo/bin/cargo.exe test --offline --manifest-path tools/civ6
 | test_restart_action_launches_and_clicks_verified_window | 起動、窓確認、DX11 確認、クリックの順序と回数を確認する |
 | test_frontend_probe_reconnects_after_unknown_read_only_reply | 読み取り照会の応答不明後に切断して再照会する |
 | test_frontend_probe_clicks_again_if_movie_still_plays | オープニングが続けば12秒後にもう一度クリックする |
-| test_steam_launch_retries_when_prior_session_blocks_first_uri | 起動窓が出ない状態が続けば Steam 起動を2回試す |
+| test_steam_launch_waits_for_delayed_prior_session_without_replaying_uri | 起動窓が遅れても Steam 起動要求は一度だけ送り、結果を待つ |
 | test_single_process_waits_for_exiting_process_to_disappear | 重複プロセスが消えるまで待ち、残った PID と開始時刻を返す |
 | test_single_process_still_refuses_when_duplicates_persist | 重複が残れば入力エラーで拒否する |
 | test_window_wait_ignores_transient_duplicate_processes | 一時的な重複の後で単一のゲーム窓を認識する |

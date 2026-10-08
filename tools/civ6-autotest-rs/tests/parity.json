@@ -1003,8 +1003,8 @@
     "source": "tools/civ6-autotest/tests/test_restart.py",
     "class": "RestartActionTests",
     "test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
-    "rust_test": "test_steam_launch_retries_when_prior_session_blocks_first_uri",
-    "assertions": "起動窓が出ない状態が続けば Steam 起動を2回試す",
+    "rust_test": "test_steam_launch_waits_for_delayed_prior_session_without_replaying_uri",
+    "assertions": "起動窓が遅れても Steam 起動要求は一度だけ送り、結果を待つ",
     "rust_target": "driver_restart"
   },
   {
