@@ -6,6 +6,8 @@
 
 | パス | 位置づけ |
 |---|---|
+| [`spec/data/banseiki-pool.json`](spec/data/banseiki-pool.json) | 万世紀プールの初期300人の採用済み人物台帳（SSOT 4.8） |
+| [`spec/banseiki-pool-data.md`](spec/banseiki-pool-data.md) | 人物データの項目とRust検査の使い方 |
 | [`spec/ssot/`](spec/ssot/) | **唯一の仕様正本（SSOT）**。章・節ごとのファイルに分割している。本文中の「本書」はこのディレクトリ全体を指す |
 | [`spec/data/territory-allocation-candidates.json`](spec/data/territory-allocation-candidates.json) | SSOT 14.4 / 14.5 から再生成できる**派生データ**。インポート・自動テスト用 |
 | [`spec/territory-allocation-data.md`](spec/territory-allocation-data.md) | 上記 JSON のデータ辞書、不変条件、SSOT との照合結果 |
@@ -51,10 +53,13 @@
 | [`poc/sengoku-calendar.md`](poc/sengoku-calendar.md) | 戦国パックの1534年開始・速度別暦進行と実機確認項目 |
 | [`poc/autotest.md`](poc/autotest.md) | Civ6 PoC 検証ドライバの使い方、時間・メモリ・保存容量・ロード時間のCSVと集計、実機シナリオとログ判定 |
 | [`poc/autotest-native.md`](poc/autotest-native.md) | PR87のPythonを実行しないRust検証ドライバー、標準の待ち列との接続、対応範囲と検査結果 |
+| [`poc/banseiki-pool.md`](poc/banseiki-pool.md) | 300人の登録、2人の選択、保存・再読込の検証と画像の参照元 |
+| [`poc/hotseat-log-bridge.md`](poc/hotseat-log-bridge.md) | PR100の検証専用MODによるLua.log通信、元21手順と2回の保存・再読込の実機結果 |
 | [`poc/leader-portraits.md`](poc/leader-portraits.md) | 1534年日本22勢力の指導者肖像、画像台帳、生成・実機確認手順 |
 | [`poc/leader-persona.md`](poc/leader-persona.md) | 22人の性格・史料、進化用称号と人物別の功績、専攻・分岐を永久固定するツリー全表と専用画面、公式APIの根拠、実機用シナリオ |
 | [`poc/native-slots-diagnostic.md`](poc/native-slots-diagnostic.md) | PR86の匿名本体総督枠と支払い候補を分離したテストMOD、Rust/Lua検査結果、実機で未確認の条件 |
 | [`poc/pr86-native-admission.md`](poc/pr86-native-admission.md) | PR86の加入人物と本体任命資格の静的解析、実機拒否、独立Rust bridgeの元判定を保つ試作と次の実機順序 |
+| [`poc/pr86-saved-price.md`](poc/pr86-saved-price.md) | PR86の加入時価格契約、価格更新をまたぐ保存、称号予約・資格・UIの生成と回帰検査、親で継続する受入範囲 |
 | [`poc/pr86-native-runtime-probe.md`](poc/pr86-native-runtime-probe.md) | PR86の本体資格関数を変更せずに呼出し元・引数・戻り値を観測するRust debugger、live_chain接続、専用子プロセスでの検査と実機未確認の条件 |
 | [`poc/pr86-boundary-diagnostic.md`](poc/pr86-boundary-diagnostic.md) | PR86の本体中和・未配置回復・都市喪失を観測するテスト専用MOD、独立シナリオと未確定の敵スパイ操作 |
 | [`poc/pr86-boundary-progress.md`](poc/pr86-boundary-progress.md) | 境界診断を実装する担当の検査結果と、実機未観測の項目 |
@@ -71,6 +76,8 @@
 | [`rust-migration-test-inventory.json`](rust-migration-test-inventory.json) | 移行前の全テスト名と、Rust で対応する workspace の区分 |
 | [`rust-migration-incremental-inventory.json`](rust-migration-incremental-inventory.json) | 移行中に main へ追加された吸収・英雄・再起動の137項目 |
 | [`tooling/civ6-live-rust-driver.md`](tooling/civ6-live-rust-driver.md) | 共有の実機実行ツールを Rust 実行器へ接続する処理と変更差分 |
+| [`tooling/civ6-live-reliability.md`](tooling/civ6-live-reliability.md) | 基盤だけの最小保存読込を10回連続で確かめ、停止段階と元のエラーを記録する手順 |
+| [`tooling/civ6-live-reliability-2026-10-07.md`](tooling/civ6-live-reliability-2026-10-07.md) | 2026年10月6〜7日のPR別停止原因と基盤修正・実機確認の記録 |
 | [`tooling/civ6-startup-recovery.md`](tooling/civ6-startup-recovery.md) | 起動停止の実測、表示処理の復旧、オーバーレイの設定と3回連続起動の証拠 |
 | [`rust-driver/README.md`](rust-driver/README.md) | 実機ドライバーの214テストの対応、レビュー指摘への修正、統合するコミットの順序 |
 

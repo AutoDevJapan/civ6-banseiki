@@ -11,6 +11,19 @@ pub mod persona_engine;
 pub mod strict;
 
 pub fn repo_root() -> PathBuf {
+    // Cargo integration tests run in their package directory. A shared target
+    // can reuse a dependency whose baked manifest path belongs to a different
+    // checkout; read the executing checkout's scripts, never that cached path.
+    if let Ok(directory) = std::env::current_dir() {
+        if let Some(root) = directory.ancestors().find(|root| {
+            root.join("tools/Cargo.toml").is_file()
+                && root
+                    .join("poc/JAC_PoC_LeaderPersona/Scripts/JAC_LeaderPersona_Gameplay.lua")
+                    .is_file()
+        }) {
+            return root.to_path_buf();
+        }
+    }
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()

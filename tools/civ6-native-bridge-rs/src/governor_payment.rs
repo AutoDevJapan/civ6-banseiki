@@ -103,6 +103,61 @@ impl PromotionSnapshot {
     }
 }
 
+/// Who an official PROMOTE checker result belongs to, as already identified by
+/// the caller from its ready catalog. `Standard` is only valid for an Index the
+/// caller found absent from that catalog; unknown or unready catalogs must be
+/// passed as a `Persona` without a snapshot so that they close.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PromotionSubject<'a> {
+    Standard,
+    Persona {
+        definition: PaymentDefinition,
+        /// Expected owner from the current invocation (Governors+0x70 -> +0xd8).
+        owner: u32,
+        /// None when the person's own flags could not be read consistently.
+        snapshot: Option<&'a PromotionSnapshot>,
+        /// Synchronized join/evolution admission for this owner and person.
+        joined: bool,
+    },
+}
+
+/// Pure promotion policy. It never turns an original false into true and
+/// keeps every RAX bit except AL. A persona may only take the next unpaid
+/// evolution TITLE of its saved cost; base, extra TITLEs, skills (bought via
+/// property, never PROMOTE) and anything after full payment are denied.
+/// Partial payment is allowed here, unlike the paid-assignment gate.
+/// The process-owned Windows runtime applies this to the two pinned natural
+/// CanPromote callers after their original call, using admission and catalog.
+pub fn restrict_promotion(
+    original: u64,
+    subject: PromotionSubject<'_>,
+    requested: u32,
+    call_current: bool,
+) -> u64 {
+    if original & 0xff == 0 {
+        return original;
+    }
+    let PromotionSubject::Persona {
+        definition,
+        owner,
+        snapshot,
+        joined,
+    } = subject
+    else {
+        return original;
+    };
+    let next = snapshot
+        .filter(|_| joined && call_current)
+        .and_then(|s| s.diagnostic_paid(owner, definition).ok())
+        .filter(|paid| (1..definition.cost).contains(paid))
+        .and_then(|paid| definition.titles[usize::from(paid) - 1]);
+    if next == Some(requested) {
+        original
+    } else {
+        original & !0xff
+    }
+}
+
 fn copy<const N: usize>(memory: &impl CurrentMemory, address: u64) -> Result<[u8; N], ReadFailure> {
     if address == 0 || address.checked_add(N as u64).is_none() {
         return Err(ReadFailure::Unreadable);
@@ -486,6 +541,197 @@ mod tests {
                 .unwrap()
                 .diagnostic_paid(7, definition),
             Err(PaymentFailure::OutOfOrder)
+        );
+    }
+
+    fn snapshot_with(owner: u32, person: u32, owned: &[u32]) -> PromotionSnapshot {
+        let mut words = [0u64; PROMOTION_WORDS];
+        for index in owned {
+            words[*index as usize / 64] |= 1 << (index % 64);
+        }
+        PromotionSnapshot {
+            owner,
+            governor_index: person,
+            count: 64,
+            owned: words,
+        }
+    }
+
+    #[test]
+    fn promotion_policy_allows_only_the_next_unpaid_title_exhaustively() {
+        // base 10, TITLE_1 11, TITLE_2 12. Indices 13/14 model TITLE_1/2 rows
+        // kept for cost1 saved-price compatibility; 20 is a property skill.
+        let sequence = [10u32, 11, 12];
+        let requests = [10u32, 11, 12, 13, 14, 20, 4095];
+        let sentinel = 0xaabb_ccdd_1122_3301u64;
+        let mut allowed_cases = 0;
+        for cost in 1..=3u8 {
+            let definition = PaymentDefinition {
+                governor_index: 22,
+                cost,
+                base: 10,
+                titles: [(cost >= 2).then_some(11), (cost == 3).then_some(12)],
+            };
+            let needed = &sequence[..cost as usize];
+            for mask in 0..32u32 {
+                let owned: Vec<u32> = [10, 11, 12, 13, 14]
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(bit, _)| mask & (1 << bit) != 0)
+                    .map(|(_, index)| index)
+                    .collect();
+                // Independent model: the needed flags must form a prefix.
+                let held: Vec<bool> = needed.iter().map(|i| owned.contains(i)).collect();
+                let paid = held.iter().take_while(|h| **h).count();
+                let ordered = held[paid..].iter().all(|h| !h);
+                for (snapshot_owner, person) in [(7, 22), (8, 22), (7, 23)] {
+                    let snapshot = snapshot_with(snapshot_owner, person, &owned);
+                    for requested in requests {
+                        for (joined, current, readable) in [
+                            (true, true, true),
+                            (false, true, true),
+                            (true, false, true),
+                            (true, true, false),
+                        ] {
+                            let subject = PromotionSubject::Persona {
+                                definition,
+                                owner: 7,
+                                snapshot: readable.then_some(&snapshot),
+                                joined,
+                            };
+                            let allowed = joined
+                                && current
+                                && readable
+                                && (snapshot_owner, person) == (7, 22)
+                                && ordered
+                                && paid >= 1
+                                && paid < cost as usize
+                                && requested == sequence[paid];
+                            allowed_cases += usize::from(allowed);
+                            let expected = if allowed { sentinel } else { sentinel & !0xff };
+                            assert_eq!(
+                                restrict_promotion(sentinel, subject, requested, current),
+                                expected,
+                                "cost {cost} owned {owned:?} owner {snapshot_owner} person {person} \
+                                 request {requested} joined {joined} current {current} readable {readable}"
+                            );
+                            // An original false is never opened, all upper bits kept.
+                            assert_eq!(
+                                restrict_promotion(sentinel & !0xff, subject, requested, current),
+                                sentinel & !0xff
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // cost2: base only -> TITLE_1. cost3: base -> TITLE_1, base+T1 -> TITLE_2.
+        // Flags outside the definition are free: cost2 has 12/13/14 (8),
+        // cost3 has 13/14 for each of its two steps (4 + 4).
+        assert_eq!(allowed_cases, 8 + 4 + 4);
+    }
+
+    #[test]
+    fn promotion_policy_keeps_standard_governors_and_rejects_bad_definitions() {
+        let sentinel = 0x1234_5678_9abc_de01u64;
+        for requested in [0, 10, 11, 4095] {
+            for current in [true, false] {
+                assert_eq!(
+                    restrict_promotion(sentinel, PromotionSubject::Standard, requested, current),
+                    sentinel
+                );
+                assert_eq!(
+                    restrict_promotion(
+                        sentinel & !0xff,
+                        PromotionSubject::Standard,
+                        requested,
+                        current
+                    ),
+                    sentinel & !0xff
+                );
+            }
+        }
+        let snapshot = snapshot_with(7, 22, &[10]);
+        for definition in [
+            // cost2 missing TITLE_1, duplicate title, title equal to base, cost0.
+            PaymentDefinition {
+                governor_index: 22,
+                cost: 2,
+                base: 10,
+                titles: [None, None],
+            },
+            PaymentDefinition {
+                governor_index: 22,
+                cost: 3,
+                base: 10,
+                titles: [Some(11), Some(11)],
+            },
+            PaymentDefinition {
+                governor_index: 22,
+                cost: 2,
+                base: 10,
+                titles: [Some(10), None],
+            },
+            PaymentDefinition {
+                governor_index: 22,
+                cost: 0,
+                base: 10,
+                titles: [None, None],
+            },
+            // Title outside the copied flag range is unknown, not payable.
+            PaymentDefinition {
+                governor_index: 22,
+                cost: 2,
+                base: 10,
+                titles: [Some(64), None],
+            },
+        ] {
+            for requested in [10, 11, 64] {
+                let subject = PromotionSubject::Persona {
+                    definition,
+                    owner: 7,
+                    snapshot: Some(&snapshot),
+                    joined: true,
+                };
+                assert_eq!(
+                    restrict_promotion(sentinel, subject, requested, true),
+                    sentinel & !0xff
+                );
+            }
+        }
+        // A non-boolean nonzero AL is still treated as an original true and
+        // only AL is cleared on denial.
+        let subject = PromotionSubject::Persona {
+            definition: PaymentDefinition {
+                governor_index: 22,
+                cost: 1,
+                base: 10,
+                titles: [None, None],
+            },
+            owner: 7,
+            snapshot: Some(&snapshot),
+            joined: true,
+        };
+        assert_eq!(
+            restrict_promotion(0xffff_ff80, subject, 13, true),
+            0xffff_ff00
+        );
+        // An out-of-range owner never matches even if the snapshot says so.
+        let foreign_snapshot = snapshot_with(64, 22, &[10]);
+        let foreign = PromotionSubject::Persona {
+            definition: PaymentDefinition {
+                governor_index: 22,
+                cost: 2,
+                base: 10,
+                titles: [Some(11), None],
+            },
+            owner: 64,
+            snapshot: Some(&foreign_snapshot),
+            joined: true,
+        };
+        assert_eq!(
+            restrict_promotion(sentinel, foreign, 11, true),
+            sentinel & !0xff
         );
     }
 

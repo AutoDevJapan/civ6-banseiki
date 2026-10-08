@@ -1,4 +1,5 @@
-//! Explicit process-lifetime owner of the existing three-entry composite.
+//! Explicit process-lifetime owner of appointment, property, assignment and
+//! the two pinned natural CanPromote callers.
 //! No timer uninstalls it. The single finite observation may expire or stop;
 //! its allocation, gateways and authority remain resident until process exit.
 //! Close/rebuild exports are control boundaries, NOT an observed reload hook.
@@ -7,7 +8,7 @@ use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_PIN,
 };
 
-pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0001;
+pub const RUNTIME_CONFIG_VERSION: u32 = 0x0324_0002;
 // Relocated data exports identify the exact gateway for each entry. Read
 // their values in the loaded DLL, not a DONT_RESOLVE_DLL_REFERENCES image.
 #[unsafe(no_mangle)]
@@ -17,10 +18,15 @@ pub static BRIDGE_RUNTIME_PROPERTY_GATEWAY: unsafe extern "system" fn() = proper
 #[unsafe(no_mangle)]
 pub static BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY: unsafe extern "system" fn() =
     assignment::assign_calibration_gateway;
+#[unsafe(no_mangle)]
+pub static BRIDGE_RUNTIME_PROMOTION_GATEWAY: unsafe extern "system" fn() =
+    promotion::runtime_promotion_gateway;
 static OWNED: AtomicBool = AtomicBool::new(false);
 static INSTALLED: AtomicBool = AtomicBool::new(false);
-static RECORDING: AtomicBool = AtomicBool::new(false);
-static SAMPLE_FLIGHTS: AtomicU32 = AtomicU32::new(0);
+// One atomic word orders admission against closure. A successful stop cannot
+// miss a writer between a separate enabled check and counter increment.
+static SAMPLE_GATE: civ6_bootstrap_rs::observation::ObservationGate =
+    civ6_bootstrap_rs::observation::ObservationGate::new(false);
 static DEADLINE_MS: AtomicU64 = AtomicU64::new(0);
 // Reset stamp and invocation generation change in ONE cmpxchg16b. A reset
 // paused after its phase CAS cannot advance generation after a newer reset.
@@ -348,30 +354,43 @@ pub(super) fn payment_after_catalog(owner: usize, ticket: u32) -> bool {
         && STATE[owner].load() == snapshot
 }
 
-/// Acquisition/recheck makes observation stop drain only sampled callbacks.
+/// The closed bit and active writer count share a single linearization point.
 /// No hook waits, allocates or takes a lock. Rows are never reset or redirected.
 pub(super) fn sample_begin() -> bool {
     if !owned() {
         return true;
     }
+    // A callback entering during installation belongs to the unpublished
+    // phase. It may finish after initialization, but may not expire or enter
+    // that later observation using the old, zero deadline.
+    let installed = INSTALLED.load(Ordering::Acquire);
+    #[cfg(test)]
+    if SAMPLE_PUBLISH_PAUSE.swap(false, Ordering::AcqRel) {
+        SAMPLE_PUBLISH_PAUSED.store(true, Ordering::Release);
+        while !SAMPLE_PUBLISH_RELEASE.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+    }
+    if !installed {
+        return false;
+    }
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     if now >= DEADLINE_MS.load(Ordering::Acquire) {
-        RECORDING.store(false, Ordering::Release);
+        SAMPLE_GATE.close();
     }
-    if !RECORDING.load(Ordering::Acquire) {
-        return false;
-    }
-    SAMPLE_FLIGHTS.fetch_add(1, Ordering::AcqRel);
-    if !RECORDING.load(Ordering::Acquire) {
-        SAMPLE_FLIGHTS.fetch_sub(1, Ordering::Release);
-        return false;
-    }
-    true
+    SAMPLE_GATE.try_acquire()
 }
+
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_PAUSE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_PAUSED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+pub(super) static SAMPLE_PUBLISH_RELEASE: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn sample_end() {
     if owned() {
-        SAMPLE_FLIGHTS.fetch_sub(1, Ordering::Release);
+        SAMPLE_GATE.release();
     }
 }
 
@@ -389,9 +408,9 @@ fn stop_observation() -> BridgeStatus {
     if !INSTALLED.load(Ordering::Acquire) {
         return BridgeStatus::InvalidInput;
     }
-    RECORDING.store(false, Ordering::Release);
+    SAMPLE_GATE.close();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-    while SAMPLE_FLIGHTS.load(Ordering::Acquire) != 0 {
+    while !SAMPLE_GATE.drained() {
         if std::time::Instant::now() >= deadline {
             return BridgeStatus::Critical;
         }
@@ -400,11 +419,14 @@ fn stop_observation() -> BridgeStatus {
     BridgeStatus::Ok
 }
 
-pub(super) fn allocate_trace() -> *mut CompositeTrace {
+/// The complete raw property log is committed and touched before any hook
+/// exists. Its failure refuses installation; there is no 4096-row fallback.
+pub(super) fn allocate_trace() -> Option<*mut CompositeTrace> {
+    property_log::publish()?;
     let trace = Box::into_raw(CompositeTrace::boxed());
     OWNED.store(true, Ordering::Release);
     advance();
-    trace
+    Some(trace)
 }
 
 #[cfg(test)]
@@ -437,10 +459,13 @@ fn pause_reset() {
 }
 
 pub(super) fn start_observation(seconds: u32) {
-    INSTALLED.store(true, Ordering::Release);
     let now = unsafe { windows_sys::Win32::System::SystemInformation::GetTickCount64() };
     DEADLINE_MS.store(now + u64::from(seconds) * 1000, Ordering::Release);
-    RECORDING.store(true, Ordering::Release);
+    SAMPLE_GATE.initialize_before_publish();
+    // Publish stoppability only after opening the observation. Otherwise a
+    // concurrent stop could succeed against the initial closed word and then
+    // be undone by this store of zero.
+    INSTALLED.store(true, Ordering::Release);
 }
 
 #[cfg(test)]
@@ -495,6 +520,8 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         // trace ownership. Its ordinary restoration contract still applies.
         if PROPERTY_USED.load(Ordering::Acquire)
             || ASSIGN_USED.load(Ordering::Acquire)
+            || PROMOTION_USED.load(Ordering::Acquire)
+            || promotion::used()
             || HOOK.lock().map_or(true, |hook| hook.is_some())
             || JOINED_PROPERTY_HOOK
                 .lock()
@@ -519,6 +546,7 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         if gamecore.is_null()
             || !module_path(gamecore).is_some_and(|path| same_file(&path, GAMECORE))
             || pinned_gamecore(Path::new(GAMECORE), BridgeMode::ProductionAdmission).is_none()
+            || !promotion::verify(gamecore as usize)
         {
             return BridgeStatus::GameCoreIdentity as u32;
         }
@@ -547,7 +575,20 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         {
             return BridgeStatus::HookFailure as u32;
         }
-        let trace = allocate_trace();
+        let Some(trace) = allocate_trace() else {
+            return BridgeStatus::HookFailure as u32;
+        };
+        // Restrict both promotion callers before publishing the property/
+        // appointment/assignment composite or enabling its session. While the
+        // catalog is absent, all original true promotion results stay closed.
+        if let Err(reason) = unsafe { promotion::install(gamecore as usize) } {
+            product_deactivate();
+            return if reason.starts_with("critical:") {
+                BridgeStatus::Critical
+            } else {
+                BridgeStatus::HookFailure
+            } as u32;
+        }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;
@@ -556,6 +597,9 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             // Storage stays alive for any already-fetched relay. No retry may
             // repoint it. guarded_install/composite restore the installed set.
             product_deactivate();
+            if unsafe { promotion::restore() }.is_err() {
+                return BridgeStatus::Critical as u32;
+            }
             return status as u32;
         }
         start_observation(config.max_seconds);
@@ -567,56 +611,11 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
     })
     .unwrap_or_else(|_| {
         product_deactivate();
-        BridgeStatus::Panic as u32
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
-        let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
-        let before = (
-            owned(),
-            PRODUCT_ACTIVE.load(Ordering::Acquire),
-            PRODUCT_SESSION.load(Ordering::Acquire),
-            EPOCH.load(),
-        );
-        for input in [
-            null_mut(),
-            std::ptr::dangling_mut(),
-            usize::MAX as *mut c_void,
-        ] {
-            assert_eq!(
-                BridgeRuntimeInstall(input),
-                BridgeStatus::InvalidInput as u32
-            );
+        match unsafe { uninstall() } {
+            Err(reason) if reason != "bridge not installed" => BridgeStatus::Critical as u32,
+            _ => BridgeStatus::Panic as u32,
         }
-        let mut invalid = BridgeConfig::for_production(0, 0, 0);
-        // This export accepts only its explicit version and game-owned trace.
-        assert_eq!(
-            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
-            BridgeStatus::InvalidInput as u32
-        );
-        invalid.version = RUNTIME_CONFIG_VERSION;
-        invalid.trace_size = 0;
-        invalid.max_seconds = 0;
-        assert_eq!(
-            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
-            BridgeStatus::InvalidInput as u32
-        );
-        assert_eq!(
-            (
-                owned(),
-                PRODUCT_ACTIVE.load(Ordering::Acquire),
-                PRODUCT_SESSION.load(Ordering::Acquire),
-                EPOCH.load()
-            ),
-            before
-        );
-    }
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -665,4 +664,52 @@ pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
     // Each owner enters rebuilding on its own natural reset getter. No
     // controller metadata supplies identity or a publication fence.
     BridgeStatus::Ok as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_export_rejects_invalid_storage_and_config_without_policy_changes() {
+        let _guard = super::super::tests::HOOK_TEST_LOCK.lock().unwrap();
+        let before = (
+            owned(),
+            PRODUCT_ACTIVE.load(Ordering::Acquire),
+            PRODUCT_SESSION.load(Ordering::Acquire),
+            EPOCH.load(),
+        );
+        for input in [
+            null_mut(),
+            std::ptr::dangling_mut(),
+            usize::MAX as *mut c_void,
+        ] {
+            assert_eq!(
+                BridgeRuntimeInstall(input),
+                BridgeStatus::InvalidInput as u32
+            );
+        }
+        let mut invalid = BridgeConfig::for_production(0, 0, 0);
+        // This export accepts only its explicit version and game-owned trace.
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        invalid.version = RUNTIME_CONFIG_VERSION;
+        invalid.trace_size = 0;
+        invalid.max_seconds = 0;
+        assert_eq!(
+            BridgeRuntimeInstall((&mut invalid as *mut BridgeConfig).cast()),
+            BridgeStatus::InvalidInput as u32
+        );
+        assert_eq!(
+            (
+                owned(),
+                PRODUCT_ACTIVE.load(Ordering::Acquire),
+                PRODUCT_SESSION.load(Ordering::Acquire),
+                EPOCH.load()
+            ),
+            before
+        );
+    }
 }

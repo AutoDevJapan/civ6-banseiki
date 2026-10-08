@@ -45,8 +45,10 @@
 	</DomainValueFilterQueries>
 	<Queries>
 		<!-- GreatBuilders registers Sejong in Expansion2_Players, but its leader gameplay action
-		     requires RULESET_EXPANSION_2. Exclude only this audited mismatch for Banseiki. -->
-		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'difference' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_SEJONG') AND ?1 = 'RULESET_JAC_BANSEIKI'"/>
+		     requires RULESET_EXPANSION_2. Babylon's base gameplay is also skipped for Banseiki,
+		     while its XP2 action can still match LeaderPlayable and create dangling references.
+		     Exclude these audited mismatches in every slot, preserving official rulesets. -->
+		<Row QueryId="JAC_Banseiki_UnsupportedLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'difference' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_SEJONG', 'LEADER_HAMMURABI') AND ?1 = 'RULESET_JAC_BANSEIKI'"/>
 		<Row QueryId="JAC_Banseiki_HumanLeaderFilter" SQL="SELECT 'Players:Expansion2_Players' AS Domain, LeaderType AS Value, 'intersect' AS Filter FROM Players WHERE Domain = 'Players:Expansion2_Players' AND LeaderType IN ('LEADER_JAC_ODA_NOBUHIDE', 'LEADER_JAC_TAKEDA_NOBUTORA') AND ?1 = 'RULESET_JAC_BANSEIKI' AND ?2 = 0 AND ?3 = 'JAC_BANSEIKI_ONLY' AND instr(COALESCE(?4, ''), 'Maps/JAC_Japan_') = 0"/>
 	</Queries>
 	<QueryParameters>

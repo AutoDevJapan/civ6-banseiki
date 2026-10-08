@@ -906,3 +906,469 @@ fn frozen_ainu_subset_preserves_original_sequences_and_is_not_a_full_capture() {
         .unwrap()
         .contains("not a complete capture"));
 }
+
+// SYNTHETIC 851 unit model: non-local AI owners, slot 1 owns sources 0 and 21.
+// Receipts come from this independent table, never from the checker or generator.
+const NORMAL_AI: &str = include_str!("fixtures/catalog-check/source-contract-normal-ai-851.json");
+const NORMAL_AI_SHA256: &str = "16b5dec69852d0713828273a0c009f1c66ae0cb972308279c430d25ecd2eaeea";
+const AI: &str = "CATALOG_NORMAL_AI_V1";
+const PROCESS: &str = "{\"pid\":7,\"created_filetime\":123}";
+
+fn ai_owner(s: usize) -> usize {
+    if s == 21 {
+        1
+    } else {
+        s + 1
+    }
+}
+fn ai_cost(s: usize) -> u32 {
+    (s % 3 + 1) as u32
+}
+fn ai_titles() -> [u32; 22] {
+    let mut titles = [0; 22];
+    for s in 0..22 {
+        titles[ai_owner(s)] += ai_cost(s);
+    }
+    titles
+}
+fn normal_ai_model(directory: &Path) -> (Vec<Value>, Vec<Value>) {
+    normal_ai_model_with(directory, ai_titles())
+}
+fn normal_ai_model_with(directory: &Path, titles: [u32; 22]) -> (Vec<Value>, Vec<Value>) {
+    let (legacy_trace, _) = model(directory);
+    let scenario: Value = serde_json::from_str(NORMAL_AI).unwrap();
+    let steps = scenario["steps"].as_array().unwrap();
+    let players = steps[2]["players"].as_array().unwrap();
+    let leader = |s: usize| players[s]["leader"].as_str().unwrap();
+    let index = |s: usize| 17 + s * 7;
+    let id = |s: usize| {
+        format!(
+            "{s}:{}:{}:{}:{}",
+            ai_owner(s),
+            index(s),
+            leader(s),
+            ai_cost(s)
+        )
+    };
+    let ledger = |sources: std::ops::Range<usize>, phase: &str| {
+        sources
+            .map(|s| {
+                let state = match phase {
+                    "closed" => "nil:nil:nil".to_owned(),
+                    "JOINED" => format!("GREAT_PERSON:{}:nil", 100 + s),
+                    _ => format!("EVOLVING:{}:{}", 100 + s, ai_cost(s) - 1),
+                };
+                format!("{}:{state}:{}:0", id(s), titles[ai_owner(s)])
+            })
+            .collect::<Vec<_>>()
+            .join(";")
+    };
+    let stable = format!(
+        "{AI} STABLE turn=1 catalog={} titles={}",
+        (0..22)
+            .map(|s| format!(
+                "{s}:{}:{}:{}:{}:{}:42",
+                leader(s),
+                players[s]["civ"].as_str().unwrap(),
+                index(s),
+                -1748467484i64 - s as i64,
+                ai_cost(s)
+            ))
+            .collect::<Vec<_>>()
+            .join(";"),
+        (0..22)
+            .map(|o| format!("{o}:{}:0", titles[o]))
+            .collect::<Vec<_>>()
+            .join(";"),
+    );
+    let raw = |marker: &str| {
+        let rows: Vec<_> = (0..22)
+            .map(|s| {
+                let bits: String = (0..22)
+                    .map(|o| if o == ai_owner(s) { '1' } else { '0' })
+                    .collect();
+                format!("{AI} {marker} {} positive=1 negative=21 raw={bits}", id(s))
+            })
+            .collect();
+        format!("positive=22 negative=462 {}", rows.join(";"))
+    };
+    let record = |action: String, status: &str, detail: String| json!({"at":"2026-10-07T00:00:00Z","action":action,"status":status,"detail":detail});
+    let mut log = vec![record(
+        "start".into(),
+        "OK",
+        scenario["name"].as_str().unwrap().into(),
+    )];
+    for (i, step) in steps.iter().enumerate() {
+        let action = format!("{}/43 {}", i + 1, step["action"].as_str().unwrap());
+        log.push(record(action.clone(), "START", step.to_string()));
+        let detail = match step["action"].as_str().unwrap() {
+            "start_native_production_admission" => format!("native production-admission original-return telemetry ready; artifact normal-ai-observer-v1.jsonl; process={PROCESS}"),
+            "stop_native_production_admission" => format!("native entry restored; artifact {}", directory.join("normal-ai-observer-v1.jsonl").display()),
+            "exit_to_menu" => "main menu reached".into(),
+            "ui_lua" => {
+                let key = step["capture_as"].as_str().or_else(|| step["equals_capture"].as_str());
+                let value = match key.map(|k| k.strip_prefix("CATALOG_NORMAL_AI_V1_").unwrap()) {
+                    Some("STABLE") => stable.clone(),
+                    Some("CLOSED") => format!("{AI} MATRIX identities=22 {}", ledger(0..22, "closed")),
+                    Some("FINAL") => format!("{AI} MATRIX identities=22 {}", ledger(0..22, "EVOLVING")),
+                    Some(batch) => {
+                        let (first, phase) = batch.split_once('_').unwrap();
+                        let first: usize = first.parse().unwrap();
+                        let phase = if phase == "EVOLVE" { "EVOLVING" } else { "JOINED" };
+                        format!("{AI} {phase} {}", ledger(first..(first + 4).min(22), phase))
+                    }
+                    None if i == 5 => format!("{AI} normal observer: official AI title budgets; local human owns no subject; UI callbacks unchanged; no game turn requested"),
+                    None if i == 9 => "PAYMENT880 observed 484 existing closed Core qualifications after observer installation".into(),
+                    None => raw(if step["state_name"] == "InGame" { "UI_NATIVE_QUALIFICATION" } else { "GAMEPLAY_PROJECTION" }),
+                };
+                // The 851 runner names the native process on receipts after start.
+                let suffix = if (9..41).contains(&i) { format!("; native_process={PROCESS}") } else { String::new() };
+                format!("ran Lua in {}; return={value}{suffix}", step["state_name"].as_str().unwrap())
+            }
+            _ => "synthetic unit model setup result; not live evidence".into(),
+        };
+        log.push(record(action, "OK", detail));
+    }
+    log.push(record("judge".into(), "OK", "6/6 checks passed".into()));
+    let mut trace = legacy_trace[..3].to_vec();
+    for s in 0..22 {
+        let owner = ai_owner(s);
+        let address = 0x10000 + owner * 0x1000;
+        trace.push(json!({"kind":"calibration","sequence":s+1,"governor_index":index(s),"governors_this":format!("0x{:016x}",0x90000+owner*0x1000),"return_site_rva":0xba523,"thread_id":11,"owner_read_state":1,"player_address":format!("0x{address:016x}"),"player_id":owner,"property_receiver":format!("0x{:016x}",address+0x528),"original_al":s%2,"effective_al":1}));
+    }
+    let mut sequence = 0;
+    for s in 0..22 {
+        let owner = ai_owner(s);
+        let receiver = 0x10528 + owner * 0x1000;
+        for (key, payload) in [
+            (902000 + owner, 1),
+            (903000 + index(s), 1),
+            (901000 + index(s), 0),
+            (900000 + index(s), 1),
+            (901000 + index(s), 1),
+        ] {
+            sequence += 1;
+            let cell = (900000..=900255).contains(&key) || (901000..=901255).contains(&key);
+            trace.push(json!({"kind":"property_get","sequence":sequence,"property":format!("0x{receiver:016x}"),"key_id":key,"returned":"0x0000000000800000","thread_id":12,"read_state":1,"tag":1,"payload8":format!("0x{payload:016x}"),"flags14":0,
+                "denial_owner":if cell {owner}else{0},"denial_index":if cell {index(s)}else{0},"denial_checked":false}));
+        }
+    }
+    trace.push(legacy_trace.last().unwrap().clone());
+    (trace, log)
+}
+/// Replaces text in every successful receipt (never in START sources).
+fn edit_receipts(steps: &[Value], from: &str, to: &str) -> Vec<Value> {
+    let mut steps = steps.to_vec();
+    for row in &mut steps {
+        if row["status"] == "OK" && row["action"] != "start" {
+            row["detail"] = json!(row["detail"].as_str().unwrap().replace(from, to));
+        }
+    }
+    steps
+}
+
+#[test]
+fn normal_ai_851_contract_is_byte_pinned_and_assigns_no_local_subject() {
+    use sha2::{Digest, Sha256};
+    assert_eq!(
+        format!("{:x}", Sha256::digest(NORMAL_AI.as_bytes())),
+        NORMAL_AI_SHA256
+    );
+    let v: Value = serde_json::from_str(NORMAL_AI).unwrap();
+    let legacy: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/source-contract.json")).unwrap();
+    assert_ne!(v["name"], legacy["name"]);
+    let steps = v["steps"].as_array().unwrap();
+    assert_eq!(steps.len(), 43);
+    assert_eq!(steps[8]["name"], "normal-ai-observer-v1");
+    let players = steps[2]["players"].as_array().unwrap();
+    assert_eq!(players[0]["human"], true);
+    assert!(players[1..].iter().all(|p| p["human"] == false));
+    assert_eq!(ai_titles()[0], 0);
+}
+
+#[test]
+fn frozen_normal_ai_851_qualifies_shared_owner_one_and_never_local_human() {
+    let dir = tempfile::tempdir().unwrap();
+    let (trace, steps) = normal_ai_model(dir.path());
+    let r = check(&trace, &steps).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::NormalAi851
+    );
+    assert_eq!(r.scenario_contract_sha256, NORMAL_AI_SHA256);
+    assert!(r.scenario_complete && r.capture_valid && r.qualification_positive22);
+    assert!(r.gameplay_closed484);
+    assert!(!r.product_acceptance && !r.payment_authority && !r.full_history_authority);
+    let owners: Vec<_> = r.catalog.iter().map(|e| e.owner).collect();
+    assert_eq!((owners[0], owners[21]), (1, 1));
+    assert_eq!(owners.iter().filter(|o| **o == 1).count(), 2);
+    assert!(!owners.contains(&0));
+    assert_eq!(
+        (
+            r.ui_native_qualification.positive,
+            r.ui_native_qualification.negative
+        ),
+        (22, 462)
+    );
+    let p = r
+        .pairs
+        .iter()
+        .find(|p| p.source == 21 && p.observed_owner == 1)
+        .unwrap();
+    assert_eq!((p.rows, p.core_allow_true_rows), (1, 1));
+    let t = dir.path().join("normal-ai-observer-v1.jsonl");
+    let s = dir.path().join("steps.jsonl");
+    std::fs::write(&t, lines(&trace)).unwrap();
+    std::fs::write(&s, lines(&steps)).unwrap();
+    assert!(
+        catalog_check::check_files(&t, &s)
+            .unwrap()
+            .qualification_positive22
+    );
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_civ6-catalog-check"))
+        .arg("check")
+        .arg(&t)
+        .arg(&s)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["source_contract_version"], "NormalAi851");
+    assert_eq!(report["product_acceptance"], false);
+    // The 851 start/stop receipts name their own artifact, not the legacy one.
+    let legacy = dir.path().join("normal-catalog22.jsonl");
+    std::fs::write(&legacy, lines(&trace)).unwrap();
+    assert!(catalog_check::check_files(&legacy, &s).is_err());
+}
+
+#[test]
+fn normal_ai_unknown_name_mixed_versions_edits_and_insertions_are_rejected() {
+    let (_, steps) = normal_ai_model(Path::new("unit-model"));
+    let parse = |s: &[Value]| catalog_check::evidence_from_steps(&lines(s));
+    assert!(parse(&steps).is_ok());
+    let legacy: Value =
+        serde_json::from_str(include_str!("fixtures/catalog-check/source-contract.json")).unwrap();
+    let nil: Value = serde_json::from_str(include_str!(
+        "fixtures/catalog-check/source-contract-nil-adjusted-068.json"
+    ))
+    .unwrap();
+    for name in [
+        json!("Unknown future normal catalog"),
+        legacy["name"].clone(),
+    ] {
+        let mut bad = steps.clone();
+        bad[0]["detail"] = name;
+        assert!(parse(&bad).is_err());
+    }
+    let mut mutations = 0;
+    for other in [&legacy, &nil] {
+        for (i, row) in steps.iter().enumerate() {
+            if row["status"] != "START" {
+                continue;
+            }
+            let n: usize = row["action"]
+                .as_str()
+                .unwrap()
+                .split_once('/')
+                .unwrap()
+                .0
+                .parse()
+                .unwrap();
+            let own: Value = serde_json::from_str(row["detail"].as_str().unwrap()).unwrap();
+            if own != other["steps"][n - 1] {
+                let mut bad = steps.clone();
+                bad[i]["detail"] = json!(other["steps"][n - 1].to_string());
+                assert!(parse(&bad).is_err(), "851 step {n}");
+                mutations += 1;
+            }
+        }
+    }
+    // At least the 34 ledger-printing Lua codes differ from each older wire.
+    assert!(mutations >= 2 * 34, "{mutations}");
+    // The reverse: a legacy-named run cannot adopt one 851 source.
+    let (_, old) = model(Path::new("unit-model"));
+    let normal: Value = serde_json::from_str(NORMAL_AI).unwrap();
+    for n in [6, 9] {
+        let mut bad = old.clone();
+        let row = bad
+            .iter_mut()
+            .find(|r| {
+                r["status"] == "START"
+                    && r["action"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with(&format!("{n}/43 "))
+            })
+            .unwrap();
+        row["detail"] = json!(normal["steps"][n - 1].to_string());
+        assert!(parse(&bad).is_err(), "legacy step {n}");
+    }
+    let at = steps
+        .iter()
+        .position(|r| r["status"] == "START" && r["action"] == "20/43 ui_lua")
+        .unwrap();
+    let mut edited = steps.clone();
+    let mut source: Value = serde_json::from_str(edited[at]["detail"].as_str().unwrap()).unwrap();
+    source["code"] = json!(format!("{}\n-- edited", source["code"].as_str().unwrap()));
+    edited[at]["detail"] = json!(source.to_string());
+    assert!(parse(&edited).is_err());
+    // Hidden turn, payment or a repeated operation inserted mid-run.
+    let payment = json!({"action":"ui_lua","state_name":"GameCore_Tuner","code":"Players[1]:GetGovernors():ChangeGovernorPoints(-1)"});
+    for (op, source) in [
+        ("end_turn", json!({"action":"end_turn"})),
+        ("ui_lua", payment),
+    ] {
+        let mut bad = steps.clone();
+        let label = format!("20/43 {op}");
+        bad.insert(
+            at,
+            json!({"at":"2026-10-07T00:00:00Z","action":label,"status":"OK","detail":"synthetic"}),
+        );
+        bad.insert(at, json!({"at":"2026-10-07T00:00:00Z","action":label,"status":"START","detail":source.to_string()}));
+        assert!(parse(&bad).is_err(), "{op}");
+    }
+    let mut bad = steps.clone();
+    bad.insert(at, steps[at + 1].clone());
+    bad.insert(at, steps[at].clone());
+    assert!(parse(&bad).is_err());
+}
+
+#[test]
+fn normal_ai_cyclic_human_zero_or_edited_owner_is_rejected() {
+    let (trace, steps) = normal_ai_model(Path::new("unit-model"));
+    // The legacy ring would hand source 21 to local human slot 0.
+    rejected(&trace, &edit_receipts(&steps, "21:1:164:", "21:0:164:"));
+    rejected(&trace, &edit_receipts(&steps, "0:1:17:", "0:2:17:"));
+    // A native positive for slot 0 instead of the frozen owner 1.
+    let mut bad = trace.clone();
+    bad[24]["player_id"] = json!(0);
+    bad[24]["player_address"] = json!("0x0000000000010000");
+    bad[24]["property_receiver"] = json!("0x0000000000010528");
+    bad[24]["governors_this"] = json!("0x0000000000090000");
+    let r = check(&bad, &steps).unwrap();
+    assert!(!r.qualification_positive22);
+    assert_eq!(r.missing_positive_sources, vec![21]);
+    assert!(!r.qualification_errors.is_empty());
+}
+
+#[test]
+fn normal_ai_receipts_must_name_the_started_native_process() {
+    let (trace, steps) = normal_ai_model(Path::new("unit-model"));
+    let at = steps
+        .iter()
+        .position(|r| {
+            r["status"] == "OK" && r["detail"].as_str().unwrap().contains("native_process=")
+        })
+        .unwrap();
+    let suffix = format!("; native_process={PROCESS}");
+    for (from, to) in [
+        ("\"pid\":7", "\"pid\":8"),
+        ("123}", "124}"),
+        ("123}", "123,\"mode\":1}"),
+        (suffix.as_str(), ""),
+    ] {
+        let mut bad = steps.clone();
+        bad[at]["detail"] = json!(bad[at]["detail"].as_str().unwrap().replace(from, to));
+        rejected(&trace, &bad);
+    }
+    // A receipt before native start cannot claim a process.
+    let prepare = steps
+        .iter()
+        .position(|r| r["status"] == "OK" && r["action"] == "6/43 ui_lua")
+        .unwrap();
+    let mut bad = steps.clone();
+    bad[prepare]["detail"] = json!(format!(
+        "{}{suffix}",
+        bad[prepare]["detail"].as_str().unwrap()
+    ));
+    rejected(&trace, &bad);
+    // Consistently renamed receipts still disagree with the raw trace identity.
+    rejected(&trace, &edit_receipts(&steps, "\"pid\":7,", "\"pid\":9,"));
+}
+
+#[test]
+fn normal_ai_missing_native_positive_or_partial_capture_is_never_qualification() {
+    let (mut trace, steps) = normal_ai_model(Path::new("unit-model"));
+    trace[24]["effective_al"] = json!(0);
+    let r = check(&trace, &steps).unwrap();
+    assert!(r.capture_valid && !r.qualification_positive22);
+    assert_eq!(r.missing_positive_sources, vec![21]);
+    trace[24]["effective_al"] = json!(1);
+    trace[29]["payload8"] = json!("0x0000000000000000");
+    assert_eq!(
+        check(&trace, &steps).unwrap().missing_positive_sources,
+        vec![0]
+    );
+    let (trace, steps) = normal_ai_model(Path::new("unit-model"));
+    rejected(&trace, &steps[..30]);
+    let e = catalog_check::evidence_from_steps(&lines(&steps)).unwrap();
+    assert!(catalog_check::verify(&lines(&trace[..trace.len() - 1]), &e).is_err());
+}
+
+#[test]
+fn normal_ai_shared_owner_budget_and_unchanged_balances_are_enforced() {
+    // Owner 1 can cover either person alone, but not both reservations at once.
+    let mut short = ai_titles();
+    assert_eq!(short[1], ai_cost(0) + ai_cost(21));
+    short[1] = ai_cost(0).max(ai_cost(21));
+    let (_, steps) = normal_ai_model_with(Path::new("unit-model"), short);
+    let error = catalog_check::evidence_from_steps(&lines(&steps)).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("recipient lacks official titles"),
+        "{error}"
+    );
+    let (trace, steps) = normal_ai_model(Path::new("unit-model"));
+    let joined = "0:1:17:LEADER_JAC_HOJO_UJITSUNA:1:GREAT_PERSON:100:nil:2:0";
+    let evolved = "21:1:164:LEADER_JAC_AINU_TARIKONA:1:EVOLVING:121:0:2:0";
+    for (from, to) in [
+        // Hidden grant or spend after the stable budget read.
+        (joined, joined.replace(":nil:2:0", ":nil:3:0")),
+        (joined, joined.replace(":nil:2:0", ":nil:2:1")),
+        // Reservation corrupted for the second person of owner 1.
+        (evolved, evolved.replace(":121:0:", ":121:1:")),
+    ] {
+        assert!(lines(&steps).contains(from));
+        rejected(&trace, &edit_receipts(&steps, from, &to));
+    }
+    // A final stable re-read with another turn or balance differs from capture.
+    let last = steps
+        .iter()
+        .rposition(|r| {
+            r["status"] == "OK" && r["detail"].as_str().unwrap().contains(" STABLE turn=")
+        })
+        .unwrap();
+    for (from, to) in [
+        ("STABLE turn=1", "STABLE turn=2"),
+        ("titles=0:0:0;1:2:0", "titles=0:0:0;1:3:0"),
+    ] {
+        let mut bad = steps.clone();
+        bad[last]["detail"] = json!(bad[last]["detail"].as_str().unwrap().replace(from, to));
+        rejected(&trace, &bad);
+    }
+}
+
+#[test]
+fn normal_ai_shipping_restart_prefix_keeps_851_binding() {
+    let (trace, mut steps) = normal_ai_model(Path::new("unit-model"));
+    for row in &mut steps {
+        let a = row["action"].as_str().unwrap();
+        if let Some((n, operation)) = a.split_once(' ') {
+            let (n, _) = n.split_once('/').unwrap();
+            row["action"] = json!(format!(
+                "{}/44 {operation}",
+                n.parse::<usize>().unwrap() + 1
+            ));
+        }
+    }
+    steps.insert(1,json!({"at":"2026-10-07T00:00:00Z","action":"1/44 restart_game","status":"START","detail":"{\"action\":\"restart_game\",\"timeout\":420}"}));
+    steps.insert(2,json!({"at":"2026-10-07T00:00:00Z","action":"1/44 restart_game","status":"OK","detail":"synthetic restart model only"}));
+    let r = check(&trace, &steps).unwrap();
+    assert_eq!(
+        r.source_contract_version,
+        catalog_check::SourceContractVersion::NormalAi851
+    );
+    assert!(r.qualification_positive22);
+}

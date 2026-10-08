@@ -476,11 +476,10 @@ fn delayed_civics_and_unknown_mutation_returns_never_become_success() {
         }
         let method = if evolving { "PrepareEvolution" } else { "Join" };
         lua.load(format!("local original=ExposedMembers.JAC_LeaderPersona.{method}; CALLS=0; ExposedMembers.JAC_LeaderPersona.{method}=function(...) CALLS=CALLS+1; original(...); return nil end")).exec().unwrap();
-        assert!(
-            lua.load(catalog::pair_code(0, evolving, true).unwrap())
-                .eval::<String>()
-                .is_err()
-        );
+        assert!(lua
+            .load(catalog::pair_code(0, evolving, true).unwrap())
+            .eval::<String>()
+            .is_err());
         assert_eq!(lua.globals().get::<u32>("CALLS").unwrap(), 1);
     }
 }
@@ -520,11 +519,10 @@ fn every_cost_requires_all_official_titles_before_the_single_reservation() {
         lua.load(format!("Players[{}].points={source}", source + 1))
             .exec()
             .unwrap();
-        assert!(
-            lua.load(catalog::pair_code(source, true, true).unwrap())
-                .eval::<String>()
-                .is_err()
-        );
+        assert!(lua
+            .load(catalog::pair_code(source, true, true).unwrap())
+            .eval::<String>()
+            .is_err());
         lua.load(format!(
             "assert(Players[{}]:GetProperty('JAC_PERSONA_RESULT')=='NO_TITLE'); assert(SPAWNS==1 and DESTROYS==0 and #REQUESTS==0)", source+1
         )).exec().unwrap();
@@ -548,11 +546,10 @@ end
     )
     .exec()
     .unwrap();
-    assert!(
-        lua.load(catalog::batch_code(0, 4, false, true).unwrap())
-            .eval::<String>()
-            .is_err()
-    );
+    assert!(lua
+        .load(catalog::batch_code(0, 4, false, true).unwrap())
+        .eval::<String>()
+        .is_err());
     lua.load("assert(CALLS==2 and SPAWNS==2 and #REQUESTS==0)")
         .exec()
         .unwrap();

@@ -21,6 +21,53 @@ const IO_BUDGET: Duration = Duration::from_secs(8);
 const REAP_BUDGET: Duration = Duration::from_secs(15);
 const CASE_BUDGET: Duration = Duration::from_secs(50);
 
+/// Stable setup for fixtures which tear down immediately after their first
+/// probe. The Windows attach thread is transient; a breakpoint alone does not
+/// mean its real EXIT_THREAD event has been handled and continued yet.
+#[derive(Default)]
+pub(super) struct AttachReadyBarrier {
+    thread: Option<u32>,
+    complete: bool,
+}
+impl AttachReadyBarrier {
+    pub(super) fn advance(&mut self, debugger: &mut Debugger, event: &DEBUG_EVENT) -> bool {
+        if self.complete {
+            // Windows may reuse the retired attach TID for later fixture
+            // workers. Completed setup must not classify their exit events.
+            return false;
+        }
+        if debugger.ready {
+            assert!(debugger.attach_origin.accepted);
+            assert_eq!(
+                debugger.attach_origin.breakin_thread,
+                Some(event.dwThreadId)
+            );
+            assert!(self.thread.is_none());
+            self.thread = Some(event.dwThreadId);
+            debugger.ready = false;
+        }
+        if event.dwDebugEventCode == EXIT_THREAD_DEBUG_EVENT
+            && self.thread == Some(event.dwThreadId)
+        {
+            assert!(!debugger.threads.contains_key(&event.dwThreadId));
+            assert!(
+                debugger.cleanup_event.is_none(),
+                "exit must be continued before fixture readiness"
+            );
+            assert!(!self.complete);
+            self.complete = true;
+            return true;
+        }
+        false
+    }
+    pub(super) fn complete(&self) -> bool {
+        self.complete
+    }
+    pub(super) fn thread(&self) -> Option<u32> {
+        self.thread
+    }
+}
+
 pub(super) trait ObserverJoin {
     type Output;
     fn bounded_join(self) -> thread::Result<Self::Output>;
@@ -207,39 +254,53 @@ impl OwnedCase {
     fn capture_members(&mut self) -> Result<(), String> {
         // Two DWORDs precede the variable ULONG_PTR array. A usize buffer
         // provides the Windows x64 alignment required by both parts.
-        let mut buffer = [0usize; 257];
-        if unsafe {
-            QueryInformationJobObject(
-                self.job.0,
-                JobObjectBasicProcessIdList,
-                buffer.as_mut_ptr().cast(),
-                size_of::<[usize; 257]>() as u32,
-                std::ptr::null_mut(),
-            )
-        } == 0
-        {
-            return Err(win_error("list owned test processes"));
-        }
-        let list = unsafe { &*(buffer.as_ptr().cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()) };
-        let count = list.NumberOfProcessIdsInList as usize;
-        if count > 256 || list.NumberOfAssignedProcesses as usize > count {
-            return Err("owned test Job exceeded its bounded process list".into());
-        }
-        for &pid in &buffer[1..1 + count] {
-            let pid = u32::try_from(pid).map_err(|e| e.to_string())?;
-            if let std::collections::btree_map::Entry::Vacant(entry) = self.members.entry(pid) {
-                match process(pid, false) {
-                    Ok(handle) => {
-                        entry.insert(handle);
+        let snapshot_deadline = Instant::now() + Duration::from_millis(50);
+        loop {
+            let mut buffer = [0usize; 257];
+            if unsafe {
+                QueryInformationJobObject(
+                    self.job.0,
+                    JobObjectBasicProcessIdList,
+                    buffer.as_mut_ptr().cast(),
+                    size_of::<[usize; 257]>() as u32,
+                    std::ptr::null_mut(),
+                )
+            } == 0
+            {
+                return Err(win_error("list owned test processes"));
+            }
+            let list = unsafe { &*(buffer.as_ptr().cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()) };
+            let count = list.NumberOfProcessIdsInList as usize;
+            let assigned = list.NumberOfAssignedProcesses as usize;
+            if count > 256 || assigned > 256 {
+                return Err(format!("owned test Job exceeded its bounded process list: assigned={assigned}, returned={count}, capacity=256"));
+            }
+            for &pid in &buffer[1..1 + count] {
+                let pid = u32::try_from(pid).map_err(|e| e.to_string())?;
+                if let std::collections::btree_map::Entry::Vacant(entry) = self.members.entry(pid) {
+                    match process(pid, false) {
+                        Ok(handle) => {
+                            entry.insert(handle);
+                        }
+                        Err(_) if std::io::Error::last_os_error().raw_os_error() == Some(87) => {
+                            // The process object has already ceased to exist.
+                        }
+                        Err(error) => return Err(error),
                     }
-                    Err(_) if std::io::Error::last_os_error().raw_os_error() == Some(87) => {
-                        // The process object has already ceased to exist.
-                    }
-                    Err(error) => return Err(error),
                 }
             }
+            if assigned <= count {
+                return Ok(());
+            }
+            // An incomplete PID list is not evidence that our capacity was
+            // exceeded. Pin the returned members, then obtain a complete snapshot
+            // before accepting it. Accounting and signaled-handle checks in reap
+            // remain mandatory, including after this bounded retry fails.
+            if Instant::now() >= snapshot_deadline {
+                return Err(format!("owned test Job PID snapshot remained incomplete: assigned={assigned}, returned={count}, capacity=256"));
+            }
+            thread::sleep(Duration::from_millis(1));
         }
-        Ok(())
     }
 
     fn wait_empty(&self, budget: Duration) -> Result<u32, String> {

@@ -1,0 +1,28 @@
+[package]
+name = "cc-live"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1"
+chrono = "0.4"
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_Security", "Win32_Storage_FileSystem"] }
+
+[[bin]]
+name = "live_chain"
+path = "src/bin/live_chain.rs"
+
+[[bin]]
+name = "ship"
+path = "src/bin/ship.rs"
+
+[[bin]]
+name = "review"
+path = "src/bin/review.rs"
+
+[[bin]]
+name = "merge_pr"
+path = "src/bin/merge_pr.rs"

@@ -1,10 +1,11 @@
+pub use crate::session::SessionType;
 use crate::{Error, Result};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 41] = [
+pub const ACTIONS: [&str; 43] = [
     "start_native_order_capture",
     "set_native_order_phase",
     "stop_native_order_capture",
@@ -46,6 +47,8 @@ pub const ACTIONS: [&str; 41] = [
     "stop_native_property_trace",
     "start_native_promotion_call_trace",
     "stop_native_promotion_call_trace",
+    "start_native_bootstrap",
+    "stop_native_bootstrap",
 ];
 pub fn lua_string(value: &str) -> String {
     serde_json::to_string(value).unwrap()
@@ -83,8 +86,21 @@ pub fn safe_relative_path(value: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(normalized))
 }
 pub fn validate_scenario(data: &Value) -> Result<()> {
+    crate::bootstrap_scenario::validate(data)?;
     if !data.is_object() || !data["name"].is_string() {
         return Err(Error::scenario("Scenario needs a name"));
+    }
+    let session = SessionType::from_scenario(data)?;
+    if let Some(nonce) = data.get("hotseat_bridge_nonce") {
+        if session != SessionType::Hotseat
+            || !nonce
+                .as_str()
+                .is_some_and(crate::hotseat_bridge::nonce_valid)
+        {
+            return Err(Error::scenario(
+                "hotseat_bridge_nonce needs a 32-digit nonce and hotseat session",
+            ));
+        }
     }
     if let Some(mode) = data.get("test_mode") {
         validate_test_mode(mode)?;
@@ -157,9 +173,9 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         if let Some(flag) = step.get("preserve_diplomacy_session") {
-            if action != "ui_lua" || !flag.is_boolean() {
+            if !matches!(action, "ui_lua" | "save") || !flag.is_boolean() {
                 return Err(fail(
-                    "preserve_diplomacy_session needs a boolean ui_lua flag".into(),
+                    "preserve_diplomacy_session needs a boolean ui_lua or save flag".into(),
                 ));
             }
         }
@@ -470,7 +486,8 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                     return Err(fail("seed must be a signed 32-bit integer".into()));
                 }
                 if step.get("map_file").is_some_and(|v| {
-                    !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
+                    !matches!(v.as_str(), Some("Continents.lua" | "Pangaea.lua"))
+                        && !matches(r"^\{[0-9a-fA-F-]{36}\}Maps/[A-Za-z0-9_-]+\.Civ6Map$", v)
                 }) {
                     return Err(fail("invalid map_file".into()));
                 }
@@ -483,10 +500,23 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 let players = step["players"]
                     .as_array()
                     .filter(|a| {
-                        a.len() >= 2 && a.iter().filter(|p| p["human"] == true).count() == 1
+                        let humans = a.iter().filter(|p| p["human"] == true).count();
+                        a.len() >= 2
+                            && match session {
+                                SessionType::SinglePlayer => humans == 1,
+                                SessionType::Hotseat => humans >= 2,
+                            }
                     })
                     .ok_or_else(|| {
-                        fail("specify at least two players and exactly one human".into())
+                        fail(
+                            match session {
+                                SessionType::SinglePlayer => {
+                                    "specify at least two players and exactly one human"
+                                }
+                                SessionType::Hotseat => "hotseat needs at least two human players",
+                            }
+                            .into(),
+                        )
                     })?;
                 if players.iter().any(|p| {
                     !p.is_object()
@@ -498,6 +528,11 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "autoplay" => {
+                if session == SessionType::Hotseat {
+                    return Err(fail(
+                        "autoplay does not support hotseat; use end_turn".into(),
+                    ));
+                }
                 if step["turns"].as_i64().is_none_or(|n| n <= 0) {
                     return Err(fail("turns must be positive".into()));
                 }
@@ -652,10 +687,25 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                 }
             }
             "save" | "load" => {
+                if step.get("save_sha256").is_some()
+                    && (action != "load"
+                        || !step["save_sha256"].as_str().is_some_and(|s| {
+                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+                        }))
+                {
+                    return Err(fail(
+                        "save_sha256 requires load and 64 hexadecimal characters".into(),
+                    ));
+                }
                 if !matches(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$", &step["name"]) {
                     return Err(fail("invalid save name".into()));
                 }
-                bool_flags(&["exact_name", "metrics", "checkpoint"])?;
+                bool_flags(&["exact_name", "metrics", "checkpoint", "resume_once"])?;
+                if step.get("resume_once").is_some()
+                    && (action != "load" || step.get("save_sha256").is_none())
+                {
+                    return Err(fail("resume_once requires load with save_sha256".into()));
+                }
                 if step["checkpoint"] == true && step["exact_name"] != true {
                     return Err(fail("checkpoint requires exact_name: true".into()));
                 }
@@ -773,11 +823,28 @@ pub fn builds_setup(step: &Value) -> bool {
         .as_bool()
         .unwrap_or(step["ruleset"] == BANSEIKI_RULESET)
 }
+pub fn load_code(name: &str, session: SessionType) -> String {
+    let (defaults, save_type) = match session {
+        SessionType::SinglePlayer => ("", "SaveTypes.SINGLE_PLAYER"),
+        SessionType::Hotseat => (
+            "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)\n",
+            "Network.GetGameConfigurationSaveType()",
+        ),
+    };
+    format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{defaults}local ok = Network.LoadGame({{Name={}, Location=SaveLocations.LOCAL_STORAGE, Type={save_type}, Directory=SaveDirectories.DEFAULT, IsAutosave=false, IsQuicksave=false}}, ServerType.{})\nif ok == false then error('Network.LoadGame returned false') end\nreturn true", lua_string(name), session.server_type())
+}
 pub fn configure_code(step: &Value) -> String {
+    configure_code_for_session(step, SessionType::SinglePlayer)
+}
+pub fn configure_code_for_session(step: &Value, session: SessionType) -> String {
     let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "if not UI.IsInFrontEnd() then error('main menu required') end".into(),
-        "GameConfiguration.SetToDefaults()".into(),
+        match session {
+            SessionType::SinglePlayer => "GameConfiguration.SetToDefaults()",
+            SessionType::Hotseat => "GameConfiguration.SetToDefaults(GameModeTypes.HOTSEAT)",
+        }
+        .into(),
         format!(
             "GameConfiguration.SetRuleSet({})",
             lua_string(step["ruleset"].as_str().unwrap())
@@ -789,6 +856,7 @@ pub fn configure_code(step: &Value) -> String {
             "MapConfiguration.SetValue('MAP_SCRIPT', {})",
             lua_string(file)
         ));
+        lines.push(map_readback_code(file, "configured"));
     }
     lines.extend([format!("MapConfiguration.SetMapSize({})",lua_string(step["map_size"].as_str().unwrap())),format!("GameConfiguration.SetGameSpeedType({})",lua_string(step["speed"].as_str().unwrap())),format!("MapConfiguration.SetValue('RANDOM_SEED', {})",step["seed"]),format!("GameConfiguration.SetValue('GAME_SYNC_RANDOM_SEED', {})",step["seed"]),format!("MapConfiguration.SetMaxMajorPlayers({})",players.len()),format!("GameConfiguration.SetParticipatingPlayerCount({} + GameConfiguration.GetHiddenPlayerCount())",players.len())]);
     if let Some(count) = step.get("city_states") {
@@ -804,14 +872,35 @@ pub fn configure_code(step: &Value) -> String {
         };
         lines.extend([format!("local p = PlayerConfigurations[{i}]"),format!("if not p then error('player slot {i} unavailable') end"),format!("p:SetSlotStatus(SlotStatus.{slot})"),format!("p:SetLeaderTypeName({leader})"),format!("p:SetCivilizationTypeName({civ})"),format!("if p:GetLeaderTypeName() ~= {leader} then error('leader mismatch in slot {i}') end"),format!("if p:GetCivilizationTypeName() ~= {civ} then error('civilization mismatch in slot {i}') end")]);
     }
+    if session == SessionType::Hotseat {
+        lines.push(session.guard_code().into());
+    }
     lines.push("return true".into());
     lines.join("\n")
 }
-pub fn build_setup_code(players: &[Value]) -> String {
+pub fn build_setup_code(step: &Value) -> String {
+    let players = step["players"].as_array().unwrap();
     let mut lines = vec![
         "BuildHeadlessGameSetup()".to_string(),
         "g_GameParameters:FullRefresh()".into(),
+        // MapSize_ValueChanged resets participant and city-state counts during
+        // FullRefresh. Restore requested settings before checking the players.
+        format!(
+            "local participatingCount = {} + GameConfiguration.GetHiddenPlayerCount()",
+            players.len()
+        ),
+        "GameConfiguration.SetParticipatingPlayerCount(participatingCount)".into(),
+        "if GameConfiguration.GetParticipatingPlayerCount() ~= participatingCount then error('setup changed participating player count') end".into(),
     ];
+    if let Some(file) = step["map_file"].as_str() {
+        lines.push(map_readback_code(file, "setup-refreshed"));
+    }
+    if let Some(count) = step.get("city_states") {
+        lines.extend([
+            format!("GameConfiguration.SetValue('CITY_STATE_COUNT', {count})"),
+            format!("if GameConfiguration.GetValue('CITY_STATE_COUNT') ~= {count} then error('setup changed city-state count') end"),
+        ]);
+    }
     for (i, p) in players.iter().enumerate() {
         let slot = if p["human"] == true {
             "SS_TAKEN"
@@ -825,6 +914,9 @@ pub fn build_setup_code(players: &[Value]) -> String {
         "return 'setup built; configured players survived'".into(),
     ]);
     lines.join("\n")
+}
+fn map_readback_code(file: &str, phase: &str) -> String {
+    format!("do local actualMap=MapConfiguration.GetValue('MAP_SCRIPT')\nprint('JAC_MAP_READBACK phase={phase} type='..type(actualMap)..' value='..tostring(actualMap))\nassert(type(actualMap)=='string' and actualMap=={}, 'configured MAP_SCRIPT differs after {phase}') end",lua_string(file))
 }
 pub fn enable_mods_code(ids: &[String], disabled: &[String]) -> String {
     enable_mods_code_with_scope(ids, disabled, false)

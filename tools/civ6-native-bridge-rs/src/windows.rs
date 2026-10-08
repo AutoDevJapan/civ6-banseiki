@@ -28,11 +28,17 @@ mod assignment;
 #[path = "windows/composite.rs"]
 mod composite;
 pub use composite::CompositeTrace;
+#[path = "windows/property_log.rs"]
+mod property_log;
 #[path = "windows/runtime.rs"]
 mod runtime;
+#[path = "windows/trace_init.rs"]
+mod trace_init;
 pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
+#[path = "windows/promotion.rs"]
+mod promotion;
 use assignment::{
     assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
     ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
@@ -85,6 +91,10 @@ const PROMOTION_CALL_WINDOW: [u8; 16] = [
     0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f, 0x84, 0x75, 0x01, 0x00, 0x00, 0x44, 0x8b, 0xc7,
 ];
 const PROMOTION_CALL_HEAD: [u8; 8] = [0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f];
+pub const RUNTIME_PROMOTION_CALL_WINDOWS: [(usize, [u8; 16]); 2] = [
+    (PINNED_PROMOTION_CALL_RVA, PROMOTION_CALL_WINDOW),
+    (promotion::AI_CALL_RVA, promotion::AI_WINDOW),
+];
 const PROMOTION_TRACE_MAGIC: u32 = 0x4a41_4338; // JAC8
 const PROMOTION_TRACE_VERSION: u32 = 1;
 pub const PROMOTION_TRACE_CAPACITY: usize = 2048;
@@ -1298,12 +1308,16 @@ unsafe extern "system" fn calibration_begin(
         return null_mut();
     }
     let trace = unsafe { &*trace };
-    trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    if !runtime::owned() {
+        trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    }
     let row = if production {
         // A per-call stack object carries the decision even after the prefix
         // observation sample fills. Never use shared telemetry as authority.
         if scratch.is_null() {
-            trace.in_flight.fetch_sub(1, Ordering::Release);
+            if !runtime::owned() {
+                trace.in_flight.fetch_sub(1, Ordering::Release);
+            }
             return null_mut();
         }
         unsafe { ptr::write(scratch, CalibrationRow::default()) };
@@ -1461,6 +1475,9 @@ unsafe extern "system" fn calibration_end(
     if !trace.is_null() {
         let trace = unsafe { &*trace };
         if trace.reserved == BridgeMode::ProductionAdmission as u32 && runtime::sample_begin() {
+            if runtime::owned() {
+                trace.in_flight.fetch_add(1, Ordering::AcqRel);
+            }
             let slot = runtime::next_slot(&trace.next, CALIBRATION_CAPACITY);
             if slot < CALIBRATION_CAPACITY {
                 let target = &trace.rows[slot];
@@ -1484,9 +1501,14 @@ unsafe extern "system" fn calibration_end(
             } else {
                 trace.dropped.fetch_add(1, Ordering::Relaxed);
             }
+            if runtime::owned() {
+                trace.in_flight.fetch_sub(1, Ordering::Release);
+            }
             runtime::sample_end();
         }
-        trace.in_flight.fetch_sub(1, Ordering::Release);
+        if !runtime::owned() {
+            trace.in_flight.fetch_sub(1, Ordering::Release);
+        }
     }
     result
 }
@@ -1643,12 +1665,80 @@ static JOINED_TEST_RELEASE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
 static PROPERTY_TEST_RAW_MUTATE_RETURNED: AtomicU64 = AtomicU64::new(0);
+
+fn production_ignored(key_id: u32) -> bool {
+    product_key(key_id).is_none()
+        && product_close_index(key_id).is_none()
+        && product_reset_owner(key_id).is_none()
+        && !(composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id))
+}
+
+/// (read_state, tag, payload, flags) from one copy of the returned 24 bytes.
+type PropertyRead = (u32, u32, u64, u32);
+fn read_property(returned: u64) -> PropertyRead {
+    match copy_current::<24>(returned) {
+        Some(bytes) => (
+            1,
+            u16::from_le_bytes(bytes[0..2].try_into().unwrap()) as u32,
+            u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            u32::from_le_bytes(bytes[20..24].try_into().unwrap()),
+        ),
+        None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
+    }
+}
+
+fn production_observe(property: u64, key_id: u32, token: u64, read: PropertyRead) {
+    let (state, tag, payload, flags) = read;
+    if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
+        composite::observe(property, key_id, token, state, tag, payload, flags);
+    } else {
+        product_observe_property(property, key_id, token, state, tag, payload, flags);
+        if runtime::owned() && !(state == 1 && tag == 1 && flags == 0 && payload <= 1) {
+            composite::invalidate(property, token);
+        }
+    }
+}
+
+fn fill_row(row: &PropertyRow, property: u64, key_id: u32, returned: u64, read: PropertyRead) {
+    row.key_id.store(key_id, Ordering::Relaxed);
+    row.property.store(property, Ordering::Relaxed);
+    row.returned.store(returned, Ordering::Relaxed);
+    row.thread_id
+        .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
+    row.read_state.store(read.0, Ordering::Relaxed);
+    row.tag.store(read.1, Ordering::Relaxed);
+    row.payload.store(read.2, Ordering::Relaxed);
+    row.flags.store(read.3, Ordering::Relaxed);
+}
+
+/// The native tag is u16; its unused high half stores the closure proof
+/// without enlarging the original 48-byte diagnostic row.
+fn production_tag(tag: u32, key_id: u32, property: u64, token: u64) -> u32 {
+    match product_key(key_id) {
+        Some((index, _)) if token != 0 => {
+            let owner = ((token >> 31) & 63) as usize;
+            let session = (token >> 37) as u32;
+            let denied = product_permission(owner, index, property, session) == Some(false);
+            tag | ((owner as u32) << 25) | ((index as u32) << 17) | (u32::from(denied) << 16)
+        }
+        _ => tag,
+    }
+}
+
 unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: u64, token: u64) {
     let trace = PROPERTY_TRACE_PTR.load(Ordering::Acquire);
     if trace.is_null() {
         return;
     }
     let trace = unsafe { &*trace };
+    let log = property_log::BRIDGE_RUNTIME_PROPERTY_LOG.load(Ordering::Acquire);
+    if !log.is_null() && trace.scope == BridgeMode::ProductionAdmission as u32 {
+        property_log::record(log, property, key_id, returned, token);
+        return;
+    }
+    // Every write to the exported observation, including filtered/in_flight,
+    // belongs to this writer lease. Authority still consumes unsampled calls.
+    let sampled = runtime::sample_begin();
     #[cfg(test)]
     if trace.scope == BridgeMode::JoinedAdmission as u32
         && returned != 0
@@ -1665,17 +1755,17 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
         || ((trace.scope == BridgeMode::PropertyAdmissionScoped as u32
             || trace.scope == BridgeMode::JoinedAdmission as u32)
             && key_id != ASHINA_ADMISSION_KEY_ID)
-        || (trace.scope == BridgeMode::ProductionAdmission as u32
-            && product_key(key_id).is_none()
-            && product_close_index(key_id).is_none()
-            && product_reset_owner(key_id).is_none()
-            && !(composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id)))
+        || (trace.scope == BridgeMode::ProductionAdmission as u32 && production_ignored(key_id))
     {
-        trace.filtered.fetch_add(1, Ordering::Relaxed);
+        if sampled {
+            trace.filtered.fetch_add(1, Ordering::Relaxed);
+            runtime::sample_end();
+        }
         return;
     }
-    trace.in_flight.fetch_add(1, Ordering::AcqRel);
-    let sampled = runtime::sample_begin();
+    if sampled {
+        trace.in_flight.fetch_add(1, Ordering::AcqRel);
+    }
     let slot = if sampled {
         runtime::next_slot(&trace.next, TRACE_CAPACITY)
     } else {
@@ -1694,24 +1784,10 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     }
     // One synchronous copy of borrowed native storage. Authority and telemetry
     // consume exactly these same bytes, even if the source is then replaced.
-    let (state, tag, payload, flags) = match copy_current::<24>(returned) {
-        Some(bytes) => (
-            1,
-            u16::from_le_bytes(bytes[0..2].try_into().unwrap()) as u32,
-            u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
-            u32::from_le_bytes(bytes[20..24].try_into().unwrap()),
-        ),
-        None => (if returned == 0 { 0 } else { 2 }, 0, 0, 0),
-    };
+    let read = read_property(returned);
+    let (state, tag, payload, flags) = read;
     if trace.scope == BridgeMode::ProductionAdmission as u32 {
-        if composite::ENABLED.load(Ordering::Acquire) && composite::handles(key_id) {
-            composite::observe(property, key_id, token, state, tag, payload, flags);
-        } else {
-            product_observe_property(property, key_id, token, state, tag, payload, flags);
-            if runtime::owned() && !(state == 1 && tag == 1 && flags == 0 && payload <= 1) {
-                composite::invalidate(property, token);
-            }
-        }
+        production_observe(property, key_id, token, read);
     }
     #[cfg(test)]
     if returned != 0 && returned == PROPERTY_TEST_RAW_MUTATE_RETURNED.load(Ordering::Acquire) {
@@ -1720,36 +1796,21 @@ unsafe extern "system" fn record_property(property: u64, key_id: u32, returned: 
     if slot >= TRACE_CAPACITY {
         if sampled {
             trace.dropped.fetch_add(1, Ordering::Relaxed);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
             runtime::sample_end();
         }
-        trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
     }
     let row = &trace.rows[slot];
-    row.key_id.store(key_id, Ordering::Relaxed);
-    row.property.store(property, Ordering::Relaxed);
-    row.returned.store(returned, Ordering::Relaxed);
-    row.thread_id
-        .store(unsafe { GetCurrentThreadId() }, Ordering::Relaxed);
-    row.read_state.store(state, Ordering::Relaxed);
-    row.tag.store(tag, Ordering::Relaxed);
-    row.payload.store(payload, Ordering::Relaxed);
-    row.flags.store(flags, Ordering::Relaxed);
+    fill_row(row, property, key_id, returned, read);
     if trace.scope == BridgeMode::JoinedAdmission as u32 {
         joined_observe_property(property, key_id, token, state, tag, payload, flags);
     }
-    if trace.scope == BridgeMode::ProductionAdmission as u32 && token != 0 {
-        if let Some((index, _)) = product_key(key_id) {
-            let owner = ((token >> 31) & 63) as usize;
-            let session = (token >> 37) as u32;
-            // The native tag is u16; its unused high half stores the closure
-            // proof without enlarging the original 48-byte diagnostic row.
-            let denied = product_permission(owner, index, property, session) == Some(false);
-            row.tag.store(
-                tag | ((owner as u32) << 25) | ((index as u32) << 17) | (u32::from(denied) << 16),
-                Ordering::Relaxed,
-            );
-        }
+    if trace.scope == BridgeMode::ProductionAdmission as u32 {
+        row.tag.store(
+            production_tag(tag, key_id, property, token),
+            Ordering::Relaxed,
+        );
     }
     row.sequence.store(1, Ordering::Release);
     trace.in_flight.fetch_sub(1, Ordering::Release);
@@ -2608,7 +2669,8 @@ unsafe fn install_property_at(
 ) -> Result<(), &'static str> {
     if trace.is_null()
         || unsafe { (*trace).magic } != PROPERTY_TRACE_MAGIC
-        || unsafe { (*trace).version } != PROPERTY_TRACE_VERSION
+        || (unsafe { (*trace).version } != PROPERTY_TRACE_VERSION
+            && !property_log::marked(unsafe { &*trace }))
     {
         return Err("property trace mapping version mismatch");
     }
@@ -2667,11 +2729,19 @@ unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> 
 unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
     product_deactivate();
-    let promotion = unsafe { restore_promotion_call() }?;
-    let assignment = restore_one(&composite::ASSIGNMENT_HOOK)?;
-    let main = restore_one(&HOOK)?;
-    let property = restore_one(&JOINED_PROPERTY_HOOK)?;
-    if !main && !property && !promotion && !assignment {
+    // Attempt every restoration even if an earlier operand/entry fails. Failed
+    // owners remain retained for recovery; no fetched relay is freed.
+    let results = [
+        unsafe { promotion::restore() },
+        unsafe { restore_promotion_call() },
+        restore_one(&composite::ASSIGNMENT_HOOK),
+        restore_one(&HOOK),
+        restore_one(&JOINED_PROPERTY_HOOK),
+    ];
+    if let Some(error) = results.iter().find_map(|r| r.as_ref().err()) {
+        return Err(*error);
+    }
+    if !results.into_iter().any(|r| r == Ok(true)) {
         return Err("bridge not installed");
     }
     Ok(())
@@ -3011,7 +3081,7 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         }
         BridgeMode::CanEver => {
             let trace = config.trace_address as *mut SharedTrace;
-            unsafe { ptr::write(trace, SharedTrace::default()) };
+            unsafe { SharedTrace::initialize_at(trace) };
             unsafe { install_at(entry, trace, disk_bytes) }
         }
         BridgeMode::PromotionCall => {
@@ -3024,23 +3094,20 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
                 return BridgeStatus::HookFailure;
             }
             let trace = config.trace_address as *mut PromotionTrace;
-            unsafe { ptr::write(trace, PromotionTrace::default()) };
+            unsafe { PromotionTrace::initialize_at(trace) };
             let callee = unsafe { (module as *mut u8).add(PINNED_PROMOTION_CALLEE_RVA) };
             unsafe { install_promotion_call(entry, callee, trace, promotion_window.unwrap()) }
         }
         BridgeMode::CanEverCalibration => {
             let trace = config.trace_address as *mut CalibrationTrace;
-            unsafe { ptr::write(trace, CalibrationTrace::default()) };
+            unsafe { CalibrationTrace::initialize_at(trace) };
             unsafe { install_calibration_at(entry, trace, disk_bytes) }
         }
         BridgeMode::JoinedAdmission | BridgeMode::ProductionAdmission => {
             let trace = config.trace_address as *mut JoinedTrace;
-            unsafe { ptr::write(trace, JoinedTrace::default()) };
+            unsafe { JoinedTrace::initialize_at(trace, mode) };
             joined_deactivate();
             product_deactivate();
-            if mode == BridgeMode::ProductionAdmission {
-                unsafe { ptr::write(&mut (*trace).property, PropertyTrace::production_scoped()) };
-            }
             let property = property_entry.expect("verified joined property entry");
             let property_bytes = property_disk.expect("verified joined property bytes");
             if composite_requested {
@@ -3115,12 +3182,12 @@ fn guarded_install(config: BridgeConfig) -> BridgeStatus {
         BridgeMode::Property | BridgeMode::PropertyScoped | BridgeMode::PropertyAdmissionScoped => {
             let trace = config.trace_address as *mut PropertyTrace;
             unsafe {
-                ptr::write(
+                PropertyTrace::initialize_at(
                     trace,
-                    match mode {
-                        BridgeMode::PropertyScoped => PropertyTrace::scoped(),
-                        BridgeMode::PropertyAdmissionScoped => PropertyTrace::admission_scoped(),
-                        _ => PropertyTrace::default(),
+                    if mode == BridgeMode::Property {
+                        0
+                    } else {
+                        mode as u32
                     },
                 )
             };

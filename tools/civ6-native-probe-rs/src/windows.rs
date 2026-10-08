@@ -201,12 +201,20 @@ fn queried_exit_code(game: &Handle) -> CriticalExit {
     }
 }
 fn critical_exit_from_debug_event(event: &DEBUG_EVENT) -> Option<CriticalExit> {
-    (event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT).then(|| CriticalExit {
-        code: Some(unsafe { event.u.ExitProcess.dwExitCode }),
-        source: "exit_process_debug_event",
-    })
+    if event.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT {
+        Some(CriticalExit {
+            code: Some(unsafe { event.u.ExitProcess.dwExitCode }),
+            source: "exit_process_debug_event",
+        })
+    } else {
+        None
+    }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Keep pending Win32 event delivery, attach provenance and owned-process closure state explicit at critical recovery calls"
+)]
 fn announce_critical_and_wait_for_owned_game(
     game: &Handle,
     pid: u32,
@@ -319,9 +327,8 @@ fn announce_critical_and_wait_for_owned_game(
         } else {
             thread::sleep(Duration::from_millis(50));
         }
-        match alive(game) {
-            Ok(false) => return Ok(queried_exit_code(game)),
-            Ok(true) | Err(_) => {}
+        if let Ok(false) = alive(game) {
+            return Ok(queried_exit_code(game));
         }
     }
     Err(format!("{reason}; critical_cleanup unresolved: controller did not close the owned game within 12 seconds"))
@@ -1734,6 +1741,10 @@ impl Debugger {
             .unwrap_or_default();
         self.log_incomplete(tid, incomplete, None, None)
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Record the raw Win32 exception and optional context separately from its ownership classification without inventing missing evidence"
+    )]
     fn log_single_step(
         &mut self,
         tid: u32,
@@ -1877,10 +1888,10 @@ impl Debugger {
                 }
                 return Ok(DBG_CONTINUE);
             }
-            UNLOAD_DLL_DEBUG_EVENT => {
-                if unsafe { event.u.UnloadDll.lpBaseOfDll } as u64 == self.module_base {
-                    return Err("observed GameCore module unloaded".into());
-                }
+            UNLOAD_DLL_DEBUG_EVENT
+                if unsafe { event.u.UnloadDll.lpBaseOfDll } as u64 == self.module_base =>
+            {
+                return Err("observed GameCore module unloaded".into());
             }
             EXCEPTION_DEBUG_EVENT => {
                 let info = unsafe { event.u.Exception };
@@ -2513,13 +2524,13 @@ impl CleanupOps for Debugger {
         let tids: Vec<u32> = self.held.iter().copied().collect();
         for tid in tids {
             let handle = &self.threads[&tid].handle;
-            if unsafe { ResumeThread(handle.0) } == u32::MAX {
-                if unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0 {
-                    return Err(format!(
-                        "live thread {tid} remains suspended: {}",
-                        win_error("ResumeThread")
-                    ));
-                }
+            if unsafe { ResumeThread(handle.0) } == u32::MAX
+                && unsafe { WaitForSingleObject(handle.0, 0) } != WAIT_OBJECT_0
+            {
+                return Err(format!(
+                    "live thread {tid} remains suspended: {}",
+                    win_error("ResumeThread")
+                ));
             }
             self.held.remove(&tid);
         }
@@ -3275,13 +3286,17 @@ mod tests {
             debugger.close_ack = close_ack;
             // Inject only into the dispatcher, before any real OS event. This
             // is not a child-generated breakpoint and is never continued.
-            let mut app_event = DEBUG_EVENT::default();
-            app_event.dwDebugEventCode = EXCEPTION_DEBUG_EVENT;
-            app_event.dwProcessId = pid;
-            app_event.dwThreadId = u32::MAX;
-            let mut record = EXCEPTION_RECORD::default();
-            record.ExceptionCode = EXCEPTION_BREAKPOINT;
-            record.ExceptionAddress = debugger.attach_origin.breakpoint_address as *mut _;
+            let mut app_event = DEBUG_EVENT {
+                dwDebugEventCode: EXCEPTION_DEBUG_EVENT,
+                dwProcessId: pid,
+                dwThreadId: u32::MAX,
+                ..Default::default()
+            };
+            let record = EXCEPTION_RECORD {
+                ExceptionCode: EXCEPTION_BREAKPOINT,
+                ExceptionAddress: debugger.attach_origin.breakpoint_address as *mut _,
+                ..Default::default()
+            };
             app_event.u.Exception = EXCEPTION_DEBUG_INFO {
                 ExceptionRecord: record,
                 dwFirstChance: 1,
@@ -3490,8 +3505,10 @@ mod tests {
         if isolated_test("critical_pump_preserves_exit_event_and_signaled_child_codes") {
             return;
         }
-        let mut event = DEBUG_EVENT::default();
-        event.dwDebugEventCode = EXIT_PROCESS_DEBUG_EVENT;
+        let mut event = DEBUG_EVENT {
+            dwDebugEventCode: EXIT_PROCESS_DEBUG_EVENT,
+            ..Default::default()
+        };
         event.u.ExitProcess = EXIT_PROCESS_DEBUG_INFO {
             dwExitCode: 0xc0000005,
         };

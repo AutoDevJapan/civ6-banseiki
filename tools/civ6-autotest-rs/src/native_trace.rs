@@ -852,6 +852,43 @@ mod platform {
 
         const FIXTURE_READY: &str = "PR86_CRITICAL_FIXTURE_READY";
 
+        // Production Unresolved intentionally retains observer authority.
+        // A timed test worker is different: its creator must reap its exact
+        // spawned process after exercising the real Session Drop behavior.
+        struct FixtureSession {
+            inner: Option<Session>,
+            process: std::os::windows::io::OwnedHandle,
+        }
+        impl std::ops::Deref for FixtureSession {
+            type Target = Session;
+            fn deref(&self) -> &Session {
+                self.inner.as_ref().unwrap()
+            }
+        }
+        impl std::ops::DerefMut for FixtureSession {
+            fn deref_mut(&mut self) -> &mut Session {
+                self.inner.as_mut().unwrap()
+            }
+        }
+        impl Drop for FixtureSession {
+            fn drop(&mut self) {
+                drop(self.inner.take());
+                let handle = self.process.as_raw_handle() as HANDLE;
+                if unsafe { WaitForSingleObject(handle, 0) } == WAIT_TIMEOUT {
+                    assert_ne!(
+                        unsafe { TerminateProcess(handle, 1) },
+                        0,
+                        "terminate only this fixture's original process handle"
+                    );
+                }
+                assert_eq!(
+                    unsafe { WaitForSingleObject(handle, 2_000) },
+                    WAIT_OBJECT_0,
+                    "test worker exit must be confirmed before nextest completes"
+                );
+            }
+        }
+
         #[test]
         fn property_trace_requires_named_owner_reads_updates_and_deletes() {
             let directory = tempfile::tempdir().unwrap();
@@ -985,14 +1022,14 @@ mod platform {
         fn session(
             deadline: Option<Instant>,
             closes: Arc<AtomicUsize>,
-        ) -> (Session, mpsc::Sender<ObserverMessage>) {
+        ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
             session_with_close(deadline, closes, false)
         }
         fn session_with_close(
             deadline: Option<Instant>,
             closes: Arc<AtomicUsize>,
             terminate_owned_fixture: bool,
-        ) -> (Session, mpsc::Sender<ObserverMessage>) {
+        ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",
@@ -1043,43 +1080,50 @@ mod platform {
             // Session still checks the pinned creation time and image before close.
             let owned_target =
                 terminate_owned_fixture.then(|| child.as_handle().try_clone_to_owned().unwrap());
+            let fixture_process = child.as_handle().try_clone_to_owned().unwrap();
             (
-                Session {
-                    child,
-                    stdin,
-                    messages: rx,
-                    reader_closed: true,
-                    output: PathBuf::from("fixture.jsonl"),
-                    mode: "governor".into(),
-                    identity,
-                    phase: Phase::Ready,
-                    failure: None,
-                    stop_sent: false,
-                    stop_deadline: deadline,
-                    close_reserve: Duration::from_millis(20),
-                    critical: None,
-                    close_attempted: false,
-                    close_error: None,
-                    close_owned_game: Box::new(move |request_pid, request_start| {
-                        assert_eq!(request_pid, pid);
-                        assert_eq!(request_start, expected_start);
-                        closes.fetch_add(1, Ordering::SeqCst);
-                        if let Some(owned) = owned_target.as_ref() {
-                            if unsafe { TerminateProcess(owned.as_raw_handle() as HANDLE, 1) } == 0
-                            {
-                                return Err(Error::input("cannot terminate owned Rust fixture"));
+                FixtureSession {
+                    inner: Some(Session {
+                        child,
+                        stdin,
+                        messages: rx,
+                        reader_closed: true,
+                        output: PathBuf::from("fixture.jsonl"),
+                        mode: "governor".into(),
+                        identity,
+                        phase: Phase::Ready,
+                        failure: None,
+                        stop_sent: false,
+                        stop_deadline: deadline,
+                        close_reserve: Duration::from_millis(20),
+                        critical: None,
+                        close_attempted: false,
+                        close_error: None,
+                        close_owned_game: Box::new(move |request_pid, request_start| {
+                            assert_eq!(request_pid, pid);
+                            assert_eq!(request_start, expected_start);
+                            closes.fetch_add(1, Ordering::SeqCst);
+                            if let Some(owned) = owned_target.as_ref() {
+                                if unsafe { TerminateProcess(owned.as_raw_handle() as HANDLE, 1) }
+                                    == 0
+                                {
+                                    return Err(Error::input(
+                                        "cannot terminate owned Rust fixture",
+                                    ));
+                                }
+                                if unsafe {
+                                    WaitForSingleObject(owned.as_raw_handle() as HANDLE, 2_000)
+                                } != WAIT_OBJECT_0
+                                {
+                                    return Err(Error::input(
+                                        "owned Rust fixture exit was not confirmed",
+                                    ));
+                                }
                             }
-                            if unsafe {
-                                WaitForSingleObject(owned.as_raw_handle() as HANDLE, 2_000)
-                            } != WAIT_OBJECT_0
-                            {
-                                return Err(Error::input(
-                                    "owned Rust fixture exit was not confirmed",
-                                ));
-                            }
-                        }
-                        Ok(())
+                            Ok(())
+                        }),
                     }),
+                    process: fixture_process,
                 },
                 tx,
             )

@@ -206,6 +206,13 @@ impl Runner {
         if !self.persona_runtime_restart {
             return Ok(());
         }
+        if scenario::SessionType::from_scenario(&self.scenario)?
+            != scenario::SessionType::SinglePlayer
+        {
+            return Err(Error::scenario(
+                "resident restart diagnostic requires a single-player session",
+            ));
+        }
         if self.test_mode || self.owner_start || self.scenario.get("test_mode").is_some() {
             return Err(Error::scenario(
                 "resident restart diagnostic requires automatic, non-test execution",
@@ -282,6 +289,7 @@ impl Runner {
         if !self.persona_runtime_restart {
             return Ok(());
         }
+        self.validate_persona_runtime_mode()?;
         if self.test_mode || self.owner_start {
             return Err(Error::scenario(
                 "resident restart diagnostic requires automatic, non-test single-player execution",
@@ -347,10 +355,70 @@ impl Runner {
     }
 
     pub(super) fn cleanup_persona_process(&mut self) -> Result<()> {
-        if !self.persona_runtime_restart || self.resident_runtime_identity.is_none() {
+        let result = crate::time::with_interrupt_cleanup(|| self.cleanup_persona_process_inner());
+        if self.persona_runtime_restart {
+            self.backend.release_startup_lock();
+        }
+        result
+    }
+    fn cleanup_persona_process_inner(&mut self) -> Result<()> {
+        if !self.persona_runtime_restart {
             return Ok(());
         }
-        self.retire_persona_process_inner(self.clock.now() + 15.0, true)
+        let deadline = self.clock.now() + 15.0;
+        if self.resident_runtime_identity.is_some() {
+            return self.retire_persona_process_inner(deadline, true);
+        }
+        self.retirement_authorized(deadline, true)?;
+        // Steam launches asynchronously. A timeout/cancellation can occur
+        // before any window exists, so process ownership cannot depend on UI.
+        self.bind_persona_launch()?;
+        // A launched game belongs to this run before a save has loaded or the
+        // resident bridge has been installed. Retain that independent ownership
+        // through cancellation, preflight failure and an uncertain install.
+        let Some(game) = self.persona_launched_process else {
+            if self.persona_launch_requested {
+                return Err(Error::input(
+                    "Steam launch remains unassociated; outer live_chain cleanup required",
+                ));
+            }
+            return Ok(());
+        };
+        self.retirement_authorized(deadline, true)?;
+        let inspected = self.backend.single_process(5.0)?;
+        if let Some(current) = inspected {
+            if current != (game.pid, game.started) {
+                return Err(Error::input(
+                    "persona launched process changed before cleanup",
+                ));
+            }
+            self.disconnect();
+            self.retirement_authorized(deadline, true)?;
+            self.backend.acquire_startup_lock()?;
+            self.backend.authorize_game_control(Some(game))?;
+            self.backend.terminate(game.pid, game.started)?;
+            if !self.backend.wait_exit(game.pid, deadline)? {
+                return Err(Error::input("persona launched process exit not confirmed"));
+            }
+        }
+        self.backend.finish_native_process_exit()?;
+        self.persona_launched_process = None;
+        self.persona_launch_requested = false;
+        // A failed load may leave incomplete logs. Preserve them via the run's
+        // normal error path; cleanup must not depend on a successful load.
+        self.persona_transition(json!({"kind":"preinstall_process_exit",
+            "pid":game.pid,"started":game.started,"confirmed":true,
+            "already_exited":inspected.is_none(),"same_process_reload":false}))
+    }
+
+    pub(super) fn bind_persona_launch(&mut self) -> Result<()> {
+        if self.persona_runtime_restart
+            && self.persona_launch_requested
+            && self.persona_launched_process.is_none()
+        {
+            self.persona_launched_process = self.backend.pin_launched_process()?;
+        }
+        Ok(())
     }
 
     fn retirement_authorized(&self, deadline: f64, cleanup: bool) -> Result<()> {
@@ -379,6 +447,8 @@ impl Runner {
         if inspected.is_none() && cleanup {
             self.backend.finish_native_process_exit()?;
             self.resident_runtime_identity = None;
+            self.persona_launched_process = None;
+            self.persona_launch_requested = false;
             if self.baseline.is_some() && !self.persona_current_logs_archived {
                 self.archive_persona_log_generation()?;
             }
@@ -391,6 +461,9 @@ impl Runner {
         }
         self.disconnect();
         self.retirement_authorized(deadline, cleanup)?;
+        self.backend.acquire_startup_lock()?;
+        self.backend
+            .authorize_game_control(Some((pid, started).into()))?;
         // Direct termination avoids invoking an unverified GameCore teardown
         // callback while the resident entries are live. Backend rechecks the
         // process creation identity, and only this live_chain owner's target.
@@ -405,6 +478,8 @@ impl Runner {
         }
         self.backend.finish_native_process_exit()?;
         self.resident_runtime_identity = None;
+        self.persona_launched_process = None;
+        self.persona_launch_requested = false;
         if self.baseline.is_some() && !self.persona_current_logs_archived {
             self.archive_persona_log_generation()?;
         }
@@ -425,6 +500,418 @@ mod tests {
     use super::*;
     use mlua::Lua;
     use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct LaunchState {
+        control_owned: bool,
+        process: Option<(u32, f64)>,
+        calls: Vec<&'static str>,
+        lease_error: Option<&'static str>,
+        exit_confirmed: bool,
+        window_error: Option<ErrorKind>,
+        dx11_error: bool,
+        pin_rejected: bool,
+        no_process: bool,
+        lease_checks: usize,
+        lease_changes_at: Option<usize>,
+    }
+    struct LaunchBackend(Arc<Mutex<LaunchState>>);
+    impl Backend for LaunchBackend {
+        fn acquire_startup_lock(&mut self) -> Result<()> {
+            self.check_startup_lock()
+        }
+        fn check_startup_lock(&mut self) -> Result<()> {
+            if self.0.lock().unwrap().control_owned {
+                Ok(())
+            } else {
+                Err(Error::input("fixture does not own the shared lock"))
+            }
+        }
+        fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+            Ok(self.0.lock().unwrap().process)
+        }
+        fn launch(&mut self) -> Result<()> {
+            let mut s = self.0.lock().unwrap();
+            s.calls.push("launch");
+            if !s.no_process {
+                s.process = Some((7, 1.0));
+            }
+            Ok(())
+        }
+        fn wait_window(&mut self, _: f64) -> Result<isize> {
+            if let Some(kind) = self.0.lock().unwrap().window_error {
+                return Err(Error::new(kind, "window not available"));
+            }
+            Ok(1)
+        }
+        fn require_dx11(&mut self, _: isize) -> Result<()> {
+            if self.0.lock().unwrap().dx11_error {
+                return Err(Error::input("window validation failed"));
+            }
+            Ok(())
+        }
+        fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+            let mut s = self.0.lock().unwrap();
+            s.calls.push("pin_without_window");
+            if s.pin_rejected {
+                return Err(Error::input(
+                    "process predates launch or identity is ambiguous",
+                ));
+            }
+            Ok(s.process.map(Into::into))
+        }
+        fn live_lease_budget(&self) -> Result<Option<f64>> {
+            let mut s = self.0.lock().unwrap();
+            s.lease_checks += 1;
+            if s.lease_changes_at == Some(s.lease_checks) {
+                return Err(Error::new(ErrorKind::LiveLease, "ownership changed"));
+            }
+            match s.lease_error {
+                Some(message) => Err(Error::new(ErrorKind::LiveLease, message)),
+                None => Ok(None),
+            }
+        }
+        fn terminate(&mut self, pid: u32, started: f64) -> Result<()> {
+            let mut s = self.0.lock().unwrap();
+            assert_eq!(s.process, Some((pid, started)));
+            s.calls.push("terminate");
+            Ok(())
+        }
+        fn wait_exit(&mut self, _: u32, _: f64) -> Result<bool> {
+            let mut s = self.0.lock().unwrap();
+            s.calls.push("wait_exit");
+            Ok(s.exit_confirmed)
+        }
+        fn finish_native_process_exit(&mut self) -> Result<()> {
+            self.0.lock().unwrap().calls.push("release");
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn owned_launch_is_reclaimed_before_runtime_install_without_adopting_replacements() {
+        for case in [
+            "load_failed",
+            "lease_expired",
+            "lease_changed",
+            "pid_reused",
+            "exit_pending",
+            "already_exited",
+            "lease_changed_at_terminate",
+            "shared_lock_lost",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = Arc::new(Mutex::new(LaunchState {
+                control_owned: true,
+                exit_confirmed: true,
+                ..Default::default()
+            }));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(LaunchBackend(Arc::clone(&state))),
+                Arc::new(SystemClock),
+            );
+            r.persona_runtime_restart = true;
+            let mut attempt = StartupAttempt::default();
+            r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+                .unwrap();
+            assert!(attempt.launch_requested);
+            assert_eq!(r.persona_launched_process, attempt.process);
+            assert_eq!(r.resident_runtime_identity, None);
+            {
+                let mut s = state.lock().unwrap();
+                match case {
+                    "lease_expired" => s.lease_error = Some("CIV6_LEASE_YIELD: expired"),
+                    "lease_changed" => s.lease_error = Some("ownership changed"),
+                    "pid_reused" => s.process = Some((7, 2.0)),
+                    "exit_pending" => s.exit_confirmed = false,
+                    "already_exited" => s.process = None,
+                    "lease_changed_at_terminate" => {
+                        s.lease_checks = 0;
+                        s.lease_changes_at = Some(3);
+                    }
+                    "shared_lock_lost" => s.control_owned = false,
+                    _ => {}
+                }
+            }
+            let result = r.cleanup_persona_process();
+            let s = state.lock().unwrap();
+            match case {
+                "lease_changed"
+                | "pid_reused"
+                | "lease_changed_at_terminate"
+                | "shared_lock_lost" => {
+                    assert!(result.is_err());
+                    assert_eq!(s.calls, ["launch", "pin_without_window"]);
+                    assert_eq!(r.persona_launched_process, attempt.process);
+                }
+                "exit_pending" => {
+                    assert!(result.is_err());
+                    assert_eq!(
+                        s.calls,
+                        ["launch", "pin_without_window", "terminate", "wait_exit"]
+                    );
+                    assert_eq!(r.persona_launched_process, attempt.process);
+                }
+                _ => {
+                    result.unwrap();
+                    assert_eq!(r.persona_launched_process, None);
+                    if case == "already_exited" {
+                        assert_eq!(s.calls, ["launch", "pin_without_window", "release"]);
+                    } else {
+                        assert_eq!(
+                            s.calls,
+                            [
+                                "launch",
+                                "pin_without_window",
+                                "terminate",
+                                "wait_exit",
+                                "release"
+                            ]
+                        );
+                    }
+                    let receipt: Value = serde_json::from_str(
+                        &fs::read_to_string(dir.path().join("persona-runtime-transitions.jsonl"))
+                            .unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(receipt["pid"], 7);
+                    assert_eq!(receipt["started"], 1.0);
+                    assert_eq!(receipt["confirmed"], true);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn existing_unlaunched_game_is_not_adopted_for_persona_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(Mutex::new(LaunchState {
+            control_owned: true,
+            process: Some((7, 1.0)),
+            ..Default::default()
+        }));
+        let mut r = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            dir.path().into(),
+            dir.path().into(),
+            dir.path().into(),
+            4318,
+            Box::new(LaunchBackend(Arc::clone(&state))),
+            Arc::new(SystemClock),
+        );
+        r.persona_runtime_restart = true;
+        let mut attempt = StartupAttempt::default();
+        r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+            .unwrap();
+        assert!(!attempt.launch_requested);
+        assert_eq!(r.persona_launched_process, None);
+        r.cleanup_persona_process().unwrap();
+        assert!(state.lock().unwrap().calls.is_empty());
+    }
+
+    #[test]
+    fn launch_cleanup_is_independent_of_window_arrival_and_dx11_validation() {
+        for (window_error, dx11_error, pin_rejected) in [
+            (Some(ErrorKind::Interrupted), false, false),
+            (Some(ErrorKind::Scenario), false, false),
+            (None, true, false),
+            (Some(ErrorKind::Interrupted), false, true),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let state = Arc::new(Mutex::new(LaunchState {
+                control_owned: true,
+                exit_confirmed: true,
+                window_error,
+                dx11_error,
+                pin_rejected,
+                ..Default::default()
+            }));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(LaunchBackend(Arc::clone(&state))),
+                Arc::new(SystemClock),
+            );
+            r.persona_runtime_restart = true;
+            let mut attempt = StartupAttempt::default();
+            assert!(r
+                .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+                .is_err());
+            assert!(r.persona_launch_requested);
+            assert_eq!(r.resident_runtime_identity, None);
+            let result = r.cleanup_persona_process();
+            let s = state.lock().unwrap();
+            if pin_rejected {
+                assert!(result.is_err());
+                assert_eq!(
+                    s.calls,
+                    ["launch", "pin_without_window", "pin_without_window"]
+                );
+                assert!(r.persona_launch_requested);
+            } else {
+                result.unwrap();
+                assert!(!r.persona_launch_requested);
+                assert_eq!(r.persona_launched_process, None);
+                let expected = vec![
+                    "launch",
+                    "pin_without_window",
+                    "terminate",
+                    "wait_exit",
+                    "release",
+                ];
+                assert_eq!(s.calls, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn absent_launch_candidate_stays_unresolved_for_outer_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(Mutex::new(LaunchState {
+            control_owned: true,
+            no_process: true,
+            window_error: Some(ErrorKind::Interrupted),
+            ..Default::default()
+        }));
+        let mut r = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            dir.path().into(),
+            dir.path().into(),
+            dir.path().into(),
+            4318,
+            Box::new(LaunchBackend(Arc::clone(&state))),
+            Arc::new(SystemClock),
+        );
+        r.persona_runtime_restart = true;
+        let mut attempt = StartupAttempt::default();
+        assert!(r
+            .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
+            .is_err());
+        let error = r.cleanup_persona_process().unwrap_err();
+        assert!(error.message.contains("outer live_chain cleanup required"));
+        assert!(r.persona_launch_requested && r.persona_launched_process.is_none());
+        assert_eq!(
+            state.lock().unwrap().calls,
+            ["launch", "pin_without_window", "pin_without_window"]
+        );
+    }
+
+    #[test]
+    fn real_window_retry_deadline_keeps_absent_and_late_launches_unresolved() {
+        struct ManualClock(Mutex<f64>);
+        impl Clock for ManualClock {
+            fn now(&self) -> f64 {
+                *self.0.lock().unwrap()
+            }
+            fn sleep(&self, seconds: f64) {
+                *self.0.lock().unwrap() += seconds;
+            }
+        }
+        struct TimeoutBackend {
+            control_owned: bool,
+            clock: Arc<ManualClock>,
+            calls: Arc<Mutex<Vec<&'static str>>>,
+            late: bool,
+        }
+        impl Backend for TimeoutBackend {
+            fn acquire_startup_lock(&mut self) -> Result<()> {
+                self.check_startup_lock()
+            }
+            fn check_startup_lock(&mut self) -> Result<()> {
+                if self.control_owned {
+                    Ok(())
+                } else {
+                    Err(Error::input("fixture does not own the shared lock"))
+                }
+            }
+            fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+                Ok((self.late && self.clock.now() >= 135.0).then_some((7, 135.0)))
+            }
+            fn launch(&mut self) -> Result<()> {
+                self.calls.lock().unwrap().push("launch");
+                Ok(())
+            }
+            fn wait_window(&mut self, deadline: f64) -> Result<isize> {
+                self.calls.lock().unwrap().push("window_wait");
+                self.clock.sleep(deadline - self.clock.now());
+                Err(Error::input("no visible window"))
+            }
+            fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
+                let Some((pid, started)) = self.single_process(0.0)? else {
+                    return Ok(None);
+                };
+                crate::startup::validate_launch_binding(100.0, self.clock.now(), started)?;
+                Ok(Some(crate::startup::GameProcess { pid, started }))
+            }
+            fn terminate(&mut self, _: u32, _: f64) -> Result<()> {
+                panic!("an absent or late game must not be terminated")
+            }
+        }
+        for late in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let clock = Arc::new(ManualClock(Mutex::new(100.0)));
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let mut r = Runner::with_backend(
+                json!({"name":"fixture","steps":[]}),
+                dir.path().into(),
+                dir.path().into(),
+                dir.path().into(),
+                4318,
+                Box::new(TimeoutBackend {
+                    control_owned: true,
+                    clock: Arc::clone(&clock),
+                    calls: Arc::clone(&calls),
+                    late,
+                }),
+                clock.clone(),
+            );
+            r.persona_runtime_restart = true;
+            let failure = r
+                .launch_startup_and_wait(140.0, true, &mut StartupAttempt::default())
+                .unwrap_err();
+            assert_eq!(
+                calls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|&&c| c == "launch")
+                    .count(),
+                1
+            );
+            if late {
+                assert_eq!(clock.now(), 135.0);
+                assert!(failure.message.contains("association expired"));
+            } else {
+                assert_eq!(clock.now(), 140.0);
+                assert_eq!(failure.kind, ErrorKind::Scenario);
+                assert!(failure.message.contains("window did not appear"));
+                assert_eq!(
+                    calls
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .filter(|&&c| c == "window_wait")
+                        .count(),
+                    8
+                );
+            }
+            let cleanup = r.cleanup_persona_process().unwrap_err();
+            assert!(cleanup.message.contains(if late {
+                "association expired"
+            } else {
+                "outer live_chain cleanup required"
+            }));
+            assert!(r.persona_launch_requested && r.persona_launched_process.is_none());
+        }
+    }
 
     struct LostStateRead {
         calls: Arc<Mutex<usize>>,
@@ -778,6 +1265,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
     }
 
     struct LifecycleBackend {
+        control_owned: bool,
         identity: Option<(u32, u64)>,
         exited: bool,
         ready: bool,
@@ -785,6 +1273,16 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         lease_failure: Option<(usize, bool)>,
     }
     impl Backend for LifecycleBackend {
+        fn acquire_startup_lock(&mut self) -> Result<()> {
+            self.check_startup_lock()
+        }
+        fn check_startup_lock(&mut self) -> Result<()> {
+            if self.control_owned {
+                Ok(())
+            } else {
+                Err(Error::input("fixture does not own the shared lock"))
+            }
+        }
         fn live_lease_budget(&self) -> Result<Option<f64>> {
             if let Some((after, changed)) = self.lease_failure {
                 if self.calls.lock().unwrap().len() >= after {
@@ -861,6 +1359,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
             dir.into(),
             4318,
             Box::new(LifecycleBackend {
+                control_owned: true,
                 identity,
                 exited,
                 ready,
@@ -899,6 +1398,10 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
         r.scenario["test_mode"] = json!({"skipped_turns":0});
         assert!(r.validate_persona_runtime_mode().is_err());
         r.scenario.as_object_mut().unwrap().remove("test_mode");
+        r.scenario["session_type"] = "hotseat".into();
+        assert!(r.validate_persona_runtime_mode().is_err());
+        assert!(r.activate_persona_runtime(r.clock.now() + 30.0).is_err());
+        r.scenario.as_object_mut().unwrap().remove("session_type");
         r.scenario["steps"] = json!([{"action":"start_native_paid_runtime"}]);
         assert!(r.validate_persona_runtime_mode().is_err());
         assert!(calls.lock().unwrap().is_empty());
@@ -993,6 +1496,7 @@ ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function() return status
                 dir.path().into(),
                 4318,
                 Box::new(LifecycleBackend {
+                    control_owned: true,
                     identity: Some((7, 123)),
                     exited: true,
                     ready: true,

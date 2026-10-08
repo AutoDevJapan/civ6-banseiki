@@ -188,6 +188,13 @@ fn persona_inventory_preserves_all_119_original_methods() {
         if file.ends_with("persona_boundary.rs") {
             assert!(actual.remove("persistent_gameplay_api_probe_only_records_published_members"));
         }
+        if file == "tools/civ6-data-rs/tests/persona.rs" {
+            // Register the price-update regression separately. The original
+            // 119-method correspondence and digest remain exact and unchanged.
+            assert!(
+                actual.remove("repricing_personas_keeps_the_original_official_payment_definitions")
+            );
+        }
         let expected: BTreeSet<String> = expected.into_iter().map(str::to_owned).collect();
         assert_eq!(actual, expected, "{}", source.display());
     }
@@ -215,4 +222,38 @@ fn persona_inventory_registers_eleven_native_probe_methods_separately() {
     .map(|name| format!("persona_native_slots::{name}"))
     .collect();
     assert_eq!(inventory::resolve(&path, "persona_native_slots"), expected);
+}
+
+#[test]
+fn saved_price_and_join_regressions_are_registered_separately() {
+    for (module, methods) in [
+        (
+            "persona_sql_price",
+            &[
+                "real_sql_rebuild_preserves_d21_and_price_v1_saves_for_prices_123",
+                "rebuilt_sql_rejects_unknown_cross_person_owner_and_damaged_receipts",
+            ][..],
+        ),
+        (
+            "persona_join_transaction",
+            &[
+                "invalid_legacy_ledger_is_rejected_before_any_new_great_person",
+                "source_mismatch_and_corrupt_store_never_spawn_or_change_contracts",
+                "successful_spawn_followed_by_price_rejection_is_physically_rolled_back",
+                "spawn_failure_and_existing_person_preserve_identity_and_price",
+                "store_and_field_write_failures_restore_price_and_remove_only_created_unit",
+                "refused_destroy_is_tracked_and_retries_compensate_without_second_grant",
+                "rejection_when_adopting_an_existing_person_never_destroys_or_renames_it",
+                "reentrant_grant_and_throw_after_creation_do_not_duplicate_or_leak_persons",
+                "corrupt_rollback_price_image_never_rewrites_another_person_contract",
+            ][..],
+        ),
+    ] {
+        let path = repo_root().join(format!("tools/civ6-lua-tests-rs/tests/{module}.rs"));
+        let expected = methods
+            .iter()
+            .map(|method| format!("{module}::{method}"))
+            .collect();
+        assert_eq!(inventory::resolve(&path, module), expected);
+    }
 }

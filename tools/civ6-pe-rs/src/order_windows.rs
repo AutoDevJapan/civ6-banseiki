@@ -1,6 +1,8 @@
 //! Capture-only adapter over the existing observer's attach/cleanup machinery.
 use super::*;
 use crate::order_capture::{self as plan, Phase, Request, Site};
+#[path = "order_context.rs"]
+mod context_facts;
 use windows_sys::Win32::System::Memory::{
     VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE, PAGE_EXECUTE,
     PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD,
@@ -192,6 +194,67 @@ fn reject_arm(d: &mut Debugger, mut row: Value, error: String) -> String {
         );
     }
     error
+}
+// A stop-time sample can prove loss at that instant, never continuous coverage.
+// Call only after the existing cleanup freeze, before TF or DR restoration.
+fn stop_register_evidence(
+    d: &Debugger,
+    epoch: CaptureEpoch,
+    threads: &CaptureThreads,
+    steps: &BTreeMap<u32, Step>,
+) -> Value {
+    let mut rows = Vec::new();
+    let (mut matched, mut mismatched, mut unknown, mut exited, mut pending) = (0, 0, 0, 0, 0);
+    for &tid in d.threads.keys() {
+        let (mut row, c, wait) = arm_evidence(d, tid, Some(epoch), epoch, &threads.generations);
+        row["pending_step_for_tid"] = json!(steps.contains_key(&tid));
+        let disposition = if row["thread_owner_pid"] != d.pid || row["handle_tid"] != tid {
+            unknown += 1;
+            "ownership_unproven"
+        } else if wait == WAIT_OBJECT_0 {
+            exited += 1;
+            "signaled_handle_coverage_unknown"
+        } else if wait != WAIT_TIMEOUT || !d.held.contains(&tid) {
+            unknown += 1;
+            "context_unproven"
+        } else {
+            match c {
+                Err(_) => {
+                    unknown += 1;
+                    "context_unproven"
+                }
+                Ok(_) if steps.contains_key(&tid) => {
+                    pending += 1;
+                    "pending_instruction_not_completed"
+                }
+                Ok(_)
+                    if threads.generations.get(&tid) != Some(&epoch.generation)
+                        || d.threads[&tid].armed_sites != epoch.sites =>
+                {
+                    mismatched += 1;
+                    "generation_or_sites_mismatch"
+                }
+                Ok(c) if !installed_sites_match_context(&epoch.sites, &c) => {
+                    mismatched += 1;
+                    "debug_register_mismatch"
+                }
+                Ok(_) => {
+                    matched += 1;
+                    "matched_at_stop_only"
+                }
+            }
+        };
+        row["disposition"] = json!(disposition);
+        rows.push(row);
+    }
+    let status = if mismatched > 0 {
+        "mismatch"
+    } else if unknown + exited + pending > 0 || matched == 0 {
+        "incomplete"
+    } else {
+        "matched_at_stop"
+    };
+    json!({"type":"pre_restore_registers","summary":{"snapshot_status":status,"phase":epoch.phase.name(),"generation":epoch.generation,"tracked":rows.len(),"matched":matched,"mismatched":mismatched,"unknown":unknown,"signaled":exited,"pending":pending,"coverage_over_interval":"unknown","zero_hits_proves_unreached":false},"thread_checks":rows})
 }
 fn install_sites(
     d: &mut Debugger,
@@ -432,19 +495,82 @@ fn emit(row: &Value) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+const THREAD_NAME_EXCEPTION: i32 = 0x406d1388;
+// Microsoft pack(8) THREADNAME_INFO on Win64 is 24 bytes / 3 ULONG_PTRs.
+// The shipped Bink producer passes count=6 for that same 24-byte prefix;
+// live04's dump confirms six words. Only this observed legacy count is added.
+// The upper DWORD of word 0 is padding, not a required zero field.
+fn thread_name_notice(d: &Debugger, event: &DEBUG_EVENT) -> Result<Value, String> {
+    let ex = unsafe { event.u.Exception }.ExceptionRecord;
+    if event.dwProcessId != d.pid
+        || ex.ExceptionCode != THREAD_NAME_EXCEPTION
+        // Windows adds EXCEPTION_SOFTWARE_ORIGINATE (SDK winnt.h) to the
+        // observed record even when RaiseException was called with flags=0.
+        || ex.ExceptionFlags & !0x80 != 0
+        || !matches!(ex.NumberParameters, 3 | 6)
+    {
+        return Err("not the Win64 thread-name notification shape".into());
+    }
+    let words = &ex.ExceptionInformation;
+    if words[0] as u32 != 0x1000 || (words[2] as u64 >> 32) != 0 || words[1] == 0 {
+        return Err("invalid thread-name fields".into());
+    }
+    let target = if words[2] as u32 == u32::MAX {
+        event.dwThreadId
+    } else {
+        words[2] as u32
+    };
+    for tid in [event.dwThreadId, target] {
+        let thread = d
+            .threads
+            .get(&tid)
+            .ok_or("thread-name thread is not tracked")?;
+        if unsafe { GetProcessIdOfThread(thread.handle.0) } != d.pid
+            || unsafe { GetThreadId(thread.handle.0) } != tid
+            || unsafe { WaitForSingleObject(thread.handle.0, 0) } != WAIT_TIMEOUT
+        {
+            return Err("thread-name thread ownership or lifetime differs".into());
+        }
+    }
+    let mut name = Vec::new();
+    for i in 0..256u64 {
+        let address = (words[1] as u64)
+            .checked_add(i)
+            .ok_or("thread-name address overflow")?;
+        let byte = read_exact::<1>(&d.game, address)?[0];
+        if byte == 0 {
+            return Ok(
+                json!({"target_tid":target,"name_bytes":name,"name_address":words[1],"layout":if ex.NumberParameters==3 {"Win64-pack8-3-ULONG_PTR"} else {"Civ6-Bink-Win64-pack8-prefix-count6"},"padding_ignored":(words[0] as u64)>>32,"trailing_words_uninterpreted":if ex.NumberParameters==6 {&words[3..6]}else{&words[3..3]}}),
+            );
+        }
+        name.push(byte);
+    }
+    Err("thread-name is not terminated within 256 bytes".into())
+}
+
 fn qualify_exception(
     d: &mut Debugger,
     event: &DEBUG_EVENT,
     steps: &BTreeMap<u32, Step>,
     sites: &[u64],
-) -> Result<(), String> {
+) -> Result<i32, String> {
     if event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT {
-        return Ok(());
+        return Ok(DBG_CONTINUE);
     }
     let info = unsafe { event.u.Exception };
     let tid = event.dwThreadId;
     let address = info.ExceptionRecord.ExceptionAddress as u64;
     match info.ExceptionRecord.ExceptionCode {
+        THREAD_NAME_EXCEPTION if thread_name_notice(d, event).is_ok() => {
+            if steps.contains_key(&tid) {
+                d.last_dispatch =
+                    DispatchOutcome::Ambiguous("thread-name interrupted pending step");
+                return Err("thread-name cannot complete or discard a pending instruction".into());
+            }
+            // A validated naming notification has no instruction-completion
+            // meaning. Keep every other thread's pending step untouched.
+            return Ok(DBG_CONTINUE);
+        }
         EXCEPTION_SINGLE_STEP => {
             d.last_dispatch = DispatchOutcome::Ambiguous("order exception ownership unresolved");
             let state = d.threads.get(&tid).ok_or("unknown exception thread")?;
@@ -493,13 +619,28 @@ fn qualify_exception(
         _ => {}
     }
     d.cleanup_event = Some((*event, d.status_after_error(event)));
-    Ok(())
+    Ok(d.status_after_error(event))
 }
 
 fn exception_evidence(d: &Debugger, event: &DEBUG_EVENT, steps: &BTreeMap<u32, Step>) -> Value {
     let info = unsafe { event.u.Exception };
     let tid = event.dwThreadId;
     let mut row = json!({"type":"debug_exception","tid":tid,"code":info.ExceptionRecord.ExceptionCode,"address":info.ExceptionRecord.ExceptionAddress as u64,"first_chance":info.dwFirstChance!=0,"expected_owner_pid":d.pid,"pending_step_count":steps.len()});
+    let ex = &info.ExceptionRecord;
+    row["exception_flags"] = json!(ex.ExceptionFlags);
+    row["number_parameters"] = json!(ex.NumberParameters);
+    row["exception_information"] = json!(
+        &ex.ExceptionInformation
+            [..(ex.NumberParameters as usize).min(ex.ExceptionInformation.len())]
+    );
+    row["exception_information_truncated"] =
+        json!(ex.NumberParameters as usize > ex.ExceptionInformation.len());
+    if ex.ExceptionCode == THREAD_NAME_EXCEPTION {
+        match thread_name_notice(d, event) {
+            Ok(notice) => row["thread_name_notice"] = notice,
+            Err(error) => row["thread_name_rejected"] = json!(error),
+        }
+    }
     if let Some(step) = steps.get(&tid) {
         row["pending_step"] = json!({"capture_seq":step.capture["capture_seq"],"site":step.site.name,"expected_rip":step.expected,"phase":step.phase.name(),"armed_eflags":step.armed_eflags});
     }
@@ -530,7 +671,10 @@ fn classify_then_record(
     // any fallible write, including when qualification itself fails.
     let mut row = exception_evidence(d, event, steps);
     let qualified = qualify_exception(d, event, steps, sites);
-    let status = d.status_after_error(event);
+    let status = qualified
+        .as_ref()
+        .copied()
+        .unwrap_or_else(|_| d.status_after_error(event));
     d.cleanup_event = Some((*event, status));
     row["qualification_error"] = json!(qualified.as_ref().err());
     row["continue_status"] = json!(status);
@@ -544,7 +688,16 @@ fn classify_then_record(
             json!({"type":"exception_record_failure","error":error.to_string(),"exception":fallback})
         );
     }
-    qualified.and(recorded.map_err(|e| e.to_string()))
+    qualified
+        .map(|_| ())
+        .and(recorded.map_err(|e| e.to_string()))
+}
+
+fn cleanup_order(d: &mut Debugger) -> Result<(), String> {
+    // Native default classification does not know the naming protocol. Preserve
+    // the status already fixed before recording, including on disk failure.
+    let pending = d.cleanup_event;
+    d.cleanup(pending.as_ref().map(|(event, status)| (event, *status)))
 }
 
 fn core_module(pid: u32) -> Result<Option<Module>, String> {
@@ -722,6 +875,10 @@ pub fn observe(req: Request) -> Result<(), String> {
         return Err("initial GameCore path differs".into());
     }
     let initial_context = read_pointer(&d.game, exe.base + 0x22d60c0)?;
+    let mut module_identities = BTreeMap::new();
+    if let Some(core) = &initial_core {
+        module_identities.insert(core.base, context_facts::module_row(core));
+    }
     mark(
         &mut d,
         json!({"type":"order_identity","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"chain_pid":req.chain_pid,"chain_created_filetime":req.chain_created,"controller_pid":req.controller_pid,"controller_created_filetime":req.controller_created,"source_dll":req.source_dll,"source_dll_sha256":req.source_dll_sha,"exe_base":exe.base,"capture_phase":req.phase.name(),"front_prefix":req.front_prefix,"load_prefix":req.load_prefix,"static_proof":static_proof,"initial_core_base":initial_core.as_ref().map(|m|m.base),"initial_context":initial_context,"first_factory_since_process_start":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
@@ -820,9 +977,18 @@ pub fn observe(req: Request) -> Result<(), String> {
                         }
                     }
                     let attach_snapshot = !d.attach_origin.accepted;
+                    let module_base = info.lpBaseOfDll as u64;
+                    // At attach only the known Core identity is needed. For
+                    // real reloads retain the module identity BEFORE unload.
+                    if !attach_snapshot {
+                        let identity = context_facts::module_at(req.pid, module_base)
+                            .map(|m| context_facts::module_row(&m))
+                            .unwrap_or_else(|e| json!({"base":module_base,"identity":"unknown","error":e}));
+                        module_identities.insert(module_base, identity);
+                    }
                     mark(
                         &mut d,
-                        json!({"type":if attach_snapshot {"module_attach_snapshot"}else{"module_load"},"tid":tid,"base":info.lpBaseOfDll as u64,"source":"real_debug_event","load_since_ready":!attach_snapshot}),
+                        json!({"type":if attach_snapshot {"module_attach_snapshot"}else{"module_load"},"tid":tid,"base":module_base,"module_identity":module_identities.get(&module_base),"source":"real_debug_event","load_since_ready":!attach_snapshot}),
                     )?;
                     if let Some(core) = core_module(req.pid)? {
                         if !same_path(&core.path, &core_path)
@@ -833,9 +999,11 @@ pub fn observe(req: Request) -> Result<(), String> {
                     }
                 }
                 UNLOAD_DLL_DEBUG_EVENT => {
+                    let module_base=unsafe {event.u.UnloadDll.lpBaseOfDll} as u64;
+                    let prior_identity=module_identities.remove(&module_base);
                     mark(
                         &mut d,
-                        json!({"type":"module_unload","tid":tid,"base":unsafe {event.u.UnloadDll.lpBaseOfDll} as u64,"source":"real_debug_event"}),
+                        json!({"type":"module_unload","tid":tid,"base":module_base,"prior_module_identity":prior_identity,"identity_source":"last_observed_load_or_initial_core","source":"real_debug_event"}),
                     )?;
                 }
                 EXIT_PROCESS_DEBUG_EVENT => {
@@ -957,7 +1125,10 @@ pub fn observe(req: Request) -> Result<(), String> {
                                         _ => None,
                                     };
                                     hits += 1;
-                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"pointer_candidate":pointer,"gameplay_owner":"unknown","original_instruction_executions":null});
+                                    let context_slot = if matches!(site.name,"context_release"|"context_replace") {
+                                        context_facts::capture(&d,&exe,site,&c,pointer.unwrap_or(0))
+                                    } else {Value::Null};
+                                    let row = json!({"type":"instruction_before","capture_seq":hits,"tid":tid,"site":site.name,"rva":site.rva,"phase":phase.name(),"rax":c.Rax,"rbx":c.Rbx,"rcx":c.Rcx,"rdx":c.Rdx,"r8":c.R8,"r9":c.R9,"rsp":c.Rsp,"rip":c.Rip,"pointer_candidate":pointer,"context_slot":context_slot,"gameplay_owner":"unknown","original_instruction_executions":null});
                                     mark(&mut d, row.clone())?;
                                     steps.insert(
                                         tid,
@@ -980,6 +1151,9 @@ pub fn observe(req: Request) -> Result<(), String> {
                                 }
                             }
                         }
+                    } else if info.ExceptionRecord.ExceptionCode == THREAD_NAME_EXCEPTION
+                        && d.cleanup_event.as_ref().is_some_and(|(_,s)| *s == DBG_CONTINUE) {
+                        status = DBG_CONTINUE;
                     } else {
                         if steps.contains_key(&tid) {
                             d.last_dispatch =
@@ -998,9 +1172,22 @@ pub fn observe(req: Request) -> Result<(), String> {
         }
         Ok(())
     })).unwrap_or_else(|_|Err("capture loop panicked; restoring before exit".into()));
-    // Clear ONLY the TF introduced by this adapter before shared restoration.
+    let mut stop_register_audit = Value::Null;
+    let mut audit_write = Ok(());
+    // Record before clearing TF or restoring DRs. Diagnostic I/O failure must
+    // not bypass restoration or turn a verified detach into game termination.
     let cleanup = (|| -> Result<(), String> {
-        d.freeze()?;
+        let frozen = d.freeze();
+        let audit = match &frozen {
+            Ok(()) => stop_register_evidence(&d, epoch, &capture_threads, &steps),
+            Err(e) => {
+                json!({"type":"pre_restore_registers","summary":{"snapshot_status":"freeze_failed","tracked":d.threads.len(),"coverage_over_interval":"unknown","zero_hits_proves_unreached":false},"freeze_error":e})
+            }
+        };
+        stop_register_audit = audit["summary"].clone();
+        audit_write = mark(&mut d, audit);
+        frozen?;
+        // Clear ONLY the TF introduced by this adapter before shared restoration.
         for tid in steps.keys() {
             let state = d.threads.get(tid).ok_or("pending step lost thread")?;
             if unsafe { WaitForSingleObject(state.handle.0, 0) } == WAIT_OBJECT_0 {
@@ -1015,7 +1202,7 @@ pub fn observe(req: Request) -> Result<(), String> {
         {
             d.critical_ambiguous_exception(&event, reason)
         } else {
-            d.cleanup(None)
+            cleanup_order(&mut d)
         }
     })();
     let cleanup = match cleanup {
@@ -1042,9 +1229,9 @@ pub fn observe(req: Request) -> Result<(), String> {
     drop(input_reader);
     mark(
         &mut d,
-        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"capture_thread_events":{"armed_creates":capture_threads.created,"exit_events":capture_threads.exited,"final_tracked":capture_threads.generations.len()},"phase_generation":epoch.generation,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
+        json!({"type":"order_stop","schema":plan::SCHEMA,"game_pid":req.pid,"game_created_filetime":req.created,"result":if result.is_ok()&&cleanup.is_ok()&&audit_write.is_ok(){"ok"}else{"error"},"error":result.as_ref().err(),"cleanup_error":cleanup.as_ref().err(),"stop_register_audit":stop_register_audit,"stop_register_record_error":audit_write.as_ref().err(),"terminal_kind":terminal,"debug_registers_restored":cleanup.is_ok(),"pending_instruction_completions":steps.len(),"sites":rows,"owned_thread_handles_closed":handles,"capture_thread_events":{"armed_creates":capture_threads.created,"exit_events":capture_threads.exited,"final_tracked":capture_threads.generations.len()},"phase_generation":epoch.generation,"input_reader_joined":true,"helper_processes_spawned":0,"controller_must_reap_child":true,"common_boundary_proof":"unknown","gameplay_lua_identity":"unknown","memory_writes":0,"dll_install_calls":0}),
     )?;
-    result.and(cleanup)
+    result.and(cleanup).and(audit_write)
 }
 
 /// Parent stub: only invoke from the existing live_chain-owned controller lane.
@@ -1237,8 +1424,12 @@ mod step_tests;
 mod phase_tests;
 
 #[cfg(test)]
+#[path = "order_thread_name_tests.rs"]
+mod thread_name_tests;
+
+#[cfg(test)]
 mod tests {
-    use super::super::test_support::Fixture;
+    use super::super::test_support::{AttachReadyBarrier, Fixture};
     use super::*;
     #[test]
     fn order_capture_chain_allowlist_rejects_other_copies_and_hashes() {
@@ -1358,6 +1549,7 @@ mod tests {
             )
             .unwrap();
             d.close_ack = ack;
+            let mut ready_barrier = AttachReadyBarrier::default();
             let deadline = Instant::now() + Duration::from_secs(20);
             loop {
                 assert!(
@@ -1369,7 +1561,6 @@ mod tests {
                     continue;
                 }
                 d.cleanup_event = Some((event, DBG_EXCEPTION_NOT_HANDLED));
-                let status;
                 if event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
                     && unsafe { event.u.Exception.ExceptionRecord.ExceptionCode }
                         == EXCEPTION_SINGLE_STEP
@@ -1395,10 +1586,9 @@ mod tests {
                     assert_eq!(d.terminal, TerminalKind::Detached);
                     return path;
                 }
-                status = d.handle_event(&event).unwrap();
+                let status = d.handle_event(&event).unwrap();
                 d.continue_pending_with_status(status).unwrap();
-                if d.ready {
-                    d.ready = false;
+                if ready_barrier.advance(&mut d, &event) {
                     ready_tx.send(()).unwrap();
                 }
             }

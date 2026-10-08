@@ -13,7 +13,7 @@ pub fn controller_capabilities() -> serde_json::Value {
     serde_json::json!({
         "schema": "civ6-native-controller-capabilities-v1",
         "gamecore_sha256": PINNED_GAMECORE_SHA256,
-        "runtime_config_version": 0x0324_0001u32,
+        "runtime_config_version": 0x0324_0002u32,
         "modes": ["can-ever", "property", "property-scoped", "can-ever-calibration",
             "property-admission-scoped", "assign-calibration", "joined-admission",
             "production-admission", "paid-assignment-experimental",
@@ -47,7 +47,8 @@ pub use windows::{
     PINNED_PROMOTION_CALL_RVA, PINNED_PROPERTY_GET_RVA, PRODUCTION_ALLOW_BASE,
     PRODUCTION_CLOSE_BASE, PRODUCTION_INDEX_LIMIT, PRODUCTION_MANIFEST_BASE, PRODUCTION_RESET_KEY,
     PRODUCTION_RESET_LAST_KEY, PROMOTION_TRACE_CAPACITY, PROPERTY_TEST_PHASE_KEY_ID,
-    PROPERTY_TEST_VALUE_KEY_ID, RUNTIME_CONFIG_VERSION, TRACE_CAPACITY,
+    PROPERTY_TEST_VALUE_KEY_ID, RUNTIME_CONFIG_VERSION, RUNTIME_PROMOTION_CALL_WINDOWS,
+    TRACE_CAPACITY,
 };
 
 #[cfg(not(windows))]

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="c8fb8042-8e3e-4b35-b02a-781947194700" version="1">
+	<Properties>
+		<Name>LOC_JAC_BANSEIKI_POOL_MOD_NAME</Name>
+		<Teaser>LOC_JAC_BANSEIKI_POOL_MOD_DESCRIPTION</Teaser>
+		<Description>LOC_JAC_BANSEIKI_POOL_MOD_DESCRIPTION</Description>
+		<Authors>civ6-banseiki</Authors>
+		<CompatibleVersions>2.0</CompatibleVersions>
+	</Properties>
+	<Dependencies>
+		<Mod id="4873eb62-8ccc-4574-b784-dda455e74e68" title="LOC_EXPANSION2_MOD_TITLE"/>
+		<Mod id="ba3a1c58-9287-4654-a22f-85f9e6841e9b" title="LOC_JAC_POC_CUSTOM_CIVS_MOD_NAME"/>
+		<Mod id="bd7a82c5-6b38-4b69-a7f5-8dc9af534249" title="LOC_JAC_BANSEIKI_MOD_NAME"/>
+	</Dependencies>
+	<LocalizedText>
+		<Text id="LOC_JAC_BANSEIKI_POOL_MOD_NAME">
+			<en_US>JAC PoC: Banseiki Pool</en_US>
+			<ja_JP>JAC PoC：万世紀プール</ja_JP>
+			<ru_RU>JAC PoC: пул Бансэйки</ru_RU>
+		</Text>
+		<Text id="LOC_JAC_BANSEIKI_POOL_MOD_DESCRIPTION">
+			<en_US>Registers the Banseiki character ledger as leaders. Human players choose from the ledger.</en_US>
+			<ja_JP>万世紀の人物台帳を指導者として登録する。人間のプレイヤーは台帳の人物から選ぶ。</ja_JP>
+			<ru_RU>Регистрирует персонажей Бансэйки как лидеров. Люди выбирают лидера из этого списка.</ru_RU>
+		</Text>
+	</LocalizedText>
+	<ActionCriteria>
+		<Criteria id="JAC_BanseikiPool_Ruleset">
+			<RuleSetInUse>RULESET_JAC_BANSEIKI</RuleSetInUse>
+		</Criteria>
+	</ActionCriteria>
+	<InGameActions>
+		<!-- Options also includes SetupParameters while entering/leaving a game. -->
+		<ImportFiles id="JAC_BanseikiPool_InGameSetupFiles">
+			<File>UI/JAC_PoolSetup.lua</File>
+			<File>UI/JAC_Stock_SetupParameters.lua</File>
+			<File>UI/SetupParameters.lua</File>
+		</ImportFiles>
+		<UpdateDatabase id="JAC_BanseikiPool_Gameplay" criteria="JAC_BanseikiPool_Ruleset">
+			<Properties><LoadOrder>500</LoadOrder></Properties>
+			<File>Data/JAC_BanseikiPool_Gameplay.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_BanseikiPool_Text" criteria="JAC_BanseikiPool_Ruleset">
+			<File>Text/JAC_BanseikiPool_Text.xml</File>
+		</UpdateText>
+		<UpdateIcons id="JAC_BanseikiPool_Icons" criteria="JAC_BanseikiPool_Ruleset">
+			<File>Data/JAC_BanseikiPool_Icons.xml</File>
+		</UpdateIcons>
+		<UpdateColors id="JAC_BanseikiPool_Colors" criteria="JAC_BanseikiPool_Ruleset">
+			<File>Data/JAC_BanseikiPool_Colors.xml</File>
+		</UpdateColors>
+		<UpdateArt id="JAC_BanseikiPool_Art" criteria="JAC_BanseikiPool_Ruleset">
+			<File>JAC_PoC_BanseikiPool.dep</File>
+		</UpdateArt>
+		<AddGameplayScripts id="JAC_BanseikiPool_Scripts" criteria="JAC_BanseikiPool_Ruleset">
+			<File>Scripts/JAC_BanseikiPool.lua</File>
+		</AddGameplayScripts>
+	</InGameActions>
+	<FrontEndActions>
+		<!-- Runs after CustomCivs (Players rows) and BanseikiRuleset (the old slot-0 filter).
+		     No RuleSetInUse criteria: the rows are hidden outside Banseiki by a domain filter. -->
+		<UpdateDatabase id="JAC_BanseikiPool_Settings">
+			<Properties><LoadOrder>500</LoadOrder></Properties>
+			<File>Config/JAC_BanseikiPool_Config.sql</File>
+		</UpdateDatabase>
+		<UpdateText id="JAC_BanseikiPool_SettingsText">
+			<File>Text/JAC_BanseikiPool_Text.xml</File>
+		</UpdateText>
+		<UpdateIcons id="JAC_BanseikiPool_SettingsIcons">
+			<File>Data/JAC_BanseikiPool_Icons.xml</File>
+		</UpdateIcons>
+		<UpdateColors id="JAC_BanseikiPool_SettingsColors">
+			<File>Data/JAC_BanseikiPool_Colors.xml</File>
+		</UpdateColors>
+		<ImportFiles id="JAC_BanseikiPool_SetupFiles">
+			<Properties><LoadOrder>500</LoadOrder></Properties>
+			<File>UI/JAC_PoolSetup.lua</File>
+			<File>UI/JAC_Stock_SetupParameters.lua</File>
+			<File>UI/SetupParameters.lua</File>
+		</ImportFiles>
+	</FrontEndActions>
+	<Files>
+		<File>JAC_PoC_BanseikiPool.dep</File>
+		<File>ArtDefs/Leaders.artdef</File>
+		<File>ArtDefs/FallbackLeaders.artdef</File>
+		<File>Config/JAC_BanseikiPool_Config.sql</File>
+		<File>Data/JAC_BanseikiPool_Gameplay.sql</File>
+		<File>Data/JAC_BanseikiPool_Icons.xml</File>
+		<File>Data/JAC_BanseikiPool_Colors.xml</File>
+		<File>Text/JAC_BanseikiPool_Text.xml</File>
+		<File>Scripts/JAC_BanseikiPool.lua</File>
+		<File>UI/JAC_PoolSetup.lua</File>
+		<File>UI/JAC_Stock_SetupParameters.lua</File>
+		<File>UI/SetupParameters.lua</File>
+	</Files>
+</Mod>

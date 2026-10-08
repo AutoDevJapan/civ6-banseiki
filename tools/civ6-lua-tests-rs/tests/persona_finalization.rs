@@ -171,7 +171,7 @@ fn invalid_saved_surcharge_rejects_even_after_full_native_payment() {
 }
 
 #[test]
-fn saved_cost_must_match_current_valid_definition_before_gameplay_read() {
+fn saved_cost_must_match_independent_joining_contract_before_gameplay_read() {
     for cost in 1..=3 {
         for bad in ["nil", "0", "-1", "'2'", "1.5", "4", "false", "0/0"] {
             let lua = scene(cost);
@@ -267,7 +267,7 @@ fn cost_one_requires_explicit_zero_and_recovery_finishes_once() {
 }
 
 #[test]
-fn wrong_owner_and_changed_definition_do_not_consume_person() {
+fn wrong_owner_is_rejected_and_price_only_change_keeps_joining_price() {
     let lua = scene(2);
     exec(
         &lua,
@@ -276,11 +276,169 @@ fn wrong_owner_and_changed_definition_do_not_consume_person() {
         finalize(1); retain(2)
         assert(Players[1]:GetProperty('JAC_PERSONA_RESULT')=='NOT_OWNED')
         ROW.EvolutionCost=3
-        finalize(); retain(2)
-        ROW.EvolutionCost=2
         finalize(); completed()
     "#,
     );
+}
+
+#[test]
+fn price_only_updates_preserve_the_ui_payment_prefix_across_reload() {
+    for cost in 1..=3 {
+        for new_price in (1..=3).filter(|price| *price != cost) {
+            let lua = scene(cost);
+            exec(
+                &lua,
+                &format!(
+                    r#"
+                ROW.EvolutionCost={new_price}
+                Game:SetProperty(KEY..'MERIT',37)
+                Game:SetProperty(KEY..'NODE_PRESERVED',1)
+                RESET_CONTEXTS()
+                assert(loadstring(GAMEPLAY_SOURCE))()
+                assert(ExposedMembers.JAC_LeaderPersona.EvolutionCost(LEADER)==COST)
+            "#
+                ),
+            );
+            lua.load(read_repo(
+                "poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua",
+            ))
+            .exec()
+            .unwrap();
+            exec(
+                &lua,
+                r#"
+                retain(1)
+                for step=1,COST-1 do
+                    assert(JAC_AppointLeader(LEADER),'saved UI payment step was refused')
+                    assert(#REQUESTS==1 and REQUESTS[1].op==PlayerOperations.PROMOTE_GOVERNOR)
+                    assert(REQUESTS[1].params.promotion==GameInfo.GovernorPromotions[ROW.BasePromotionType..'_TITLE_'..step].Index)
+                    assert(deliver() and #REQUESTS==0)
+                    retain(step+1)
+                end
+                assert(JAC_AppointLeader(LEADER) and deliver())
+                completed()
+                assert(Game:GetProperty(KEY..'MERIT')==37 and Game:GetProperty(KEY..'NODE_PRESERVED')==1)
+                local def=GameInfo.Governors[ROW.GovernorType]
+                assert(Players[2]:GetProperty(901000+def.Index)==true,'saved appointment eligibility missing')
+                assert(Players[2]:GetProperty(905000+def.Index)==true,'saved placement eligibility missing')
+                assert(Players[1]:GetProperty(905000+def.Index)==false,'other owner inherited payment')
+                -- Assign through the shipped UI operation, then model native
+                -- establishment. A repriced saved person still earns one deed.
+                JAC_AssignLeader(LEADER,21); assert(deliver())
+                local gov=Players[2]:GetGovernors():GetGovernor(def.Hash)
+                gov.established=true; Players[2].human=true
+                GameInfo.JAC_PersonaTreeNodes=collection({},'NodeType')
+                GameInfo.JAC_PersonaTreePeople={[LEADER]={MeritProfile='MILITARY'}}
+                GameInfo.JAC_PersonaMeritRules={MILITARY={GOVERN_TURN=2}}
+                TURN=TURN+1
+                ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(2)
+                assert(Game:GetProperty(KEY..'MERIT')==39,'repricing stopped merit acquisition')
+                ExposedMembers.JAC_LeaderPersona.OnPlayerTurnStarted(2)
+                assert(Game:GetProperty(KEY..'MERIT')==39,'replayed turn duplicated merit')
+                ROW.EvolutionCost=COST
+                ExposedMembers.JAC_LeaderPersona.Reconcile()
+                assert(#REQUESTS==0 and DESTROYS==1 and Players[2].spent==COST)
+                assert(Game:GetProperty(KEY..'MERIT')==39)
+            "#,
+            );
+        }
+    }
+}
+
+/// Pay every title through official notifications, then read the same
+/// Gameplay again. Loading alone must republish placement for the paid owner;
+/// no turn, Reconcile, Finalize or republish request follows the load.
+fn paid_then_reloaded(cost: u8, tamper: &str) -> Lua {
+    let lua = scene(cost);
+    exec(
+        &lua,
+        r#"
+        for step=1,COST-1 do promote(step) end
+        finalize(); completed()
+        DEF=GameInfo.Governors[ROW.GovernorType]
+        function placement(owner)
+            local p=Players[owner]
+            assert(p:GetProperty(904999)==true,'paid catalog not committed')
+            assert(p:GetProperty(904000+DEF.Index)==true and p:GetProperty(906000+DEF.Index)==true)
+            return p:GetProperty(905000+DEF.Index)
+        end
+        assert(placement(2)==true and placement(1)==false)
+        BEFORE={spent=Players[2].spent,destroys=DESTROYS,state=Game:GetProperty(KEY..'STATE')}
+        STORE_KEY='JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1'
+    "#,
+    );
+    exec(&lua, tamper);
+    exec(
+        &lua,
+        r#"
+        OPENED={}
+        for owner=0,21 do
+            local p=Players[owner]; local setter=p.SetProperty
+            p.SetProperty=function(self,key,value)
+                if key==905000+DEF.Index and value==true then OPENED[owner]=true end
+                return setter(self,key,value)
+            end
+        end
+        RESET_CONTEXTS()
+        assert(loadstring(GAMEPLAY_SOURCE))()
+        assert(#REQUESTS==0,'load queued an operation')
+        assert(Players[2].spent==BEFORE.spent and DESTROYS==BEFORE.destroys,'load changed native payment')
+        assert(Game:GetProperty(KEY..'STATE')==BEFORE.state)
+    "#,
+    );
+    lua
+}
+
+#[test]
+fn reload_republishes_paid_placement_without_a_turn() {
+    for cost in 1..=3 {
+        let lua = paid_then_reloaded(cost, "");
+        exec(
+            &lua,
+            r#"
+            assert(placement(2)==true,'paid placement stayed closed after load')
+            assert(placement(1)==false and not OPENED[1],'other owner inherited payment')
+            local status=ExposedMembers.JAC_LeaderPersona.EventsGameplayStatus(2,LEADER)
+            assert(status.active==true)
+        "#,
+        );
+    }
+}
+
+#[test]
+fn reload_keeps_placement_closed_without_a_complete_paid_receipt() {
+    let missing =
+        "local s=Game:GetProperty(STORE_KEY); s.people[LEADER]=nil; Game:SetProperty(STORE_KEY,s)";
+    let partial = "local s=Game:GetProperty(STORE_KEY); s.people[LEADER].acquired[COST]=nil; Game:SetProperty(STORE_KEY,s)";
+    let foreign = "Game:SetProperty(KEY..'OWNER',1)";
+    for cost in 1..=3 {
+        for tamper in [missing, partial, foreign] {
+            let lua = paid_then_reloaded(cost, tamper);
+            exec(
+                &lua,
+                r#"
+                for owner=0,21 do assert(not OPENED[owner],'incomplete receipt reopened placement') end
+            "#,
+            );
+        }
+    }
+}
+
+#[test]
+fn reload_closure_failure_never_reopens_saved_placement() {
+    for cost in 1..=3 {
+        let tamper = r#"
+            local getter=Players[2].GetProperty
+            Players[2].GetProperty=function(self,key)
+                if key==907002 then error('paid reset unavailable') end
+                return getter(self,key)
+            end"#;
+        let lua = paid_then_reloaded(cost, tamper);
+        exec(
+            &lua,
+            "for owner=0,21 do assert(not OPENED[owner],'placement reopened after failed closure') end",
+        );
+    }
 }
 
 #[test]
@@ -347,7 +505,7 @@ fn valid_receipt_consumes_only_the_matching_person_found_by_engine_identity() {
         &lua,
         r#"
         FIRE('JAC_LeaderPersonaJoin',2,{Source=0})
-        assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='JOINED')
+        assert(Players[2]:GetProperty('JAC_PERSONA_RESULT')=='JOINED',tostring(Players[2]:GetProperty('JAC_PERSONA_RESULT')))
         local other='JAC_PERSONA_LEADER_JAC_ODA_NOBUHIDE_'
         local otherID=Game:GetProperty(other..'UNIT')
         assert(otherID~=PERSON_ID and Players[2]:GetUnits():FindID(otherID))

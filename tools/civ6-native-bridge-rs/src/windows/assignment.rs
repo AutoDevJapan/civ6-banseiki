@@ -204,10 +204,10 @@ pub(super) unsafe extern "system" fn assign_calibration_begin(
     let Some(trace) = (unsafe { ASSIGN_TRACE_PTR.load(Ordering::Acquire).as_ref() }) else {
         return generation;
     };
-    trace.in_flight.fetch_add(1, Ordering::AcqRel);
     if !runtime::sample_begin() {
         return generation;
     }
+    trace.in_flight.fetch_add(1, Ordering::AcqRel);
     // Saturating sequence: capacity exhaustion cannot wrap and overwrite rows.
     let slot = trace
         .next
@@ -216,6 +216,7 @@ pub(super) unsafe extern "system" fn assign_calibration_begin(
         });
     let Ok(slot) = slot else {
         trace.dropped.fetch_add(1, Ordering::Relaxed);
+        trace.in_flight.fetch_sub(1, Ordering::Release);
         runtime::sample_end();
         return generation;
     };
@@ -335,9 +336,9 @@ pub(super) unsafe extern "system" fn assign_calibration_end(
             row.original_al
                 .store((original & 0xff) as u32, Ordering::Relaxed);
             row.sequence.store(1, Ordering::Release);
+            trace.in_flight.fetch_sub(1, Ordering::Release);
             runtime::sample_end();
         }
-        trace.in_flight.fetch_sub(1, Ordering::Release);
     }
     result
 }

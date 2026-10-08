@@ -229,7 +229,9 @@ pub fn analyze(reader: impl BufRead) -> Result<Value, String> {
             }
             "module_load" | "module_unload" => module_changes
                 .push(json!({"sequence":seq,"kind":row["type"],"base":positive(row,"base")?})),
-            "module_attach_snapshot" | "debug_exception" => {}
+            // Diagnostic snapshots do not establish instruction execution or
+            // continuous breakpoint coverage, including when all DRs match.
+            "module_attach_snapshot" | "debug_exception" | "pre_restore_registers" => {}
             "order_stop" => {
                 if !crate::order_capture::restored_stop(row, pid32, created)
                     || row["result"] != "ok"
@@ -348,6 +350,21 @@ mod tests {
         assert_eq!(v["runtime_activation_allowed"], false);
         assert_eq!(v["common_load_boundary_proven"], false);
         assert_eq!(v["gameplay_lua_identity"], "unknown");
+    }
+    #[test]
+    fn stop_register_diagnostic_never_becomes_order_or_coverage_proof() {
+        for status in ["matched_at_stop", "mismatch", "incomplete", "freeze_failed"] {
+            let mut rows = fixture();
+            rows.insert(rows.len() - 1, json!({"type":"pre_restore_registers","summary":{"snapshot_status":status,"coverage_over_interval":"unknown","zero_hits_proves_unreached":false}}));
+            for (i, row) in rows.iter_mut().enumerate() {
+                row["sequence"] = json!(i + 1);
+                row["elapsed_ms"] = json!(i);
+            }
+            let v = read(&rows).unwrap();
+            assert_eq!(v["completed_instructions"], 2);
+            assert_eq!(v["runtime_activation_allowed"], false);
+            assert_eq!(v["common_load_boundary_proven"], false);
+        }
     }
     #[test]
     fn missing_completion_and_truncation_are_rejected() {

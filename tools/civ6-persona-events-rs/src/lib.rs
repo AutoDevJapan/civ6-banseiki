@@ -1,5 +1,11 @@
 //! Synchronous Gameplay acquisition sets and the retained private diagnostic.
+mod join_transaction;
+pub mod mp_hotseat;
+pub mod mp_setup_read;
+pub mod mp_staging;
+pub mod mp_staging_boundary;
 mod normal;
+pub mod price_routes;
 pub mod scenario;
 pub mod sp_reassign;
 pub mod sp_runtime;
@@ -421,7 +427,7 @@ pub fn embed(source: &str) -> Result<String, String> {
         "    EventsGameplayStatus = PersonaEvents.NormalStatus,\n",
         "",
     );
-    Ok(source.replace("    EventsProbeStatus = PersonaEvents.Status,",
+    price_routes::gameplay(&source.replace("    EventsProbeStatus = PersonaEvents.Status,",
         "    EventsProbeStatus = PersonaEvents.Status,\n    EventsGameplayStatus = PersonaEvents.NormalStatus,"))
 }
 

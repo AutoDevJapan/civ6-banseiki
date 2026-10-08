@@ -1387,6 +1387,10 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
     let folder = civ6_autotest_rs::repo_root().join("tools/civ6-autotest/scenarios");
     let mut count = 0;
     let mut blocked_recovery_seen = false;
+    let mut hotseat_growth_seen = false;
+    let mut banseiki_hotseat_growth_seen = false;
+    let mut japan_hotseat_growth_seen = false;
+    let mut pool_scenarios_seen = std::collections::BTreeSet::new();
     for entry in std::fs::read_dir(folder).unwrap() {
         let entry = entry.unwrap();
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -1402,7 +1406,20 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
         let first = &steps(&data)[0];
         if action(first, "enable_mods") {
             count += 1;
+            if matches!(
+                name.as_str(),
+                "banseiki-pool-bridge.json"
+                    | "banseiki-pool-hotseat.json"
+                    | "banseiki-pool-random-bridge.json"
+                    | "banseiki-pool-single-player.json"
+            ) {
+                pool_scenarios_seen.insert(name.clone());
+            }
             blocked_recovery_seen |= name == "assassin-blocked-recovery.json";
+            hotseat_growth_seen |= name == "multiplayer-hotseat-growth.json";
+            banseiki_hotseat_growth_seen |= name == "multiplayer-banseiki-hotseat-growth.json";
+            japan_hotseat_growth_seen |=
+                name == "multiplayer-japan-15km-settlers-hotseat-growth.json";
             let strings = |key: &str| -> Vec<String> {
                 first[key]
                     .as_array()
@@ -1467,10 +1484,14 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
         }
     }
-    // Preserve the prior 141 scenes and inspect the main-branch blocked-recovery
-    // scenario against the same isolation rules, rather than excluding it.
+    // Preserve all prior scenes and apply the same isolation assertions to
+    // Japan Hotseat and all four pool starts. The witness hold starts no game.
     assert!(blocked_recovery_seen);
-    assert_eq!(count, 142);
+    assert!(hotseat_growth_seen);
+    assert!(banseiki_hotseat_growth_seen);
+    assert_eq!(count, 149);
+    assert!(japan_hotseat_growth_seen);
+    assert_eq!(pool_scenarios_seen.len(), 4);
 }
 
 #[test]
@@ -2454,6 +2475,10 @@ fn verification_all_new_chunks_validate_and_compile_as_lua() {
 }
 
 #[test]
+#[expect(
+    clippy::manual_repeat_n,
+    reason = "Keep the existing equality assertion and exact expected metrics-group sequence unchanged"
+)]
 fn verification_full_map_measurements_cover_continuous_play_and_both_reloads() {
     let base = scenario("japan-15km-200turn-full.json");
     for (turns, check_turns) in [
@@ -2589,6 +2614,10 @@ fn verification_saved_state_snapshot_uses_indexed_city_iterator_and_detects_chan
 }
 
 #[test]
+#[expect(
+    clippy::bool_assert_comparison,
+    reason = "Keep the existing typed Lua boundary equality assertion, expected true value and diagnostic message unchanged"
+)]
 fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_and_ledger() {
     let kinds = [
         "ERA_ANCIENT",
@@ -2603,7 +2632,8 @@ fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_
         "ERA_JAC_SHOHO",
         "ERA_JAC_KEIAN",
     ];
-    let cases: [(&str, Vec<(i64, i64)>, Vec<(i64, i64)>); 3] = [
+    type BoundaryCase<'a> = (&'a str, Vec<(i64, i64)>, Vec<(i64, i64)>);
+    let cases: [BoundaryCase<'_>; 3] = [
         (
             "sengoku-era-reigns-epic.json",
             vec![(0, 1), (1, 98), (2, 108), (3, 163)],
@@ -2904,7 +2934,7 @@ fn driver_build_setup_checks_every_player_after_refresh() {
         json!({"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true}),
         json!({"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":false}),
     ];
-    let generated = build_setup_code(&players);
+    let generated = build_setup_code(&json!({"players":players}));
     assert!(
         generated.find("BuildHeadlessGameSetup()").unwrap()
             < generated.find("g_GameParameters:FullRefresh()").unwrap()
@@ -2939,6 +2969,80 @@ fn driver_build_setup_defaults_on_for_banseiki_only() {
             step["build_setup"] = json!(value);
         }
         assert_eq!(builds_setup(&step), expected, "{ruleset}, {explicit:?}");
+    }
+}
+
+#[test]
+fn setup_refresh_restores_requested_counts_and_rejects_ignored_settings() {
+    let mut step = json!({"players":[
+        {"leader":"LEADER_JAC_ODA_NOBUHIDE","civ":"CIVILIZATION_JAC_ODA","human":true},
+        {"leader":"LEADER_JAC_TAKEDA_NOBUTORA","civ":"CIVILIZATION_JAC_TAKEDA","human":true}
+    ],"city_states":0});
+    for (keep_players, keep_cities, cities_requested) in [
+        (false, false, true),
+        (true, false, true),
+        (false, true, true),
+        (false, false, false),
+    ] {
+        if cities_requested {
+            step["city_states"] = json!(0);
+        } else {
+            step.as_object_mut().unwrap().remove("city_states");
+        }
+        let lua = Lua::new();
+        lua.globals().set("KEEP_PLAYERS", keep_players).unwrap();
+        lua.globals().set("KEEP_CITIES", keep_cities).unwrap();
+        lua.load(r#"
+            count, cities, maximum, hidden = 4, 0, 2, 2
+            SlotStatus = {SS_TAKEN=3, SS_COMPUTER=1}
+            GameConfiguration = {
+                GetHiddenPlayerCount=function() return hidden end,
+                GetParticipatingPlayerCount=function() return count end,
+                SetParticipatingPlayerCount=function(v) if not KEEP_PLAYERS then count=v end end,
+                SetValue=function(k,v) assert(k=='CITY_STATE_COUNT'); if not KEEP_CITIES then cities=v end end,
+                GetValue=function(k) assert(k=='CITY_STATE_COUNT'); return cities end
+            }
+            MapConfiguration = {
+                SetMaxMajorPlayers=function(v) maximum=v end,
+                GetMaxMajorPlayers=function() return maximum end
+            }
+            g_GameParameters = {FullRefresh=function()
+                count, cities, maximum = 6 + hidden, 12, 10
+            end}
+            function BuildHeadlessGameSetup() end
+            function HideGameSetup() end
+            PlayerConfigurations = {}
+            for i,n in ipairs({'ODA_NOBUHIDE','TAKEDA_NOBUTORA'}) do
+                local name, civ = n, (i==1 and 'ODA' or 'TAKEDA')
+                PlayerConfigurations[i-1] = {
+                    GetLeaderTypeName=function() return 'LEADER_JAC_'..name end,
+                    GetCivilizationTypeName=function() return 'CIVILIZATION_JAC_'..civ end,
+                    GetSlotStatus=function() return SlotStatus.SS_TAKEN end
+                }
+            end
+        "#).exec().unwrap();
+        let result = lua.load(build_setup_code(&step)).exec();
+        if keep_players || keep_cities {
+            let error = result.unwrap_err().to_string();
+            assert!(
+                error.contains(if keep_players {
+                    "participating player count"
+                } else {
+                    "city-state count"
+                }),
+                "{error}"
+            );
+        } else {
+            result.unwrap();
+            assert_eq!(lua.globals().get::<i64>("count").unwrap(), 4);
+            // Keep the map's supported limit. Replacing it with the requested
+            // count would make MapSize_ValueNeedsChanging trigger another reset.
+            assert_eq!(lua.globals().get::<i64>("maximum").unwrap(), 10);
+            assert_eq!(
+                lua.globals().get::<i64>("cities").unwrap(),
+                if cities_requested { 0 } else { 12 }
+            );
+        }
     }
 }
 
