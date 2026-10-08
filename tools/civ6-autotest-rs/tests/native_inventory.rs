@@ -280,7 +280,13 @@ fn recovered_source_changed_to_third_party_is_not_borrowed() {
         let lua = world(2, 2);
         archive_recovery(&lua, false);
         lua.globals().set("THIRD_HUMAN", human).unwrap();
-        lua.load("UI_POS=16;Players[3].IsHuman=function() return THIRD_HUMAN end;assert(RECOVER().Status=='WAITING_UI')").exec().unwrap();
+        lua.load(r#"
+          CityManager.TransferCity(CITIES[0],3);TRANSFERS=0
+          local cities=Players[3].GetCities
+          Players[3].GetCities=function() local out=cities();out.GetCapitalCity=function() return CITIES[0] end;return out end
+          assert(Players[3]:GetCities():GetCount()==2 and Players[3]:GetCities():GetCapitalCity():GetX()~=16)
+          UI_POS=16;Players[3].IsHuman=function() return THIRD_HUMAN end;assert(RECOVER().Status=='WAITING_UI')
+        "#).exec().unwrap();
         assert!(receive(&lua, &publish(&lua)));
         lua.load("local r=JAC_AbsorptionGameplay.GetState().Recoveries['recovery:shared-original'];assert(r.Status=='WAITING_UI' and r.WaitingFor=='MP_SOURCE_OWNER_CHANGED' and r.NativeCarrier==nil and TRANSFERS==0 and MOVES==0);assert(Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900']==nil)").exec().unwrap();
     }
