@@ -84,6 +84,47 @@ fn stable_trace(
         std::thread::yield_now();
     }
 }
+
+// Failure evidence is sampled without calling any target export or waiting for
+// a drain. Keep each original sample before attempting the next read. Even a
+// valid, identical pair is diagnostic evidence, never successful completion.
+fn failure_trace_snapshot(
+    pid: u32,
+    created: u64,
+    mut read: impl FnMut(&mut [u8]) -> Result<(), String>,
+    mut save: impl FnMut(&str, &[u8]) -> Result<(), String>,
+) -> Value {
+    let mut evidence = json!({"type":"bootstrap_failure_snapshot",
+        "pid":pid,"created_filetime":created,"product_acceptance":false,
+        "drained":false,"samples":[]});
+    let mut snapshots = Vec::new();
+    for name in [
+        "failure-bootstrap-first.bin",
+        "failure-bootstrap-second.bin",
+    ] {
+        let mut bytes = vec![0; wire::TRACE_BYTES];
+        if let Err(error) = read(&mut bytes) {
+            evidence["error"] = json!(format!("read {name}: {error}"));
+            return evidence;
+        }
+        if let Err(error) = save(name, &bytes) {
+            evidence["error"] = json!(format!("preserve {name}: {error}"));
+            return evidence;
+        }
+        evidence["samples"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(name));
+        snapshots.push(bytes);
+    }
+    evidence["identical_reads"] = json!(snapshots[0] == snapshots[1]);
+    match wire::trace(&snapshots[0], pid, created) {
+        Ok(trace) => evidence["first_trace_diagnostic"] = trace,
+        Err(error) => evidence["first_trace_error"] = json!(error),
+    }
+    evidence
+}
+
 pub(super) fn run(raw: &[String]) -> Result<(), String> {
     if raw.len() != 2 || raw[0] != "--request" {
         return Err("usage: civ6-native-bridge bootstrap --request ABSOLUTE.json".into());
@@ -201,6 +242,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         json!({"type":"bootstrap_identity","pid":req.pid,"created_filetime":req.created,"chain_pid":chain_pid,"chain_created_filetime":process_created(&chain)?,"runner_pid":runner_pid,"runner_created_filetime":process_created(&runner)?,"bootstrap_sha256":req.bootstrap_sha,"runtime_sha256":req.runtime_sha,"prepare_version":civ6_bootstrap_rs::VERSION,"menu_context":menu_context,"runtime_installed":false}),
     )?;
     let mut job = OwnedJob::attach(&game, req.pid, req.created)?;
+    let mut prepared_trace_address = None;
     let result = (|| -> Result<(), String> {
         let runtime = load(&game, req.pid, &req.runtime, loader)?;
         let bootstrap = load(&game, req.pid, &req.bootstrap, loader)?;
@@ -248,6 +290,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         {
             return Err("prepared trace identity differs".into());
         }
+        prepared_trace_address = Some(address);
         // Preparation/injection consumed part of the lease. Recheck the whole
         // controller budget at its actual start, including the existing
         // recovery reserve; a runner-side check is not controller authority.
@@ -362,12 +405,114 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     })();
     match result {
         Ok(()) => Ok(()),
-        Err(e) => Err(fail_owned_call(&mut job, &game, e, RECOVERY_SECONDS * 1000)),
+        Err(e) => {
+            let evidence = prepared_trace_address.map(|address| {
+                failure_trace_snapshot(
+                    req.pid,
+                    req.created,
+                    |bytes| read_remote(&game, address, bytes),
+                    |extension, bytes| preserve(&req.output, extension, bytes),
+                )
+            });
+            let recorded = evidence.map(|evidence| {
+                write_json(&mut writer, evidence)
+                    .and_then(|_| writer.flush().map_err(|error| error.to_string()))
+            });
+            let error = match recorded {
+                Some(Err(error)) => format!("{e}; failure evidence log: {error}"),
+                _ => e,
+            };
+            // Evidence collection must never replace or prevent containment.
+            Err(fail_owned_call(
+                &mut job,
+                &game,
+                error,
+                RECOVERY_SECONDS * 1000,
+            ))
+        }
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bootstrap_failure_preserves_first_sample_when_second_read_fails() {
+        let mut reads = 0;
+        let mut saved = Vec::new();
+        let evidence = failure_trace_snapshot(
+            41,
+            42,
+            |bytes| {
+                reads += 1;
+                if reads == 2 {
+                    return Err("owned process exited".into());
+                }
+                bytes.fill(7);
+                Ok(())
+            },
+            |name, bytes| {
+                saved.push((name.to_owned(), bytes.to_vec()));
+                Ok(())
+            },
+        );
+        assert_eq!(reads, 2);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].0, "failure-bootstrap-first.bin");
+        assert_eq!(saved[0].1, vec![7; wire::TRACE_BYTES]);
+        assert_eq!(evidence["samples"].as_array().unwrap().len(), 1);
+        assert!(evidence["error"].as_str().unwrap().contains("second"));
+        assert_eq!(evidence["product_acceptance"], false);
+        assert_eq!(evidence["drained"], false);
+        assert!(evidence.get("identical_reads").is_none());
+    }
+
+    #[test]
+    fn bootstrap_failure_equal_or_changed_samples_never_mean_completion() {
+        for changed in [false, true] {
+            let mut reads = 0;
+            let mut saved = Vec::new();
+            let evidence = failure_trace_snapshot(
+                41,
+                42,
+                |bytes| {
+                    reads += 1;
+                    bytes.fill(if changed && reads == 2 { 1 } else { 0 });
+                    Ok(())
+                },
+                |name, bytes| {
+                    saved.push((name.to_owned(), bytes.to_vec()));
+                    Ok(())
+                },
+            );
+            assert_eq!(saved.len(), 2);
+            assert_eq!(saved[0].1, vec![0; wire::TRACE_BYTES]);
+            assert_eq!(saved[1].1, vec![u8::from(changed); wire::TRACE_BYTES]);
+            assert_eq!(evidence["identical_reads"], !changed);
+            assert_eq!(evidence["product_acceptance"], false);
+            assert_eq!(evidence["drained"], false);
+            assert!(evidence["first_trace_error"].as_str().is_some());
+        }
+    }
+
+    #[test]
+    fn bootstrap_failure_preservation_error_does_not_attempt_another_read() {
+        let mut reads = 0;
+        let evidence = failure_trace_snapshot(
+            41,
+            42,
+            |_| {
+                reads += 1;
+                Ok(())
+            },
+            |_, _| Err("destination already exists".into()),
+        );
+        assert_eq!(reads, 1);
+        assert!(evidence["samples"].as_array().unwrap().is_empty());
+        assert!(evidence["error"].as_str().unwrap().contains("preserve"));
+        assert_eq!(evidence["product_acceptance"], false);
+    }
+
     #[test]
     fn bootstrap_controller_owned_file_pin_rejects_write_delete_and_changed_hash() {
         let dir = tempfile::tempdir().unwrap();

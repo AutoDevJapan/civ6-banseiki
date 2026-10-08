@@ -16,15 +16,15 @@ local function serial(v,path)
  if type(v)~='table' then return scalar(v) end
  path=path or {}; if path[v] then error('cyclic snapshot table') end; path[v]=true
  local keys={}
- for key in pairs(v) do
+ for key,value in pairs(v) do
   local kind=type(key)
   if kind~='number' and kind~='string' and kind~='boolean' then error('unstable snapshot key type: '..kind) end
-  keys[#keys+1]={key=key,encoded=scalar(key)}
+  keys[#keys+1]={encoded=scalar(key),value=value}
  end
  table.sort(keys,function(a,b) return a.encoded<b.encoded end)
  local out={}
  for _,entry in ipairs(keys) do
-  out[#out+1]=entry.encoded..'='..serial(rawget(v,entry.key),path)
+  out[#out+1]=entry.encoded..'='..serial(entry.value,path)
  end
  path[v]=nil
  return '{'..table.concat(out,';')..'}'

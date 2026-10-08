@@ -5,6 +5,8 @@ use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::PathBuf};
 
 const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
+// Telemetry may stop after 300s, but the controller owns both bounded reads.
+const CONTROLLER_SECONDS: u32 = 2 * 300 + 2 * 60 + 2 * 30 + 60 + 45 + 60;
 const READY: &str = r#"
 local p=Players[0]; local api=ExposedMembers.JAC_LeaderPersona
 if not p or not p:IsTurnActive() or UI.IsGameCoreBusy() or UI.IsProcessingMessages()
@@ -95,7 +97,7 @@ fn scene(
     let read = json!({"action":"ui_lua","state_name":"InGame","code":read_code(expect_assignable),"timeout":30});
     json!({"name":"Read-only paid Governor: cold saved-world load and same-process reload; not assignment acceptance","judge_profile":"generic","strict_lua_errors":true,"steps":[
         original["steps"][0],{"action":"restart_game"},
-        {"action":"start_native_bootstrap","name":"paid-reload-native","max_seconds":300,"runtime_dll":runtime,"runtime_sha256":runtime_sha,"bootstrap_dll":bootstrap,"bootstrap_sha256":bootstrap_sha,"timeout":40},
+        {"action":"start_native_bootstrap","name":"paid-reload-native","max_seconds":300,"controller_seconds":CONTROLLER_SECONDS,"runtime_dll":runtime,"runtime_sha256":runtime_sha,"bootstrap_dll":bootstrap,"bootstrap_sha256":bootstrap_sha,"timeout":40},
         load,wait,read,{"action":"exit_to_menu","timeout":60},load,wait,read,
         {"action":"stop_native_bootstrap","timeout":45}
     ]})
@@ -184,6 +186,14 @@ mod tests {
         );
         civ6_autotest_rs::scenario::validate_scenario(&s).unwrap();
         assert_eq!(s["steps"].as_array().unwrap().len(), 11);
+        let (telemetry, controller) =
+            civ6_bootstrap_rs::protocol::Request::durations(&s["steps"][2]).unwrap();
+        let post_prepare_budget: u32 = s["steps"].as_array().unwrap()[3..]
+            .iter()
+            .map(|step| step["timeout"].as_u64().unwrap() as u32)
+            .sum();
+        assert_eq!(telemetry, 300);
+        assert_eq!(controller, post_prepare_budget + 60);
         assert_eq!(s["steps"][3], s["steps"][7]);
         assert_eq!(s["steps"][3]["save_sha256"], "a".repeat(64));
         assert_eq!(s["steps"][3]["exact_name"], true);

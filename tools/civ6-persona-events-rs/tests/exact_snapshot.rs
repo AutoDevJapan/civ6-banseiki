@@ -133,3 +133,23 @@ fn repeated_tables_and_deep_copies_keep_the_same_value() {
     let b = second.load("return {copy={sequence=9007199254740990,owner=0}, base={owner=0,sequence=9007199254740990}}").eval::<mlua::Table>().unwrap();
     assert_eq!(before, serializer(&second).call::<String>(b).unwrap());
 }
+
+#[test]
+fn snapshot_keeps_all_values_when_game_ui_has_no_rawget() {
+    let lua = Lua::new();
+    let serial = serializer(&lua);
+    let input = "return {[1]={sequence=100000000000001,paid=1}, ['1']=true, leader='伊達'}";
+    let before: String = serial
+        .call(lua.load(input).eval::<mlua::Table>().unwrap())
+        .unwrap();
+    // Civ6's InGame context rejected this global in live178 before any join or
+    // payment. Removing it in a real Lua51 context must preserve the full
+    // snapshot, including nearby numbers, nested values and typed keys.
+    lua.load("rawget=nil").exec().unwrap();
+    let after: String = serial
+        .call(lua.load(input).eval::<mlua::Table>().unwrap())
+        .unwrap();
+    assert_eq!(before, after);
+    assert!(after.contains("number:15:100000000000001"));
+    assert!(after.contains("string:1:1=boolean:4:true"));
+}
