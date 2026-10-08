@@ -254,6 +254,7 @@ fn ownership_check_expiring_lua_budget_sends_no_quit_command() {
     *clock_holder.lock().unwrap() = Some(h.clock.clone());
 
     assert!(h.runner.restart_game(5.0).is_err());
+    assert!(*already_advanced.lock().unwrap());
     assert_eq!(h.clock.at(), 5.0);
     assert!(h
         .calls()

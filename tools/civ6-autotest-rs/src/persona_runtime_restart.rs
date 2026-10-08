@@ -689,7 +689,7 @@ mod tests {
             );
             r.persona_runtime_restart = true;
             let mut attempt = StartupAttempt::default();
-            r.launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+            r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
                 .unwrap();
             assert!(attempt.launch_requested);
             assert_eq!(r.persona_launched_process, attempt.process);
@@ -778,7 +778,7 @@ mod tests {
         );
         r.persona_runtime_restart = true;
         let mut attempt = StartupAttempt::default();
-        r.launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+        r.launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
             .unwrap();
         assert!(!attempt.launch_requested);
         assert_eq!(r.persona_launched_process, None);
@@ -815,7 +815,7 @@ mod tests {
             r.persona_runtime_restart = true;
             let mut attempt = StartupAttempt::default();
             assert!(r
-                .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+                .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
                 .is_err());
             assert!(r.persona_launch_requested);
             assert_eq!(r.resident_runtime_identity, None);
@@ -865,7 +865,7 @@ mod tests {
         r.persona_runtime_restart = true;
         let mut attempt = StartupAttempt::default();
         assert!(r
-            .launch_startup_and_wait(r.clock.now() + 10.0, false, true, &mut attempt)
+            .launch_startup_and_wait(r.clock.now() + 10.0, true, &mut attempt)
             .is_err());
         let error = r.cleanup_persona_process().unwrap_err();
         assert!(error.message.contains("outer live_chain cleanup required"));
@@ -947,7 +947,7 @@ mod tests {
             );
             r.persona_runtime_restart = true;
             let failure = r
-                .launch_startup_and_wait(140.0, false, true, &mut StartupAttempt::default())
+                .launch_startup_and_wait(140.0, true, &mut StartupAttempt::default())
                 .unwrap_err();
             assert_eq!(
                 calls

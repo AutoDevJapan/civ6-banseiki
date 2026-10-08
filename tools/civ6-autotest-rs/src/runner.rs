@@ -1516,7 +1516,7 @@ impl Runner {
         let remaining = self.remaining_unsent(deadline, unsent)?;
         self.backend.connect(self.port, remaining)?;
         // Connecting can consume the last budget; never mutate after it expired.
-        let remaining = self.remaining_unsent(deadline, unsent)?;
+        let _remaining = self.remaining_unsent(deadline, unsent)?;
         if let Some(game) = game {
             self.backend
                 .authorize_game_control(Some(game))
