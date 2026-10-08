@@ -3,6 +3,7 @@
 //! enumeration order and RNG. UI VMs are separate, read-only projections: the
 //! EXECUTE_SCRIPT envelope is replayed in engine order with the engine actor.
 //! Save reconstruction persists properties/cities, never closures or MOD locals.
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{exec, exec_args, new_lua, read_repo};
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::{json, Value as Json};
@@ -178,14 +179,19 @@ impl Client {
         assert!(
             self.0
                 .load(format!("return {expression}"))
-                .eval::<bool>()
+                .strict_eval::<bool>()
                 .unwrap(),
             "{expression}"
         );
     }
     fn state(&self) -> Json {
         self.0
-            .from_value(self.0.load("return SAVE_STATE()").eval::<Value>().unwrap())
+            .from_value(
+                self.0
+                    .load("return SAVE_STATE()")
+                    .strict_eval::<Value>()
+                    .unwrap(),
+            )
             .unwrap()
     }
     fn restored(state: &Json, reverse: bool, no_castles: bool) -> Self {
@@ -236,7 +242,7 @@ impl Panel {
             .from_value(
                 self.0
                     .load("return REQUESTS[#REQUESTS]")
-                    .eval::<Value>()
+                    .strict_eval::<Value>()
                     .unwrap(),
             )
             .unwrap()
@@ -244,13 +250,13 @@ impl Panel {
     fn name(&self, id: i64) -> String {
         self.0
             .load("local id=...; return PlayerConfigurations[id]:GetCivilizationShortDescription()")
-            .call(id)
+            .strict_call(id)
             .unwrap()
     }
     fn shown(&self) -> bool {
         self.0
             .load("return not Controls.PactPanel:IsHidden()")
-            .eval()
+            .strict_eval()
             .unwrap()
     }
 }
@@ -482,7 +488,7 @@ fn actual_panel_callbacks_send_requests_without_writing_engine_properties() {
             proposer
                 .0
                 .load("return REQUESTS[1]")
-                .eval::<Value>()
+                .strict_eval::<Value>()
                 .unwrap(),
         )
         .unwrap();
@@ -501,7 +507,7 @@ fn actual_panel_callbacks_send_requests_without_writing_engine_properties() {
             acceptor
                 .0
                 .load("return REQUESTS[1]")
-                .eval::<Value>()
+                .strict_eval::<Value>()
                 .unwrap(),
         )
         .unwrap();
@@ -518,7 +524,7 @@ fn actual_panel_callbacks_send_requests_without_writing_engine_properties() {
             acceptor
                 .0
                 .load("return REQUESTS[2]")
-                .eval::<Value>()
+                .strict_eval::<Value>()
                 .unwrap(),
         )
         .unwrap();

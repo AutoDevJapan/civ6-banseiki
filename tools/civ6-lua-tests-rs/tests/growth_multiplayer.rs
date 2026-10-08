@@ -1,5 +1,6 @@
 //! Runs the shipped gameplay Lua in separate VMs. These are code-level checks,
 //! not a claim that two real LAN endpoints or engine synchronization were tested.
+use civ6_lua_tests_rs::strict::ChunkExt;
 use civ6_lua_tests_rs::{new_lua, read_repo};
 use mlua::{Lua, LuaSerdeExt, Value};
 use serde_json::{json, Value as Json};
@@ -89,7 +90,7 @@ impl Endpoint {
     }
 
     fn state(&self) -> Json {
-        let state: Value = self.0.load("return export()").eval().unwrap();
+        let state: Value = self.0.load("return export()").strict_eval().unwrap();
         self.0.from_value(state).unwrap()
     }
 
@@ -99,7 +100,7 @@ impl Endpoint {
             .load(format!(
                 "return unitprops[{owner}][{id}].JAC_POC_GROWTHUI_WARLORD"
             ))
-            .eval()
+            .strict_eval()
             .unwrap();
         self.0.from_value(record).unwrap()
     }
@@ -182,7 +183,7 @@ fn one_ready_human_cannot_finalize_initialization_before_the_other_has_units() {
         let waiting: bool = endpoint
             .0
             .load("return LOG[#LOG]:find('waiting for human',1,true)~=nil")
-            .eval()
+            .strict_eval()
             .unwrap();
         assert!(waiting);
         endpoint.exec(&format!(
@@ -253,7 +254,7 @@ fn absent_ui_roster_does_not_cause_gameplay_to_call_frontend_apis_or_partially_i
     let missing: bool = endpoint
         .0
         .load("return LOG[#LOG]:find('waiting for synchronized human roster',1,true)~=nil")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert!(missing);
     assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"].is_null());
@@ -307,7 +308,11 @@ fn rejects_roster_spoof_stale_turn_malformed_ids_and_missing_known_human() {
         let endpoint = Endpoint::new(0, false, None);
         endpoint.exec("network=true; beginturn(0)");
         let before = endpoint.state();
-        let accepted: bool = endpoint.0.load(format!("return {request}")).eval().unwrap();
+        let accepted: bool = endpoint
+            .0
+            .load(format!("return {request}"))
+            .strict_eval()
+            .unwrap();
         assert!(!accepted, "{request}");
         assert_eq!(before, endpoint.state(), "{request}");
     }
@@ -324,7 +329,7 @@ fn nil_or_inactive_roster_actor_cannot_seed_a_game() {
             .load(format!(
                 "return rosteroperation({actor},{{Turn=turn,Roster='0,1'}})"
             ))
-            .eval()
+            .strict_eval()
             .unwrap();
         assert!(!accepted);
         assert_eq!(original, endpoint.state());
@@ -339,7 +344,7 @@ fn stale_active_receipt_cannot_authorize_a_player_who_already_ended_their_turn()
     let accepted: bool = endpoint
         .0
         .load("return rosteroperation(0,{Turn=turn,Roster='0,1'})")
-        .eval()
+        .strict_eval()
         .unwrap();
     assert!(!accepted);
     assert_eq!(before, endpoint.state());
@@ -378,7 +383,7 @@ fn actual_ui_roster_packet_replayed_into_both_gameplay_vms_initializes_once() {
     ui.load("load(); publish(); assert(#SENT==1)")
         .exec()
         .unwrap();
-    let packet: Value = ui.load("return SENT[1]").eval().unwrap();
+    let packet: Value = ui.load("return SENT[1]").strict_eval().unwrap();
     let packet: Json = ui.from_value(packet).unwrap();
     assert_eq!(packet["actor"], 0);
     assert_eq!(packet["params"]["Roster"], "0,1");

@@ -1,4 +1,6 @@
-use civ6_lua_tests_rs::strict::{assert_python_truth, truthy_results, ChunkExt, Data};
+use civ6_lua_tests_rs::strict::{
+    assert_python_truth, truthy_results, ChunkExt, Data, FromLuaMulti,
+};
 use civ6_lua_tests_rs::{json_to_lua, new_lua, query_json, read_repo, repo_root};
 use mlua::{Function, Lua, MultiValue, Value};
 use rusqlite::Connection;
@@ -10,6 +12,15 @@ const R1: &str = "JAC_RP_PLACEHOLDER_01";
 const R2: &str = "JAC_RP_PLACEHOLDER_02";
 const KEY: &str = "JAC_RP_STATE_V1";
 const MOD: &str = "poc/JAC_PoC_ReligionPersistence";
+
+trait BooleanCall {
+    fn call_bool(&self, args: impl mlua::IntoLuaMulti) -> mlua::Result<bool>;
+}
+impl BooleanCall for Function {
+    fn call_bool(&self, args: impl mlua::IntoLuaMulti) -> mlua::Result<bool> {
+        bool::from_results(self.call::<MultiValue>(args)?)
+    }
+}
 const TABLES: [&str; 6] = [
     "Religions",
     "AssetKinds",
@@ -2117,7 +2128,7 @@ fn network_event(h: &Harness, actor: i64, request: &Json) -> bool {
         .globals()
         .get::<Function>("RELIGION_OPERATION")
         .unwrap()
-        .call::<bool>((actor, json_to_lua(&h.lua, request)))
+        .call_bool((actor, json_to_lua(&h.lua, request)))
         .unwrap()
 }
 
@@ -2283,7 +2294,7 @@ fn multiplayer_all_eight_choices_traverse_ui_player_operation_and_two_engine_rec
             .unwrap();
         let send: Function = bridge.get("ResolveDiscovery").unwrap();
         assert!(send
-            .call::<bool>((R1, "d", outcome, json_to_lua(&a.lua, &a.options(json!({})))))
+            .call_bool((R1, "d", outcome, json_to_lua(&a.lua, &a.options(json!({})))))
             .unwrap());
         assert_eq!(
             (a.snapshot(), a.eval("ENGINE"), a.writes()),
@@ -2300,11 +2311,11 @@ fn multiplayer_all_eight_choices_traverse_ui_player_operation_and_two_engine_rec
         for h in [&a, &b] {
             let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
             assert!(
-                receive.call::<bool>((1, packet.to_lua(&h.lua))).unwrap(),
+                receive.call_bool((1, packet.to_lua(&h.lua))).unwrap(),
                 "{outcome}"
             );
             let applied = (h.snapshot(), h.eval("ENGINE"), h.writes());
-            assert!(!receive.call::<bool>((1, packet.to_lua(&h.lua))).unwrap());
+            assert!(!receive.call_bool((1, packet.to_lua(&h.lua))).unwrap());
             assert_eq!((h.snapshot(), h.eval("ENGINE"), h.writes()), applied);
             assert_eq!(h.s()["discoveries"]["d"]["effects"], "APPLIED");
         }
@@ -2425,12 +2436,12 @@ fn multiplayer_hero_owner_observation_completes_on_two_clients_without_receiver_
     let proposal = a.eval("REQUESTS[1].params");
     for h in [&mut a, &mut b] {
         let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
-        assert!(receive.call::<bool>((1, proposal.to_lua(&h.lua))).unwrap());
+        assert!(receive.call_bool((1, proposal.to_lua(&h.lua))).unwrap());
         assert_eq!(hero_verification(h), "PENDING");
         assert_eq!(h.engine("1")["faith"], 500);
         assert_eq!(h.export()["heroes"]["1"]["city"], 0);
         assert_eq!(h.export()["heroes"]["1"]["player"], 1);
-        assert!(!receive.call::<bool>((1, proposal.to_lua(&h.lua))).unwrap());
+        assert!(!receive.call_bool((1, proposal.to_lua(&h.lua))).unwrap());
         h.reload();
         h.exec("MULTIPLAYER=true");
     }
@@ -2443,12 +2454,8 @@ fn multiplayer_hero_owner_observation_completes_on_two_clients_without_receiver_
     for h in [&mut a, &mut b] {
         h.exec("ExposedMembers.JAC_RP_HeroUI.UnitInfo=function() error('receiver UI read') end; ExposedMembers.JAC_RP_HeroUI.ClaimPlayer=function() error('receiver UI read') end");
         let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
-        assert!(!receive
-            .call::<bool>((0, observation.to_lua(&h.lua)))
-            .unwrap());
-        assert!(receive
-            .call::<bool>((1, observation.to_lua(&h.lua)))
-            .unwrap());
+        assert!(!receive.call_bool((0, observation.to_lua(&h.lua))).unwrap());
+        assert!(receive.call_bool((1, observation.to_lua(&h.lua))).unwrap());
         assert_eq!(hero_verification(h), "APPLIED");
         assert_eq!(h.engine("1")["faith"], 532.5);
         assert_eq!(
@@ -2456,16 +2463,12 @@ fn multiplayer_hero_owner_observation_completes_on_two_clients_without_receiver_
             false
         );
         let before = (h.snapshot(), h.eval("ENGINE"));
-        assert!(!receive
-            .call::<bool>((1, observation.to_lua(&h.lua)))
-            .unwrap());
+        assert!(!receive.call_bool((1, observation.to_lua(&h.lua))).unwrap());
         assert_eq!((h.snapshot(), h.eval("ENGINE")), before);
         h.reload();
         h.exec("MULTIPLAYER=true");
         let receive: Function = h.lua.globals().get("RELIGION_OPERATION").unwrap();
-        assert!(!receive
-            .call::<bool>((1, observation.to_lua(&h.lua)))
-            .unwrap());
+        assert!(!receive.call_bool((1, observation.to_lua(&h.lua))).unwrap());
         assert_eq!(h.engine("1")["faith"], 532.5);
     }
     assert_eq!(a.snapshot(), b.snapshot());
