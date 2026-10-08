@@ -40,7 +40,7 @@ Rustの検査は次の範囲と順序で実行する（2026年10月8日、オー
 - 作業途中は変更したクレートと、その変更に依存するクレート・関連する結合テストを`cargo nextest run --locked -p <クレート>`で回す。公開APIの変更では利用側も確認する。保存や小修正のたびに全workspaceを繰り返さない。
 - 全workspaceは、マージ前の最新ソースに対して`cargo nextest run --locked --manifest-path tools/Cargo.toml --workspace --all-targets`を1回実行する。nextestが実行しないdoctestは`cargo test --locked --manifest-path tools/Cargo.toml --workspace --doc`で確認する。Lua・シナリオ・実機の受入条件は維持し、変更に関係する検査を途中で、全件をマージ前に確認する。
 - 検査の失敗は原因を直す。修正が全件結果を無効にした場合だけ全件を再実行する。同じソースのCI結果を同じ担当が重複して回さない。
-- このPCではCargoの共通ゲートを使う。生成先ごとに排他し、異なる生成先は最大3件、1件10並列まで。同じ生成先の検査・Clippy・ビルドを一つの順序にまとめる。worktreeの生成先は分け、依存の再利用にはPC共通のsccacheを使う。テストの外部資源に必要な直列指定は維持する。
+- このPCではCargoの共通ゲートを使い、生成先ごとに排他する。異なる生成先の同時件数はCPU使用率と空きメモリから動的に決める。CPUが75%未満で空きメモリが16GiB以上なら1件ずつ増やし、通常の上限は論理コア数÷4とする。CPUが90%以上か空きメモリが16GiB未満なら、新しいビルドを待たせる。待機中もゲートが設定を読み直し、起動時の環境変数で枠を固定しない。ビルドとnextestの並列数も実行中のビルド数で分け、通常は最大10とする。同じ生成先の検査・Clippy・ビルドを一つの順序にまとめる。worktreeの生成先は分け、依存の再利用にはPC共通のsccacheを使う。テストの外部資源に必要な直列指定は維持する。
 
 1. サブエージェントには Codex CLI の GPT-6-Sol（推論強度 ultra または max）や GPT-6-Luna（max）を積極的に使う
    - 例：`codex exec -m gpt-6-sol -c model_reasoning_effort='"max"' -s workspace-write --skip-git-repo-check -C <作業フォルダ> -o <出力ファイル> - < <プロンプト>`
