@@ -86,6 +86,7 @@ fn frame<'a>(people: &'a [Person<'a>], sequence: u64, spent: u32) -> Frame<'a> {
     Frame {
         epoch: EPOCH,
         sequence,
+        turn: 7,
         owner: 1,
         earned: 3,
         spent,
@@ -93,7 +94,7 @@ fn frame<'a>(people: &'a [Person<'a>], sequence: u64, spent: u32) -> Frame<'a> {
     }
 }
 fn replay() -> Replay {
-    Replay::new(EPOCH, 1).unwrap()
+    Replay::new(EPOCH, 1, None).unwrap()
 }
 fn own<'a>(people: &'a mut [Person<'static>], name: &str) -> &'a mut Person<'static> {
     people.iter_mut().find(|p| p.leader == name).unwrap()
@@ -151,27 +152,119 @@ fn uesugi_two_distinct_steps_and_reload_reconstructs_remaining_one() {
         r.observe(&frame(&two, 2, 2)),
         Ok(Decision::ObservedOnePayment)
     );
-    let c2 = proposal(r.observe(&frame(&two, 3, 2)).unwrap());
+    assert_eq!(
+        r.observe(&frame(&two, 3, 2)),
+        Ok(Decision::AlreadyProposedThisTurn)
+    );
+    let mut next_turn = frame(&two, 4, 2);
+    next_turn.turn = 8;
+    let c2 = proposal(r.observe(&next_turn).unwrap());
+    assert_eq!((c1.turn, c2.turn), (7, 8));
     assert_ne!(c1.promotion_index, c2.promotion_index);
     let three = fixture(UESUGI, 3);
     assert_eq!(
-        r.observe(&frame(&three, 4, 3)),
+        r.observe(&Frame {
+            turn: 8,
+            ..frame(&three, 5, 3)
+        }),
         Ok(Decision::ObservedOnePayment)
     );
     assert_eq!(
-        r.observe(&frame(&three, 5, 3)),
+        r.observe(&Frame {
+            turn: 8,
+            ..frame(&three, 6, 3)
+        }),
         Ok(Decision::NoAdditionalTitle)
     );
     let new_epoch = Epoch {
         generation: 2,
         ..EPOCH
     };
-    let mut reloaded = Replay::new(new_epoch, 1).unwrap();
+    let mut reloaded = Replay::new(new_epoch, 1, Some(c1.turn)).unwrap();
     let mut f = frame(&two, 1, 2);
     f.epoch = new_epoch;
+    assert_eq!(reloaded.observe(&f), Ok(Decision::AlreadyProposedThisTurn));
+    f.sequence = 2;
+    f.turn = 8;
     let resumed = proposal(reloaded.observe(&f).unwrap());
     assert_eq!(resumed.promotion_index, c2.promotion_index);
     assert_eq!(resumed.previous_paid, 2);
+}
+
+#[test]
+fn repeated_callback_cannot_propose_a_different_person_in_the_same_turn() {
+    let mut before = fixture(DATE, 1);
+    *own(&mut before, UESUGI) = fixture(UESUGI, 1)
+        .into_iter()
+        .find(|p| p.leader == UESUGI)
+        .unwrap();
+    let mut r = replay();
+    let mut f = frame(&before, 1, 2);
+    f.earned = 5;
+    assert_eq!(
+        proposal(r.observe(&f).unwrap()).governor_index,
+        own(&mut before, DATE).definition.governor_index
+    );
+    *own(&mut before, DATE) = fixture(DATE, 2)
+        .into_iter()
+        .find(|p| p.leader == DATE)
+        .unwrap();
+    let mut f = frame(&before, 2, 3);
+    f.earned = 5;
+    assert_eq!(r.observe(&f), Ok(Decision::ObservedOnePayment));
+    for sequence in 3..20 {
+        f.sequence = sequence;
+        assert_eq!(r.observe(&f), Ok(Decision::AlreadyProposedThisTurn));
+    }
+    f.turn = 8;
+    f.sequence = 20;
+    let c = proposal(r.observe(&f).unwrap());
+    assert_eq!(
+        c.governor_index,
+        before
+            .iter()
+            .find(|p| p.leader == UESUGI)
+            .unwrap()
+            .definition
+            .governor_index
+    );
+}
+
+#[test]
+fn pending_attempt_survives_new_turn_without_reissue_and_turn_regression_poisoned() {
+    let before = fixture(UESUGI, 1);
+    let mut r = replay();
+    proposal(r.observe(&frame(&before, 1, 1)).unwrap());
+    let f = Frame {
+        turn: 8,
+        ..frame(&before, 2, 1)
+    };
+    assert_eq!(r.observe(&f), Ok(Decision::AwaitResult));
+    assert_eq!(r.observe(&frame(&before, 3, 1)), Err(Failure::Order));
+    assert_eq!(
+        r.observe(&Frame {
+            turn: 9,
+            ..frame(&before, 4, 1)
+        }),
+        Err(Failure::AmbiguousResult)
+    );
+}
+
+#[test]
+fn restored_turn_mark_blocks_same_turn_and_rejects_earlier_saved_turn() {
+    let two = fixture(UESUGI, 2);
+    let mut r = Replay::new(EPOCH, 1, Some(7)).unwrap();
+    assert_eq!(
+        r.observe(&frame(&two, 1, 2)),
+        Ok(Decision::AlreadyProposedThisTurn)
+    );
+    assert_eq!(
+        r.observe(&Frame {
+            turn: 6,
+            ..frame(&two, 2, 2)
+        }),
+        Err(Failure::Order)
+    );
 }
 
 #[test]

@@ -37,6 +37,8 @@ pub struct Person<'a> {
 pub struct Frame<'a> {
     pub epoch: Epoch,
     pub sequence: u64,
+    /// Synchronized Gameplay turn, not callback sequence or wall-clock time.
+    pub turn: u32,
     pub owner: u32,
     pub earned: u32,
     pub spent: u32,
@@ -54,6 +56,7 @@ pub struct Candidate {
     pub previous_paid: u8,
     pub spent_before: u32,
     pub sequence: u64,
+    pub turn: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -62,6 +65,7 @@ pub enum Decision {
     Propose(Candidate),
     AwaitResult,
     ObservedOnePayment,
+    AlreadyProposedThisTurn,
     NoAdditionalTitle,
 }
 
@@ -95,6 +99,8 @@ pub struct Replay {
     epoch: Epoch,
     owner: u32,
     last_sequence: u64,
+    last_turn: Option<u32>,
+    last_proposal_turn: Option<u32>,
     proposals: u8,
     pending: Option<Pending>,
     poisoned: bool,
@@ -104,7 +110,10 @@ pub struct Replay {
 }
 
 impl Replay {
-    pub fn new(epoch: Epoch, owner: u32) -> Result<Self, Failure> {
+    /// On a drained reload, carry the prior proposal turn from the same
+    /// synchronized saved operation arm. None is for a genuinely fresh replay.
+    /// These scalar inputs cannot prove that provenance or authorize execution.
+    pub fn new(epoch: Epoch, owner: u32, last_proposal_turn: Option<u32>) -> Result<Self, Failure> {
         if epoch.pid == 0 || epoch.created == 0 || epoch.generation == 0 || owner >= 64 {
             return Err(Failure::Epoch);
         }
@@ -112,6 +121,8 @@ impl Replay {
             epoch,
             owner,
             last_sequence: 0,
+            last_turn: last_proposal_turn,
+            last_proposal_turn,
             proposals: 0,
             pending: None,
             poisoned: false,
@@ -136,10 +147,11 @@ impl Replay {
         if f.epoch != self.epoch || f.owner != self.owner {
             return Err(Failure::Epoch);
         }
-        if f.sequence <= self.last_sequence {
+        if f.sequence <= self.last_sequence || self.last_turn.is_some_and(|turn| f.turn < turn) {
             return Err(Failure::Order);
         }
         self.last_sequence = f.sequence;
+        self.last_turn = Some(f.turn);
         let paid = validate(f)?;
         if f.spent < self.last_spent || paid.iter().zip(self.last_paid).any(|(now, old)| *now < old)
         {
@@ -208,6 +220,9 @@ impl Replay {
             if already == 0 || already == cost {
                 continue;
             }
+            if self.last_proposal_turn == Some(f.turn) {
+                return Ok(Decision::AlreadyProposedThisTurn);
+            }
             if self.proposals >= 2 {
                 return Err(Failure::Exhausted);
             }
@@ -220,8 +235,10 @@ impl Replay {
                 previous_paid: already,
                 spent_before: f.spent,
                 sequence: f.sequence,
+                turn: f.turn,
             };
             self.proposals += 1;
+            self.last_proposal_turn = Some(f.turn);
             self.pending = Some(Pending {
                 candidate: c,
                 definition: p.definition,
