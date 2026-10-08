@@ -263,6 +263,8 @@ fn other_button(kind: Kind, label: &str) -> bool {
 /// Makes a bounded, deterministic choice from one snapshot. No game attribution
 /// is inferred from buttons. `console_proves_civ6` is ignored unless both the
 /// generic Steam title and live176's complete warning match first.
+/// An empty measured launch placeholder permits observation only; the caller
+/// must keep the original launch deadline and must not select any button.
 pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: bool) -> Action {
     let title = normalize(title);
     let body = normalize(body);
@@ -272,6 +274,17 @@ pub fn decide(title: &str, body: &str, buttons: &[String], console_proves_civ6: 
     let explicit = game_title(&title);
     if !explicit && ordinary_window(&title, buttons) && !warning_like(&title, &body, buttons) {
         return Action::None;
+    }
+    // live54/live55 captured the same empty Chromium window. In live55 this
+    // preceded ShowInterstitials and the current launch's game process.
+    // Observe this measured placeholder within the existing launch deadline;
+    // it supplies no text or button that could authorize a selection.
+    if title == "steam - game launch failed"
+        && body.is_empty()
+        && buttons.is_empty()
+        && !console_proves_civ6
+    {
+        return Action::Wait;
     }
     if body.is_empty() {
         return Action::Stop("Steam warning body is empty".into());
@@ -675,6 +688,33 @@ mod tests {
             decide("Browser", ACTUAL, &buttons(&["Play anyway"]), true),
             Action::None
         );
+    }
+
+    #[test]
+    fn empty_measured_launch_placeholder_waits_without_authorizing_a_button() {
+        assert_eq!(
+            decide("Steam - Game Launch Failed", "", &[], false),
+            Action::Wait
+        );
+        for (title, body, labels, proof) in [
+            ("Steam - Game Launch Failed", "", vec![], true),
+            (
+                "Steam - Game Launch Failed",
+                "",
+                buttons(&["Play anyway"]),
+                false,
+            ),
+            (
+                "Steam - Game Launch Failed",
+                "Unexpected failure",
+                vec![],
+                false,
+            ),
+            ("Steam - Unable to Sync", "", vec![], false),
+            ("Steam - Other Warning", "", vec![], false),
+        ] {
+            stopped(decide(title, body, &labels, proof));
+        }
     }
 
     #[test]
