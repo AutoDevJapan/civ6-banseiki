@@ -875,11 +875,9 @@ mod platform {
                 drop(self.inner.take());
                 let handle = self.process.as_raw_handle() as HANDLE;
                 if unsafe { WaitForSingleObject(handle, 0) } == WAIT_TIMEOUT {
-                    assert_ne!(
-                        unsafe { TerminateProcess(handle, 1) },
-                        0,
-                        "terminate only this fixture's original process handle"
-                    );
+                    // The worker can exit between the probe and termination.
+                    // Its final signaled state, not the request result, proves cleanup.
+                    let _ = unsafe { TerminateProcess(handle, 1) };
                 }
                 assert_eq!(
                     unsafe { WaitForSingleObject(handle, 2_000) },
