@@ -3,6 +3,7 @@ local pending = true -- resume verification once after loading a saved game.
 local elapsed, timedOut = {}, {}
 local frameChecks, publishedChecks = {}, {} -- read-only diagnostics, not saved
 local inFlight = {}
+local retryBudget = {}
 local Bridge = {}
 -- Official BlackDeathScenario_PopupHandler.lua:22-28. Only the local human
 -- submits; spectators and other clients never submit for the receipt owner.
@@ -90,6 +91,19 @@ local function complete(playerID)
     or type(info.lifespan) ~= "number" or info.lifespan <= 0 or info.claim ~= playerID then return false end
   local token = tostring(state.revision) .. ":" .. tostring(h.unit)
   if inFlight[playerID] ~= token then
+    local budgetKey = tostring(Game.GetCurrentGameTurn()) .. ":" .. token
+    local budget = retryBudget[playerID]
+    if not budget or budget.key ~= budgetKey then
+      budget = {key=budgetKey, attempts=0}; retryBudget[playerID] = budget
+    end
+    if budget.attempts >= 8 then
+      if not budget.reported then
+        budget.reported = true
+        print("[JAC_RP] hero verification unacknowledged after 8 attempts; reservation retained")
+      end
+      return false
+    end
+    budget.attempts = budget.attempts + 1
     inFlight[playerID] = token
     local d = state.religions[h.religion].discoveries[h.discovery]
     local city, reservedTurn = h.city or d.effect.city, h.reservedTurn or d.resolvedTurn
@@ -135,6 +149,7 @@ Events.LoadScreenClose.Add(function()
   pending, elapsed, timedOut = true, {}, {}
   frameChecks, publishedChecks = {}, {}
   inFlight = {}
+  retryBudget = {}
   ContextPtr:SetHide(false)
   local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
   if tonumber(testFlag) == 1 then

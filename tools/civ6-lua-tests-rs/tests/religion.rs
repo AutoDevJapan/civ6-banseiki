@@ -2416,6 +2416,12 @@ fn multiplayer_ai_hero_without_owner_observation_chooses_legal_sale_without_ui_r
 }
 
 #[test]
+fn multiplayer_hero_verification_rejections_are_bounded_and_retry_on_next_turn() {
+    let h = network_discovery();
+    h.exec("assert(ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=0})); local original=RELIGION_OPERATION; RELIGION_OPERATION=function(actor,p) if p.Action=='COMPLETE_HERO' then return false end;return original(actor,p) end; for i=1,100 do HERO_UI_PUBLISH();HERO_UI_TICK(0) end; assert(#REQUESTS==9); assert(rp.Export().heroes['1'].verification=='PENDING'); TURN=TURN+1; RELIGION_TURN_START(1); HERO_UI_PUBLISH(); HERO_UI_TICK(0); assert(#REQUESTS==10); RELIGION_OPERATION=original; TURN=TURN+1;RELIGION_TURN_START(1);HERO_UI_PUBLISH();HERO_UI_TICK(0);assert(rp.Export().heroes['1'].verification=='APPLIED')");
+}
+
+#[test]
 fn multiplayer_hero_ui_chooses_an_eligible_owned_city_origin_instead_of_a_rejected_first_class() {
     let h = network_discovery();
     h.exec("GameInfo.Buildings.BUILDING_OTHER={Index=2}; GameInfo.Projects.PROJECT_CREATE_HERO_ANANSI.RequiredBuilding='BUILDING_OTHER'; DEFER_OPERATIONS=true; assert(ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=0})); assert(REQUESTS[1].params.HeroClass==11); assert(not ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{city=999})); assert(not ExposedMembers.JAC_RP_HeroUI.ResolveDiscovery('JAC_RP_PLACEHOLDER_01','d','HERO',{})); assert(#REQUESTS==1)");

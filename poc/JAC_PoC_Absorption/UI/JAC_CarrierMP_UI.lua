@@ -67,6 +67,11 @@ local function Observe(c)
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
+  if m.Phase=='SELECT' or m.Phase=='PREPARE' then
+    local api=ExposedMembers.JAC_Absorption
+    local tx=api and api.GetState().Transactions[m.Transaction]
+    if tx and tx.Turn~=Game.GetCurrentGameTurn() and not (tx.Request and tx.Request.FlowPolicy) then return false end
+  end
   if m.Phase=='BORROW' or m.Phase=='RETURN' or m.Phase=='ABORT_RETURN' or m.Phase=='ABORT_DONE' then
     return request(c,'RESUME')
   end
@@ -104,4 +109,12 @@ local function Observe(c)
     or m.Phase=='ABORT_RESTORED' or m.Phase=='RECHECK' then return request(c,'OBSERVE',o) end
   return false
 end
-JAC_ObserveNativeCarrierMP=function(c) local ok,result=pcall(Observe,c);return ok and result==true end
+local diagnostic
+JAC_ObserveNativeCarrierMP=function(c)
+  local ok,result=pcall(Observe,c)
+  if not ok then
+    local message=tostring(result)
+    if diagnostic~=message then print('[JAC_CARRIER_MP] observation waiting: '..message);diagnostic=message end
+  else diagnostic=nil end
+  return ok and result==true
+end

@@ -842,6 +842,96 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_natural_turn_changes_can_finish_borrowed_ready_dispatch_and_restored_phases() {
+        for phase in ["BORROWED", "READY", "DISPATCH", "RESTORED"] {
+            let lua = mp_world(2, false);
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(
+                &lua,
+                if phase == "RESTORED" {
+                    "DISPATCH"
+                } else {
+                    phase
+                },
+            );
+            if phase == "RESTORED" {
+                lua.load("MP_OBSERVE()").exec().unwrap();
+                assert!(mp_receive(&lua, &mp_publish(&lua)));
+            }
+            lua.load(
+                r#"
+              CURRENT_TURN=CURRENT_TURN+1
+              for _,x in ipairs({4,16}) do
+                local c=CITIES[x];c.pop=c.pop+1;c.loyalty=c.loyalty-0.25
+                c.faith={['5']=3,['6']=2}
+                c:SetProperty('MP_TEST_PROPERTY',{Value='自然更新',Culture=17.25})
+              end
+            "#,
+            )
+            .exec()
+            .unwrap();
+            for _ in 0..10 {
+                let current=lua.load("return JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP.Phase").eval::<String>().unwrap();
+                if current == "DONE" {
+                    break;
+                }
+                let published = lua.load("return MP_OBSERVE()").eval::<bool>().unwrap();
+                if published {
+                    assert!(
+                        mp_receive(
+                            &lua,
+                            &lua.load("return MP_LAST()").eval::<String>().unwrap()
+                        ),
+                        "{phase}: {current}"
+                    );
+                }
+            }
+            lua.load(r#"
+              local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+              assert(m.Phase=='DONE' and UI_MOVES==1 and TRANSFERS==2 and WORK_X==16)
+              assert(CITIES[4]:GetOwner()==1 and CITIES[16]:GetOwner()==2)
+              for _,x in ipairs({4,16}) do
+                assert(CITIES[x].pop==7 and CITIES[x].loyalty==86.75)
+                assert(CITIES[x]:GetProperty('MP_TEST_PROPERTY').Value=='自然更新')
+              end
+            "#).exec().unwrap();
+        }
+    }
+
+    #[test]
+    fn mp_invalid_preclaim_observation_recovers_cities_and_fences_the_pending_claim() {
+        let lua = mp_world(2, false);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "READY");
+        let claim = mp_publish(&lua);
+        lua.globals().set("PENDING_CLAIM", claim.clone()).unwrap();
+        let bad=lua.load("local p=JAC_CarrierMP.Decode(PENDING_CLAIM);local o=JAC_CarrierMP.Decode(p.Payload);o.Cities[1].Properties.EVIL=9;p.Payload=JAC_CarrierMP.Encode(o);return JAC_CarrierMP.Encode(p)").eval::<String>().unwrap();
+        assert!(!mp_receive(&lua, &bad));
+        lua.load("assert(CITIES[4]:GetOwner()==1 and UI_MOVES==0 and TRANSFERS==2 and CITIES[4]:GetProperty('EVIL')==nil)").exec().unwrap();
+        assert!(!mp_receive(&lua, &claim));
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
+    }
+
+    #[test]
+    fn mp_stale_manual_select_or_prepare_cannot_begin_a_new_loan() {
+        for phase in ["SELECT", "PREPARE"] {
+            let lua = mp_world(2, false);
+            lua.load("MP_PLAN()").exec().unwrap();
+            if phase == "PREPARE" {
+                mp_until(&lua, phase);
+            }
+            let packet = mp_publish(&lua);
+            lua.globals().set("STALE_PACKET", packet).unwrap();
+            lua.load("CURRENT_TURN=CURRENT_TURN+1").exec().unwrap();
+            let packet=lua.load("local p=JAC_CarrierMP.Decode(STALE_PACKET);p.Turn=CURRENT_TURN;return JAC_CarrierMP.Encode(p)").eval::<String>().unwrap();
+            assert!(!mp_receive(&lua, &packet));
+            lua.load("assert(TRANSFERS==0 and UI_MOVES==0 and CITIES[4]:GetOwner()==1)")
+                .exec()
+                .unwrap();
+        }
+    }
+
+    #[test]
     fn mp_review_saved_loan_crosses_turn_only_for_carrier_cleanup() {
         let lua = mp_world(2, false);
         lua.load("MP_PLAN()").exec().unwrap();
@@ -1126,13 +1216,14 @@ mod native_transport {
             .eval::<String>()
             .unwrap();
         assert!(!mp_receive(&lua, &bad));
-        lua.load("assert(UI_MOVES==0 and TRANSFERS==1)")
+        lua.load("assert(UI_MOVES==0 and TRANSFERS==2 and CITIES[4]:GetOwner()==1)")
             .exec()
             .unwrap();
-        assert!(mp_receive(
+        assert!(!mp_receive(
             &lua,
             &lua.globals().get::<String>("MP_RAW").unwrap()
         ));
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
     }
 
     #[test]

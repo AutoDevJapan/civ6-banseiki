@@ -181,7 +181,7 @@ function MP.Preflight(tx)
 end
 local function restoreProperties(current,l)
   -- CoreBefore is captured by Gameplay, never copied from the UI packet.
-  local before=assert(l.CoreBefore,'MP loan lacks trusted Core properties')
+  local before=assert(l.ReturnCore or l.CoreBefore,'MP loan lacks trusted Core properties')
   local catalog=A.NativeCarrierPropertyKeys()
   for k in pairs(before.PropertyKeys) do
     assert(catalog[k]==true,'MP saved property no longer registered')
@@ -194,6 +194,12 @@ local function returnLoans(state,c)
   local m=c.MP
   for _,l in ipairs(m.Loans) do
     local current=city(l)
+    -- Save current authoritative values before a transfer can clear them.
+    -- Refresh only while still borrowed; a completed transfer must not replace
+    -- its saved pre-return values with the cleared post-transfer properties.
+    if current:GetOwner()==m.Actor or not l.ReturnIssued then
+      l.ReturnCore=R.Copy(A.ReadNativeCarrierCore(current,l));save(state)
+    end
     if l.Owner~=m.Actor and current:GetOwner()==m.Actor then
       assert(l.Issued,'MP cannot return an unissued loan')
       assert(l.BorrowedID==nil or current:GetID()==l.BorrowedID,'MP borrowed return identity changed')
@@ -204,7 +210,8 @@ local function returnLoans(state,c)
     assert(current:GetOwner()==l.Owner,'MP return owner changed')
     assert(l.Owner==m.Actor or l.ReturnIssued or current:GetID()==l.ID,'MP original return identity changed')
     if l.FinalID then assert(current:GetID()==l.FinalID,'MP returned city identity changed') end
-    l.FinalID=current:GetID();restoreProperties(current,l);save(state)
+    l.FinalID=current:GetID();restoreProperties(current,l)
+    l.RestoredCore=R.Copy(A.ReadNativeCarrierCore(current,l));save(state)
   end
 end
 local function attemptReturn(state,c)
@@ -325,6 +332,8 @@ local function validateObservation(c,o,placement)
       'MP reported property differs from registered Core snapshot')
     assert(core.HasBuilding and type(observed.Slots)=='number' and l.Slot>=0 and l.Slot<observed.Slots,
       'MP physical slot unavailable')
+    if core.Slots~=nil then assert(observed.Slots==core.Slots,'MP reported Core slot count changed') end
+    if core.Work~=nil then assert(observed.Work==core.Work,'MP reported Core work slot changed') end
     assert(observed.State.Name==core.Name and observed.State.Population==core.Population
       and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and #core.UnitsOnCenter==0,
       'MP observation Core city changed')
@@ -332,14 +341,17 @@ local function validateObservation(c,o,placement)
       and Equal(observed.State.Governance,current:GetProperty(R.GOVERNANCE_KEY)),'MP reported Core governance changed')
     assert(type(observed.State.Assets)=='table' and type(observed.State.Religion)=='table'
       and type(observed.State.PurchasedPlots)=='table' and type(observed.State.Loyalty)=='number','MP incomplete actor city observation')
+    if core.Loyalty~=nil then assert(observed.State.Loyalty==core.Loyalty,'MP reported Core loyalty changed') end
+    if core.Religion~=nil then assert(Equal(observed.State.Religion,core.Religion),'MP reported Core religion changed') end
     -- Work slots, religion, loyalty, plots and global locations may be UI-only.
     -- Compare synchronized actor publications; do not read each peer UI cache.
     if l.ActorBefore and m.Phase~='RECHECK' then
-      assert(Equal(observed.State,l.ActorBefore.State),'MP actor reports borrowed city changed')
+      for _,field in ipairs({'Name','Assets','UnitsOnCenter','PurchasedPlots'}) do
+        assert(Equal(observed.State[field],l.ActorBefore.State[field]),'MP actor reports invariant city change: '..field)
+      end
     end
     if m.Phase=='RESTORED' or m.Phase=='ABORT_RESTORED' then
-      assert(Equal(core.PropertyKeys,l.CoreBefore.PropertyKeys) and Equal(core.Properties,l.CoreBefore.Properties),
-        'MP trusted properties not restored')
+      assert(l.RestoredCore,'MP trusted property restoration incomplete')
     end
   end
   local compatible=false
@@ -365,9 +377,9 @@ local function reserved(state,c,l)
 end
 local function receive(actor,p)
   assert(GameConfiguration.IsAnyMultiplayer() and type(p)=='table' and p.Version==2,'MP wire contract')
-  local state=A.GetState();local found={};local selectedSnap
+  local state=A.GetState();local found={};local selectedSnap,selectedTx
   for _,tx in pairs(state.Transactions) do for _,snap in ipairs(tx.NativeWorks or {}) do
-    if snap.Carrier and snap.Carrier.Token==p.Token then found[#found+1]=snap.Carrier;selectedSnap=snap end
+    if snap.Carrier and snap.Carrier.Token==p.Token then found[#found+1]=snap.Carrier;selectedSnap=snap;selectedTx=tx end
   end end
   assert(#found==1,'MP carrier token missing or duplicated');local c=found[1];local m=assert(c.MP)
   assert(m.Version==2 and actor==m.Actor and p.Actor==actor,'MP unselected actor')
@@ -378,6 +390,10 @@ local function receive(actor,p)
     Turn=p.Turn,Payload=p.Payload,Session=p.Session,DispatchStatus=p.DispatchStatus or ''})
   if m.Receipts and m.Receipts[id] then return true end
   assert(p.Phase==m.Phase and p.Nonce==m.Nonce,'MP stale phase/nonce')
+  if (m.Phase=='SELECT' or m.Phase=='PREPARE') and selectedTx.Turn~=Game.GetCurrentGameTurn()
+    and not (selectedTx.Request and selectedTx.Request.FlowPolicy) then
+    m.WaitingFor='MP_CONTRACT_REVALIDATION';save(state);return false
+  end
   if p.Command=='RESUME' then
     assert(m.Phase=='BORROW' or m.Phase=='RETURN' or m.Phase=='ABORT_RETURN' or m.Phase=='ABORT_DONE','MP resume phase')
     MP.Advance(state,c);return true
@@ -403,12 +419,27 @@ local function receive(actor,p)
     m.Loans={origin,{Owner=chosen.Owner,ID=chosen.City,X=chosen.X,Y=chosen.Y,Building=chosen.Building,Slot=chosen.Slot}}
     phase(state,c,'PREPARE');return true
   end
-  local o=Decode(p.Payload)
+  if p.Command=='ABORT' and (m.Phase=='BORROWED' or m.Phase=='READY') then
+    abort(state,c,'actor canceled before dispatch claim');return true
+  end
+  local decoded,o=pcall(Decode,p.Payload)
+  if not decoded then
+    if not m.Claimed and (m.Phase=='BORROWED' or m.Phase=='READY') then
+      abort(state,c,'invalid preclaim observation: '..tostring(o));return false
+    end
+    error(o)
+  end
   local placement=(m.Phase=='RESTORED' or m.Phase=='RECHECK') and 'TARGET' or 'SOURCE'
   if m.Phase=='DISPATCH' then
     placement=o.Cities and o.Cities[2] and o.Cities[2].Work==c.Index and 'TARGET' or 'SOURCE'
   end
-  validateObservation(c,o,placement)
+  local valid,err=pcall(validateObservation,c,o,placement)
+  if not valid then
+    if not m.Claimed and (m.Phase=='BORROWED' or m.Phase=='READY') then
+      abort(state,c,'invalid preclaim observation: '..tostring(err));return false
+    end
+    error(err)
+  end
   m.Receipts=m.Receipts or {};m.Receipts[id]=true
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')

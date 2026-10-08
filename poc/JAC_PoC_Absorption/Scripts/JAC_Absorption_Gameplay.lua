@@ -1952,10 +1952,24 @@ end
 -- fallback. The registered catalog is the authority for property restoration.
 A.ReadNativeCarrierCore = function(city, loan)
   local keys = A.NativeCarrierPropertyKeys()
+  local buildings = city:GetBuildings()
+  local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
+  local religion = city.GetReligion and city:GetReligion()
+  local followers
+  if religion and religion.GetReligionsInCity then
+    followers = {}
+    for _, row in pairs(religion:GetReligionsInCity()) do
+      followers[tostring(row.Religion)] = row.Followers
+    end
+  end
   return { Name = city:GetName(), Population = city:GetPopulation(),
     PropertyKeys = keys, Properties = Properties(city, keys),
     UnitsOnCenter = UnitsOnCityCenter(loan.X, loan.Y, city:GetOwner()),
-    HasBuilding = city:GetBuildings():HasBuilding(loan.Building) }
+    HasBuilding = buildings:HasBuilding(loan.Building),
+    Loyalty = identity and identity.GetLoyalty and identity:GetLoyalty() or nil,
+    Religion = followers,
+    Work = buildings.GetGreatWorkInSlot and buildings:GetGreatWorkInSlot(loan.Building, loan.Slot) or nil,
+    Slots = buildings.GetNumGreatWorkSlots and buildings:GetNumGreatWorkSlots(loan.Building) or nil }
 end
 A.ReadNativeCarrier = function(city, loan)
   local keys = A.NativeCarrierPropertyKeys()
