@@ -1,4 +1,5 @@
 //! Synchronous Gameplay acquisition sets and the retained private diagnostic.
+pub mod admission_reload;
 mod join_transaction;
 pub mod mp_hotseat;
 pub mod mp_setup_read;
