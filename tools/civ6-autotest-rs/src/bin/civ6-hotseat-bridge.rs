@@ -1,5 +1,5 @@
 //! Explicitly bounded hotseat test transport. Never starts a game or Steam.
-use civ6_autotest_rs::{Error, Result, hotseat_bridge as hs, judge, runner::Runner, scenario};
+use civ6_autotest_rs::{hotseat_bridge as hs, judge, runner::Runner, scenario, Error, Result};
 use clap::{Parser, Subcommand};
 use hs::TransportIo;
 use serde::{Deserialize, Serialize};
@@ -778,12 +778,10 @@ mod tests {
             menu_load(&bundle, &absent_logs, &absent_saves, 4318),
             adopt_load(&bundle, &absent_logs),
         ] {
-            assert!(
-                result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("input-only bundle cannot run acceptance steps")
-            );
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("input-only bundle cannot run acceptance steps"));
         }
         assert!(!dir.path().join("bridge-journal.jsonl").exists());
         assert!(!dir.path().join("input-probe-sent.json").exists());

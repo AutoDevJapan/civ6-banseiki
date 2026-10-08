@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
 use civ6_autotest_rs::{
-    Error, Result,
     runner::{Backend, Runner},
     time::Clock,
+    Error, Result,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{
     collections::VecDeque,
     path::{Path, PathBuf},

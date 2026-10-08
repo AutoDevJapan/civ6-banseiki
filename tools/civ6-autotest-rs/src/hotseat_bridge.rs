@@ -1,6 +1,6 @@
 //! Test-only hotseat witness bundle and strict Lua.log transport.
 //! No FireTuner command is sent from this module while a game is running.
-use crate::{Error, Result, judge, scenario};
+use crate::{judge, scenario, Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{

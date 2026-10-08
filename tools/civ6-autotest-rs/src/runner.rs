@@ -1,10 +1,11 @@
 use crate::steam_sync::{ExitEvidence, Stage, SyncStatus};
 use crate::tuner::{state_available, state_name_eq, state_position};
 use crate::{
-    Error, ErrorKind, Result, checkpoint, judge, metrics, scenario,
+    checkpoint, judge, metrics, scenario,
     time::{Clock, SystemClock},
+    Error, ErrorKind, Result,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -591,12 +592,10 @@ mod native_trace_step_tests {
                 assert!(detail.contains("native_process="));
                 assert_eq!(*reads.lock().unwrap(), 1);
             } else {
-                assert!(
-                    result
-                        .unwrap_err()
-                        .message
-                        .contains("resident runtime target changed")
-                );
+                assert!(result
+                    .unwrap_err()
+                    .message
+                    .contains("resident runtime target changed"));
                 assert_eq!(*reads.lock().unwrap(), 0);
             }
         }
@@ -666,13 +665,11 @@ mod native_trace_step_tests {
             Box::new(BridgeBackend(Arc::clone(&calls))),
             Arc::new(SystemClock),
         );
-        assert!(
-            runner
-                .run_step(&json!({"action":"start_native_property_trace",
+        assert!(runner
+            .run_step(&json!({"action":"start_native_property_trace",
             "name":"values","max_seconds":120}))
-                .unwrap()
-                .contains("values.jsonl")
-        );
+            .unwrap()
+            .contains("values.jsonl"));
         let stopped = runner
             .run_step(&json!({"action":"stop_native_property_trace"}))
             .unwrap();
@@ -724,12 +721,10 @@ mod native_trace_step_tests {
             Arc::new(SystemClock),
         );
         for action in ["start_native_property_trace", "start_native_can_ever_trace"] {
-            assert!(
-                runner
-                    .run_step(&json!({"action":action,"name":"bad",
+            assert!(runner
+                .run_step(&json!({"action":action,"name":"bad",
                 "max_seconds":90,"scope":"unbounded"}))
-                    .is_err()
-            );
+                .is_err());
         }
         assert!(calls.lock().unwrap().is_empty());
     }
@@ -760,12 +755,10 @@ mod reliability_failure_tests {
         runner.write_result().unwrap();
         let result: Value =
             serde_json::from_slice(&fs::read(output.join("result.json")).unwrap()).unwrap();
-        assert!(
-            result["failure"]
-                .as_str()
-                .unwrap()
-                .contains("foreign key rollback")
-        );
+        assert!(result["failure"]
+            .as_str()
+            .unwrap()
+            .contains("foreign key rollback"));
         assert_eq!(result["failure_boundary"]["stage"], "judge");
         let boundary: Value =
             serde_json::from_slice(&fs::read(output.join("failure.json")).unwrap()).unwrap();

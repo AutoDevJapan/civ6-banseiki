@@ -7,7 +7,7 @@ use civ6_autotest_rs::scenario::{
 };
 use mlua::{Function, Lua};
 use regex::Regex;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use support_fixture::{action, code, compile_lua, expect_error, lua_error, root, scenario, steps};
 
 const PROBE_MOD: &str = "57a3af09-fb38-41da-b367-818de11a995c";
@@ -53,13 +53,11 @@ fn property_observer_scene_is_bounded_and_all_embedded_lua_parses() {
     validate_scenario(&data).unwrap();
     assert_eq!(data["strict_lua_errors"], true);
     let actions = steps(&data);
-    assert!(
-        actions[0]["ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|id| id == "d8532710-f853-4c53-8853-271000000001")
-    );
+    assert!(actions[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == "d8532710-f853-4c53-8853-271000000001"));
     let start = actions
         .iter()
         .position(|step| action(step, "start_native_property_trace"))
@@ -102,26 +100,18 @@ fn numeric_property_scene_uses_only_fixed_numeric_test_keys() {
     }));
     let lua = Lua::new();
     let sources = actions.iter().filter_map(embedded_lua).collect::<Vec<_>>();
-    assert!(
-        sources
-            .iter()
-            .any(|s| s.contains("JAC_PropertyObserverNumericStep"))
-    );
-    assert!(
-        sources
-            .iter()
-            .all(|s| !s.contains("'JAC_TEST853_VALUE'") && !s.contains("'JAC_TEST853_PHASE'"))
-    );
-    assert!(
-        sources
-            .iter()
-            .any(|s| s.contains("Game:GetProperty(853271)"))
-    );
-    assert!(
-        sources
-            .iter()
-            .any(|s| s.contains("Game:GetProperty(853272)"))
-    );
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("JAC_PropertyObserverNumericStep")));
+    assert!(sources
+        .iter()
+        .all(|s| !s.contains("'JAC_TEST853_VALUE'") && !s.contains("'JAC_TEST853_PHASE'")));
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("Game:GetProperty(853271)")));
+    assert!(sources
+        .iter()
+        .any(|s| s.contains("Game:GetProperty(853272)")));
     for source in sources {
         compile_lua(&lua, source);
     }
@@ -139,12 +129,9 @@ fn persona_boundary_scenarios_validate_without_operating_the_game() {
         let data = scenario(name);
         validate_scenario(&data).unwrap();
         assert_eq!(data["strict_lua_errors"], true, "{name}");
-        assert!(
-            steps(&data)
-                .iter()
-                .all(|step| !["restart_game", "autoplay"]
-                    .contains(&step["action"].as_str().unwrap()))
-        );
+        assert!(steps(&data)
+            .iter()
+            .all(|step| !["restart_game", "autoplay"].contains(&step["action"].as_str().unwrap())));
         for step in steps(&data) {
             if let Some(source) = embedded_lua(step) {
                 compile_lua(&lua, source);
@@ -279,11 +266,9 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
         .unwrap();
     assert!(intent_index < saves[0] && saves[0] < request_index);
     assert!(request_index < saves[1] && saves[1] < reload);
-    assert!(
-        saves
-            .iter()
-            .all(|&i| request_steps[i]["checkpoint"] == true)
-    );
+    assert!(saves
+        .iter()
+        .all(|&i| request_steps[i]["checkpoint"] == true));
     assert_eq!(request_steps[reload]["checkpoint"], true);
     assert_eq!(request_steps[8]["action"], "inspect_native_spy_research");
     assert_eq!(request_steps[8]["phase"], "after_acceptance");
@@ -317,18 +302,14 @@ fn third_spy_research_requests_once_and_saves_each_real_turn_before_reading_it()
     assert_eq!(ready_steps[2]["phase"], "capacity_ready");
     assert_eq!(tick_steps[5]["action"], "inspect_native_spy_research");
     assert_eq!(tick_steps[5]["phase"], "after_turn");
-    assert!(
-        ready_steps
-            .iter()
-            .all(|step| !action(step, "save") && !action(step, "end_turn"))
-    );
+    assert!(ready_steps
+        .iter()
+        .all(|step| !action(step, "save") && !action(step, "end_turn")));
     for data in [&request, &tick, &ready] {
         assert_eq!(data["strict_lua_errors"], true);
-        assert!(
-            steps(data)
-                .iter()
-                .all(|step| !action(step, "autoplay") && !action(step, "start_game"))
-        );
+        assert!(steps(data)
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "start_game")));
         let lua = Lua::new();
         for step in steps(data) {
             if let Some(source) = embedded_lua(step) {
@@ -376,11 +357,9 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
             assert_eq!(step["exact_name"], true, "{name}");
             assert_eq!(step["checkpoint"], true, "{name}");
         }
-        assert!(
-            steps
-                .iter()
-                .all(|step| !action(step, "autoplay") && !action(step, "restart_game"))
-        );
+        assert!(steps
+            .iter()
+            .all(|step| !action(step, "autoplay") && !action(step, "restart_game")));
         for step in steps {
             if let Some(source) = embedded_lua(step) {
                 compile_lua(&lua, source);
@@ -406,22 +385,18 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
     assert_eq!(setup[0]["human"], true);
     assert_eq!(setup[1]["leader"], "LEADER_JAC_DATE_TANEMUNE");
     assert_eq!(setup[2]["leader"], "LEADER_JAC_ASHINA_MORIKIYO");
-    assert!(
-        start["steps"][0]["ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|id| id == ENEMY_GATE_MOD)
-    );
+    assert!(start["steps"][0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == ENEMY_GATE_MOD));
     let joined = steps(&start)
         .iter()
         .filter_map(embedded_lua)
         .collect::<Vec<_>>();
-    assert!(
-        joined
-            .iter()
-            .any(|code| code.contains("Queue('PREPARE_ENEMY')"))
-    );
+    assert!(joined
+        .iter()
+        .any(|code| code.contains("Queue('PREPARE_ENEMY')")));
     let position = |needle: &str| {
         joined
             .iter()
@@ -444,11 +419,9 @@ fn enemy_neutralization_scenarios_use_distinct_actors_and_single_turn_checkpoint
         evolve_step < first_ai_turn,
         "enemy must evolve before the first AI turn"
     );
-    assert!(
-        joined
-            .iter()
-            .any(|code| code.contains("QueueEnemy('APPOINT')"))
-    );
+    assert!(joined
+        .iter()
+        .any(|code| code.contains("QueueEnemy('APPOINT')")));
     assert!(joined.iter().any(|code| code.contains("Queue('BIND_SPY')")));
     let mission = scenario("leader-persona-spy-neutralization-mission.json");
     assert_eq!(
@@ -553,11 +526,9 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     assert!(production_steps.iter().all(|step| {
         !action(step, "save") && !action(step, "end_turn") && !action(step, "configure")
     }));
-    assert!(
-        embedded_lua(&production_steps[2])
-            .unwrap()
-            .contains("Tier1ProductionDiagnosis()")
-    );
+    assert!(embedded_lua(&production_steps[2])
+        .unwrap()
+        .contains("Tier1ProductionDiagnosis()"));
     let classification =
         scenario("leader-persona-spy-neutralization-retry-capacity-government-classify.json");
     let classification_steps = steps(&classification);
@@ -595,12 +566,10 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         .position(|s| action(s, "save"))
         .unwrap();
     assert!(request < turn && turn < read && read < proof && proof < save);
-    assert!(
-        classification_steps[proof]["code"]
-            .as_str()
-            .unwrap()
-            .contains("x.afterTotal==r.total")
-    );
+    assert!(classification_steps[proof]["code"]
+        .as_str()
+        .unwrap()
+        .contains("x.afterTotal==r.total"));
     for (suffix, civic_action) in [
         (
             "retry-capacity-government-tier1",
@@ -640,11 +609,9 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             assert!(action(&steps[research + 1], "end_turn"));
             assert_eq!(steps[research + 1]["turns"], 1);
             assert!(action(&steps[research + 2], "wait_for"));
-            assert!(
-                embedded_lua(&steps[research + 2])
-                    .unwrap()
-                    .contains("#t.missingPrerequisites==0")
-            );
+            assert!(embedded_lua(&steps[research + 2])
+                .unwrap()
+                .contains("#t.missingPrerequisites==0"));
             assert!(research + 2 < civic);
         }
         let save = steps.iter().position(|s| action(s, "save")).unwrap();
@@ -653,12 +620,10 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
             "{suffix}"
         );
         assert_eq!(steps[turn]["turns"], 1);
-        assert!(
-            steps[save - 1]["code"]
-                .as_str()
-                .unwrap()
-                .contains("d.mission.turn==23")
-        );
+        assert!(steps[save - 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains("d.mission.turn==23"));
     }
     let old_tier2 =
         scenario("leader-persona-spy-neutralization-retry-capacity-government-tier2.json");
@@ -667,18 +632,14 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         && !embedded_lua(s).is_some_and(|code| code.contains("Queue("))));
     let probe = scenario("leader-persona-spy-neutralization-retry-captive-exchange-probe.json");
     let probe_codes: Vec<_> = steps(&probe).iter().filter_map(embedded_lua).collect();
-    assert!(
-        probe_codes
-            .iter()
-            .any(|code| code.contains("ProbeCapturedExchange()")
-                && code.contains("d.occupied==1")
-                && code.contains("r.nameIndex==-1"))
-    );
-    assert!(
-        !probe_codes
-            .iter()
-            .any(|code| code.contains("Queue(") || code.contains("RequestSession"))
-    );
+    assert!(probe_codes
+        .iter()
+        .any(|code| code.contains("ProbeCapturedExchange()")
+            && code.contains("d.occupied==1")
+            && code.contains("r.nameIndex==-1")));
+    assert!(!probe_codes
+        .iter()
+        .any(|code| code.contains("Queue(") || code.contains("RequestSession")));
     let exchange = scenario("leader-persona-spy-neutralization-retry-captive-exchange.json");
     let exchange_steps = steps(&exchange);
     let exchange_codes: Vec<_> = exchange_steps.iter().filter_map(embedded_lua).collect();
@@ -760,19 +721,17 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         })
         .unwrap();
     assert!(screen_ready < session_observed && session_observed < mark && mark < outcome);
-    assert!(
-        exchange_steps[session_observed + 1..=outcome]
-            .iter()
-            .all(|step| {
-                if action(step, "wait_for") {
-                    step["condition"]["preserve_diplomacy_session"] == true
-                } else if action(step, "ui_lua") {
-                    step["preserve_diplomacy_session"] == true
-                } else {
-                    false
-                }
-            })
-    );
+    assert!(exchange_steps[session_observed + 1..=outcome]
+        .iter()
+        .all(|step| {
+            if action(step, "wait_for") {
+                step["condition"]["preserve_diplomacy_session"] == true
+            } else if action(step, "ui_lua") {
+                step["preserve_diplomacy_session"] == true
+            } else {
+                false
+            }
+        }));
     let save = exchange_steps
         .iter()
         .position(|step| action(step, "save"))
@@ -796,11 +755,9 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
     assert_eq!(civic_steps[civic_turn]["turns"], 1);
     assert!(civic_steps[civic_turn]["timeout"].as_u64().unwrap() >= 240);
     assert!(civic["test_mode"].is_null());
-    assert!(
-        civic_steps
-            .iter()
-            .all(|step| !action(step, "autoplay") && step["fast_forward"] != true)
-    );
+    assert!(civic_steps
+        .iter()
+        .all(|step| !action(step, "autoplay") && step["fast_forward"] != true));
     let civic_verified = civic_steps
         .iter()
         .position(|step| {
@@ -874,11 +831,9 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         .iter()
         .filter_map(embedded_lua)
         .collect();
-    assert!(
-        plan_codes
-            .iter()
-            .any(|code| code.contains("CaptiveCapacityPlan()"))
-    );
+    assert!(plan_codes
+        .iter()
+        .any(|code| code.contains("CaptiveCapacityPlan()")));
     assert!(!plan_codes.iter().any(|code| code.contains("Queue(")));
     let capacity_build = scenario("leader-persona-spy-neutralization-retry-capacity-build.json");
     let build_codes: Vec<_> = steps(&capacity_build)
@@ -942,21 +897,17 @@ fn enemy_failed_mission_retry_has_fixed_reusable_checkpoint_scenarios() {
         && code.contains("d.eventID==0")
         && code.contains("d.eventTurn==23")
         && code.contains("Queue('BEGIN_SPY_RETRY')")));
-    assert!(
-        codes
-            .iter()
-            .any(|code| code.contains("d.mode=='CAPACITY_MAP'")
-                && code.contains("d.currentID~=d.spyID")
-                && code.contains("d.capacity==2")
-                && code.contains("d.roster.capturedPlaceholder"))
-    );
-    assert!(
-        codes
-            .iter()
-            .any(|code| code.contains("r.archive.spyID==655368")
-                && code.contains("r.binding.spyID==r.spyID")
-                && code.contains("s.spyRoster.physicalCount==2"))
-    );
+    assert!(codes
+        .iter()
+        .any(|code| code.contains("d.mode=='CAPACITY_MAP'")
+            && code.contains("d.currentID~=d.spyID")
+            && code.contains("d.capacity==2")
+            && code.contains("d.roster.capturedPlaceholder")));
+    assert!(codes
+        .iter()
+        .any(|code| code.contains("r.archive.spyID==655368")
+            && code.contains("r.binding.spyID==r.spyID")
+            && code.contains("s.spyRoster.physicalCount==2")));
     let prepare_steps = steps(&prepare);
     let verified = prepare_steps
         .iter()
@@ -1165,14 +1116,12 @@ fn produced_spy_comparison_uses_native_build_and_a_short_acceptance_barrier() {
     assert!(index("ACCEPTED_SPY_BUILD") < index("Queue('SPY_FINISH')"));
     assert!(index("JAC_BOUNDARY_SPY')~=nil") < index("Queue('SPY_TRAVEL'"));
     assert!(index("Queue('SPY_TRAVEL'") < index("ACCEPTED_SPY_TRAVEL"));
-    assert!(
-        codes
-            .iter()
-            .all(|source| !source.contains("Queue('PREPARE')")
-                && !source.contains("Queue('EVOLVE')")
-                && !source.contains("Queue('ASSIGN')")
-                && !source.contains("Queue('BUY')"))
-    );
+    assert!(codes
+        .iter()
+        .all(|source| !source.contains("Queue('PREPARE')")
+            && !source.contains("Queue('EVOLVE')")
+            && !source.contains("Queue('ASSIGN')")
+            && !source.contains("Queue('BUY')")));
 }
 
 #[test]
@@ -1186,11 +1135,9 @@ fn persona_native_eligibility_diagnostic_validates_without_operating_the_game() 
         .map(|step| step["turns"].as_i64().unwrap())
         .collect();
     assert_eq!(turns, [1]);
-    assert!(
-        steps(&data)
-            .iter()
-            .all(|step| !["restart_game", "autoplay"].contains(&step["action"].as_str().unwrap()))
-    );
+    assert!(steps(&data)
+        .iter()
+        .all(|step| !["restart_game", "autoplay"].contains(&step["action"].as_str().unwrap())));
     let lua = Lua::new();
     for step in steps(&data) {
         if let Some(source) = embedded_lua(step) {
@@ -1212,13 +1159,11 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
         validate_scenario(&data).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert_eq!(steps(&data).len(), expected_steps, "{name}");
         assert_eq!(data["strict_lua_errors"], true, "{name}");
-        assert!(
-            data["steps"][0]["ids"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|id| id == TITLE_PROXY_MOD)
-        );
+        assert!(data["steps"][0]["ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == TITLE_PROXY_MOD));
         assert!(steps(&data).iter().all(|step| !action(step, "autoplay")));
         for step in steps(&data) {
             if let Some(source) = embedded_lua(step) {
@@ -1228,40 +1173,30 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
     }
     let title = scenario("leader-persona-title-proxy-15km.json");
     let only = scenario("leader-persona-native-slot-ai-only-15km.json");
-    assert!(
-        only["steps"][0]["ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|id| id == NATIVE_SLOT_ONLY_MOD)
-    );
+    assert!(only["steps"][0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == NATIVE_SLOT_ONLY_MOD));
     assert!(code(&steps(&only)[3]).contains("CanEverAppointGovernor(proxy.Hash)"));
     assert!(code(&steps(&only)[3]).contains("not g:CanEverAppointGovernor(slot.Hash)"));
     assert_eq!(code(&steps(&only)[10]), "return JAC_SlotsAssertAI(true)");
-    assert!(
-        steps(&only)
-            .iter()
-            .all(|step| !action(step, "save") && !action(step, "load"))
-    );
-    assert!(
-        steps(&only)
-            .iter()
-            .filter_map(code_if_ui)
-            .all(|code| !code.contains("JAC_SlotsAppoint("))
-    );
-    assert!(
-        title["steps"][0]["disable_ids"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|id| id == NATIVE_SLOTS_MOD)
-    );
-    assert!(
-        steps(&title)
-            .iter()
-            .filter_map(|step| step["code"].as_str())
-            .all(|code| !code.contains("SetCulturalProgress"))
-    );
+    assert!(steps(&only)
+        .iter()
+        .all(|step| !action(step, "save") && !action(step, "load")));
+    assert!(steps(&only)
+        .iter()
+        .filter_map(code_if_ui)
+        .all(|code| !code.contains("JAC_SlotsAppoint(")));
+    assert!(title["steps"][0]["disable_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == NATIVE_SLOTS_MOD));
+    assert!(steps(&title)
+        .iter()
+        .filter_map(|step| step["code"].as_str())
+        .all(|code| !code.contains("SetCulturalProgress")));
     assert!(steps(&title).iter().any(|step| {
         code_if_ui(step).is_some_and(|code| code.contains("JAC_TitleProxyGiveTitles"))
     }));
@@ -1280,13 +1215,11 @@ fn persona_native_slot_diagnostics_preserve_the_live_failure_gates() {
                 .any(|id| id == NATIVE_SLOT_ONLY_MOD),
             "{name}"
         );
-        assert!(
-            data["steps"][0]["ids"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|id| id == NATIVE_SLOTS_MOD)
-        );
+        assert!(data["steps"][0]["ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id == NATIVE_SLOTS_MOD));
         assert_eq!(code(&steps[9]), "return JAC_SlotsAssertAI(true)", "{name}");
         assert_eq!(
             code(&steps[receipt_step]),
@@ -1340,21 +1273,17 @@ fn persona_static_gate_diagnostic_separates_ai_boundary_and_one_official_request
     let steps = steps(&data);
     assert_eq!(steps.len(), 17);
     assert_eq!(data["strict_lua_errors"], true);
-    assert!(
-        steps[0]["ids"]
+    assert!(steps[0]["ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == STATIC_GATE_MOD));
+    for other in [TITLE_PROXY_MOD, NATIVE_SLOTS_MOD, NATIVE_SLOT_ONLY_MOD] {
+        assert!(steps[0]["disable_ids"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|id| id == STATIC_GATE_MOD)
-    );
-    for other in [TITLE_PROXY_MOD, NATIVE_SLOTS_MOD, NATIVE_SLOT_ONLY_MOD] {
-        assert!(
-            steps[0]["disable_ids"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|id| id == other)
-        );
+            .any(|id| id == other));
     }
     assert_eq!(code(&steps[3]), "return JAC_StaticGate.AssertClosed(false)");
     assert_eq!(code(&steps[8]), "return JAC_StaticGate.AssertAI()");
@@ -1367,11 +1296,9 @@ fn persona_static_gate_diagnostic_separates_ai_boundary_and_one_official_request
     );
     assert_eq!(steps[6]["turns"], 1);
     assert!(steps[6]["timeout"].as_u64().unwrap() >= 240);
-    assert!(
-        steps
-            .iter()
-            .all(|step| !action(step, "autoplay") && !action(step, "save"))
-    );
+    assert!(steps
+        .iter()
+        .all(|step| !action(step, "autoplay") && !action(step, "save")));
     assert_eq!(
         steps
             .iter()
@@ -1500,13 +1427,11 @@ fn every_other_new_game_isolates_diagnostic_gates_at_the_shared_selection_bounda
             );
             assert!(isolated.iter().any(|id| id == STATIC_GATE_MOD), "{name}");
             if name == "leader-persona-spy-neutralization-start-15km.json" {
-                assert!(
-                    first["ids"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|id| id == ENEMY_GATE_MOD)
-                );
+                assert!(first["ids"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|id| id == ENEMY_GATE_MOD));
             } else {
                 assert!(isolated.iter().any(|id| id == ENEMY_GATE_MOD), "{name}");
             }
@@ -1649,12 +1574,11 @@ fn joined_admission_calibration_separates_owner_returns_and_typed_property_trans
             .count(),
         1
     );
-    assert!(
-        !s.iter()
-            .any(|step| step["code"].as_str().is_some_and(|code| code
-                .contains("APPOINT_GOVERNOR")
-                || code.contains("PROMOTE_GOVERNOR")))
-    );
+    assert!(!s
+        .iter()
+        .any(|step| step["code"].as_str().is_some_and(
+            |code| code.contains("APPOINT_GOVERNOR") || code.contains("PROMOTE_GOVERNOR")
+        )));
     let property = s
         .iter()
         .find(|step| step["action"] == "start_native_property_trace")
@@ -1697,9 +1621,11 @@ fn joined_cost_one_scene_uses_one_native_window_and_one_official_appointment() {
             .count(),
         1
     );
-    assert!(s.iter().any(|step| step["code"].as_str().is_some_and(
-        |code| code.contains("count==484") && code.contains("CanEverAppointGovernor")
-    )));
+    assert!(s
+        .iter()
+        .any(|step| step["code"].as_str().is_some_and(
+            |code| code.contains("count==484") && code.contains("CanEverAppointGovernor")
+        )));
     assert_eq!(
         s.iter()
             .filter(|step| step["code"]
@@ -1789,11 +1715,9 @@ fn carrier_exchange_rejects_ignored_snapshot_options_without_limiting_checkpoint
             let mut exchange = data.clone();
             exchange["steps"][0][key] = value;
             let error = validate_scenario(&exchange).unwrap_err();
-            assert!(
-                error
-                    .message
-                    .contains(&format!("carrier_exchange does not support {key}"))
-            );
+            assert!(error
+                .message
+                .contains(&format!("carrier_exchange does not support {key}")));
         }
     }
     let checkpoint = json!({
@@ -1842,12 +1766,10 @@ fn carrier_exchange_rejects_unimplemented_comparisons_but_checkpoint_retains_the
     checkpoint["steps"][0]["path"] = json!("carrier/before.json");
     checkpoint["steps"][0]["capture_as"] = json!("BEFORE");
     checkpoint["steps"][0]["equals_capture"] = json!("BEFORE");
-    assert!(
-        validate_scenario(&checkpoint)
-            .unwrap_err()
-            .message
-            .contains("earlier capture_as")
-    );
+    assert!(validate_scenario(&checkpoint)
+        .unwrap_err()
+        .message
+        .contains("earlier capture_as"));
     checkpoint["steps"][0]
         .as_object_mut()
         .unwrap()
@@ -2001,12 +1923,10 @@ fn era_every_single_turn_is_logged_in_both_contexts() {
 fn era_speeds_differ_only_in_speed() {
     let standard = era_probe("standard");
     let quick = era_probe("quick");
-    assert!(
-        steps(&standard)[0]["ids"]
-            .as_array()
-            .unwrap()
-            .contains(&json!(PROBE_MOD))
-    );
+    assert!(steps(&standard)[0]["ids"]
+        .as_array()
+        .unwrap()
+        .contains(&json!(PROBE_MOD)));
     assert_eq!(steps(&standard)[1]["speed"], "GAMESPEED_STANDARD");
     assert_eq!(steps(&quick)[1]["speed"], "GAMESPEED_QUICK");
     let normalized: Value = serde_json::from_str(
@@ -2058,12 +1978,10 @@ fn era_other_scenarios_on_the_test_map_disable_the_probe_mod() {
         let name = path.file_name().unwrap().to_str().unwrap();
         if name == "sengoku-era-reigns-beyond-nine.json" {
             let data: Value = serde_json::from_str(&text).unwrap();
-            assert!(
-                data["steps"][0]["ids"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!(PROBE_MOD))
-            );
+            assert!(data["steps"][0]["ids"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(PROBE_MOD)));
             assert!(code(&data["steps"][2]).contains("SetValue('JAC_ERA_TIMING_TAIL', true)"));
         } else if text.contains("JAC_Unification_Test.Civ6Map")
             && !name.starts_with("probe-era-timing")
@@ -2146,18 +2064,14 @@ fn era_checked_turns_are_the_generated_era_starts() {
     let data = scenario("sengoku-era-reigns.json");
     let s = steps(&data);
     assert_eq!(s[1]["speed"], "GAMESPEED_STANDARD");
-    assert!(
-        s[1]["map_file"]
-            .as_str()
-            .unwrap()
-            .contains("JAC_Japan_15km.Civ6Map")
-    );
-    assert!(
-        s[0]["disable_ids"]
-            .as_array()
-            .unwrap()
-            .contains(&json!(PROBE_MOD))
-    );
+    assert!(s[1]["map_file"]
+        .as_str()
+        .unwrap()
+        .contains("JAC_Japan_15km.Civ6Map"));
+    assert!(s[0]["disable_ids"]
+        .as_array()
+        .unwrap()
+        .contains(&json!(PROBE_MOD)));
     for (turn, era, ends) in [(1, 0, koji), (66, 1, eiroku), (73, 2, genki)] {
         assert!(
             s.iter()
@@ -2354,12 +2268,10 @@ fn japan_resource_scenario_matches_the_manifest_on_the_adopted_15km_map() {
         .find(|entry| entry["km_per_tile"] == 15)
         .unwrap();
     let s = steps(&data);
-    assert!(
-        s[1]["map_file"]
-            .as_str()
-            .unwrap()
-            .contains(item["file"].as_str().unwrap())
-    );
+    assert!(s[1]["map_file"]
+        .as_str()
+        .unwrap()
+        .contains(item["file"].as_str().unwrap()));
     assert_eq!(s[1]["build_setup"], true);
     assert!(!data.to_string().contains("JAC_RESOURCES_TEST_YEAR"));
     let checks: Vec<_> = s
@@ -2373,11 +2285,9 @@ fn japan_resource_scenario_matches_the_manifest_on_the_adopted_15km_map() {
         .filter(|record| record["start_status"] == "deferred")
         .collect();
     assert_eq!(deferred.len(), 9);
-    assert!(
-        deferred
-            .iter()
-            .all(|record| record["placement_status"] == "reserved_for_later_release")
-    );
+    assert!(deferred
+        .iter()
+        .all(|record| record["placement_status"] == "reserved_for_later_release"));
     for c in &checks {
         for record in &deferred {
             let expected = format!(
@@ -2518,26 +2428,20 @@ fn verification_fast_forward_keeps_checkpoints_without_claiming_continuous_metri
     };
     assert_eq!(auto_turns(&short), [50, 50, 50, 50, 50, 50, 1]);
     assert_eq!(auto_turns(&original), [50, 50, 50, 50, 50, 50, 1]);
-    assert!(
-        steps(&short)
-            .iter()
-            .filter(|step| action(step, "autoplay") && step["turns"].as_u64().unwrap() > 2)
-            .all(|step| step["fast_forward"] == true)
-    );
-    assert!(
-        steps(&original)
-            .iter()
-            .all(|step| step["fast_forward"] != true)
-    );
-    assert!(
-        steps(&short)
-            .iter()
-            .filter(|step| action(step, "autoplay"))
-            .all(|step| step["metrics_group"]
-                .as_str()
-                .unwrap()
-                .starts_with("TEST_MODE_"))
-    );
+    assert!(steps(&short)
+        .iter()
+        .filter(|step| action(step, "autoplay") && step["turns"].as_u64().unwrap() > 2)
+        .all(|step| step["fast_forward"] == true));
+    assert!(steps(&original)
+        .iter()
+        .all(|step| step["fast_forward"] != true));
+    assert!(steps(&short)
+        .iter()
+        .filter(|step| action(step, "autoplay"))
+        .all(|step| step["metrics_group"]
+            .as_str()
+            .unwrap()
+            .starts_with("TEST_MODE_")));
     let checkpoints = |data: &Value| -> Vec<Value> {
         steps(data)
             .iter()
@@ -2588,12 +2492,10 @@ fn verification_full_map_measurements_cover_continuous_play_and_both_reloads() {
             [0]
         );
         assert_eq!(players[0]["civ"], "CIVILIZATION_JAC_RYUKYU");
-        assert!(
-            s[1]["map_file"]
-                .as_str()
-                .unwrap()
-                .contains("JAC_Japan_15km.Civ6Map")
-        );
+        assert!(s[1]["map_file"]
+            .as_str()
+            .unwrap()
+            .contains("JAC_Japan_15km.Civ6Map"));
         let autos: Vec<_> = s.iter().filter(|step| action(step, "autoplay")).collect();
         assert_eq!(
             autos[..autos.len() - 1]
@@ -3155,12 +3057,10 @@ fn driver_new_scenarios_check_requested_states() {
     assert!(code(&steps(&screen)[4]).contains("#values~=22"));
     assert!(code(&steps(&screen)[2]).contains("#values~=2"));
     let settler = scenario("japan-map-15km-settlers.json");
-    assert!(
-        steps(&settler)[1]["map_file"]
-            .as_str()
-            .unwrap()
-            .contains("_Settlers.Civ6Map")
-    );
+    assert!(steps(&settler)[1]["map_file"]
+        .as_str()
+        .unwrap()
+        .contains("_Settlers.Civ6Map"));
     assert!(code(&steps(&settler)[3]).contains("p:GetCities():GetCount()~=0"));
     assert!(code(&steps(&settler)[3]).contains("count~=1"));
     let long = scenario("japan-map-15km-200turn.json");
@@ -3169,12 +3069,10 @@ fn driver_new_scenarios_check_requested_states() {
     assert_eq!(s[auto]["turns"], 200);
     assert_eq!(s[auto]["allow_human_elimination"], true);
     assert_eq!(s[auto]["research_metrics"], true);
-    assert!(
-        s[0]["ids"]
-            .as_array()
-            .unwrap()
-            .contains(&json!("26c967d0-c10d-4eeb-8aaf-c83dc7e621e7"))
-    );
+    assert!(s[0]["ids"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("26c967d0-c10d-4eeb-8aaf-c83dc7e621e7")));
     assert_eq!(s[1]["build_setup"], true);
     assert_eq!(s[1]["ruleset"], "RULESET_JAC_BANSEIKI");
     let start = s

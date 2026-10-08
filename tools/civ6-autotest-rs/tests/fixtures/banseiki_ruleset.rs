@@ -1,7 +1,7 @@
 use crate::support_fixture::{action, code, root, scenario, steps};
 use regex::Regex;
 use roxmltree::{Document, Node};
-use rusqlite::{Connection, params_from_iter, types::Value as SqlValue};
+use rusqlite::{params_from_iter, types::Value as SqlValue, Connection};
 use std::collections::{BTreeMap, BTreeSet};
 
 const DOMAIN: &str = "Players:Expansion2_Players";
@@ -220,17 +220,14 @@ fn duplicate_policy_and_runtime_scenario_cover_same_civilization() {
             .iter()
             .any(|right| left["civ"] == right["civ"] && left["leader"] != right["leader"])
     }));
-    assert!(
-        s[configure + 1..start]
-            .iter()
-            .filter(|step| action(step, "ui_lua")
-                && ["FrontEnd", "HostGame"].contains(&step["state_name"].as_str().unwrap_or("")))
-            .any(
-                |step| code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_LEADERS')")
-                    && code(step)
-                        .contains("GameConfiguration.GetValue('NO_DUPLICATE_CIVILIZATIONS')")
-            )
-    );
+    assert!(s[configure + 1..start]
+        .iter()
+        .filter(|step| action(step, "ui_lua")
+            && ["FrontEnd", "HostGame"].contains(&step["state_name"].as_str().unwrap_or("")))
+        .any(
+            |step| code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_LEADERS')")
+                && code(step).contains("GameConfiguration.GetValue('NO_DUPLICATE_CIVILIZATIONS')")
+        ));
     assert!(s[start + 1..].iter().any(|step| {
         action(step, "ui_lua")
             && step["state_name"] == "InGame"

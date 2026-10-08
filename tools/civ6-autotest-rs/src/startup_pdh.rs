@@ -1,6 +1,6 @@
 //! Read-only native WDDM adapter enumeration and three PDH GPU Engine samples.
 //! Runs in the bounded diagnostic worker, never in the driver's input thread.
-use crate::{Error, Result, startup_idle::*};
+use crate::{startup_idle::*, Error, Result};
 use std::{
     ptr,
     time::{Duration, Instant},
