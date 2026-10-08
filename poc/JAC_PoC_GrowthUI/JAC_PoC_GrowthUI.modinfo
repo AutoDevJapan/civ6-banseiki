@@ -53,13 +53,21 @@
 			</Properties>
 		</ReplaceUIScript>
 		<ImportFiles id="JAC_GrowthUI_UIFiles" criteria="JAC_GrowthUI_GatheringStorm">
+			<File>UI/JAC_GrowthRoster.lua</File>
+			<File>UI/JAC_GrowthRoster.xml</File>
 			<File>UI/JAC_Notebooks.xml</File>
 			<File>UI/JAC_Notebooks.lua</File>
 			<File>UI/JAC_PartialScreenHooks.lua</File>
 			<File>UI/Textures/JAC_Notebooks_Hook.dds</File>
 		</ImportFiles>
+		<AddUserInterfaces id="JAC_GrowthRoster_InGameUI" criteria="JAC_GrowthUI_GatheringStorm">
+			<Properties><Context>InGame</Context></Properties>
+			<File>UI/JAC_GrowthRoster.xml</File>
+		</AddUserInterfaces>
 	</InGameActions>
 	<Files>
+		<File>UI/JAC_GrowthRoster.lua</File>
+		<File>UI/JAC_GrowthRoster.xml</File>
 		<File>Text/JAC_PoC_GrowthUI_Text.xml</File>
 		<File>Scripts/JAC_PoC_GrowthUI_Gameplay.lua</File>
 		<File>UI/JAC_Notebooks.xml</File>

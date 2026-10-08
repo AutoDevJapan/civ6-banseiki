@@ -9,6 +9,7 @@ local RESULT = "JAC_UNIFICATION_PACT_RESULT"
 
 local m_Rows = InstanceManager:new("PlayerRow", "Root", Controls.Rows)
 local m_ShownProposal = nil -- 自動で開いた申し込み（同じ申し込みでは開き直さない）
+local m_ShownProposalPlayer = nil -- ホットシートでは同じ申し込み元でも受け手が変わる
 
 local function Name(playerID)
 	return Locale.Lookup(PlayerConfigurations[playerID]:GetCivilizationShortDescription())
@@ -72,8 +73,11 @@ end
 local function OnRefreshIfShown()
 	local me = Game.GetLocalPlayer()
 	local proposal = me ~= -1 and LeadOf(me) == nil and Game:GetProperty(PROPOSAL_PREFIX .. me) or nil
-	if proposal ~= nil and proposal ~= m_ShownProposal then Controls.PactPanel:SetHide(false) end
+	if proposal ~= nil and (me ~= m_ShownProposalPlayer or proposal ~= m_ShownProposal) then
+		Controls.PactPanel:SetHide(false)
+	end
 	m_ShownProposal = proposal
+	m_ShownProposalPlayer = me
 	if not Controls.PactPanel:IsHidden() then Refresh() end
 end
 

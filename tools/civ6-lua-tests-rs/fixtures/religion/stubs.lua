@@ -30,8 +30,21 @@ Game = {
 ExposedMembers = {}
 ENGINE = engine or {}
 FAIL_EFFECT, FAIL_SPAWN, BAD_CONVERSION = false, false, false
-GameEvents = { OnGameTurnStarted = { Add = function(f) TURN_HOOK = f end } }
-GameConfiguration = { GetValue = function() return HEROES_MODE end }
+GameEvents = { OnGameTurnStarted = { Add = function(f) TURN_HOOK = f end },
+  JAC_ReligionOperation = { Add = function(f) RELIGION_OPERATION = f end },
+  PlayerTurnStartComplete = { Add = function(f) RELIGION_TURN_START = f end },
+  OnPlayerTurnEnded = { Add = function(f) RELIGION_TURN_END = f end } }
+GameConfiguration = { GetValue = function() return HEROES_MODE end,
+  IsAnyMultiplayer = function() return MULTIPLAYER == true end }
+LOCAL_PLAYER, REQUESTS, HUMAN_ONE = 1, {}, true
+Game.GetLocalPlayer = function() return LOCAL_PLAYER end
+PlayerOperations = { EXECUTE_SCRIPT = 1 }
+UI = { RequestPlayerOperation = function(actor, op, params)
+  assert(actor == LOCAL_PLAYER and op == PlayerOperations.EXECUTE_SCRIPT)
+  assert(params.OnStart == 'JAC_ReligionOperation')
+  REQUESTS[#REQUESTS + 1] = { actor=actor, params=clone(params) }
+  if not DEFER_OPERATIONS then RELIGION_OPERATION(actor, clone(params)) end
+end }
 HEROES_MODE = true
 local function info(rows, key)
   local t = setmetatable({}, { __call = function()
@@ -54,6 +67,8 @@ GameInfo.HeroClasses = info({
   { Index = 10, HeroClassType = 'HEROCLASS_ANANSI', UnitType = 'UNIT_HERO_ANANSI', CreationProjectType = 'PROJECT_CREATE_HERO_ANANSI' },
   { Index = 11, HeroClassType = 'HEROCLASS_ARTHUR', UnitType = 'UNIT_HERO_ARTHUR', CreationProjectType = 'PROJECT_CREATE_HERO_ARTHUR' },
 }, 'HeroClassType')
+GameInfo.Projects = { PROJECT_CREATE_HERO_ANANSI={RequiredBuilding='BUILDING_MONUMENT'},
+  PROJECT_CREATE_HERO_ARTHUR={RequiredBuilding='BUILDING_MONUMENT'} }
 GameInfo.ProjectCompletionModifiers = info({
   { Index = 1, ProjectType = 'PROJECT_CREATE_HERO_ANANSI', ModifierId = 'MODIFIER_CREATE_HERO_ANANSI' },
   { Index = 2, ProjectType = 'PROJECT_CREATE_HERO_ARTHUR', ModifierId = 'MODIFIER_CREATE_HERO_ARTHUR' },
@@ -166,7 +181,8 @@ for id = 0, 1 do
   Players[pid] = {
     GetID = function() return pid end, IsAlive = function() return e.alive end,
     IsTurnActive = function() return e.active ~= false end,
-    IsMajor = function() return e.major end, IsHuman = function() return pid == 0 end,
+    IsMajor = function() return e.major end,
+    IsHuman = function() return pid == 0 or pid == 1 and (MULTIPLAYER == true or HUMAN_ONE == true) end,
     GetCities = function() return { GetCapitalCity = function() return e.city and capital or nil end,
       FindID = function(_, city) return e.city and cityObjects[tostring(city)] or nil end,
       Members = function() local key; return function()
@@ -197,13 +213,15 @@ for id = 0, 1 do
       ChangeFavor = function(_, amount) if FAIL_EFFECT then error('effect refused') end; e.favor = e.favor + amount end } end,
     GetUnits = function() return {
       FindID = function(_, unit) local u = e.units[tostring(unit)]; return u and {
-        GetID = function() return u.id end, GetType = function() return u.kind end,
+        GetID = function() return u.id end, GetOwner = function() return u.owner or pid end,
+        GetType = function() return u.kind end,
         GetHeroClassType = function() return u.class or -1 end,
         GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end } end,
       Members = function() local key; return function()
         key = next(e.units, key); if key == nil then return end
         local u = e.units[key]; return u.id, {
-          GetID = function() return u.id end, GetType = function() return u.kind end,
+          GetID = function() return u.id end, GetOwner = function() return u.owner or pid end,
+          GetType = function() return u.kind end,
           GetHeroClassType = function() return u.class or -1 end,
           GetProperty = function(_, key) assert(key == UnitPropertyKeys.LifespanRemaining); return u.lifespan end }
       end end } end,
