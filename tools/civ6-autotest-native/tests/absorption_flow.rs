@@ -3025,15 +3025,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
     ))
     .map_err(mlua::Error::external)?;
-    // The absorption entry owns its private modules. The independent carrier
-    // boundary and inventory receivers have their own contexts and must also
-    // load exactly once.
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 3);
-    for id in [
-        "JAC_Absorption_Gameplay",
-        "JAC_CarrierBoundary",
-        "JAC_NativeInventory",
-    ] {
+    // Every private gameplay dependency belongs to the absorption entry VM.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
+    for id in ["JAC_Absorption_Gameplay"] {
         assert_eq!(
             manifest
                 .matches(&format!(
@@ -3046,8 +3040,6 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
-    assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
-    assert!(manifest.contains("<File>Scripts/JAC_NativeInventory.lua</File></AddGameplayScripts>"));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
@@ -3064,6 +3056,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         GameEvents.JAC_AbsorptionProduct_Operation=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
         GameEvents.OnGameTurnStarted=COUNTED_EVENT()
+        GameEvents.JAC_CarrierBoundary_Operation=COUNTED_EVENT()
+        GameEvents.JAC_CarrierMP_Operation=COUNTED_EVENT()
+        GameEvents.JAC_NativeInventory_Operation=COUNTED_EVENT()
     "#,
     )
     .exec()?;
@@ -3100,6 +3095,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil)
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
+        assert(GameEvents.JAC_CarrierBoundary_Operation.Count()==1)
+        assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
+        assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
         assert(GameEvents.OnGameTurnStarted.Count()==4)
         assert(GameEvents.JAC_AbsorptionProduct_Operation.Count()==1)
@@ -3133,6 +3131,286 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(not Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1').Accepted)
         assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1').ID=='retry')
     "#).exec()
+}
+
+#[derive(Default)]
+struct GameplayAction {
+    order: i32,
+    files: Vec<String>,
+}
+
+// Use the distribution's actions, not a hand-maintained list of scripts.
+// ImportFiles makes include available; each AddGameplayScripts gets a new VM.
+fn gameplay_actions(manifest: &str) -> mlua::Result<(Vec<GameplayAction>, Vec<String>)> {
+    use quick_xml::{Reader, events::Event};
+    let mut reader = Reader::from_str(manifest);
+    let mut actions = Vec::new();
+    let mut imports = Vec::new();
+    let mut in_game = false;
+    let mut kind = String::new();
+    let mut action = GameplayAction::default();
+    loop {
+        match reader.read_event().map_err(mlua::Error::external)? {
+            Event::Start(e) => match e.name().as_ref() {
+                b"InGameActions" => in_game = true,
+                b"AddGameplayScripts" | b"ImportFiles" if in_game => {
+                    let criteria = e
+                        .try_get_attribute("criteria")
+                        .map_err(mlua::Error::external)?
+                        .unwrap();
+                    assert_eq!(criteria.value.as_ref(), b"JAC_Absorption_Banseiki");
+                    kind = String::from_utf8(e.name().as_ref().to_vec()).unwrap();
+                    action = GameplayAction::default();
+                }
+                b"File" if !kind.is_empty() => {
+                    action.files.push(
+                        reader
+                            .read_text(e.name())
+                            .map_err(mlua::Error::external)?
+                            .into_owned(),
+                    );
+                }
+                b"LoadOrder" if !kind.is_empty() => {
+                    action.order = reader
+                        .read_text(e.name())
+                        .map_err(mlua::Error::external)?
+                        .parse()
+                        .map_err(mlua::Error::external)?;
+                }
+                _ => {}
+            },
+            Event::End(e) => match e.name().as_ref() {
+                b"InGameActions" => in_game = false,
+                b"AddGameplayScripts" if kind == "AddGameplayScripts" => {
+                    actions.push(std::mem::take(&mut action));
+                    kind.clear();
+                }
+                b"ImportFiles" if kind == "ImportFiles" => {
+                    imports.append(&mut action.files);
+                    kind.clear();
+                }
+                _ => {}
+            },
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    actions.sort_by_key(|a| a.order);
+    Ok((actions, imports))
+}
+
+fn gameplay_action_vm(
+    action: &GameplayAction,
+    imports: &[String],
+    saved: Option<&str>,
+    entry_override: Option<&str>,
+) -> mlua::Result<Lua> {
+    let lua = Lua::new(); // No metatable can inherit a previous entry's globals.
+    lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
+    lua.load(r#"
+      GameEvents=setmetatable({}, {__index=function(t,name)
+        local handlers={}
+        local event={Add=function(fn) handlers[#handlers+1]=fn end,
+          Count=function() return #handlers end,
+          Call=function(...) local result;for _,fn in ipairs(handlers) do result=fn(...) end;return result end}
+        rawset(t,name,event);return event
+      end})
+      Players[2].IsTurnActive=function() return true end
+      function SAVE_PROPERTIES()
+        local function literal(v)
+          if type(v)=='string' then return string.format('%q',v) end
+          if type(v)=='number' or type(v)=='boolean' then return tostring(v) end
+          assert(type(v)=='table','non-property save value')
+          local parts={};for k,x in pairs(v) do parts[#parts+1]='['..literal(k)..']='..literal(x) end
+          return '{'..table.concat(parts,',')..'}'
+        end
+        return 'Game.props='..literal(Game.props)
+      end
+    "#).exec()?;
+    if let Some(saved) = saved {
+        lua.load(saved).exec()?;
+    }
+    let mut files = std::collections::BTreeMap::new();
+    for file in imports {
+        if file.starts_with("Scripts/") && file.ends_with(".lua") {
+            let name = file
+                .strip_prefix("Scripts/")
+                .unwrap()
+                .strip_suffix(".lua")
+                .unwrap();
+            files.insert(
+                name.to_owned(),
+                fs::read_to_string(repo_path(&format!("poc/JAC_PoC_Absorption/{file}")))
+                    .map_err(mlua::Error::external)?,
+            );
+        }
+    }
+    let included = lua.create_table()?;
+    lua.globals().set(
+        "include",
+        lua.create_function(move |lua, name: String| {
+            if included.get::<bool>(name.as_str())? {
+                return Ok(());
+            }
+            let source = files
+                .get(&name)
+                .ok_or_else(|| mlua::Error::external(format!("include not imported: {name}")))?;
+            lua.load(source).set_name(format!("{name}.lua")).exec()?;
+            included.set(name, true)
+        })?,
+    )?;
+    for file in &action.files {
+        let source = if file == "Scripts/JAC_Absorption_Entry.lua" {
+            entry_override.map(str::to_owned)
+        } else {
+            None
+        }
+        .unwrap_or(
+            fs::read_to_string(repo_path(&format!("poc/JAC_PoC_Absorption/{file}")))
+                .map_err(mlua::Error::external)?,
+        );
+        // Run twice without include caching the root: exercise Entry's guard.
+        for _ in 0..2 {
+            lua.load(&source).set_name(file).exec()?;
+        }
+    }
+    Ok(lua)
+}
+
+#[test]
+fn real_modinfo_entry_vm_registers_native_handlers_once_and_resumes_saved_receipt()
+-> mlua::Result<()> {
+    let manifest = fs::read_to_string(repo_path(
+        "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
+    ))
+    .map_err(mlua::Error::external)?;
+    let (actions, imports) = gameplay_actions(&manifest)?;
+    assert_eq!(actions.len(), 1);
+    let mut saved = None;
+    for _ in 0..4 {
+        // Initial load plus fresh VMs for save/load/rejoin.
+        for action in &actions {
+            let lua = gameplay_action_vm(action, &imports, saved.as_deref(), None)?;
+            lua.load(
+                r#"
+              assert(_VERSION=='Lua 5.1')
+              assert(JAC_AbsorptionGameplay and JAC_AbsorptionFlowGameplay)
+              assert(JAC_AbsorptionAdmissionGameplay and JAC_AbsorptionProductGameplay)
+              assert(JAC_CarrierMP.Preflight and JAC_CarrierMP.Advance)
+              assert(JAC_NativeInventory.With and JAC_NativeInventory.Tick)
+              assert(not JAC_NativeInventory.HasContext())
+              JAC_CarrierMP.Preflight({NativeWorks={}})
+              include('JAC_CarrierBoundary');include('JAC_NativeInventory')
+              for _,name in ipairs({'JAC_CarrierBoundary_Operation','JAC_CarrierMP_Operation',
+                'JAC_NativeInventory_Operation','JAC_AbsorptionFlow_Operation',
+                'JAC_AbsorptionProduct_Operation','JAC_Absorption_TestCall'}) do
+                assert(GameEvents[name].Count()==1,name)
+              end
+              assert(GameEvents.PlayerTurnStartComplete.Count()==1)
+              assert(GameEvents.OnPlayerTurnEnded.Count()==1)
+              assert(GameEvents.OnGameTurnStarted.Count()==4)
+              assert(ExposedMembers.JAC_Absorption.Apply==nil)
+              assert(ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
+              assert(ExposedMembers.JAC_AbsorptionProduct.Command==nil)
+              assert(ExposedMembers.JAC_NativeInventory.With==nil)
+              assert(ExposedMembers.JAC_CarrierMP.Advance==nil)
+              GameConfiguration.IsAnyMultiplayer=function() return true end
+              local inventory=Game:GetProperty('JAC_NATIVE_INVENTORY_V1')
+              if not inventory then
+                local ok,err=pcall(JAC_NativeInventory.With,
+                  {ID='vm-inventory',From=1,To=2},'CITY_VERIFY',function()
+                    error('missing observation must not execute continuation')
+                  end)
+                assert(not ok and err=='JAC_ABSORPTION_WAITING_UI',tostring(err))
+              end
+              local pending=ExposedMembers.JAC_NativeInventory.GetPending()
+              assert(#pending==1 and pending[1].ID=='vm-inventory' and pending[1].Actor==2)
+              local nonce=pending[1].Nonce
+              GameEvents.PlayerTurnStartComplete.Call()
+              assert(ExposedMembers.JAC_NativeInventory.GetPending()[1].Nonce==nonce)
+              pending[1].ID='detached-ui-copy'
+              assert(ExposedMembers.JAC_NativeInventory.GetPending()[1].ID=='vm-inventory')
+              local packet=Game:GetProperty('VM_PACKET')
+              if not packet then
+                local c={Token='vm-carrier',Phase='BORROW',Route='TO_FREE',Index=900,
+                  Owner=3,Borrower=2,X=16,Y=0,Building=1,Slot=0,
+                  OriginalCity=CITIES[16]:GetID(),BorrowToken='vm-observation'}
+                local state=JAC_AbsorptionGameplay.GetState()
+                state.Transactions.vm={NativeWorks={{Carrier=c}}}
+                Game:SetProperty(JAC_AbsorptionRules.STATE_KEY,state)
+                packet={Version=1,Command='BOUNDARY',Actor=2,Turn=CURRENT_TURN,
+                  CityOwner=3,CityID=CITIES[16]:GetID(),ObservationToken=c.BorrowToken}
+                for _,name in ipairs({'Token','Phase','Route','Index','Owner','Borrower',
+                  'X','Y','Building','Slot','OriginalCity'}) do packet[name]=c[name] end
+                local parts={};for _,name in ipairs(JAC_AbsorptionRules.Keys(packet)) do
+                  local v=tostring(packet[name]);parts[#parts+1]=#v..':'..v
+                end
+                packet.RequestID=table.concat(parts);Game:SetProperty('VM_PACKET',packet)
+              else
+                assert(ExposedMembers.JAC_CarrierBoundary.GetReceipt(packet.RequestID).Count==1)
+              end
+              assert(GameEvents.JAC_CarrierBoundary_Operation.Call(2,packet)==true)
+              assert(GameEvents.JAC_CarrierBoundary_Operation.Call(2,packet)==true)
+              assert(ExposedMembers.JAC_CarrierBoundary.GetReceipt(packet.RequestID).Count==1)
+              local before=JAC_AbsorptionRules.Canonical(Game.props)
+              assert(GameEvents.JAC_CarrierMP_Operation.Call(2,{})==false)
+              assert(GameEvents.JAC_NativeInventory_Operation.Call(2,{})==false)
+              assert(JAC_AbsorptionRules.Canonical(Game.props)==before)
+              GameEvents.JAC_Absorption_TestCall.Call('mp','ENGINE','Apply',{PLAN})
+              assert(Game:GetProperty('JAC_ABSORPTION_TEST_RESULT_V1')==nil)
+              assert(TRANSFERS==0 and SPAWNS==0)
+            "#,
+            )
+            .exec()?;
+            saved = Some(lua.load("return SAVE_PROPERTIES()").eval::<String>()?);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn former_load_orders_reproduce_both_private_engine_assertions_in_separate_vms() -> mlua::Result<()>
+{
+    let manifest = fs::read_to_string(repo_path(
+        "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
+    ))
+    .map_err(mlua::Error::external)?;
+    let mut legacy = manifest.clone();
+    let tag = "<ImportFiles id=\"JAC_Absorption_Native_Files\"";
+    let start = legacy.find(tag).unwrap();
+    let end = start + legacy[start..].find("</ImportFiles>").unwrap() + "</ImportFiles>".len();
+    legacy.replace_range(start..end, "");
+    for (name, order) in [("JAC_CarrierBoundary", 205), ("JAC_NativeInventory", 206)] {
+        legacy = legacy.replace("</InGameActions>", &format!(
+            "<AddGameplayScripts id=\"{name}\" criteria=\"JAC_Absorption_Banseiki\"><Properties><LoadOrder>{order}</LoadOrder></Properties><File>Scripts/{name}.lua</File></AddGameplayScripts></InGameActions>"));
+    }
+    let entry = fs::read_to_string(repo_path(
+        "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua",
+    ))
+    .map_err(mlua::Error::external)?;
+    let legacy_entry = entry
+        .replace("include(\"JAC_CarrierBoundary\")", "")
+        .replace("include(\"JAC_NativeInventory\")", "");
+    let (actions, imports) = gameplay_actions(&legacy)?;
+    assert_eq!(actions.len(), 3);
+    // Even keeping the successful engine VM alive cannot share its globals.
+    let engine = gameplay_action_vm(&actions[0], &imports, None, Some(&legacy_entry))?;
+    engine.load("assert(JAC_AbsorptionGameplay)").exec()?;
+    for action in &actions[1..] {
+        let error = match gameplay_action_vm(action, &imports, None, None) {
+            Ok(_) => panic!("independent entry unexpectedly inherited the engine"),
+            Err(error) => error.to_string(),
+        };
+        assert!(error.contains("assertion failed!"), "{error}");
+        let file = &action.files[0];
+        let line = if file.ends_with("JAC_CarrierBoundary.lua") {
+            144
+        } else {
+            55
+        };
+        assert!(error.contains(&format!("{file}\"]:{line}:")), "{error}");
+    }
+    Ok(())
 }
 
 #[test]

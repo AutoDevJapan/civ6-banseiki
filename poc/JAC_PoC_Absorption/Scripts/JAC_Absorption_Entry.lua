@@ -2,6 +2,10 @@
 -- No gameplay dependency is obtained through a cross-context function table.
 if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
+-- These bindings capture the engine's private globals; LoadOrder cannot share
+-- them between separate AddGameplayScripts VMs. Load before their consumers.
+include("JAC_CarrierBoundary")
+include("JAC_NativeInventory")
 include("JAC_Absorption_Flow")
 include("JAC_Absorption_Admission")
 include("JAC_Absorption_Product")
