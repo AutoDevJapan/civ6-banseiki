@@ -282,6 +282,100 @@ fn consumed_inventory_requests_drop_large_snapshots_and_expire_next_turn() {
 }
 
 #[test]
+fn ui_receipts_remain_small_and_terminal_unused_requests_expire() {
+    let lua = world(2, 3);
+    lua.load("CITIES[4]:SetProperty('JAC_ABSORPTION_CITY_FAITH_V1',{Followers=4,Blob=string.rep('復',16000)});JAC_AbsorptionGameplay.Apply(PLAN)").exec().unwrap();
+    for _ in 0..4 {
+        if lua
+            .load(
+                "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
+            )
+            .eval::<bool>()
+            .unwrap()
+        {
+            break;
+        }
+        let parts = publish_parts(&lua);
+        assert!(parts.len() > 2);
+        for packet in &parts {
+            assert!(receive(&lua, packet));
+        }
+        for packet in parts.iter().rev() {
+            assert!(receive(&lua, packet));
+        }
+    }
+    lua.load(r#"
+      local box=Game:GetProperty('JAC_NATIVE_INVENTORY_V1')
+      assert(#JAC_NativeInventoryCodec.Encode(box)<12000)
+      for _,q in pairs(box.Requests) do
+        assert(q.Consumed and q.Receipt and q.Receipt.PartFingerprints and not q.Receipt.Parts and not q.Receipt.Payload)
+      end
+      box.Requests['native-city:SOURCE_CANCEL']={ID=PLAN.ID,From=1,To=3,Phase='SOURCE_CANCEL',Turn=5,
+        Core={Blob=string.rep('x',16000)},Observation={Blob=string.rep('x',16000)}}
+      box.Requests['still-active:CITY_COMMIT']={ID='still-active',From=1,To=3,Phase='CITY_COMMIT',Turn=5,
+        Core={},CoreSignature='pending',Actor=2}
+      local state=JAC_AbsorptionGameplay.GetState();state.Transactions['still-active']={Status='WAITING_UI'}
+      Game:SetProperty('JAC_ABSORPTION_STATE_V1',state);Game:SetProperty('JAC_NATIVE_INVENTORY_V1',box)
+      CURRENT_TURN=6;GameEvents.PlayerTurnStartComplete.Emit(2)
+      box=Game:GetProperty('JAC_NATIVE_INVENTORY_V1')
+      assert(box.Requests['native-city:SOURCE_CANCEL']==nil and box.Requests['still-active:CITY_COMMIT'])
+      assert(TRANSFERS==2 and MOVES==0)
+    "#).exec().unwrap();
+}
+
+#[test]
+fn legacy_v1_receipt_replay_migrates_without_repeating_city_transfer() {
+    let lua = world(2, 3);
+    lua.load("JAC_AbsorptionGameplay.Apply(PLAN)")
+        .exec()
+        .unwrap();
+    let parts = publish_parts(&lua);
+    for packet in &parts {
+        assert!(receive(&lua, packet));
+    }
+    let part = lua.create_table().unwrap();
+    for (i, packet) in parts.iter().enumerate() {
+        part.set(i + 1, packet.clone()).unwrap();
+    }
+    lua.globals().set("OLD_PARTS", part).unwrap();
+    lua.load(r#"
+      local box=Game:GetProperty('JAC_NATIVE_INVENTORY_V1')
+      local q=box.Requests['native-city:SOURCE_PREPARE']
+      q.Receipt={Actor=q.Actor,Nonce=q.Nonce,Turn=q.Turn};q.Chunks={}
+      for _,raw in ipairs(OLD_PARTS) do local p=JAC_NativeInventoryCodec.Decode(raw);q.Chunks[p.Part]=p.Payload end
+      Game:SetProperty('JAC_NATIVE_INVENTORY_V1',box)
+    "#).exec().unwrap();
+    let resumed = loaded(2, 3, &saved(&lua));
+    for packet in &parts {
+        assert!(receive(&resumed, packet));
+    }
+    resumed.load("local q=Game:GetProperty('JAC_NATIVE_INVENTORY_V1').Requests['native-city:SOURCE_PREPARE'];assert(q.Receipt.PartFingerprints and not q.Chunks and TRANSFERS==2 and MOVES==0)").exec().unwrap();
+}
+
+#[test]
+fn source_change_between_chunks_reissues_nonce_and_rejects_late_fragments() {
+    let lua = world(2, 3);
+    lua.load("CITIES[4]:SetProperty('JAC_ABSORPTION_CITY_FAITH_V1',{Followers=4,Blob=string.rep('復',16000)});JAC_AbsorptionGameplay.Apply(PLAN)").exec().unwrap();
+    let old = publish_parts(&lua);
+    assert!(old.len() > 2);
+    assert!(receive(&lua, &old[0]));
+    lua.load("CITIES[4].pop=CITIES[4].pop+1").exec().unwrap();
+    assert!(!receive(&lua, &old[1]));
+    for packet in old.iter().skip(2) {
+        assert!(!receive(&lua, packet));
+    }
+    lua.load("assert(TRANSFERS==0 and MOVES==0)")
+        .exec()
+        .unwrap();
+    for packet in publish_parts(&lua) {
+        assert!(receive(&lua, &packet));
+    }
+    lua.load("assert(TRANSFERS==2 and MOVES==0)")
+        .exec()
+        .unwrap();
+}
+
+#[test]
 fn turn_activity_difference_never_changes_saved_provider_or_nonce() {
     let a = world(2, 0);
     let b = world(3, 0);

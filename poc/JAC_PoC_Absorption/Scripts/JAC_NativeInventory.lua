@@ -62,18 +62,41 @@ local function box() return R.Copy(Game:GetProperty(KEY) or {Version=1,Serial=0,
 local function save(b) assert(b.Version==1);Game:SetProperty(KEY,R.Copy(b)) end
 local function prune(b,turn)
   local changed=false
+  local transactions
   for key,q in pairs(b.Requests) do
-    if q.Consumed and q.Turn<turn then b.Requests[key]=nil;changed=true end
+    if q.Turn<turn then
+      local terminal=q.Consumed
+      if not terminal and q.Phase~='FLOW_BEGIN' and q.Phase~='FLOW_CHECK'
+        and not q.Phase:match('^CITY_LOYALTY:') then
+        if not transactions then transactions=(Game:GetProperty(R.STATE_KEY) or {}).Transactions or {} end
+        local tx=transactions[q.ID]
+        terminal=not tx or tx.Status=='COMPLETE' or tx.Status=='CANCELLED'
+      end
+      if terminal then b.Requests[key]=nil;changed=true end
+    end
   end
   return changed
 end
+local function fingerprint(payload)
+  local first,second=0,1
+  for at=1,#payload do local byte=payload:byte(at)
+    -- Products remain below 2^53, so these integer operations are exact in
+    -- Lua 5.1 doubles. Receipts acknowledge completed work, never authorize
+    -- another mutation or replace its saved observation.
+    first=(first*257+byte)%2147483647;second=(second*263+byte)%2147483629
+  end
+  return {Bytes=#payload,First=first,Second=second}
+end
 local function receiptPayload(q)
   local receipt=q.Receipt
-  if receipt and not receipt.Parts and not receipt.Payload then
+  if receipt and not receipt.PartFingerprints and not receipt.Fingerprint then
     -- Older V1 saves retain the accepted observation/chunks with the receipt.
-    if q.Chunks then receipt.Parts=R.Copy(q.Chunks)
-    elseif q.Observation then receipt.Payload=Encode(q.Observation) end
+    local parts=receipt.Parts or q.Chunks
+    if parts then
+      receipt.PartFingerprints={};for i,part in ipairs(parts) do receipt.PartFingerprints[i]=fingerprint(part) end
+    elseif receipt.Payload or q.Observation then receipt.Fingerprint=fingerprint(receipt.Payload or Encode(q.Observation)) end
   end
+  if receipt then receipt.Parts=nil;receipt.Payload=nil end
   return receipt
 end
 local function active(id)
@@ -339,8 +362,12 @@ local function receive(actor,p)
   if q.Receipt then
     local receipt=receiptPayload(q)
     if chunked then
-      assert(receipt.Parts and #receipt.Parts==p.Parts and receipt.Parts[p.Part]==p.Payload,'inventory duplicate chunk changed')
-    else assert(receipt.Payload==p.Payload,'inventory duplicate payload changed') end
+      assert(receipt.PartFingerprints and #receipt.PartFingerprints==p.Parts
+        and Equal(receipt.PartFingerprints[p.Part],fingerprint(p.Payload)),'inventory duplicate chunk changed')
+    else assert(Equal(receipt.Fingerprint,fingerprint(p.Payload)),'inventory duplicate payload changed') end
+    if q.Consumed and (q.Core or q.Observation or q.Plan or q.Chunks) then
+      q.Core=nil;q.CoreSignature=nil;q.Observation=nil;q.Plan=nil;q.Chunks=nil;q.ChunkCount=nil;save(b)
+    end
     return true
   end
   if chunked then
@@ -365,8 +392,10 @@ local function receive(actor,p)
   if direct then assert(Equal(direct,o),'inventory differs from available Core getters') end
   if q.Observation then assert(Equal(q.Observation,o),'inventory duplicate payload changed');return true end
   q.Observation=R.Copy(o);q.EvidenceKind=direct and 'DIRECT_CORE' or 'SYNCHRONIZED_ACTOR_OBSERVATION'
+  local fingerprints
+  if chunked then fingerprints={};for i,part in ipairs(q.Chunks) do fingerprints[i]=fingerprint(part) end end
   q.Receipt={Actor=actor,Nonce=q.Nonce,Turn=q.Turn,
-    Parts=chunked and R.Copy(q.Chunks) or nil,Payload=not chunked and payload or nil}
+    PartFingerprints=fingerprints,Fingerprint=not chunked and fingerprint(payload) or nil}
   q.Chunks=nil;q.ChunkCount=nil;save(b);return true
 end
 GameEvents.JAC_NativeInventory_Operation.Add(function(actor,p)
