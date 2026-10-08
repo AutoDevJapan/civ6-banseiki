@@ -64,7 +64,10 @@ fn install_absorption_adapter(h: &Harness) {
         GameEvents.JAC_Absorption_TestCall={Add=function() end}
         GameConfiguration.IsAnyMultiplayer=function() return false end
         include=function(name)
-          if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow' then return end
+          -- This adapter harness stubs the absorption engine and transport;
+          -- the native entry tests load those modules in their real context.
+          if name=='JAC_Absorption_Gameplay' or name=='JAC_Absorption_Flow'
+            or name=='JAC_CarrierBoundary' or name=='JAC_NativeInventory' then return end
           local source=name=='JAC_ReligionPersistence' and RP_SOURCE
             or name=='JAC_RP_AbsorptionAdapter' and RP_ADAPTER_SOURCE
           assert(source, 'unexpected VFS include: '..name)
