@@ -412,15 +412,30 @@ fn wait_civ6_exit(r: &mut impl Runner, deadline: f64) -> Result<bool, String> {
 /// Check the exact Civ6 executable path and skip reporters whose Civ6 parent
 /// still lives. Other Firaxis games and active Civ6 processes are untouched.
 pub fn close_stale_civ6_reporters(r: &mut impl Runner) -> Result<(), String> {
-    let out = r.run(
-        Call::new(args(&[
-            "powershell",
-            "-NoProfile",
-            "-Command",
-            REPORTER_COMMAND,
-        ]))
-        .timeout(30.0),
-    )?;
+    let call = Call::new(args(&[
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        REPORTER_COMMAND,
+    ]))
+    .timeout(30.0);
+    let mut out = r.run(call.clone())?;
+    // A reporter can finish between CIM enumeration and Stop-Process. Repeat
+    // the scoped discovery once, rather than treating any stop failure as exit.
+    // Access denied, inspection failures and a second failure still abort.
+    if out.code != 0
+        && out.stderr.lines().any(|line| {
+            line.split_once("FullyQualifiedErrorId")
+                .is_some_and(|(_, value)| {
+                    value.trim().strip_prefix(':').is_some_and(|value| {
+                        value.trim()
+                            == "NoProcessFoundForGivenId,Microsoft.PowerShell.Commands.StopProcessCommand"
+                    })
+                })
+        })
+    {
+        out = r.run(call)?;
+    }
     if out.code != 0 {
         return Err(format!(
             "Could not close the stale Civ6 crash reporter: {}",
@@ -1515,6 +1530,7 @@ fn main_owned(
             state.round()["exit"] = exit_evidence;
         }
         if let Err(error) = closed {
+            r.print(&format!("RESULT {name} {scenario} close-error {artifacts}"))?;
             return Err(format!(
                 "driver exit {}; Civ6 close failed: {error}",
                 windows_exit_code(run.code)

@@ -298,17 +298,22 @@ mod win {
         access: u32,
         f: impl FnOnce(isize) -> Result<T>,
     ) -> Result<T> {
-        let guard = Owned(
-            open_process(pid, access)
-                .ok_or_else(|| Error::input(format!("Cannot open process {pid}")))?,
-        );
+        let guard = Owned(open_process(pid, access).ok_or_else(|| {
+            Error::input(format!(
+                "Cannot open process {pid}: {}",
+                std::io::Error::last_os_error()
+            ))
+        })?);
         f(guard.0)
     }
     pub(crate) fn image_path(h: Handle) -> Result<String> {
         let mut buf = vec![0u16; 32768];
         let mut len = buf.len() as u32;
         if unsafe { QueryFullProcessImageNameW(h, 0, buf.as_mut_ptr(), &mut len) } == 0 {
-            return Err(Error::input("Cannot read Civ VI window executable"));
+            return Err(Error::input(format!(
+                "Cannot read Civ VI window executable: {}",
+                std::io::Error::last_os_error()
+            )));
         }
         Ok(String::from_utf16_lossy(&buf[..len as usize]))
     }
@@ -373,8 +378,11 @@ mod win {
             if unsafe { GetWindowThreadProcessId(h, &mut pid) } == 0 || pid == 0 {
                 return Err(Error::input("Cannot identify Civ VI window process"));
             }
-            let path = with_process(pid, 0x1000, image_path)
-                .map_err(|_| Error::input("Cannot read Civ VI window executable"))?;
+            let path = with_process(pid, 0x1000, image_path).map_err(|error| {
+                Error::input(format!(
+                    "Cannot read Civ VI window executable (PID {pid}): {error}"
+                ))
+            })?;
             Ok(path
                 .rsplit(['\\', '/'])
                 .next()

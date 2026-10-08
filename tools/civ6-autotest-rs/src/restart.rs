@@ -404,7 +404,14 @@ pub fn close_orphan_civ_reporters_with<B: LifecycleBackend>(backend: &mut B) -> 
         if !backend.civ_ids()?.is_empty() {
             return Ok(());
         }
-        backend.terminate_reporter(pid)?;
+        if let Err(error) = backend.terminate_reporter(pid) {
+            // The helper can exit after its image was checked. Require a fresh
+            // successful enumeration proving it absent; a remaining helper or
+            // an inspection failure must still prevent the Steam launch.
+            if backend.reporter_ids()?.contains(&pid) {
+                return Err(error);
+            }
+        }
     }
     Ok(())
 }

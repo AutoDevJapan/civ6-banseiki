@@ -337,6 +337,38 @@ fn reporter_failure_aborts() {
     assert!(close_stale_civ6_reporters(&mut r)
         .unwrap_err()
         .contains("denied"));
+    assert_eq!(r.calls.len(), 1);
+}
+
+const REPORTER_GONE: &str = "+ FullyQualifiedErrorId : NoProcessFoundForGivenId,Microsoft.PowerShell.Commands.StopProcessCommand";
+
+#[test]
+fn reporter_exit_during_stop_requires_successful_scoped_rediscovery() {
+    let mut r = Fake::outputs(&[("", REPORTER_GONE, 1), ("", "", 0)]);
+    close_stale_civ6_reporters(&mut r).unwrap();
+    assert_eq!(r.calls.len(), 2);
+    assert_eq!(r.calls[0].args, r.calls[1].args);
+    assert_eq!(r.calls[1].args.last().unwrap(), REPORTER_COMMAND);
+}
+
+#[test]
+fn reporter_rediscovery_failure_is_not_suppressed_or_repeated() {
+    for error in [REPORTER_GONE, "access denied"] {
+        let mut r = Fake::outputs(&[("", REPORTER_GONE, 1), ("", error, 1)]);
+        assert!(close_stale_civ6_reporters(&mut r).is_err());
+        assert_eq!(r.calls.len(), 2);
+    }
+}
+
+#[test]
+fn reporter_error_prose_does_not_authorize_rediscovery() {
+    let mut r = Fake::outputs(&[(
+        "",
+        "NoProcessFoundForGivenId while inspection was denied",
+        1,
+    )]);
+    assert!(close_stale_civ6_reporters(&mut r).is_err());
+    assert_eq!(r.calls.len(), 1);
 }
 #[test]
 fn answering_game_is_still_closed_before_relaunch() {
@@ -1344,6 +1376,29 @@ fn chain_closes_game_after_each_run_and_on_exit() {
     );
 }
 #[test]
+fn chain_preserves_driver_result_location_when_cleanup_fails() {
+    for code in [0, 7] {
+        let f = Fixture::new();
+        let mut r = ready_chain(&f, code);
+        r.replies[READY_CLEANUP_REPLY + 5] = Ok(Output {
+            code: 1,
+            stderr: "reporter access denied".into(),
+            ..Output::default()
+        });
+        let error = cli(&mut r, &f.p, &["name:s.json".into()]).unwrap_err();
+        assert!(error.contains(&format!("driver exit {code}; Civ6 close failed")));
+        assert!(r.printed.contains(&format!(
+            "RESULT name s.json close-error {}",
+            path(f.root.join("artifacts"))
+        )));
+        assert!(!r.printed.iter().any(|line| line == "CHAIN DONE"));
+        assert_eq!(
+            read_text(f.root.join("artifacts.log")).unwrap(),
+            "[OK] one\n[FAIL] two\nnoise\n"
+        );
+    }
+}
+#[test]
 fn chain_stop_on_failure_retains_exit_code_and_cleans() {
     let f = Fixture::new();
     let mut r = ready_chain(&f, 7);
@@ -2168,22 +2223,43 @@ fn driver_is_bounded_by_the_remaining_scenario_window() {
 
 #[cfg(windows)]
 #[test]
+#[ignore = "only invoked as the managed timeout fixture by its parent test"]
+fn managed_timeout_output_child() {
+    if std::env::var_os("CC_LIVE_TIMEOUT_OUTPUT_CHILD").is_none() {
+        return;
+    }
+    use std::io::Write;
+    println!("partial startup diagnostic");
+    std::io::stdout().flush().unwrap();
+    loop {
+        std::thread::park_timeout(std::time::Duration::from_secs(60));
+    }
+}
+
+#[cfg(windows)]
+#[test]
 fn managed_merged_timeout_retains_partial_output() {
+    // A native child avoids the shell/ping startup competing with the one-second
+    // deadline under parallel load. The child flushes before it deliberately
+    // blocks, and the managed timeout must still retain that output and reap it.
+    let executable = std::env::current_exe().unwrap();
     let error = process::RealRunner
         .run(
             Call::new(args(&[
-                "cmd.exe",
-                "/d",
-                "/c",
-                "echo partial startup diagnostic & ping 127.0.0.1 -n 31 > nul",
+                &path(executable),
+                "--ignored",
+                "--exact",
+                "managed_timeout_output_child",
+                "--nocapture",
             ]))
+            .env("CC_LIVE_TIMEOUT_OUTPUT_CHILD", "1")
             .managed()
             .merged()
-            .timeout(1.0),
+            .timeout(5.0),
         )
         .unwrap_err();
-    assert!(error.contains("command timed out"));
-    assert!(error.contains("partial startup diagnostic"));
+    assert!(error.contains("command timed out"), "{error}");
+    assert!(error.contains("partial startup diagnostic"), "{error}");
 }
 
 struct ReliabilityRunner {
