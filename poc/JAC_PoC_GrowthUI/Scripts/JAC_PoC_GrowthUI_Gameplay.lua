@@ -173,7 +173,7 @@ end
 
 local function CopyStarts(value)
 	local result = {}
-	-- Compact waiting receipts to one row per human, including old saved rows.
+	-- Compact waiting receipts to one row per major, including old saved rows.
 	-- Keep the actual start count; a long initialization wait must not lose XP.
 	for _, row in pairs(value or {}) do
 		local key = tostring(row.owner)
@@ -207,7 +207,13 @@ local function OnPlayerTurnStartComplete(playerID)
 		Game:SetProperty(ACTIVE_KEY, nextActive)
 		if not Game:GetProperty(INITIALIZED_KEY) then
 			local pending = CopyStarts(Game:GetProperty(PENDING_KEY))
-			if p:IsHuman() then
+			-- Core's human flag may lag the configured roster. Keep starts for
+			-- every alive major, then filter through IsHuman when applying XP.
+			local major = false
+			for _,alive in ipairs(PlayerManager.GetAliveMajors()) do
+				if alive:GetID() == playerID then major = true; break end
+			end
+			if major then
 				local key = tostring(playerID)
 				local prior = pending[key]
 				if not prior or turn > prior.turn then
@@ -219,7 +225,12 @@ local function OnPlayerTurnStartComplete(playerID)
 			return
 		end
 	elseif not Game:GetProperty(INITIALIZED_KEY) then InitializeNewGame() end
-	if Game:GetProperty(INITIALIZED_KEY) then ApplyGrowth(playerID, turn) end
+	if Game:GetProperty(INITIALIZED_KEY) then
+		-- A failed unit write may leave only part of a pending batch applied.
+		-- Drain it before a newer turn can advance LastXPTurn past old receipts.
+		if Game:GetProperty(PENDING_KEY) then DrainPending() end
+		ApplyGrowth(playerID, turn)
+	end
 end
 
 local function ReceiveRoster(actor, params)
@@ -252,12 +263,8 @@ local function ReceiveRoster(actor, params)
 	for _,p in ipairs(HumanPlayers()) do assert(listed[p:GetID()], "human player omitted from roster") end
 	if Game:GetProperty(INITIALIZED_KEY) then return true end
 	local known = Game:GetProperty(ROSTER_KEY)
-	-- An authenticated active human may publish a changed configured roster.
-	-- Removed seats must already be nonhuman in Core; UI lag may still make
-	-- newly configured seats nonhuman, so initialization continues to wait.
-	for _,id in ipairs(known or {}) do
-		assert(listed[id] or not majors[id] or not majors[id]:IsHuman(), "human removed from saved roster")
-	end
+	-- The human coverage check above also protects updates to the saved roster.
+	-- Newly configured seats may still lag Core's human flag, so continue waiting.
 	if not known or table.concat(known, ",") ~= params.Roster then Game:SetProperty(ROSTER_KEY, ids) end
 	DrainPending()
 	return true

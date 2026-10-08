@@ -44,7 +44,10 @@ impl Endpoint {
                   n=n+1; local id=ids[n]; if not id then return nil end
                   return id,{GetID=function() return id end,
                     GetProperty=function(_,key) return copy(unitprops[pid][id][key]) end,
-                    SetProperty=function(_,key,value) unitprops[pid][id][key]=copy(value) end}
+                    SetProperty=function(_,key,value)
+                      if failUnit==id then error('unit property write refused') end
+                      unitprops[pid][id][key]=copy(value)
+                    end}
                 end
               end} end}
           end
@@ -394,6 +397,41 @@ fn actual_ui_roster_packet_replayed_into_both_gameplay_vms_initializes_once() {
 }
 
 #[test]
+fn delayed_core_human_flag_does_not_lose_a_configured_humans_first_start() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; humans[1]=false; beginturn(1); endturn(1); beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'})); humans[1]=true; assert(rosteroperation(0,{Turn=turn,Roster='0,1'}))");
+    for owner in 0..=1 {
+        assert_eq!(endpoint.record(owner, 65536)["XP"], 20);
+        assert_eq!(endpoint.record(owner, 65536)["LastXPTurn"], 1);
+    }
+}
+
+#[test]
+fn pending_receipts_drain_after_partial_write_failure_without_losing_or_duplicating_xp() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; present[1]=false; beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'})); present[1]=true; failUnit=131073; assert(not pcall(beginturn,1)); failUnit=nil; assert(props.JAC_POC_GROWTHUI_INITIALIZED==nil)");
+    // First retry completes initialization but fails while paying one unit.
+    endpoint.exec("local writes=0; local original=Game.SetProperty; Game.SetProperty=function(self,key,value) original(self,key,value); if key=='JAC_POC_GROWTHUI_INITIALIZED' then failUnit=131073 end end; assert(not pcall(beginturn,1)); assert(props.JAC_POC_GROWTHUI_INITIALIZED); Game.SetProperty=original; failUnit=nil; turn=2; beginturn(0)");
+    assert_eq!(endpoint.record(0, 65536)["XP"], 10);
+    assert_eq!(endpoint.record(0, 131073)["XP"], 10);
+    assert_eq!(endpoint.record(1, 65536)["XP"], 20);
+    assert_eq!(endpoint.record(1, 131073)["XP"], 20);
+    assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_PENDING_STARTS"].is_null());
+    let once = endpoint.state();
+    endpoint.exec("beginturn(0)");
+    assert_eq!(once, endpoint.state());
+}
+
+#[test]
+fn revised_roster_cannot_remove_a_still_human_seat_or_change_saved_pending_receipts() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; present[1]=false; beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'}))");
+    let waiting = endpoint.state();
+    endpoint.exec("assert(not rosteroperation(0,{Turn=turn,Roster='0'}))");
+    assert_eq!(waiting, endpoint.state());
+}
+
+#[test]
 fn changed_roster_after_ai_takeover_unblocks_initialization_and_saved_pending_growth() {
     let host = Endpoint::new(0, false, None);
     host.exec("network=true; present[1]=false; beginturn(0); assert(rosteroperation(0,{Turn=turn,Roster='0,1'})); turn=2; beginturn(0); humans[1]=false");
@@ -414,18 +452,20 @@ fn changed_roster_after_ai_takeover_unblocks_initialization_and_saved_pending_gr
 }
 
 #[test]
-fn long_roster_wait_compacts_only_human_receipts_and_retains_all_growth() {
+fn long_roster_wait_compacts_major_receipts_and_applies_only_human_growth() {
     let endpoint = Endpoint::new(0, false, None);
     endpoint.exec("network=true; humans[1]=false; for t=1,100 do turn=t; beginturn(0); beginturn(0); beginturn(1) end");
     let rows = endpoint.state()["properties"]["JAC_POC_GROWTHUI_PENDING_STARTS"].clone();
-    assert_eq!(rows.as_object().unwrap().len(), 1);
+    assert_eq!(rows.as_object().unwrap().len(), 2);
     assert_eq!(rows["0"]["starts"], 100);
+    assert_eq!(rows["1"]["starts"], 100);
     let peer = Endpoint::new(1, true, Some(&endpoint.state()));
     peer.exec("network=true; humans[1]=false; assert(rosteroperation(0,{Turn=turn,Roster='0'}))");
     // Reference the existing normal per-turn path for XP and level arithmetic.
     let reference = Endpoint::new(0, false, None);
     reference.exec("humans[1]=false; loadscreen(); for t=1,100 do turn=t; beginturn(0) end");
     assert_eq!(peer.record(0, 65536), reference.record(0, 65536));
+    assert!(peer.record(1, 65536).is_null());
     assert!(peer.state()["properties"]["JAC_POC_GROWTHUI_PENDING_STARTS"].is_null());
 }
 

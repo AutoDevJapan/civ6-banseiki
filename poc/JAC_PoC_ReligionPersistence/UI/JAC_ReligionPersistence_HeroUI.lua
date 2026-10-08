@@ -24,6 +24,8 @@ function Bridge.ResolveDiscovery(id, discovery, outcome, options)
   if outcome == "HERO" then
     local p = Players[Game.GetLocalPlayer()]
     if not p or not p:IsHuman() or not p:IsTurnActive() then return false end
+    local city = type(options.city) == "number" and p:GetCities():FindID(options.city)
+    if not city or city:GetOwner() ~= p:GetID() then return false end
     local rp = ExposedMembers.JAC_ReligionPersistence
     if not rp then return false end
     local candidates, reserved = {}, {}
@@ -31,7 +33,10 @@ function Bridge.ResolveDiscovery(id, discovery, outcome, options)
       if hero.heroClass ~= nil then reserved[hero.heroClass] = true end
     end
     for row in GameInfo.HeroClasses() do
-      if not reserved[row.Index] and Bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates+1] = row end
+      local project = GameInfo.Projects[row.CreationProjectType]
+      local building = project and GameInfo.Buildings[project.RequiredBuilding]
+      if building and city:GetBuildings():HasBuilding(building.Index)
+        and not reserved[row.Index] and Bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates+1] = row end
     end
     table.sort(candidates, function(a,b) return a.HeroClassType < b.HeroClassType end)
     if not candidates[1] then return false end
