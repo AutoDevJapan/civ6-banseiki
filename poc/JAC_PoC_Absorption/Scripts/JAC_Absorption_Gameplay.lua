@@ -1806,9 +1806,9 @@ end
 NativeWorkAtTarget = function(snap)
   local mp = snap.Carrier and snap.Carrier.MP
   if mp then
-    assert(mp.Phase == "DONE" and mp.ProofTurn == Game.GetCurrentGameTurn(),
-      "MP work requires a fresh shared publication")
-    local work = assert(mp.Final.Locations[1])
+    assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
+      "MP work requires a fresh synchronized actor observation")
+    local work = assert(mp.FinalActorObservation.Locations[1])
     local city = assert(CityManager.GetCityAt(work.X, work.Y))
     assert(city:GetOwner() == work.Owner and city:GetID() == work.CityID
       and SameNativeWorkSlot(work, snap.TargetSlot), "MP final work city changed")
@@ -1845,9 +1845,9 @@ end
 NativeWorkSourceEmpty = function(tx, snap)
   local mp = snap.Carrier and snap.Carrier.MP
   if mp then
-    assert(mp.Phase == "DONE" and mp.ProofTurn == Game.GetCurrentGameTurn(),
-      "MP source requires a fresh shared publication")
-    local source = assert(mp.Final.Cities[1])
+    assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
+      "MP source requires a fresh synchronized actor observation")
+    local source = assert(mp.FinalActorObservation.Cities[1])
     local city = assert(CityManager.GetCityAt(source.X, source.Y))
     assert(source.Work == -1 and city:GetID() == source.ID
       and city:GetOwner() == source.Owner, "MP source city changed after restoration")
@@ -1943,9 +1943,22 @@ local function NativeCarrierState(city, carrier)
     UnitsOnCenter = units, PurchasedPlots = plots }
 end
 A.NativeCarrierFriction = ActiveNativeCarrierFriction
-A.ReadNativeCarrier = function(city, loan)
+A.NativeCarrierPropertyKeys = function()
   local keys = R.Copy(cityKeys)
   keys[R.GOVERNANCE_KEY] = true
+  return keys
+end
+-- Only getters used directly in Gameplay: no CityRead or ExposedMembers
+-- fallback. The registered catalog is the authority for property restoration.
+A.ReadNativeCarrierCore = function(city, loan)
+  local keys = A.NativeCarrierPropertyKeys()
+  return { Name = city:GetName(), Population = city:GetPopulation(),
+    PropertyKeys = keys, Properties = Properties(city, keys),
+    UnitsOnCenter = UnitsOnCityCenter(loan.X, loan.Y, city:GetOwner()),
+    HasBuilding = city:GetBuildings():HasBuilding(loan.Building) }
+end
+A.ReadNativeCarrier = function(city, loan)
+  local keys = A.NativeCarrierPropertyKeys()
   local slotType = city:GetBuildings():GetGreatWorkSlotType(loan.Building, loan.Slot)
   local slot = assert(GameInfo.GreatWorkSlotTypes[slotType], "native slot type missing")
   return { Owner = city:GetOwner(), ID = city:GetID(), X = city:GetX(), Y = city:GetY(),
@@ -1953,7 +1966,7 @@ A.ReadNativeCarrier = function(city, loan)
     Work = WorkInSlot(city, loan.Building, loan.Slot),
     State = NativeCarrierState(city, { Building = loan.Building, Slot = loan.Slot,
       X = loan.X, Y = loan.Y, Owner = city:GetOwner() }),
-    Properties = Properties(city, keys) }
+    PropertyKeys = keys, Properties = Properties(city, keys) }
 end
 
 local function AssertNativeCarrierReturnSafe(city, carrier)
@@ -2213,6 +2226,11 @@ local function MoveNativeWorks(state, tx)
     if snap.NativeRoute == "CITY" then
       assert(snap.Destination == tx.To, "native city inheritance has an external destination")
     end
+  end
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() then
+    assert(JAC_CarrierMP, "native MP carrier binding unavailable")
+    JAC_CarrierMP.Preflight(tx)
   end
   local reserved = {}
   local reservedCities = ReservedNativeCarrierCities(state, tx.ID)
@@ -2677,6 +2695,18 @@ function A.Resume(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
+  if tx.Turn ~= Game.GetCurrentGameTurn() and not tx.Request.FlowPolicy
+    and GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() and JAC_CarrierMP
+    and JAC_CarrierMP.HasContinuation(tx) then
+    -- This permission advances/restores saved MP loans only. It does not
+    -- replay the stale manual contract for units, cities, or other adapters.
+    JAC_CarrierMP.ContinueOnly(state, tx)
+    tx.Status, tx.Error = "WAITING_UI", nil
+    tx.WaitingFor = "MP_CARRIER_CONTINUATION_ONLY"
+    Save(state)
+    return R.Copy(tx)
+  end
   assert(tx.Turn == Game.GetCurrentGameTurn() or tx.Request.FlowPolicy,
     "manual transfers require their adapter contract in the original turn")
   if tx.Status == "BLOCKED" then

@@ -51,34 +51,32 @@ end
 
 
 -- UI.GetElapsedTime is used by Base/Assets/UI/ToolTips/PlotToolTip.lua:879,886.
-local identity={};local session=tostring(identity)..':'..tostring(UI.GetElapsedTime());local sent={}
+local identity={};local session=tostring(identity)..':'..tostring(UI.GetElapsedTime())
+local claimed,sent,status={},{},{}
+local function request(c,command,payload)
+  local m=c.MP
+  UI.RequestPlayerOperation(m.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_CarrierMP_Operation',
+    Version=2,Command=command,Actor=m.Actor,Token=c.Token,Phase=m.Phase,Nonce=m.Nonce,
+    Turn=Game.GetCurrentGameTurn(),Payload=Encode(payload or {}),Session=session,
+    DispatchStatus=status[c.MoveToken] or 'NOT_ATTEMPTED'})
+  return true
+end
 local function Observe(c)
   assert(identity)
   local m=c and c.MP
-  if not m or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
+  if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
-  if m.Phase=='BORROW' or m.Phase=='RETURN' then
-    UI.RequestPlayerOperation(m.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_CarrierMP_Operation',
-      Version=1,Command='RESUME',Actor=m.Actor,Token=c.Token,Phase=m.Phase,Nonce=m.Nonce,
-      Turn=Game.GetCurrentGameTurn(),Payload='',Session=session})
-    return true
+  if m.Phase=='BORROW' or m.Phase=='RETURN' or m.Phase=='ABORT_RETURN' or m.Phase=='ABORT_DONE' then
+    return request(c,'RESUME')
   end
   if m.Phase=='SELECT' then
     local reads=assert(ExposedMembers.JAC_HeroReadAPI)
-    local slots=reads.FindCompatibleNativeSlots(c.Owner,c.Source.ObjectType)
-    for _,slot in ipairs(slots) do
-      if slot.X~=c.Source.X or slot.Y~=c.Source.Y then
-        UI.RequestPlayerOperation(m.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_CarrierMP_Operation',
-          Version=1,Command='OBSERVE',Actor=m.Actor,Token=c.Token,Phase=m.Phase,Nonce=m.Nonce,
-          Turn=Game.GetCurrentGameTurn(),Payload=Encode({Target=slot}),Session=session})
-        return true
-      end
-    end
-    return false
+    return request(c,'OBSERVE',{Candidates=reads.FindCompatibleNativeSlots(c.Owner,c.Source.ObjectType)})
   end
-  if m.Phase=='DISPATCH' and m.Session==session and not sent[c.MoveToken] then
-    sent[c.MoveToken]=true -- also on an unknown send result: never repeat MOVE
+  if m.Phase=='DISPATCH' and m.DispatchSession==session and claimed[c.MoveToken]==m.ClaimNonce
+    and not sent[c.MoveToken] then
+    sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local p={}
     p[PlayerOperations.PARAM_PLAYER_ONE]=m.Actor
     p[PlayerOperations.PARAM_CITY_SRC]=c.MoveSource.City
@@ -87,22 +85,23 @@ local function Observe(c)
     p[PlayerOperations.PARAM_BUILDING_DEST]=c.MoveTarget.Building
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
-    pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
-    return false
+    local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
+    status[c.MoveToken]=ok and result==false and 'REJECTED' or ok and result==true and 'ACCEPTED' or 'UNKNOWN'
+    return false -- reconcile at a later native publication, not the send call
   end
-  if m.Phase~='PREPARE' and m.Phase~='BORROWED' and m.Phase~='DISPATCH' and m.Phase~='RESTORED' then return false end
   local api=assert(ExposedMembers.JAC_Absorption)
   local o={Cities={},Locations=api.ReadNativeLocations(c.Index)}
-  for _,l in ipairs(m.Loans) do
+  for _,l in ipairs(m.Loans or {}) do
     local current=assert(CityManager.GetCityAt(l.X,l.Y))
     o.Cities[#o.Cities+1]=api.ReadNativeCarrier(current,l)
   end
-  -- A failed or unknown MOVE remains pending. Never infer success from a
-  -- request return, event receipt, number of publications, or an empty cache.
-  if m.Phase=='DISPATCH' and (o.Cities[1].Work~=-1 or o.Cities[2].Work~=c.Index) then return false end
-  UI.RequestPlayerOperation(m.Actor,PlayerOperations.EXECUTE_SCRIPT,{OnStart='JAC_CarrierMP_Operation',
-    Version=1,Command='OBSERVE',Actor=m.Actor,Token=c.Token,Phase=m.Phase,Nonce=m.Nonce,
-    Turn=Game.GetCurrentGameTurn(),Payload=Encode(o),Session=session})
-  return true
+  if m.Phase=='READY' then
+    if m.GrantSession~=session then return request(c,'ABORT',o) end
+    claimed[c.MoveToken]=m.Nonce
+    return request(c,'CLAIM',o)
+  end
+  if m.Phase=='BORROWED' or m.Phase=='PREPARE' or m.Phase=='DISPATCH' or m.Phase=='RESTORED'
+    or m.Phase=='ABORT_RESTORED' or m.Phase=='RECHECK' then return request(c,'OBSERVE',o) end
+  return false
 end
 JAC_ObserveNativeCarrierMP=function(c) local ok,result=pcall(Observe,c);return ok and result==true end
