@@ -1,6 +1,6 @@
 -- UnitPropertyKeys exists in the UI context but not in gameplay on the installed engine.
 -- Share the engine's actual numeric enum value; never invent a replacement property.
-local uiPlayers, uiGame = Players, Game
+local uiPlayers, uiGame, uiCityManager = Players, Game, CityManager
 include('JAC_CarrierMP_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
@@ -14,23 +14,55 @@ local function MissingUnitRead(owner, id, turn, current, reason)
     missingUnitReads[key] = text
   end
 end
-local function PublishedCity(owner, id, method)
-  local cities = uiPlayers[owner]:GetCities()
-  local city = cities:FindID(id)
-  if not city then
-    local known = {}
-    pcall(function()
-      for _, current in cities:Members() do
-        known[#known+1] = current:GetID() .. '@' .. current:GetX() .. ',' .. current:GetY()
-      end
-    end)
-    table.sort(known)
-    error('UI city cache is not ready: owner=' .. tostring(owner) .. ' id=' .. tostring(id)
-      .. ' method=' .. method .. ' known=' .. table.concat(known, ';'), 0)
+local function CityReadWait(owner, id, method, x, y, reason)
+  local known = {}
+  pcall(function()
+    for _, current in uiPlayers[owner]:GetCities():Members() do
+      known[#known+1] = current:GetID() .. '@' .. current:GetX() .. ',' .. current:GetY()
+    end
+  end)
+  table.sort(known)
+  error('UI city cache is not ready: owner=' .. tostring(owner) .. ' id=' .. tostring(id)
+    .. ' method=' .. method .. ' known=' .. table.concat(known, ';')
+    .. ' x=' .. tostring(x) .. ' y=' .. tostring(y) .. ' reason=' .. tostring(reason), 0)
+end
+local function PublishedCity(owner, id, method, x, y)
+  local player = uiPlayers and uiPlayers[owner]
+  if not player then CityReadWait(owner, id, method, x, y, 'PLAYER_MISSING') end
+  local city
+  if x ~= nil or y ~= nil then
+    if type(x) ~= 'number' or type(y) ~= 'number'
+      or not uiCityManager or not uiCityManager.GetCityAt then
+      CityReadWait(owner, id, method, x, y, 'CITY_AT_API_UNAVAILABLE')
+    end
+    city = uiCityManager.GetCityAt(x, y)
+  else
+    -- Keep the old signature for callers without coordinates. New gameplay
+    -- requests always supply the identity re-read from the physical Core city.
+    city = player:GetCities():FindID(id)
+  end
+  if not city then CityReadWait(owner, id, method, x, y, 'CITY_MISSING') end
+  local actualOwner, actualID, actualX, actualY = city:GetOwner(), city:GetID(), city:GetX(), city:GetY()
+  if actualOwner ~= owner or actualID ~= id or x ~= nil and (actualX ~= x or actualY ~= y) then
+    CityReadWait(owner, id, method, x, y, 'IDENTITY_MISMATCH actual='
+      .. tostring(actualOwner) .. '/' .. tostring(actualID) .. '@' .. tostring(actualX) .. ',' .. tostring(actualY))
   end
   return city
 end
+local function ProtectedCityRead(owner, id, method, x, y, getter)
+  local ok, value = pcall(function() return getter(PublishedCity(owner, id, method, x, y)) end)
+  if not ok then
+    if tostring(value):find('UI city cache is not ready', 1, true) then error(value, 0) end
+    CityReadWait(owner, id, method, x, y, 'GETTER_ERROR: ' .. tostring(value))
+  end
+  if value == nil then CityReadWait(owner, id, method, x, y, 'VALUE_MISSING') end
+  return value
+end
 local function PublishHeroKeys()
+  -- LoadScreenClose can run in a retained Lua context with replaced API tables.
+  -- Closures must use this load's bindings; no city object survives a read.
+  uiPlayers, uiGame, uiCityManager = Players, Game, CityManager
+  ExposedMembers.JAC_HeroReadAPI = nil
   if UnitPropertyKeys and type(UnitPropertyKeys.LifespanRemaining) == "number" then
     ExposedMembers.JAC_HeroLifespanKey = UnitPropertyKeys.LifespanRemaining
   end
@@ -80,13 +112,15 @@ local function PublishHeroKeys()
       assert(method == "FAITH_BALANCE", "unsupported UI player read")
       return uiPlayers[owner]:GetReligion():GetFaithBalance()
     end
-    reads.ReadNativeWork = function(owner, id, index)
-      local city = PublishedCity(owner, id, 'NATIVE_WORK')
-      local buildings = city:GetBuildings()
-      return { Type = buildings:GetGreatWorkTypeFromIndex(index),
-        CreatorName = buildings:GetCreatorNameFromIndex(index),
-        TurnCreated = buildings:GetTurnFromIndex(index),
-        CreatedByPlayer = uiGame.GetGreatWorkPlayer(index) }
+    reads.ReadNativeWork = function(owner, id, index, x, y)
+      return ProtectedCityRead(owner, id, 'NATIVE_WORK', x, y, function(city)
+        local buildings = city:GetBuildings()
+        local value = { Type = buildings:GetGreatWorkTypeFromIndex(index),
+          CreatorName = buildings:GetCreatorNameFromIndex(index),
+          TurnCreated = buildings:GetTurnFromIndex(index),
+          CreatedByPlayer = uiGame.GetGreatWorkPlayer(index) }
+        return value
+      end)
     end
     reads.FindCompatibleNativeSlots = function(owner, objectType)
       assert(type(owner) == "number" and type(objectType) == "string", "native slot query requires owner and type")
@@ -118,58 +152,97 @@ local function PublishHeroKeys()
       end)
       return slots
     end
-    reads.ReadCarrierPlots = function(owner, id)
-      local city = assert(uiPlayers[owner]:GetCities():FindID(id),
-        "native carrier city is not published")
-      local purchased = assert(Map.GetCityPlots():GetPurchasedPlots(city),
-        "native carrier purchased plots are unavailable")
-      local result = {}
-      for _, index in pairs(purchased) do
-        local plot = assert(Map.GetPlotByIndex(index), "native carrier purchased plot missing")
-        local buyer = Cities.GetPlotPurchaseCity(plot)
-        assert(plot:GetOwner() == owner and buyer and buyer:GetOwner() == owner
-          and buyer:GetX() == city:GetX() and buyer:GetY() == city:GetY(),
-          "native carrier purchased plot belongs to another city")
-        result[#result + 1] = index
-      end
-      table.sort(result)
-      return result
+    reads.ReadCarrierPlots = function(owner, id, x, y)
+      return ProtectedCityRead(owner, id, 'CARRIER_PLOTS', x, y, function(city)
+        local purchased = assert(Map.GetCityPlots():GetPurchasedPlots(city),
+          "native carrier purchased plots are unavailable")
+        local result = {}
+        for _, index in pairs(purchased) do
+          local plot = assert(Map.GetPlotByIndex(index), "native carrier purchased plot missing")
+          local buyer = Cities.GetPlotPurchaseCity(plot)
+          assert(plot:GetOwner() == owner and buyer and buyer:GetOwner() == owner
+            and buyer:GetX() == city:GetX() and buyer:GetY() == city:GetY(),
+            "native carrier purchased plot belongs to another city")
+          result[#result + 1] = index
+        end
+        table.sort(result)
+        return result
+      end)
     end
-    reads.ReadCity = function(owner, id, method, building, slot, extra)
-      local city = PublishedCity(owner, id, method)
-      if method == "RELIGIONS" then
-        local rows = {}
-        for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
-          rows[#rows + 1] = { Religion = row.Religion, Followers = row.Followers }
+    reads.ReadCity = function(owner, id, method, building, slot, extra, x, y)
+      assert(method == 'RELIGIONS' or method == 'DISTRICTS' or method == 'SLOTS'
+        or method == 'WORK' or method == 'PURCHASE_COST' or method == 'LOYALTY', 'unsupported UI city read')
+      return ProtectedCityRead(owner, id, method, x, y, function(city)
+        if method == "RELIGIONS" then
+          local rows = {}
+          for _, row in pairs(city:GetReligion():GetReligionsInCity()) do
+            rows[#rows + 1] = { Religion = row.Religion, Followers = row.Followers }
+          end
+          return rows
+        elseif method == "DISTRICTS" then
+          local locations = {}
+          for _, district in city:GetDistricts():Members() do
+            locations[#locations + 1] = { Type = GameInfo.Districts[district:GetType()].DistrictType,
+              X = district:GetX(), Y = district:GetY() }
+          end
+          return locations
+        elseif method == "SLOTS" then return city:GetBuildings():GetNumGreatWorkSlots(building)
+        elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot)
+        elseif method == "PURCHASE_COST" then
+          return city:GetGold():GetPurchaseCost(building, slot,
+            extra or MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)
+        elseif method == "LOYALTY" then
+          return city:GetCulturalIdentity():GetLoyalty()
         end
-        return rows
-      elseif method == "DISTRICTS" then
-        local locations = {}
-        for _, district in city:GetDistricts():Members() do
-          locations[#locations + 1] = { Type = GameInfo.Districts[district:GetType()].DistrictType,
-            X = district:GetX(), Y = district:GetY() }
-        end
-        return locations
-      elseif method == "SLOTS" then return city:GetBuildings():GetNumGreatWorkSlots(building)
-      elseif method == "WORK" then return city:GetBuildings():GetGreatWorkInSlot(building, slot)
-      elseif method == "PURCHASE_COST" then
-        return city:GetGold():GetPurchaseCost(building, slot,
-          extra or MilitaryFormationTypes.STANDARD_MILITARY_FORMATION)
-      elseif method == "LOYALTY" then
-        return city:GetCulturalIdentity():GetLoyalty()
+      end)
+    end
+    reads.ObserveCityReads = function(requests)
+      if type(requests) ~= 'table' then return false end
+      for _, request in ipairs(requests) do
+        local ok, value = pcall(function()
+          if request.Method == 'NATIVE_WORK' then
+            return reads.ReadNativeWork(request.Owner, request.ID, request.Index, request.X, request.Y)
+          elseif request.Method == 'CARRIER_PLOTS' then
+            return reads.ReadCarrierPlots(request.Owner, request.ID, request.X, request.Y)
+          end
+          local result = reads.ReadCity(request.Owner, request.ID, request.Method,
+            request.Building, request.Slot, request.Extra, request.X, request.Y)
+          if request.Method == 'WORK' and type(result) == 'number' and result >= 0 then
+            reads.ReadNativeWork(request.Owner, request.ID, result, request.X, request.Y)
+          end
+          if request.Works then
+            assert(type(result) == 'number' and result >= 0 and result == math.floor(result),
+              'UI work slot count is unavailable')
+            for slot = 0, result - 1 do
+              local index = reads.ReadCity(request.Owner, request.ID, 'WORK',
+                request.Building, slot, nil, request.X, request.Y)
+              assert(type(index) == 'number', 'UI work slot value is unavailable')
+              if index >= 0 then
+                reads.ReadNativeWork(request.Owner, request.ID, index, request.X, request.Y)
+              end
+            end
+          end
+          return result
+        end)
+        if not ok or value == nil then return false end
       end
-      error("unsupported UI city read")
+      return true
     end
     reads.Observe = function(token, class)
       local origin = reads.GetHeroOriginCityID(class)
       observed[token] = { Claim = reads.GetHeroClaimPlayer(class), Origin = origin }
     end
     reads.ObserveCity = function(request)
-      if observed[request.Token] or uiGame.GetCurrentGameTurn() ~= request.Turn then return end
-      local ok, value = pcall(reads.ReadCity, request.Owner, request.ID, "LOYALTY")
+      local previous = observed[request.Token]
+      if previous and previous.Owner == request.Owner and previous.ID == request.ID
+        and previous.X == request.X and previous.Y == request.Y and previous.Turn == request.Turn then return end
+      observed[request.Token] = nil
+      if uiGame.GetCurrentGameTurn() ~= request.Turn then return end
+      local ok, value = pcall(reads.ReadCity, request.Owner, request.ID, "LOYALTY",
+        nil, nil, nil, request.X, request.Y)
       if ok and type(value) == "number" and value >= 0 and value <= 100 then
         observed[request.Token] = { Owner = request.Owner, ID = request.ID,
-          Turn = request.Turn, Value = value }
+          X = request.X, Y = request.Y, Turn = request.Turn, Value = value }
       end
     end
     ExposedMembers.JAC_HeroReadAPI = reads
@@ -323,20 +396,42 @@ local function ObservePendingHeroes()
   local pendingPublication = false
   for _, tx in pairs(state and state.Transactions or {}) do
     local automatic = AutomaticFlow(tx.ID)
+    if automatic and tx.Status == 'WAITING_UI'
+      and (tx.AwaitingPreparation and not tx.SourceCityReads
+        or tx.AwaitingFinalUI and not tx.FinalUI
+        or tx.SourceRosterMoved and not tx.FinalUI and not tx.CityReadUI
+        or tx.CityLoyaltyPending and tx.CityLoyaltyPending.Owner == nil) then
+      -- Old saves contain no coordinate read requests. Wake Core once to
+      -- reacquire the identities and persist requests; do not publish a mark.
+      pendingPublication = true
+    end
     if tx.AwaitingPreparation then
       for _, read in pairs(tx.SourceSpreadReads or {}) do
         reads.ObserveUnit(read.Token, read.Owner, read.ID, read.Turn)
       end
-      if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn then
+      if tx.SourceReadyToken and uiGame.GetCurrentGameTurn() == tx.Turn
+        and reads.ObserveCityReads(tx.SourceCityReads) then
         reads.MarkPublished(tx.SourceReadyToken)
         if automatic then pendingPublication = true end
       end
     end
     local verification = tx.VerificationUI
-    if verification and uiGame.GetCurrentGameTurn() == verification.Turn then reads.MarkPublished(verification.Token) end
-    if tx.AwaitingFinalUI then
-      reads.MarkPublished(tx.ID .. ":final")
+    if verification and uiGame.GetCurrentGameTurn() == verification.Turn
+      and reads.ObserveCityReads(verification.Reads) then reads.MarkPublished(verification.Token) end
+    local final = tx.FinalUI
+    if tx.AwaitingFinalUI and final and uiGame.GetCurrentGameTurn() == final.Turn
+      and reads.ObserveCityReads(final.Reads) then
+      reads.MarkPublished(final.Token)
       if automatic then pendingPublication = true end
+    end
+    local cityRead = tx.CityReadUI
+    if cityRead and reads.ObserveCityReads(cityRead.Reads) then
+      reads.MarkPublished(cityRead.Token)
+      if automatic then pendingPublication = true end
+    end
+    if tx.CityLoyaltyPending and tx.CityLoyaltyPending.Owner ~= nil then
+      reads.ObserveCity(tx.CityLoyaltyPending)
+      if automatic and reads.GetObservation(tx.CityLoyaltyPending.Token) then pendingPublication = true end
     end
     if tx.NativeDealUI and tx.NativeDealUI.Token then
       reads.MarkPublished(tx.NativeDealUI.Token)

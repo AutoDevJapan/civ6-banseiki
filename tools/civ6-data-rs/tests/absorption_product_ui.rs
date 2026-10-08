@@ -3,6 +3,135 @@ use civ6_data_rs::{absorption_product, Repository};
 use mlua::Lua;
 use std::path::Path;
 
+fn city_read_provider() -> anyhow::Result<Lua> {
+    let lua = Lua::new();
+    lua.load(r#"
+local function event()
+  local handlers={}
+  return {Add=function(fn) handlers[#handlers+1]=fn end,
+    Emit=function() for _,fn in ipairs(handlers) do fn() end end}
+end
+Events={LoadScreenClose=event(),GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event()}
+include=function() end;ExposedMembers={};PlayerOperations={};UI={};PlayerManager={GetAlive=function() return {} end}
+GameInfo={Districts={[7]={DistrictType='DISTRICT_REAL'}},GreatWorkSlotTypes={}}
+GETTERS={};FAULT=nil;PHYSICAL=true
+local function read(kind,value)
+  GETTERS[kind]=(GETTERS[kind] or 0)+1
+  if FAULT=='getter' then error('native getter threw') end
+  return value
+end
+REAL={Owner=1,ID=196610,X=129,Y=35,
+  GetOwner=function(s) return s.Owner end,GetID=function(s) return s.ID end,
+  GetX=function(s) return s.X end,GetY=function(s) return s.Y end,
+  GetReligion=function() return {GetReligionsInCity=function() return read('RELIGIONS',{{Religion=5,Followers=9}}) end} end,
+  GetDistricts=function() return {Members=function() return ipairs(read('DISTRICTS',{
+    {GetType=function() return 7 end,GetX=function() return 128 end,GetY=function() return 35 end}})) end} end,
+  GetBuildings=function() return {
+    GetNumGreatWorkSlots=function(_,b) assert(b==11);return read('SLOTS',2) end,
+    GetGreatWorkInSlot=function(_,b,s) assert(b==11 and (s==0 or s==1));return read('WORK',s==0 and 77 or -1) end,
+    GetGreatWorkTypeFromIndex=function(_,i) assert(i==77);return read('NATIVE_TYPE',4) end,
+    GetCreatorNameFromIndex=function() return read('CREATOR','real creator') end,
+    GetTurnFromIndex=function() return read('CREATED_TURN',3) end} end,
+  GetCulturalIdentity=function() return {GetLoyalty=function() return read('LOYALTY',72) end} end}
+local old={GetOwner=function() return 1 end,GetID=function() return 131073 end,
+  GetX=function() return 119 end,GetY=function() return 42 end}
+Players={[1]={GetCities=function() return {FindID=function() return nil end,Members=function() return ipairs({old}) end} end}}
+CityManager={GetCityAt=function(x,y) assert(x==129 and y==35);if PHYSICAL then return REAL end end}
+Game={GetCurrentGameTurn=function() return 10 end,GetHeroesManager=function() return {} end,
+  GetGreatWorkPlayer=function(i) assert(i==77);return read('CREATED_BY',6) end,GetProperty=function() end}
+"#).exec()?;
+    lua.load(std::fs::read_to_string(
+        Repository::checked_in()
+            .root
+            .join("poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua"),
+    )?)
+    .exec()?;
+    Ok(lua)
+}
+
+#[test]
+fn city_reads_use_physical_identity_and_actual_getters_with_stale_collections() -> anyhow::Result<()>
+{
+    let lua = city_read_provider()?;
+    lua.load(r#"
+local r=ExposedMembers.JAC_HeroReadAPI
+local function city(method,b,s) return r.ReadCity(1,196610,method,b,s,nil,129,35) end
+assert(city('SLOTS',11)==2 and city('WORK',11,0)==77 and city('WORK',11,1)==-1)
+assert(city('RELIGIONS')[1].Followers==9)
+assert(city('DISTRICTS')[1].Type=='DISTRICT_REAL' and city('LOYALTY')==72)
+local work=r.ReadNativeWork(1,196610,77,129,35)
+assert(work.Type==4 and work.CreatorName=='real creator' and work.TurnCreated==3 and work.CreatedByPlayer==6)
+for _,kind in ipairs({'SLOTS','WORK','RELIGIONS','DISTRICTS','LOYALTY','NATIVE_TYPE','CREATOR','CREATED_TURN','CREATED_BY'}) do
+  assert(GETTERS[kind]>0,'physical getter was bypassed: '..kind)
+end
+for _,field in ipairs({'Owner','ID','X','Y'}) do
+  local original=REAL[field];REAL[field]=original+1
+  local count=GETTERS.SLOTS
+  local ok,why=pcall(city,'SLOTS',11)
+  assert(not ok and tostring(why):find('UI city cache is not ready',1,true),field..' mismatch accepted')
+  assert(GETTERS.SLOTS==count,'getter ran on a different city')
+  assert(not pcall(r.ReadNativeWork,1,196610,77,129,35),'NativeWork accepted '..field..' mismatch')
+  REAL[field]=original
+end
+for _,fault in ipairs({'missing','player','api','getter'}) do
+  local player,manager=Players[1],CityManager
+  if fault=='missing' then PHYSICAL=false
+  elseif fault=='player' then Players[1]=nil
+  elseif fault=='api' then CityManager={}
+  else FAULT='getter' end
+  -- Rebind on LoadScreenClose, just as a retained UI context does after loading.
+  Events.LoadScreenClose.Emit()
+  r=ExposedMembers.JAC_HeroReadAPI
+  local ok,why=pcall(city,'SLOTS',11)
+  assert(not ok and tostring(why):find('UI city cache is not ready',1,true),fault..' did not wait')
+  assert(not pcall(r.ReadNativeWork,1,196610,77,129,35),fault..' NativeWork did not wait')
+  Players[1],CityManager,PHYSICAL,FAULT=player,manager,true,nil
+  Events.LoadScreenClose.Emit();r=ExposedMembers.JAC_HeroReadAPI
+  assert(city('SLOTS',11)==2)
+end
+"#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn load_screen_rebinds_city_player_and_game_apis_before_real_publication() -> anyhow::Result<()> {
+    let lua = city_read_provider()?;
+    lua.load(r#"
+local old=ExposedMembers.JAC_HeroReadAPI
+local oldCity=REAL
+REAL=setmetatable({GetBuildings=function() return {
+  GetNumGreatWorkSlots=function() return 3 end,
+  GetGreatWorkInSlot=function(_,b,s) assert(s>=0 and s<3);return s==0 and 77 or -1 end,
+  GetGreatWorkTypeFromIndex=function() return 5 end,
+  GetCreatorNameFromIndex=function() return 'new creator' end,
+  GetTurnFromIndex=function() return 4 end} end},{__index=oldCity})
+Players={[1]={GetCities=function() return {FindID=function() return nil end,Members=function() return ipairs({}) end} end,
+  GetUnits=function() return {Members=function() return ipairs({
+    {GetID=function() return 7 end,GetSpreadCharges=function() return 1 end}}) end} end}}
+CityManager={GetCityAt=function(x,y) assert(x==129 and y==35);return REAL end}
+Game={GetCurrentGameTurn=function() return 11 end,GetHeroesManager=function() return {} end,
+  GetGreatWorkPlayer=function() return 8 end,GetProperty=function() end}
+local request={Owner=1,ID=196610,X=129,Y=35,Method='SLOTS',Building=11,Works=true}
+ExposedMembers.JAC_Absorption={GetState=function() return {Transactions={t={ID='t',AwaitingFinalUI=true,
+  FinalUI={Token='new-city',Turn=11,Reads={request}}}}} end,GetUIPhase=function() end}
+oldCity.GetBuildings=function() error('old UI city was retained') end
+Events.LoadScreenClose.Emit()
+local current=ExposedMembers.JAC_HeroReadAPI
+assert(current~=old and current.GetObservation('new-city').Published)
+assert(current.ReadCity(1,196610,'SLOTS',11,nil,nil,129,35)==3)
+assert(current.ReadUnit(1,7,'SPREAD_CHARGES',11)==1)
+local work=current.ReadNativeWork(1,196610,77,129,35)
+assert(work.Type==5 and work.CreatedByPlayer==8 and work.CreatorName=='new creator' and work.TurnCreated==4)
+Game.GetHeroesManager=function() return nil end
+Events.LoadScreenClose.Emit()
+assert(ExposedMembers.JAC_HeroReadAPI==nil,'load retained an unavailable prior reader and its publications')
+Game.GetHeroesManager=function() return {} end
+Events.LoadScreenClose.Emit()
+assert(ExposedMembers.JAC_HeroReadAPI.ReadCity(1,196610,'SLOTS',11,nil,nil,129,35)==3)
+"#).exec()?;
+    Ok(())
+}
+
 #[test]
 fn native_read_waits_report_missing_identity_without_changing_getter_results() -> anyhow::Result<()>
 {
@@ -12,7 +141,7 @@ local function event() return {Add=function() end} end
 Events={LoadScreenClose=event(),GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event()}
 include=function() end
 ExposedMembers={};PlayerOperations={};UI={};GameInfo={}
-local city={GetID=function() return 4 end,GetX=function() return 12 end,GetY=function() return 13 end}
+ local city={GetOwner=function() return 1 end,GetID=function() return 4 end,GetX=function() return 12 end,GetY=function() return 13 end}
 local cities={FindID=function(_,id) if id==4 then return city end end,
   Members=function() return ipairs({city}) end}
 local unit={GetID=function() return 7 end,GetSpreadCharges=function() return 2 end}

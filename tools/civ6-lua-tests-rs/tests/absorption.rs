@@ -339,7 +339,29 @@ fn boundaries(lua: &Lua) {
         "READ",
         lua.create_function(|_, args: MultiValue| {
             let path = String::from_value(argument(&args, 0)?)?;
-            Ok(read_repo(path))
+            let source = read_repo(&path);
+            if path.ends_with("JAC_Absorption_HeroKeys.lua") {
+                // Historical doubles supplied UI-only getters on collection
+                // wrappers. Model the UI's physical lookup with those same
+                // objects, including nil until its publication boundary.
+                Ok(format!(
+                    "local readPlayers, coreCities = Players, CityManager\n\
+                     local CityManager = {{GetCityAt=function(x,y)\n\
+                       local city=coreCities.GetCityAt(x,y)\n\
+                       local player=city and readPlayers[city:GetOwner()]\n\
+                       local view=player and player:GetCities():FindID(city:GetID())\n\
+                       if not view then return nil end\n\
+                       return setmetatable({{\n\
+                         GetOwner=view.GetOwner or function() return city:GetOwner() end,\n\
+                         GetID=view.GetID or function() return city:GetID() end,\n\
+                         GetX=view.GetX or function() return city:GetX() end,\n\
+                         GetY=view.GetY or function() return city:GetY() end\n\
+                       }},{{__index=view}})\n\
+                     end}}\n{source}"
+                ))
+            } else {
+                Ok(source)
+            }
         })
         .unwrap(),
     )
