@@ -63,6 +63,17 @@ local function InitializeNewGame()
 	end
 
 	local humans = HumanPlayers()
+	-- Do not finalize a partial roster while a peer's starting units are pending.
+	-- Preflight before writing any unit records so a later retry cannot reset XP.
+	for _, player in ipairs(humans) do
+		if #SortedUnits(player) == 0 then
+			if not waitingReported then
+				Log("waiting for human starting units")
+				waitingReported = true
+			end
+			return
+		end
+	end
 	local assigned = 0
 	for _, player in ipairs(humans) do
 		local units = SortedUnits(player)
