@@ -88,20 +88,33 @@ fn stable_trace(
 // Failure evidence is sampled without calling any target export or waiting for
 // a drain. Keep each original sample before attempting the next read. Even a
 // valid, identical pair is diagnostic evidence, never successful completion.
+#[derive(Clone, Copy)]
+enum ObservationStopStage {
+    NotRequested,
+    Requested,
+    ReturnedSuccess,
+}
+
 fn failure_trace_snapshot(
     pid: u32,
     created: u64,
+    stop_stage: ObservationStopStage,
     mut read: impl FnMut(&mut [u8]) -> Result<(), String>,
     mut save: impl FnMut(&str, &[u8]) -> Result<(), String>,
 ) -> Value {
     let mut evidence = json!({"type":"bootstrap_failure_snapshot",
         "pid":pid,"created_filetime":created,"product_acceptance":false,
-        "drained":false,"samples":[]});
+        "drained":null,"stop_observation_stage":match stop_stage {
+            ObservationStopStage::NotRequested => "not_requested",
+            ObservationStopStage::Requested => "requested",
+            ObservationStopStage::ReturnedSuccess => "returned_success",
+        },"samples":[]});
     let mut snapshots = Vec::new();
     for name in [
         "failure-bootstrap-first.bin",
         "failure-bootstrap-second.bin",
     ] {
+        evidence["attempted_sample"] = json!(name);
         let mut bytes = vec![0; wire::TRACE_BYTES];
         if let Err(error) = read(&mut bytes) {
             evidence["error"] = json!(format!("read {name}: {error}"));
@@ -123,6 +136,22 @@ fn failure_trace_snapshot(
         Err(error) => evidence["first_trace_error"] = json!(error),
     }
     evidence
+}
+
+fn failure_evidence_error(
+    mut error: String,
+    evidence: Option<Value>,
+    record: impl FnOnce(Value) -> Result<(), String>,
+) -> String {
+    if let Some(evidence) = evidence {
+        if let Some(capture_error) = evidence["error"].as_str() {
+            error = format!("{error}; failure evidence: {capture_error}");
+        }
+        if let Err(log_error) = record(evidence) {
+            error = format!("{error}; failure evidence log: {log_error}");
+        }
+    }
+    error
 }
 
 pub(super) fn run(raw: &[String]) -> Result<(), String> {
@@ -243,6 +272,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
     )?;
     let mut job = OwnedJob::attach(&game, req.pid, req.created)?;
     let mut prepared_trace_address = None;
+    let mut stop_observation_stage = ObservationStopStage::NotRequested;
     let result = (|| -> Result<(), String> {
         let runtime = load(&game, req.pid, &req.runtime, loader)?;
         let bootstrap = load(&game, req.pid, &req.bootstrap, loader)?;
@@ -334,6 +364,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 return Err("bootstrap controller deadline before explicit stop".into());
             }
         }
+        stop_observation_stage = ObservationStopStage::Requested;
         if remote_call(
             &game,
             bootstrap.base + prepared[1],
@@ -343,6 +374,7 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
         {
             return Err("bootstrap observation drain failed".into());
         }
+        stop_observation_stage = ObservationStopStage::ReturnedSuccess;
         let (trace, bytes) = stable_trace(&game, address, req.pid, req.created)?;
         fs::OpenOptions::new()
             .write(true)
@@ -410,18 +442,15 @@ pub(super) fn run(raw: &[String]) -> Result<(), String> {
                 failure_trace_snapshot(
                     req.pid,
                     req.created,
+                    stop_observation_stage,
                     |bytes| read_remote(&game, address, bytes),
                     |extension, bytes| preserve(&req.output, extension, bytes),
                 )
             });
-            let recorded = evidence.map(|evidence| {
+            let error = failure_evidence_error(e, evidence, |evidence| {
                 write_json(&mut writer, evidence)
                     .and_then(|_| writer.flush().map_err(|error| error.to_string()))
             });
-            let error = match recorded {
-                Some(Err(error)) => format!("{e}; failure evidence log: {error}"),
-                _ => e,
-            };
             // Evidence collection must never replace or prevent containment.
             Err(fail_owned_call(
                 &mut job,
@@ -437,12 +466,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bootstrap_failure_summary_retains_original_capture_and_log_errors() {
+        let mut recorded = false;
+        let error = failure_evidence_error(
+            "original controller deadline".into(),
+            Some(json!({"error":"owned process unreadable","product_acceptance":false})),
+            |record| {
+                recorded = true;
+                assert_eq!(record["product_acceptance"], false);
+                Err("output write failed".into())
+            },
+        );
+        assert!(recorded);
+        assert!(error.starts_with("original controller deadline;"));
+        assert!(error.contains("failure evidence: owned process unreadable"));
+        assert!(error.contains("failure evidence log: output write failed"));
+    }
+
+    #[test]
     fn bootstrap_failure_preserves_first_sample_when_second_read_fails() {
         let mut reads = 0;
         let mut saved = Vec::new();
         let evidence = failure_trace_snapshot(
             41,
             42,
+            ObservationStopStage::NotRequested,
             |bytes| {
                 reads += 1;
                 if reads == 2 {
@@ -463,7 +511,8 @@ mod tests {
         assert_eq!(evidence["samples"].as_array().unwrap().len(), 1);
         assert!(evidence["error"].as_str().unwrap().contains("second"));
         assert_eq!(evidence["product_acceptance"], false);
-        assert_eq!(evidence["drained"], false);
+        assert_eq!(evidence["stop_observation_stage"], "not_requested");
+        assert!(evidence["drained"].is_null());
         assert!(evidence.get("identical_reads").is_none());
     }
 
@@ -475,6 +524,7 @@ mod tests {
             let evidence = failure_trace_snapshot(
                 41,
                 42,
+                ObservationStopStage::Requested,
                 |bytes| {
                     reads += 1;
                     bytes.fill(if changed && reads == 2 { 1 } else { 0 });
@@ -490,7 +540,8 @@ mod tests {
             assert_eq!(saved[1].1, vec![u8::from(changed); wire::TRACE_BYTES]);
             assert_eq!(evidence["identical_reads"], !changed);
             assert_eq!(evidence["product_acceptance"], false);
-            assert_eq!(evidence["drained"], false);
+            assert_eq!(evidence["stop_observation_stage"], "requested");
+            assert!(evidence["drained"].is_null());
             assert!(evidence["first_trace_error"].as_str().is_some());
         }
     }
@@ -501,6 +552,7 @@ mod tests {
         let evidence = failure_trace_snapshot(
             41,
             42,
+            ObservationStopStage::ReturnedSuccess,
             |_| {
                 reads += 1;
                 Ok(())
@@ -511,6 +563,9 @@ mod tests {
         assert!(evidence["samples"].as_array().unwrap().is_empty());
         assert!(evidence["error"].as_str().unwrap().contains("preserve"));
         assert_eq!(evidence["product_acceptance"], false);
+        assert_eq!(evidence["attempted_sample"], "failure-bootstrap-first.bin");
+        assert_eq!(evidence["stop_observation_stage"], "returned_success");
+        assert!(evidence["drained"].is_null());
     }
 
     #[test]
