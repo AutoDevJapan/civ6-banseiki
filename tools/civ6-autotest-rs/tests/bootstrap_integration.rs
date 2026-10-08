@@ -212,6 +212,24 @@ fn frontend_time_is_subtracted_from_the_same_bootstrap_preparation_deadline() {
 }
 
 #[test]
+fn system_backend_refuses_expired_preparation_before_process_discovery() {
+    let mut backend = SystemBackend::default();
+    let dir = tempfile::tempdir().unwrap();
+    let error = backend
+        .start_native_bootstrap(
+            dir.path(),
+            &json!({}),
+            std::time::Instant::now() - std::time::Duration::from_secs(1),
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.message,
+        "bootstrap preparation deadline expired before process discovery"
+    );
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn either_observer_failure_interrupts_the_shared_step_budget() {
     struct Ended(bool);
     impl Backend for Ended {

@@ -793,6 +793,11 @@ impl Backend for SystemBackend {
         step: &Value,
         preparation_deadline: std::time::Instant,
     ) -> Result<()> {
+        if std::time::Instant::now() >= preparation_deadline {
+            return Err(Error::scenario(
+                "bootstrap preparation deadline expired before process discovery",
+            ));
+        }
         if self.native_bootstrap.is_some()
             || self.native_bridge.is_some()
             || self.native_trace.is_some()
@@ -804,6 +809,11 @@ impl Backend for SystemBackend {
         let (pid, started) = self
             .single_process(0.0)?
             .ok_or_else(|| Error::input("bootstrap game missing"))?;
+        if std::time::Instant::now() >= preparation_deadline {
+            return Err(Error::scenario(
+                "bootstrap preparation deadline expired after process discovery",
+            ));
+        }
         self.native_bootstrap = Some(crate::native_bridge::Session::start_bootstrap(
             pid,
             started,

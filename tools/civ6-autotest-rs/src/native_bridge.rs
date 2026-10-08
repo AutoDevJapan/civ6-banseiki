@@ -1174,23 +1174,17 @@ mod platform {
             let input = child.stdin.take();
             let Some(stdout) = child.stdout.take() else {
                 let close = close_game(pid, started);
-                if unsafe { WaitForSingleObject(target.0, 10_000) } == WAIT_OBJECT_0 {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
+                let cleanup = finish_failed_cleanup(close, &target, &mut child);
                 return Err(Error::input(format!(
-                    "bridge stdout unavailable; pinned game close={close:?}; exit_confirmed={}",
+                    "bridge stdout unavailable; cleanup={cleanup:?}; exit_confirmed={}",
                     unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
                 )));
             };
             if input.is_none() {
                 let close = close_game(pid, started);
-                if unsafe { WaitForSingleObject(target.0, 10_000) } == WAIT_OBJECT_0 {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
+                let cleanup = finish_failed_cleanup(close, &target, &mut child);
                 return Err(Error::input(format!(
-                    "bridge stop pipe unavailable; pinned game close={close:?}; exit_confirmed={}",
+                    "bridge stop pipe unavailable; cleanup={cleanup:?}; exit_confirmed={}",
                     unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
                 )));
             }
@@ -1230,11 +1224,9 @@ mod platform {
                     && line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
                 _ => {
                     let close = session.close_target();
-                    if unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0 {
-                        let _ = session.child.kill();
-                        let _ = session.child.wait();
-                        session.finished = true;
-                    }
+                    let cleanup = finish_failed_cleanup(close, &session.target, &mut session.child);
+                    session.finished = unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0
+                        && matches!(session.child.try_wait(), Ok(Some(_)));
                     let mut diagnostic = String::new();
                     if session.finished {
                         if let Some(stderr) = session.child.stderr.take() {
@@ -1242,7 +1234,8 @@ mod platform {
                         }
                     }
                     Err(Error::input(format!(
-                        "native bridge did not prove bounded readiness; pinned game close={close:?}; controller diagnostic={}",
+                        "native bridge did not prove bounded readiness; cleanup={cleanup:?}; controller_exit_confirmed={}; controller diagnostic={}",
+                        session.finished,
                         diagnostic.trim()
                     )))
                 }
@@ -1491,6 +1484,7 @@ mod platform {
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()
                 .unwrap();
+            let controller_pin = test_target(&controller);
             let closed_target = target.clone();
             let close = Box::new(move |actual, _| {
                 assert_eq!(actual, pid);
@@ -1521,6 +1515,11 @@ mod platform {
                 "must not use a fresh 30-second wait"
             );
             assert!(target.lock().unwrap().0.try_wait().unwrap().is_some());
+            assert_eq!(
+                unsafe { WaitForSingleObject(controller_pin.0, 0) },
+                WAIT_OBJECT_0,
+                "controller exit must be confirmed independently"
+            );
             assert!(peer.0.try_wait().unwrap().is_none());
         }
 
