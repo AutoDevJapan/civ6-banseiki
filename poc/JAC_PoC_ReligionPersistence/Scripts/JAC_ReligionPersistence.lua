@@ -5,6 +5,11 @@
 local KEY = "JAC_RP_STATE_V1"
 local SCHEMA = 1
 local RP = { PROPERTY_KEY = KEY, SCHEMA = SCHEMA }
+local ACTIVE_KEY = "JAC_RP_ACTIVE_TURNS_V1"
+
+local function multiplayer()
+  return GameConfiguration.IsAnyMultiplayer and GameConfiguration.IsAnyMultiplayer() == true
+end
 
 local function check(ok, message)
   if not ok then error("[JAC_RP] " .. message, 3) end
@@ -460,16 +465,39 @@ local function researchBoosts(p)
   return boosts
 end
 
-local function heroPlan(p, city)
+local function heroPlan(p, city, requestedClass, observedClaim)
   check(GameConfiguration.GetValue("GAMEMODE_HEROES") == true
     or GameConfiguration.GetValue("GAMEMODE_HEROES") == 1, "official Heroes & Legends mode required")
-  local bridge = ExposedMembers.JAC_RP_HeroUI
-  check(bridge ~= nil and GameInfo.HeroClasses ~= nil, "official Heroes UI bridge unavailable")
-  local originBuilding = bridge.OriginBuilding(p:GetID())
-  check(city:GetBuildings():HasBuilding(originBuilding), "hero city requires the official origin building")
+  check(GameInfo.HeroClasses ~= nil, "official Heroes catalog unavailable")
   local candidates = {}
-  for row in GameInfo.HeroClasses() do
-    if bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates + 1] = row end
+  if requestedClass ~= nil then
+    count(requestedClass, "requested hero class")
+    local hero = GameInfo.HeroClasses[requestedClass]
+    check(hero ~= nil and observedClaim == -1, "hero proposal requires an unclaimed observation")
+    local project = GameInfo.Projects[hero.CreationProjectType]
+    local building = project and GameInfo.Buildings[project.RequiredBuilding]
+    check(building and city:GetBuildings():HasBuilding(building.Index),
+      "hero city requires the official origin building")
+    -- The proposal is an actor's choice, not a trusted native claim snapshot.
+    -- Independently reject live native units and this MOD's saved reservations.
+    for _, owner in ipairs(PlayerManager.GetAlive()) do
+      for _, unit in owner:GetUnits():Members() do
+        check(unit:GetType() ~= GameInfo.Units[hero.UnitType].Index, "hero already alive")
+      end
+    end
+    for _, reservation in pairs(read().heroes) do
+      check(reservation.heroClass ~= requestedClass, "hero class already reserved")
+    end
+    candidates[1] = hero
+  else
+    check(not multiplayer(), "multiplayer hero requires an actor proposal")
+    local bridge = ExposedMembers.JAC_RP_HeroUI
+    check(bridge ~= nil, "official Heroes UI bridge unavailable")
+    check(city:GetBuildings():HasBuilding(bridge.OriginBuilding(p:GetID())),
+      "hero city requires the official origin building")
+    for row in GameInfo.HeroClasses() do
+      if bridge.ClaimPlayer(row.Index) == -1 then candidates[#candidates + 1] = row end
+    end
   end
   table.sort(candidates, function(a, b) return a.HeroClassType < b.HeroClassType end)
   check(#candidates > 0, "no unclaimed official hero")
@@ -634,7 +662,7 @@ local function discoveryPlan(id, discoveryID, outcome, options)
     count(options.city, "hero city")
     check(p:GetCities():FindID(options.city) ~= nil, "hero requires an owned city")
     check(state.heroes[tostring(discovery.player)] == nil, "PoC hero already recruited")
-    local hero, modifier = heroPlan(p, p:GetCities():FindID(options.city))
+    local hero, modifier = heroPlan(p, p:GetCities():FindID(options.city), options.heroClass, options.heroClaim)
     plan.city, plan.heroClass, plan.heroUnit, plan.heroModifier = options.city, hero.Index, hero.UnitType, modifier
     plan.faith = finite(p:GetReligion():GetFaithYield(), "per-turn faith") * RULES.HERO_FAITH_MULTIPLIER
   end
@@ -645,7 +673,12 @@ local function discoveryPlan(id, discoveryID, outcome, options)
   discovery.effects = "PENDING"
   discovery.outcome, discovery.resolvedTurn = outcome, Game.GetCurrentGameTurn()
   discovery.effect = copy(plan)
-  if outcome == "HERO" then state.heroes[tostring(plan.player)] = { religion = id, discovery = discoveryID } end
+  if outcome == "HERO" then state.heroes[tostring(plan.player)] = {
+    religion=id, discovery=discoveryID, player=plan.player, city=plan.city,
+    heroClass=plan.heroClass, heroUnit=plan.heroUnit, rewardFaith=plan.faith,
+    reservedTurn=Game.GetCurrentGameTurn(),
+    token=id .. ":" .. discoveryID .. ":" .. plan.player .. ":" .. plan.city .. ":" .. Game.GetCurrentGameTurn(),
+    claimIndependentlyVerified=false } end
   if outcome == "ARTIFACT" then state.artifacts[tostring(plan.player)] = { religion = id, asset = plan.asset } end
   return state, plan
 end
@@ -775,11 +808,28 @@ function RP.ResolveDiscovery(id, discoveryID, outcome, options)
 end
 
 local heroObservations = {} -- diagnostic only; never saved or used for decisions
-function RP.CompleteHero(playerID)
+function RP.CompleteHero(playerID, observation)
   local state = read()
   local h = state.heroes[tostring(playerID)]
   check(h ~= nil and h.verification == "PENDING", "hero not awaiting verification")
-  local info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
+  local info
+  if observation then
+    local d = get(state, h.religion).discoveries[h.discovery]
+    local city = h.city or d.effect and d.effect.city
+    local turn = h.reservedTurn or d.resolvedTurn
+    local token = h.token or h.religion .. ":" .. h.discovery .. ":" .. playerID .. ":" .. city .. ":" .. turn
+    check(observation.Token == token and observation.ReservedTurn == turn
+      and observation.City == city, "stale hero reservation observation")
+    count(observation.ObservedClass, "observed hero class")
+    count(observation.ObservedLifespan, "observed hero lifespan", true)
+    check(observation.ObservedClass == h.heroClass and observation.ObservedClaim == playerID,
+      "hero display observation mismatch")
+    info = { hero=true, class=observation.ObservedClass, lifespan=observation.ObservedLifespan,
+      claim=observation.ObservedClaim, active=true }
+  else
+    check(not multiplayer(), "multiplayer hero completion requires an actor observation")
+    info = ExposedMembers.JAC_RP_HeroUI.UnitInfo(playerID, h.unit)
+  end
   local testFlag = GameConfiguration.GetValue("JAC_AUTOTEST")
   if tonumber(testFlag) == 1 then
     local observed = "unit=" .. h.unit .. " expectedClass=" .. h.heroClass .. " actual=" .. encode(info)
@@ -796,12 +846,21 @@ function RP.CompleteHero(playerID)
   end
   local p = player(playerID)
   local unit = p:GetUnits():FindID(h.unit)
-  check(unit ~= nil and unit:GetType() == GameInfo.Units[h.heroUnit].Index, "native hero unit changed")
+  check(unit ~= nil and unit:GetOwner() == playerID
+    and unit:GetType() == GameInfo.Units[h.heroUnit].Index, "native hero unit changed")
   local religion = get(state, h.religion)
   local d = religion.discoveries[h.discovery]
   check(d ~= nil and d.outcome == "HERO" and d.effects == "PENDING", "hero receipt changed")
   local use = religion.materialUses[d.asset]
   check(use ~= nil and use.effects == "PENDING", "hero material reservation changed")
+  check(d.player == playerID and use.player == playerID
+    and religion.assets[d.asset] and religion.assets[d.asset].owner == playerID,
+    "hero material owner changed")
+  if observation then
+    h.displayObservation = { actor=playerID, class=info.class, claim=info.claim,
+      lifespan=info.lifespan, turn=Game.GetCurrentGameTurn() }
+    h.claimIndependentlyVerified = false -- UI claim/lifespan are display evidence only.
+  end
   h.verification = "APPLYING"
   commit(state) -- a interrupted reward cannot replay on the next frame/load.
   p:GetReligion():ChangeFaithBalance(h.rewardFaith)
@@ -852,10 +911,100 @@ function RP.Export()
   return read()
 end
 
+-- Official BlackDeathScenario/UI/BlackDeathScenario_PopupHandler.lua:22-28:
+-- EXECUTE_SCRIPT invokes the named GameEvent on every client. The first
+-- argument is the ENGINE player actor, never an ID supplied in params.
+local function operation(actor, params)
+  check(type(params) == "table", "operation parameters required")
+  local allowed = { OnStart=true, Action=true, Turn=true, Revision=true,
+    Religion=true, Discovery=true, Outcome=true, City=true, Revival=true,
+    Community=true, Source=true, TargetReligion=true, TargetPlayer=true, Unit=true,
+    HeroClass=true, HeroClaim=true, Token=true, ReservedTurn=true,
+    ObservedClass=true, ObservedClaim=true, ObservedLifespan=true }
+  for key, value in pairs(params) do
+    check(allowed[key] and (type(value) == "string" or type(value) == "number"),
+      "unsupported operation parameter")
+  end
+  if params.Action ~= "COMPLETE_HERO" then
+    check(params.Token == nil and params.ReservedTurn == nil and params.ObservedClass == nil
+      and params.ObservedClaim == nil and params.ObservedLifespan == nil,
+      "hero observation requires a completion operation")
+  end
+  if params.Action ~= "RESOLVE" or params.Outcome ~= "HERO" then
+    check(params.HeroClass == nil and params.HeroClaim == nil, "hero proposal requires a hero choice")
+  end
+  local p = player(actor)
+  -- Track official Gameplay events instead of consulting UI active-turn reads:
+  -- PiratesScenario_StartScript.lua:1621,1624. Persist for mid-turn reloads;
+  -- a map supports simultaneous turns without a UI-local current-player ID.
+  local active = Game:GetProperty(ACTIVE_KEY) or {}
+  check(p:IsHuman() and active[tostring(actor)] == Game.GetCurrentGameTurn(),
+    "operation requires the actor's active human turn")
+  count(params.Turn, "request turn")
+  count(params.Revision, "request revision")
+  local state = read()
+  check(params.Turn == Game.GetCurrentGameTurn() and params.Revision == state.revision,
+    "stale religion operation")
+  local religion = get(state, params.Religion)
+  if params.Action == "RESOLVE" then
+    identifier(params.Discovery, "discovery")
+    local d = religion.discoveries[params.Discovery]
+    check(d ~= nil and d.player == actor, "discovery not owned by engine actor")
+    RP.ResolveDiscovery(params.Religion, params.Discovery, params.Outcome, {
+      player=actor, city=params.City, revival=params.Revival, community=params.Community,
+      targetReligion=params.TargetReligion, targetPlayer=params.TargetPlayer,
+      heroClass=params.HeroClass, heroClaim=params.HeroClaim })
+    return true
+  elseif params.Action == "REVIVE" then
+    RP.Revive(params.Religion, params.Revival, params.Source, params.Community, actor, params.City)
+    return true
+  elseif params.Action == "COMPLETE_HERO" then
+    local h = state.heroes[tostring(actor)]
+    check(h ~= nil and h.religion == params.Religion and h.discovery == params.Discovery
+      and h.unit == params.Unit, "hero receipt not owned by engine actor")
+    return RP.CompleteHero(actor, params)
+  end
+  error("[JAC_RP] unknown religion operation")
+end
+
+function RP.HandleOperation(actor, params)
+  local ok, result = pcall(operation, actor, params)
+  if not ok then print("[JAC_RP] operation rejected: " .. tostring(result)); return false end
+  return result
+end
+
+local function completeSingleplayerAIHero(actor)
+  -- AI cannot issue a local human UI operation. Preserve singleplayer AI
+  -- completion on its own engine turn events, never on another client's frame.
+  local p = Players[actor]
+  if multiplayer() or not p or p:IsHuman() then return end
+  local h = read().heroes[tostring(actor)]
+  if h and h.verification == "PENDING" then
+    local ok, result = pcall(RP.CompleteHero, actor)
+    if not ok then print("[JAC_RP] AI hero verification pending: " .. tostring(result)) end
+  end
+end
+
 -- The turn hook ONLY expires alliance restrictions; never replays effects.
 -- Official gameplay turn event: BlackDeathScenario.lua:64.
 if not JAC_RP_AdapterInclude then
   GameEvents.OnGameTurnStarted.Add(RP.RefreshReligiousAlliances)
+  GameEvents.JAC_ReligionOperation.Add(RP.HandleOperation)
+  GameEvents.PlayerTurnStartComplete.Add(function(actor)
+    if type(actor) ~= "number" or actor < 0 or Players[actor] == nil then return end
+    local active = copy(Game:GetProperty(ACTIVE_KEY) or {})
+    active[tostring(actor)] = Game.GetCurrentGameTurn()
+    Game:SetProperty(ACTIVE_KEY, active)
+    completeSingleplayerAIHero(actor)
+  end)
+  GameEvents.OnPlayerTurnEnded.Add(function(actor)
+    completeSingleplayerAIHero(actor)
+    local active = copy(Game:GetProperty(ACTIVE_KEY) or {})
+    if active[tostring(actor)] ~= nil then
+      active[tostring(actor)] = nil
+      Game:SetProperty(ACTIVE_KEY, active)
+    end
+  end)
   -- Read fresh on every call: old saves cannot inherit previous Lua locals.
   ExposedMembers.JAC_ReligionPersistence = RP
 end

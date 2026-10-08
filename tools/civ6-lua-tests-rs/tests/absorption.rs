@@ -780,6 +780,7 @@ fn package_manifest() {
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",
+            "UI/JAC_CarrierMP_UI.lua",
             "UI/JAC_Absorption_HeroKeys.xml",
             "UI/JAC_Absorption_AdmissionUI.lua",
             "UI/JAC_Absorption_CityStates.lua",
