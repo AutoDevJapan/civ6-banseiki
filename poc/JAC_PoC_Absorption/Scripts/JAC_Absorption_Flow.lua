@@ -2,6 +2,10 @@
 -- EXECUTE_SCRIPT requests and reads detached snapshots; it never rolls.
 include("JAC_Absorption_Rules")
 local R = JAC_AbsorptionRules
+local function Multiplayer()
+  return GameConfiguration and type(GameConfiguration.IsAnyMultiplayer) == "function"
+    and GameConfiguration.IsAnyMultiplayer() == true
+end
 local A = assert(JAC_AbsorptionGameplay, "absorption engine must load first")
 local F = {}
 local KEY = "JAC_ABSORPTION_FLOW_V1"
@@ -57,7 +61,7 @@ end
 local function Clamp(value, lo, hi) return math.max(lo, math.min(hi, value)) end
 local function DebugAllowed()
   return Game:GetProperty(TEST_KEY) == 1 and GameConfiguration
-    and GameConfiguration.IsAnyMultiplayer and not GameConfiguration.IsAnyMultiplayer()
+    and GameConfiguration.IsAnyMultiplayer and not Multiplayer()
 end
 local function DebugState()
   if not DebugAllowed() then return nil end
@@ -291,7 +295,7 @@ local function IsAllowed(entry, action)
   return false
 end
 local function Inventory(plan, phase)
-  if GameConfiguration.IsAnyMultiplayer() then
+  if Multiplayer() then
     assert(JAC_NativeInventory, "native inventory binding unavailable")
     if JAC_NativeInventory.HasContext() then return InventoryLocal(plan) end
     return JAC_NativeInventory.With(plan, phase or "FLOW_BEGIN", function() return InventoryLocal(plan) end)
@@ -443,7 +447,7 @@ local function Begin(plan)
   return R.Copy(flow)
 end
 function F.Begin(plan)
-  if not GameConfiguration.IsAnyMultiplayer() then return Begin(plan) end
+  if not Multiplayer() then return Begin(plan) end
   local ok,result=pcall(function()
     return JAC_NativeInventory.With(plan,"FLOW_BEGIN",function() return Begin(plan) end)
   end)
@@ -491,7 +495,7 @@ local function InventoryStillMatches(flow)
     return false, "absorption faction died before resolution"
   end
   local entries, roster
-  if GameConfiguration.IsAnyMultiplayer() then
+  if Multiplayer() then
     entries,roster=JAC_NativeInventory.With(flow.Request,"FLOW_CHECK",function() return InventoryLocal(flow.Request) end)
   else entries,roster=Inventory(flow.Request) end
   local actual = {}

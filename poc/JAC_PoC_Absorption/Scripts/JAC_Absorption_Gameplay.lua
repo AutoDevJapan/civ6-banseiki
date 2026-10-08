@@ -1,5 +1,9 @@
 include("JAC_Absorption_Rules")
 local R = JAC_AbsorptionRules
+local function Multiplayer()
+  return GameConfiguration and type(GameConfiguration.IsAnyMultiplayer) == "function"
+    and GameConfiguration.IsAnyMultiplayer() == true
+end
 local A = { Rules = R }
 local unitKeys = { [R.PERSON_KEY] = true, JAC_POC_GROWTHUI_WARLORD = true }
 local cityKeys = { [R.CITY_FAITH_KEY] = true }
@@ -62,7 +66,7 @@ A.GetPropertyKeys = function()
 end
 A.GetUIPhase = function() return R.Copy(Game:GetProperty("JAC_ABSORPTION_FIXTURE_UI_WAIT")) end
 local function CityRead(city, method, ...)
-  if GameConfiguration.IsAnyMultiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+  if Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.ReadCity(city, method, ...)
   end
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -86,7 +90,7 @@ function A.CityLoyalty(city)
 end
 local function RequestLoyaltyRead(city, governance, phase)
   if CoreCityLoyalty(city) ~= nil then return end
-  if GameConfiguration.IsAnyMultiplayer() then return end
+  if Multiplayer() then return end
   local request = governance.LoyaltyRead
   local turn = Game.GetCurrentGameTurn()
   if request and request.Phase == phase and request.Turn == turn then return end
@@ -98,7 +102,7 @@ end
 local function PublishedLoyalty(city, governance, phase)
   local direct = CoreCityLoyalty(city)
   if direct ~= nil then return direct end
-  if GameConfiguration.IsAnyMultiplayer() then
+  if Multiplayer() then
     assert(JAC_NativeInventory,"native inventory binding unavailable")
     local ok,value=pcall(function()
       return JAC_NativeInventory.With({ID=governance.ID,From=governance.From,To=governance.To},
@@ -255,7 +259,7 @@ end
 A.PalaceWorks = PalaceWorks
 
 function A.OwnedGreatWorkSlots(owner)
-  if GameConfiguration.IsAnyMultiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+  if Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.Works(owner)
   end
   local works, seen = {}, {}
@@ -320,7 +324,7 @@ A.OwnedGreatWorks = OwnedGreatWorks
 local function NativeWorkLocations(index)
   assert(type(index) == "number" and index >= 0 and index == math.floor(index),
     "native Great Work index required")
-  if GameConfiguration.IsAnyMultiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+  if Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.Locations(index)
   end
   local owners, seen, found = {}, {}, {}
@@ -514,7 +518,7 @@ end
 local function NativeWorkRoute(source, tracked, donor, destination, custodian)
   if not custodian then return "CITY" end
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() and destination >= 0 then return "CARRIER" end
+    and Multiplayer() and destination >= 0 then return "CARRIER" end
   if destination < 0 or (tracked and tracked.NativeOwnerMoves or 0) > 0
     or source.BuildingType == "BUILDING_PALACE" and source.CreatedByPlayer ~= donor then
     return "CARRIER"
@@ -938,7 +942,7 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
   if plan.FlowPolicy and R.CITY_POLICY[plan.Mode].Immediate ~= 0 then
     for _, city in source:GetCities():Members() do
       assert(city.ChangeLoyalty, "native city loyalty setter unavailable")
-      if CoreCityLoyalty(city) == nil and not GameConfiguration.IsAnyMultiplayer() then
+      if CoreCityLoyalty(city) == nil and not Multiplayer() then
         local reads = ExposedMembers.JAC_HeroReadAPI
         assert(reads and reads.GetObservation,
           "published UI city loyalty reads unavailable")
@@ -952,7 +956,7 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
     assert(previous.Status ~= "COMPLETE" or previous.From ~= plan.From, "faction was already absorbed")
   end
   for _, city in source:GetCities():Members() do
-    if CityNeedsUI(city) and not (GameConfiguration.IsAnyMultiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext()) then
+    if CityNeedsUI(city) and not (Multiplayer() and JAC_NativeInventory and JAC_NativeInventory.HasContext()) then
       local reads = ExposedMembers.JAC_HeroReadAPI
       if not sourceReadyToken or not reads or not reads.GetObservation
         or not reads.GetObservation(sourceReadyToken) then error("JAC_ABSORPTION_WAITING_UI", 0) end
@@ -1213,7 +1217,7 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
 end
 
 local function Prepare(plan, state, sourceReads, sourceReadyToken)
-  if GameConfiguration.IsAnyMultiplayer() then
+  if Multiplayer() then
     assert(JAC_NativeInventory, "native inventory binding unavailable")
     return JAC_NativeInventory.With(plan, "SOURCE_PREPARE", function()
       return PrepareLocal(plan, state, sourceReads, sourceReadyToken)
@@ -1683,7 +1687,7 @@ local function MovedAssetsLocal(tx, normalCommitted)
 end
 
 local function MovedAssets(tx, normalCommitted)
-  if normalCommitted and GameConfiguration.IsAnyMultiplayer() and not JAC_NativeInventory.HasContext() then
+  if normalCommitted and Multiplayer() and not JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.With(tx, "CITY_COMMIT", function() return MovedAssetsLocal(tx, normalCommitted) end)
   end
   return MovedAssetsLocal(tx, normalCommitted)
@@ -1830,7 +1834,7 @@ local function VerifyLocal(tx, state, exactUnits)
 end
 
 local function Verify(tx, state, exactUnits)
-  if GameConfiguration.IsAnyMultiplayer() and not JAC_NativeInventory.HasContext() then
+  if Multiplayer() and not JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.With(tx, "CITY_VERIFY", function() return VerifyLocal(tx, state, exactUnits) end)
   end
   return VerifyLocal(tx, state, exactUnits)
@@ -1888,7 +1892,7 @@ NativeWorkAtTarget = function(snap)
   return found[1]
 end
 NativeWorkAtAbsorber = function(tx, snap)
-  if GameConfiguration.IsAnyMultiplayer() and not JAC_NativeInventory.HasContext() then
+  if Multiplayer() and not JAC_NativeInventory.HasContext() then
     return JAC_NativeInventory.With(tx,"CITY_VERIFY",function() return NativeWorkAtAbsorber(tx,snap) end)
   end
   local found = NativeWorkLocations(snap.Source.Index)
@@ -2105,7 +2109,7 @@ local function AssertNativeCarrierContext()
   -- and PARAM_PLAYER_ONE as the local player. The single-player cross-owner
   -- route has no verified MP actor for an AI / Free Cities borrower.
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer()),
+    and Multiplayer()),
     "native Great Work carrier MOVE has no verified multiplayer actor")
 end
 
@@ -2126,7 +2130,7 @@ end
 
 local function AdvanceNativeCarrier(state, carrier, preferred)
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() then
+    and Multiplayer() then
     assert(JAC_CarrierMP, "native Great Work carrier MOVE has no verified multiplayer actor")
     return JAC_CarrierMP.Advance(state, carrier, preferred)
   end
@@ -2329,7 +2333,7 @@ local function MoveNativeWorks(state, tx)
     end
   end
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() then
+    and Multiplayer() then
     assert(JAC_CarrierMP, "native MP carrier binding unavailable")
     JAC_CarrierMP.Preflight(tx)
   end
@@ -2347,7 +2351,7 @@ local function MoveNativeWorks(state, tx)
   end
   for _, snap in ipairs(tx.NativeWorks or {}) do
     if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-      and GameConfiguration.IsAnyMultiplayer() and snap.Custodian and snap.NativeRoute == "CARRIER" then
+      and Multiplayer() and snap.Custodian and snap.NativeRoute == "CARRIER" then
       assert(JAC_CarrierMP, "native MP carrier binding unavailable")
       if not JAC_CarrierMP.AdvanceSnap(state, tx, snap) then
         error("JAC_ABSORPTION_WAITING_UI", 0)
@@ -2404,7 +2408,7 @@ local function MoveNativeWorks(state, tx)
             Token = tx.ID .. ":carrier:" .. snap.Source.Index,
             BorrowToken = tx.ID .. ":carrier:" .. snap.Source.Index .. ":borrow" }
           if not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
-            and GameConfiguration.IsAnyMultiplayer()) then
+            and Multiplayer()) then
             snap.Carrier.Before = NativeCarrierState(city, snap.Carrier)
           end
           Save(state)
@@ -2622,7 +2626,7 @@ local function Execute(state, tx)
   for _, snap in ipairs(tx.Cities) do
     if CityNeedsUI(assert(CityManager.GetCityAt(snap.X, snap.Y))) then needsCityUI = true; break end
   end
-  if needsCityUI and not GameConfiguration.IsAnyMultiplayer() then
+  if needsCityUI and not Multiplayer() then
       local reads = ExposedMembers.JAC_HeroReadAPI
       if not reads or not reads.GetObservation or not reads.GetObservation(tx.ID .. ":final") then
         tx.AwaitingFinalUI = true
@@ -2656,7 +2660,7 @@ local function Execute(state, tx)
     .. " units=" .. #tx.Units .. " cities=" .. #tx.Cities .. " plots=" .. #tx.Plots)
   return R.Copy(tx)
   end
-  if GameConfiguration.IsAnyMultiplayer() then
+  if Multiplayer() then
     return JAC_NativeInventory.With(tx,"CITY_COMMIT",finalizeCityInheritance)
   end
   return finalizeCityInheritance()
@@ -2761,7 +2765,7 @@ function A.CanCancelUnprepared(id, expectedPlan)
   local state = State()
   local tx = state.Transactions[id]
   if not tx then return true end
-  if GameConfiguration.IsAnyMultiplayer() and JAC_NativeInventory and not JAC_NativeInventory.HasContext()
+  if Multiplayer() and JAC_NativeInventory and not JAC_NativeInventory.HasContext()
     and not tx.AwaitingPreparation then
     local ok,allowed=pcall(function()
       return JAC_NativeInventory.With(tx,"SOURCE_CANCEL",function() return A.CanCancelUnprepared(id,expectedPlan) end)
@@ -2811,7 +2815,7 @@ function A.Resume(id)
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
   if tx.Turn ~= Game.GetCurrentGameTurn() and not tx.Request.FlowPolicy
     and GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() and JAC_CarrierMP
+    and Multiplayer() and JAC_CarrierMP
     and JAC_CarrierMP.HasContinuation(tx) then
     -- This permission advances/restores saved MP loans only. It does not
     -- replay the stale manual contract for units, cities, or other adapters.
@@ -2929,7 +2933,7 @@ function A.Verify(id, exact)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   assert(tx.Status == "COMPLETE", "absorption did not complete: " .. tx.Status)
-  if VerificationNeedsUI(tx, exact == true) and not GameConfiguration.IsAnyMultiplayer() then
+  if VerificationNeedsUI(tx, exact == true) and not Multiplayer() then
     local request, reads = tx.VerificationUI, ExposedMembers.JAC_HeroReadAPI
     assert(request and request.Turn == Game.GetCurrentGameTurn() and reads and reads.GetObservation
       and reads.GetObservation(request.Token), "verification requires a published UI request")
@@ -3037,7 +3041,7 @@ local function NativeRecoverySourceEmpty(source)
 end
 local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() then
+    and Multiplayer() then
     assert(JAC_CarrierMP, "native MP recovery binding unavailable")
     intent.NativeSource = intent.NativeSource or R.Copy(source)
     if not JAC_CarrierMP.AdvanceRecovery(state, intent, intent.NativeSource, owner, token) then
@@ -3453,7 +3457,7 @@ function A.ApplyCityFriction(onlyOwner)
               g.FrictionApplied = (g.FrictionApplied or 0) + 1
               g.LastFrictionTurn, g.FrictionPending, g.LoyaltyRead = pending.Turn, nil, nil
               city:SetProperty(R.GOVERNANCE_KEY, g)
-            elseif GameConfiguration.IsAnyMultiplayer() then
+            elseif Multiplayer() then
               -- Finish one shared before/after observation before another
               -- city's properties can invalidate that pending descriptor.
               return

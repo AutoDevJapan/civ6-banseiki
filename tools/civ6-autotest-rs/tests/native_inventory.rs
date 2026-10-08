@@ -220,6 +220,27 @@ fn public_turn_events_refresh_fixed_observer_after_shared_human_roster_change() 
 }
 
 #[test]
+fn single_player_turn_events_preserve_saved_mp_inventory_intents() {
+    for missing in [false, true] {
+        let lua = world(2, 3);
+        lua.globals().set("MISSING_CONFIG", missing).unwrap();
+        lua.load(r#"
+          JAC_AbsorptionGameplay.Apply(PLAN)
+          local before=JAC_NativeInventoryCodec.Encode(Game:GetProperty('JAC_NATIVE_INVENTORY_V1'))
+          local configuration=GameConfiguration
+          if MISSING_CONFIG then GameConfiguration=nil
+          else GameConfiguration.IsAnyMultiplayer=function() return false end end
+          CURRENT_TURN=6;GameEvents.PlayerTurnStartComplete.Emit(2)
+          assert(before==JAC_NativeInventoryCodec.Encode(Game:GetProperty('JAC_NATIVE_INVENTORY_V1')))
+          assert(TRANSFERS==0 and MOVES==0 and #SENT==0)
+          GameConfiguration=configuration;GameConfiguration.IsAnyMultiplayer=function() return true end
+          GameEvents.PlayerTurnStartComplete.Emit(2)
+          assert(before~=JAC_NativeInventoryCodec.Encode(Game:GetProperty('JAC_NATIVE_INVENTORY_V1')))
+        "#).exec().unwrap();
+    }
+}
+
+#[test]
 fn turn_activity_difference_never_changes_saved_provider_or_nonce() {
     let a = world(2, 0);
     let b = world(3, 0);

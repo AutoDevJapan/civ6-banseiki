@@ -281,6 +281,8 @@ end
 -- Gameplay turn receipts refresh the observer assignment after load/rejoin.
 -- UI GetPending is detached and never writes shared state or selects an actor.
 function NI.Refresh()
+  if not GameConfiguration or not GameConfiguration.IsAnyMultiplayer
+    or not GameConfiguration.IsAnyMultiplayer() then return end
   local b=box();local actor=selected();local turn=Game.GetCurrentGameTurn();local changed=false
   local core=descriptors();local signature=Encode(core)
   for _,key in ipairs(R.Keys(b.Requests)) do local q=b.Requests[key]
