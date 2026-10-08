@@ -151,6 +151,96 @@ fn wait(code: &str) -> Value {
     json!({"action":"wait_for","timeout":30,"condition":{"type":"lua","state_name":"InGame","code":format!("{UI_COMMON}\n{code}")}})
 }
 
+const STARTUP_READ: &str = r#"
+local function quoted(v) return '"'..tostring(v):gsub('[%z\1-\31\\"]',function(c)return string.format('\\u%04x',string.byte(c))end)..'"' end
+local fields={}
+local function read(name,fn)
+ local ok,value=pcall(fn); local kind=type(value); local text=nil
+ if ok and kind=='boolean' then text=tostring(value)
+ elseif ok and kind=='number' and value==value and value>-math.huge and value<math.huge then text=string.format('%.17g',value)
+ elseif ok and kind=='string' then text=quoted(value) end
+ local problem=not ok and quoted(value) or (kind=='nil' and '"nil_result"' or 'null')
+ fields[#fields+1]='{"name":'..quoted(name)..',"available":'..tostring(text~=nil)..',"type":'..quoted(kind)..',"value":'..(text or 'null')..',"error":'..problem..'}'
+end
+read('turn',function()return Game.GetCurrentGameTurn()end)
+read('local_player',function()return Game.GetLocalPlayer()end)
+for id=0,21 do local owner=id
+ read('player_'..id..'_human',function()return Players[owner]:IsHuman()end)
+ read('player_'..id..'_active',function()return Players[owner]:IsTurnActive()end)
+ read('player_'..id..'_active_complete',function()return Players[owner]:IsTurnActiveComplete()end)
+end
+read('capital_id',function()return Players[0]:GetCities():GetCapitalCity():GetID()end)
+read('capital_population',function()return Players[0]:GetCities():GetCapitalCity():GetPopulation()end)
+read('city_plot_list_method_present',function()return type(Map.GetCityPlots)=='function' end)
+read('capital_purchased_plot_count',function()return #Map.GetCityPlots():GetPurchasedPlots(Players[0]:GetCities():GetCapitalCity())end)
+read('district_create_method',function()return type(Players[0]:GetCities():GetCapitalCity():GetBuildQueue().CreateIncompleteDistrict)=='function'end)
+if __UI__ then
+ read('can_end_turn',function()return UI.CanEndTurn()end)
+ read('sent_turn_complete',function()return UI.HasSentTurnComplete()end)
+ read('processing_messages',function()return UI.IsProcessingMessages()end)
+ read('interface_mode',function()return UI.GetInterfaceMode()end)
+ read('loadscreen_hidden',function()return ContextPtr:LookUpControl('/LoadScreen'):IsHidden()end)
+end
+return '{"context":'..quoted(__CONTEXT__)..',"phase":'..quoted(__PHASE__)..',"observations":['..table.concat(fields,',')..'],"quantity_accepted":false}'
+"#;
+
+pub fn make_startup_probe(repo: &Repository, entry: &Value) -> Result<Value> {
+    ensure!(
+        entry["oath"] == "JAC_OATH_MORI_SETO_FLEETS",
+        "initial-human-state diagnostic is bound to Mori's startup"
+    );
+    let mut probe = oath_save_probe::make_native_probe(repo, entry)?;
+    let steps = probe["steps"].as_array_mut().unwrap();
+    ensure!(
+        steps[3]["action"] == "start_game"
+            && steps[4]["action"] == "wait_for"
+            && steps[4]["condition"]["state_name"] == "GameCore_Tuner",
+        "startup diagnostic prefix changed"
+    );
+    steps.truncate(5); // Start through the real Core ledger/capital gate, no patch or fixture.
+    for (phase, seconds) in [
+        ("after_start_game", 0),
+        ("after_observe_30", 30),
+        ("after_observe_60", 30),
+        ("after_observe_85", 25),
+        ("after_screenshot_optional_ui_close", 0),
+    ] {
+        if seconds > 0 {
+            steps.push(json!({"action":"observe_for","seconds":seconds,"timeout":seconds+10}));
+        }
+        for (state, is_ui) in [("GameCore_Tuner", false), ("InGame", true)] {
+            let code = STARTUP_READ
+                .replace("__UI__", if is_ui { "true" } else { "false" })
+                .replace("__CONTEXT__", if is_ui { "'UI'" } else { "'CORE'" })
+                .replace("__PHASE__", &format!("'{phase}'"));
+            steps.push(json!({"action":"ui_lua","state_name":state,"code":code,"timeout":30}));
+        }
+        if phase == "after_observe_85" {
+            // Record both contexts before screenshot closes any optional UI.
+            steps.push(
+                json!({"action":"screenshot","path":"startup-after-observe-85.png","timeout":30}),
+            );
+        }
+    }
+    let object = probe.as_object_mut().unwrap();
+    for key in [
+        "save_probe",
+        "native_exact_removal_candidate",
+        "native_production_basis",
+        "naval_port_fixture",
+    ] {
+        object.remove(key);
+    }
+    object.insert("finite_turns".into(), json!(0));
+    object.insert(
+        "name".into(),
+        json!("毛利の初期手番を両Lua状態から観測する（数量・港・保存は未検証）"),
+    );
+    object.insert("startup_diagnostic".into(),json!({"scope":"observe_core_ui_initial_human_state","gameplay_mutations":false,"optional_ui_closed_by_screenshot":true,"quantity_accepted":false}));
+    civ6_autotest_rs::scenario::validate_scenario(&probe)?;
+    Ok(probe)
+}
+
 pub fn make_probe(repo: &Repository, entry: &Value) -> Result<Value> {
     ensure!(
         entry["oath"] == "JAC_OATH_MORI_SETO_FLEETS",
@@ -201,6 +291,76 @@ pub fn make_probe(repo: &Repository, entry: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_probe_observes_unavailable_fields_without_mutating_or_blessing_them() -> Result<()> {
+        let repo = Repository::checked_in();
+        let entry = oath_save_probe::catalogue(&repo)?
+            .into_iter()
+            .find(|e| e["oath"] == "JAC_OATH_MORI_SETO_FLEETS")
+            .unwrap();
+        let probe = make_startup_probe(&repo, &entry)?;
+        assert_eq!(probe["finite_turns"], 0);
+        assert!(probe.get("naval_port_fixture").is_none());
+        assert!(probe.get("native_exact_removal_candidate").is_none());
+        assert_eq!(probe["diagnostic_only"], true);
+        let steps = probe["steps"].as_array().unwrap();
+        let waits: Vec<_> = steps
+            .iter()
+            .filter(|s| s["action"] == "observe_for")
+            .map(|s| s["seconds"].as_u64().unwrap())
+            .collect();
+        assert_eq!(waits, vec![30, 30, 25]);
+        let screen = steps
+            .iter()
+            .position(|s| s["action"] == "screenshot")
+            .unwrap();
+        assert!(steps[screen - 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains("after_observe_85"));
+        assert!(steps[screen + 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains("after_screenshot_optional_ui_close"));
+        assert!(!steps.iter().skip(5).any(|s| s["action"] == "wait_for"));
+        assert!(!probe["steps"].as_array().unwrap().iter().any(|s| [
+            "oath_exact_removal",
+            "save",
+            "load",
+            "end_turn",
+            "autoplay"
+        ]
+        .contains(&s["action"].as_str().unwrap())));
+        let vm = mlua::Lua::new();
+        vm.load("Game={GetCurrentGameTurn=function()return 0 end,GetLocalPlayer=function()return 0 end};Players={[0]={IsHuman=function()return true end,IsTurnActive=function()return true end,IsTurnActiveComplete=function()return false end}};Map={};UI={CanEndTurn=function()return false end,HasSentTurnComplete=function()return false end,IsProcessingMessages=function()return true end,GetInterfaceMode=function()return 5 end}").exec()?;
+        for step in probe["steps"].as_array().unwrap().iter().skip(5) {
+            if let Some(code) = step["code"].as_str() {
+                let raw = vm.load(code).eval::<String>()?;
+                let report: Value = serde_json::from_str(&raw)?;
+                assert_eq!(report["quantity_accepted"], false);
+                let rows = report["observations"].as_array().unwrap();
+                assert_eq!(
+                    rows.iter()
+                        .find(|r| r["name"] == "player_0_active_complete")
+                        .unwrap()["value"],
+                    false
+                );
+                assert_eq!(
+                    rows.iter()
+                        .find(|r| r["name"] == "capital_purchased_plot_count")
+                        .unwrap()["available"],
+                    false
+                );
+                assert!(rows
+                    .iter()
+                    .find(|r| r["name"] == "capital_purchased_plot_count")
+                    .unwrap()["error"]
+                    .is_string());
+            }
+        }
+        Ok(())
+    }
 
     const UI_STATE: &str = r#"
 turn=0; owner=-1; member=false; population=4; balance=1000; can=true; permitted=true; pillaged=false; built=false

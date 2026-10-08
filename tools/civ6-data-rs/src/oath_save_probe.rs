@@ -788,7 +788,22 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
         )?;
         return Ok(());
     }
-    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal [--naval-harbor]] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
+    if args.len() == 5
+        && args[0] == "--startup-diagnostic"
+        && args[1] == "--oath"
+        && args[3] == "--output"
+    {
+        let entry = catalogue(repo)?
+            .into_iter()
+            .find(|e| e["oath"] == args[2])
+            .context("unknown oath")?;
+        write_new(
+            Path::new(&args[4]),
+            &crate::oath_naval_port::make_startup_probe(repo, &entry)?,
+        )?;
+        return Ok(());
+    }
+    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal [--naval-harbor] | --startup-diagnostic] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
 }
 
 pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
