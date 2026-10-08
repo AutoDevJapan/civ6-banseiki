@@ -331,3 +331,112 @@ fn generated_binding_matches_and_no_new_core_enactment_or_ui_mutator_exists() {
     let lua = world(2, 2, false);
     lua.load("assert(ExposedMembers.JAC_NativeDeal==nil and ExposedMembers.JAC_Absorption.BuildNativeWorkDealCore==nil)").exec().unwrap();
 }
+
+#[test]
+fn ai_last_city_full_artifact_museum_inherits_all_originals_without_history_or_deal() {
+    for recipient in [2, 3] {
+        let a = world(2, recipient, true);
+        let b = world(3, recipient, true);
+        for lua in [&a, &b] {
+            lua.load(
+                r#"
+              PLAN.To=RECIPIENT;PLAN.NativeWorks={}
+              GameInfo.JAC_AbsorptionOutcomes=function()
+                local list={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+                  {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}};local i=0
+                return function() i=i+1;return list[i] end
+              end
+              Players[1].cities[8]=nil;CITIES[8].owner=0;Players[0].cities[8]=CITIES[8]
+              PLOTS[8].owner=0;PLOTS[9].owner=0
+              -- Owner/creator mismatch plus unrecorded same-turn circulation:
+              -- CITY keeps the same physical slots; it requires no Original certificate.
+              ENGINE().Works[900].Creator=3;ENGINE().Works[900].Owner=2;ENGINE().Works[900].Owner=1
+              ENGINE().Works[902]={Owner=1,X=4,Building=1,Slot=1,Creator=0,Kind=4}
+              ENGINE().Works[903]={Owner=1,X=4,Building=1,Slot=2,Creator=3,Kind=4}
+              local transfer=CityManager.TransferCity
+              CityManager.TransferCity=function(city,owner)
+                transfer(city,owner)
+                for _,w in pairs(ENGINE().Works) do if w.X==city.x then w.Owner=owner end end
+              end
+              JAC_AbsorptionGameplay.Apply(PLAN)
+            "#,
+            )
+            .exec()
+            .unwrap();
+        }
+        for _ in 0..6 {
+            if a.load(
+                "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
+            )
+            .eval::<bool>()
+            .unwrap()
+            {
+                break;
+            }
+            relay(&a, &b);
+        }
+        for lua in [&a, &b] {
+            lua.load(r#"
+              local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID]
+              assert(tx.Status=='COMPLETE',tostring(tx.Error)..' '..tostring(DIAG))
+              assert(TRANSFERS==1 and MOVES==0 and ENGINE().Calls==0 and #tx.NativeWorks==3)
+              for _,snap in ipairs(tx.NativeWorks) do assert(snap.NativeRoute=='CITY' and not snap.Carrier and not snap.MPDeal) end
+              for slot,index in ipairs({900,902,903}) do
+                local w=ENGINE().Works[index];assert(w.Owner==RECIPIENT and w.X==4 and w.Slot==slot-1)
+              end
+              assert(ENGINE().Works[901].Owner==RECIPIENT and ENGINE().Works[901].Slot==0)
+            "#).exec().unwrap();
+        }
+    }
+}
+
+#[test]
+fn artifact_city_transfer_missing_original_is_not_completed_or_reissued() {
+    let a = world(2, 2, true);
+    let b = world(3, 2, true);
+    for lua in [&a, &b] {
+        lua.load(
+            r#"
+          PLAN.To=RECIPIENT;PLAN.NativeWorks={}
+          GameInfo.JAC_AbsorptionOutcomes=function()
+            local list={{Kind='GREAT_PERSON',Outcome='RECRUIT',Destination='ABSORBER'},
+              {Kind='ITEM',Outcome='TRANSFER',Destination='ABSORBER'}};local i=0
+            return function() i=i+1;return list[i] end
+          end
+          Players[1].cities[8]=nil;CITIES[8].owner=0;Players[0].cities[8]=CITIES[8]
+          PLOTS[8].owner=0;PLOTS[9].owner=0
+          local transfer=CityManager.TransferCity
+          CityManager.TransferCity=function(city,owner)
+            transfer(city,owner)
+            if city.x==4 then ENGINE().Works[900]=nil end
+          end
+          JAC_AbsorptionGameplay.Apply(PLAN)
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+    for _ in 0..6 {
+        let ps = packets(&a);
+        for p in ps {
+            for lua in [&a, &b] {
+                let _ = receive(lua, &p);
+                let _ = receive(lua, &p);
+            }
+        }
+    }
+    for lua in [&a, &b] {
+        lua.load(
+            r#"
+          local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID]
+          assert(tx.Status~='COMPLETE' and TRANSFERS==1 and CITIES[4].owner==RECIPIENT,
+            tostring(tx.Status)..' transfers='..tostring(TRANSFERS)..' owner='..tostring(CITIES[4].owner))
+          assert(not tx.NativeWorks[1].PhysicalMoved)
+          pcall(JAC_AbsorptionGameplay.Resume,PLAN.ID)
+          assert(TRANSFERS==1 and MOVES==0 and ENGINE().Calls==0)
+        "#,
+        )
+        .exec()
+        .unwrap();
+    }
+}

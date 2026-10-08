@@ -2,6 +2,26 @@
 
 ## MPキャリアのコード接続と信頼境界
 
+### AI宮殿の代替操作とArtifactの通常CITY継承
+
+66857808上で、履歴に依存しない操作を追加調査した。作者による[本体静的解析](https://github.com/cru121/civ6-gamecore-reference/blob/main/findings/topics/great-works-moving.md)は公式公開APIの保証書ではなく、Lua公開経路と内部処理を切り分ける資料として使う。新規のEnactを許可する完全履歴は依然として未証明であり、ND.Original=falseと発行済み記録の再発行禁止を維持する。
+
+| 経路 | 根拠 | 接続可能な範囲 / 未証明の前提 |
+|---|---|---|
+| 通常CITY継承 | 公開CityManager.TransferCityから本体都市移管へ到達する。既存MP処理はCore所有者と共有NI観測を照合する | Palace以外の建物・枠を維持する既存経路。AI最後都市の満枠Artifact博物館を、未知の往復履歴のまま人間・AI受取人へ継承する二VM検査が成功。CITY一回、個別MOVE・借用・Enactは0回。これは本体実通信試験ではない |
+| 宮殿作品のCITY再配置 | 本体都市移管の一部にRemoveGreatWork→ReceiveGreatWorkがある | Capital属性の分岐は確認した再配置呼出しを通らず進む。宮殿原indexの移管先・空枠不足時の保全をまだ裏付けられず、通常CITYの成功から解禁しない |
+| 首都を事前に変更 | 公開CityManager.SetAsCapitalは内部City::Instance::SetAsCapitalへ到達する | 首都フラグの変更は確認したが、内部MoveCapitalを呼んで作品を退避する公開経路とは認定しない。首都・最後都市を借用可能にはしない |
+| 内部作品setter | ReceiveGreatWork、AddGreatWork、RemoveGreatWorkは内部関数 | vanilla Luaの公開操作と確認できない。CE追加APIやDLL呼出しへの依存は導入しない。建物削除は作品が枠から消える危険があり、退避として使わない |
+| 作成・移動イベントによる履歴 | GreatWorkCreated/Movedの本体イベント記述、移動通知は作品種別を含む | 原index別の全取引・都市所有変更・保存再参加を欠落なく捕捉するGameplayイベント列は未証明。周期NI観測で作る証明書は新規Enactの資格にしない |
+
+インストール済みのExpansion2 `GameCore_XP2_FinalRelease.dll` を読み取り専用で逆アセンブルした。SHA256は `324C51E9EA3531758842E16C69E6CDDBEFBB226C5B675C3D6E60111646C2E98C`、image baseは `0x180000000`。作者資料の旧ビルドでは都市移管本体が未検証と明記されているため、旧ビルドの処理を現ビルドへそのまま仮定していない。現在のLua TransferCity wrapperのRVAは `0x6cce60`、都市移管は `0x142db0`。`0x143fbc` のRemoveGreatWorkと `0x143fcc` のReceiveGreatWorkを確認した。一方、建物定義のCapital bitを検査する `0x143e48` からはSetBuildingLocationを経て `0x143ffb` へ進む。これらは命令列の観測であり、宮殿作品が安全に移ることの証明ではない。SetAsCapital wrapperは `0x6cce00`、呼出先のInstance setterは `0x1356e0`。
+
+移動通知の即時参照にはキャッシュ登録・MoveCapital・PlayerOperationsが現れるが、今回確認したEnact命令列から全取引を閉じる同通知は確認できなかった。[RemoveGreatWorkの解析](https://github.com/cru121/civ6-gamecore-reference/blob/main/findings/functions/Buildings_RemoveGreatWork.md)も同関数単体は通知しないとする。間接通知の不存在を証明したものではなく、閉じた履歴の根拠が不足しているという判断である。
+
+次の具体案は、正式CITY移管に伴う宮殿再配置の本体条件を特定した上で、共有NIの全原indexと受取人の適合空枠を事前保存し、Core都市移管一回の後に同index・来歴・効果・世界一件性と他原本の保持を照合する経路である。枠不足時に不可逆な消失が起きない条件まで必要であり、事後の欠損検出だけでは事前保全の代わりにならない。新しい検査は通常Artifact CITY継承と、移管後に原indexが欠落した場合の未完了・都市移管再発行禁止を扱う。宮殿、Artifactの個別移動、散逸・回収、満枠交換はこの検査追加で完了としない。
+
+今回の限定実行は新規2件と生成一致・Lua51構文1件の計3件が成功した。負例の初回はfixtureに都市が二つ残り、移管回数一回という検査自身の条件で失敗した。最後都市一つに合わせて修正し、欠損による未完了と再発行0回を確認した。製品不具合のREDとしては数えない。ログは `scratch/native-deal-logs/ai-artifact-city.log`、`ai-artifact-city-missing.log`（旧失敗）、`ai-artifact-city-missing-final.log`、`ai-core-route-generated-parity.log`。製品Rust/Lua源は変更せず、既存668の関連24件や親の最新全件を再実行していない。新規実機と実LANは0回。
+
 ### Core原本取引の履歴境界と発行済み記録の照合
 
 81ec605aの新規Core取引は独立レビューのMustにより未受領とし、今回の修正では新規MP Enactを停止した。Creatorと現在Ownerの一致、NativeOwnerMoves未記録または0、MOD取引記録の不在、定期NI初期snapshotだけでは、同一手番に起きたvanilla A→B→Aを排除できない。ND.Originalは閉じた本体履歴を証明できずfalseを返し、fresh DEALを明示指定してもND.Preflightが発行前に拒否する。自動certificateや仮想履歴getterは追加しない。生成されたMP NativeDeal bindingにはEnactWorkingDealの呼出しがない。旧Core-private builderはSP等の既存経路のために保持し、UIへ公開しない。
