@@ -75,6 +75,16 @@ local function actorFor(recipient)
   end
   return best
 end
+local function actorForWork(recipient,source)
+  if source.BuildingType=='BUILDING_PALACE' then
+    -- Keep the capital under its actual human owner. Borrow only the target
+    -- city into that owner's civilization; no AI identity or history guess.
+    local p=Players[source.Owner]
+    if p and p:IsAlive() and p:IsHuman() then return source.Owner end
+    return nil
+  end
+  return actorFor(recipient)
+end
 local function phase(state,c,p)
   c.MP.Phase=p;c.MP.Nonce=c.MP.Nonce+1;save(state)
 end
@@ -89,18 +99,23 @@ local function eligible(l,actor)
     if capital and capital:GetX()==l.X and capital:GetY()==l.Y then return false end
   end
   return not A.NativeCarrierFriction(current)
-    and #A.ReadNativeCarrierCore(current,l).UnitsOnCenter==0
+    and (l.Owner==actor or #A.ReadNativeCarrierCore(current,l).UnitsOnCenter==0)
 end
 function MP.Preflight(tx)
   -- Scan every item before the first city loan, not only the next item.
   for _,snap in ipairs(tx.NativeWorks or {}) do
     if snap.Custodian then
       assert(snap.NativeRoute=='CARRIER','MP legacy deal needs reconciliation')
-      assert(snap.Source.BuildingType~='BUILDING_PALACE','MP Palace source needs native preservation proof')
+      if snap.Source.BuildingType=='BUILDING_PALACE' and snap.Carrier then
+        assert(snap.Carrier.MP and snap.Carrier.MP.Actor==snap.Source.Owner,
+          'MP saved Palace carrier must retain its original owner as actor')
+      end
       assert(snap.Source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact cannot move to an empty museum')
       if not snap.Carrier then
         local s=snap.Source
-        local actor=actorFor(tx.To)
+        local actor=actorForWork(tx.To,s)
+        assert(s.BuildingType~='BUILDING_PALACE' or actor==s.Owner,
+          'MP AI Palace source needs native preservation proof')
         if actor then
           assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},actor),
             'MP source city cannot be safely borrowed')
@@ -186,7 +201,7 @@ function MP.AdvanceSnap(state,tx,snap)
   local player=Players[tx.To]
   assert(player and player:IsAlive(),'MP absorber must be alive')
   if not snap.Carrier then
-    local actor=actorFor(tx.To)
+    local actor=actorForWork(tx.To,snap.Source)
     if not actor then tx.WaitingFor='MP_HUMAN_EXECUTOR';save(state);return false end
     snap.Carrier={Route=snap.Destination<0 and 'TO_FREE' or 'TO_OWNER',Phase='BORROW',BorrowIssued=false,Index=snap.Source.Index,
       Source=R.Copy(snap.Source),Owner=snap.Custodian,Borrower=actor,
@@ -204,10 +219,11 @@ function MP.AdvanceSnap(state,tx,snap)
 end
 function MP.AdvanceRecovery(state,intent,source,owner,token)
   assert(Players[owner] and Players[owner]:IsAlive(),'MP recovery recipient must be alive')
-  assert(source.BuildingType~='BUILDING_PALACE','MP Palace recovery requires native preservation proof')
   assert(source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact recovery requires museum exchange proof')
   if not intent.NativeCarrier then
-    local actor=actorFor(owner)
+    local actor=actorForWork(owner,source)
+    assert(source.BuildingType~='BUILDING_PALACE' or actor==source.Owner,
+      'MP AI Palace recovery requires native preservation proof')
     if not actor then intent.WaitingFor='MP_HUMAN_EXECUTOR';save(state);return false end
     if not eligible({Owner=source.Owner,ID=source.CityID,X=source.X,Y=source.Y,Building=source.Building,Slot=source.Slot},actor) then
       intent.WaitingFor='MP_SOURCE_CITY_UNAVAILABLE';save(state);return false
@@ -220,6 +236,8 @@ function MP.AdvanceRecovery(state,intent,source,owner,token)
   end
   local c=intent.NativeCarrier
   assert(c.MP and c.MP.Recovery==token and c.Owner==owner and c.Source.Index==source.Index,'MP recovery intent changed')
+  assert(source.BuildingType~='BUILDING_PALACE' or c.MP.Actor==source.Owner,
+    'MP saved Palace recovery must retain its original owner as actor')
   if not MP.Advance(state,c,owner) then return false end
   intent.NativeTarget=R.Copy(c.FinalSlot);intent.NativePhysicalMoved=true
   intent.NativeMoveEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
@@ -229,6 +247,8 @@ function MP.Advance(state,c,preferred)
   assert(GameConfiguration.IsAnyMultiplayer(),'MP required')
   local m=assert(c.MP,'MP reservation required')
   assert(m.Version==2 and m.Actor==c.Borrower,'MP legacy saved loan requires trusted reconciliation')
+  assert(c.Source.BuildingType~='BUILDING_PALACE' or m.Actor==c.Source.Owner,
+    'MP Palace carrier cannot borrow the source capital')
   if not active(m.Actor) then m.WaitingFor='MP_ACTOR_TURN';save(state);return false end
   m.WaitingFor=nil
   if m.Phase=='DONE' and m.ObservationTurn~=Game.GetCurrentGameTurn() then
@@ -254,7 +274,7 @@ function MP.Advance(state,c,preferred)
         local current=city(l)
         local core=A.ReadNativeCarrierCore(current,l)
         assert(core.HasBuilding and core.Name==l.CoreBefore.Name
-          and core.Population==l.CoreBefore.Population and #core.UnitsOnCenter==0,'MP Core city changed before borrowing')
+          and core.Population==l.CoreBefore.Population and (l.Owner==m.Actor or #core.UnitsOnCenter==0),'MP Core city changed before borrowing')
         if current:GetOwner()==l.Owner and l.Owner~=m.Actor then
           assert(eligible(l,m.Actor),'MP loan eligibility changed')
           counts[l.Owner]=(counts[l.Owner] or 0)+1
@@ -301,7 +321,7 @@ local function validateObservation(c,o,placement)
     if core.Slots~=nil then assert(observed.Slots==core.Slots,'MP reported Core slot count changed') end
     if core.Work~=nil then assert(observed.Work==core.Work,'MP reported Core work slot changed') end
     assert(observed.State.Name==core.Name and observed.State.Population==core.Population
-      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and #core.UnitsOnCenter==0,
+      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and (l.Owner==m.Actor or #core.UnitsOnCenter==0),
       'MP observation Core city changed')
     assert(Equal(observed.State.Faith,current:GetProperty(R.CITY_FAITH_KEY))
       and Equal(observed.State.Governance,current:GetProperty(R.GOVERNANCE_KEY)),'MP reported Core governance changed')
