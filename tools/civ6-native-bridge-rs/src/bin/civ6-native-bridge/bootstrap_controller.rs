@@ -130,6 +130,7 @@ fn failure_trace_snapshot(
             .push(json!(name));
         snapshots.push(bytes);
     }
+    evidence.as_object_mut().unwrap().remove("attempted_sample");
     evidence["identical_reads"] = json!(snapshots[0] == snapshots[1]);
     match wire::trace(&snapshots[0], pid, created) {
         Ok(trace) => evidence["first_trace_diagnostic"] = trace,
@@ -539,6 +540,7 @@ mod tests {
             assert_eq!(saved[0].1, vec![0; wire::TRACE_BYTES]);
             assert_eq!(saved[1].1, vec![u8::from(changed); wire::TRACE_BYTES]);
             assert_eq!(evidence["identical_reads"], !changed);
+            assert!(evidence.get("attempted_sample").is_none());
             assert_eq!(evidence["product_acceptance"], false);
             assert_eq!(evidence["stop_observation_stage"], "requested");
             assert!(evidence["drained"].is_null());
