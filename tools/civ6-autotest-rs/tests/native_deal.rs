@@ -95,151 +95,229 @@ fn world(local: i64, recipient: i64, artifact: bool) -> Lua {
 fn packets(lua: &Lua) -> Vec<String> {
     lua.load("return PUBLISH_DEAL()").eval().unwrap()
 }
-fn step(a: &Lua, b: &Lua) {
-    let p = packets(a);
-    assert!(!p.is_empty(), "no pending deal observation");
-    for raw in p {
+fn relay(a: &Lua, b: &Lua) {
+    let ps = packets(a);
+    assert!(!ps.is_empty());
+    for p in ps {
         for lua in [a, b] {
-            assert!(receive(lua, &raw));
-            let counters = lua
-                .load("return tostring(ENGINE().Calls)..':'..TRANSFERS..':'..MOVES")
-                .eval::<String>()
-                .unwrap();
-            // An unconfirmed observation advances only its read nonce. Its
-            // duplicate is then stale; accepted receipts or stale rejection
-            // must both leave native effects unchanged.
-            let _ = receive(lua, &raw);
-            assert_eq!(
-                counters,
-                lua.load("return tostring(ENGINE().Calls)..':'..TRANSFERS..':'..MOVES")
-                    .eval::<String>()
-                    .unwrap()
-            );
+            assert!(receive(lua, &p));
+            let _ = receive(lua, &p);
         }
     }
 }
-fn complete(a: &Lua, b: &Lua) {
-    for _ in 0..12 {
-        if a.load(
-            "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
-        )
-        .eval::<bool>()
-        .unwrap()
-        {
-            break;
-        }
-        step(a, b);
-    }
-    for lua in [a, b] {
-        lua.load(
-            r#"
-          local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID]
-          assert(tx.Status=='COMPLETE',tx.Status..' '..tostring(tx.Error)..' '..tostring(DIAG))
-          local d=tx.NativeWorks[1].MPDeal;assert(d.Complete and d.Issued and d.FinalSlot.Slot==1)
-          assert(ENGINE().Calls==1 and MOVES==0 and TRANSFERS==2)
-          assert(ENGINE().Works[901].Slot==0 and ENGINE().Works[900].Owner==RECIPIENT)
-        "#,
-        )
+fn unknown(a: &Lua) {
+    a.load("pcall(JAC_AbsorptionGameplay.Apply,PLAN)")
         .exec()
         .unwrap();
+    for _ in 0..4 {
+        let ps = packets(a);
+        if ps.is_empty() {
+            break;
+        }
+        for p in ps {
+            let _ = receive(a, &p);
+        }
+    }
+    a.load("assert(ENGINE().Calls==0 and TRANSFERS==0 and MOVES==0,'unknown history reached native enactment')").exec().unwrap();
+}
+// These fixtures reconstruct a potentially already-issued Version 1 journal.
+// They authorize no new trade and never assert/mint an Original certificate.
+fn seed_legacy(a: &Lua, b: &Lua) {
+    for lua in [a, b] {
+        lua.load(r#"
+          JAC_NativeInventory.Tick=function() end
+          function SEED_LEGACY()
+            return JAC_NativeInventory.With(PLAN,'TEST_LEGACY_CAPTURE',function()
+              local before=JAC_NativeInventory.Snapshot();local source
+              for _,w in ipairs(before.Works) do if w.Index==900 then source=w end end
+              assert(source);local x=RECIPIENT==2 and 12 or 16;local c=CITIES[x]
+              local snap={ID='native-work:900',NativeRoute='DEAL',Source=JAC_AbsorptionRules.Copy(source),Destination=RECIPIENT,
+                Custodian=RECIPIENT,DealSubmitted=true,MPDeal={Version=1,Issued=true,From=1,To=RECIPIENT,
+                  Source=JAC_AbsorptionRules.Copy(source),Before=before,IssuedTurn=CURRENT_TURN,
+                  EmptySlots={{Owner=RECIPIENT,CityID=c.id,City=c.id,X=x,Y=0,Building=1,Slot=1,SlotType='GREATWORKSLOT_TEST'}}}}
+              local s=JAC_AbsorptionGameplay.GetState()
+              s.Transactions[PLAN.ID]={ID=PLAN.ID,From=1,To=PLAN.To,Turn=CURRENT_TURN,Status='WAITING_UI',Request=PLAN,
+                SourceRoster={},NativeWorks={snap},Cities={}}
+              Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)
+              ENGINE().Calls=1 -- saved historical counter, never EnactWorkingDeal
+            end)
+          end
+          local ok,err=pcall(SEED_LEGACY);assert(not ok and err=='JAC_ABSORPTION_WAITING_UI')
+        "#).exec().unwrap();
+    }
+    relay(a, b);
+    for lua in [a, b] {
+        lua.load("SEED_LEGACY()").exec().unwrap();
     }
 }
+fn advance(a: &Lua) -> bool {
+    a.load(
+        r#"
+      local s=JAC_AbsorptionGameplay.GetState();local tx=s.Transactions[PLAN.ID]
+      local ok,value=pcall(JAC_NativeDeal.Advance,s,tx,tx.NativeWorks[1])
+      DIAG=not ok and tostring(value) or nil
+      return ok and value==true
+    "#,
+    )
+    .eval()
+    .unwrap()
+}
+fn observe(a: &Lua, b: &Lua) -> [bool; 2] {
+    assert!(!advance(a));
+    assert!(!advance(b));
+    relay(a, b);
+    [advance(a), advance(b)]
+}
+fn moved(lua: &Lua) {
+    lua.load("ENGINE().Works[900].Owner=RECIPIENT;ENGINE().Works[900].X=RECIPIENT==2 and 12 or 16;ENGINE().Works[900].Building=1;ENGINE().Works[900].Slot=1").exec().unwrap();
+}
 #[test]
-fn original_palace_and_original_artifact_use_one_core_deal_without_move_or_city_loan() {
-    for recipient in [2, 3] {
-        for artifact in [false, true] {
-            let a = world(2, recipient, artifact);
-            let b = world(3, recipient, artifact);
-            for lua in [&a, &b] {
-                lua.load("JAC_AbsorptionGameplay.Apply(PLAN)")
-                    .exec()
-                    .unwrap();
+fn unknown_vanilla_roundtrip_or_periodic_initial_certificate_never_enacts() {
+    for artifact in [false, true] {
+        for roundtrip in [false, true] {
+            let a = world(2, 2, artifact);
+            if roundtrip {
+                a.load("ENGINE().Works[900].Owner=3;ENGINE().Works[900].X=16;ENGINE().Works[900].Owner=1;ENGINE().Works[900].X=4").exec().unwrap();
             }
-            complete(&a, &b);
+            a.load("Players[1]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{['native-work:900']={ID='native-work:900',Kind='ITEM',Owner=1,NativeOwnerMoves=0,NativeWork={Index=900},InitialObservation={Owner=1,Creator=1,Turn=CURRENT_TURN}}})").exec().unwrap();
+            unknown(&a);
         }
     }
 }
 #[test]
-fn issued_unknown_result_never_reissues_and_save_rejoin_accepts_later_physical_observation() {
+fn direct_core_current_inventory_and_valid_deal_are_not_complete_history() {
+    let a = inventory_world::world(2, 2);
+    a.load("DIRECT_CORE=true").exec().unwrap();
+    setup(&a, false);
+    unknown(&a);
+    a.load("assert(JAC_NativeDeal.Original({}, {},1,2,2,PLAN.ID)==false)")
+        .exec()
+        .unwrap();
+}
+#[test]
+fn after_issued_snapshot_other_new_work_and_legal_rearrangement_are_allowed() {
+    for artifact in [false, true] {
+        let a = world(2, 2, artifact);
+        let b = world(3, 2, artifact);
+        seed_legacy(&a, &b);
+        for lua in [&a, &b] {
+            moved(lua);
+            lua.load("ENGINE().Works[901].Owner=3;ENGINE().Works[901].X=16;ENGINE().Works[903]={Owner=1,X=4,Building=ARTIFACT and 1 or 0,Slot=0,Creator=1,Kind=5};CURRENT_TURN=6;JAC_NativeInventory.Refresh()").exec().unwrap();
+        }
+        assert_eq!(observe(&a, &b), [true, true]);
+        for lua in [&a, &b] {
+            lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0 and MOVES==0);local d=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].NativeWorks[1].MPDeal;assert(d.Complete and d.FinalSlot.Slot==1)").exec().unwrap();
+        }
+    }
+}
+#[test]
+fn already_issued_unknown_exception_survives_save_and_timeout_without_enactment() {
     let a = world(2, 2, false);
     let b = world(3, 2, false);
+    seed_legacy(&a, &b);
     for lua in [&a, &b] {
-        lua.load("ENGINE().NoEffect=true;JAC_AbsorptionGameplay.Apply(PLAN)")
+        lua.load("local s=JAC_AbsorptionGameplay.GetState();s.Transactions[PLAN.ID].NativeWorks[1].MPDeal.CallError='native call outcome unknown';Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)").exec().unwrap();
+    }
+    assert_eq!(observe(&a, &b), [false, false]);
+    let data = saved(&b);
+    drop(b);
+    let b = loaded(3, 2, &data);
+    setup(&b, false);
+    b.load("JAC_NativeInventory.Tick=function() end")
+        .exec()
+        .unwrap();
+    for lua in [&a, &b] {
+        lua.load("CURRENT_TURN=100;JAC_NativeInventory.Refresh()")
             .exec()
             .unwrap();
     }
-    step(&a, &b);
-    step(&a, &b);
+    assert_eq!(observe(&a, &b), [false, false]);
+    for lua in [&a, &b] {
+        moved(lua);
+    }
+    assert_eq!(observe(&a, &b), [true, true]);
     for lua in [&a, &b] {
         lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0 and MOVES==0)")
             .exec()
             .unwrap();
     }
-    let data = saved(&b);
-    drop(b);
-    let b = loaded(3, 2, &data);
-    setup(&b, false);
-    for _ in 0..3 {
-        step(&a, &b);
-    }
-    for lua in [&a, &b] {
-        lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0);ENGINE().Works[900].Owner=2;ENGINE().Works[900].X=12;ENGINE().Works[900].Building=1;ENGINE().Works[900].Slot=1").exec().unwrap();
-    }
-    complete(&a, &b);
 }
 #[test]
-fn original_deal_rejects_retrade_changed_snapshot_and_foreign_sender_before_native_effect() {
-    for attack in ["ENGINE().Works[900].Creator=3",
-        "Players[1]:SetProperty('JAC_ABSORPTION_ASSETS_V1',{['native-work:900']={ID='native-work:900',Kind='ITEM',Owner=1,NativeOwnerMoves=1,NativeWork={Index=900}}})",
-        "ENGINE().Invalid=true",
-        "local s=JAC_AbsorptionGameplay.GetState();s.Transactions.old={From=1,To=2,Status='COMPLETE',SourceRosterMoved=true,NativeWorks={{Source={Index=900},Destination=2,DealSubmitted=true}}};Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)"] {
-        let a=world(2,2,false);a.load(attack).exec().unwrap();
-        a.load("pcall(JAC_AbsorptionGameplay.Apply,PLAN)").exec().unwrap();
-        for _ in 0..3 { let ps=packets(&a);if ps.is_empty() {break;}for raw in ps {let _=receive(&a,&raw);} }
-        a.load("assert(ENGINE().Calls==0 and TRANSFERS==0 and MOVES==0)").exec().unwrap();
-    }
-    let a = world(2, 2, false);
-    a.load("JAC_AbsorptionGameplay.Apply(PLAN)").exec().unwrap();
-    let p = packets(&a).remove(0);
-    a.globals().set("RAW", p.clone()).unwrap();
-    a.load(
-        "assert(not RECEIVE(3,JAC_NativeInventoryCodec.Decode(RAW)));CITIES[4].pop=CITIES[4].pop+1",
-    )
-    .exec()
-    .unwrap();
-    assert!(!receive(&a, &p));
-    a.load("assert(ENGINE().Calls==0 and TRANSFERS==0)")
-        .exec()
-        .unwrap();
-}
-#[test]
-fn post_issue_missing_replaced_or_displaced_existing_works_never_prove_success() {
+fn missing_replaced_duplicate_or_changed_provenance_preserves_issued_journal() {
     for attack in [
         "ENGINE().Works[901]=nil",
         "ENGINE().Works[903]=ENGINE().Works[901];ENGINE().Works[901]=nil",
-        "ENGINE().Works[901].Slot=1;ENGINE().Works[900].Slot=0",
+        "ENGINE().Works[901].Creator=3",
         "ENGINE().Works[900].Creator=3",
     ] {
         let a = world(2, 2, false);
         let b = world(3, 2, false);
+        seed_legacy(&a, &b);
         for lua in [&a, &b] {
-            lua.load("JAC_AbsorptionGameplay.Apply(PLAN)")
-                .exec()
-                .unwrap();
-        }
-        step(&a, &b);
-        step(&a, &b);
-        for lua in [&a, &b] {
+            moved(lua);
             lua.load(attack).exec().unwrap();
         }
-        step(&a, &b);
+        assert_eq!(observe(&a, &b), [false, false]);
         for lua in [&a, &b] {
-            lua.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx.Status~='COMPLETE' and not tx.NativeWorks[1].PhysicalMoved and ENGINE().Calls==1 and TRANSFERS==0)").exec().unwrap();
+            lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0 and MOVES==0);assert(not JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].NativeWorks[1].PhysicalMoved)").exec().unwrap();
         }
+    }
+    let a = world(2, 2, false);
+    let b = world(3, 2, false);
+    seed_legacy(&a, &b);
+    for lua in [&a, &b] {
+        moved(lua);
+        lua.load("BUILDINGS_ORIGINAL=BUILDINGS;BUILDINGS=function(c,ui) local out=BUILDINGS_ORIGINAL(c,ui);if out.GetGreatWorkInSlot then local old=out.GetGreatWorkInSlot;out.GetGreatWorkInSlot=function(self,building,slot) if c.x==4 and building==0 and slot==0 then return 900 end;return old(self,building,slot) end end;return out end").exec().unwrap();
+        assert!(!advance(lua));
+    }
+    for p in packets(&a) {
+        for lua in [&a, &b] {
+            assert!(!receive(lua, &p));
+        }
+    }
+    for lua in [&a, &b] {
+        lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0)")
+            .exec()
+            .unwrap();
     }
 }
 #[test]
-fn generated_original_deal_binding_matches_and_core_builder_is_not_exposed_to_ui() {
+fn changed_saved_source_and_unrelated_city_rebuild_are_rejected() {
+    for mutation in ["local s=JAC_AbsorptionGameplay.GetState();s.Transactions[PLAN.ID].NativeWorks[1].Source.CreatorName='forged';Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)",
+        "CITIES[4].id=CITIES[4].id+5000",
+        "local s=JAC_AbsorptionGameplay.GetState();s.Transactions[PLAN.ID].NativeWorks[1].MPDeal.EmptySlots[1].Slot=0;Game:SetProperty('JAC_ABSORPTION_STATE_V1',s);ENGINE().Works[901].X=16;ENGINE().Works[901].Owner=3;ENGINE().Works[900].Slot=0"] {
+        let a=world(2,2,false);let b=world(3,2,false);seed_legacy(&a,&b);
+        for lua in [&a,&b] {moved(lua);lua.load(mutation).exec().unwrap();}
+        if mutation.contains("CreatorName='forged'") {assert!(!advance(&a));assert!(!advance(&b));} else {assert_eq!(observe(&a,&b),[false,false]);}
+    }
+}
+#[test]
+fn issued_deal_accepts_source_identity_change_only_with_completed_native_city_journal() {
+    for inherited in [false, true] {
+        let a = world(2, 2, false);
+        let b = world(3, 2, false);
+        seed_legacy(&a, &b);
+        for lua in [&a, &b] {
+            moved(lua);
+            lua.globals().set("INHERITED", inherited).unwrap();
+            lua.load(r#"
+              CITIES[4].id=2004;local s=JAC_AbsorptionGameplay.GetState();local tx=s.Transactions[PLAN.ID]
+              if INHERITED then
+                Players[1].cities[4]=nil;Players[tx.To].cities[4]=CITIES[4]
+                CITIES[4].owner=tx.To;CITIES[4]:SetProperty('JAC_ABSORPTION_GOVERNANCE_V1',{ID=tx.ID,From=1,To=tx.To})
+                tx.Cities={{X=4,Y=0,TransferTurn=5,TransferredCityID=2004}}
+              else
+                tx.NativeWorks[2]={Carrier={MP={Loans={{Owner=1,ID=4,X=4,Y=0,Issued=true,ReturnIssued=true,FinalID=2004,
+                  RestoredCore={Owner=1,ID=2004,X=4,Y=0}}}}}}
+              end
+              Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)
+            "#).exec().unwrap();
+        }
+        assert_eq!(observe(&a, &b), [true, true]);
+    }
+}
+#[test]
+fn generated_binding_matches_and_no_new_core_enactment_or_ui_mutator_exists() {
     assert_eq!(
         fs::read_to_string(repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeDeal.lua"))
             .unwrap(),
@@ -249,116 +327,7 @@ fn generated_original_deal_binding_matches_and_core_builder_is_not_exposed_to_ui
         .load(transport::deal_binding())
         .into_function()
         .unwrap();
+    assert!(!transport::deal_binding().contains("pcall(DealManager.EnactWorkingDeal"));
     let lua = world(2, 2, false);
-    lua.load("assert(type(JAC_AbsorptionGameplay.BuildNativeWorkDealCore)=='function' and ExposedMembers.JAC_Absorption.BuildNativeWorkDealCore==nil and ExposedMembers.JAC_NativeDeal==nil)").exec().unwrap();
-}
-
-#[test]
-fn interrupted_native_call_and_stale_saved_source_do_not_reissue() {
-    for flag in ["ThrowBefore", "ThrowAfter"] {
-        let a = world(2, 2, false);
-        let b = world(3, 2, false);
-        for lua in [&a, &b] {
-            lua.load(format!(
-                "ENGINE().{flag}=true;JAC_AbsorptionGameplay.Apply(PLAN)"
-            ))
-            .exec()
-            .unwrap();
-        }
-        step(&a, &b);
-        step(&a, &b);
-        if flag == "ThrowAfter" {
-            complete(&a, &b);
-        } else {
-            for _ in 0..3 {
-                step(&a, &b);
-            }
-            for lua in [&a, &b] {
-                lua.load("assert(ENGINE().Calls==1 and TRANSFERS==0 and MOVES==0)")
-                    .exec()
-                    .unwrap();
-            }
-        }
-    }
-    let a = world(2, 2, false);
-    let b = world(3, 2, false);
-    for lua in [&a, &b] {
-        lua.load("JAC_AbsorptionGameplay.Apply(PLAN)")
-            .exec()
-            .unwrap();
-    }
-    step(&a, &b);
-    step(&a, &b);
-    for lua in [&a, &b] {
-        lua.load("local s=JAC_AbsorptionGameplay.GetState();s.Transactions[PLAN.ID].NativeWorks[1].Source.CreatorName='changed saved snapshot';Game:SetProperty('JAC_ABSORPTION_STATE_V1',s)").exec().unwrap();
-    }
-    step(&a, &b);
-    for lua in [&a, &b] {
-        lua.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx.Status=='BLOCKED' and not tx.NativeWorks[1].PhysicalMoved and ENGINE().Calls==1 and TRANSFERS==0)").exec().unwrap();
-    }
-}
-
-#[test]
-fn original_last_capital_uses_no_loan_and_full_artifact_museum_is_not_swapped() {
-    let a = world(2, 2, false);
-    let b = world(3, 2, false);
-    for lua in [&a, &b] {
-        lua.load("Players[1].cities[8]=nil;CITIES[8].owner=0;Players[0].cities[8]=CITIES[8];PLOTS[8].owner=0;PLOTS[9].owner=0;JAC_AbsorptionGameplay.Apply(PLAN)").exec().unwrap();
-    }
-    for _ in 0..12 {
-        if a.load(
-            "return JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID].Status=='COMPLETE'",
-        )
-        .eval::<bool>()
-        .unwrap()
-        {
-            break;
-        }
-        step(&a, &b);
-    }
-    for lua in [&a, &b] {
-        lua.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx.Status=='COMPLETE' and ENGINE().Calls==1 and TRANSFERS==1 and MOVES==0 and tx.NativeWorks[1].Carrier==nil)").exec().unwrap();
-    }
-    let a = world(2, 2, true);
-    a.load("for i=1,2 do ENGINE().Works[901+i]={Owner=2,X=12,Building=1,Slot=i,Creator=2,Kind=5} end;JAC_AbsorptionGameplay.Apply(PLAN)").exec().unwrap();
-    for _ in 0..4 {
-        let ps = packets(&a);
-        if ps.is_empty() {
-            break;
-        }
-        for raw in ps {
-            let _ = receive(&a, &raw);
-        }
-    }
-    a.load("assert(ENGINE().Calls==0 and TRANSFERS==0 and MOVES==0)")
-        .exec()
-        .unwrap();
-}
-
-#[test]
-fn next_turn_manual_contract_reconciles_issued_deal_only_without_new_city_absorption() {
-    let a = world(2, 2, false);
-    let b = world(3, 2, false);
-    for lua in [&a, &b] {
-        lua.load("ENGINE().NoEffect=true;JAC_AbsorptionGameplay.Apply(PLAN)")
-            .exec()
-            .unwrap();
-    }
-    step(&a, &b);
-    step(&a, &b);
-    for lua in [&a, &b] {
-        lua.load("CURRENT_TURN=6;JAC_NativeInventory.Refresh();ENGINE().Works[900].Owner=2;ENGINE().Works[900].X=12;ENGINE().Works[900].Building=1;ENGINE().Works[900].Slot=1").exec().unwrap();
-    }
-    step(&a, &b);
-    for lua in [&a, &b] {
-        lua.load("local tx=JAC_AbsorptionGameplay.GetState().Transactions[PLAN.ID];assert(tx.NativeWorks[1].PhysicalMoved and tx.WaitingFor=='MP_DEAL_CONTINUATION_ONLY' and tx.Status=='WAITING_UI' and ENGINE().Calls==1 and TRANSFERS==0 and MOVES==0)").exec().unwrap();
-    }
-}
-
-#[test]
-fn direct_core_inventory_can_prove_original_deal_without_any_ui_publication() {
-    let lua = inventory_world::world(2, 2);
-    lua.load("DIRECT_CORE=true").exec().unwrap();
-    setup(&lua, false);
-    lua.load("local tx=JAC_AbsorptionGameplay.Apply(PLAN);assert(tx.Status=='COMPLETE' and ENGINE().Calls==1 and TRANSFERS==2 and MOVES==0 and #SENT==0);assert(tx.NativeWorks[1].MPDeal.BeforeEvidenceKind=='DIRECT_CORE' and tx.NativeWorks[1].MPDeal.AfterEvidenceKind=='DIRECT_CORE')").exec().unwrap();
+    lua.load("assert(ExposedMembers.JAC_NativeDeal==nil and ExposedMembers.JAC_Absorption.BuildNativeWorkDealCore==nil)").exec().unwrap();
 }

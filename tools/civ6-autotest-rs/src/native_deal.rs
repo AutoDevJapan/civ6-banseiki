@@ -1,4 +1,4 @@
-//! One-shot original-work Core deal, using authenticated shared inventory.
+//! Observation-only recovery of issued Core deals; unknown history cannot enact.
 pub const GAMEPLAY: &str = r#"
 local A=assert(JAC_AbsorptionGameplay)
 local R=assert(JAC_AbsorptionRules)
@@ -17,28 +17,21 @@ local function slotRecord(w)
   return {Owner=w.Owner,City=w.CityID,CityID=w.CityID,X=w.X,Y=w.Y,Building=w.Building,Slot=w.Slot}
 end
 function ND.Original(source,tracked,donor,destination,custodian,currentID)
-  if not (source.Owner==donor and source.CreatedByPlayer==donor
-    and (tracked and tracked.NativeOwnerMoves or 0)==0 and destination>=0
-    and custodian==destination) then return false end
-  -- Preserve known global history even when a physical work comes back to its
-  -- creator without bringing the destination roster record back with it.
-  for id,old in pairs(A.GetState().Transactions or {}) do if id~=currentID then
-    for _,w in ipairs(old.NativeWorks or {}) do
-      if w.Source.Index==source.Index and (w.DealSubmitted or w.PhysicalMoved
-        or old.SourceRosterMoved and w.Destination~=old.From) then return false end
-    end
-  end end
-  return true
+  -- No verified complete Core ownership-history getter/event stream is wired.
+  -- Creator==owner, MOD counters, current deal lists and periodic observations
+  -- cannot exclude an unrecorded vanilla A->B->A round trip. Never mint a cert.
+  return false
 end
 function ND.Eligible(tx,snap)
-  return not snap.Carrier and ND.Original(snap.Source,(tx.SourceRoster or {})[snap.ID],
-    tx.From,snap.Destination,snap.Custodian,tx.ID)
+  local d=snap.MPDeal
+  -- An existing issued journal is an irreversible-call recovery record, not
+  -- evidence that a fresh Core trade is safe. It authorizes observation only.
+  return not snap.Carrier and snap.DealSubmitted==true and d and d.Version==1 and d.Issued==true
+    and d.From==tx.From and d.To==snap.Custodian and snap.Custodian==snap.Destination
+    and Equal(d.Source,snap.Source)
 end
 function ND.Preflight(tx,snap)
-  assert(ND.Eligible(tx,snap),'MP Core deal requires original ownership and zero recorded owner moves')
-  assert(DealManager and DealManager.GetWorkingDeal and DealManager.GetPossibleDealItems
-    and DealManager.EnactWorkingDeal,'native Core deal API unavailable')
-  if snap.DealSubmitted then assert(snap.MPDeal and snap.MPDeal.Issued,'legacy submitted deal lacks original-work journal') end
+  assert(ND.Eligible(tx,snap),'MP Core deal history is unproven: fresh enactment disabled')
 end
 local function emptySlots(world,owner,objectType)
   local valid={};for row in GameInfo.GreatWork_ValidSubTypes() do
@@ -46,8 +39,6 @@ local function emptySlots(world,owner,objectType)
   end
   local result={}
   for _,row in ipairs(world.Cities) do if row.Owner==owner then
-    local city=assert(CityManager.GetCityAt(row.X,row.Y),'deal recipient city missing')
-    assert(city:GetOwner()==row.Owner and city:GetID()==row.ID,'deal recipient identity changed')
     for _,building in ipairs(R.Keys(row.Buildings)) do
       if row.Pillaged[building]==false then
         for slot=0,row.Reads.SLOTS[building]-1 do
@@ -65,21 +56,41 @@ local function workMap(world)
   local map={};for _,w in ipairs(world.Works) do assert(not map[w.Index],'deal duplicate physical index');map[w.Index]=w end
   return map
 end
-local function sourceEmpty(source)
+local function journalIdentity(tx,source,city)
+  if city:GetOwner()==source.Owner and city:GetID()==source.CityID then return true end
+  for _,w in ipairs(tx.NativeWorks or {}) do
+    local mp=w.Carrier and w.Carrier.MP
+    for _,l in ipairs(mp and mp.Loans or {}) do
+      local restored=l.RestoredCore
+      if l.Owner==source.Owner and l.ID==source.CityID and l.X==source.X and l.Y==source.Y
+        and l.Issued==true and l.ReturnIssued==true and l.FinalID==city:GetID()
+        and city:GetOwner()==l.Owner and restored and restored.Owner==l.Owner
+        and restored.ID==l.FinalID and restored.X==l.X and restored.Y==l.Y then return true end
+    end
+  end
+  for _,mapped in ipairs(tx.Cities or {}) do
+    local g=city:GetProperty(R.GOVERNANCE_KEY)
+    if mapped.X==source.X and mapped.Y==source.Y and mapped.TransferTurn~=nil
+      and mapped.TransferredCityID==city:GetID() and city:GetOwner()==tx.To
+      and g and g.ID==tx.ID and g.From==source.Owner and g.To==tx.To then return true end
+  end
+  return false
+end
+local function sourceNotOriginal(tx,source)
   local city=assert(CityManager.GetCityAt(source.X,source.Y),'deal source city missing')
-  assert(city:GetOwner()==source.Owner and city:GetID()==source.CityID
-    and city:GetBuildings():HasBuilding(source.Building),'deal source identity changed')
-  return NI.ReadCity(city,'WORK',source.Building,source.Slot)==-1
+  assert(journalIdentity(tx,source,city),'deal source identity changed without a native city journal')
+  if not city:GetBuildings():HasBuilding(source.Building) then
+    return source.BuildingType=='BUILDING_PALACE' and city:GetOwner()==tx.To
+  end
+  return NI.ReadCity(city,'WORK',source.Building,source.Slot)~=source.Index
 end
 local function reconcile(state,tx,snap)
   local d=assert(snap.MPDeal);assert(d.Version==1 and d.Issued and d.From==tx.From and d.To==snap.Custodian
     and Equal(d.Source,snap.Source),'deal saved intent changed')
   local now=NI.Snapshot();local previous=workMap(d.Before);local current=workMap(now)
-  assert(#now.Works==#d.Before.Works,'deal physical work cardinality changed')
   for index,w in pairs(previous) do
     local actual=assert(current[index],'deal another original work missing')
     assert(Equal(identity(w),identity(actual)),'deal work provenance or effects changed')
-    if index~=d.Source.Index then assert(sameSlot(w,actual),'deal another work displaced or replaced') end
   end
   local moved=assert(current[d.Source.Index])
   if sameSlot(moved,d.Source) then
@@ -87,8 +98,13 @@ local function reconcile(state,tx,snap)
   end
   assert(moved.Owner==d.To,'deal original moved to an unexpected owner')
   local final
-  for _,candidate in ipairs(d.EmptySlots) do if sameSlot(moved,candidate) then final=candidate end end
-  assert(final and sourceEmpty(d.Source),'deal target was not a compatible pre-issue empty slot or source is occupied')
+  local beforeEmpty=emptySlots(d.Before,d.To,d.Source.ObjectType)
+  for _,candidate in ipairs(d.EmptySlots) do if sameSlot(moved,candidate) then
+    for _,verified in ipairs(beforeEmpty) do
+      if sameSlot(candidate,verified) and candidate.SlotType==verified.SlotType then final=verified end
+    end
+  end end
+  assert(final and sourceNotOriginal(tx,d.Source),'deal target was not a compatible pre-issue empty slot or source original remains')
   snap.TargetSlot=slotRecord(moved);snap.TargetSlot.SlotType=final.SlotType
   snap.PhysicalMoved=true;d.FinalSlot=R.Copy(snap.TargetSlot);d.Complete=true;d.WaitingFor=nil
   d.After=now;d.AfterEvidenceKind=NI.EvidenceKind();d.VerifiedTurn=Game.GetCurrentGameTurn()
@@ -100,25 +116,6 @@ function ND.Advance(state,tx,snap)
     assert(Equal(snap.MPDeal.Source,snap.Source) and snap.MPDeal.From==tx.From
       and snap.MPDeal.To==snap.Custodian,'deal saved source or recipient changed')
     if snap.PhysicalMoved then assert(snap.MPDeal.Complete);return true end
-  else
-    NI.With(tx,'DEAL_BEFORE:'..snap.Source.Index,function()
-      local before=NI.Snapshot();local works=workMap(before);local source=assert(works[snap.Source.Index],'deal source absent')
-      assert(sameSlot(source,snap.Source) and Equal(identity(source),identity(snap.Source)),'deal source snapshot changed')
-      local city=assert(CityManager.GetCityAt(source.X,source.Y))
-      assert(city:GetOwner()==tx.From and city:GetID()==source.CityID,'deal source Core owner or ID changed')
-      local slots=emptySlots(before,snap.Custodian,source.ObjectType)
-      assert(#slots>0,'deal has no compatible empty native slot')
-      local definition=assert(GameInfo.GreatWorks[source.GreatWorkType])
-      A.BuildNativeWorkDealCore(tx.From,snap.Custodian,source.Index,definition.Index,tx.NativeWorks)
-      snap.MPDeal={Version=1,From=tx.From,To=snap.Custodian,Source=R.Copy(snap.Source),
-        Before=before,EmptySlots=slots,BeforeEvidenceKind=NI.EvidenceKind(),Issued=true,
-        IssuedTurn=Game.GetCurrentGameTurn(),WaitingFor='ISSUED_UNCONFIRMED'}
-      snap.DealSubmitted=true;save(state) -- durable intent immediately before the only native call
-      local ok,value=pcall(DealManager.EnactWorkingDeal,tx.From,snap.Custodian)
-      snap.MPDeal.CallReturned=ok;snap.MPDeal.CallResult=ok and tostring(value) or nil
-      snap.MPDeal.CallError=not ok and tostring(value) or nil
-      save(state) -- return values and exceptions are diagnostic, never physical proof
-    end)
   end
   return NI.With(tx,'DEAL_AFTER:'..snap.Source.Index,function() return reconcile(state,tx,snap) end)
 end

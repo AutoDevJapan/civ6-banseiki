@@ -2,22 +2,23 @@
 
 ## MPキャリアのコード接続と信頼境界
 
-### 原所有者の未再取引作品を保全するMP Core取引
+### Core原本取引の履歴境界と発行済み記録の照合
 
-MPでも、原所有者が作った作品を最初に保全する場合は、既存のCore取引を利用する。条件は共有snapshotの作品所有者と創作元が取込元に一致すること、取引先が保存された行先と一致すること、記録された所有移動回数が0であること。過去の取引記録に同じindexの発行・移動・都市継承が残る場合も、新しいCore取引へ通さない。取得済み宮殿作品・考古遺物を再取引する許可は追加しない。履歴getterは仮定せず、MODの記録外で起きた取引まで未取引と独立証明したとは表現しない。
+81ec605aの新規Core取引は独立レビューのMustにより未受領とし、今回の修正では新規MP Enactを停止した。Creatorと現在Ownerの一致、NativeOwnerMoves未記録または0、MOD取引記録の不在、定期NI初期snapshotだけでは、同一手番に起きたvanilla A→B→Aを排除できない。ND.Originalは閉じた本体履歴を証明できずfalseを返し、fresh DEALを明示指定してもND.Preflightが発行前に拒否する。自動certificateや仮想履歴getterは追加しない。生成されたMP NativeDeal bindingにはEnactWorkingDealの呼出しがない。旧Core-private builderはSP等の既存経路のために保持し、UIへ公開しない。
 
-生成源は `tools/civ6-autotest-rs/src/native_deal.rs`、配布Luaは `civ6-carrier-transport generate-deal` で作る。既存の作業中取引を組み立てる関数はCore-privateのまま利用し、UIへ公開しない。Gameplayの同じ同期callbackで、発行済み意図を保存してから `DealManager.EnactWorkingDeal(from,to)` を一回だけ呼ぶ。AIのPlayerOperation、個別MOVE、都市借用、原本の生成・削除は使わない。後続の正式な勢力吸収の都市移管は、この作品取引そのものとは別の処理である。
+一次資料の `Debug/Diplomacy.ltp:118-127` はCore Enactの存在を示すが、未再取引性を証明しない。同ファイル360行以降と `Base/Assets/UI/Screens/ReportScreen.lua:363` のGetPlayerDealsは現行取引を列挙する利用例であり、完了した全取引履歴の網羅・継続性を保証していない。公式 `Base/Assets/UI/GreatWorksOverview.lua:1045,1125` のGreatWorkMovedはUIで購読され、引数は都市所有者・ID・建物・作品種別である。作成から再参加までの原index別・欠落なしの同期履歴をこの利用例だけから認定しない。
 
-発行前には全世界の作品一覧・枠と、受取先の適合空枠を共有snapshotへ保存する。本体が行先枠を選んだ後は、原枠が空、同indexが世界に一件、指定所有者の発行前に空だった適合枠に存在し、来歴・効果と他の全作品の位置・来歴が保持されたことを照合する。実際の行先枠をFinalSlotへ保存する。枠種別は公開された本体getterを使い、Core getterが存在する場合は直接照合する。UIしか読めない値は指定人間による同期観測であり、Coreの独立証拠とは呼ばない。
+作者による実測API資料でも [DealManager](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/Objects/DealManager/DealManager.md) はCore EnactとGetPlayerDealsを列挙するが、完全履歴保証は示していない。[GreatWorkMoved](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/EventObjects/Events/Events.GreatWorkMoved.md) の引数と [GameEvents一覧](https://github.com/Sukritact/Civilization-VI-Modding-Knowledge-Base/blob/master/EventObjects/GameEvents.md) から、全所有移動を閉じるCoreイベント列は確認できなかった。これはAPI不在の絶対証明ではなく、今回確認できる根拠では未証明として発行しない判断である。
 
-返り値・例外だけでは成功を確定しない。発行後の結果が不明、または原枠に残っている場合は、意図を保存し、nonceを更新した共有観測だけを続ける。取引の再発行と推測による成功はしない。手動非Flow契約が次手番へ移った場合も、発行済み作品取引の照合だけを許可し、新規作品取引・部隊処理・都市吸収は進めない。
+同owner MOVEは実際の所有者である人間が要求し、移動先も本人所有である場合に既存経路がある。今回のAI取込元・借用できない宮殿原本をその経路へ載せるために、AIを操作担当へ偽装したり首都・最後の都市の借用制約を外したりはしない。Coreによる通常CITY継承の既存経路は保持する。原本MP Core保全、宮殿・考古遺物・取得済み再移動・満枠交換は今回の拒否修正で完了としない。
 
-宮殿原本と借用できない最後の首都の原本、人間・AI受取先、エンジンが有効な取引項目として提示する考古遺物原本をLua51二VMで検査する。考古遺物は本体が取引を許可し、適合空枠がある場合のコード経路である。満枠博物館の交換、原創作元と現在所有者が異なる原本、取得済み作品の再移動、履歴不明の外部取引、実LANはこの結果の成功範囲へ読み替えない。公式根拠は `Debug/Diplomacy.ltp:118-127` のCore取引発行、`Base/Assets/UI/GreatWorksOverview.lua` の枠・来歴getter、および本書の原本Core取引成功47〜49と再取引消失68〜70・76・77の記録である。
+Version 1の保存記録で既に発行された可能性がある取引は、履歴certificateとして採用せず、不可逆操作の回復記録として共有観測だけを再開する。snapと記録のSource・From・To・発行済み印を照合し、再発行しない。Beforeの全indexが世界に一件ずつ同じ来歴・効果で残ることを検査する。他作品の新しいindex、合法な所有者・都市・枠の移動は許容する。対象原本は指定所有者の、Beforeで実際に空だった適合枠に一件存在することを検査し、FinalSlotを保存する。元枠に別作品が入ることは許容し、元原本が他国に残ること・世界重複は拒否する。枠種別・作品位置などUI-onlyの値は指定人間の同期観測であり、Core独立証拠とは呼ばない。
 
-検査では、不明結果の再参加後観測要求が消える問題を1件再現して修正した。原本取引9件・NI12件は21/21成功、関連キャリア4件、manifest1件、独立nativeの登録・UI読取境界・SP回帰6件も成功した。確定関連数は32件であり、全workspaceの成功ではない。発行前後の例外、旧保存snapshot変更、無資格実行者、他作品の欠損・差替え・移動、手番活動値の違い、重複・古いRPC、Core getterのみの対照を含む。初回は共通検査fixtureの移動後パスを修正してから17件を実行し、16成功・1失敗を記録した。失敗を成功へ書き換えず、不明結果の観測修正後に該当1件と最新21件を確認した。
+借用返還後のsourceCityID変更は、同txのIssued・ReturnIssued・FinalID・RestoredCoreで原所有者と座標を結べる場合だけ許容する。正式CITY継承は保存されたTransferredCityID・TransferTurnと同txのCore統治プロパティを照合する。同座標に建て直した新都市やjournalなしのID変更は拒否する。発行済み例外・結果不明は診断を保持し、100手番後でも再発行しない。欠落・来歴差替え・重複は保全停止する。
 
-ログは専用WTの `scratch/native-deal-logs/` に保存する。`final-native-deal-and-inventory.log`、`carrier-regression.log`、`manifest-regression.log`、`standalone-registration-sp-regression.log` が確定結果である。Rust源と配布Luaの一致、Lua51構文、書式と差分を確認する。取引の観測中に他作品数・位置・来歴が変わった場合は成功を確定せず保全停止する。Core取引の可否と適合空枠の公開が前提で、UIのみの値の独立証明、未記録の外部再取引、実機・実LANは未達のまま保持し、元ToDo996は継続する。
+新検査は偽certificateを付けず、既に発行されたV1記録の再構成fixtureで回復のみを検査する。Must2件は旧源で0成功・2失敗のREDを確認した。修正後は新しいNativeDeal8件とNI12件の20/20、必要なキャリア回帰4/4が成功した。確定関連24件であり、81ecの原本新規Enact成功32件を最新保証へ読み替えない。Rust生成源と実配布Luaの一致・Lua51構文を検査する。
 
+ログは専用WTの `scratch/native-deal-logs/` にある `review-must-red.log`、`review-final-deal-ni.log`、`review-carrier-regression.log`。親のNI軽量receipt・prune源はコピーしていない。最終全workspace・Clippy・CI・実LANは親へ残し、元ToDo996は継続する。
 ### 初期一覧と通常CITY継承の共有観測
 
 初期作品一覧とキャリアの関連検査は70件すべて成功し、省略は0件だった。作品一覧12件とキャリア58件に、独立したLua 5.1環境、保存状態の再構成と再参加、部分送信、重複要求、無資格の実行者、都市継承後と翌ターンの照合を含む。配布LuaとRust生成源の一致も確認した。この結果は実LANの成功を意味せず、最終レビュー・全workspace・CIとマージは別に確認する。
