@@ -11,6 +11,44 @@ pub(super) static END_PAUSED: AtomicBool = AtomicBool::new(false);
 pub(super) static END_RELEASE: AtomicBool = AtomicBool::new(false);
 const ORIGINAL: u64 = 0xaabb_ccdd_1122_3301;
 
+#[test]
+fn promotion_primary_image_matches_both_callers_arguments_and_untouched_callee() {
+    if !Path::new(GAMECORE).is_file() {
+        println!("fixed primary GameCore NOT AVAILABLE; witness check NOT EXECUTED");
+        return;
+    }
+    // A loaded-image witness fixture, copied from the actual pinned disk image.
+    // No GameCore code is loaded or run. verify checks the real complete SHA.
+    let mut file = File::open(GAMECORE).unwrap();
+    let mut image = vec![0u8; AI_CALL_RVA + 16];
+    for (rva, len) in [
+        (
+            PINNED_PROMOTION_CALL_RVA - OFFICIAL_ARGS.len(),
+            OFFICIAL_ARGS.len() + 16,
+        ),
+        (AI_CALL_RVA - AI_ARGS.len(), AI_ARGS.len() + 16),
+        (PINNED_PROMOTION_CALLEE_RVA - 5, CALLEE_BOUNDARY.len()),
+    ] {
+        let offset = pe_file_offset(&mut file, rva as u32).unwrap();
+        file.seek(SeekFrom::Start(offset)).unwrap();
+        file.read_exact(&mut image[rva..rva + len]).unwrap();
+    }
+    let base = image.as_ptr() as usize;
+    assert!(verify(base));
+    for offset in [
+        AI_CALL_RVA + 1,
+        AI_CALL_RVA + 5,
+        AI_CALL_RVA - AI_ARGS.len(),
+        PINNED_PROMOTION_CALL_RVA - 3,
+        PINNED_PROMOTION_CALLEE_RVA,
+    ] {
+        image[offset] ^= 1;
+        assert!(!verify(base), "loaded witness changed at {offset:#x}");
+        image[offset] ^= 1;
+    }
+    println!("fixed SHA, both PE call mappings/argument witnesses and callee boundary verified");
+}
+
 struct OwnedChild(std::process::Child);
 impl Drop for OwnedChild {
     fn drop(&mut self) {

@@ -834,3 +834,7 @@ bootstrap controllerは停止後、Compositeとログを各2回すべて読み�
 合成Win64子では、費用1/2/3、部分支払・paid=false、他者許可、余分TITLE/技能、取得済み再送、通常総督、不正flag/owner、閉鎖・再許可と読込をまたぐ原call、観測停止後のtrace不変を確認する。別の子で全volatile整数/XMM/flagsとcaller stackの一致、実SEH巻戻し、片側設置失敗の復元、片側復元失敗の保持と他方の復元、並列4threadと復元直前に取り込まれたrelayの寿命を確認する。AMD以外の検査は設置前拒否を確認し、「AMD gateway child NOT EXECUTED」と記録する。その拒否をgateway試験実行へ数えない。
 
 これは通常runtimeへの**ソース上の接続**であり、実ゲームへの設置・起動・操作は0。新たな上位AI hook、未証明の`ai_operation` actor登録・実行、Spent用hook、正式操作の送信は追加していない。AIの自然な処理段階と同期Gameplay/読込境界は本書558・584・600・618行の未実測を維持する。効果なしTITLEをchooserが選ぶ保証もないため、費用2/3のAI正式支払い成功を主張しない。ToDo2005の実機保守ゲートが開くまで追加live設置をしない。親が通常起動・自然AI/人間の正式PROMOTE、本人Spent/既取得状態、途中読込と旧要求排出・MPを照合し、既払保存を再送せず確認する。元の製品7条件は0/7、PR86と親ToDo880は継続する。有限commit・関連検査の正確な件数・原ログ・設置条件は`D:/CC/Work/todo880/promotion-runtime-result-20261008.json`で親へ返す。
+
+関連クレートだけのnextestは150件・8実行ファイルすべて成功、失敗・ignored・skipped0。その原ログに別途表示されたWin64子は17件各1成功で、新規gatewayの6子を含む（いずれも82 filtered）。既存AI gatewayの3つの内部子は親側でcaptured outputの終了を確認する従来方式を保持し、表示された17件へ加算しない。既存の二つの子入口を親検査一覧で通しただけの結果も、実際のgateway呼出しへ数えない。
+
+同じruntime本体に追加した一次照合テストだけを次に実行し、1成功・83 skipped（この1件の内部83 filtered）、失敗・ignored0だった。実際の固定SHAのDLLから両caller・直前引数・callee境界をコピーし、通常installerと同じ`verify`を通した。AI operand/後続命令/R8D命令、公式RCX命令、callee先頭の各改変を拒否した。150件を最新151件の一括実行とは言わず、150件と追加1件を別記録で保持する。GameCoreをロード・実行した検査ではない。最初のABI子は試験用確保位置のoperand整列条件で失敗し、試験の近傍anchorを修正後に該当4子を再確認した。実装のCPU条件は変えていない。変更Rust7本の整形と差分検査も成功し、全workspace実行は0である。
