@@ -67,6 +67,66 @@ pub struct GrowthSnapshot {
     pub records: Vec<GrowthRecord>,
 }
 
+/// Compare two endpoint pairs before/after a save reload or reconnect at the
+/// same game turn. Original envelopes remain unchanged. This checks supplied
+/// records only; it cannot prove that a restore or network event actually ran.
+pub fn compare_restoration(before: &[Checkpoint; 2], after: &[Checkpoint; 2]) -> Result<()> {
+    compare(&before[0], &before[1])?;
+    compare(&after[0], &after[1])?;
+    if before[0].phase == after[0].phase && before[0].barrier_tag == after[0].barrier_tag {
+        return Err(invalid(
+            &after[0].endpoint_id,
+            "restoration boundary",
+            "before and after must label distinct collection stages",
+        ));
+    }
+    for previous in before {
+        let current = after
+            .iter()
+            .find(|c| c.endpoint_id == previous.endpoint_id)
+            .ok_or_else(|| {
+                invalid(
+                    &previous.endpoint_id,
+                    "restoration endpoint_id",
+                    "missing after restoration",
+                )
+            })?;
+        if previous.session_tag != current.session_tag {
+            return Err(invalid(
+                &current.endpoint_id,
+                "restoration session_tag",
+                "game session changed",
+            ));
+        }
+        let a = previous.parse()?;
+        let b = current.parse()?;
+        if a.local_player != b.local_player {
+            return Err(invalid(
+                &current.endpoint_id,
+                "restoration localPlayer",
+                "endpoint changed player",
+            ));
+        }
+        if a.world_turn != b.world_turn {
+            return Err(invalid(
+                &current.endpoint_id,
+                "restoration worldTurn",
+                "must restore the same turn",
+            ));
+        }
+        for (left, right) in a.records.iter().zip(&b.records) {
+            if left != right {
+                return Err(invalid(
+                    &current.endpoint_id,
+                    &format!("restoration {}", left.key),
+                    format!("growth record changed: before={left:?}, after={right:?}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn invalid(endpoint: &str, field: &str, detail: impl fmt::Display) -> Error {
     Error::scenario(format!(
         "growth checkpoint endpoint {endpoint:?}: {field}: {detail}"

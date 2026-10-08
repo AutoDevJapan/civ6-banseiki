@@ -483,6 +483,8 @@ end
 -- needs an independent physical movement before that change.
 local function NativeWorkRoute(source, tracked, donor, destination, custodian)
   if not custodian then return "CITY" end
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() and destination >= 0 then return "CARRIER" end
   if destination < 0 or (tracked and tracked.NativeOwnerMoves or 0) > 0
     or source.BuildingType == "BUILDING_PALACE" and source.CreatedByPlayer ~= donor then
     return "CARRIER"
@@ -1802,6 +1804,17 @@ local function RestoreTransferred(state, tx, unit, snap, coreOnly)
   end
 end
 NativeWorkAtTarget = function(snap)
+  local mp = snap.Carrier and snap.Carrier.MP
+  if mp then
+    assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
+      "MP work requires a fresh synchronized actor observation")
+    local work = assert(mp.FinalActorObservation.Locations[1])
+    local city = assert(CityManager.GetCityAt(work.X, work.Y))
+    assert(city:GetOwner() == work.Owner and city:GetID() == work.CityID
+      and SameNativeWorkSlot(work, snap.TargetSlot), "MP final work city changed")
+    SameNativeWorkIdentity(snap.Source, work)
+    return R.Copy(work)
+  end
   local found = NativeWorkLocations(snap.Source.Index)
   assert(#found == 1, "native Great Work index is missing or duplicated: " .. snap.ID)
   SameNativeWorkIdentity(snap.Source, found[1])
@@ -1830,6 +1843,16 @@ NativeWorkAtAbsorber = function(tx, snap)
   return work
 end
 NativeWorkSourceEmpty = function(tx, snap)
+  local mp = snap.Carrier and snap.Carrier.MP
+  if mp then
+    assert(mp.Phase == "DONE" and mp.ObservationTurn == Game.GetCurrentGameTurn(),
+      "MP source requires a fresh synchronized actor observation")
+    local source = assert(mp.FinalActorObservation.Cities[1])
+    local city = assert(CityManager.GetCityAt(source.X, source.Y))
+    assert(source.Work == -1 and city:GetID() == source.ID
+      and city:GetOwner() == source.Owner, "MP source city changed after restoration")
+    return
+  end
   local source = snap.Source
   local city = assert(CityManager.GetCityAt(source.X, source.Y),
     "native Great Work donor city disappeared: " .. snap.ID)
@@ -1919,6 +1942,46 @@ local function NativeCarrierState(city, carrier)
     Governance = R.Copy(city:GetProperty(R.GOVERNANCE_KEY)),
     UnitsOnCenter = units, PurchasedPlots = plots }
 end
+A.NativeCarrierFriction = ActiveNativeCarrierFriction
+A.NativeCarrierPropertyKeys = function()
+  local keys = R.Copy(cityKeys)
+  keys[R.GOVERNANCE_KEY] = true
+  return keys
+end
+-- Only getters used directly in Gameplay: no CityRead or ExposedMembers
+-- fallback. The registered catalog is the authority for property restoration.
+A.ReadNativeCarrierCore = function(city, loan)
+  local keys = A.NativeCarrierPropertyKeys()
+  local buildings = city:GetBuildings()
+  local identity = city.GetCulturalIdentity and city:GetCulturalIdentity()
+  local religion = city.GetReligion and city:GetReligion()
+  local followers
+  if religion and religion.GetReligionsInCity then
+    followers = {}
+    for _, row in pairs(religion:GetReligionsInCity()) do
+      followers[tostring(row.Religion)] = row.Followers
+    end
+  end
+  return { Name = city:GetName(), Population = city:GetPopulation(),
+    PropertyKeys = keys, Properties = Properties(city, keys),
+    UnitsOnCenter = UnitsOnCityCenter(loan.X, loan.Y, city:GetOwner()),
+    HasBuilding = buildings:HasBuilding(loan.Building),
+    Loyalty = identity and identity.GetLoyalty and identity:GetLoyalty() or nil,
+    Religion = followers,
+    Work = buildings.GetGreatWorkInSlot and buildings:GetGreatWorkInSlot(loan.Building, loan.Slot) or nil,
+    Slots = buildings.GetNumGreatWorkSlots and buildings:GetNumGreatWorkSlots(loan.Building) or nil }
+end
+A.ReadNativeCarrier = function(city, loan)
+  local keys = A.NativeCarrierPropertyKeys()
+  local slotType = city:GetBuildings():GetGreatWorkSlotType(loan.Building, loan.Slot)
+  local slot = assert(GameInfo.GreatWorkSlotTypes[slotType], "native slot type missing")
+  return { Owner = city:GetOwner(), ID = city:GetID(), X = city:GetX(), Y = city:GetY(),
+    Slots = WorkSlots(city, loan.Building), SlotType = slot.GreatWorkSlotType,
+    Work = WorkInSlot(city, loan.Building, loan.Slot),
+    State = NativeCarrierState(city, { Building = loan.Building, Slot = loan.Slot,
+      X = loan.X, Y = loan.Y, Owner = city:GetOwner() }),
+    PropertyKeys = keys, Properties = Properties(city, keys) }
+end
 
 local function AssertNativeCarrierReturnSafe(city, carrier)
   local current = NativeCarrierState(city, carrier)
@@ -1950,10 +2013,17 @@ local function RestoreNativeCarrierGovernance(state, city, carrier)
   Save(state)
 end
 
-local function NativeCarrierActorReady()
+local function AssertNativeCarrierContext()
+  -- Base/Assets/UI/GreatWorksOverview.lua:907,914 sends both the actor
+  -- and PARAM_PLAYER_ONE as the local player. The single-player cross-owner
+  -- route has no verified MP actor for an AI / Free Cities borrower.
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
     and GameConfiguration.IsAnyMultiplayer()),
     "native Great Work carrier MOVE has no verified multiplayer actor")
+end
+
+local function NativeCarrierActorReady()
+  AssertNativeCarrierContext()
   local actor = Game.GetLocalPlayer and Game.GetLocalPlayer()
   local player = type(actor) == "number" and Players[actor]
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -1967,7 +2037,15 @@ local function NativeCarrierSlot(carrier, owner, id)
     Building = carrier.Building, Slot = carrier.Slot }
 end
 
-local function AdvanceNativeCarrier(state, carrier)
+local function AdvanceNativeCarrier(state, carrier, preferred)
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() then
+    assert(JAC_CarrierMP, "native Great Work carrier MOVE has no verified multiplayer actor")
+    return JAC_CarrierMP.Advance(state, carrier, preferred)
+  end
+  -- A saved loan can resume beyond BORROW. Refuse every phase before reading
+  -- this client's UI cache, replaying a transfer, or adopting a publication.
+  AssertNativeCarrierContext()
   local city = assert(CityManager.GetCityAt(carrier.X, carrier.Y),
     "native Great Work carrier city disappeared")
   local slotValue = false
@@ -2163,6 +2241,11 @@ local function MoveNativeWorks(state, tx)
       assert(snap.Destination == tx.To, "native city inheritance has an external destination")
     end
   end
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() then
+    assert(JAC_CarrierMP, "native MP carrier binding unavailable")
+    JAC_CarrierMP.Preflight(tx)
+  end
   local reserved = {}
   local reservedCities = ReservedNativeCarrierCities(state, tx.ID)
   for _, pending in ipairs(tx.NativeWorks or {}) do
@@ -2176,6 +2259,13 @@ local function MoveNativeWorks(state, tx)
     end
   end
   for _, snap in ipairs(tx.NativeWorks or {}) do
+    if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+      and GameConfiguration.IsAnyMultiplayer() and snap.Custodian and snap.NativeRoute == "CARRIER" then
+      assert(JAC_CarrierMP, "native MP carrier binding unavailable")
+      if not JAC_CarrierMP.AdvanceSnap(state, tx, snap) then
+        error("JAC_ABSORPTION_WAITING_UI", 0)
+      end
+    else
     if snap.Custodian then
       if not snap.TargetSlot then
         local player = Players[snap.Custodian]
@@ -2226,10 +2316,13 @@ local function MoveNativeWorks(state, tx)
             Building = slot.Building, Slot = slot.Slot,
             Token = tx.ID .. ":carrier:" .. snap.Source.Index,
             BorrowToken = tx.ID .. ":carrier:" .. snap.Source.Index .. ":borrow" }
-          snap.Carrier.Before = NativeCarrierState(city, snap.Carrier)
+          if not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
+            and GameConfiguration.IsAnyMultiplayer()) then
+            snap.Carrier.Before = NativeCarrierState(city, snap.Carrier)
+          end
           Save(state)
         end
-        local ready, advanced = pcall(AdvanceNativeCarrier, state, snap.Carrier)
+        local ready, advanced = pcall(AdvanceNativeCarrier, state, snap.Carrier, tx.To)
         if not ready then
           if NativeUIStale(advanced) then
             snap.Carrier.RefreshRequested = snap.Carrier.Phase == "PROVED"
@@ -2245,8 +2338,10 @@ local function MoveNativeWorks(state, tx)
         snap.TargetSlot = R.Copy(snap.Carrier.FinalSlot)
         snap.PhysicalMoved = true
         Save(state)
-        NativeWorkAtTarget(snap)
-        NativeWorkSourceEmpty(tx, snap)
+        if not snap.Carrier.MP then
+          NativeWorkAtTarget(snap)
+          NativeWorkSourceEmpty(tx, snap)
+        end
       elseif snap.PhysicalMoved then
         NativeWorkAtTarget(snap)
         NativeWorkSourceEmpty(tx, snap)
@@ -2293,6 +2388,7 @@ local function MoveNativeWorks(state, tx)
           error("JAC_ABSORPTION_WAITING_UI", 0)
         end
       end
+    end
     end
   end
 end
@@ -2613,6 +2709,18 @@ function A.Resume(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
+  if tx.Turn ~= Game.GetCurrentGameTurn() and not tx.Request.FlowPolicy
+    and GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() and JAC_CarrierMP
+    and JAC_CarrierMP.HasContinuation(tx) then
+    -- This permission advances/restores saved MP loans only. It does not
+    -- replay the stale manual contract for units, cities, or other adapters.
+    JAC_CarrierMP.ContinueOnly(state, tx)
+    tx.Status, tx.Error = "WAITING_UI", nil
+    tx.WaitingFor = "MP_CARRIER_CONTINUATION_ONLY"
+    Save(state)
+    return R.Copy(tx)
+  end
   assert(tx.Turn == Game.GetCurrentGameTurn() or tx.Request.FlowPolicy,
     "manual transfers require their adapter contract in the original turn")
   if tx.Status == "BLOCKED" then
@@ -3235,6 +3343,7 @@ JAC_AbsorptionGameplay = A
 ExposedMembers.JAC_Absorption = {
   GetState = A.GetState, GetRoster = A.GetRoster, GetUIPhase = A.GetUIPhase,
   Canonical = R.Canonical, GetPropertyKeys = A.GetPropertyKeys,
+  ReadNativeCarrier = A.ReadNativeCarrier, ReadNativeLocations = A.NativeWorkLocations,
 }
 Log("loaded version=1 explicit_dispositions=true")
 return A

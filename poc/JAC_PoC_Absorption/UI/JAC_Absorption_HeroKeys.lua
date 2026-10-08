@@ -1,6 +1,7 @@
 -- UnitPropertyKeys exists in the UI context but not in gameplay on the installed engine.
 -- Share the engine's actual numeric enum value; never invent a replacement property.
 local uiPlayers, uiGame = Players, Game
+include('JAC_CarrierMP_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
 local function PublishHeroKeys()
@@ -158,7 +159,9 @@ end
 local function ObserveNativeCarrier(carrier, reads)
   -- A saved single-player MOVE must not bypass the gameplay borrow guard.
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and GameConfiguration.IsAnyMultiplayer() then return false end
+    and GameConfiguration.IsAnyMultiplayer() then
+    return JAC_ObserveNativeCarrierMP and JAC_ObserveNativeCarrierMP(carrier) or false
+  end
   if not carrier or carrier.Phase == "RESTORED" then return false end
   if carrier.Phase == "PROVED" then
     if not carrier.RefreshRequested then return false end

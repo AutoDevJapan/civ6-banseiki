@@ -272,9 +272,13 @@ local function AiPropose()
   end
 end
 
-local function OnPropose(playerID, params) Propose(playerID, params and params.Target); end
+local function OnPropose(playerID, params)
+  if type(playerID) ~= "number" or Players[playerID] == nil then return; end
+  Propose(playerID, params and params.Target);
+end
 
 local function OnAccept(playerID, params)
+  if type(playerID) ~= "number" or Players[playerID] == nil then return; end
   local lead = params and params.Target;
   if lead ~= nil and Game:GetProperty(PROPOSAL_PREFIX .. playerID) == lead and CanJoin(lead, playerID) then
     Join(lead, playerID);
@@ -284,6 +288,7 @@ local function OnAccept(playerID, params)
 end
 
 local function OnLeave(playerID)
+  if type(playerID) ~= "number" or Players[playerID] == nil then return; end
   if LeadOf(playerID) == nil then
     Players[playerID]:SetProperty(RESULT, "INVALID");
     return;

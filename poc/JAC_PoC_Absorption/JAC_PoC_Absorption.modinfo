@@ -40,6 +40,7 @@
     <UpdateDatabase id="JAC_Absorption_ArtifactTest_Data" criteria="JAC_Absorption_ArtifactTest"><Properties><LoadOrder>301</LoadOrder></Properties><File>Data/JAC_Absorption_ArtifactTest.sql</File></UpdateDatabase>
     <UpdateText id="JAC_Absorption_Text" criteria="JAC_Absorption_Banseiki"><File>Text/JAC_Absorption_Text.xml</File></UpdateText>
     <ImportFiles id="JAC_Absorption_Rules" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Rules.lua</File></ImportFiles>
+    <ImportFiles id="JAC_CarrierMP_UI" criteria="JAC_Absorption_Banseiki"><File>UI/JAC_CarrierMP_UI.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Flow_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Flow.lua</File><File>UI/JAC_AbsorptionFlow.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Engine_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Gameplay.lua</File></ImportFiles>
     <AddGameplayScripts id="JAC_Absorption_Gameplay" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>200</LoadOrder></Properties><File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>
@@ -54,5 +55,6 @@
     <File>Scripts/JAC_Absorption_Flow.lua</File>
     <File>Scripts/JAC_Absorption_Entry.lua</File>
     <File>Scripts/JAC_CarrierBoundary.lua</File>
+    <File>UI/JAC_CarrierMP_UI.lua</File>
   </Files>
 </Mod>

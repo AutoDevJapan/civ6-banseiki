@@ -15,6 +15,9 @@ enum Command {
     Generate {
         output: PathBuf,
     },
+    GenerateUi {
+        output: PathBuf,
+    },
     SendQuery {
         checkpoint: PathBuf,
         active_humans: String,
@@ -23,6 +26,7 @@ enum Command {
 fn run(args: Args) -> Result<()> {
     match args.command {
         Command::Generate { output } => fs::write(output, transport::gameplay_binding())?,
+        Command::GenerateUi { output } => fs::write(output, transport::ui_binding())?,
         Command::SendQuery {
             checkpoint,
             active_humans,
