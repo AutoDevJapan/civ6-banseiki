@@ -6,6 +6,7 @@ include("JAC_Absorption_Flow")
 -- Carrier multiplayer operations use the same private gameplay API and must
 -- be included here, rather than loaded in a second gameplay environment.
 include("JAC_CarrierBoundary")
+include("JAC_NativeInventory")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
 if GameInfo.JAC_RP_Religions then
   JAC_RP_AdapterInclude = true

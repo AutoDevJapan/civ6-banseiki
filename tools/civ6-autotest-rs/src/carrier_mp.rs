@@ -1,4 +1,4 @@
-//! Generated paired-city MP binding. Only an active human absorber issues MOVE;
+//! Generated paired-city MP binding. Only a selected active human issues MOVE;
 //! every Gameplay VM consumes the same scalar, framed publication packet.
 pub const CODEC: &str = r#"
 local function Encode(v)
@@ -21,7 +21,9 @@ local function Encode(v)
 end
 local function Decode(s)
   assert(type(s)=='string' and #s<=1048576,'observation size')
-  local at,budget=1,8192
+  -- Every decoded node consumes input bytes. The wire byte limit bounds
+  -- total work while allowing valid inventories with more than 8192 nodes.
+  local at,budget=1,#s
   local function read(depth)
     budget=budget-1;assert(budget>=0 and depth<=24,'observation complexity')
     local tag=s:sub(at,at);at=at+1
@@ -61,6 +63,18 @@ local function active(id)
   local p=Players[id]
   return p and p:IsAlive() and p:IsHuman() and p.IsTurnActive and p:IsTurnActive()
 end
+local function actorFor(recipient)
+  local p=Players[recipient]
+  -- A human recipient retains its turn ownership. An AI recipient needs a
+  -- separate, deterministic human executor; never impersonate an AI.
+  if p and p:IsAlive() and p:IsHuman() then return recipient end
+  local best
+  for _,id in ipairs(PlayerManager.GetAliveIDs()) do
+    local human=Players[id]
+    if human and human:IsAlive() and human:IsHuman() and (not best or id<best) then best=id end
+  end
+  return best
+end
 local function phase(state,c,p)
   c.MP.Phase=p;c.MP.Nonce=c.MP.Nonce+1;save(state)
 end
@@ -81,14 +95,16 @@ function MP.Preflight(tx)
   -- Scan every item before the first city loan, not only the next item.
   for _,snap in ipairs(tx.NativeWorks or {}) do
     if snap.Custodian then
-      assert(snap.Destination>=0,'MP scattering/recovery requires a separate reservation protocol')
       assert(snap.NativeRoute=='CARRIER','MP legacy deal needs reconciliation')
       assert(snap.Source.BuildingType~='BUILDING_PALACE','MP Palace source needs native preservation proof')
       assert(snap.Source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact cannot move to an empty museum')
       if not snap.Carrier then
         local s=snap.Source
-        assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},tx.To),
-          'MP source city cannot be safely borrowed')
+        local actor=actorFor(tx.To)
+        if actor then
+          assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},actor),
+            'MP source city cannot be safely borrowed')
+        end
       end
     end
   end
@@ -154,13 +170,12 @@ end
 function MP.HasContinuation(tx)
   for _,snap in ipairs(tx.NativeWorks or {}) do
     local c=snap.Carrier;local m=c and c.MP
-    if m and m.Version==2 and m.Transaction==tx.ID and m.Actor==tx.To
+    if m and m.Version==2 and m.Transaction==tx.ID and m.Actor==c.Borrower
       and c.Token==tx.ID..':carrier:'..snap.Source.Index and c.Source.Index==snap.Source.Index then return true end
   end
   return false
 end
 function MP.ContinueOnly(state,tx)
-  if not active(tx.To) then tx.WaitingFor='MP_ACTOR_TURN';save(state);return end
   for _,snap in ipairs(tx.NativeWorks or {}) do
     local c=snap.Carrier;local m=c and c.MP
     if m and m.Version==2 and m.Transaction==tx.ID then MP.Advance(state,c,tx.To) end
@@ -169,18 +184,45 @@ end
 function MP.AdvanceSnap(state,tx,snap)
   MP.Preflight(tx)
   local player=Players[tx.To]
-  assert(player and player:IsAlive() and player:IsHuman(),'MP absorber must be a living human')
+  assert(player and player:IsAlive(),'MP absorber must be alive')
   if not snap.Carrier then
-    snap.Carrier={Route='TO_OWNER',Phase='BORROW',BorrowIssued=false,Index=snap.Source.Index,
-      Source=R.Copy(snap.Source),Owner=snap.Custodian,Borrower=tx.To,
+    local actor=actorFor(tx.To)
+    if not actor then tx.WaitingFor='MP_HUMAN_EXECUTOR';save(state);return false end
+    snap.Carrier={Route=snap.Destination<0 and 'TO_FREE' or 'TO_OWNER',Phase='BORROW',BorrowIssued=false,Index=snap.Source.Index,
+      Source=R.Copy(snap.Source),Owner=snap.Custodian,Borrower=actor,
       Token=tx.ID..':carrier:'..snap.Source.Index}
-    snap.Carrier.MP={Version=2,Transaction=tx.ID,Actor=tx.To,Phase='SELECT',Nonce=1,RejectedCandidates={}}
+    snap.Carrier.MP={Version=2,Transaction=tx.ID,Actor=actor,Phase='SELECT',Nonce=1,RejectedCandidates={}}
+    tx.WaitingFor=nil
     save(state);return false
   end
-  if not active(tx.To) then tx.WaitingFor='MP_ACTOR_TURN';save(state);return false end
+  if not active(snap.Carrier.MP.Actor) then tx.WaitingFor='MP_ACTOR_TURN';save(state);return false end
+  tx.WaitingFor=nil
   if not MP.Advance(state,snap.Carrier,tx.To) then return false end
   snap.TargetSlot=R.Copy(snap.Carrier.FinalSlot);snap.PhysicalMoved=true
   snap.NativeMoveEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
+  save(state);return true
+end
+function MP.AdvanceRecovery(state,intent,source,owner,token)
+  assert(Players[owner] and Players[owner]:IsAlive(),'MP recovery recipient must be alive')
+  assert(source.BuildingType~='BUILDING_PALACE','MP Palace recovery requires native preservation proof')
+  assert(source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact recovery requires museum exchange proof')
+  if not intent.NativeCarrier then
+    local actor=actorFor(owner)
+    if not actor then intent.WaitingFor='MP_HUMAN_EXECUTOR';save(state);return false end
+    if not eligible({Owner=source.Owner,ID=source.CityID,X=source.X,Y=source.Y,Building=source.Building,Slot=source.Slot},actor) then
+      intent.WaitingFor='MP_SOURCE_CITY_UNAVAILABLE';save(state);return false
+    end
+    intent.NativeCarrier={Route='FROM_FREE',Phase='BORROW',BorrowIssued=false,Index=source.Index,
+      Source=R.Copy(source),Owner=owner,Borrower=actor,Token=token..':carrier:'..source.Index}
+    intent.NativeCarrier.MP={Version=2,Recovery=token,Actor=actor,Phase='SELECT',Nonce=1,RejectedCandidates={}}
+    intent.WaitingFor=nil
+    save(state);return false
+  end
+  local c=intent.NativeCarrier
+  assert(c.MP and c.MP.Recovery==token and c.Owner==owner and c.Source.Index==source.Index,'MP recovery intent changed')
+  if not MP.Advance(state,c,owner) then return false end
+  intent.NativeTarget=R.Copy(c.FinalSlot);intent.NativePhysicalMoved=true
+  intent.NativeMoveEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
   save(state);return true
 end
 function MP.Advance(state,c,preferred)
@@ -300,25 +342,49 @@ local function validateObservation(c,o,placement)
   assert(o.Cities[i].Work==c.Index and o.Cities[3-i].Work==-1,'MP reported source/target mismatch')
 end
 local function reserved(state,c,l)
+  local function busy(other)
+    local m=other and other.MP
+    if m and other.Token~=c.Token and m.Phase~='DONE' and m.Phase~='ABORT_DONE' then
+      if other.Index==c.Index then return true end
+      for _,loan in ipairs(m.Loans or {other.Source}) do
+        if loan.X==l.X and loan.Y==l.Y then return true end
+      end
+    end
+    return false
+  end
   for _,tx in pairs(state.Transactions) do for _,snap in ipairs(tx.NativeWorks or {}) do
     local other=snap.Carrier;local m=other and other.MP
     local expired=m and (m.Phase=='SELECT' or m.Phase=='PREPARE')
       and tx.Turn~=Game.GetCurrentGameTurn() and not (tx.Request and tx.Request.FlowPolicy)
-    if m and not expired and other.Token~=c.Token and m.Phase~='DONE' and m.Phase~='ABORT_DONE' then
-      for _,busy in ipairs(m.Loans or {other.Source}) do
-        if busy.X==l.X and busy.Y==l.Y then return true end
-      end
-    end
+    if not expired and busy(other) then return true end
   end end
+  for _,intent in pairs(state.Recoveries or {}) do
+    if intent.Status~='COMPLETE' and busy(intent.NativeCarrier) then return true end
+  end
   return false
 end
 local function receive(actor,p)
   assert(GameConfiguration.IsAnyMultiplayer() and type(p)=='table' and p.Version==2,'MP wire contract')
-  local state=A.GetState();local found={};local selectedSnap,selectedTx
+  local state=A.GetState();local found={};local selectedSnap,selectedTx,selectedRecovery
   for _,tx in pairs(state.Transactions) do for _,snap in ipairs(tx.NativeWorks or {}) do
     if snap.Carrier and snap.Carrier.Token==p.Token then found[#found+1]=snap.Carrier;selectedSnap=snap;selectedTx=tx end
   end end
+  for _,intent in pairs(state.Recoveries or {}) do
+    if intent.NativeCarrier and intent.NativeCarrier.Token==p.Token then
+      found[#found+1]=intent.NativeCarrier;selectedRecovery=intent
+    end
+  end
   assert(#found==1,'MP carrier token missing or duplicated');local c=found[1];local m=assert(c.MP)
+  if selectedTx then
+    assert(m.Transaction==selectedTx.ID and not m.Recovery
+      and c.Token==selectedTx.ID..':carrier:'..selectedSnap.Source.Index
+      and c.Owner==selectedSnap.Custodian and Equal(c.Source,selectedSnap.Source),'MP transaction anchor changed')
+  else
+    assert(m.Recovery and not m.Transaction and state.Recoveries[m.Recovery]==selectedRecovery
+      and c.Token==m.Recovery..':carrier:'..c.Source.Index
+      and c.Owner==selectedRecovery.Owner and Equal(c.Source,selectedRecovery.NativeSource),'MP recovery anchor changed')
+  end
+  assert(c.Borrower==m.Actor,'MP borrower differs from selected executor')
   assert(m.Version==2 and actor==m.Actor and p.Actor==actor,'MP unselected actor')
   if not active(actor) then return false end
   assert(p.Turn==Game.GetCurrentGameTurn(),'MP stale turn')
@@ -327,7 +393,7 @@ local function receive(actor,p)
     Turn=p.Turn,Payload=p.Payload,Session=p.Session,DispatchStatus=p.DispatchStatus or ''})
   if m.Receipts and m.Receipts[id] then return true end
   assert(p.Phase==m.Phase and p.Nonce==m.Nonce,'MP stale phase/nonce')
-  if (m.Phase=='SELECT' or m.Phase=='PREPARE') and selectedTx.Turn~=Game.GetCurrentGameTurn()
+  if selectedTx and (m.Phase=='SELECT' or m.Phase=='PREPARE') and selectedTx.Turn~=Game.GetCurrentGameTurn()
     and not (selectedTx.Request and selectedTx.Request.FlowPolicy) then
     m.WaitingFor='MP_CONTRACT_REVALIDATION';save(state);return false
   end
@@ -352,7 +418,8 @@ local function receive(actor,p)
     if not chosen then m.WaitingFor='TARGET_SLOT';save(state);return false end
     assert(not reserved(state,c,origin),'MP source city already reserved')
     c.X,c.Y,c.Building,c.Slot,c.OriginalCity=chosen.X,chosen.Y,chosen.Building,chosen.Slot,chosen.City
-    selectedSnap.TargetSlot=R.Copy(chosen)
+    if selectedSnap then selectedSnap.TargetSlot=R.Copy(chosen)
+    else selectedRecovery.NativeTarget=R.Copy(chosen) end
     m.Loans={origin,{Owner=chosen.Owner,ID=chosen.City,X=chosen.X,Y=chosen.Y,Building=chosen.Building,Slot=chosen.Slot}}
     phase(state,c,'PREPARE');return true
   end

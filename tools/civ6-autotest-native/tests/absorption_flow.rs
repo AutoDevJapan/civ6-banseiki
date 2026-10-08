@@ -1944,6 +1944,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
     assert!(manifest.contains("<ImportFiles id=\"JAC_CarrierBoundary\""));
+    assert!(manifest.contains("<ImportFiles id=\"JAC_NativeInventory\""));
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
@@ -1996,6 +1997,7 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         }
         lua.load(r#"
             assert(type(JAC_AbsorptionGameplay)=='table' and type(JAC_AbsorptionFlowGameplay)=='table')
+            assert(type(JAC_NativeInventory)=='table' and type(JAC_NativeInventory.With)=='function')
             for _,method in ipairs({'Advance','Preflight','AdvanceSnap','HasContinuation','ContinueOnly'}) do
               assert(type(rawget(JAC_CarrierMP,method))=='function','private carrier API missing: '..method)
             end
@@ -2003,13 +2005,14 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     }
     // This separate context deliberately inherits no private gameplay globals.
     lua.load(r#"
-        assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil and JAC_CarrierMP==nil)
+        assert(JAC_AbsorptionGameplay==nil and JAC_AbsorptionFlowGameplay==nil and JAC_CarrierMP==nil and JAC_NativeInventory==nil)
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
         assert(GameEvents.OnGameTurnStarted.Count()==2)
         assert(GameEvents.JAC_CarrierBoundary_Operation.Count()==1)
         assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
+        assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         local codecs=0
         for name,value in pairs(ExposedMembers.JAC_CarrierMP) do
           assert((name=='Encode' or name=='Decode') and type(value)=='function')
