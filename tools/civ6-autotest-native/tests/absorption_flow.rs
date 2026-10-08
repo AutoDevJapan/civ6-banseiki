@@ -3027,16 +3027,12 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     .map_err(mlua::Error::external)?;
     // Every private gameplay dependency belongs to the absorption entry VM.
     assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
-    for id in ["JAC_Absorption_Gameplay"] {
-        assert_eq!(
-            manifest
-                .matches(&format!(
-                    "<AddGameplayScripts id=\"{id}\" criteria=\"JAC_Absorption_Banseiki\">"
-                ))
-                .count(),
-            1,
-        );
-    }
+    assert_eq!(
+        manifest
+            .matches("<AddGameplayScripts id=\"JAC_Absorption_Gameplay\" criteria=\"JAC_Absorption_Banseiki\">")
+            .count(),
+        1,
+    );
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
