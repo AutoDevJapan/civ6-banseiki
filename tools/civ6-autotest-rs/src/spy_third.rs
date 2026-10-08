@@ -452,12 +452,24 @@ local function coreCheck(owner,o)
  -- synchronized Gameplay callback, where they may exist but be unsupported.
  source.captives='UI'; source.captivesByCaptor={};
  assert(type(o.captivesByCaptor)=='table','third spy UI captive groups unavailable');
+ local saved=Game:GetProperty(ARCHIVE);
+ local savedGroups=saved and saved.observation and saved.observation.captivesByCaptor;
+ if saved then assert(type(savedGroups)=='table','third spy saved captive groups unavailable') end
  for id,expected in pairs(o.captivesByCaptor) do
   local captorID=tonumber(id);
-  assert(integer(captorID,0) and tostring(captorID)==id and Players[captorID] and type(expected)=='string',
+  local canonical=type(id)=='string' and (id=='0' or id:match('^[1-9]%d*$')~=nil);
+  assert(canonical and integer(captorID,0) and Players[captorID] and type(expected)=='string',
    'third spy UI captive group differs');
+  if savedGroups then
+   local baseline=savedGroups[id];
+   assert(type(baseline)=='string','third spy saved captive group differs');
+   assert(expected==baseline,'third spy UI captive group differs');
+  end
   source.captivesByCaptor[id]='UI';
  end
+ if savedGroups then for id in pairs(savedGroups) do
+  assert(type(o.captivesByCaptor[id])=='string','third spy UI captive group differs');
+ end end
  return source
 end
 function T.InstallCore(hooks)

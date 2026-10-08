@@ -1014,6 +1014,7 @@ mod platform {
                     std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink()).unwrap();
                 }
                 Ok("timed") => std::thread::sleep(Duration::from_millis(350)),
+                Ok("long-lived") => std::thread::sleep(Duration::from_secs(30)),
                 _ => {}
             }
         }
@@ -1023,10 +1024,33 @@ mod platform {
         ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
             session_with_close(deadline, closes, false)
         }
+        fn session_outliving_deadline(
+            deadline: Option<Instant>,
+            closes: Arc<AtomicUsize>,
+        ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
+            session_with_fixture(deadline, closes, false, "long-lived")
+        }
         fn session_with_close(
             deadline: Option<Instant>,
             closes: Arc<AtomicUsize>,
             terminate_owned_fixture: bool,
+        ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
+            session_with_fixture(
+                deadline,
+                closes,
+                terminate_owned_fixture,
+                if terminate_owned_fixture {
+                    "critical"
+                } else {
+                    "timed"
+                },
+            )
+        }
+        fn session_with_fixture(
+            deadline: Option<Instant>,
+            closes: Arc<AtomicUsize>,
+            terminate_owned_fixture: bool,
+            fixture_mode: &str,
         ) -> (FixtureSession, mpsc::Sender<ObserverMessage>) {
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .args([
@@ -1034,14 +1058,7 @@ mod platform {
                     "native_trace::platform::tests::fixture_observer_worker",
                     "--nocapture",
                 ])
-                .env(
-                    "PR86_TRACE_STOP_FIXTURE",
-                    if terminate_owned_fixture {
-                        "critical"
-                    } else {
-                        "timed"
-                    },
-                )
+                .env("PR86_TRACE_STOP_FIXTURE", fixture_mode)
                 .creation_flags(CREATE_NO_WINDOW)
                 .stdin(Stdio::piped())
                 .stdout(if terminate_owned_fixture {
@@ -1127,27 +1144,44 @@ mod platform {
             )
         }
         #[test]
-        fn stop_and_drop_share_one_deadline_and_one_close_request() {
+        fn stop_does_not_restart_the_supplied_startup_deadline() {
             let closes = Arc::new(AtomicUsize::new(0));
-            let (mut session, _tx) = session(
+            let (mut session, _tx) = session_outliving_deadline(
                 Some(Instant::now() + Duration::from_millis(120)),
                 Arc::clone(&closes),
             );
-            let started = Instant::now();
+            assert!(
+                session.child.try_wait().unwrap().is_none(),
+                "the child must still be alive before stop"
+            );
+            let stop_started = Instant::now();
             assert!(session
                 .stop()
                 .unwrap_err()
                 .to_string()
                 .contains("single 20 second deadline"));
-            drop(session);
-            // Leave room for scheduler delays in the parallel suite while
-            // remaining well below the 20-second deadline Drop must not restart.
             assert!(
-                started.elapsed() < Duration::from_secs(2),
-                "Drop restarted the shared startup deadline"
+                stop_started.elapsed() < Duration::from_secs(2),
+                "stop restarted the supplied startup deadline"
             );
             assert_eq!(closes.load(Ordering::SeqCst), 1);
-            std::thread::sleep(Duration::from_millis(360)); // The owned Rust fixture exits itself.
+            drop(session);
+        }
+        #[test]
+        fn drop_uses_the_expired_shared_deadline_and_closes_once() {
+            let closes = Arc::new(AtomicUsize::new(0));
+            let (mut fixture, _tx) = session_outliving_deadline(None, Arc::clone(&closes));
+            assert!(fixture.child.try_wait().unwrap().is_none());
+            let session = fixture.inner.as_mut().unwrap();
+            session.stop_deadline = Some(Instant::now() - Duration::from_millis(1));
+            let drop_started = Instant::now();
+            drop(fixture.inner.take());
+            assert!(
+                drop_started.elapsed() < Duration::from_secs(2),
+                "Session::drop restarted the shared startup deadline"
+            );
+            assert_eq!(closes.load(Ordering::SeqCst), 1);
+            drop(fixture);
         }
         #[test]
         fn repeated_critical_messages_close_the_owned_target_once() {

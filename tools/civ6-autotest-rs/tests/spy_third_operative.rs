@@ -664,7 +664,7 @@ fn changed_captive_group_prevents_final_adoption_without_pairing_anonymous_peopl
     t.run("CAPTURED[1][1].NameIndex=2; FRAME()");
     t.reject(
         "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
-        "immutable archive differs",
+        "third spy UI captive group differs",
     );
     t.run("assert(not Game:GetProperty('JAC_BOUNDARY_SPY') and not Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_STATE').bound)");
 }
@@ -1138,6 +1138,14 @@ fn captured_spy_roster_getters_are_never_called_from_gameplay() {
         end
         "#,
     );
+    t.run(
+        r#"
+        CORE_READ=true;
+        local ok,err=pcall(function() return Players[0]:GetDiplomacy():GetNumSpiesCaptured() end);
+        assert(not ok and tostring(err):find('UI-only captured roster getter',1,true) and CORE_CAPTURE_CALLS==1);
+        CORE_READ=false; CORE_CAPTURE_CALLS=0;
+        "#,
+    );
     t.third_success(false);
     t.run(
         r#"
@@ -1146,6 +1154,50 @@ fn captured_spy_roster_getters_are_never_called_from_gameplay() {
         assert(sources.captivesByCaptor['0']=='UI' and sources.captivesByCaptor['1']=='UI');
         assert(UI_CORE_CALLS==0);
         "#,
+    );
+}
+
+#[test]
+fn captured_captor_group_keys_reject_noncanonical_numbers() {
+    for invalid in ["-0", "00", "01", "+1"] {
+        let t = Third::new();
+        t.run(&format!(
+            r#"
+            local invalidID=setmetatable({{}}, {{__tostring=function() return '{invalid}' end}});
+            local getPlayers=Game.GetPlayers;
+            Game.GetPlayers=function()
+             local players=getPlayers(); local first=players[1];
+             players[1]=setmetatable({{GetID=function() return invalidID end}},{{__index=first}});
+             return players;
+            end;
+            "#
+        ));
+        t.reject(
+            "ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME(); \
+             ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',REQUESTS[#REQUESTS].params)",
+            "third spy UI captive group differs",
+        );
+    }
+}
+
+#[test]
+fn saved_captor_group_map_must_keep_each_original_key() {
+    let t = Third::new();
+    t.run(
+        r#"
+        ExposedMembers.JAC_PersonaBoundary.ThirdSpyReserve('BEGIN'); FRAME();
+        local r=REQUESTS[#REQUESTS].params; ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',r);
+        fire(Events.GameCoreEventPublishComplete); FRAME();
+        r=REQUESTS[#REQUESTS].params; assert(r.Phase=='BARRIER');
+        local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE');
+        a.observation.captivesByCaptor['1']=nil;
+        Game:SetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE',a);
+        SAVED_BARRIER=r;
+        "#,
+    );
+    t.reject(
+        "ENEMY_CASES.fireCore('JAC_BoundaryThirdSpyStep',SAVED_BARRIER)",
+        "third spy saved captive group differs",
     );
 }
 
