@@ -11,7 +11,8 @@ use std::{
 const BRANCH: &str = "agent/todo880-citizen-12";
 const HEAD: &str = "5a792461e3ab4bcc0bc393ed5cb75e70fd05f4ff";
 const SCENE_SHA: &str = "99fb9e5f20e897414403434504d0c0e9aad3f546577e5b650bea153dadf1127d";
-const JOB: &str = "20261006-171922-orch-todo-1665";
+#[cfg(test)]
+const JOB: &str = "fixture-current-owner";
 const LIVE: &str = "C:/Users/makhmeto/Desktop/dev/ADJ/civ6-banseiki-wt/live";
 const SALE_SHA: &str = "e84d34a97d4c10406b97dcf4e22716ab788453d282e76b6ccac10a86c9bc43cc";
 const RECOVERY_OUT: &str =
@@ -218,8 +219,8 @@ fn check_input(args: &[String], bytes: &[u8]) -> Result<Value, String> {
     Ok(scene)
 }
 fn check_lock(v: &Value, job: &str) -> Result<(), String> {
-    if job != JOB
-        || v["job"] != JOB
+    if job.is_empty()
+        || v["job"] != job
         || v["live_chain"] != true
         || v["pid"].as_u64().is_none()
         || v["chain_pid"] != v["pid"]
@@ -229,6 +230,57 @@ fn check_lock(v: &Value, job: &str) -> Result<(), String> {
         return Err("standard chain ownership evidence is missing".into());
     }
     Ok(())
+}
+fn current_job<'a>(session: &'a str, chain: &str) -> Result<&'a str, String> {
+    if session.is_empty() || session != chain {
+        return Err("session and chain job identities differ or are empty".into());
+    }
+    Ok(session)
+}
+fn check_maintenance(value: &Value, job: &str) -> Result<(), String> {
+    if job.is_empty()
+        || !value["allowed_jobs"]
+            .as_array()
+            .is_some_and(|jobs| jobs.iter().any(|allowed| allowed.as_str() == Some(job)))
+    {
+        return Err("live maintenance excludes this job".into());
+    }
+    Ok(())
+}
+#[test]
+fn resumed_owner_requires_session_chain_lock_and_maintenance_agreement() {
+    for owner in ["fixture-prior-owner", "fixture-resumed-owner"] {
+        let job = current_job(owner, owner).unwrap();
+        let lock = json!({"job":owner,"live_chain":true,"pid":10,"chain_pid":10,
+            "pid_created_filetime":1,"lock_token":"token"});
+        assert!(check_lock(&lock, job).is_ok());
+        assert!(check_maintenance(&json!({"allowed_jobs":[owner]}), job).is_ok());
+        assert!(check_lock(&lock, "another-owner").is_err());
+        assert!(check_maintenance(&json!({"allowed_jobs":["maintenance-owner"]}), job).is_err());
+    }
+    for (session, chain) in [
+        ("", ""),
+        ("current", "old"),
+        ("current", ""),
+        ("", "current"),
+    ] {
+        assert!(current_job(session, chain).is_err());
+    }
+    for malformed in [
+        json!({}),
+        json!({"allowed_jobs":null}),
+        json!({"allowed_jobs":"current"}),
+        json!({"allowed_jobs":[1,true,null]}),
+    ] {
+        assert!(check_maintenance(&malformed, "current").is_err());
+    }
+    assert!(check_lock(
+        &json!({"job":"","live_chain":true,"pid":10,"chain_pid":10,
+        "pid_created_filetime":1,"lock_token":"token"}),
+        ""
+    )
+    .is_err());
+    assert!(check_maintenance(&json!({"allowed_jobs":[""]}), "").is_err());
 }
 fn command(program: &str, args: &[&str]) -> Result<String, String> {
     let prefix = format!(
@@ -462,7 +514,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let lock_path = Path::new("D:/CC/Tools/civ6-live/civ6.lock");
     let lock: Value = serde_json::from_slice(&std::fs::read(lock_path)?)?;
-    check_lock(&lock, &std::env::var("CODEX_JOB_ID")?)?;
+    let session_job = std::env::var("CC_JOB_ID")?;
+    let chain_job = std::env::var("CODEX_JOB_ID")?;
+    let job = current_job(&session_job, &chain_job)?;
+    check_lock(&lock, job)?;
     let admission = match recovery_kind {
         1 => Some(recovery_admission()?),
         2 => Some(restart_recovery_admission()?),
@@ -472,12 +527,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let maintenance = Path::new("D:/CC/Tools/civ6-live/reliability-maintenance.json");
     if maintenance.exists() {
         let v: Value = serde_json::from_slice(&std::fs::read(maintenance)?)?;
-        if !v["allowed_jobs"]
-            .as_array()
-            .is_some_and(|a| a.iter().any(|j| j == JOB))
-        {
-            return Err("live maintenance excludes this job".into());
-        }
+        check_maintenance(&v, job)?;
     }
     git(&["diff", "--quiet", "HEAD", "--"])?;
     git(&["fetch", "-q", "origin"])?;
