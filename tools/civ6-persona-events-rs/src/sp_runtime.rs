@@ -1,5 +1,5 @@
 //! Explicit SP runtime experiment. Product auto-bootstrap is not asserted.
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 pub const LEADER: &str = "LEADER_JAC_DATE_TANEMUNE";
 pub const SAVE: &str = "JAC-Normal-Paid-SP-Cost2";
 

@@ -53,21 +53,18 @@ UI={RequestPlayerOperation=function(owner,operation,args) assert(owner==0 and op
         .unwrap();
     assert_eq!(result, "one normal assignment requested");
     lua.load("assert(calls==1);allowed=false").exec().unwrap();
-    assert!(
-        lua.load(steps[at]["code"].as_str().unwrap())
-            .exec()
-            .unwrap_err()
-            .to_string()
-            .contains("city not assignable")
-    );
+    assert!(lua
+        .load(steps[at]["code"].as_str().unwrap())
+        .exec()
+        .unwrap_err()
+        .to_string()
+        .contains("city not assignable"));
     lua.load("assert(calls==1)").exec().unwrap();
     assert_eq!(steps[at + 1]["action"], "wait_for");
-    assert!(
-        steps[at + 1]["condition"]["code"]
-            .as_str()
-            .unwrap()
-            .contains("GetAssignedCity")
-    );
+    assert!(steps[at + 1]["condition"]["code"]
+        .as_str()
+        .unwrap()
+        .contains("GetAssignedCity"));
 }
 
 #[test]
@@ -138,12 +135,10 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     assert_eq!(body.matches("JAC_RequestLeaderJoin(1)").count(), 1);
     assert_eq!(body.matches("JAC_AssignLeader('").count(), 1);
     assert_eq!(steps[5]["action"], "ui_lua");
-    assert!(
-        steps[5]["code"]
-            .as_str()
-            .unwrap()
-            .contains("pre-existing unjoined governor")
-    );
+    assert!(steps[5]["code"]
+        .as_str()
+        .unwrap()
+        .contains("pre-existing unjoined governor"));
     let attach = steps
         .iter()
         .position(|s| s["action"] == "start_native_paid_runtime")
@@ -163,46 +158,36 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     // The pre-turn audit must follow the official AI title grant, not merely
     // repeat the fresh-start check before any title can be spent.
     assert_eq!(steps[turn - 2]["state_name"], "GameCore_Tuner");
-    assert!(
-        steps[turn - 2]["code"]
-            .as_str()
-            .unwrap()
-            .contains("AI has no usable official title")
-    );
+    assert!(steps[turn - 2]["code"]
+        .as_str()
+        .unwrap()
+        .contains("AI has no usable official title"));
     for position in [turn - 1, turn + 1] {
         assert_eq!(steps[position]["state_name"], "InGame");
-        assert!(
-            steps[position]["code"]
-                .as_str()
-                .unwrap()
-                .contains(sp_runtime::AI_ADMISSION)
-        );
+        assert!(steps[position]["code"]
+            .as_str()
+            .unwrap()
+            .contains(sp_runtime::AI_ADMISSION));
     }
     assert_eq!(body.matches(sp_runtime::AI_ADMISSION).count(), 2);
     assert_eq!(steps[turn + 1]["state_name"], "InGame");
-    assert!(
-        steps[turn + 1]["code"]
-            .as_str()
-            .unwrap()
-            .contains(sp_runtime::AI_GOVERNORS)
-    );
+    assert!(steps[turn + 1]["code"]
+        .as_str()
+        .unwrap()
+        .contains(sp_runtime::AI_GOVERNORS));
     assert_eq!(steps[turn + 2]["state_name"], "GameCore_Tuner");
     assert_eq!(steps[turn + 2]["code"], sp_runtime::AI_GREAT_PEOPLE);
-    assert!(
-        steps[saved - 1]["code"]
-            .as_str()
-            .unwrap()
-            .contains("sample(false)")
-    );
+    assert!(steps[saved - 1]["code"]
+        .as_str()
+        .unwrap()
+        .contains("sample(false)"));
     assert_eq!(steps[saved + 1]["action"], "restart_game");
     assert_eq!(steps[saved + 2]["action"], "load");
     for s in &steps[saved + 2..] {
-        assert!(
-            !s["code"]
-                .as_str()
-                .unwrap_or("")
-                .contains("RequestPlayerOperation")
-        );
+        assert!(!s["code"]
+            .as_str()
+            .unwrap_or("")
+            .contains("RequestPlayerOperation"));
     }
     assert!(body.contains("a.allowed==false and b.allowed==true"));
     assert!(body.contains("checked==483"));
@@ -215,11 +200,10 @@ fn restored_snapshot_reads_saved_state_without_querying_absent_runtime_gate() {
     let lua = world();
     lua.load("full(); assigned=true; Players[0]:GetGovernors().CanAssignGovernor=function() error('no runtime after restart') end").exec().unwrap();
     lua.load(format!("{}\nlocal v=assert(sample(false)); assert(v.phase=='full' and v.allowed==nil and v.assigned==v.city)", sp_runtime::SNAPSHOT)).exec().unwrap();
-    assert!(
-        lua.load(format!("{}\nreturn sample()", sp_runtime::SNAPSHOT))
-            .exec()
-            .is_err()
-    );
+    assert!(lua
+        .load(format!("{}\nreturn sample()", sp_runtime::SNAPSHOT))
+        .exec()
+        .is_err());
 }
 
 fn ai_world() -> Lua {
@@ -512,13 +496,12 @@ end end})
 GameInfo.Governors.OTHER={Hash=999}
 local gs=Players[0]:GetGovernors(); gs.HasGovernor=function() return false end; gs.CanEverAppointGovernor=function() return false end
 "#).exec().unwrap();
-    assert!(
-        lua.load(pair)
-            .exec()
-            .unwrap_err()
-            .to_string()
-            .contains("second unpaid prefix")
-    );
+    assert!(lua
+        .load(pair)
+        .exec()
+        .unwrap_err()
+        .to_string()
+        .contains("second unpaid prefix"));
     // A result cannot manufacture the missing earlier event after finalization.
     lua.load("assert(JAC_NORMAL_SP_AUDIT.partials[2]==nil)")
         .exec()
