@@ -33,7 +33,7 @@ use windows_sys::Win32::{
     },
     UI::{
         Input::KeyboardAndMouse::{keybd_event, GetAsyncKeyState},
-        WindowsAndMessaging::GetWindowThreadProcessId,
+        WindowsAndMessaging::{GetWindowThreadProcessId, PostMessageW, WM_CLOSE},
     },
 };
 
@@ -106,6 +106,7 @@ pub struct RecoveryLease {
     file: File,
     chain_pid: u32,
     chain_created: u64,
+    token: String,
 }
 impl RecoveryLease {
     pub fn acquire() -> Result<Self> {
@@ -119,12 +120,28 @@ impl RecoveryLease {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .ok_or_else(|| Error::input("absolute shared Civ6 lock path was not supplied"))?;
-        let file = OpenOptions::new().read(true).share_mode(1).open(path)?; // FILE_SHARE_READ only
+        super::verify_control_path(&fs::canonicalize(path)?, super::SHARED_LOCK_PATH)?;
+        let mut file = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(super::SHARED_LOCK_PATH)?; // FILE_SHARE_READ only
+        let mut record = Vec::new();
+        (&mut file).take(32769).read_to_end(&mut record)?;
+        if record.len() > 32768 {
+            return Err(Error::input("shared Civ6 lock record too large"));
+        }
+        let record: Value = serde_json::from_slice(&record)?;
+        let token = record["lock_token"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::input("live-chain acquisition token missing"))?
+            .to_owned();
         let owner = open_process(chain_pid, 0x101000)?;
         let mut lease = Self {
             file,
             chain_pid,
             chain_created: created(owner.0)?,
+            token,
         };
         lease.check()?;
         Ok(lease)
@@ -137,7 +154,17 @@ impl RecoveryLease {
         if record.len() > 32768 {
             return Err(Error::input("shared Civ6 lock record too large"));
         }
-        verify_lock_record(&serde_json::from_slice(&record)?, self.chain_pid)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| Error::input(e.to_string()))?
+            .as_secs_f64();
+        super::verify_control_record(
+            &serde_json::from_slice(&record)?,
+            self.chain_pid,
+            self.chain_created,
+            &self.token,
+            now,
+        )?;
         let owner = open_process(self.chain_pid, 0x101000)?;
         if created(owner.0)? != self.chain_created
             || unsafe { WaitForSingleObject(owner.0, 0) } != 258
@@ -145,38 +172,18 @@ impl RecoveryLease {
             return Err(Error::input("live-chain lock owner exited or changed"));
         }
         let image = click::image_path(owner.0 as isize)?;
-        if !image
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or("")
-            .eq_ignore_ascii_case("live_chain.exe")
-        {
-            return Err(Error::input("lock owner is not live_chain.exe"));
-        }
+        super::verify_control_path(std::path::Path::new(&image), super::CHAIN_IMAGE_PATH)?;
         let rows = process_rows()?;
-        let mut child = std::process::id();
-        for _ in 0..32 {
-            if child == self.chain_pid {
-                return Ok(());
-            }
-            let row = rows
-                .iter()
-                .find(|row| row.pid == child)
-                .ok_or_else(|| Error::input("live-chain ancestry is unknown"))?;
-            let child_handle = open_process(child, 0x101000)?;
-            let parent_handle = open_process(row.parent_pid, 0x101000)?;
-            if created(parent_handle.0)? > created(child_handle.0)? {
-                return Err(Error::input("live-chain ancestor PID was reused"));
-            }
-            child = row.parent_pid;
-        }
-        Err(Error::input(
-            "driver is not a descendant of the shared lock owner",
-        ))
+        super::verify_control_ancestry(std::process::id(), self.chain_pid, &rows, |pid| {
+            created(open_process(pid, 0x101000)?.0)
+        })
     }
 }
 
 fn pinned(game: GameProcess, access: u32) -> Result<Handle> {
+    pin_game_identity(game, access, true)
+}
+fn pin_game_identity(game: GameProcess, access: u32, dx11_only: bool) -> Result<Handle> {
     if crate::restart::single_civ_process(0.0)? != Some((game.pid, game.started)) {
         return Err(Error::input(
             "just-launched Civ6 process disappeared or changed",
@@ -187,11 +194,13 @@ fn pinned(game: GameProcess, access: u32) -> Result<Handle> {
         return Err(Error::input("just-launched Civ6 creation time changed"));
     }
     let image = click::image_path(handle.0 as isize)?;
-    if !image
+    let name = image
         .rsplit(['/', '\\'])
         .next()
         .unwrap_or("")
-        .eq_ignore_ascii_case("CivilizationVI.exe")
+        .to_lowercase();
+    if !click::CIV_EXECUTABLES.contains(&name.as_str())
+        || (dx11_only && name != "civilizationvi.exe")
     {
         return Err(Error::input(
             "just-launched process is not the DX11 Civ6 executable",
@@ -200,6 +209,11 @@ fn pinned(game: GameProcess, access: u32) -> Result<Handle> {
     Ok(handle)
 }
 fn own_window(game: GameProcess) -> Result<isize> {
+    let hwnd = game_window(game)?;
+    crate::restart::require_dx11_window(hwnd)?;
+    Ok(hwnd)
+}
+fn game_window(game: GameProcess) -> Result<isize> {
     let hwnd = click::find_civ_window()?;
     let mut pid = 0;
     unsafe {
@@ -210,8 +224,21 @@ fn own_window(game: GameProcess) -> Result<isize> {
             "startup window belongs to a different process",
         ));
     }
-    crate::restart::require_dx11_window(hwnd)?;
     Ok(hwnd)
+}
+
+pub fn request_owned_close(lease: &mut RecoveryLease, game: GameProcess) -> Result<()> {
+    // Keep the process object pinned while resolving the window. The global
+    // window finder alone could otherwise select a replacement process.
+    // Closing an owned DX12 game remains supported; only new launches and
+    // startup diagnostics require DX11.
+    let _pin = pin_game_identity(game, 0x1000, false)?;
+    let hwnd = game_window(game)?;
+    lease.check()?;
+    if game_window(game)? != hwnd || unsafe { PostMessageW(hwnd as HANDLE, WM_CLOSE, 0, 0) } == 0 {
+        return Err(Error::input("Could not request owned Civ6 window close"));
+    }
+    Ok(())
 }
 pub struct PinnedGame {
     pub game: GameProcess,
@@ -240,6 +267,22 @@ impl PinnedGame {
         Ok(())
     }
 }
+pub fn pin_launched_process(floor: f64) -> Result<Option<PinnedGame>> {
+    let Some((pid, started)) = crate::restart::single_civ_process(0.0)? else {
+        return Ok(None);
+    };
+    let observed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| Error::input(e.to_string()))?
+        .as_secs_f64();
+    super::validate_launch_binding(floor, observed, started)?;
+    let game = GameProcess { pid, started };
+    let handle = pinned(game, 0x1000)?;
+    let raw = handle.0 as isize;
+    std::mem::forget(handle);
+    Ok(Some(PinnedGame { game, handle: raw }))
+}
+
 pub fn pin_window_process(hwnd: isize, floor: f64) -> Result<PinnedGame> {
     let mut pid = 0;
     unsafe {

@@ -1,10 +1,62 @@
 mod support_safety;
 
+#[allow(dead_code)]
+#[path = "../examples/read-group-refusal-62.rs"]
+mod refusal_reader;
+
+#[test]
+fn refusal_read_wait_never_closes_diplomacy_after_an_unknown_response() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "InGame".into(),
+            "DiplomacyActionView".into(),
+            "DiplomacyDealView".into(),
+        ])
+    });
+    let mut polls = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("ExposedMembers.JAC_PersonaBoundary~=nil") {
+            polls += 1;
+            if polls == 1 {
+                return Err(Error::new(
+                    ErrorKind::LuaResponseUnknown,
+                    "unknown read response",
+                ));
+            }
+        }
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok("false".into());
+        }
+        Ok("true".into())
+    });
+    let mut runner = f.runner(json!({"name":"preserve refusal","steps":[]}), backend);
+    runner
+        .run_step(&refusal_reader::scene()["steps"][1])
+        .unwrap();
+    let trace = f.trace();
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, c, _)| c.contains("ExposedMembers.JAC_PersonaBoundary~=nil"))
+            .count(),
+        2
+    );
+    assert!(
+        trace.lua.iter().all(|(state, _, _)| state == "InGame"),
+        "{:?}",
+        trace.lua
+    );
+}
+
 #[test]
 fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     let valid = [
         serde_json::json!({"action":"ui_lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":true}),
         serde_json::json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":false}}),
+        serde_json::json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":true}),
     ];
     for step in valid {
         validate_scenario(&json!({"name":"preserved session","steps":[step]})).unwrap();
@@ -14,6 +66,7 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
         json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":"return true","preserve_diplomacy_session":1}}),
         json!({"action":"wait_for","preserve_diplomacy_session":true,"condition":{"type":"lua","state_name":"InGame","code":"return true"}}),
         json!({"action":"pause","seconds":1,"preserve_diplomacy_session":true}),
+        json!({"action":"save","name":"OwnedDiplomacySave","preserve_diplomacy_session":"true"}),
         json!({"action":"wait_for","condition":{"type":"state","name":"InGame","preserve_diplomacy_session":true}}),
     ];
     for step in invalid {
@@ -26,10 +79,68 @@ fn diplomacy_preservation_rejects_malformed_flags_and_wrong_action_locations() {
     }
 }
 
+#[test]
+fn a_save_callback_retry_keeps_owned_diplomacy_and_never_resends_the_save() {
+    let f = Fixture::new();
+    let target = f.saves.join("OwnedDiplomacySave.Civ6Save");
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| {
+        Ok(vec![
+            "InGame".into(),
+            "DiplomacyActionView".into(),
+            "DiplomacyDealView".into(),
+        ])
+    });
+    let mut polls = 0;
+    backend.on_lua = Box::new(move |_, code, _| {
+        if code.contains("Network.SaveGame") {
+            fs::write(&target, b"owned save bytes").unwrap();
+        }
+        if code.contains("JAC_AUTOTEST_SAVE_DONE == true") {
+            polls += 1;
+            if polls == 1 {
+                return Err(Error::new(
+                    ErrorKind::LuaResponseUnknown,
+                    "callback response may have arrived",
+                ));
+            }
+        }
+        if code == "return ContextPtr:IsHidden()" {
+            return Ok("false".into());
+        }
+        Ok("true".into())
+    });
+    let mut r = f.runner(json!({"name":"preserved save","steps":[]}), backend);
+    r.run_step(&json!({"action":"save","name":"OwnedDiplomacySave","exact_name":true,"preserve_diplomacy_session":true})).unwrap();
+    let trace = f.trace();
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("Network.SaveGame"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        trace
+            .lua
+            .iter()
+            .filter(|(_, code, _)| code.contains("JAC_AUTOTEST_SAVE_DONE == true"))
+            .count(),
+        2
+    );
+    assert!(
+        trace.lua.iter().all(|(state, _, _)| state == "InGame"),
+        "{:?}",
+        trace.lua
+    );
+}
+
 use civ6_autotest_rs::{
     judge,
     runner::{AutoplayOptions, Runner, LOADSCREEN_READY},
     scenario::{safe_relative_path, validate_scenario},
+    time::Clock,
     Error, ErrorKind,
 };
 use serde_json::{json, Value};
@@ -206,6 +317,45 @@ fn test_busy_core_cannot_admit_a_loaded_game_or_repeat_begin_game() {
                 .iter()
                 .any(|code| code.contains("CloseImmediately()")));
         }
+    }
+}
+
+#[test]
+fn lost_begin_game_reply_is_observed_without_resending_the_transition() {
+    for (reached_ingame, log_writable) in
+        [(true, true), (true, false), (false, true), (false, false)]
+    {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        backend.on_states = Box::new(|_| Ok(vec!["LoadScreen".into(), "InGame".into()]));
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("OnActivateButtonClicked") {
+                Err(Error::unknown(
+                    "loading context disappeared after Begin Game",
+                ))
+            } else if code.contains("Game.GetLocalPlayer") {
+                Ok(reached_ingame.to_string())
+            } else {
+                Ok("true".into())
+            }
+        });
+        let mut runner = f.direct_runner(json!({}), backend);
+        if !log_writable {
+            fs::create_dir(f.output.join("steps.jsonl")).unwrap();
+        }
+        ready(&f, &mut runner);
+        let result = runner.enter_game_after_loadscreen(0, 3.0, None, false);
+        if reached_ingame {
+            result.unwrap();
+        } else {
+            error_has(
+                result.unwrap_err(),
+                ErrorKind::Scenario,
+                "outcome undecidable",
+            );
+        }
+        assert_eq!(lua_count(&f, "OnActivateButtonClicked"), 1);
+        assert!(f.trace().presses.is_empty());
     }
 }
 
@@ -434,6 +584,16 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
     let t = f.trace();
     assert!(t.connects.is_empty());
     assert!(t.state_queries.is_empty());
+    let boundary: Value =
+        serde_json::from_slice(&fs::read(f.output.join("failure.json")).unwrap()).unwrap();
+    assert_eq!(boundary["stage"], "preflight");
+    assert_eq!(boundary["message"], "Multiple Civ VI processes");
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert!(result["failure"]
+        .as_str()
+        .unwrap()
+        .contains("Multiple Civ VI processes"));
     let last = f.records().pop().unwrap();
     assert_eq!(
         (last["action"].as_str(), last["status"].as_str()),
@@ -442,9 +602,63 @@ fn test_multiple_civ_processes_stop_run_before_tuner_access() {
 }
 
 #[test]
-fn test_failed_cold_start_is_reported_before_tuner_access() {
+fn failure_record_write_error_keeps_original_cause_and_disconnects() {
+    for preflight in [true, false] {
+        let f = Fixture::new();
+        let output = f.output.clone();
+        let mut backend = f.backend();
+        if preflight {
+            backend.on_require_process = Some(Box::new(move || {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::input("original process failure"))
+            }));
+        } else {
+            backend.on_lua = Box::new(move |_, _, _| {
+                fs::create_dir(output.join("failure.json")).unwrap();
+                Err(Error::lua("original Lua failure"))
+            });
+        }
+        let mut runner = f.runner(
+            scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+            backend,
+        );
+        runner.auto_restart = false;
+        assert_eq!(runner.run().unwrap(), 1);
+        assert!(f.trace().disconnects > 0);
+        let result: Value =
+            serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+        assert!(result["failure"].as_str().unwrap().contains(if preflight {
+            "original process failure"
+        } else {
+            "original Lua failure"
+        }));
+        assert_eq!(result["passed"], false);
+    }
+}
+
+#[test]
+fn interrupted_step_keeps_its_original_boundary_through_finalization() {
     let f = Fixture::new();
     let mut backend = f.backend();
+    backend.on_lua = Box::new(|_, _, _| Err(Error::interrupted("stop during Lua request")));
+    let mut runner = f.runner(
+        scenario(json!({"action":"ui_lua","state_name":"InGame","code":"return true"})),
+        backend,
+    );
+    runner.auto_restart = false;
+    assert_eq!(runner.run().unwrap_err().kind, ErrorKind::Interrupted);
+    let result: Value =
+        serde_json::from_slice(&fs::read(f.output.join("result.json")).unwrap()).unwrap();
+    assert_eq!(result["failure_boundary"]["step"], 1);
+    assert_eq!(result["failure_boundary"]["action"], "ui_lua");
+    assert_eq!(result["failure_boundary"]["error_kind"], "Interrupted");
+    assert!(f.trace().disconnects > 0);
+}
+
+#[test]
+fn test_failed_cold_start_is_reported_before_tuner_access() {
+    let f = Fixture::new();
+    let mut backend = f.backend().owned_chain();
     backend.on_process = Box::new(|_| Ok(None));
     let clock = f.clock.clone();
     backend.on_launch = Some(Box::new(move || {
@@ -621,7 +835,7 @@ fn test_scenario_validates_lua_code_before_running() {
                 json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":code}})
             };
             let error = validate_scenario(&scenario(step)).unwrap_err();
-            error_has(error, ErrorKind::Scenario, &format!("Step 1:"));
+            error_has(error, ErrorKind::Scenario, "Step 1:");
             let error = validate_scenario(&scenario(if action == "ui_lua" {
                 json!({"action":"ui_lua","state_name":"InGame","code":code})
             } else {
@@ -770,7 +984,7 @@ fn test_pre_send_framing_error_is_logged_as_step_failure() {
 }
 
 #[test]
-fn test_transition_pre_send_failure_is_logged_without_waiting() {
+fn test_transition_pre_send_failure_is_bounded_by_the_step_deadline() {
     for action in ["start_game", "load"] {
         let f = Fixture::new();
         let mut backend = f.backend();
@@ -783,9 +997,9 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         });
         let step = if action == "load" {
             fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
-            json!({"action":"load","name":"existing","exact_name":true})
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":2})
         } else {
-            json!({"action":"start_game"})
+            json!({"action":"start_game","timeout":2})
         };
         let mut runner = f.runner(scenario(step), backend);
         runner.auto_restart = false;
@@ -795,11 +1009,52 @@ fn test_transition_pre_send_failure_is_logged_without_waiting() {
         } else {
             "Network.HostGame"
         };
-        assert_eq!(lua_count(&f, needle), 1);
+        assert!(lua_count(&f, needle) > 1);
+        assert!(f.clock.now() <= 2.0);
         assert!(f.trace().presses.is_empty());
         let last = f.records().pop().unwrap();
         assert_eq!(last["status"], "FAIL");
         assert_eq!(last["detail"], "pre-send connection failed");
+    }
+}
+
+#[test]
+fn test_transition_reconnects_before_send_and_sends_once_after_recovery() {
+    for action in ["start_game", "load"] {
+        let f = Fixture::new();
+        let mut backend = f.backend();
+        let mut connects = 0;
+        backend.on_connect = Some(Box::new(move |_, _| {
+            connects += 1;
+            if connects <= 2 {
+                Err(Error::tuner("connection refused before send"))
+            } else {
+                Ok(())
+            }
+        }));
+        let lua = f.logs.join("Lua.log");
+        backend.on_lua = Box::new(move |_, code, _| {
+            if code.contains("Network.HostGame") || code.contains("Network.LoadGame") {
+                append(&lua, &format!("{LOADSCREEN_READY}\n"));
+            }
+            Ok("true".into())
+        });
+        let step = if action == "load" {
+            fs::write(f.saves.join("existing.Civ6Save"), b"save").unwrap();
+            json!({"action":"load","name":"existing","exact_name":true,"timeout":5})
+        } else {
+            json!({"action":"start_game","timeout":5})
+        };
+        let mut runner = f.direct_runner(json!({}), backend);
+        runner.baseline = Some(judge::snapshot_logs(&f.logs).unwrap());
+        runner.run_step(&step).unwrap();
+        let needle = if action == "load" {
+            "Network.LoadGame"
+        } else {
+            "Network.HostGame"
+        };
+        assert_eq!(lua_count(&f, needle), 1);
+        assert!(f.clock.now() > 0.0 && f.clock.now() < 5.0);
     }
 }
 

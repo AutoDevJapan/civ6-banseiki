@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+civ6-bootstrap-rs = { path = "../civ6-bootstrap-rs" }
 civ6-cli-compat-rs = { path = "../civ6-cli-compat-rs" }
 civ6-native-probe-rs = { path = "../civ6-native-probe-rs", features = ["bootstrap-order"] }
 civ6-native-bridge-rs = { path = "../civ6-native-bridge-rs" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 regex = "1"
 sha2 = "0.10"
 csv = "1"

@@ -185,7 +185,7 @@ fn every_repository_mod_id_is_owned_in_both_logs_without_requiring_its_path() {
     assert!(ids.contains("D8532710-F853-4C53-8853-271000000001"));
     assert_eq!(
         ids.len(),
-        22,
+        23,
         "update the owned MOD inventory when adding a MOD"
     );
     for id in ids {
@@ -589,14 +589,25 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-return-boundary.json",
                 "assassin-actor-eliminated-save-load.json",
                 "assassin-target-eliminated-save-load.json",
+                "hotseat-bridge-live-hold.json",
+                "multiplayer-banseiki-hotseat-growth.json",
+                "multiplayer-hotseat-growth.json",
+                "multiplayer-japan-15km-settlers-hotseat-growth.json",
                 "mod-selection-rollback.json",
+                "banseiki-pool-hotseat.json",
+                "banseiki-pool-single-player.json",
+                "banseiki-pool-bridge.json",
+                "banseiki-pool-random-bridge.json",
+                "reliability-seed.json",
+                "reliability-cycle.json",
             ]
             .into_iter()
             .map(str::to_string),
         )
         .collect();
     let expected: BTreeSet<_> = expected_names.iter().cloned().collect();
-    assert_eq!(expected.len(), 145);
+    // The explicit filenames and exact remaining-name set below define the
+    // inventory. A second numeric total becomes stale when branches add names.
     assert_eq!(
         expected.len(),
         expected_names.len(),

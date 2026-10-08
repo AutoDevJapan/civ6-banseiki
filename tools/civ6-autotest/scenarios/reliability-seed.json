@@ -1,0 +1,18 @@
+{
+  "name": "Reliability: create the fixed minimal save",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "steps": [
+    {"action":"restart_game","timeout":420},
+    {"action":"enable_mods","ids":["dfa0717e-4d0b-4370-b693-27fc6758571b"],"exclusive_user_mods":true,"timeout":60},
+    {"action":"configure","ruleset":"RULESET_EXPANSION_2","map_size":"MAPSIZE_DUEL","speed":"GAMESPEED_STANDARD","seed":1971,"city_states":0,"players":[
+      {"leader":"LEADER_CLEOPATRA","civ":"CIVILIZATION_EGYPT","human":true},
+      {"leader":"LEADER_GILGAMESH","civ":"CIVILIZATION_SUMERIA","human":false}
+    ],"timeout":60},
+    {"action":"start_game","timeout":240},
+    {"action":"autoplay","turns":1,"timeout":120},
+    {"action":"ui_lua","state_name":"InGame","code":"local r=GameInfo.GlobalParameters['JAC_POC_BUNDLE0_VERSION']; if not r or tostring(r.Value)~='1' then error('minimal mod database missing') end; local s=Game:GetProperty('JAC_POC_BUNDLE0_STATE'); if type(s)~='table' or type(s.FirstTurn)~='number' or type(s.LastTurn)~='number' or type(s.TurnsSeen)~='number' or s.LastTurn~=Game.GetCurrentGameTurn() then error('invalid minimal seed state') end; return true","timeout":30},
+    {"action":"save","name":"JAC-Reliability-Seed-1971","exact_name":true,"metrics":true,"timeout":60},
+    {"action":"exit_to_menu","timeout":60}
+  ]
+}

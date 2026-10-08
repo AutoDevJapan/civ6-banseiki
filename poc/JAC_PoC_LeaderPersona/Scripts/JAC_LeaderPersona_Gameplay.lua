@@ -466,6 +466,10 @@ local function catalog()
         indices[p.Index]=p; types[p.GovernorPromotionType]=p
         promotionHashes[p.Hash]=true
     end
+    local effectful={}
+    if GameInfo.GovernorPromotionModifiers then
+        for modifier in GameInfo.GovernorPromotionModifiers() do effectful[modifier.GovernorPromotionType]=true end
+    end
     -- Membership, including BASE, is engine data. Names never imply a Set.
     if not GameInfo.GovernorPromotionSets then return nil end
     local membership,baseByGovernor,setBinding={},{},{}
@@ -499,13 +503,17 @@ local function catalog()
         local d={leader=l,governor=g.Index,governorHash=g.Hash,governorType=g.GovernorType,
             person=person.Index,personHash=person.Hash,personType=row.PersonType,
             civilization=row.CivilizationType,baseType=row.BasePromotionType,cost=row.EvolutionCost,promotions={},byIndex={}}
-        for step=0,d.cost-1 do
+        -- Keep every available payment definition. Repricing may shorten the
+        -- new price, but saved people still need their original prefix.
+        for step=0,2 do
             local name=row.BasePromotionType..(step==0 and '' or '_TITLE_'..step)
             local p=GameInfo.GovernorPromotions[name]
+            if not p and step>=d.cost then break end
             if not p or p.GovernorPromotionType~=name or not indices[p.Index] or
                indices[p.Index].GovernorPromotionType~=name or types[name].Index~=p.Index or
                not hash(p.Hash) or promotions[p.Index] or not membership[g.Index] or
-               not membership[g.Index][p.Index] or (step==0 and baseByGovernor[g.Index]~=p.Index) then return nil end
+               not membership[g.Index][p.Index] or (step==0 and baseByGovernor[g.Index]~=p.Index) or
+               (step>0 and effectful[name]) then return nil end
             promotions[p.Index]=true
             d.promotions[step+1]={index=p.Index,hash=p.Hash,name=name}; d.byIndex[p.Index]=step+1
         end
@@ -514,19 +522,80 @@ local function catalog()
     end
     if #rows~=22 then return nil end
     table.sort(rows,function(a,b) return a.governor<b.governor end)
-    local parts={SOURCE}
     table.sort(setBinding)
-    for _,set in ipairs(setBinding) do parts[#parts+1]=#set..':'..set end
-    for _,d in ipairs(rows) do
-        for _,v in ipairs({d.leader,d.governorType,d.governor,d.governorHash,d.personType,d.person,d.personHash,d.civilization,d.cost}) do
-            local s=tostring(v); parts[#parts+1]=#s..':'..s
+    local function setName(d,p)
+        return table.concat({d.governorType,d.governor,d.governorHash,p.name,p.index,p.hash,p==d.promotions[1] and 1 or 0},'/')
+    end
+    local function bind(costs,sets)
+        local parts={SOURCE}
+        for _,set in ipairs(sets or setBinding) do parts[#parts+1]=#set..':'..set end
+        for _,d in ipairs(rows) do
+            local cost=costs and costs[d.leader] or d.cost
+            if not integer(cost,4) or cost<1 or not d.promotions[cost] then return nil end
+            for _,v in ipairs({d.leader,d.governorType,d.governor,d.governorHash,d.personType,d.person,d.personHash,d.civilization,cost}) do
+                local value=tostring(v); parts[#parts+1]=#value..':'..value
+            end
+            for step=1,cost do
+                local p=d.promotions[step]
+                for _,v in ipairs({p.name,p.index,p.hash}) do local value=tostring(v); parts[#parts+1]=#value..':'..value end
+            end
         end
-        for _,p in ipairs(d.promotions) do
-            for _,v in ipairs({p.name,p.index,p.hash}) do local s=tostring(v); parts[#parts+1]=#s..':'..s end
+        return table.concat(parts,'|')
+    end
+    local function boundPrices(binding)
+        if type(binding)~='string' then return nil end
+        local parts={}; for part in string.gmatch(binding,'[^|]+') do parts[#parts+1]=part end
+        local first=#rows[1].leader..':'..rows[1].leader
+        local at
+        for i=2,#parts do if parts[i]==first then at=i-1; break end end
+        if not at then return nil end
+        local historical,present,current={},{},{}
+        for _,set in ipairs(setBinding) do current[set]=true end
+        for i=2,at do
+            local length,set=string.match(parts[i],'^(%d+):(.*)$')
+            if not set or tonumber(length)~=#set or not current[set] or present[set] then return nil end
+            historical[#historical+1]=set; present[set]=true
         end
+        local costs={}
+        for _,d in ipairs(rows) do
+            local part=parts[at+9]
+            local cost=part and string.match(part,'^1:([123])$')
+            cost=cost and tonumber(cost)
+            if not cost then return nil end
+            costs[d.leader]=cost; at=at+9+3*cost
+        end
+        -- Replay the entire original catalog. A price increase may append only
+        -- canonical, effect-free payment memberships beyond its old prefix.
+        -- Every existing identity, Index, Hash and membership remains exact.
+        if at~=#parts or bind(costs,historical)~=binding then return nil end
+        local additions={}
+        for _,d in ipairs(rows) do
+            for step,p in ipairs(d.promotions) do
+                local set=setName(d,p)
+                if step<=costs[d.leader] then
+                    if not present[set] then return nil end
+                else additions[set]=true end
+            end
+        end
+        for _,set in ipairs(setBinding) do if not present[set] and not additions[set] then return nil end end
+        return costs
     end
     return {rows=rows,leaders=leaders,governors=governors,allGovernors=governorIndices,
-        allPromotions=indices,membership=membership,baseByGovernor=baseByGovernor,binding=table.concat(parts,'|')}
+        allPromotions=indices,membership=membership,baseByGovernor=baseByGovernor,binding=bind(),boundPrices=boundPrices}
+end
+local function priceContract(p,d)
+    return type(p)=='table' and p.version==1 and p.leader==d.leader and
+        integer(p.owner,64) and integer(p.sourcePlayer,64) and p.owner~=p.sourcePlayer and
+        p.governorType==d.governorType and p.governor==d.governor and p.governorHash==d.governorHash and
+        p.personType==d.personType and p.person==d.person and p.personHash==d.personHash and p.baseType==d.baseType and
+        integer(p.cost,4) and p.cost>=1 and d.promotions[p.cost]~=nil
+end
+local function joinedCost(d)
+    local cost=d and d.joinCost
+    local phase=d and Get(d.leader,'STATE')
+    if not integer(cost,4) or cost<1 or Get(d.leader,'EVOLUTION_COST')~=cost or
+       (phase~='GREAT_PERSON' and Get(d.leader,'EVOLUTION_SURCHARGE')~=cost-1) then return nil end
+    return cost
 end
 local function joined(owner,d,source)
     local cfg=integer(source,64) and PlayerConfigurations[source]
@@ -534,8 +603,7 @@ local function joined(owner,d,source)
     return Player(owner,true) and cfg and source~=owner and
         cfg:GetLeaderTypeName()==d.leader and cfg:GetCivilizationTypeName()==d.civilization and
         Get(d.leader,'OWNER')==owner and Get(d.leader,'SOURCE')==source and
-        Get(d.leader,'EVOLUTION_COST')==d.cost and
-        (phase=='GREAT_PERSON' or Get(d.leader,'EVOLUTION_SURCHARGE')==d.cost-1) and
+        joinedCost(d)~=nil and
         (phase=='GREAT_PERSON' or phase=='EVOLVING' or phase=='GOVERNOR')
 end
 local function proof(p,s,owner,d,key,source)
@@ -555,9 +623,10 @@ local function proof(p,s,owner,d,key,source)
         integer(p.turn) and p.turn>=s.turn and p.turn<=Game.GetCurrentGameTurn() and
         (p.spent==nil or integer(p.spent))
 end
-local function readState(ignoreAdmissionSchema)
-    local s=Game:GetProperty(STORE); local c=catalog()
-    if not c or type(s)~='table' or s.version~=3 or s.source~=SOURCE or s.binding~=c.binding or
+local function readState(ignoreAdmissionSchema,snapshot)
+    local s=snapshot or Game:GetProperty(STORE); local c=catalog()
+    local prices=c and type(s)=='table' and c.boundPrices(s.binding)
+    if not prices or s.version~=3 or s.source~=SOURCE or
        s.baseline~=0 or not integer(s.turn) or s.turn~=configuredStartTurn() or not integer(s.sequence) or
        type(s.people)~='table' or type(s.owners)~='table' or #s.owners~=22 or type(s.sources)~='table' or
        type(s.commit)~='table' or s.commit.nativeClosedAll22~=true or s.commit.schema~=3 or
@@ -565,6 +634,33 @@ local function readState(ignoreAdmissionSchema)
        type(s.receipts)~='table' or #s.receipts>64 or type(s.accounts)~='table' or
        (s.continuityTainted~=false and s.continuityTainted~=true) or
        (not ignoreAdmissionSchema and Game:GetProperty('JAC_PERSONA_ADMISSION_SCHEMA_V1')~=3) then return nil,c end
+    if s.priceVersion~=nil then
+        if s.priceVersion~=1 or type(s.prices)~='table' then return nil,c end
+        local bindings={[s.binding]=prices}
+        for leader,p in pairs(s.prices) do
+            local d=c.leaders[leader]
+            if not d or not priceContract(p,d) or p.sourcePlayer~=s.sources[leader] then return nil,c end
+            if type(p.binding)~='string' then return nil,c end
+            local committed=bindings[p.binding]
+            if not committed then committed=c.boundPrices(p.binding); bindings[p.binding]=committed end
+            if not committed or committed[leader]~=p.cost then return nil,c end
+        end
+    elseif s.prices~=nil then return nil,c end
+    for _,d in ipairs(c.rows) do
+        local owner=Get(d.leader,'OWNER')
+        local p=s.prices and s.prices[d.leader]
+        if owner~=nil then
+            local source=Get(d.leader,'SOURCE')
+            if s.prices then
+                if not p or p.owner~=owner or p.sourcePlayer~=source then return nil,c end
+                d.joinCost=p.cost
+            else
+                -- d21 saves have independent prices in the committed binding.
+                -- Do not infer a missing or reduced amount from current data.
+                d.joinCost=prices[d.leader]
+            end
+        end
+    end
     local owners={}
     for _,owner in ipairs(s.owners) do if not integer(owner,64) or owners[owner] then return nil,c end; owners[owner]=true end
     local debitSequences={}
@@ -647,6 +743,129 @@ local function state()
     if not subscribed() or (s and s.continuityTainted) then return nil,c end
     return s,c
 end
+function E.CatalogCost(row)
+    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 then return nil end
+    local leader=row.LeaderType; local owner=Get(leader,'OWNER')
+    if owner==nil then return row.EvolutionCost end
+    if E.Enabled() then
+        local p=Get(leader,'PRICE_CONTRACT')
+        if type(p)~='table' or p.version~=1 or p.leader~=leader or p.owner~=owner or
+           p.sourcePlayer~=Get(leader,'SOURCE') or p.governorType~=row.GovernorType or
+           p.personType~=row.PersonType or p.baseType~=row.BasePromotionType or
+           not integer(p.cost,4) or p.cost<1 then return nil end
+        return p.cost
+    end
+    local s,c=state(); local d=s and c.leaders[leader]
+    local source=Get(leader,'SOURCE'); local cfg=integer(source,64) and PlayerConfigurations[source]
+    if d and d.joinCost and Player(owner,true) and cfg and source~=owner and
+       cfg:GetLeaderTypeName()==leader and cfg:GetCivilizationTypeName()==d.civilization then return d.joinCost end
+end
+function E.Cost(row)
+    local cost=E.CatalogCost(row)
+    if not cost then return nil end
+    local leader=row.LeaderType
+    if Get(leader,'OWNER')==nil then return cost end
+    local phase=Get(leader,'STATE')
+    if Get(leader,'EVOLUTION_COST')~=cost or
+       (phase~='GREAT_PERSON' and Get(leader,'EVOLUTION_SURCHARGE')~=cost-1) or
+       (phase~='GREAT_PERSON' and phase~='EVOLVING' and phase~='GOVERNOR') then return nil end
+    return cost
+end
+local function same(a,b)
+    if type(a)~=type(b) then return false end
+    if type(a)~='table' then return a==b end
+    for key,value in pairs(a) do if not same(value,b[key]) then return false end end
+    for key in pairs(b) do if a[key]==nil then return false end end
+    return true
+end
+function E.PrepareJoinPrice(owner,source,row)
+    if not row or not integer(row.EvolutionCost,4) or row.EvolutionCost<1 or Get(row.LeaderType,'OWNER')~=nil then return nil end
+    local cfg=integer(source,64) and PlayerConfigurations[source]
+    if not Player(owner,true) or not cfg or source==owner or cfg:GetLeaderTypeName()~=row.LeaderType or
+       cfg:GetCivilizationTypeName()~=row.CivilizationType then return nil end
+    if E.Enabled() then
+        local before=Get(row.LeaderType,'PRICE_CONTRACT')
+        local after={version=1,leader=row.LeaderType,owner=owner,sourcePlayer=source,
+            governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=row.EvolutionCost}
+        if before~=nil and not same(before,after) then return nil end
+        return {leader=row.LeaderType,owner=owner,source=source,key=Key(row.LeaderType,'PRICE_CONTRACT'),before=copy(before),after=after}
+    end
+    local s,c=state(); local d=s and c.leaders[row.LeaderType]
+    if not d or s.sources[d.leader]~=source or not s.accounts[owner] or s.people[d.leader] then return nil end
+    local before=copy(s); s=copy(s) -- preparation must never mutate a Game table
+    if not s.prices then
+        -- Import only original joining prices that still match the d21
+        -- commitment and the joined identities; never repair a damaged amount.
+        s.prices={}; s.priceVersion=1
+        for _,prior in ipairs(c.rows) do
+            local who=Get(prior.leader,'OWNER')
+            if who~=nil then
+                if not joined(who,prior,Get(prior.leader,'SOURCE')) then return nil end
+                s.prices[prior.leader]={version=1,leader=prior.leader,owner=who,sourcePlayer=Get(prior.leader,'SOURCE'),
+                    binding=s.binding,
+                    governorType=prior.governorType,governor=prior.governor,governorHash=prior.governorHash,
+                    personType=prior.personType,person=prior.person,personHash=prior.personHash,baseType=prior.baseType,cost=prior.joinCost}
+            end
+        end
+    end
+    local existing=s.prices[d.leader]
+    local contract={version=1,leader=d.leader,owner=owner,sourcePlayer=source,
+        binding=c.binding,
+        governorType=d.governorType,governor=d.governor,governorHash=d.governorHash,
+        personType=d.personType,person=d.person,personHash=d.personHash,baseType=d.baseType,cost=row.EvolutionCost}
+    if existing and not same(existing,contract) then return nil end
+    s.prices[d.leader]=contract
+    return {leader=row.LeaderType,owner=owner,source=source,key=STORE,before=before,after=s}
+end
+function E.RecordJoinPrice(owner,source,row,plan)
+    local checked=E.PrepareJoinPrice(owner,source,row)
+    if not plan or not checked or plan.key~=checked.key or
+       not same(plan.before,checked.before) or not same(plan.after,checked.after) then return false end
+    Game:SetProperty(plan.key,copy(plan.after))
+    return same(Game:GetProperty(plan.key),plan.after)
+end
+function E.UndoJoinPrice(plan)
+    if type(plan)~='table' or not Definition(plan.leader) or not integer(plan.owner,64) or
+       not integer(plan.source,64) or plan.owner==plan.source or
+       (plan.key~=STORE and plan.key~=Key(plan.leader,'PRICE_CONTRACT')) then return false end
+    if plan.key==STORE then
+        if type(plan.before)~='table' or type(plan.after)~='table' then return false end
+        local before,after=copy(plan.before),copy(plan.after)
+        before.prices=nil; before.priceVersion=nil; after.prices=nil; after.priceVersion=nil
+        if not same(before,after) then return false end -- undo has no authority over spending/receipts/sources
+        local prior,oldCatalog=readState(false,plan.before)
+        local nextState=readState(false,plan.after)
+        local target=nextState and nextState.prices and nextState.prices[plan.leader]
+        if not prior or not target or target.owner~=plan.owner or target.sourcePlayer~=plan.source then return false end
+        if prior.prices then
+            for leader,p in pairs(prior.prices) do if not same(p,nextState.prices[leader]) then return false end end
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader and not same(p,prior.prices[leader]) then return false end
+            end
+        else
+            -- A legacy import may add only the existing joining contracts,
+            -- preserving their original binding and amount.
+            for leader,p in pairs(nextState.prices) do
+                if leader~=plan.leader then
+                    local d=oldCatalog.leaders[leader]
+                    if not d or p.binding~=prior.binding or p.cost~=d.joinCost or
+                       not joined(p.owner,d,p.sourcePlayer) then return false end
+                end
+            end
+        end
+    else
+        local row=Definition(plan.leader); local p=plan.after
+        if type(p)~='table' or not integer(p.cost,4) or p.cost<1 or
+           not same(p,{version=1,leader=plan.leader,owner=plan.owner,sourcePlayer=plan.source,
+              governorType=row.GovernorType,personType=row.PersonType,baseType=row.BasePromotionType,cost=p.cost}) or
+           (plan.before~=nil and not same(plan.before,p)) then return false end
+    end
+    local current=Game:GetProperty(plan.key)
+    if same(current,plan.before) then return true end
+    if not same(current,plan.after) then return false end -- never repair a damaged/foreign ledger
+    Game:SetProperty(plan.key,copy(plan.before))
+    return same(Game:GetProperty(plan.key),plan.before)
+end
 -- Capture freshness before the existing admission initializer claims schema 3.
 -- Settings and a later ready state cannot recreate this lexical candidate.
 local candidate
@@ -691,7 +910,7 @@ local function fresh()
     initialization.stage='candidate_ready'; initialization.owner=nil; initialization.leader=nil
     for _,owner in ipairs(ids) do accounts[owner]={floor=0,floorSerial=0,expected=0,serial=0,debits={},byKey={},tainted=false} end
     return {version=3,source=SOURCE,binding=c.binding,baseline=0,turn=startTurn,continuityTainted=false,
-        sequence=0,owners=copy(ids),sources=sources,accounts=accounts,people={},receipts={}}
+        sequence=0,owners=copy(ids),sources=sources,accounts=accounts,people={},receipts={},priceVersion=1,prices={}}
 end
 local freshOK,result=pcall(fresh); initialization.candidateCallOK=freshOK
 if freshOK then candidate=result else initialization.error=tostring(result) end
@@ -730,10 +949,19 @@ function E.NormalCommit(ok,forceClosed)
     Game:SetProperty(STORE,s)
     initialization.stage='committed'; initialization.owner=nil
 end
+-- Publication only verifies authority. A durable debit confirmation is a
+-- domain step for real operations and later callbacks, never for a load.
+local readOnly=0
+function E.ReadOnly(f,...)
+    readOnly=readOnly+1
+    local ok,err=pcall(f,...)
+    readOnly=readOnly-1 -- an error must not leave publication read-only
+    if not ok then error(err,0) end
+end
 -- Only a live lexical Gameplay getter can create a durable debit confirmation.
 -- Unexpected excess spending cannot settle earlier pending records.
 function E.Confirm(owner)
-    if E.Enabled() then return end
+    if E.Enabled() or readOnly>0 then return end
     local s=state(); local a=s and s.accounts[owner]; local n=spent(owner)
     if not a or a.tainted or n==nil or n~=a.expected then return end
     local changed=false
@@ -781,7 +1009,7 @@ local function absence(s,c,owner,d,entry)
             local e=s.people[other.leader]
             if not e or e.tainted or not e.reservation or
                not joined(owner,other,e.sourcePlayer) or not e.acquired.appointed then return false end
-            for step=1,other.cost do
+            for step=1,joinedCost(other) do
                 local p=e.acquired[step]; local debit=p and a.debits[p.spendingSerial]
                 if not debit or not debit.confirmed or debit.invalidated then return false end
             end
@@ -791,7 +1019,9 @@ local function absence(s,c,owner,d,entry)
 end
 function E.NormalPaid(owner,row,cost)
     local s,c=state(); local d=c and row and c.leaders[row.LeaderType]
-    if not s or not d or cost~=d.cost or not Player(owner,true) or not s.accounts[owner] then return nil,true end
+    if not s or not d or not Player(owner,true) or not s.accounts[owner] then return nil,true end
+    local expected=Get(d.leader,'OWNER')==nil and d.cost or joinedCost(d)
+    if cost~=expected then return nil,true end
     local entry=s.people[d.leader]
     if not entry then
         if s.accounts[owner].tainted then return nil,true end
@@ -810,7 +1040,7 @@ function E.NormalPaid(owner,row,cost)
     end
     if not a.appointed or not a[1] then return nil,true end
     local paid,missing,pending=0,false,false
-    for step=1,d.cost do
+    for step=1,cost do
         if not a[step] then missing=true
         elseif missing then return nil,true
         else
@@ -831,7 +1061,8 @@ end
 function E.NormalNative(owner,row)
     local s,c=state(); local d=c and row and c.leaders[row.LeaderType]
     if not s or not d or not Player(owner,true) then return nil end
-    local paid=E.NormalPaid(owner,row,d.cost)
+    local cost=Get(d.leader,'OWNER')==nil and d.cost or joinedCost(d)
+    local paid=E.NormalPaid(owner,row,cost)
     if paid==nil then return nil end
     return {appointed=paid>0,base=paid>0,surchargePaid=math.max(0,paid-1),source=SOURCE}
 end
@@ -840,8 +1071,8 @@ function E.Reserved(owner,fallback)
     local s,c=state(); local total,uncertain=0,not s
     for row in GameInfo.JAC_LeaderPersonas() do
         if Get(row.LeaderType,'OWNER')==owner and Get(row.LeaderType,'STATE')=='EVOLVING' then
-            local cost=Get(row.LeaderType,'EVOLUTION_COST')
-            if not integer(cost,4) or cost<1 or cost~=row.EvolutionCost then return math.huge,true end
+            local cost=E.Cost(row)
+            if not cost then return math.huge,true end
             local paid=E.NormalPaid(owner,row,cost)
             if paid==nil then uncertain=true; paid=0 end
             total=total+cost-paid
@@ -885,6 +1116,7 @@ local function receive(name,...)
     if arity==(app and 2 or 3) and integer(args[1],64) and integer(args[2],256) and (app or integer(args[3],4096)) then
         local owner=args[1]; local d=c.governors[args[2]]
         local key=d and (app and 'appointed' or d.byIndex[args[3]])
+        if key and not app and key>(joinedCost(d) or d.cost) then key=nil end
         -- Owner consumption is independent of whether this person is joined,
         -- correctly owned or in an evolution reservation. Count every resolved
         -- official success once; contradictory definitions close pending work.
@@ -952,7 +1184,7 @@ function E.NormalStatus(owner,leader)
     local s,c=state(); local raw=readState(); local d=c and c.leaders[leader]
     return {source=SOURCE,active=s~=nil,initialization=copy(initialization),sequence=s and s.sequence,commit=s and copy(s.commit),
         acquired=s and s.people[leader] and copy(s.people[leader].acquired),receipts=s and copy(s.receipts),
-        paid=d and E.NormalPaid(owner,Definition(leader),d.cost),reserved=E.Reserved(owner),spent=spent(owner),
+        paid=d and E.NormalPaid(owner,Definition(leader),Get(leader,'OWNER')==nil and d.cost or joinedCost(d)),reserved=E.Reserved(owner),spent=spent(owner),
         registrations=copy(registrations),continuityTainted=raw and raw.continuityTainted,
         account=s and copy(s.accounts[owner]),reservation=s and s.people[leader] and copy(s.people[leader].reservation)}
 end
@@ -1056,9 +1288,8 @@ local function ReservedOutstandingCost(owner, rows, spent)
     for _,entry in ipairs(rows) do
         local row = entry.row;
         if Get(row.LeaderType, "OWNER") == owner and Get(row.LeaderType, "STATE") == "EVOLVING" then
-            local cost = Get(row.LeaderType, "EVOLUTION_COST");
-            if type(cost) ~= "number" or cost % 1 ~= 0 or cost < 1 or cost > 3 or
-               cost ~= row.EvolutionCost then return nil; end
+            local cost = PersonaEvents.Cost(row);
+            if not cost then return nil; end
             local paid, readable = CorePaymentRead(owner, row, cost);
             if readable and paid == nil then return nil; end
             -- Without native identity proof, retain the whole reservation.
@@ -1101,7 +1332,7 @@ local function CoreAdmissionCapabilities(owner, leader)
         if ok and governor and type(governor.HasPromotion) == "function" then
             local base = GameInfo.GovernorPromotions[row.BasePromotionType];
             if base then result.baseOK, result.base = pcall(governor.HasPromotion, governor, base.Hash); end
-            for step=1,row.EvolutionCost-1 do
+            for step=1,(PersonaEvents.Cost(row) or 1)-1 do
                 local promotion = GameInfo.GovernorPromotions[row.BasePromotionType .. "_TITLE_" .. step];
                 if promotion then
                     result["paymentOK" .. step], result["payment" .. step] =
@@ -1114,9 +1345,8 @@ local function CoreAdmissionCapabilities(owner, leader)
 end
 local function AdmissionAllowed(owner, row, rows, forceClosed)
     if forceClosed or Get(row.LeaderType, "OWNER") ~= owner then return false; end
-    local cost = Get(row.LeaderType, "EVOLUTION_COST");
-    if type(cost) ~= "number" or cost ~= row.EvolutionCost or cost % 1 ~= 0 or
-       cost < 1 or cost > 3 then return false; end
+    local cost = PersonaEvents.Cost(row);
+    if not cost then return false; end
     local available, spent = OfficialTitleBalance(owner);
     if not available then return false; end
     local person, ready, count = FindPerson(owner, row);
@@ -1429,8 +1659,9 @@ local function NormalPaidPublicationActive(ids, rows)
     return type(view) == 'table' and view.active == true;
 end
 local function PaidPublicationEligible(owner, row, forceClosed, diagnostic)
+    local cost = PersonaEvents.Cost(row);
     if forceClosed or Get(row.LeaderType, 'OWNER') ~= owner or Get(row.LeaderType, 'STATE') ~= 'GOVERNOR' or
-       Get(row.LeaderType, 'UNIT') ~= nil or Get(row.LeaderType, 'EVOLUTION_COST') ~= row.EvolutionCost then
+       Get(row.LeaderType, 'UNIT') ~= nil or not cost then
         return false;
     end
     local person, ready, count = FindPerson(owner, row);
@@ -1438,8 +1669,8 @@ local function PaidPublicationEligible(owner, row, forceClosed, diagnostic)
     -- A diagnostic true cell only requests native inspection. Normal cells
     -- additionally require this person's validated, confirmed Gameplay set.
     if diagnostic then return true; end
-    local paid, readable = PersonaEvents.NormalPaid(owner, row, row.EvolutionCost);
-    return readable == true and paid == row.EvolutionCost;
+    local paid, readable = PersonaEvents.NormalPaid(owner, row, cost);
+    return readable == true and paid == cost;
 end
 local function PublishProductionAdmission(forceClosed, onlyOwner)
     local close = ClosePaidAdmissionOwners;
@@ -1496,7 +1727,13 @@ local function PublishProductionAdmission(forceClosed, onlyOwner)
     end
     local packed, used = {}, {};
     for slot,entry in ipairs(rows) do
-        local row, cost = entry.row, entry.row.EvolutionCost;
+        local row = entry.row;
+        -- One person has one joined owner and one immutable payment prefix.
+        -- Unjoined people use the current price for future joins.
+        -- Pack the independent definition even if one mutable prepare receipt
+        -- is damaged. Eligibility below still requires the complete receipt,
+        -- and other owners must keep their valid appointment/placement cells.
+        local cost = PersonaEvents.CatalogCost(row);
         local governor = GameInfo.Governors[row.GovernorType];
         if not integer(cost, 4) or cost == 0 or not governor or governor.GovernorType ~= row.GovernorType or
            row.BasePromotionType ~= "GOVERNOR_PROMOTION_JAC_PERSONA_" .. string.sub(row.LeaderType,12) .. "_BASE" then close(); return; end
@@ -1614,6 +1851,14 @@ local function SyncProductionAdmission(forceClosed, onlyOwner)
         ClosePaidAdmissionOwners();
     end
 end
+-- Load boundary. The forced pass closes every saved generation and lets a
+-- fresh store commit at its all-closed handshake. Only after that pass
+-- published, the normal pass revalidates the restored paid sets read-only:
+-- loading never confirms a saved debit or changes the acquisition store.
+local function InitializeProductionAdmission()
+    SyncProductionAdmission(true);
+    if normalPaidPublished then PersonaEvents.ReadOnly(SyncProductionAdmission, false); end
+end
 -- Explicit synchronized refresh after a controller install/rebuild. The caller
 -- supplies no eligibility, payment, flag or native-generation authority.
 GameEvents.JAC_LeaderPersonaRepublish.Add(function(owner, params)
@@ -1659,63 +1904,166 @@ GameEvents.JAC_LeaderPersonaProject.Add(function(owner, params)
     Player(owner, true):SetProperty('JAC_PERSONA_PROJECT_RECEIPT', params.ProjectionSerial);
 end);
 -- END RUST GENERATED PAID ASSIGNMENT GLUE
-local function Join(owner, source, personality, trait)
-    local p, other = Player(owner, true), Player(source, false);
-    if not p or not other or owner == source then return Finish(owner, "INVALID"); end
-    local config = PlayerConfigurations[source];
-    local leader = config and config:GetLeaderTypeName();
-    local row = Definition(leader);
-    local ownConfig = PlayerConfigurations[owner];
-    if not row or not ownConfig or not Definition(ownConfig:GetLeaderTypeName()) or
-       config:GetCivilizationTypeName() ~= row.CivilizationType then return Finish(owner, "INVALID"); end
-    if (personality ~= nil and not PERSONALITIES[personality]) or
-       (trait ~= nil and not TRAITS[trait]) then return Finish(owner, "INVALID_METADATA"); end
-    -- A world-unique person, even if callers try another owner or a different source slot.
-    if Get(leader, "OWNER") ~= nil then
-        return Finish(owner, Get(leader, "OWNER") == owner and "ALREADY_JOINED" or "OTHER_OWNER");
-    end
-    if trait ~= nil and trait ~= row.Trait then return Finish(owner, "INVALID_METADATA"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " native-governor");
-    local native = NativeGovernor(owner, row);
-    if not native then return Finish(owner, "NATIVE_UNAVAILABLE"); end
-    if native.appointed then return Finish(owner, "GOVERNOR_EXISTS"); end
-    local city = p:GetCities():GetCapitalCity();
-    if not city then return Finish(owner, "NO_CITY"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " find-person-before");
-    local unit, ready = FindPerson(owner, row);
-    if not ready then return Finish(owner, "NATIVE_UNAVAILABLE"); end
-    if not unit then
-        -- Gameplay grant: DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111.
-        -- CreatePerson is a Tuner placement API and does not return here.
-        local individual = GameInfo.GreatPersonIndividuals[row.PersonType];
-        local class = GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
-        local era = GameInfo.Eras[individual.EraType];
-        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-before");
-        Game.GetGreatPeople():GrantPerson(individual.Hash, class.Hash, era.Hash, 0, owner, false);
-        print("JAC_PERSONA_STAGE " .. leader .. " grant-person-after");
-        unit = FindPerson(owner, row);
-    end
-    if not unit then return Finish(owner, "SPAWN_FAILED"); end
-    print("JAC_PERSONA_STAGE " .. leader .. " person-identified");
-    Set(leader, "SOURCE", source);
-    Set(leader, "NAME", row.Name);
-    Set(leader, "PORTRAIT", row.PortraitIcon);
-    -- Designed defaults are data, not a claim that historical psychology is known.
-    Set(leader, "PERSONALITY", personality or row.Personality);
-    Set(leader, "TRAIT", row.Trait);
-    Set(leader, "EVOLUTION_COST", row.EvolutionCost);
-    Set(leader, "UNIT", unit:GetID());
-    Set(leader, "OWNER", owner);
-    Set(leader, "STATE", "GREAT_PERSON");
-    Set(leader, "MERIT", 0);
-    if leader == ASHINA_ADMISSION then SyncAshinaAdmission(true); end
-    SyncProductionAdmission(false, owner);
-    return Finish(owner, "JOINED");
+-- BEGIN RUST PERSONA JOIN TRANSACTION
+-- Generated by civ6-persona-events-rs::join_transaction.
+local joinBusy = {};
+local joinFields = {"SOURCE","NAME","PORTRAIT","PERSONALITY","TRAIT","EVOLUTION_COST","UNIT","OWNER","STATE","MERIT"};
+local function JoinEqual(a,b)
+    if type(a)~=type(b) then return false; end
+    if type(a)~="table" then return a==b; end
+    for key,value in pairs(a) do if not JoinEqual(value,b[key]) then return false; end end
+    for key in pairs(b) do if a[key]==nil then return false; end end
+    return true;
 end
+local function JoinPeople(owner,row)
+    local individual=GameInfo.GreatPersonIndividuals[row.PersonType];
+    local class=individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+    local kind=class and GameInfo.Units[class.UnitType];
+    local p=Player(owner,false); if not p or not kind then return nil; end
+    local units={};
+    for _,unit in p:GetUnits():Members() do
+        if unit:GetType()==kind.Index then
+            local person=unit:GetGreatPerson(); local id=person and person:GetIndividual();
+            local definition=id~=nil and id~=-1 and GameInfo.GreatPersonIndividuals[id];
+            if definition and definition.GreatPersonIndividualType==row.PersonType then units[#units+1]=unit; end
+        end
+    end
+    return units;
+end
+local function RollbackJoin(transaction,row)
+    local owner,leader=transaction.owner,transaction.leader;
+    local restored=true;
+    for i=#joinFields,1,-1 do
+        local field=joinFields[i]; local current=Get(leader,field);
+        if not JoinEqual(current,transaction.before[field]) then
+            if not JoinEqual(current,transaction.after[field]) then restored=false;
+            else
+                local ok=pcall(Set,leader,field,transaction.before[field]);
+                if not ok or not JoinEqual(Get(leader,field),transaction.before[field]) then restored=false; end
+            end
+        end
+    end
+    local priced,priceOK=pcall(PersonaEvents.UndoJoinPrice,transaction.price);
+    restored=restored and priced and priceOK==true;
+    local read,units=pcall(JoinPeople,owner,row);
+    if not read or not units then return false; end
+    for _,unit in ipairs(units) do
+        if not transaction.existing[unit:GetID()] then
+            -- This ID did not exist at the verified grant boundary. Never
+            -- destroy or rename an existing person when adopting its ID.
+            local ok=pcall(function() Player(owner,false):GetUnits():Destroy(unit); end);
+            if not ok then restored=false; end
+        end
+    end
+    read,units=pcall(JoinPeople,owner,row);
+    if not read or not units then return false; end
+    for _,unit in ipairs(units) do if not transaction.existing[unit:GetID()] then restored=false; end end
+    if not restored then return false; end
+    local cleared=pcall(Set,leader,"JOIN_TRANSACTION",nil);
+    return cleared and Get(leader,"JOIN_TRANSACTION")==nil;
+end
+local function Join(owner, source, personality, trait)
+    local p,other=Player(owner,true),Player(source,false);
+    if not p or not other or owner==source then return Finish(owner,"INVALID"); end
+    local config=PlayerConfigurations[source]; local leader=config and config:GetLeaderTypeName();
+    local row=Definition(leader); local own=PlayerConfigurations[owner];
+    if not row or not own or not Definition(own:GetLeaderTypeName()) or config:GetCivilizationTypeName()~=row.CivilizationType then return Finish(owner,"INVALID"); end
+    if (personality~=nil and not PERSONALITIES[personality]) or (trait~=nil and not TRAITS[trait]) then return Finish(owner,"INVALID_METADATA"); end
+    if joinBusy[leader] then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    local pending=Get(leader,"JOIN_TRANSACTION");
+    if pending~=nil then
+        if type(pending)~="table" or pending.version~=1 or pending.leader~=leader or
+           pending.owner~=owner or pending.source~=source or type(pending.before)~="table" or
+           type(pending.after)~="table" or type(pending.existing)~="table" or type(pending.price)~="table" or
+           pending.price.leader~=leader or pending.price.owner~=owner or pending.price.source~=source or
+           pending.before.OWNER~=nil or pending.before.STATE~=nil or pending.before.UNIT~=nil or
+           pending.before.SOURCE~=nil or pending.before.EVOLUTION_COST~=nil then
+            return Finish(owner,"NATIVE_UNAVAILABLE");
+        end
+        for id,value in pairs(pending.existing) do
+            if type(id)~="number" or id%1~=0 or id<0 or value~=true then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+        end
+        joinBusy[leader]=true;
+        local ok,rolled=pcall(RollbackJoin,pending,row); joinBusy[leader]=nil;
+        if not ok or not rolled then return Finish(owner,"JOIN_ROLLBACK_PENDING"); end
+        -- A recovery request compensates old work only. A later explicit Join
+        -- can start a fresh transaction after every old mutation is removed.
+        return Finish(owner,"NATIVE_UNAVAILABLE");
+    end
+    if Get(leader,"OWNER")~=nil then return Finish(owner,Get(leader,"OWNER")==owner and "ALREADY_JOINED" or "OTHER_OWNER"); end
+    if trait~=nil and trait~=row.Trait then return Finish(owner,"INVALID_METADATA"); end
+    if Get(leader,"STATE")~=nil or Get(leader,"UNIT")~=nil or Get(leader,"SOURCE")~=nil or Get(leader,"EVOLUTION_COST")~=nil then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    print("JAC_PERSONA_STAGE "..leader.." native-governor");
+    local native=NativeGovernor(owner,row);
+    if not native then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    if native.appointed then return Finish(owner,"GOVERNOR_EXISTS"); end
+    if not p:GetCities():GetCapitalCity() then return Finish(owner,"NO_CITY"); end
+    -- The ordinary native read may confirm an earlier person's visible debit.
+    -- Capture the join image after that settlement, still before any grant.
+    local prepared,price=pcall(PersonaEvents.PrepareJoinPrice,owner,source,row);
+    if not prepared or not price then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    print("JAC_PERSONA_STAGE "..leader.." find-person-before");
+    local ready,people=pcall(JoinPeople,owner,row);
+    if not ready or not people or #people>1 then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    local transaction={version=1,leader=leader,owner=owner,source=source,price=price,before={},after={},existing={}};
+    for _,field in ipairs(joinFields) do transaction.before[field]=Get(leader,field); end
+    for _,unit in ipairs(people) do transaction.existing[unit:GetID()]=true; end
+    local staged=pcall(Set,leader,"JOIN_TRANSACTION",transaction);
+    if not staged or not JoinEqual(Get(leader,"JOIN_TRANSACTION"),transaction) then return Finish(owner,"NATIVE_UNAVAILABLE"); end
+    joinBusy[leader]=true;
+    local result="NATIVE_UNAVAILABLE";
+    local ok=pcall(function()
+        local unit=people[1];
+        if not unit then
+            local individual=GameInfo.GreatPersonIndividuals[row.PersonType];
+            local class=individual and GameInfo.GreatPersonClasses[individual.GreatPersonClassType];
+            local era=individual and GameInfo.Eras[individual.EraType];
+            if not individual or not class or not era then return; end
+            result="SPAWN_FAILED";
+            -- Gameplay grant: DLC/NubiaScenario/Scripts/NubiaScenario.lua:106-111.
+            -- GrantPerson has no returned unit; identify it in the owner's collection.
+            print("JAC_PERSONA_STAGE "..leader.." grant-person-before");
+            Game.GetGreatPeople():GrantPerson(individual.Hash,class.Hash,era.Hash,0,owner,false);
+            print("JAC_PERSONA_STAGE "..leader.." grant-person-after");
+            local created=JoinPeople(owner,row);
+            if not created or #created~=1 then return; end
+            unit=created[1];
+        end
+        result="NATIVE_UNAVAILABLE";
+        print("JAC_PERSONA_STAGE "..leader.." person-identified");
+        if not PersonaEvents.RecordJoinPrice(owner,source,row,price) then return; end
+        transaction.after={SOURCE=source,NAME=row.Name,PORTRAIT=row.PortraitIcon,PERSONALITY=personality or row.Personality,
+            TRAIT=row.Trait,EVOLUTION_COST=price.after.cost or price.after.prices[leader].cost,UNIT=unit:GetID(),
+            OWNER=owner,STATE="GREAT_PERSON",MERIT=0};
+        for _,field in ipairs(joinFields) do
+            Set(leader,field,transaction.after[field]);
+            if not JoinEqual(Get(leader,field),transaction.after[field]) then return; end
+        end
+        -- Recheck the physical person and complete ledger before committing.
+        local found=JoinPeople(owner,row);
+        if not found or #found~=1 or found[1]:GetID()~=unit:GetID() or PersonaEvents.Cost(row)~=transaction.after.EVOLUTION_COST then return; end
+        Set(leader,"JOIN_TRANSACTION",nil);
+        if Get(leader,"JOIN_TRANSACTION")~=nil then return; end
+        result="JOINED";
+    end);
+    if not ok or result~="JOINED" then
+        -- Save the exact undo image before compensating. A refused native
+        -- Destroy remains a known pending transaction, never a new grant.
+        pcall(Set,leader,"JOIN_TRANSACTION",transaction);
+        local undone,rolled=pcall(RollbackJoin,transaction,row);
+        joinBusy[leader]=nil;
+        if not undone or not rolled then return Finish(owner,"JOIN_ROLLBACK_PENDING"); end
+        return Finish(owner,result=="SPAWN_FAILED" and "SPAWN_FAILED" or "NATIVE_UNAVAILABLE");
+    end
+    joinBusy[leader]=nil;
+    if leader==ASHINA_ADMISSION then SyncAshinaAdmission(true); end
+    SyncProductionAdmission(false,owner);
+    return Finish(owner,"JOINED");
+end
+-- END RUST PERSONA JOIN TRANSACTION
 
 local function EvolutionCost(leader)
-    local row = Definition(leader);
-    return row and (Get(leader, "EVOLUTION_COST") or row.EvolutionCost);
+    return PersonaEvents.Cost(Definition(leader));
 end
 
 local function AvailableTitles(p)
@@ -1757,10 +2105,10 @@ end
 -- BEGIN RUST GENERATED PERSONA FINALIZATION
 -- Generated by civ6-native-bridge-rs::persona_finalization; edit its Rust source.
 local function ValidateEvolutionReceipt(leader, row)
-    -- GameInfo defines the price. Saved fields are a prepare receipt, never
-    -- authority to reduce it. Validate before the UI reader, which also reads
-    -- the saved cost to select its ordered native payment-promotion prefix.
-    local cost = row.EvolutionCost;
+    -- The independent joining contract defines this person's price. Current
+    -- GameInfo may be repriced; the mutable prepare fields cannot reduce it.
+    -- Validate before reading payment or destroying the Great Person.
+    local cost = PersonaEvents.Cost(row);
     local savedCost = Get(leader, "EVOLUTION_COST");
     local surcharge = Get(leader, "EVOLUTION_SURCHARGE");
     if type(cost) ~= "number" or cost % 1 ~= 0 or cost < 1 or cost > 3 or
@@ -2163,4 +2511,4 @@ ExposedMembers.JAC_LeaderPersona = {
     OnPlayerTurnStarted = OnPlayerTurnStarted, SyncEffects = SyncEffects, MeritQueue = MeritQueue
 };
 print("JAC_LeaderPersona_Gameplay: ready");
-SyncProductionAdmission(true);
+InitializeProductionAdmission();

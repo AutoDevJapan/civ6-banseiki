@@ -46,6 +46,13 @@ fn render(text: &str) -> Result<String, Box<dyn std::error::Error>> {
         civ6_native_bridge_rs::appointment_glue::source(),
         &output[finish..]
     );
+    // The file's last statement is the load entry owned by the paid block.
+    let load = "\nInitializeProductionAdmission();\n";
+    let output = match output.strip_suffix("\nSyncProductionAdmission(true);\n") {
+        Some(body) => format!("{body}{load}"),
+        None if output.ends_with(load) => output,
+        None => return Err("Gameplay load entry missing".into()),
+    };
     Ok(output)
 }
 
@@ -65,8 +72,9 @@ mod tests {
     fn markerless_parent_preserves_the_event_republication_block() {
         let legacy = format!("local function SyncAppointmentAdmission(forceClosed, onlyOwner)\n return;\nend\n{}{}",
             "-- BEGIN RUST PERSONA EVENTS REPUBLISH\nlocal function keep_synced_receipts() return 1474 end\n-- END RUST PERSONA EVENTS REPUBLISH\n",
-            civ6_native_bridge_rs::paid_glue::source());
+            civ6_native_bridge_rs::paid_glue::source()) + "SyncProductionAdmission(true);\n";
         let result = render(&legacy).unwrap();
+        assert!(result.ends_with("\nInitializeProductionAdmission();\n"));
         assert!(result.contains("local function keep_synced_receipts() return 1474 end"));
         assert_eq!(
             result

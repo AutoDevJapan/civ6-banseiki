@@ -1,0 +1,83 @@
+{
+  "name": "Banseiki pool: 300 registered people, two human leaders, duplicate exclusion and saved IDs",
+  "judge_profile": "generic",
+  "strict_lua_errors": true,
+  "session_type": "hotseat",
+  "steps": [
+    {
+      "action": "enable_mods",
+      "exclusive_user_mods": true,
+      "ids": [
+        "bd7a82c5-6b38-4b69-a7f5-8dc9af534249",
+        "dfa0717e-4d0b-4370-b693-27fc6758571b",
+        "ba3a1c58-9287-4654-a22f-85f9e6841e9b",
+        "c8fb8042-8e3e-4b35-b02a-781947194700"
+      ]
+    },
+    {
+      "action": "configure",
+      "ruleset": "RULESET_JAC_BANSEIKI",
+      "speed": "GAMESPEED_STANDARD",
+      "map_size": "MAPSIZE_DUEL",
+      "city_states": 0,
+      "seed": 1947202610,
+      "players": [
+        {
+          "leader": "LEADER_JAC_ODA_NOBUHIDE",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        },
+        {
+          "leader": "LEADER_JAC_POOL_O008",
+          "civ": "CIVILIZATION_JAC_ODA",
+          "human": true
+        }
+      ]
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "HostGame",
+      "code": "print('[JAC_POOL_TEST] status human='..tostring(SlotStatus.SS_TAKEN)..' ai='..tostring(SlotStatus.SS_COMPUTER)..' cfg0='..tostring(PlayerConfigurations[0]:GetValue('SLOT_STATUS'))..' cfg1='..tostring(PlayerConfigurations[1]:GetValue('SLOT_STATUS')))\nif not JAC_POOL_FILTER_INSTALLED then error('pool frontend hook not loaded') end\nlocal rows=DB.ConfigurationQuery(\"SELECT PersonID, LeaderType, CivilizationType FROM JAC_BanseikiPool\")\nif #rows~=300 then error('pool count '..#rows) end\nlocal pool={}; for _,r in ipairs(rows) do pool[r.LeaderType]=r end\nif not GameConfiguration.IsHotseat() then error('hotseat required') end\nlocal expected={'LEADER_JAC_ODA_NOBUHIDE','LEADER_JAC_POOL_O008'}\nfor pid=0,1 do\n  local c=PlayerConfigurations[pid]; if not c or not c:IsHuman() then error('human slot '..pid) end\n  if c:GetLeaderTypeName()~=expected[pid+1] then error('chosen leader '..pid) end\n  if c:GetCivilizationTypeName()~=pool[expected[pid+1]].CivilizationType or c:GetCivilizationTypeName()~='CIVILIZATION_JAC_ODA' then error('same registered civilization '..pid) end\n  local p=CreatePlayerParameters(pid,true); p:Refresh()\n  local found, registered, duplicate=0,0,false\n  for _,v in ipairs(p.Parameters.PlayerLeader.Values) do\n    if pool[v.Value] then\n      registered=registered+1\n      if v.Value==expected[pid+1] and not v.Invalid then found=found+1 end\n      if v.Value==expected[2-pid] then duplicate=v.Invalid==true end\n    elseif v.Value~='RANDOM' then error('outside pool '..pid..' '..tostring(v.Value)) end\n  end\n  if found~=1 or registered~=300 or not duplicate then error('pool selection '..pid..' '..registered..' '..found..' '..tostring(duplicate)) end\nend\nprint('[JAC_POOL_TEST] frontend300 twoHuman=2 duplicates=blocked')\nreturn 'frontend300 twoHuman=2 duplicates=blocked'",
+      "capture_as": "FRONTEND"
+    },
+    {
+      "action": "start_game",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "local version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('saved ledger version missing') end\nlocal expected={'JAC_POOL_H040','JAC_POOL_O008'}\nlocal parts={version}\nfor pid=0,1 do\n local p=Players[pid]\n if not p or not p:IsHuman() then error('two human players required') end\n local person=p:GetProperty('JAC_POOL_PERSON_ID')\n local trait=p:GetProperty('JAC_POOL_TRAIT')\n local role=p:GetProperty('JAC_POOL_ROLE')\n if person~=expected[pid+1] or type(trait)~='string' or role~='LEADER' then error('person record '..pid..' '..tostring(person)) end\n parts[#parts+1]=table.concat({pid,person,trait,role},'|')\nend\nprint('[JAC_POOL_TEST] restoredRecords '..table.concat(parts,';'))\nreturn table.concat(parts,';')",
+      "capture_as": "INITIAL_PEOPLE"
+    },
+    {
+      "action": "end_turn",
+      "timeout": 120
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=1 then error('second human turn required') end\nlocal version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('saved ledger version missing') end\nlocal expected={'JAC_POOL_H040','JAC_POOL_O008'}\nlocal parts={version}\nfor pid=0,1 do\n local p=Players[pid]\n if not p or not p:IsHuman() then error('two human players required') end\n local person=p:GetProperty('JAC_POOL_PERSON_ID')\n local trait=p:GetProperty('JAC_POOL_TRAIT')\n local role=p:GetProperty('JAC_POOL_ROLE')\n if person~=expected[pid+1] or type(trait)~='string' or role~='LEADER' then error('person record '..pid..' '..tostring(person)) end\n parts[#parts+1]=table.concat({pid,person,trait,role},'|')\nend\nprint('[JAC_POOL_TEST] restoredRecords '..table.concat(parts,';'))\nreturn table.concat(parts,';')",
+      "equals_capture": "INITIAL_PEOPLE"
+    },
+    {
+      "action": "save",
+      "name": "JAC-Pool-Two-Human-Mid-Round"
+    },
+    {
+      "action": "exit_to_menu",
+      "timeout": 90
+    },
+    {
+      "action": "load",
+      "name": "JAC-Pool-Two-Human-Mid-Round",
+      "timeout": 240
+    },
+    {
+      "action": "ui_lua",
+      "state_name": "InGame",
+      "code": "if Game.GetLocalPlayer()~=1 then error('saved second human turn required') end\nlocal version=Game:GetProperty('JAC_BANSEIKI_POOL_LEDGER')\nif type(version)~='string' or not version:match('^300:%x+$') then error('saved ledger version missing') end\nlocal expected={'JAC_POOL_H040','JAC_POOL_O008'}\nlocal parts={version}\nfor pid=0,1 do\n local p=Players[pid]\n if not p or not p:IsHuman() then error('two human players required') end\n local person=p:GetProperty('JAC_POOL_PERSON_ID')\n local trait=p:GetProperty('JAC_POOL_TRAIT')\n local role=p:GetProperty('JAC_POOL_ROLE')\n if person~=expected[pid+1] or type(trait)~='string' or role~='LEADER' then error('person record '..pid..' '..tostring(person)) end\n parts[#parts+1]=table.concat({pid,person,trait,role},'|')\nend\nprint('[JAC_POOL_TEST] restoredRecords '..table.concat(parts,';'))\nreturn table.concat(parts,';')",
+      "equals_capture": "INITIAL_PEOPLE"
+    }
+  ]
+}

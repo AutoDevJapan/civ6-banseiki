@@ -132,7 +132,7 @@ mod platform {
     use std::os::windows::{ffi::OsStringExt, io::AsRawHandle, process::CommandExt};
     use std::process::{Child, ChildStdin, Command, Stdio};
     use std::sync::mpsc::{self, Receiver};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use windows_sys::Win32::Foundation::{
         CloseHandle, FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
@@ -141,9 +141,8 @@ mod platform {
         TH32CS_SNAPMODULE32,
     };
     use windows_sys::Win32::System::Threading::{
-        GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
-        WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-        PROCESS_TERMINATE,
+        GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
     };
 
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -975,11 +974,10 @@ mod platform {
                 "pinned game creation time changed before close",
             ));
         }
-        if unsafe { TerminateProcess(inspected.0, 1) } == 0
-            && unsafe { WaitForSingleObject(inspected.0, 0) } != WAIT_OBJECT_0
-        {
-            return Err(Error::input("pinned game termination failed"));
-        }
+        // Keep the exact inspected game pinned, but use the same authority and
+        // termination path as restart, observers and resident-runtime cleanup.
+        // Core/image validation is evidence, not permission to end the game.
+        crate::restart::terminate_civ_process(pid, started)?;
         if unsafe { WaitForSingleObject(inspected.0, 10_000) } != WAIT_OBJECT_0 {
             return Err(Error::input("pinned game exit not confirmed"));
         }
@@ -1000,7 +998,8 @@ mod platform {
         mode: BridgeMode,
         assignment_subject: Option<AssignmentSubject>,
         resident_runtime: bool,
-        _binary_pins: (std::fs::File, std::fs::File),
+        _binary_pins: Vec<std::fs::File>,
+        bootstrap: bool,
     }
 
     impl Session {
@@ -1032,7 +1031,7 @@ mod platform {
             name: &str,
             seconds: u64,
             mode: &str,
-            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
         ) -> Result<Self> {
             let resident_runtime = mode == "paid-assignment-runtime";
             let mode = match mode {
@@ -1106,7 +1105,7 @@ mod platform {
                 "process_pid":pid,"process_created_filetime":created,"product_acceptance":false}),
             )?;
             manifest.flush()?;
-            let mut child = Command::new(executable)
+            let child = Command::new(executable)
                 .args([
                     "--pid",
                     &pid.to_string(),
@@ -1142,26 +1141,50 @@ mod platform {
                 .env("CIV6_AUTOTEST_RUNNER_PATH", &runner)
                 .creation_flags(CREATE_NO_WINDOW)
                 .spawn()?;
+            Self::from_child(
+                child,
+                artifact,
+                pid,
+                created,
+                started,
+                target,
+                mode,
+                close_game,
+                resident_runtime,
+                vec![controller_pin, dll_pin],
+                false,
+                None,
+            )
+        }
+        #[allow(clippy::too_many_arguments)]
+        fn from_child(
+            mut child: Child,
+            artifact: PathBuf,
+            pid: u32,
+            created: u64,
+            started: f64,
+            target: PinnedTarget,
+            mode: BridgeMode,
+            mut close_game: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+            resident_runtime: bool,
+            binary_pins: Vec<std::fs::File>,
+            bootstrap: bool,
+            readiness_deadline: Option<Instant>,
+        ) -> Result<Self> {
             let input = child.stdin.take();
             let Some(stdout) = child.stdout.take() else {
                 let close = close_game(pid, started);
-                if unsafe { WaitForSingleObject(target.0, 10_000) } == WAIT_OBJECT_0 {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
+                let cleanup = finish_failed_cleanup(close, &target, &mut child);
                 return Err(Error::input(format!(
-                    "bridge stdout unavailable; pinned game close={close:?}; exit_confirmed={}",
+                    "bridge stdout unavailable; cleanup={cleanup:?}; exit_confirmed={}",
                     unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
                 )));
             };
             if input.is_none() {
                 let close = close_game(pid, started);
-                if unsafe { WaitForSingleObject(target.0, 10_000) } == WAIT_OBJECT_0 {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                }
+                let cleanup = finish_failed_cleanup(close, &target, &mut child);
                 return Err(Error::input(format!(
-                    "bridge stop pipe unavailable; pinned game close={close:?}; exit_confirmed={}",
+                    "bridge stop pipe unavailable; cleanup={cleanup:?}; exit_confirmed={}",
                     unsafe { WaitForSingleObject(target.0, 0) } == WAIT_OBJECT_0,
                 )));
             }
@@ -1188,17 +1211,22 @@ mod platform {
                 mode,
                 assignment_subject: None,
                 resident_runtime,
-                _binary_pins: (controller_pin, dll_pin),
+                _binary_pins: binary_pins,
+                bootstrap,
             };
-            match session.lines.recv_timeout(Duration::from_secs(30)) {
-                Ok(line) if line.starts_with(&format!("READY pid={pid} ")) => Ok(session),
+            let wait = readiness_deadline.map_or(Duration::from_secs(30), |deadline| {
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_secs(30))
+            });
+            match session.lines.recv_timeout(wait) {
+                Ok(line) if readiness_deadline.is_none_or(|deadline| Instant::now() < deadline)
+                    && line.starts_with(&format!("READY pid={pid} ")) && (!bootstrap || line==format!("READY pid={pid} created={created} bootstrap=v2 prepared=true runtime_installed=false")) => Ok(session),
                 _ => {
                     let close = session.close_target();
-                    if unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0 {
-                        let _ = session.child.kill();
-                        let _ = session.child.wait();
-                        session.finished = true;
-                    }
+                    let cleanup = finish_failed_cleanup(close, &session.target, &mut session.child);
+                    session.finished = unsafe { WaitForSingleObject(session.target.0, 0) } == WAIT_OBJECT_0
+                        && matches!(session.child.try_wait(), Ok(Some(_)));
                     let mut diagnostic = String::new();
                     if session.finished {
                         if let Some(stderr) = session.child.stderr.take() {
@@ -1206,7 +1234,8 @@ mod platform {
                         }
                     }
                     Err(Error::input(format!(
-                        "native bridge did not prove bounded readiness; pinned game close={close:?}; controller diagnostic={}",
+                        "native bridge did not prove bounded readiness; cleanup={cleanup:?}; controller_exit_confirmed={}; controller diagnostic={}",
+                        session.finished,
                         diagnostic.trim()
                     )))
                 }
@@ -1252,6 +1281,10 @@ mod platform {
                     "native bridge failed: {}",
                     stderr.trim()
                 )));
+            }
+            if self.bootstrap {
+                bootstrap_terminal(&self.artifact, self.pid, self.created)?;
+                return Ok(self.artifact.clone());
             }
             if self.resident_runtime {
                 validate_runtime_receipt(
@@ -1340,6 +1373,11 @@ mod platform {
         }
     }
 
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/native_bootstrap_session.rs"
+    ));
+
     impl Drop for Session {
         fn drop(&mut self) {
             if !self.finished {
@@ -1421,6 +1459,92 @@ mod platform {
         }
 
         #[test]
+        fn bootstrap_readiness_uses_remaining_step_deadline_and_preserves_peer() {
+            struct Fixture(Child);
+            impl Drop for Fixture {
+                fn drop(&mut self) {
+                    let _ = self.0.kill();
+                    let _ = self.0.wait();
+                }
+            }
+            let target = std::sync::Arc::new(std::sync::Mutex::new(Fixture(sleeping_child())));
+            let pid = target.lock().unwrap().0.id();
+            let pinned = test_target(&target.lock().unwrap().0);
+            let mut peer = Fixture(sleeping_child());
+            let controller = Command::new("powershell.exe")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "Start-Sleep -Seconds 20",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .unwrap();
+            let controller_pin = test_target(&controller);
+            let closed_target = target.clone();
+            let close = Box::new(move |actual, _| {
+                assert_eq!(actual, pid);
+                let mut target = closed_target.lock().unwrap();
+                target.0.kill()?;
+                target.0.wait()?;
+                Ok(())
+            });
+            let dir = tempfile::tempdir().unwrap();
+            let start = Instant::now();
+            let result = Session::from_child(
+                controller,
+                dir.path().join("bounded-ready.jsonl"),
+                pid,
+                1,
+                0.0,
+                pinned,
+                BridgeMode::ProductionAdmission,
+                close,
+                false,
+                Vec::new(),
+                true,
+                Some(start + Duration::from_millis(50)),
+            );
+            assert!(result.is_err());
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "must not use a fresh 30-second wait"
+            );
+            assert!(target.lock().unwrap().0.try_wait().unwrap().is_some());
+            assert_eq!(
+                unsafe { WaitForSingleObject(controller_pin.0, 0) },
+                WAIT_OBJECT_0,
+                "controller exit must be confirmed independently"
+            );
+            assert!(peer.0.try_wait().unwrap().is_none());
+        }
+
+        #[test]
+        fn expired_bootstrap_preparation_refuses_before_process_or_file_access() {
+            let dir = tempfile::tempdir().unwrap();
+            let result = Session::start_bootstrap(
+                0,
+                0.0,
+                dir.path(),
+                &json!({}),
+                Box::new(|_, _| panic!("no fixture/game process may be closed")),
+                Instant::now() - Duration::from_secs(1),
+            );
+            match result {
+                Err(error) => assert_eq!(
+                    error.message,
+                    "bootstrap preparation deadline expired before process pin"
+                ),
+                Ok(_) => panic!("expired budget must not create a session"),
+            }
+            assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        }
+
+        #[test]
         fn expired_runtime_observer_stop_accepts_receipt_and_keeps_target_alive() {
             let mut target = sleeping_child();
             let pinned = test_target(&target);
@@ -1469,10 +1593,11 @@ mod platform {
                 mode: BridgeMode::ProductionAdmission,
                 assignment_subject: None,
                 resident_runtime: true,
-                _binary_pins: (
+                bootstrap: false,
+                _binary_pins: vec![
                     std::fs::File::open(&artifact).unwrap(),
                     std::fs::File::open(&artifact).unwrap(),
-                ),
+                ],
             };
             let outcome = session.stop_inner();
             session.finished = true;
@@ -2153,6 +2278,10 @@ mod platform {
         }
 
         #[test]
+        #[expect(
+            clippy::bool_assert_comparison,
+            reason = "Keep the existing equality assertion that unverified production denial evidence must remain an error"
+        )]
         fn production_terminal_accepts_invalid_raw_value_as_denial_evidence_only() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("production.jsonl");
@@ -2284,6 +2413,19 @@ pub fn close_pinned_game(_: u32, _: f64) -> Result<()> {
 pub struct Session;
 #[cfg(not(windows))]
 impl Session {
+    pub fn start_bootstrap(
+        _: u32,
+        _: f64,
+        _: &Path,
+        _: &serde_json::Value,
+        _: Box<dyn FnMut(u32, f64) -> Result<()> + Send>,
+        _: std::time::Instant,
+    ) -> Result<Self> {
+        Err(Error::input("bootstrap requires Windows x64"))
+    }
+    pub fn bootstrap_healthy(&self) -> Result<()> {
+        Err(Error::input("bootstrap requires Windows x64"))
+    }
     pub fn select_assignment_subject(
         &mut self,
         _: u32,

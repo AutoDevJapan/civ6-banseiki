@@ -4,10 +4,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().skip(1).collect();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     match args.first().map(String::as_str) {
-        Some("embed") if args.len() == 1 => {
+        Some("generate-mp-staging-boundary") if args.len()==6 => {
+            let normal=serde_json::from_slice(&fs::read(&args[2])?)?;
+            let hotseat=serde_json::from_slice(&fs::read(&args[3])?)?;
+            civ6_persona_events_rs::mp_staging_boundary::prepare(&fs::read(&args[1])?, &normal, &hotseat, &args[4], &PathBuf::from(&args[5]))?;
+        }
+        Some("generate-mp-staging") if args.len()==3 => {
+            civ6_persona_events_rs::mp_staging::prepare(&fs::read(&args[1])?, &PathBuf::from(&args[2]))?;
+        }
+        Some("generate-mp-hotseat" | "generate-mp-setup" | "generate-mp-setup-read") if args.len()==4 => {
+            let normal=serde_json::from_slice(&fs::read(&args[1])?)?;
+            let hotseat=serde_json::from_slice(&fs::read(&args[2])?)?;
+            let scenario=if args[0]=="generate-mp-setup-read" {
+                civ6_persona_events_rs::mp_setup_read::build(&root,&normal,&hotseat)?
+            } else if args[0]=="generate-mp-setup" {
+                civ6_persona_events_rs::mp_hotseat::build_setup_probe(&normal,&hotseat)?
+            } else {civ6_persona_events_rs::mp_hotseat::build(&normal,&hotseat)?};
+            fs::write(&args[3],serde_json::to_string_pretty(&scenario)?)?;
+        }
+        Some("embed") if args.len() == 1 || args.len() == 2 => {
+            let root = args.get(1).map(PathBuf::from).unwrap_or(root);
             let file = root.join(civ6_persona_events_rs::GAMEPLAY);
             let source = fs::read_to_string(&file)?.replace("\r\n", "\n");
             fs::write(file, civ6_persona_events_rs::embed(&source)?)?;
+            for (path, render) in [
+                ("poc/JAC_PoC_LeaderPersona/UI/JAC_LeaderPersona_View.lua", civ6_persona_events_rs::price_routes::ui as fn(&str) -> Result<String, String>),
+                ("poc/JAC_PoC_LeaderPersona/Shared/JAC_PersonaTreeRules.lua", civ6_persona_events_rs::price_routes::shared),
+            ] {
+                let file = root.join(path);
+                let source = fs::read_to_string(&file)?.replace("\r\n", "\n");
+                fs::write(file, render(&source)?)?;
+            }
         }
         Some("generate") if args.len() == 3 => {
             let template = serde_json::from_slice(&fs::read(&args[1])?)?;
@@ -46,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs generate-mp-staging-boundary STOCK.lua NORMAL.json HOTSEAT.json NONCE OUTPUTDIR | generate-mp-staging STOCK.lua OUTPUTDIR | generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup-read NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
             )
         }
     }

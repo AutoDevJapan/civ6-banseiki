@@ -248,6 +248,7 @@ version = "0.1.0"
 dependencies = [
  "caseless",
  "chrono",
+ "civ6-bootstrap-rs",
  "civ6-cli-compat-rs",
  "civ6-native-bridge-rs",
  "civ6-native-probe-rs",
@@ -267,6 +268,15 @@ dependencies = [
  "sha2",
  "tempfile",
  "uuid",
+ "windows-sys",
+]
+
+[[package]]
+name = "civ6-bootstrap-rs"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
  "windows-sys",
 ]
 
@@ -307,6 +317,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "syn 2.0.119",
  "unicode-normalization",
 ]
@@ -333,6 +344,7 @@ dependencies = [
 name = "civ6-native-bridge-rs"
 version = "0.1.0"
 dependencies = [
+ "civ6-bootstrap-rs",
  "serde_json",
  "sha2",
  "tempfile",
@@ -362,7 +374,9 @@ version = "0.1.0"
 dependencies = [
  "civ6-autotest-rs",
  "mlua",
+ "roxmltree 0.21.1",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

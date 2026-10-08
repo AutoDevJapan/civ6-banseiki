@@ -310,15 +310,13 @@ extern "system" fn observe(raw: *mut Registers, after: u32) {
                 && raw.return_address == binding.base + expected
                 && u64_at(raw.rcx.checked_add(0x70).unwrap_or(0)) == Some(binding.player);
         }
-        if raw.site == 1 || raw.site == 2 {
-            if after == 0 && accepted {
-                own = read_current(&Memory, raw.rcx, raw.rdx).ok();
-                accepted = own.is_some_and(|p| {
-                    p.owner == binding.owner
-                        && p.governor_index == binding.definition.governor_index
-                        && p.diagnostic_paid(binding.owner, binding.definition).is_ok()
-                });
-            }
+        if (raw.site == 1 || raw.site == 2) && after == 0 && accepted {
+            own = read_current(&Memory, raw.rcx, raw.rdx).ok();
+            accepted = own.is_some_and(|p| {
+                p.owner == binding.owner
+                    && p.governor_index == binding.definition.governor_index
+                    && p.diagnostic_paid(binding.owner, binding.definition).is_ok()
+            });
         }
         if after == 0 && accepted {
             raw.ticket |= 1u64 << 63;
@@ -509,7 +507,7 @@ pub unsafe fn register(
     if base == 0
         || ai_owner == 0
         || callable == 0
-        || callable % 8 != 0
+        || !callable.is_multiple_of(8)
         || base.checked_add(0x9fb4d0).is_none()
         || ai_owner.checked_add(0x1cc).is_none()
         || callable.checked_add(0x18).is_none()

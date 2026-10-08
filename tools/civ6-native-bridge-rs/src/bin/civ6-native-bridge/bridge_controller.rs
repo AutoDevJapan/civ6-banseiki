@@ -5,6 +5,8 @@ use civ6_native_bridge_rs::{
     PINNED_PROMOTION_CALLEE_RVA, PINNED_PROMOTION_CALL_RVA, PINNED_PROPERTY_GET_RVA,
     PROPERTY_TEST_PHASE_KEY_ID, PROPERTY_TEST_VALUE_KEY_ID, TRACE_CAPACITY,
 };
+#[path = "bootstrap_controller.rs"]
+mod bootstrap_controller;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::ffi::{c_void, OsString};
@@ -162,6 +164,11 @@ impl OwnedJob {
     }
 
     fn disarm_after_verified_runtime_transfer(&self) -> Result<(), String> {
+        self.disarm()
+    }
+
+    // Bootstrap keeps resident code after a verified observation drain.
+    fn disarm_after_verified_operation(&self) -> Result<(), String> {
         self.disarm()
     }
 
@@ -371,6 +378,14 @@ fn now_unix() -> Result<f64, String> {
         .as_secs_f64())
 }
 fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), String> {
+    verify_lease_for_image(chain_pid, chain, duration, &process_path(chain)?)
+}
+fn verify_lease_for_image(
+    chain_pid: u32,
+    chain: &Handle,
+    duration: u32,
+    image: &Path,
+) -> Result<(), String> {
     let actual_lock =
         std::env::var("CIV6_LIVE_LOCK_PATH").map_err(|_| "live_chain lock environment missing")?;
     if !same_path(Path::new(&actual_lock), Path::new(LOCK)) {
@@ -383,6 +398,7 @@ fn verify_lease(chain_pid: u32, chain: &Handle, duration: u32) -> Result<(), Str
         || value["pid"].as_u64() != Some(u64::from(chain_pid))
         || !alive(chain)
         || !approved_chain(&process_path(chain)?)
+        || !same_path(&process_path(chain)?, image)
     {
         return Err("live_chain lock owner changed".into());
     }
@@ -532,6 +548,31 @@ fn read_remote(game: &Handle, address: usize, output: &mut [u8]) -> Result<(), S
         return Err("bounded target read failed".into());
     }
     Ok(())
+}
+/// Create-new original evidence beside `output`; a capture is never replaced.
+fn preserve(output: &Path, extension: &str, bytes: &[u8]) -> Result<(), String> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(output.with_extension(extension))
+        .and_then(|mut f| f.write_all(bytes))
+        .map_err(|e| format!("preserve native observation {extension}: {e}"))
+}
+/// Two whole reads of the runtime property log. `export` is the loaded
+/// runtime's data export; its current value, not its address, is the log.
+fn property_log_pair(game: &Handle, export: usize) -> Result<(Vec<u8>, Vec<u8>), String> {
+    use civ6_bootstrap_rs::protocol::PROPERTY_LOG_BYTES;
+    let mut pointer = [0u8; 8];
+    read_remote(game, export, &mut pointer)?;
+    let address = u64::from_le_bytes(pointer) as usize;
+    if address == 0 {
+        return Err("runtime property log was not published".into());
+    }
+    let mut first = vec![0; PROPERTY_LOG_BYTES];
+    let mut second = vec![0; PROPERTY_LOG_BYTES];
+    read_remote(game, address, &mut first)?;
+    read_remote(game, address, &mut second)?;
+    Ok((first, second))
 }
 fn write_remote(game: &Handle, address: usize, input: &[u8]) -> Result<(), String> {
     let mut written = 0usize;
@@ -910,6 +951,10 @@ fn drained_property_trace(game: &Handle, address: usize) -> Result<Box<PropertyT
 }
 
 pub fn run() -> Result<(), String> {
+    let raw: Vec<_> = std::env::args().skip(1).collect();
+    if raw.first().is_some_and(|v| v == "bootstrap") {
+        return bootstrap_controller::run(&raw[1..]);
+    }
     let parsed = args(&std::env::args().skip(1).collect::<Vec<_>>())?;
     let chain_pid = std::env::var("CIV6_LIVE_CHAIN_PID")
         .map_err(|_| "live_chain PID environment missing")?
@@ -1002,9 +1047,7 @@ pub fn run() -> Result<(), String> {
             &chain,
             chain_pid,
             target,
-            original,
-            property_original.unwrap(),
-            original_prefix.unwrap(),
+            (original, property_original.unwrap()),
         );
     }
     let dll = bridge_dll()?;

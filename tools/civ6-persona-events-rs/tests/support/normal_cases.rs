@@ -69,8 +69,13 @@ fn normal_context(setup: &str) -> Lua {
 fn public_all_22_owners_and_people_sparse_indices_costs_123() {
     // Every owned pair except self-Join; real definitions use a sparse Index,
     // which must never be confused with slot order, player ID or Hash.
-    for owner in 0..22 {
-        for source in 0..22 {
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get().min(4));
+    let mut checked = std::collections::BTreeSet::new();
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..parallelism).map(|lane| scope.spawn(move || {
+            let mut pairs = Vec::new();
+            for owner in (lane..22).step_by(parallelism) {
+                for source in 0..22 {
             if owner == source { continue; }
             let lua = normal_context("");
             run(&lua, &format!(r#"
@@ -103,8 +108,21 @@ assert(properties['JAC_PERSONA_'..l..'_STATE']=='GOVERNOR' and playerProps[owner
 assert(properties['JAC_PERSONA_'..l..'_MERIT']==merit)
 assert(uiReads==0 and operations==0 and used[owner]==row.EvolutionCost+extra)
 "#));
+                    pairs.push((owner, source));
+                }
+            }
+            pairs
+        })).collect();
+        for worker in workers {
+            for pair in worker.join().expect("independent Lua matrix worker failed") {
+                assert!(checked.insert(pair), "duplicate matrix pair {pair:?}");
+            }
         }
-    }
+    });
+    let expected: std::collections::BTreeSet<_> = (0..22)
+        .flat_map(|owner| (0..22).filter(move |&source| owner != source).map(move |source| (owner, source)))
+        .collect();
+    assert_eq!(checked, expected, "the complete 462-pair matrix must run");
 }
 
 #[test]
@@ -157,13 +175,13 @@ assert(uiReads==0 and operations==0)
     }
 }
 
-fn restore_normal(a: &Lua, setup: &str) -> Lua {
+fn restore_with(a: &Lua, setup: &str, source: &str) -> Lua {
     let saved: mlua::Table=a.globals().get("properties").unwrap();
     let b=Lua::new(); b.load(FIXTURE).exec().unwrap(); b.load(NORMAL_FIXTURE).exec().unwrap();
     b.globals().set("properties",transfer(&b,saved)).unwrap();
     run(&b,setup);
     run(&b,"savedNormalStore=clone(properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1)");
-    load(&b,&fs::read_to_string(root().join(GAMEPLAY)).unwrap());
+    load(&b,source);
     run(&b,r#"
 local function same(a,b)
  if type(a)~=type(b) then return false end
@@ -172,10 +190,45 @@ local function same(a,b)
  for k in pairs(b) do if a[k]==nil then return false end end
  return true
 end
-assert(same(savedNormalStore,properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1),
- 'new Lua context changed serialized acquisitions, full raw receipt history, sequence or binding')
+storeUnchanged=same(savedNormalStore,properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1)
 "#);
     b
+}
+
+fn restore_normal(a: &Lua, setup: &str) -> Lua {
+    let b=restore_with(a,setup,&fs::read_to_string(root().join(GAMEPLAY)).unwrap());
+    run(&b,"assert(storeUnchanged,'new Lua context changed serialized acquisitions, full raw receipt history, sequence or binding')");
+    b
+}
+
+#[test]
+fn load_publication_read_only_guards_are_red_mutations() {
+    let source=fs::read_to_string(root().join(GAMEPLAY)).unwrap().replace("\r\n","\n");
+    let guard="    if E.Enabled() or readOnly>0 then return end\n";
+    let restore="    readOnly=readOnly-1 -- an error must not leave publication read-only\n";
+    let entry="    if normalPaidPublished then PersonaEvents.ReadOnly(SyncProductionAdmission, false); end\n";
+    for needle in [guard,restore,entry] { assert_eq!(source.matches(needle).count(),1,"{needle}"); }
+    // A saved, completely paid but unconfirmed set: load publication must not
+    // confirm it. Without the guard, the same load writes debit confirmations.
+    let a=normal_context("");
+    run(&a,"l,row=normalJoin(0,2); used[0]=3; appointed(0,row); for step=0,2 do success(0,row,step) end");
+    let mut changed=Vec::new();
+    for src in [source.clone(),source.replace(guard,"    if E.Enabled() then return end\n")] {
+        let b=restore_with(&a,"used[0]=3",&src);
+        changed.push(!b.globals().get::<bool>("storeUnchanged").unwrap());
+    }
+    assert_eq!(changed,[false,true],"read-only guard must be what keeps the saved store unchanged");
+    // A failing read-only call must still leave later domain operations able
+    // to confirm a real debit. Without the restore, that completion stalls.
+    let failing="    pcall(PersonaEvents.ReadOnly, function() error('injected read-only failure') end)\n";
+    let mut completed=Vec::new();
+    for src in [source.replace(entry,failing),source.replace(entry,failing).replace(restore,"")] {
+        let lua=Lua::new(); lua.load(FIXTURE).exec().unwrap(); lua.load(NORMAL_FIXTURE).exec().unwrap();
+        load(&lua,&src);
+        run(&lua,"used[0]=5; l,row=normalJoin(0,1); success(0,row,0); appointed(0,row); success(0,row,1); used[0]=7; finalize(0,l)");
+        completed.push(lua.load("return #unitLists[0]==0").eval::<bool>().unwrap());
+    }
+    assert_eq!(completed,[true,false],"an error inside read-only publication must not suppress later confirmation");
 }
 
 #[test]

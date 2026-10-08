@@ -18,6 +18,8 @@ const REPORTER:&str="D:\\SteamLibrary\\steamapps\\common\\Sid Meier's Civilizati
 
 #[derive(Default)]
 struct MockLifecycle {
+    control_checks: usize,
+    deny_control_at: Option<usize>,
     civ: BTreeSet<u32>,
     civ_script: VecDeque<BTreeSet<u32>>,
     civ_queries: usize,
@@ -37,9 +39,21 @@ struct MockLifecycle {
     events: Vec<String>,
     clock: f64,
     process_rows: Vec<ProcessRow>,
+    process_rows_script: VecDeque<Vec<ProcessRow>>,
     reporter_open_fails: bool,
 }
 impl LifecycleBackend for MockLifecycle {
+    fn check_control(&mut self) -> Result<()> {
+        self.control_checks += 1;
+        if self
+            .deny_control_at
+            .is_some_and(|at| self.control_checks >= at)
+        {
+            Err(Error::input("fixture shared control lost"))
+        } else {
+            Ok(())
+        }
+    }
     fn civ_ids(&mut self) -> Result<BTreeSet<u32>> {
         self.civ_queries += 1;
         if let Some(next) = self.civ_script.pop_front() {
@@ -82,7 +96,10 @@ impl LifecycleBackend for MockLifecycle {
     }
     fn process_rows(&mut self) -> Result<Vec<ProcessRow>> {
         self.events.push("rows".into());
-        Ok(self.process_rows.clone())
+        Ok(self
+            .process_rows_script
+            .pop_front()
+            .unwrap_or_else(|| self.process_rows.clone()))
     }
     fn open_reporter(&mut self, pid: u32) -> Result<Option<isize>> {
         self.events.push(format!("open:{pid}"));
@@ -140,6 +157,55 @@ fn orphan_reporter(image: &str) -> MockLifecycle {
         reporter_path: Some(image.into()),
         ..Default::default()
     }
+}
+
+#[test]
+fn both_reporter_cleanup_paths_recheck_ownership_and_release_pinned_handles() {
+    for pinned in [false, true] {
+        for denied_at in [1, 2] {
+            let mut b = orphan_reporter(REPORTER);
+            b.reporters.insert(42);
+            b.deny_control_at = Some(denied_at);
+            let error = if pinned {
+                restart::close_orphaned_civ_reporters_with(&mut b).unwrap_err()
+            } else {
+                restart::launch_via_steam_with(&mut b).unwrap_err()
+            };
+            assert!(error.message.contains("shared control lost"));
+            assert_eq!(b.control_checks, denied_at);
+            assert!(b.reporter_terminated.is_empty());
+            assert!(b.uri.is_empty());
+            if pinned && denied_at == 2 {
+                assert_eq!(b.events.last().unwrap(), "close:200");
+                assert_eq!(b.events.iter().filter(|e| *e == "close:200").count(), 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn steam_launch_rechecks_control_after_authorized_reporter_cleanup() {
+    let mut b = orphan_reporter(REPORTER);
+    b.reporters.insert(42);
+    b.deny_control_at = Some(3);
+    assert!(restart::launch_via_steam_with(&mut b).is_err());
+    assert_eq!(b.reporter_terminated, [42]);
+    assert!(b.uri.is_empty());
+}
+
+#[test]
+fn reporter_scan_stops_when_control_changes_after_an_authorized_termination() {
+    let mut b = orphan_reporter(REPORTER);
+    b.process_rows.push(ProcessRow {
+        pid: 43,
+        name: "firaxisbugreporter.exe".into(),
+        parent_pid: 41,
+    });
+    b.deny_control_at = Some(3);
+    assert!(restart::close_orphaned_civ_reporters_with(&mut b).is_err());
+    assert_eq!(b.reporter_terminated, [42]);
+    assert_eq!(b.events.iter().filter(|e| *e == "close:200").count(), 2);
+    assert_eq!(b.control_checks, 3);
 }
 
 #[test]
@@ -201,7 +267,7 @@ fn runner_preserves_parented_reporter_through_cleanup_and_actual_uri_request() {
         let lifecycle = Arc::new(Mutex::new(lifecycle));
         let cleanup_lifecycle = lifecycle.clone();
         let launch_lifecycle = lifecycle.clone();
-        let mut fake = FakeBackend::new().process(|_| Ok(None));
+        let mut fake = FakeBackend::new().owned_chain().process(|_| Ok(None));
         fake.on_close_orphans = Box::new(move || {
             restart::close_orphaned_civ_reporters_with(&mut *cleanup_lifecycle.lock().unwrap())
         });
@@ -286,14 +352,15 @@ fn test_running_game_prevents_all_cleanup() {
 }
 
 #[test]
-fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_skipped() {
+fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_rechecked() {
     let mut b = orphan_reporter(REPORTER);
     b.reporter_open_fails = true;
-    assert_eq!(
-        restart::close_orphaned_civ_reporters_with(&mut b).unwrap(),
-        Vec::<u32>::new()
-    );
-    assert_eq!(b.events, ["rows", "open:42"]);
+    assert!(restart::close_orphaned_civ_reporters_with(&mut b)
+        .unwrap_err()
+        .message
+        .contains("Cannot open remaining Civ VI helper 42"));
+    assert_eq!(b.events, ["rows", "open:42", "rows"]);
+    assert!(b.reporter_terminated.is_empty());
     for image_failure in [true, false] {
         let mut b = orphan_reporter(REPORTER);
         b.reporter_error = image_failure;
@@ -313,6 +380,27 @@ fn pinned_reporter_handle_is_released_on_errors_and_failed_open_is_skipped() {
             1
         );
         assert!(b.reporter_terminated.is_empty());
+    }
+}
+
+#[test]
+fn failed_reporter_open_allows_confirmed_disappearance_or_a_different_process() {
+    for current in [
+        Vec::new(),
+        vec![ProcessRow {
+            pid: 42,
+            name: "other-game.exe".into(),
+            parent_pid: 41,
+        }],
+    ] {
+        let mut b = orphan_reporter(REPORTER);
+        b.reporter_open_fails = true;
+        b.process_rows_script = VecDeque::from([b.process_rows.clone(), current]);
+        assert!(restart::close_orphaned_civ_reporters_with(&mut b)
+            .unwrap()
+            .is_empty());
+        assert!(b.reporter_terminated.is_empty());
+        assert_eq!(b.events, ["rows", "open:42", "rows"]);
     }
 }
 
@@ -545,6 +633,49 @@ fn missing_or_duplicate_enabled_mod_is_rejected() {
 }
 
 #[test]
+fn official_dlc_is_checked_separately_from_mutable_mod_artwork() {
+    let temp = tempfile::tempdir().unwrap();
+    let mods = temp.path().join("Mods");
+    let dlc = temp.path().join("DLC");
+    let official = dlc.join("Babylon");
+    fs::create_dir_all(&official).unwrap();
+    fs::write(
+        official.join("Babylon.modinfo"),
+        format!("<Mod id=\"{MOD_ID}\"/>"),
+    )
+    .unwrap();
+    let scenario = json!({"steps":[{"action":"enable_mods","ids":[MOD_ID]}]});
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &dlc)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &temp.path().join("missing"))
+            .unwrap_err()
+            .message
+            .contains(MOD_ID)
+    );
+    let duplicate = mods.join("PretendOfficial");
+    fs::create_dir_all(&duplicate).unwrap();
+    fs::write(
+        duplicate.join("duplicate.modinfo"),
+        format!("<Mod id=\"{MOD_ID}\"/>"),
+    )
+    .unwrap();
+    assert!(
+        restart::enabled_mod_folders_with_dlc(&scenario, &mods, &dlc)
+            .unwrap_err()
+            .message
+            .contains("Duplicate")
+    );
+}
+
+#[test]
+#[expect(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "Keep the existing atlas equality assertion and its owned path clone unchanged"
+)]
 fn atlas_images_missing_from_mod_packages_are_reported() {
     let temp = tempfile::tempdir().unwrap();
     let folder = temp.path().join("MyMod");

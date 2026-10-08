@@ -1,6 +1,7 @@
 //! Real owned OS fixture for the production phase barrier and thread ledger.
-use super::super::test_support::Fixture;
+use super::super::test_support::{AttachReadyBarrier, Fixture};
 use super::*;
+use std::collections::btree_map::Entry;
 
 core::arch::global_asm!(
     ".text",
@@ -27,6 +28,160 @@ extern "C" {
     fn todo880_phase_spare_b();
     fn todo880_phase_spare_c();
     fn todo880_phase_spare_d();
+}
+
+/// Fixed phase: sample DRs after real CREATE_THREAD arming, at the new thread's
+/// first target call, and at a later suspended idle point. No register tampering
+/// or delayed exit bookkeeping is injected in this independent case.
+#[test]
+fn order_capture_fixed_thread_lifecycle_retains_debug_registers() {
+    fixed_thread_lifecycle(false);
+}
+
+#[test]
+fn order_capture_stop_snapshot_detects_owned_os_register_erasure() {
+    fixed_thread_lifecycle(true);
+}
+
+fn fixed_thread_lifecycle(erase_registers: bool) {
+    let mut child = Fixture::start();
+    let pid = child.child.id();
+    let entry = child.entry;
+    let path = std::env::temp_dir().join(format!(
+        "todo880-lifecycle-{}-{pid}.jsonl",
+        std::process::id()
+    ));
+    let output = Jsonl::new(&path).unwrap();
+    let (stop_tx, _) = mpsc::channel();
+    let (finish_tx, finish_rx) = mpsc::channel();
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let observer = child.observe(&stop_tx, move |ack| {
+        let mut d = Debugger::attach(pid, process(pid,true).unwrap(), entry, 1, output, ProbeMode::Lifecycle).unwrap();
+        d.mode = ProbeMode::Property;
+        d.close_ack = ack;
+        let mut ready_barrier = AttachReadyBarrier::default();
+        let epoch = CaptureEpoch { phase:Phase::Load, generation:0, sites:[Some(entry),None,None,None] };
+        let mut ledger = CaptureThreads::default();
+        let steps = BTreeMap::new();
+        let mut rows = Vec::new();
+        let mut after_ready = false;
+        let mut fresh_threads = BTreeSet::new();
+        let mut fresh_hits = BTreeSet::new();
+        let mut exit_tids = BTreeSet::new();
+        let mut hits = 0;
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            assert!(Instant::now() < deadline, "owned lifecycle absolute deadline");
+            if finish_rx.try_recv().is_ok() {
+                d.freeze().unwrap();
+                for tid in d.threads.keys().copied().collect::<Vec<_>>() {
+                    let (mut row,c,wait) = arm_evidence(&d,tid,Some(epoch),epoch,&ledger.generations);
+                    row["sample_stage"] = json!("suspended_after_calls");
+                    row["registers_match"] = json!(wait==WAIT_TIMEOUT && c.as_ref().is_ok_and(|c| installed_sites_match_context(&epoch.sites,c)));
+                    rows.push(row);
+                }
+                let erased_tid = if erase_registers {
+                    let tid = *d.held.iter().next().expect("owned live fixture thread");
+                    let handle = &d.threads[&tid].handle;
+                    let mut c = context(handle).unwrap();
+                    c.Dr0=0;c.Dr1=0;c.Dr2=0;c.Dr3=0;c.Dr6=0;c.Dr7=0;
+                    set_context(handle,&c).unwrap();
+                    let actual=context(handle).unwrap();
+                    assert_eq!([actual.Dr0,actual.Dr1,actual.Dr2,actual.Dr3,actual.Dr7],[0;5]);
+                    Some(tid)
+                } else {None};
+                let audit = stop_register_evidence(&d,epoch,&ledger,&steps);
+                mark(&mut d,audit.clone()).unwrap();
+                assert_eq!(audit["summary"]["mismatched"],u64::from(erase_registers));
+                assert_eq!(audit["summary"]["coverage_over_interval"],"unknown");
+                assert_eq!(audit["summary"]["zero_hits_proves_unreached"],false);
+                if let Some(tid)=erased_tid {
+                    let row=audit["thread_checks"].as_array().unwrap().iter().find(|r|r["tid"]==tid).unwrap();
+                    assert_eq!(row["disposition"],"debug_register_mismatch");
+                    assert_eq!(row["last_written_generation"],0);
+                    assert_eq!(row["held"],true);
+                    assert_eq!(row["raw_context"]["dr0"],0);
+                    assert_eq!(row["raw_context"]["dr7"],0);
+                    // The diagnostic itself must not rearm the erased thread.
+                    let after=context(&d.threads[&tid].handle).unwrap();
+                    assert_eq!([after.Dr0,after.Dr1,after.Dr2,after.Dr3,after.Dr7],[0;5]);
+                }
+                d.cleanup(None).unwrap();
+                assert_eq!(d.terminal,TerminalKind::Detached);
+                return json!({"kind":"owned_os_fixed_thread_lifecycle","pid":pid,"phase_changes":0,"register_reset_injected":erase_registers,"erased_tid":erased_tid,"stop_register_audit":audit,"exit_delay_injected":false,"hits":hits,"fresh_thread_ids":fresh_threads,"fresh_hit_ids":fresh_hits,"exit_tids":exit_tids,"samples":rows,"restored":true,"game_live":false});
+            }
+            let mut event = DEBUG_EVENT::default();
+            if unsafe { WaitForDebugEventEx(&mut event,20) } == 0 {continue;}
+            assert_eq!(event.dwProcessId,pid);
+            d.cleanup_event=Some((event,DBG_EXCEPTION_NOT_HANDLED));
+            d.last_dispatch=DispatchOutcome::Unrelated;
+            d.last_attach_breakpoint_owned=false;
+            let tid=event.dwThreadId;
+            let created=matches!(event.dwDebugEventCode,CREATE_PROCESS_DEBUG_EVENT|CREATE_THREAD_DEBUG_EVENT);
+            if created && after_ready {fresh_threads.insert(tid);}
+            if event.dwDebugEventCode==EXIT_THREAD_DEBUG_EVENT {exit_tids.insert(tid);}
+            if capture_thread_event(&mut d,&event,epoch,&mut ledger,&steps).unwrap() {
+                if created {
+                    let (mut row,c,_) = arm_evidence(&d,tid,Some(epoch),epoch,&ledger.generations);
+                    row["sample_stage"] = json!("create_event_after_set_readback");
+                    row["after_attach_ready"] = json!(after_ready);
+                    row["registers_match"] = json!(installed_sites_match_context(&epoch.sites,&c.unwrap()));
+                    rows.push(row);
+                }
+                d.continue_pending_with_status(DBG_CONTINUE).unwrap();
+                if ready_barrier.advance(&mut d,&event) {after_ready=true;ready_tx.send(()).unwrap();}
+                continue;
+            }
+            if event.dwDebugEventCode==EXCEPTION_DEBUG_EVENT {
+                let info=unsafe {event.u.Exception};
+                classify_then_record(&mut d,&event,&steps,&[entry],|d,row|mark(d,row).map_err(std::io::Error::other)).unwrap();
+                if info.ExceptionRecord.ExceptionCode==EXCEPTION_SINGLE_STEP {
+                    let (mut row,c,_) = arm_evidence(&d,tid,Some(epoch),epoch,&ledger.generations);
+                    let mut c=c.unwrap();
+                    assert_eq!(c.Rip,entry);
+                    row["sample_stage"] = json!("target_entry_after_thread_initialization");
+                    row["registers_match"] = json!(installed_sites_match_context(&epoch.sites,&c));
+                    rows.push(row);
+                    hits+=1;
+                    if fresh_threads.contains(&tid){fresh_hits.insert(tid);}
+                    c.EFlags |= RF; c.Dr6 &= !0xf;
+                    set_context(&d.threads[&tid].handle,&c).unwrap();
+                    d.continue_pending_with_status(DBG_CONTINUE).unwrap();continue;
+                }
+                if info.ExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT && d.last_attach_breakpoint_owned {
+                    d.mark_attach_ready().unwrap();
+                    d.continue_pending_with_status(DBG_CONTINUE).unwrap();
+                    assert!(!ready_barrier.advance(&mut d,&event));continue;
+                }
+                let status=d.status_after_error(&event);
+                d.continue_pending_with_status(status).unwrap();continue;
+            }
+            let status=d.handle_event(&event).unwrap();
+            d.continue_pending_with_status(status).unwrap();
+        }
+    });
+    ready_rx.recv_timeout(Duration::from_secs(8)).unwrap();
+    assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+    assert_eq!(child.command("M", "PROBE_OUT:"), "M10");
+    assert_eq!(child.command("T", "PROBE_OUT:"), "1");
+    finish_tx.send(()).unwrap();
+    let mut receipt = observer.join().unwrap();
+    assert_eq!(child.command("R", "PROBE_REG:"), child.original_regs);
+    assert!(!child.terminate().success());
+    receipt["child_reaped"] = json!(true);
+    drop(child);
+    fs::remove_file(path).unwrap();
+    println!("TODO880_THREAD_LIFECYCLE_RECEIPT={receipt}");
+    assert_eq!(receipt["hits"], 4);
+    assert_eq!(receipt["fresh_hit_ids"].as_array().unwrap().len(), 2);
+    for tid in receipt["fresh_hit_ids"].as_array().unwrap() {
+        assert!(receipt["exit_tids"].as_array().unwrap().contains(tid));
+    }
+    for row in receipt["samples"].as_array().unwrap() {
+        if row["handle_wait"] == WAIT_TIMEOUT {
+            assert_eq!(row["registers_match"], true, "{row}");
+        }
+    }
 }
 
 #[test]
@@ -70,6 +225,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
         let mut d=Debugger::attach(pid,process(pid,true).unwrap(),remote,module.size,output,ProbeMode::Lifecycle).unwrap();
         d.mode=ProbeMode::Property;
         d.close_ack=ack;
+        let mut ready_barrier=AttachReadyBarrier::default();
         for address in front.into_iter().chain(load).flatten(){executable(&d.game,remote,address,1).unwrap();}
         let mut threads=CaptureThreads::default();
         let mut epoch=CaptureEpoch{phase:Phase::Front,generation:0,sites:front};
@@ -116,7 +272,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                                     let actual=context(&d.threads[other].handle).unwrap();
                                     assert_eq!([actual.Dr0,actual.Dr1,actual.Dr2,actual.Dr3,actual.Dr7],[old.Dr0,old.Dr1,old.Dr2,old.Dr3,old.Dr7]);
                                 }
-                                mismatch_proof=fs::read_to_string(&trace_path).unwrap().lines().filter_map(|line|serde_json::from_str::<Value>(line).ok()).filter(|row|row["type"]=="arm_rejected").last().unwrap();
+                                mismatch_proof=fs::read_to_string(&trace_path).unwrap().lines().filter_map(|line|serde_json::from_str::<Value>(line).ok()).rfind(|row|row["type"]=="arm_rejected").unwrap();
                                 assert_eq!(mismatch_proof["tid"],tid);
                                 assert_eq!(mismatch_proof["raw_context"]["dr0"],altered.Dr0);
                                 assert_eq!(mismatch_proof["expected_generation"],1);
@@ -165,7 +321,9 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 continue;
             }
             if capture_thread_event(&mut d,&event,epoch,&mut threads,&steps).unwrap(){
-                d.continue_pending_with_status(DBG_CONTINUE).unwrap();continue;
+                d.continue_pending_with_status(DBG_CONTINUE).unwrap();
+                if ready_barrier.advance(&mut d,&event) {notice_tx.send("ready").unwrap();}
+                continue;
             }
             if event.dwDebugEventCode==EXCEPTION_DEBUG_EVENT {
                 let ex=unsafe{event.u.Exception};
@@ -173,29 +331,33 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 classify_then_record(&mut d,&event,&steps,&sites,|d,row|mark(d,row).map_err(std::io::Error::other)).unwrap();
                 if ex.ExceptionRecord.ExceptionCode==EXCEPTION_SINGLE_STEP {
                     let mut c=context(&d.threads[&tid].handle).unwrap();
-                    if steps.contains_key(&tid){
+                    match steps.entry(tid) {
+                    Entry::Occupied(step) => {
                         let prior=original.remove(&tid).unwrap();
                         c.Rip=prior;
                         c.EFlags=(c.EFlags & !TF)|RF;
                         c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
-                        steps.remove(&tid);
+                        step.remove();
                         completed+=1;
-                    }else if c.Rip==entry {
+                    }
+                    Entry::Vacant(_) if c.Rip==entry => {
                         if epoch.phase==Phase::Load {load_hits+=1;c.EFlags|=RF;}
                         else {original.insert(tid,entry);c.Rip=mov;c.EFlags &= !RF;}
                         c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
-                    }else{
+                    }
+                    Entry::Vacant(step) => {
                         assert_eq!(c.Rip,mov);
                         c.EFlags|=TF|RF;c.Dr6 &= !((1<<14)|15);
                         set_context(&d.threads[&tid].handle,&c).unwrap();
                         let armed=context(&d.threads[&tid].handle).unwrap();
-                        steps.insert(tid,Step{site:Site{name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
+                        step.insert(Step{site:Site{name:"owned_fixture_mov",rva:mov-remote,bytes:&[],next:plan::Next::Sequential},expected:mov+7,armed_eflags:armed.EFlags,capture:json!({"capture_seq":completed+1}),phase:epoch.phase});
                         let next=CaptureEpoch{phase:Phase::Load,generation:epoch.generation+1,sites:load};
                         assert!(matches!(phase_barrier(&mut d,&steps,epoch,next,&mut threads).unwrap(),PhaseBarrier::Deferred));
                         deferred+=1;
                         if epoch.generation==0 {desired=Phase::Load;}
+                    }
                     }
                     d.continue_pending_with_status(DBG_CONTINUE).unwrap();
                     if !steps.is_empty() {
@@ -209,7 +371,7 @@ fn order_capture_real_phase_threads_and_pending_step() {
                 if ex.ExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT && d.last_attach_breakpoint_owned {
                     d.mark_attach_ready().unwrap();
                     d.continue_pending_with_status(DBG_CONTINUE).unwrap();
-                    notice_tx.send("ready").unwrap();continue;
+                    assert!(!ready_barrier.advance(&mut d,&event));continue;
                 }
                 d.continue_pending_with_status(d.status_after_error(&event)).unwrap();continue;
             }

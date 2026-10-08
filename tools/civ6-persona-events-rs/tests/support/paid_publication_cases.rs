@@ -205,11 +205,33 @@ fn normal_paid_publication_reload_discards_old_true_before_fresh_confirmation() 
     let a=normal_context(PAID_OBSERVER);
     run(&a,"l,row=normalJoin(0,1); used[0]=2; success(0,row,0); appointed(0,row); success(0,row,1); finalize(0,l); assert(paidVisible[0][14]==true)");
     for old in [false,true] {
+        // Record each paid true write with the observer's state at that moment,
+        // so a saved true that was merely read back cannot pass as published.
         let setup=format!(r#"used[0]=2; playerProps[0][905014]=true; playerProps[21][905005]=true;
             if {old} then properties.JAC_PERSONA_GAMEPLAY_ACQUISITIONS_V1.version=2 end
-            {PAID_OBSERVER}"#);
+            {PAID_OBSERVER}
+            paidTrueWrites={{}}
+            for owner=0,21 do
+             local p=Players[owner]; local setter=p.SetProperty
+             p.SetProperty=function(self,key,value)
+              if type(key)=='number' and key>=905000 and key<905256 and value==true then
+               paidTrueWrites[#paidTrueWrites+1]={{owner=owner,key=key,resets=paidResets[owner],committed=paidCommits[owner]}}
+              end
+              return setter(self,key,value)
+             end
+            end"#);
         let b=restore_normal(&a,&setup);
-        run(&b,"noPaidTrue(); assert(paidResets[0]>0 and paidResets[21]>0)");
+        run(&b,"assert(paidResets[0]>0 and paidResets[21]>0)");
+        if old {run(&b,"noPaidTrue(); assert(#paidTrueWrites==0)");}
+        else {run(&b,r#"
+-- Loading alone republishes: every owner closed, then a full COMMIT, then
+-- only the paid owner's person is written true by the new validation.
+assert(#paidTrueWrites==1,'load must write exactly one fresh paid true')
+local w=paidTrueWrites[1]
+assert(w.owner==0 and w.key==905014 and w.resets>0 and w.committed==true)
+for owner=0,21 do assert(paidCommits[owner]==true,'owner lacked a fresh COMMIT') end
+assert(paidVisible[0][14]==true and not paidVisible[21][5])
+"#);}
         run(&b,"ExposedMembers.JAC_LeaderPersona.Reconcile()");
         if old {run(&b,"noPaidTrue()");}
         else {run(&b,"assert(paidVisible[0][14]==true and not paidVisible[21][5])");}

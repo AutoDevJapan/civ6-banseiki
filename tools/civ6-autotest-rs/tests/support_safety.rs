@@ -30,12 +30,14 @@ pub struct Trace {
     pub manuals: Vec<String>,
 }
 
+type SleepFn = Box<dyn FnMut(f64) + Send>;
+
 #[derive(Default)]
 pub struct FakeClock {
     now: Mutex<f64>,
     sleeps: Mutex<Vec<f64>>,
     reads: Mutex<usize>,
-    on_sleep: Mutex<Option<Box<dyn FnMut(f64) + Send>>>,
+    on_sleep: Mutex<Option<SleepFn>>,
 }
 impl FakeClock {
     pub fn set(&self, value: f64) {
@@ -73,22 +75,28 @@ type StateFn = Box<dyn FnMut(f64) -> Result<Vec<String>> + Send>;
 type LuaFn = Box<dyn FnMut(&str, &str, f64) -> Result<String> + Send>;
 type ProcessFn = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type CaptureFn = Box<dyn FnMut(&Path, Option<[f64; 4]>, f64) -> Result<()> + Send>;
+type ConnectFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
+type PressFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
 
 pub struct SafetyBackend {
+    control_owned: bool,
+    control_held: bool,
     pub trace: Arc<Mutex<Trace>>,
-    pub on_connect: Option<Box<dyn FnMut(u16, f64) -> Result<()> + Send>>,
+    pub on_connect: Option<ConnectFn>,
     pub on_states: StateFn,
     pub on_lua: LuaFn,
     pub on_process: ProcessFn,
     pub on_require_process: Option<Box<dyn FnMut() -> Result<()> + Send>>,
     pub on_launch: Option<Box<dyn FnMut() -> Result<()> + Send>>,
     pub on_wait_window: Option<Box<dyn FnMut(f64) -> Result<isize> + Send>>,
-    pub on_press: Option<Box<dyn FnMut(u16, f64) -> Result<()> + Send>>,
+    pub on_press: Option<PressFn>,
     pub on_capture: Option<CaptureFn>,
 }
 impl SafetyBackend {
     pub fn new(trace: Arc<Mutex<Trace>>) -> Self {
         Self {
+            control_owned: false,
+            control_held: false,
             trace,
             on_connect: None,
             on_states: Box::new(|_| Ok(vec!["FrontEnd".into(), "InGame".into()])),
@@ -101,11 +109,32 @@ impl SafetyBackend {
             on_capture: None,
         }
     }
+    pub fn owned_chain(mut self) -> Self {
+        self.control_owned = true;
+        self
+    }
     fn event(&self, event: &str) {
         self.trace.lock().unwrap().events.push(event.into());
     }
 }
 impl Backend for SafetyBackend {
+    fn acquire_startup_lock(&mut self) -> Result<()> {
+        if !self.control_owned {
+            return Err(Error::input("safety fixture has no live-chain ownership"));
+        }
+        self.control_held = true;
+        self.check_startup_lock()
+    }
+    fn check_startup_lock(&mut self) -> Result<()> {
+        if self.control_owned && self.control_held {
+            Ok(())
+        } else {
+            Err(Error::input("safety fixture live-chain ownership was lost"))
+        }
+    }
+    fn release_startup_lock(&mut self) {
+        self.control_held = false;
+    }
     fn connect(&mut self, port: u16, timeout: f64) -> Result<()> {
         self.event("connect");
         self.trace.lock().unwrap().connects.push(timeout);
@@ -209,6 +238,11 @@ pub struct Fixture {
     pub output: PathBuf,
     pub trace: Arc<Mutex<Trace>>,
     pub clock: Arc<FakeClock>,
+}
+impl Default for Fixture {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Fixture {
     pub fn new() -> Self {

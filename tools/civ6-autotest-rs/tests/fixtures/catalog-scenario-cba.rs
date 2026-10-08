@@ -9,10 +9,10 @@
 //! UI reads the real getters independently. Native acceptance remains the
 //! parent's mode-6 artifact measurement, including original call counters.
 use civ6_autotest_rs::{
-    Error, Result, payment_scenario::READ_CLOSED_ADMISSION, scenario::validate_scenario,
+    payment_scenario::READ_CLOSED_ADMISSION, scenario::validate_scenario, Error, Result,
 };
 use civ6_native_bridge_rs::paid_catalog::COUNT;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub const NORMAL: &str = include_str!("../../../civ6-autotest/scenarios/leader-persona-15km.json");
 

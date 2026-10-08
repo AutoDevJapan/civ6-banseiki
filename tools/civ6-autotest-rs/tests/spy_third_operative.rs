@@ -14,6 +14,41 @@ fn root() -> PathBuf {
 }
 
 struct Third(Lua);
+
+#[test]
+fn core_only_off_map_backing_unit_is_not_adopted_as_new_production() {
+    let t = Third::new();
+    t.run(
+        r#"
+local p=Players[0]; local original=p.GetUnits
+p.GetUnits=function(self)
+ local units=original(self)
+ if not units.sentinelTestWrapped then
+  units.sentinelTestWrapped=true; local members=units.Members
+  units.Members=function(collection)
+   local iterator=members(collection); local emitted=false
+   return function()
+    local k,v=iterator(); if v then return k,v end
+    if CORE_READ and not emitted then
+     emitted=true
+     return 999,{GetID=function() return 1031337 end,GetOwner=function() return 0 end,
+      GetType=function() return GameInfo.Units['UNIT_SPY'].Index end,
+      GetX=function() return -9999 end,GetY=function() return -9999 end}
+    end
+   end
+  end
+ end
+ return units
+end
+"#,
+    );
+
+    t.run("SENTINEL_BASELINE=JAC_PersonaBoundaryRules.Serialize({HISTORY[0][0],HISTORY[0][1]})");
+    t.produce();
+    t.bind();
+    t.run("assert(Game:GetProperty('JAC_BOUNDARY_SPY').id~=1031337,'sentinel adopted'); assert(UI_CORE_CALLS==0,'UI calls='..tostring(UI_CORE_CALLS))");
+    t.run("local r=JAC_PersonaBoundaryRules; assert(r.Serialize({HISTORY[0][0],HISTORY[0][1]})==SENTINEL_BASELINE); local a=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE'); assert(a.properties.JAC_BOUNDARY_ENEMY_SPY_RETRY.spyID==851976)");
+}
 impl Third {
     fn run(&self, code: &str) {
         self.0.load(code).exec().unwrap();
@@ -1073,16 +1108,43 @@ fn scalar_witness_begin_progress_and_mission_work_with_ui_only_core_apis_absent(
 }
 
 #[test]
-fn available_core_getters_are_compared_without_core_player_get_id_or_ui_callbacks() {
+fn available_core_getters_keep_captured_roster_as_explicit_ui_evidence() {
     let t = Third::new();
     t.run("CORE_ROSTER_MODE='available'");
     t.third_success(false);
     t.run(
         r#"
         local sources=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE').sources;
-        assert(sources.histories=='CORE' and sources.capacity=='CORE' and sources.captives=='CORE' and sources.offMap=='CORE');
+        assert(sources.histories=='CORE' and sources.capacity=='CORE' and sources.captives=='UI' and sources.offMap=='CORE');
+        assert(sources.captivesByCaptor['0']=='UI' and sources.captivesByCaptor['1']=='UI');
         assert(sources.governor=='UI' and sources.assignment=='UI' and sources.queue=='UI');
         assert(UI_CORE_CALLS==0 and Game:GetProperty('JAC_BOUNDARY_THIRD_MISSION_ACK').histories=='CORE');
+        "#,
+    );
+}
+
+#[test]
+fn captured_spy_roster_getters_are_never_called_from_gameplay() {
+    let t = Third::new();
+    t.run(
+        r#"
+        CORE_ROSTER_MODE='available'; CORE_CAPTURE_CALLS=0;
+        for _,id in ipairs({0,1}) do
+         local p=Players[id]; local original=p.GetDiplomacy;
+         p.GetDiplomacy=function() local d=original(); if CORE_READ then
+          d.GetNumSpiesCaptured=function() CORE_CAPTURE_CALLS=CORE_CAPTURE_CALLS+1; error('UI-only captured roster getter') end;
+          d.GetNthCapturedSpy=function() CORE_CAPTURE_CALLS=CORE_CAPTURE_CALLS+1; error('UI-only captured roster getter') end;
+         end; return d end
+        end
+        "#,
+    );
+    t.third_success(false);
+    t.run(
+        r#"
+        local sources=Game:GetProperty('JAC_BOUNDARY_THIRD_SPY_ARCHIVE').sources;
+        assert(CORE_CAPTURE_CALLS==0 and sources.captives=='UI');
+        assert(sources.captivesByCaptor['0']=='UI' and sources.captivesByCaptor['1']=='UI');
+        assert(UI_CORE_CALLS==0);
         "#,
     );
 }
@@ -1194,12 +1256,9 @@ fn mission_record_requires_post_publish_history_comparison_before_result_ready()
 #[test]
 fn core_getter_errors_and_negative_counts_do_not_become_ui_fallback_success() {
     for fault in [
-        "d.GetNumSpiesCaptured=function() error('unavailable Core getter') end",
-        "d.GetNumSpiesCaptured=function() return -1 end",
         "d.GetMission=function() return 0 end",
         "d.GetMission=function() error('unavailable Core history') end",
         "d.GetMission=false",
-        "d.GetNumSpiesCaptured=17; d.GetNthCapturedSpy=17",
         "d.GetSpyCapacity=false",
     ] {
         let t = Third::new();

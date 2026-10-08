@@ -21,7 +21,7 @@ fn run(args: &[String]) -> Result<(), String> {
         "--max-seconds",
         "--mode",
     ];
-    if args.len() % 2 == 0
+    if args.len().is_multiple_of(2)
         || args
             .iter()
             .skip(1)
