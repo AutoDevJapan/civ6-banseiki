@@ -74,7 +74,7 @@ fn adapters() -> Result<(Vec<AdapterCoverage>, Vec<String>)> {
             AdapterLuid: adapter.AdapterLuid,
             ..Default::default()
         };
-        if unsafe { D3DKMTQueryStatistics(&mut query) } != 0 {
+        if unsafe { D3DKMTQueryStatistics(&raw mut query) } != 0 {
             return Err(Error::input("kernel GPU engine count is unknown"));
         }
         let nodes = unsafe { query.QueryResult.AdapterInformation.NodeCount };
@@ -139,7 +139,7 @@ fn readings(counter: PDH_HCOUNTER) -> Result<Vec<EngineReading>> {
     let mut engines = Vec::new();
     for item in unsafe { std::slice::from_raw_parts(pointer, count as usize) } {
         let address = item.szName as usize;
-        if address < start || address >= end || address % 2 != 0 {
+        if address < start || address >= end || !address.is_multiple_of(2) {
             return Err(Error::input("invalid PDH instance name"));
         }
         let text =
