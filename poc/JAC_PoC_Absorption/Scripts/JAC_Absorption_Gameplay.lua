@@ -421,7 +421,15 @@ end
 local function ReservedNativeCarrierCities(state, excludingTransaction)
   local reserved = {}
   local function Add(slot)
-    if slot then reserved[slot.X .. ":" .. slot.Y] = true end
+    if slot and slot.MP then
+      for _, loan in ipairs(slot.MP.Loans or { slot.Source }) do
+        if loan and type(loan.X) == "number" and type(loan.Y) == "number" then
+          reserved[loan.X .. ":" .. loan.Y] = true
+        end
+      end
+    elseif slot and type(slot.X) == "number" and type(slot.Y) == "number" then
+      reserved[slot.X .. ":" .. slot.Y] = true
+    end
   end
   for id, tx in pairs(state.Transactions or {}) do
     if id ~= excludingTransaction and tx.Status ~= "COMPLETE" then
@@ -2936,6 +2944,25 @@ local function NativeRecoverySourceEmpty(source)
   end
 end
 local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
+  if GameConfiguration and GameConfiguration.IsAnyMultiplayer
+    and GameConfiguration.IsAnyMultiplayer() then
+    assert(JAC_CarrierMP, "native MP recovery binding unavailable")
+    intent.NativeSource = intent.NativeSource or R.Copy(source)
+    if not JAC_CarrierMP.AdvanceRecovery(state, intent, intent.NativeSource, owner, token) then
+      local carrier = intent.NativeCarrier
+      intent.ObservationToken = carrier and (carrier.Token .. ":mp:" .. carrier.MP.Nonce)
+        or (token .. ":executor")
+      intent.Status = "WAITING_UI"
+      Save(state)
+      return false
+    end
+    intent.ObservationToken, intent.WaitingFor = nil, nil
+    NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
+      TargetSlot = intent.NativeTarget, Carrier = intent.NativeCarrier })
+    NativeWorkSourceEmpty(nil, { Carrier = intent.NativeCarrier })
+    Save(state)
+    return true
+  end
   if not intent.NativeTarget then
     local already = NativeWorkLocations(source.Index)
     if #already == 1 and already[1].Owner == owner then
@@ -3047,7 +3074,11 @@ function A.RecoverArchived(id, owner, token, original)
   end
   if record.Kind == "ITEM" then
     if record.NativeWork then
-      local work = RecoveredNativeWork(record.NativeWork, owner)
+      local work
+      if intent.NativeCarrier and intent.NativeCarrier.MP then
+        work = NativeWorkAtTarget({ ID = token, Source = intent.NativeSource,
+          TargetSlot = intent.NativeTarget, Carrier = intent.NativeCarrier })
+      else work = RecoveredNativeWork(record.NativeWork, owner) end
       record.NativeWork = R.Copy(work)
       record.NativeOwnerMoves = (archived.NativeOwnerMoves or 0) + 1
       record.City = { Owner = owner, X = work.X, Y = work.Y }

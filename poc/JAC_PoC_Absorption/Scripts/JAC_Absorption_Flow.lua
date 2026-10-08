@@ -856,6 +856,20 @@ end
 function F.ResumeWorldFor(actor, id, observationToken)
   local state = State()
   local world = assert(state.World[id], "unknown escaped world asset")
+  local recovery = A.GetState().Recoveries["recovery:" .. world.ID]
+  local carrier = recovery and recovery.NativeCarrier
+  if carrier and carrier.MP then
+    assert(world.Status == "CLAIMED" and type(observationToken) == "string"
+      and world.WaitingFor == observationToken and recovery.ObservationToken == observationToken,
+      "MP world recovery token is not pending")
+    assert(actor == carrier.MP.Actor and Players[actor] and Players[actor]:IsAlive()
+      and Players[actor]:IsHuman() and Players[actor]:IsTurnActive(),
+      "only the selected human executor can resume MP world recovery")
+    assert(carrier.Owner == world.Recipient and carrier.MP.Recovery == "recovery:" .. world.ID,
+      "MP world recipient differs from recovery reservation")
+    ClaimWorld(state, world, world.Recipient)
+    return R.Copy(world)
+  end
   assert(type(actor) == "number" and actor == world.Recipient
     and Players[actor] and Players[actor]:IsAlive() and Players[actor]:IsHuman(),
     "only the reward recipient can resume world recovery")
