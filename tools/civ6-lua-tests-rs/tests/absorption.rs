@@ -776,6 +776,7 @@ fn package_manifest() {
             "Scripts/JAC_Absorption_Entry.lua",
             "Scripts/JAC_CarrierBoundary.lua",
             "Scripts/JAC_NativeInventory.lua",
+            "Scripts/JAC_NativeDeal.lua",
             "UI/JAC_AbsorptionFlow.lua",
             "UI/JAC_AbsorptionFlow.xml",
             "UI/JAC_Absorption_HeroKeys.lua",

@@ -95,13 +95,17 @@ local function descriptors()
   if type(free)=='number' and free>=0 and Players[free] and not seen[free] then ids[#ids+1]=free end
   table.sort(ids)
   for _,owner in ipairs(ids) do for _,c in Players[owner]:GetCities():Members() do
-    local buildings={};for info in GameInfo.Buildings() do
-      if c:GetBuildings():HasBuilding(info.Index) then buildings[info.Index]=true end
+    local buildings={};local pillaged={};for info in GameInfo.Buildings() do
+      local b=c:GetBuildings()
+      if b:HasBuilding(info.Index) then
+        buildings[info.Index]=true
+        if b.IsPillaged then pillaged[info.Index]=b:IsPillaged(info.Index) end
+      end
     end
     local props={};local keys=A.NativeCarrierPropertyKeys()
     for k in pairs(keys) do props[k]=R.Copy(c:GetProperty(k)) end
     rows[#rows+1]={Owner=owner,ID=c:GetID(),X=c:GetX(),Y=c:GetY(),Name=c:GetName(),Population=c:GetPopulation(),
-      Buildings=buildings,PropertyKeys=keys,Properties=props}
+      Buildings=buildings,Pillaged=pillaged,PropertyKeys=keys,Properties=props}
   end end
   table.sort(rows,function(a,b) return a.Owner==b.Owner and a.ID<b.ID or a.Owner<b.Owner end)
   return rows
@@ -117,13 +121,17 @@ local function captureCore(core)
     local identity=c.GetCulturalIdentity and c:GetCulturalIdentity()
     local religion=c:GetReligion();local districts=c:GetDistricts()
     if not identity or not identity.GetLoyalty or not religion.GetReligionsInCity or not districts.Members then return nil end
-    local row=R.Copy(d);row.Reads={LOYALTY=identity:GetLoyalty(),RELIGIONS={},DISTRICTS={},SLOTS={},WORK={}}
+    local row=R.Copy(d);row.Reads={LOYALTY=identity:GetLoyalty(),RELIGIONS={},DISTRICTS={},SLOTS={},WORK={},SLOT_TYPES={}}
     for _,r in pairs(religion:GetReligionsInCity()) do row.Reads.RELIGIONS[#row.Reads.RELIGIONS+1]=R.Copy(r) end
     for _,r in districts:Members() do row.Reads.DISTRICTS[#row.Reads.DISTRICTS+1]={Type=GameInfo.Districts[r:GetType()].DistrictType,X=r:GetX(),Y=r:GetY()} end
     for building in pairs(d.Buildings) do
-      local count=b:GetNumGreatWorkSlots(building);row.Reads.SLOTS[building]=count;row.Reads.WORK[building]={}
+      local count=b:GetNumGreatWorkSlots(building);row.Reads.SLOTS[building]=count;row.Reads.WORK[building]={};row.Reads.SLOT_TYPES[building]={}
       for slot=0,count-1 do
         local index=b:GetGreatWorkInSlot(building,slot);row.Reads.WORK[building][slot]=index
+        if b.GetGreatWorkSlotType and GameInfo.GreatWorkSlotTypes then
+          local info=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(building,slot)]
+          if info then row.Reads.SLOT_TYPES[building][slot]=info.GreatWorkSlotType end
+        end
         if index>=0 then
           local kind=b:GetGreatWorkTypeFromIndex(index);local info=assert(GameInfo.GreatWorks[kind]);local effects={}
           for r in GameInfo.GreatWork_YieldChanges() do if r.GreatWorkType==info.GreatWorkType then effects[#effects+1]=r.YieldType..' '..r.YieldChange end end
@@ -145,7 +153,7 @@ local function validate(o,core)
   assert(type(o)=='table' and dense(o.Cities)==#core,'inventory observation shape');dense(o.Works)
   local cities={};local expected={}
   for i,d in ipairs(core) do
-    local row=assert(o.Cities[i]);local fields={'Owner','ID','X','Y','Name','Population','Buildings','PropertyKeys','Properties'}
+    local row=assert(o.Cities[i]);local fields={'Owner','ID','X','Y','Name','Population','Buildings','Pillaged','PropertyKeys','Properties'}
     for _,field in ipairs(fields) do assert(Equal(row[field],d[field]),'inventory Core descriptor changed: '..field) end
     local reads=assert(row.Reads);assert(type(reads.SLOTS)=='table' and type(reads.WORK)=='table'
       and type(reads.RELIGIONS)=='table' and type(reads.DISTRICTS)=='table'
@@ -177,6 +185,11 @@ local function validate(o,core)
       for slot=0,count-1 do
         local index=slots[slot];assert(type(index)=='number' and index>=-1 and index==math.floor(index),'inventory slot value')
         if native.GetGreatWorkInSlot then assert(index==native:GetGreatWorkInSlot(building,slot),'inventory Core work changed') end
+        local kind=reads.SLOT_TYPES and reads.SLOT_TYPES[building] and reads.SLOT_TYPES[building][slot]
+        if native.GetGreatWorkSlotType and GameInfo.GreatWorkSlotTypes then
+          local info=GameInfo.GreatWorkSlotTypes[native:GetGreatWorkSlotType(building,slot)]
+          assert(kind==(info and info.GreatWorkSlotType),'inventory Core slot type changed')
+        end
         if index>=0 then assert(not expected[index],'inventory duplicate index');expected[index]={d=d,Building=building,Slot=slot} end
       end
     end
@@ -208,6 +221,12 @@ local function validate(o,core)
   return cities
 end
 function NI.HasContext() return context~=nil end
+function NI.Snapshot()
+  assert(context,'shared inventory context required');return R.Copy(context.Request.Observation)
+end
+function NI.EvidenceKind()
+  assert(context,'shared inventory context required');return context.Request.EvidenceKind
+end
 function NI.With(plan,phase,fn)
   local id=assert(plan.ID)
   assert(type(id)=='string' and #id>0 and #id<=256 and type(plan.From)=='number'
@@ -239,7 +258,14 @@ function NI.With(plan,phase,fn)
   if not values[1] then error(values[2],0) end
   -- A later logical read gets another publication, even if only UI-only work
   -- positions changed and the Core descriptor signature remained identical.
-  b=box();b.Requests[key].Consumed=true;save(b)
+  b=box()
+  if phase:match('^DEAL_AFTER:') and values[2]==false then
+    local pending=b.Requests[key];b.Serial=b.Serial+1
+    pending.Nonce=b.Serial;pending.Actor=selected();pending.Observation=nil;pending.Receipt=nil
+    pending.Chunks=nil;pending.ChunkCount=nil;pending.Core=descriptors();pending.CoreSignature=Encode(pending.Core)
+    pending.Turn=Game.GetCurrentGameTurn();pending.Consumed=false
+  else b.Requests[key].Consumed=true end
+  save(b)
   return unpack(values,2)
 end
 function NI.Works(owner)
@@ -267,6 +293,7 @@ function NI.Tick()
       local ok,err=pcall(function()
         if q.Phase=='FLOW_BEGIN' then return JAC_AbsorptionFlowGameplay.Begin(q.Plan) end
         if q.Phase=='FLOW_CHECK' then return JAC_AbsorptionFlowGameplay.Resolve(q.To,q.ID) end
+        if q.Phase:match('^DEAL_') then return A.Resume(q.ID) end
         if q.Phase=='SOURCE_PREPARE' or q.Phase=='CITY_COMMIT' or q.Phase=='CITY_VERIFY'
           or q.Phase:match('^CITY_LOYALTY:') then
           local tx=A.GetState().Transactions[q.ID]

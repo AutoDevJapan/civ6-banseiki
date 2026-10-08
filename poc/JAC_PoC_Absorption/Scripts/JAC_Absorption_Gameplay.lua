@@ -515,10 +515,13 @@ end
 -- A city already carries every installed work through the engine's owner change.
 -- Only an outcome outside the absorber (or a Palace replaced by the engine)
 -- needs an independent physical movement before that change.
-local function NativeWorkRoute(source, tracked, donor, destination, custodian)
+local function NativeWorkRoute(source, tracked, donor, destination, custodian, transactionID)
   if not custodian then return "CITY" end
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
-    and Multiplayer() and destination >= 0 then return "CARRIER" end
+    and Multiplayer() and destination >= 0 then
+    if JAC_NativeDeal and JAC_NativeDeal.Original(source,tracked,donor,destination,custodian,transactionID) then return "DEAL" end
+    return "CARRIER"
+  end
   if destination < 0 or (tracked and tracked.NativeOwnerMoves or 0) > 0
     or source.BuildingType == "BUILDING_PALACE" and source.CreatedByPlayer ~= donor then
     return "CARRIER"
@@ -1083,7 +1086,7 @@ local function PrepareLocal(plan, state, sourceReads, sourceReadyToken)
       and (not asset.NativeWork or asset.NativeWork.Index == work.Index),
       "native Great Work roster identity mismatch: " .. id)
     if asset.NativeWork then SameNativeWorkIdentity(asset.NativeWork, work) end
-    local nativeRoute = NativeWorkRoute(work, asset, tx.From, destination, custodian)
+    local nativeRoute = NativeWorkRoute(work, asset, tx.From, destination, custodian,tx.ID)
     asset.NativeWork, asset.Type = R.Copy(work), work.ObjectType or "NATIVE_GREAT_WORK"
     asset.Name = asset.Name or work.Name or work.GreatWorkType or id
     asset.City = { Owner = tx.From, X = work.X, Y = work.Y }
@@ -2013,6 +2016,9 @@ local function BuildNativeWorkDeal(from, to, index, subtype, priorWorks)
   return working
 end
 
+-- Core-private registration; this method is never exported through ExposedMembers.
+A.BuildNativeWorkDealCore=BuildNativeWorkDeal
+
 local function NativeCarrierState(city, carrier)
   local building
   for info in GameInfo.Buildings() do
@@ -2318,7 +2324,7 @@ local function MoveNativeWorks(state, tx)
         snap.NativeRoute = snap.Carrier and "CARRIER" or snap.Custodian and "DEAL" or "CITY"
       else
         snap.NativeRoute = NativeWorkRoute(snap.Source, tx.SourceRoster[snap.ID],
-          tx.From, snap.Destination, snap.Custodian)
+          tx.From, snap.Destination, snap.Custodian,tx.ID)
         if snap.NativeRoute == "CARRIER" and snap.Destination >= 0
           and not snap.Carrier then snap.TargetSlot = nil end
       end
@@ -2356,6 +2362,9 @@ local function MoveNativeWorks(state, tx)
       if not JAC_CarrierMP.AdvanceSnap(state, tx, snap) then
         error("JAC_ABSORPTION_WAITING_UI", 0)
       end
+    elseif Multiplayer() and snap.Custodian and snap.NativeRoute=="DEAL" then
+      assert(JAC_NativeDeal,"native original-work deal binding unavailable")
+      if not JAC_NativeDeal.Advance(state,tx,snap) then error("JAC_ABSORPTION_WAITING_UI",0) end
     else
     if snap.Custodian then
       if not snap.TargetSlot then
@@ -2486,6 +2495,7 @@ end
 
 local function Execute(state, tx)
   MoveNativeWorks(state, tx) -- no unit deletion or city transfer precedes external-work proof
+  local function executeAfterNativeWorks()
   -- Ordinary units can be staged without affecting ownership. Native heroes require their origin city.
   for _, snap in ipairs(tx.Units) do
     if snap.KeepUnit and not snap.Hero then
@@ -2664,6 +2674,15 @@ local function Execute(state, tx)
     return JAC_NativeInventory.With(tx,"CITY_COMMIT",finalizeCityInheritance)
   end
   return finalizeCityInheritance()
+  end
+  if Multiplayer() then
+    for _,snap in ipairs(tx.NativeWorks or {}) do
+      if snap.MPDeal and snap.PhysicalMoved then
+        return JAC_NativeInventory.With(tx,"DEAL_EXECUTE",executeAfterNativeWorks)
+      end
+    end
+  end
+  return executeAfterNativeWorks()
 end
 
 -- The UI issues the normal city purchase between these two calls. A saved intent
@@ -2813,6 +2832,12 @@ function A.Resume(id)
   local state = State()
   local tx = assert(state.Transactions[id], "unknown absorption transaction")
   if tx.Status == "COMPLETE" then return R.Copy(tx) end
+  if tx.Turn~=Game.GetCurrentGameTurn() and not tx.Request.FlowPolicy and Multiplayer()
+    and JAC_NativeDeal and JAC_NativeDeal.HasContinuation(tx) then
+    JAC_NativeDeal.ContinueOnly(state,tx)
+    tx.Status,tx.Error="WAITING_UI",nil;tx.WaitingFor="MP_DEAL_CONTINUATION_ONLY";Save(state)
+    return R.Copy(tx)
+  end
   if tx.Turn ~= Game.GetCurrentGameTurn() and not tx.Request.FlowPolicy
     and GameConfiguration and GameConfiguration.IsAnyMultiplayer
     and Multiplayer() and JAC_CarrierMP

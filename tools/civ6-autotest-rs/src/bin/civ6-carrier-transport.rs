@@ -24,6 +24,9 @@ enum Command {
     GenerateInventoryUi {
         output: PathBuf,
     },
+    GenerateDeal {
+        output: PathBuf,
+    },
     SendQuery {
         checkpoint: PathBuf,
         active_humans: String,
@@ -34,6 +37,7 @@ fn run(args: Args) -> Result<()> {
         Command::Generate { output } => fs::write(output, transport::gameplay_binding())?,
         Command::GenerateUi { output } => fs::write(output, transport::ui_binding())?,
         Command::GenerateInventory { output } => fs::write(output, transport::inventory_binding())?,
+        Command::GenerateDeal { output } => fs::write(output, transport::deal_binding())?,
         Command::GenerateInventoryUi { output } => {
             fs::write(output, transport::inventory_ui_binding())?
         }

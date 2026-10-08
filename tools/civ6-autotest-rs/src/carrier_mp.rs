@@ -93,6 +93,9 @@ function MP.Preflight(tx)
   -- Scan every item before the first city loan, not only the next item.
   for _,snap in ipairs(tx.NativeWorks or {}) do
     if snap.Custodian then
+      if snap.NativeRoute=='DEAL' then
+        assert(JAC_NativeDeal,'MP original-work Core deal binding unavailable').Preflight(tx,snap)
+      else
       assert(snap.NativeRoute=='CARRIER','MP legacy deal needs reconciliation')
       assert(snap.Source.BuildingType~='BUILDING_PALACE','MP Palace source needs native preservation proof')
       assert(snap.Source.ObjectType~='GREATWORKOBJECT_ARTIFACT','MP artifact cannot move to an empty museum')
@@ -103,6 +106,7 @@ function MP.Preflight(tx)
           assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},actor),
             'MP source city cannot be safely borrowed')
         end
+      end
       end
     end
   end

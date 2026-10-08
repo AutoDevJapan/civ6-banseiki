@@ -59,15 +59,19 @@ local function observe(q)
     local c=assert(Players[d.Owner]:GetCities():FindID(d.ID),'inventory UI city not published')
     assert(c:GetX()==d.X and c:GetY()==d.Y and c:GetOwner()==d.Owner,'inventory UI identity changed')
     local b=c:GetBuildings();local row={Owner=d.Owner,ID=d.ID,X=d.X,Y=d.Y,Name=c:GetName(),Population=c:GetPopulation(),
-      Buildings={},PropertyKeys=R.Copy(d.PropertyKeys),Properties={},Reads={RELIGIONS={},DISTRICTS={},SLOTS={},WORK={},LOYALTY=c:GetCulturalIdentity():GetLoyalty()}}
+      Buildings={},Pillaged=R.Copy(d.Pillaged),PropertyKeys=R.Copy(d.PropertyKeys),Properties={},Reads={RELIGIONS={},DISTRICTS={},SLOTS={},WORK={},SLOT_TYPES={},LOYALTY=c:GetCulturalIdentity():GetLoyalty()}}
     for k in pairs(d.PropertyKeys) do row.Properties[k]=R.Copy(c:GetProperty(k)) end
     for _,r in pairs(c:GetReligion():GetReligionsInCity()) do row.Reads.RELIGIONS[#row.Reads.RELIGIONS+1]=R.Copy(r) end
     for _,r in c:GetDistricts():Members() do row.Reads.DISTRICTS[#row.Reads.DISTRICTS+1]={Type=GameInfo.Districts[r:GetType()].DistrictType,X=r:GetX(),Y=r:GetY()} end
     for info in GameInfo.Buildings() do if b:HasBuilding(info.Index) then
       local building=info.Index;row.Buildings[building]=true;local count=b:GetNumGreatWorkSlots(building)
-      row.Reads.SLOTS[building]=count;row.Reads.WORK[building]={}
+      row.Reads.SLOTS[building]=count;row.Reads.WORK[building]={};row.Reads.SLOT_TYPES[building]={}
       for slot=0,count-1 do
         local index=b:GetGreatWorkInSlot(building,slot);row.Reads.WORK[building][slot]=index
+        if b.GetGreatWorkSlotType and GameInfo.GreatWorkSlotTypes then
+          local slotInfo=GameInfo.GreatWorkSlotTypes[b:GetGreatWorkSlotType(building,slot)]
+          if slotInfo then row.Reads.SLOT_TYPES[building][slot]=slotInfo.GreatWorkSlotType end
+        end
         if index>=0 then
           local kind=b:GetGreatWorkTypeFromIndex(index);local definition=assert(GameInfo.GreatWorks[kind]);local effects={}
           for r in GameInfo.GreatWork_YieldChanges() do if r.GreatWorkType==definition.GreatWorkType then effects[#effects+1]=r.YieldType..' '..r.YieldChange end end
