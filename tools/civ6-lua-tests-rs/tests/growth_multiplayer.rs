@@ -240,6 +240,35 @@ fn gameplay_can_register_turn_handler_without_ui_loadscreen_event() {
 }
 
 #[test]
+fn unavailable_network_roster_api_has_a_distinct_diagnostic_and_no_partial_writes() {
+    let endpoint = Endpoint::new(0, false, None);
+    endpoint.exec("network=true; GameConfiguration.GetParticipatingPlayerIDs=nil; beginturn(0)");
+    let missing: bool = endpoint
+        .0
+        .load("return LOG[#LOG]:find('network roster API unavailable',1,true)~=nil")
+        .eval()
+        .unwrap();
+    assert!(missing);
+    assert!(endpoint.state()["properties"]["JAC_POC_GROWTHUI_INITIALIZED"].is_null());
+    assert!(endpoint.record(0, 65536).is_null());
+    endpoint.exec("GameConfiguration.GetParticipatingPlayerIDs=function() return {0,1} end; beginturn(0); beginturn(1)");
+    assert_eq!(endpoint.record(1, 65536)["XP"], 20);
+}
+
+#[test]
+fn network_save_and_rejoin_keep_xp_even_without_new_initialization_apis() {
+    let host = Endpoint::new(0, false, None);
+    host.exec("network=true; loadscreen(); beginturn(0); beginturn(1)");
+    let serialized = serde_json::to_vec(&host.state()).unwrap();
+    let saved: Json = serde_json::from_slice(&serialized).unwrap();
+    for local in 0..=1 {
+        let restored = Endpoint::new(local, true, Some(&saved));
+        restored.exec("network=true; GameConfiguration.GetParticipatingPlayerIDs=nil; loadscreen(); beginturn(0); beginturn(1)");
+        assert_eq!(saved, restored.state());
+    }
+}
+
+#[test]
 fn restored_level_cap_and_all_metadata_survive_duplicate_turns() {
     let endpoint = Endpoint::new(0, false, None);
     endpoint.exec("loadscreen(); beginturn(0)");

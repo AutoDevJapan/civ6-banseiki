@@ -17,17 +17,18 @@ local TRAITS = {
 
 local initializedThisSession = false
 local newGameReported = false
-local waitingReported = false
+local waitingReason = nil
 
 local function IsNetworkGame()
 	return GameConfiguration and GameConfiguration.IsNetworkMultiplayer
 		and GameConfiguration.IsNetworkMultiplayer() == true
 end
 
-local function ReportWaiting()
-	if not waitingReported then
-		print("[JAC_POC] waiting for human starting units and roster")
-		waitingReported = true
+local function ReportWaiting(reason)
+	reason = reason or "waiting for human starting units and roster"
+	if waitingReason ~= reason then
+		print("[JAC_POC] " .. reason)
+		waitingReason = reason
 	end
 end
 
@@ -79,14 +80,18 @@ local function InitializeNewGame()
 		-- Official StagingRoom.lua uses GetParticipatingPlayerIDs and config:IsHuman.
 		-- Do not initialize only the peers whose gameplay objects already arrived.
 		if not GameConfiguration.GetParticipatingPlayerIDs or not PlayerConfigurations then
-			ReportWaiting()
+			ReportWaiting("network roster API unavailable; growth initialization is pending")
 			return
 		end
 		local found, expected = {}, 0
 		for _, player in ipairs(humans) do found[player:GetID()] = true end
 		for _, id in ipairs(GameConfiguration.GetParticipatingPlayerIDs()) do
 			local config = PlayerConfigurations[id]
-			if not config or not config.IsHuman then ReportWaiting(); return end
+			if not config then ReportWaiting(); return end
+			if not config.IsHuman then
+				ReportWaiting("configured human getter unavailable; growth initialization is pending")
+				return
+			end
 			if config:IsHuman() then
 				expected = expected + 1
 				if not found[id] then ReportWaiting(); return end
@@ -122,10 +127,7 @@ local function InitializeNewGame()
 	end
 
 	if assigned == 0 then
-		if not waitingReported then
-			Log("waiting for human starting units")
-			waitingReported = true
-		end
+		ReportWaiting()
 		return
 	end
 
