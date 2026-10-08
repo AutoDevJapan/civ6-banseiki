@@ -1467,7 +1467,9 @@ mod native_transport {
             return {{Owner=ARTIFACT_RECIPIENT==2 and 2 or 3,City=CITIES[16].id,X=16,Y=0,
               Building=1,Slot=0,SlotType='GREATWORKSLOT_ARTIFACT'}} end
           UI.RequestPlayerOperation=function(actor,op,p)
-            local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+            local state=JAC_AbsorptionGameplay.GetState()
+            local c=ARTIFACT_RECOVERY and state.Recoveries['recovery:artifact'].NativeCarrier
+              or state.Transactions.checkpoint.NativeWorks[1].Carrier
             assert(actor==LOCAL_PLAYER and actor==c.MP.Actor and Players[actor]:IsHuman())
             if op=='script' then PACKETS[#PACKETS+1]=p;return true end
             assert(op=='move' and p.owner==actor and p.index==900 and p.slot==0)
@@ -1579,6 +1581,61 @@ mod native_transport {
                     right.load(state).eval::<String>().unwrap()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn mp_artifact_public_recovery_moves_once_and_preserves_museum_originals() {
+        for recipient in [2, 3] {
+            let left = artifact_world(2, false, recipient);
+            let right = artifact_world(3, false, recipient);
+            for lua in [&left, &right] {
+                lua.load(r#"
+                  ARTIFACT_RECOVERY=true
+                  GameInfo.GreatWorks.GREATWORK_TEST=GameInfo.GreatWorks[4]
+                  GameEvents.JAC_NativeInventory_Operation={Add=function() end}
+                  TEST_STATE_EDIT(function(s)
+                    s.Archive['native-work:900']={ID='native-work:900',Kind='ITEM',Owner=-1,NativeOwnerMoves=1,
+                      NativeWork=JAC_AbsorptionRules.Copy(s.Transactions.checkpoint.NativeWorks[1].Source)}
+                  end)
+                  function MP_PLAN()
+                    return JAC_AbsorptionGameplay.RecoverArchived('native-work:900',ARTIFACT_RECIPIENT,'recovery:artifact').Status=='COMPLETE'
+                  end
+                  function MP_OBSERVE()
+                    return JAC_ObserveNativeCarrierMP(JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier)
+                  end
+                "#).exec().unwrap();
+                lua.load(
+                    fs::read_to_string(
+                        repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_NativeInventory.lua"),
+                    )
+                    .unwrap(),
+                )
+                .exec()
+                .unwrap();
+                assert!(!lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+            }
+            for _ in 0..12 {
+                let phase=left.load("return JAC_AbsorptionGameplay.GetState().Recoveries['recovery:artifact'].NativeCarrier.MP.Phase").eval::<String>().unwrap();
+                if phase == "DONE" {
+                    break;
+                }
+                if phase == "DISPATCH" {
+                    assert!(!left.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+                    right.load("WORK_X=16").exec().unwrap();
+                }
+                let packet = mp_publish(&left);
+                for lua in [&right, &left] {
+                    assert!(mp_receive(lua, &packet));
+                }
+            }
+            for lua in [&left, &right] {
+                assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                assert!(lua.load("return MP_PLAN()").eval::<bool>().unwrap());
+                lua.load("local r=Players[ARTIFACT_RECIPIENT]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(r.NativeOwnerMoves==2 and r.NativeWork.Index==900 and r.NativeWork.Owner==ARTIFACT_RECIPIENT);for _,index in ipairs({900,901,902,903}) do assert(#JAC_AbsorptionGameplay.NativeWorkLocations(index)==1) end;assert(CITIES[4].owner==1 and CITIES[16].owner==ARTIFACT_RECIPIENT and WORK_X==16)").exec().unwrap();
+            }
+            assert_eq!(left.load("return UI_MOVES").eval::<i64>().unwrap(), 1);
+            assert_eq!(right.load("return UI_MOVES").eval::<i64>().unwrap(), 0);
         }
     }
 
