@@ -5,6 +5,16 @@ use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::PathBuf};
 
 const ORIGINAL: &str = include_str!("../../civ6-autotest/scenarios/leader-persona-15km.json");
+const READY: &str = r#"
+local p=Players[0]; local api=ExposedMembers.JAC_LeaderPersona
+if not p or not p:IsTurnActive() or UI.IsGameCoreBusy() or UI.IsProcessingMessages()
+ or type(api)~='table' or type(api.EventsGameplayStatus)~='function' then return false end
+local s=api.EventsGameplayStatus(0,'LEADER_JAC_DATE_TANEMUNE')
+return type(s)=='table' and s.active==true
+ and s.source=='civ6-persona-events-rs/v3/normal-Gameplay'
+ and type(s.registrations)=='table'
+ and s.registrations.GovernorAppointed==true and s.registrations.GovernorPromoted==true
+"#;
 const READ: &str = r#"
 local leader='LEADER_JAC_DATE_TANEMUNE'
 local row=assert(GameInfo.JAC_LeaderPersonas[leader])
@@ -81,7 +91,7 @@ fn scene(
     let original: Value = serde_json::from_str(ORIGINAL).unwrap();
     let load =
         json!({"action":"load","name":name,"exact_name":true,"save_sha256":save_sha,"timeout":300});
-    let wait = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return Players[0] and Players[0]:IsTurnActive() and not UI.IsGameCoreBusy() and not UI.IsProcessingMessages() and type(ExposedMembers.JAC_LeaderPersona)=='table'"}});
+    let wait = json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":READY}});
     let read = json!({"action":"ui_lua","state_name":"InGame","code":read_code(expect_assignable),"timeout":30});
     json!({"name":"Read-only paid Governor: cold saved-world load and same-process reload; not assignment acceptance","judge_profile":"generic","strict_lua_errors":true,"steps":[
         original["steps"][0],{"action":"restart_game"},
@@ -122,6 +132,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ready_requires_restored_normal_gameplay_and_both_official_subscriptions() {
+        let lua = mlua::Lua::new();
+        lua.load(
+            r#"
+            local function unexpected() error('readiness sent an operation') end
+            PlayerOperations={EXECUTE_SCRIPT=1}; UnitManager={RequestOperation=unexpected}
+            UI={IsGameCoreBusy=function() return false end,
+                IsProcessingMessages=function() return false end, RequestPlayerOperation=unexpected}
+            Players={[0]={IsTurnActive=function() return true end}}
+            ExposedMembers={JAC_LeaderPersona={EventsGameplayStatus=function(owner,leader)
+              assert(owner==0 and leader=='LEADER_JAC_DATE_TANEMUNE'); return status
+            end}}
+            "#,
+        )
+        .exec()
+        .unwrap();
+        for (status, ready) in [
+            ("nil", false),
+            ("{active=false,source='civ6-persona-events-rs/v3/normal-Gameplay'}", false),
+            ("{active=true,source='diagnostic',registrations={GovernorAppointed=true,GovernorPromoted=true}}", false),
+            ("{active=true,source='civ6-persona-events-rs/v3/normal-Gameplay'}", false),
+            ("{active=true,source='civ6-persona-events-rs/v3/normal-Gameplay',registrations={GovernorAppointed=true,GovernorPromoted=false}}", false),
+            ("{active=true,source='civ6-persona-events-rs/v3/normal-Gameplay',registrations={GovernorAppointed=false,GovernorPromoted=true}}", false),
+            ("{active=true,source='civ6-persona-events-rs/v3/normal-Gameplay',registrations={GovernorAppointed=true,GovernorPromoted=true}}", true),
+        ] {
+            lua.load(format!("status={status}")).exec().unwrap();
+            assert_eq!(lua.load(READY).eval::<bool>().unwrap(), ready, "{status}");
+        }
+        lua.load("UI.IsGameCoreBusy=function() return true end")
+            .exec()
+            .unwrap();
+        assert!(!lua.load(READY).eval::<bool>().unwrap());
+    }
 
     #[test]
     fn saved_input_is_pinned_twice_and_no_operation_is_replayed() {
