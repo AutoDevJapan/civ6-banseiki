@@ -106,7 +106,22 @@ fn pr87_restart_increment_maps_all_nine_original_methods_to_executable_tests() {
     let mut targets = BTreeSet::new();
     for row in &rows {
         assert_eq!(row["source"], "tools/civ6-autotest/tests/test_restart.py");
-        assert_eq!(row["rust_test"], row["test"]);
+        // Preserve historical inventory IDs while mapping the superseded URI
+        // retry assertions to the current one-request launch policy.
+        let original_name = row["test"].as_str().unwrap();
+        let expected = match original_name {
+            "test_failed_new_launch_releases_its_helper_before_next_steam_request" => {
+                "test_failed_new_launch_is_not_replayed_without_a_proven_new_attempt"
+            }
+            "test_four_launch_requests_still_wait_for_delayed_window_until_deadline" => {
+                "test_single_launch_request_waits_for_delayed_window_until_deadline"
+            }
+            "test_exhausted_launch_requests_fail_at_the_supplied_deadline" => {
+                "test_single_unresolved_launch_fails_at_the_supplied_deadline"
+            }
+            name => name,
+        };
+        assert_eq!(row["rust_test"], expected);
         let target = row["rust_target"].as_str().unwrap();
         assert_eq!(
             target,

@@ -71,12 +71,12 @@ impl Clock for FakeClock {
     }
 }
 
+type ConnectFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
+type PressFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
 type StateFn = Box<dyn FnMut(f64) -> Result<Vec<String>> + Send>;
 type LuaFn = Box<dyn FnMut(&str, &str, f64) -> Result<String> + Send>;
 type ProcessFn = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type CaptureFn = Box<dyn FnMut(&Path, Option<[f64; 4]>, f64) -> Result<()> + Send>;
-type ConnectFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
-type PressFn = Box<dyn FnMut(u16, f64) -> Result<()> + Send>;
 
 pub struct SafetyBackend {
     control_owned: bool,

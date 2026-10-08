@@ -686,7 +686,7 @@ fn atlas_images_missing_from_mod_packages_are_reported() {
     let blp = folder.join("Icons.blp");
     fs::write(&blp, b"header JAC_Old36 pixels").unwrap();
     assert_eq!(
-        restart::missing_atlas_textures(&[folder.clone()]).unwrap(),
+        restart::missing_atlas_textures(std::slice::from_ref(&folder)).unwrap(),
         ["MyMod: JAC_Crests36"]
     );
     fs::write(&blp, b"JAC_Old36 JAC_Crests36").unwrap();
