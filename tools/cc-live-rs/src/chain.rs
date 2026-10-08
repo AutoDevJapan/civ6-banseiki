@@ -1390,7 +1390,7 @@ fn main_owned(
         let timeout = scenario_timeout;
         let lease = token.map(|token| process::LeaseLimit::new(p, token, CLEANUP_RESERVE_SECONDS));
         if let Some(limit) = &lease {
-            process::observe_lease(r, limit)?;
+            process::monitor_lease(r, limit)?;
             if let Some(deadline) = limit.work_deadline() {
                 if r.monotonic() >= deadline {
                     return Err(format!(
