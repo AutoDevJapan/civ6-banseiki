@@ -13,7 +13,10 @@ const CANDIDATE: &str = "e977a244-test-fixture";
 
 // Use the shipped Lua gameplay inventory, not a Rust reimplementation.
 fn world(local_player: i64) -> Lua {
-    let lua = Lua::new();
+    world_in(Lua::new(), local_player)
+}
+
+fn world_in(lua: Lua, local_player: i64) -> Lua {
     lua.load(include_str!(
         "../../civ6-autotest-native/tests/fixtures/absorption_world.lua"
     ))
@@ -601,6 +604,63 @@ mod native_transport {
     }
     fn message(lua: &Lua) -> serde_json::Value {
         transport::packet(&checkpoint(lua), &[2]).unwrap()
+    }
+
+    #[test]
+    fn resumed_native_phases_refuse_mp_before_any_local_read_or_city_mutation() {
+        for phase in ["BORROW", "MOVE", "RETURN", "RESTORE", "PROVED", "RESTORED"] {
+            // Reverse the peer order on replay. Each recreation loads the saved
+            // intent into an independent Lua 5.1 VM, with different local IDs.
+            for local in [2, 3, 3, 2] {
+                // Debug is used only to reach the shipped private function;
+                // this VM executes trusted repository fixtures, without I/O.
+                let lua = world_in(unsafe { Lua::unsafe_new() }, local);
+                lua.globals().set("TEST_PHASE", phase).unwrap();
+                lua.load(r#"
+                  local function find(fn, wanted, seen)
+                    if seen[fn] then return end
+                    seen[fn]=true
+                    for i=1,100 do
+                      local name,value=debug.getupvalue(fn,i)
+                      if not name then break end
+                      if name==wanted then return value end
+                      if type(value)=='function' then
+                        local found=find(value,wanted,seen)
+                        if found then return found end
+                      end
+                    end
+                  end
+                  local advance=assert(find(JAC_AbsorptionGameplay.Resume,'AdvanceNativeCarrier',{}))
+                  TEST_STATE_EDIT(function(s)
+                    local c=s.Transactions.checkpoint.NativeWorks[1].Carrier
+                    c.Phase=TEST_PHASE;c.BorrowIssued=true;c.BorrowedCity=c.OriginalCity
+                    c.MoveToken=c.Token..':move:1';c.ReturnToken=c.Token..':return'
+                  end)
+                  local saved=JAC_AbsorptionGameplay.GetState()
+                  local before=JAC_AbsorptionRules.Canonical(saved)
+                  CityManager.GetCityAt=function() error('local city read reached') end
+                  Game.GetLocalPlayer=function() error('local player read reached') end
+                  ExposedMembers.JAC_HeroReadAPI={GetObservation=function()
+                    error('local observation read reached') end}
+                  for replay=1,2 do
+                    local ok,err=pcall(advance,saved,saved.Transactions.checkpoint.NativeWorks[1].Carrier)
+                    assert(not ok and tostring(err):find('no verified multiplayer actor',1,true),tostring(err))
+                    assert(JAC_AbsorptionRules.Canonical(saved)==before)
+                    assert(JAC_AbsorptionRules.Canonical(JAC_AbsorptionGameplay.GetState())==before)
+                    assert(TRANSFERS==0)
+                  end
+                "#).exec().unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn saved_route_change_cannot_reuse_a_boundary_packet_or_receipt() {
+        let lua = ready();
+        let p = message(&lua);
+        assert!(receive(&lua, 2, &p));
+        lua.load("TEST_STATE_EDIT(function(s) s.Transactions.checkpoint.NativeWorks[1].Carrier.Route='TO_OWNER' end)").exec().unwrap();
+        assert!(!receive(&lua, 2, &p));
     }
 
     #[test]

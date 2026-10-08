@@ -12,6 +12,7 @@ pub const STATE_KEY: &str = "JAC_CARRIER_BOUNDARY_V1";
 const CARRIER_FIELDS: &[(&str, &str)] = &[
     ("Token", "Token"),
     ("Phase", "Phase"),
+    ("Route", "Route"),
     ("Index", "Index"),
     ("Owner", "Owner"),
     ("Borrower", "Borrower"),

@@ -1950,10 +1950,17 @@ local function RestoreNativeCarrierGovernance(state, city, carrier)
   Save(state)
 end
 
-local function NativeCarrierActorReady()
+local function AssertNativeCarrierContext()
+  -- Base/Assets/UI/GreatWorksOverview.lua:907,914 sends both the actor
+  -- and PARAM_PLAYER_ONE as the local player. The single-player cross-owner
+  -- route has no verified MP actor for an AI / Free Cities borrower.
   assert(not (GameConfiguration and GameConfiguration.IsAnyMultiplayer
     and GameConfiguration.IsAnyMultiplayer()),
     "native Great Work carrier MOVE has no verified multiplayer actor")
+end
+
+local function NativeCarrierActorReady()
+  AssertNativeCarrierContext()
   local actor = Game.GetLocalPlayer and Game.GetLocalPlayer()
   local player = type(actor) == "number" and Players[actor]
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -1968,6 +1975,9 @@ local function NativeCarrierSlot(carrier, owner, id)
 end
 
 local function AdvanceNativeCarrier(state, carrier)
+  -- A saved loan can resume beyond BORROW. Refuse every phase before reading
+  -- this client's UI cache, replaying a transfer, or adopting a publication.
+  AssertNativeCarrierContext()
   local city = assert(CityManager.GetCityAt(carrier.X, carrier.Y),
     "native Great Work carrier city disappeared")
   local slotValue = false
