@@ -1932,7 +1932,11 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     // boundary and inventory receivers have their own contexts and must also
     // load exactly once.
     assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 3);
-    for id in ["JAC_Absorption_Gameplay", "JAC_CarrierBoundary", "JAC_NativeInventory"] {
+    for id in [
+        "JAC_Absorption_Gameplay",
+        "JAC_CarrierBoundary",
+        "JAC_NativeInventory",
+    ] {
         assert_eq!(
             manifest
                 .matches(&format!(
