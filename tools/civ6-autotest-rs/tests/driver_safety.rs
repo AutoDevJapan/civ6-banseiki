@@ -644,7 +644,7 @@ fn test_scenario_validates_lua_code_before_running() {
                 json!({"action":"wait_for","condition":{"type":"lua","state_name":"InGame","code":code}})
             };
             let error = validate_scenario(&scenario(step)).unwrap_err();
-            error_has(error, ErrorKind::Scenario, &format!("Step 1:"));
+            error_has(error, ErrorKind::Scenario, "Step 1:");
             let error = validate_scenario(&scenario(if action == "ui_lua" {
                 json!({"action":"ui_lua","state_name":"InGame","code":code})
             } else {

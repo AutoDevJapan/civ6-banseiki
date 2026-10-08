@@ -785,8 +785,7 @@ fn verification_full_map_measurements_cover_continuous_play_and_both_reloads() {
                 .iter()
                 .map(|step| step["metrics_group"].as_str().unwrap())
                 .collect::<Vec<_>>(),
-            std::iter::repeat("CONTINUOUS")
-                .take(autos.len() - 1)
+            std::iter::repeat_n("CONTINUOUS", autos.len() - 1)
                 .chain(["POST_LOAD"])
                 .collect::<Vec<_>>()
         );
@@ -894,7 +893,8 @@ fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_
         "ERA_JAC_SHOHO",
         "ERA_JAC_KEIAN",
     ];
-    let cases: [(&str, Vec<(i64, i64)>, Vec<(i64, i64)>); 3] = [
+    type BoundaryCase = (&'static str, Vec<(i64, i64)>, Vec<(i64, i64)>);
+    let cases: [BoundaryCase; 3] = [
         (
             "sengoku-era-reigns-epic.json",
             vec![(0, 1), (1, 98), (2, 108), (3, 163)],
@@ -959,11 +959,7 @@ fn verification_boundary_checks_accept_verified_state_and_reject_wrong_turn_era_
                 history.set(format!("r{reign}"), row).unwrap();
             }
             let c = code(step);
-            assert_eq!(
-                lua.load(c).eval::<bool>().unwrap(),
-                true,
-                "{name} turn {turn}"
-            );
+            assert!(lua.load(c).eval::<bool>().unwrap(), "{name} turn {turn}");
             state.set("turn", turn + 1).unwrap();
             assert!(
                 lua.load(c).eval::<bool>().is_err(),

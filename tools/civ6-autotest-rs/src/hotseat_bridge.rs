@@ -440,7 +440,7 @@ fn parse_chunk(line: &str) -> Result<Option<Chunk>> {
         || chunk.part == 0
         || chunk.part > chunk.total
         || chunk.hex.len() > 192
-        || chunk.hex.len() % 2 != 0
+        || !chunk.hex.len().is_multiple_of(2)
         || !chunk.hex.bytes().all(|c| c.is_ascii_hexdigit())
     {
         return Err(Error::scenario("invalid hotseat chunk fields"));
@@ -472,10 +472,7 @@ fn parse_frames_inner(log: &str, run_id: &str, allow_incomplete_tail: bool) -> R
         if allow_incomplete_tail && index + 1 == lines.len() && !line.ends_with('\n') {
             break;
         }
-        let chunk = match parse_chunk(line) {
-            Ok(chunk) => chunk,
-            Err(error) => return Err(error),
-        };
+        let chunk = parse_chunk(line)?;
         let Some(chunk) = chunk else {
             continue;
         };
@@ -855,14 +852,13 @@ impl<I: TransportIo> Controller<I> {
                     match frame.kind.as_str() {
                         "BEFORE" => before = Some(WitnessSnapshot::parse(&frame.body)?),
                         "SAVE_RETURNED" => save_returned = true,
-                        "RESULT" | "REQUESTED" | "SAVE_COMPLETE" => {
-                            if frame.kind != "REQUESTED"
-                                || !answer
+                        "RESULT" | "REQUESTED" | "SAVE_COMPLETE"
+                            if (frame.kind != "REQUESTED"
+                                || answer
                                     .as_ref()
-                                    .is_some_and(|v: &(String, String)| v.0 == "SAVE_COMPLETE")
-                            {
-                                answer = Some((frame.kind.clone(), frame.body.clone()))
-                            }
+                                    .is_none_or(|v: &(String, String)| v.0 != "SAVE_COMPLETE")) =>
+                        {
+                            answer = Some((frame.kind.clone(), frame.body.clone()))
                         }
                         _ => {}
                     }
