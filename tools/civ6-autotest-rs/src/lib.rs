@@ -10,6 +10,7 @@ pub mod growth_sync;
 pub mod hotseat_bridge;
 pub mod judge;
 pub mod metrics;
+mod native_inventory;
 pub mod reliability;
 pub mod restart;
 pub mod runner;
