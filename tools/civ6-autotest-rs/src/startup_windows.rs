@@ -406,7 +406,7 @@ impl Drop for OwnedChild {
     fn drop(&mut self) {
         if !matches!(self.0.try_wait(), Ok(Some(_))) {
             let _ = self.0.kill();
-            let _ = self.0.try_wait();
+            let _ = self.0.wait();
         }
     }
 }
