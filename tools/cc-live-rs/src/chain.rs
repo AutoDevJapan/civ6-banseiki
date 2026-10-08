@@ -1091,14 +1091,23 @@ fn source_manifest(
     }
     let (revision, tree) = (ids[0], ids[1]);
     let mut files = serde_json::Map::new();
+    let scenario_key = format!("tools/civ6-autotest/scenarios/{scenario}");
     for relative in [
         driver::MANIFEST.to_owned(),
         "tools/Cargo.toml".into(),
         "tools/Cargo.lock".into(),
         "tools/civ6-autotest-rs/Cargo.lock".into(),
-        format!("tools/civ6-autotest/scenarios/{scenario}"),
+        scenario_key.clone(),
     ] {
-        let file = p.live().join(&relative);
+        // Match ship::live: join the supplied path separately so an absolute
+        // generated input replaces the base instead of becoming a filename.
+        let file = if relative == scenario_key {
+            p.live()
+                .join("tools/civ6-autotest/scenarios")
+                .join(scenario)
+        } else {
+            p.live().join(&relative)
+        };
         let contents = match fs::read_to_string(&file) {
             Ok(text) => json!(text),
             Err(error) if error.kind() == ErrorKind::NotFound => Value::Null,
@@ -1812,6 +1821,67 @@ pub fn python_cli_exit(code: i32) -> i32 {
         -1
     } else {
         code
+    }
+}
+
+#[cfg(test)]
+mod source_manifest_tests {
+    use super::*;
+
+    struct GitOnly;
+    impl Runner for GitOnly {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert_eq!(call.args[0], "git");
+            assert_eq!(call.args[3], "show");
+            Ok(Output {
+                stdout: format!("{}\n{}\n", "a".repeat(40), "b".repeat(40)),
+                ..Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            0.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("source capture must not sleep or operate a game")
+        }
+    }
+
+    struct Fixture(std::path::PathBuf);
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn source_capture_reads_relative_and_absolute_generated_inputs_exactly() {
+        let fixture =
+            Fixture(std::env::temp_dir().join(format!("cc-live-source-{}", new_lock_token())));
+        let paths = Paths {
+            wt: fixture.0.join("wt"),
+            ..Paths::default()
+        };
+        let directory = paths.live().join("tools/civ6-autotest/scenarios");
+        fs::create_dir_all(&directory).unwrap();
+        let prepared = fixture.0.join("prepared.json");
+        fs::write(&prepared, r#"{"steps":[{"action":"pause","seconds":1}]}"#).unwrap();
+        for (scenario, input) in [
+            ("relative.json".to_owned(), directory.join("relative.json")),
+            (
+                path(fixture.0.join("generated outside checkout.json")),
+                fixture.0.join("generated outside checkout.json"),
+            ),
+        ] {
+            let text = "{\"name\":\"SHA固定の生成入力\",\"steps\":[]}\n";
+            fs::write(&input, text).unwrap();
+            let manifest =
+                source_manifest(&mut GitOnly, &paths, &scenario, &path(&prepared), 30.0).unwrap();
+            assert_eq!(
+                manifest["files"][format!("tools/civ6-autotest/scenarios/{scenario}")],
+                text
+            );
+            assert_eq!(manifest["prepared_scenario"]["steps"][0]["seconds"], 1);
+        }
     }
 }
 
