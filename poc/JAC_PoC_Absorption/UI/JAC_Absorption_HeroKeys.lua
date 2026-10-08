@@ -2,6 +2,7 @@
 -- Share the engine's actual numeric enum value; never invent a replacement property.
 local uiPlayers, uiGame = Players, Game
 include('JAC_CarrierMP_UI')
+include('JAC_NativeInventory_UI')
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
 local function PublishHeroKeys()
