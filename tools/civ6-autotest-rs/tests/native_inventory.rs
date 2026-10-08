@@ -275,6 +275,36 @@ fn pending_recovery_snapshot_token_cannot_change_asset_or_original() {
 }
 
 #[test]
+fn only_recovery_source_requires_missing_core_slot_type_to_be_published() {
+    let lua = world(2, 2);
+    archive_recovery(&lua, false);
+    lua.load(
+        r#"
+      Game.GetGreatWorkPlayer=function() return 1 end
+      for x,b in pairs(CORE_BUILDINGS) do local position=x
+        b.GetNumGreatWorkSlots=function() return 1 end
+        b.GetGreatWorkInSlot=function() return position==12 and 900 or -1 end
+        b.GetGreatWorkTypeFromIndex=function() return 4 end
+        b.GetCreatorNameFromIndex=function() return 'original creator' end
+        b.GetTurnFromIndex=function() return 3 end
+        b.GetGreatWorkSlotType=nil
+      end
+      assert(RECOVER().Status=='WAITING_UI' and TRANSFERS==0 and MOVES==0)
+    "#,
+    )
+    .exec()
+    .unwrap();
+    let packet = publish(&lua);
+    lua.globals().set("SLOT_PACKET", packet.clone()).unwrap();
+    let missing = lua.load("local p=JAC_NativeInventoryCodec.Decode(SLOT_PACKET);local o=JAC_NativeInventoryCodec.Decode(p.Payload);o.Works[1].SlotType=nil;p.Payload=JAC_NativeInventoryCodec.Encode(o);return JAC_NativeInventoryCodec.Encode(p)").eval::<String>().unwrap();
+    assert!(!receive(&lua, &missing));
+    assert!(receive(&lua, &packet));
+    lua.load("assert(RECOVER().Status=='COMPLETE' and MOVES==0 and TRANSFERS==0)")
+        .exec()
+        .unwrap();
+}
+
+#[test]
 fn recovered_source_changed_to_third_party_is_not_borrowed() {
     for human in [false, true] {
         let lua = world(2, 2);
@@ -467,7 +497,6 @@ fn consumed_inventory_requests_drop_large_snapshots_and_expire_next_turn() {
       Game.GetGreatWorkPlayer=function() return 1 end
       for x,b in pairs(CORE_BUILDINGS) do local position=x
         b.GetNumGreatWorkSlots=function() return 1 end
-        b.GetGreatWorkSlotType=function() return 1 end
         b.GetGreatWorkInSlot=function() return position==4 and 900 or -1 end
         b.GetGreatWorkTypeFromIndex=function() return 4 end
         b.GetCreatorNameFromIndex=function() return 'original creator' end

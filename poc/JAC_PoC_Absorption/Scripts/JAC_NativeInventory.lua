@@ -165,13 +165,13 @@ local function descriptors()
   table.sort(rows,function(a,b) return a.Owner==b.Owner and a.ID<b.ID or a.Owner<b.Owner end)
   return rows
 end
-local function captureCore(core)
+local function captureCore(core,requiredSlotIndex)
   -- This reader calls only direct native methods. Never consult ExposedMembers
   -- or the legacy helpers whose missing-getter branch reads the local UI cache.
   local result={Cities={},Works={}}
   for _,d in ipairs(core) do
     local c=assert(CityManager.GetCityAt(d.X,d.Y));local b=c:GetBuildings()
-    if not b.GetNumGreatWorkSlots or not b.GetGreatWorkInSlot or not b.GetGreatWorkTypeFromIndex or not b.GetGreatWorkSlotType
+    if not b.GetNumGreatWorkSlots or not b.GetGreatWorkInSlot or not b.GetGreatWorkTypeFromIndex
       or not b.GetCreatorNameFromIndex or not b.GetTurnFromIndex or not Game.GetGreatWorkPlayer then return nil end
     local identity=c.GetCulturalIdentity and c:GetCulturalIdentity()
     local religion=c:GetReligion();local districts=c:GetDistricts()
@@ -184,6 +184,7 @@ local function captureCore(core)
       for slot=0,count-1 do
         local index=b:GetGreatWorkInSlot(building,slot);row.Reads.WORK[building][slot]=index
         if index>=0 then
+          if index==requiredSlotIndex and not b.GetGreatWorkSlotType then return nil end
           local kind=b:GetGreatWorkTypeFromIndex(index);local info=assert(GameInfo.GreatWorks[kind]);local effects={}
           for r in GameInfo.GreatWork_YieldChanges() do if r.GreatWorkType==info.GreatWorkType then effects[#effects+1]=r.YieldType..' '..r.YieldChange end end
           if info.Tourism and info.Tourism~=0 then effects[#effects+1]='TOURISM '..info.Tourism end;table.sort(effects)
@@ -290,7 +291,7 @@ function NI.With(plan,phase,fn)
     b.Serial=b.Serial+1
     q={ID=id,From=plan.From,To=plan.To,Phase=phase,Nonce=b.Serial,Turn=Game.GetCurrentGameTurn(),Core=core,CoreSignature=signature,
       Plan=(phase=='FLOW_BEGIN' or phase=='RECOVERY_SOURCE') and R.Copy(plan) or {ID=id,From=plan.From,To=plan.To}}
-    local direct=captureCore(core)
+    local direct=captureCore(core,phase=='RECOVERY_SOURCE' and plan.Source.Index or nil)
     if direct then q.Observation=direct;q.EvidenceKind='DIRECT_CORE';validate(direct,core)
     else q.Actor=selected() end
     b.Requests[key]=q;save(b)
@@ -302,7 +303,7 @@ function NI.With(plan,phase,fn)
     end
     error('JAC_ABSORPTION_WAITING_UI',0)
   end
-  local current=captureCore(core)
+  local current=captureCore(core,phase=='RECOVERY_SOURCE' and plan.Source.Index or nil)
   if current then q.Observation=current;q.EvidenceKind='DIRECT_CORE';validate(current,core) end
   local previous=context;context={Request=q,Cities=validate(q.Observation,core)}
   local values={pcall(fn)};context=previous
@@ -445,7 +446,11 @@ local function receive(actor,p)
     payload=table.concat(q.Chunks)
   else assert(not q.ChunkCount,'inventory mixed wire format') end
   local o=Decode(payload);validate(o,q.Core)
-  local direct=captureCore(q.Core)
+  local required=q.Phase=='RECOVERY_SOURCE' and q.Plan.Source.Index or nil
+  if required then for _,w in ipairs(o.Works) do
+    if w.Index==required then assert(type(w.SlotType)=='string','inventory recovery slot type not published') end
+  end end
+  local direct=captureCore(q.Core,required)
   if direct then assert(Equal(direct,o),'inventory differs from available Core getters') end
   if q.Observation then assert(Equal(q.Observation,o),'inventory duplicate payload changed');return true end
   q.Observation=R.Copy(o);q.EvidenceKind=direct and 'DIRECT_CORE' or 'SYNCHRONIZED_ACTOR_OBSERVATION'
