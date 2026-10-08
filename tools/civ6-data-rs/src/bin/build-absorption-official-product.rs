@@ -1424,6 +1424,7 @@ return v.Status=='AVAILABLE'
     Ok(json!({
         "name":"Official Vatican City AI product route: native qualification, exact pool/grant receipts, publication replay and same-name save/load",
         "judge_profile":"generic",
+        "loadscreen_autostart":true,
         "steps":steps
     }))
 }

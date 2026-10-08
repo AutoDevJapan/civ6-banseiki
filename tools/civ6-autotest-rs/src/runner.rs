@@ -15,6 +15,9 @@ use std::{
     sync::Arc,
 };
 
+#[path = "loadscreen_autostart.rs"]
+pub mod autostart;
+
 pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nlocal p = Players[id]\nif not p or not p:IsHuman() or not p:IsTurnActive() then return false end\nlocal key = tostring(Game.GetCurrentGameTurn()) .. '|' .. tostring(id)\nif not ContextPtr:IsHidden() then\n  if PlayerConfigurations[id]:GetHotseatPassword() ~= '' then error('password-protected hotseat needs manual start-turn') end\n  JAC_AUTOTEST_HOTSEAT_CONFIRMATION = key\n  OnKeyUp_Return()\nend\nreturn (not requireDialog or JAC_AUTOTEST_HOTSEAT_CONFIRMATION == key) and ContextPtr:IsHidden() and not GameConfiguration.IsPaused()";
 
 pub trait Backend: Send {
@@ -1729,7 +1732,9 @@ impl Runner {
                     self.sleep_until(end, 0.5);
                     continue;
                 }
-                if state_available(&states, "LoadScreen") {
+                if state_available(&states, "LoadScreen")
+                    && self.scenario["loadscreen_autostart"] != true
+                {
                     // Only this context owns the Begin Game input. InGame on
                     // its own needs a readiness read, never a global Esc.
                     // Use the official keyboard path outside a FireTuner Lua call.
@@ -2050,6 +2055,57 @@ impl Runner {
         self.close_diplomacy(deadline)?;
         Ok(Some(value))
     }
+    fn start_game_step(&mut self, timeout: f64, deadline: f64) -> Result<String> {
+        self.transition_response = Value::Null;
+        let session = scenario::SessionType::from_scenario(&self.scenario)?;
+        if self.owner_start && session == scenario::SessionType::Hotseat {
+            return Err(Error::scenario("owner_start only supports single-player"));
+        }
+        let before = self.loadscreen_count()?;
+        if self.owner_start {
+            self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
+            println!("OWNER ACTION: press Start Game on the Create Game screen");
+            let wait = timeout.max(3600.0);
+            let owner_deadline = self.clock.now() + wait;
+            self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
+            self.check_start_turn(owner_deadline)?;
+            return Ok("owner pressed Start Game; single-player game reached InGame".into());
+        }
+        let marker = scenario::lua_string(&format!(
+            "JAC_AUTOTEST_HOST|session={}|monotonic={}",
+            self.output.to_string_lossy(),
+            self.clock.now()
+        ));
+        // The official HostGame call runs once. Its returned value is
+        // not a readiness proof, and Lua exceptions are never retried.
+        let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nlocal marker={marker}\nprint(marker .. '|phase=before')\nlocal ok,err=pcall(function() Network.HostGame(ServerType.{}) end)\nif not ok then print(marker .. '|phase=exception|' .. tostring(err));error(err) end\nprint(marker .. '|phase=after')\nreturn true", session.guard_code(), session.server_type());
+        let response = self.send_frontend_transition(&code, deadline);
+        self.transition_reply("host", deadline, &response)?;
+        let mut unknown = match response {
+            Ok(_) => false,
+            Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
+                println!("HostGame response interrupted during transition: {e}");
+                true
+            }
+            Err(e) => return Err(e),
+        };
+        if session == scenario::SessionType::Hotseat {
+            self.log(
+                "hotseat_host",
+                if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
+                "HostGame sent once; preparing to query the staging Lua states",
+            )?;
+            unknown |= self.launch_hotseat_staging(before, deadline)?;
+        }
+        self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
+        self.check_start_turn(deadline)?;
+        self.accept_hotseat_turn(deadline, true)?;
+        Ok(match session {
+            scenario::SessionType::SinglePlayer => "single-player game reached InGame",
+            scenario::SessionType::Hotseat => "hotseat game reached InGame; start-turn accepted",
+        }
+        .into())
+    }
     pub fn run_step(&mut self, step: &Value) -> Result<String> {
         self.run_step_with_frontend_check(step, || Ok(()))
     }
@@ -2171,59 +2227,7 @@ impl Runner {
                 ))
             }
             "start_game" => {
-                self.transition_response = Value::Null;
-                let session = scenario::SessionType::from_scenario(&self.scenario)?;
-                if self.owner_start && session == scenario::SessionType::Hotseat {
-                    return Err(Error::scenario("owner_start only supports single-player"));
-                }
-                let before = self.loadscreen_count()?;
-                if self.owner_start {
-                    self.lua("FrontEnd","if not UI.IsInFrontEnd() then error('main menu required') end\nUIManager:QueuePopup(ContextPtr:LookUpControl('/FrontEnd/MainMenu/AdvancedSetup'), PopupPriority.Current)\nreturn true",self.budget(deadline,5.0)?)?;
-                    println!("OWNER ACTION: press Start Game on the Create Game screen");
-                    let wait = timeout.max(3600.0);
-                    let owner_deadline = self.clock.now() + wait;
-                    self.enter_game_after_loadscreen(before, wait, Some(owner_deadline), false)?;
-                    self.check_start_turn(owner_deadline)?;
-                    return Ok(
-                        "owner pressed Start Game; single-player game reached InGame".into(),
-                    );
-                }
-                let marker = scenario::lua_string(&format!(
-                    "JAC_AUTOTEST_HOST|session={}|monotonic={}",
-                    self.output.to_string_lossy(),
-                    self.clock.now()
-                ));
-                // The official HostGame call runs once. Its returned value is
-                // not a readiness proof, and Lua exceptions are never retried.
-                let code = format!("if not UI.IsInFrontEnd() then error('main menu required') end\n{}\nlocal marker={marker}\nprint(marker .. '|phase=before')\nlocal ok,err=pcall(function() Network.HostGame(ServerType.{}) end)\nif not ok then print(marker .. '|phase=exception|' .. tostring(err));error(err) end\nprint(marker .. '|phase=after')\nreturn true", session.guard_code(), session.server_type());
-                let response = self.send_frontend_transition(&code, deadline);
-                self.transition_reply("host", deadline, &response)?;
-                let mut unknown = match response {
-                    Ok(_) => false,
-                    Err(e) if e.kind == ErrorKind::LuaResponseUnknown => {
-                        println!("HostGame response interrupted during transition: {e}");
-                        true
-                    }
-                    Err(e) => return Err(e),
-                };
-                if session == scenario::SessionType::Hotseat {
-                    self.log(
-                        "hotseat_host",
-                        if unknown { "UNKNOWN" } else { "ACKNOWLEDGED" },
-                        "HostGame sent once; preparing to query the staging Lua states",
-                    )?;
-                    unknown |= self.launch_hotseat_staging(before, deadline)?;
-                }
-                self.enter_game_after_loadscreen(before, timeout, Some(deadline), unknown)?;
-                self.check_start_turn(deadline)?;
-                self.accept_hotseat_turn(deadline, true)?;
-                Ok(match session {
-                    scenario::SessionType::SinglePlayer => "single-player game reached InGame",
-                    scenario::SessionType::Hotseat => {
-                        "hotseat game reached InGame; start-turn accepted"
-                    }
-                }
-                .into())
+                self.with_loadscreen_autostart(deadline, |r| r.start_game_step(timeout, deadline))
             }
             "autoplay" => {
                 let options = AutoplayOptions {
@@ -2416,7 +2420,9 @@ impl Runner {
                 Ok(target.display().to_string())
             }
             "save" => self.save_step(step, deadline),
-            "load" => self.load_step(step, timeout, deadline),
+            "load" => {
+                self.with_loadscreen_autostart(deadline, |r| r.load_step(step, timeout, deadline))
+            }
             "exit_to_menu" => {
                 self.lua(
                     "InGame",

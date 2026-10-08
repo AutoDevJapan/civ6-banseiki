@@ -760,7 +760,7 @@ return 'product save/load and duplicate admission preserve first-stage rolls and
     Ok(format!(
         "{}\n",
         serde_json::to_string_pretty(
-            &json!({"name":format!("Product {} admission with {} recipient",if small{"small-country"}else{"merger"},if human{"human"}else{"AI"}),"judge_profile":"generic","steps":steps})
+            &json!({"name":format!("Product {} admission with {} recipient",if small{"small-country"}else{"merger"},if human{"human"}else{"AI"}),"judge_profile":"generic","loadscreen_autostart":true,"steps":steps})
         )?
     ))
 }

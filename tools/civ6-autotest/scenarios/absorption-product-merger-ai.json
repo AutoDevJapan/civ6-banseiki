@@ -1,6 +1,7 @@
 {
   "name": "Product merger admission with AI recipient",
   "judge_profile": "generic",
+  "loadscreen_autostart": true,
   "steps": [
     {
       "action": "enable_mods",

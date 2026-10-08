@@ -71,6 +71,18 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
         return Err(Error::scenario("Scenario needs a name"));
     }
     let session = SessionType::from_scenario(data)?;
+    if let Some(value) = data.get("loadscreen_autostart") {
+        if !value.is_boolean() || (value == true && session != SessionType::SinglePlayer) {
+            return Err(Error::scenario(
+                "loadscreen_autostart must be boolean and requires single-player",
+            ));
+        }
+        if value == true && data.get("loadscreen_input").is_some() {
+            return Err(Error::scenario(
+                "loadscreen_autostart cannot accompany loadscreen_input",
+            ));
+        }
+    }
     if let Some(nonce) = data.get("hotseat_bridge_nonce") {
         if session != SessionType::Hotseat
             || !nonce

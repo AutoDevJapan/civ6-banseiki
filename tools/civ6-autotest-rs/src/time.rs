@@ -138,6 +138,87 @@ mod tests {
     }
 
     #[test]
+    fn pending_ctrl_c_restores_autostart_without_starting_game_or_clearing_interrupt() {
+        let _exclusive = INTERRUPT_TEST_LOCK.lock().unwrap();
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                INTERRUPTED.store(false, Ordering::Relaxed);
+            }
+        }
+        let _reset = Reset;
+        struct Game {
+            enabled: bool,
+            restores: Arc<AtomicUsize>,
+        }
+        impl Backend for Game {
+            fn require_single_process(&mut self) -> Result<()> {
+                Ok(())
+            }
+            fn single_process(&mut self, _: f64) -> Result<Option<(u32, f64)>> {
+                Ok(Some((1234, 1.0)))
+            }
+            fn list_states(&mut self, _: f64) -> Result<Vec<String>> {
+                Ok(vec!["FrontEnd".into()])
+            }
+            fn run_lua(&mut self, _: &str, code: &str, timeout: f64) -> Result<String> {
+                use crate::runner::autostart;
+                assert!(timeout > 0.0 && timeout <= 5.0);
+                if code == autostart::READ {
+                    return Ok(self.enabled.to_string());
+                }
+                if code == autostart::write(true) {
+                    self.enabled = true;
+                    INTERRUPTED.store(true, Ordering::Relaxed);
+                    return Err(crate::Error::interrupted(
+                        "cancelled during auto-start enable",
+                    ));
+                }
+                if code == autostart::write(false) {
+                    self.enabled = false;
+                    self.restores.fetch_add(1, Ordering::Relaxed);
+                    return Ok("true".into());
+                }
+                panic!("must not host after interruption: {code}");
+            }
+        }
+        INTERRUPTED.store(false, Ordering::Relaxed);
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Lua.log"), b"").unwrap();
+        let restores = Arc::new(AtomicUsize::new(0));
+        let mut runner = Runner::with_backend(
+            serde_json::json!({"loadscreen_autostart":true}),
+            root.path().into(),
+            root.path().into(),
+            root.path().into(),
+            4318,
+            Box::new(Game {
+                enabled: false,
+                restores: restores.clone(),
+            }),
+            Arc::new(SystemClock),
+        );
+        runner.baseline = Some(crate::judge::snapshot_logs(root.path()).unwrap());
+        assert_eq!(
+            runner
+                .run_step(&serde_json::json!({"action":"start_game","timeout":2}))
+                .unwrap_err()
+                .kind,
+            ErrorKind::Interrupted
+        );
+        assert_eq!(restores.load(Ordering::Relaxed), 1);
+        assert_eq!(check_interrupt().unwrap_err().kind, ErrorKind::Interrupted);
+        assert_eq!(
+            runner
+                .run_step(&serde_json::json!({"action":"start_game","timeout":2}))
+                .unwrap_err()
+                .kind,
+            ErrorKind::Interrupted
+        );
+        assert_eq!(restores.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn pending_ctrl_c_allows_one_bounded_stop_and_stays_pending() {
         let _exclusive = INTERRUPT_TEST_LOCK.lock().unwrap();
         struct Reset;
