@@ -53,18 +53,21 @@ UI={RequestPlayerOperation=function(owner,operation,args) assert(owner==0 and op
         .unwrap();
     assert_eq!(result, "one normal assignment requested");
     lua.load("assert(calls==1);allowed=false").exec().unwrap();
-    assert!(lua
-        .load(steps[at]["code"].as_str().unwrap())
-        .exec()
-        .unwrap_err()
-        .to_string()
-        .contains("city not assignable"));
+    assert!(
+        lua.load(steps[at]["code"].as_str().unwrap())
+            .exec()
+            .unwrap_err()
+            .to_string()
+            .contains("city not assignable")
+    );
     lua.load("assert(calls==1)").exec().unwrap();
     assert_eq!(steps[at + 1]["action"], "wait_for");
-    assert!(steps[at + 1]["condition"]["code"]
-        .as_str()
-        .unwrap()
-        .contains("GetAssignedCity"));
+    assert!(
+        steps[at + 1]["condition"]["code"]
+            .as_str()
+            .unwrap()
+            .contains("GetAssignedCity")
+    );
 }
 
 #[test]
@@ -135,10 +138,12 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     assert_eq!(body.matches("JAC_RequestLeaderJoin(1)").count(), 1);
     assert_eq!(body.matches("JAC_AssignLeader('").count(), 1);
     assert_eq!(steps[5]["action"], "ui_lua");
-    assert!(steps[5]["code"]
-        .as_str()
-        .unwrap()
-        .contains("pre-existing unjoined governor"));
+    assert!(
+        steps[5]["code"]
+            .as_str()
+            .unwrap()
+            .contains("pre-existing unjoined governor")
+    );
     let attach = steps
         .iter()
         .position(|s| s["action"] == "start_native_paid_runtime")
@@ -158,36 +163,46 @@ fn scenario_keeps_normal_ui_sender_and_explicit_runtime_restart_boundaries() {
     // The pre-turn audit must follow the official AI title grant, not merely
     // repeat the fresh-start check before any title can be spent.
     assert_eq!(steps[turn - 2]["state_name"], "GameCore_Tuner");
-    assert!(steps[turn - 2]["code"]
-        .as_str()
-        .unwrap()
-        .contains("AI has no usable official title"));
-    for position in [turn - 1, turn + 1] {
-        assert_eq!(steps[position]["state_name"], "InGame");
-        assert!(steps[position]["code"]
+    assert!(
+        steps[turn - 2]["code"]
             .as_str()
             .unwrap()
-            .contains(sp_runtime::AI_ADMISSION));
+            .contains("AI has no usable official title")
+    );
+    for position in [turn - 1, turn + 1] {
+        assert_eq!(steps[position]["state_name"], "InGame");
+        assert!(
+            steps[position]["code"]
+                .as_str()
+                .unwrap()
+                .contains(sp_runtime::AI_ADMISSION)
+        );
     }
     assert_eq!(body.matches(sp_runtime::AI_ADMISSION).count(), 2);
     assert_eq!(steps[turn + 1]["state_name"], "InGame");
-    assert!(steps[turn + 1]["code"]
-        .as_str()
-        .unwrap()
-        .contains(sp_runtime::AI_GOVERNORS));
+    assert!(
+        steps[turn + 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains(sp_runtime::AI_GOVERNORS)
+    );
     assert_eq!(steps[turn + 2]["state_name"], "GameCore_Tuner");
     assert_eq!(steps[turn + 2]["code"], sp_runtime::AI_GREAT_PEOPLE);
-    assert!(steps[saved - 1]["code"]
-        .as_str()
-        .unwrap()
-        .contains("sample(false)"));
+    assert!(
+        steps[saved - 1]["code"]
+            .as_str()
+            .unwrap()
+            .contains("sample(false)")
+    );
     assert_eq!(steps[saved + 1]["action"], "restart_game");
     assert_eq!(steps[saved + 2]["action"], "load");
     for s in &steps[saved + 2..] {
-        assert!(!s["code"]
-            .as_str()
-            .unwrap_or("")
-            .contains("RequestPlayerOperation"));
+        assert!(
+            !s["code"]
+                .as_str()
+                .unwrap_or("")
+                .contains("RequestPlayerOperation")
+        );
     }
     assert!(body.contains("a.allowed==false and b.allowed==true"));
     assert!(body.contains("checked==483"));
@@ -200,10 +215,11 @@ fn restored_snapshot_reads_saved_state_without_querying_absent_runtime_gate() {
     let lua = world();
     lua.load("full(); assigned=true; Players[0]:GetGovernors().CanAssignGovernor=function() error('no runtime after restart') end").exec().unwrap();
     lua.load(format!("{}\nlocal v=assert(sample(false)); assert(v.phase=='full' and v.allowed==nil and v.assigned==v.city)", sp_runtime::SNAPSHOT)).exec().unwrap();
-    assert!(lua
-        .load(format!("{}\nreturn sample()", sp_runtime::SNAPSHOT))
-        .exec()
-        .is_err());
+    assert!(
+        lua.load(format!("{}\nreturn sample()", sp_runtime::SNAPSHOT))
+            .exec()
+            .is_err()
+    );
 }
 
 fn ai_world() -> Lua {
@@ -389,4 +405,153 @@ fn generator_rejects_mp_and_wrong_source_configuration() {
     let mut t = template();
     t["steps"][1]["ruleset"] = "RULESET_STANDARD".into();
     assert!(sp_runtime::build(&t).is_err());
+}
+
+fn three_observer() -> String {
+    let scene = sp_runtime::build_with_cost(&template(), 3).unwrap();
+    scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|s| {
+            let code = s["code"].as_str()?;
+            code.contains("observer already exists")
+                .then(|| code.to_owned())
+        })
+        .unwrap()
+}
+
+fn three_world() -> Lua {
+    let lua = world();
+    lua.load(r#"
+L='LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA'; third=false
+PlayerConfigurations[4]=PlayerConfigurations[1]
+GameInfo.JAC_LeaderPersonas={[L]={GovernorType='G',BasePromotionType='B',EvolutionCost=3}}
+GameInfo.GovernorPromotions.B_TITLE_2={Index=94,Hash=194}
+local gs=Players[0]:GetGovernors(); local gov=gs:GetGovernor(106)
+gov.HasPromotion=function(_,h) if h==154 then return true elseif h==174 then return title elseif h==194 then return third end; error('unknown promotion') end
+gs.GetGovernorPoints=function() return 3 end
+a={appointed=record('GovernorAppointed',nil,nil,2),[1]=record('GovernorPromoted',54,154,1,1)}
+function middle()
+ title=true; spent=2; paid=2; a[2]=record('GovernorPromoted',74,174,3,2)
+end
+function full()
+ middle(); third=true; spent=3; paid=3; state='GOVERNOR'; unit=nil; allowed=true
+ a[3]=record('GovernorPromoted',94,194,4,3)
+ debits[3]={owner=0,governor=6,promotion=94,binding='bound',confirmed={owner=0,binding='bound',afterSpent=3,expected=3}}
+end
+"#).exec().unwrap();
+    lua
+}
+
+#[test]
+fn cost_three_observes_both_unpaid_prefixes_and_only_all_paid_permit() {
+    let lua = three_world();
+    lua.load(three_observer()).exec().unwrap();
+    lua.load(
+        r#"
+handlers[1](); assert(JAC_NORMAL_SP_AUDIT.partials[1].allowed==false)
+middle(); handlers[2](); assert(JAC_NORMAL_SP_AUDIT.partials[2].allowed==false)
+full(); handlers[1](); local q=JAC_NORMAL_SP_AUDIT
+assert(q.error==nil and q.full.allowed and #q.full.promotions==3 and q.full.spent==3)
+"#,
+    )
+    .exec()
+    .unwrap();
+}
+
+#[test]
+fn cost_three_observer_rejects_early_permit_gaps_receipt_mixup_and_double_charge() {
+    for change in [
+        "allowed=true",
+        "middle(); allowed=true",
+        "a[1]=nil; allowed=true",
+        "third=true",
+        "full(); allowed=false",
+        "full(); spent=4",
+        "middle(); debits[2].confirmed=nil",
+        "full(); a[3].leader='other'",
+        "full(); a[3].promotion=74",
+        "full(); a[3].sequence=a[2].sequence",
+        "full(); debits[3].confirmed.afterSpent=2; debits[3].confirmed.expected=2",
+        "nativeOwner=1",
+    ] {
+        let lua = three_world();
+        lua.load(three_observer()).exec().unwrap();
+        lua.load(change).exec().unwrap();
+        lua.load("handlers[1](); assert(JAC_NORMAL_SP_AUDIT.error~=nil)")
+            .exec()
+            .unwrap_or_else(|e| panic!("mutation {change}: {e}"));
+    }
+}
+
+#[test]
+fn cost_three_generated_pair_requires_real_second_partial_and_preserves_normal_senders() {
+    let scene = sp_runtime::build_with_cost(&template(), 3).unwrap();
+    civ6_autotest_rs::scenario::validate_scenario(&scene).unwrap();
+    let lua = three_world();
+    lua.load(three_observer()).exec().unwrap();
+    lua.load("handlers[1](); full(); handlers[2]()")
+        .exec()
+        .unwrap();
+    let pair = scene["steps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["capture_as"] == "NORMAL_SP_PAIR")
+        .unwrap()["code"]
+        .as_str()
+        .unwrap();
+    // Model only the non-person audit matrix here; payment identity and account
+    // are exercised through the real generated sample and pair code.
+    lua.load(r#"
+PlayerManager={GetAliveMajorIDs=function() return {0} end}
+GameInfo.JAC_LeaderPersonas=setmetatable(GameInfo.JAC_LeaderPersonas,{__call=function(t) local n=0; return function()
+ n=n+1; if n<=483 then return {LeaderType='OTHER',GovernorType='OTHER'} end
+end end})
+GameInfo.Governors.OTHER={Hash=999}
+local gs=Players[0]:GetGovernors(); gs.HasGovernor=function() return false end; gs.CanEverAppointGovernor=function() return false end
+"#).exec().unwrap();
+    assert!(
+        lua.load(pair)
+            .exec()
+            .unwrap_err()
+            .to_string()
+            .contains("second unpaid prefix")
+    );
+    // A result cannot manufacture the missing earlier event after finalization.
+    lua.load("assert(JAC_NORMAL_SP_AUDIT.partials[2]==nil)")
+        .exec()
+        .unwrap();
+    let mut body = String::new();
+    for s in scene["steps"].as_array().unwrap() {
+        let code = s["code"]
+            .as_str()
+            .or(s["condition"]["code"].as_str())
+            .unwrap_or("");
+        Lua::new().load(code).into_function().unwrap();
+        body.push_str(code);
+        for forbidden in [
+            "SetProperty",
+            "ChangeGovernorPoints",
+            "APPOINT_GOVERNOR",
+            "PROMOTE_GOVERNOR",
+        ] {
+            assert!(!code.contains(forbidden));
+        }
+    }
+    assert_eq!(body.matches("JAC_RequestLeaderJoin(4)").count(), 1);
+    assert_eq!(body.matches("JAC_EvolveLeader('").count(), 1);
+    assert_eq!(body.matches("JAC_AssignLeader('").count(), 1);
+    assert!(!body.contains(sp_runtime::LEADER));
+    assert!(body.contains("GetGovernorPoints()>=3"));
+    assert!(body.contains("v.promotions[3].sequence==b.promotions[3].sequence"));
+    assert_eq!(
+        sp_runtime::build_with_cost(&template(), 2).unwrap(),
+        sp_runtime::build(&template()).unwrap()
+    );
+    assert!(sp_runtime::build_with_cost(&template(), 1).is_err());
+    let mut wrong = template();
+    wrong["steps"][1]["players"][4]["leader"] = "wrong".into();
+    assert!(sp_runtime::build_with_cost(&wrong, 3).is_err());
 }

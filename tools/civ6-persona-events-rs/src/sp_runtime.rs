@@ -1,5 +1,5 @@
 //! Explicit SP runtime experiment. Product auto-bootstrap is not asserted.
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 pub const LEADER: &str = "LEADER_JAC_DATE_TANEMUNE";
 pub const SAVE: &str = "JAC-Normal-Paid-SP-Cost2";
 
@@ -50,9 +50,15 @@ local function sample(readGate)
  local g=gs:GetGovernor(d.Hash); if not g then return nil end
  assert(g:GetOwner()==0 and g:GetType()==d.Index,'native person differs')
  local base=assert(GameInfo.GovernorPromotions[row.BasePromotionType])
- local title=assert(GameInfo.GovernorPromotions[row.BasePromotionType..'_TITLE_1'])
- local b,t=g:HasPromotion(base.Hash),g:HasPromotion(title.Hash)
- assert(type(b)=='boolean' and type(t)=='boolean' and (not t or b))
+ local cost=row.EvolutionCost; assert(cost==2 or cost==3,'unsupported observed cost')
+ local definitions={base}; local owned={}; local actual=0; local gap=false
+ for step=1,cost do
+  if step>1 then definitions[step]=assert(GameInfo.GovernorPromotions[row.BasePromotionType..'_TITLE_'..(step-1)]) end
+  local v=g:HasPromotion(definitions[step].Hash); assert(type(v)=='boolean')
+  owned[step]=v
+  if v then assert(not gap,'non-prefix official payment'); actual=actual+1 else gap=true end
+ end
+ local title=definitions[2]; local b,t=owned[1],owned[2]
  local a=s.acquired or {}; local state=Game:GetProperty('JAC_PERSONA_'..leader..'_STATE')
  local unit=Game:GetProperty('JAC_PERSONA_'..leader..'_UNIT')
  local function receipt(r,name,promotion)
@@ -65,31 +71,38 @@ local function sample(readGate)
  end
  -- A native UI notification may precede publication of Gameplay callbacks.
  -- Such an interval is recorded as pending, never invented as an observation.
- if not b or not a.appointed or not a[1] then return nil end
- local app=receipt(a.appointed,'GovernorAppointed'); local first=receipt(a[1],'GovernorPromoted',base)
  local cities={}; for _,city in p:GetCities():Members() do cities[#cities+1]=city end
  table.sort(cities,function(x,y) return x:GetID()<y:GetID() end); local city=assert(cities[1])
  local allowed=nil
  if readGate~=false then allowed=gs:CanAssignGovernor(d.Hash,city); assert(type(allowed)=='boolean') end
+ if actual<cost and readGate~=false then assert(allowed==false,'unpaid native assignment was accepted') end
+ if not b or not a.appointed or not a[1] then return nil end
+ local app=receipt(a.appointed,'GovernorAppointed'); local first=receipt(a[1],'GovernorPromoted',base)
  local spent=gs:GetGovernorPointsSpent(); local assigned=g:GetAssignedCity()
  local out={owner=0,index=d.Index,city=city:GetID(),assigned=assigned and assigned:GetID() or -1,
   spent=spent,points=gs:GetGovernorPoints(),base=base.Index,title=title.Index,hasBase=b,hasTitle=t,
-  normalPaid=s.paid or -1,state=state,unit=unit or -1,allowed=allowed,sequence=s.sequence,app=app,first=first}
- if not t and state=='EVOLVING' then
-  assert(spent==1 and (s.paid==nil or s.paid==1) and a[2]==nil and type(unit)=='number')
+  normalPaid=s.paid or -1,state=state,unit=unit or -1,allowed=allowed,sequence=s.sequence,app=app,first=first,
+  cost=cost,actual=actual,promotions={}}
+ if actual<cost and state=='EVOLVING' then
+  assert(spent==actual and (s.paid==nil or s.paid==actual) and a[actual+1]==nil and type(unit)=='number')
   assert(p:GetUnits():FindID(unit),'pending Great Person disappeared')
-  assert(allowed==false,'unpaid native assignment was accepted')
   out.phase='partial'
- elseif t and state=='GOVERNOR' then
-  assert(spent==2 and s.paid==2 and unit==nil,'normal full settlement missing')
-  out.second=receipt(a[2],'GovernorPromoted',title)
-  for step=1,2 do
-   local r=a[step]; local debit=assert(s.account.debits[r.spendingSerial]); local confirmed=assert(debit.confirmed)
-   assert(debit.owner==0 and debit.governor==d.Index and debit.promotion==r.promotion and debit.binding==r.binding)
-   assert(confirmed.owner==0 and confirmed.binding==r.binding and confirmed.afterSpent==confirmed.expected and confirmed.afterSpent<=spent and not debit.invalidated)
-  end
+ elseif actual==cost and state=='GOVERNOR' then
+  assert(spent==cost and s.paid==cost and unit==nil,'normal full settlement missing')
   out.phase='full'
  else return nil end
+ for step=1,actual do
+  -- Real callbacks may not yet be published. Never synthesize their receipt.
+  if not a[step] then return nil end
+  out.promotions[step]=receipt(a[step],'GovernorPromoted',definitions[step])
+  if step>1 then assert(out.promotions[step].sequence>out.promotions[step-1].sequence,'payment receipt order differs') end
+  if step==2 then out.second=out.promotions[step] end
+  if out.phase=='full' or step>1 then
+   local r=a[step]; local debit=assert(s.account.debits[r.spendingSerial]); local confirmed=assert(debit.confirmed)
+   assert(debit.owner==0 and debit.governor==d.Index and debit.promotion==r.promotion and debit.binding==r.binding)
+   assert(confirmed.owner==0 and confirmed.binding==r.binding and confirmed.afterSpent==confirmed.expected and confirmed.afterSpent==step and not debit.invalidated)
+  end
+ end
  return out
 end
 "#;
@@ -146,13 +159,16 @@ pub fn observer() -> String {
         r#"{HEADER}
 assert(JAC_NORMAL_SP_AUDIT==nil,'observer already exists; do not replay')
 {SNAPSHOT}
-local q={{seen=0}}; JAC_NORMAL_SP_AUDIT=q
+local q={{seen=0,partials={{}}}}; JAC_NORMAL_SP_AUDIT=q
 q.observe=function()
  if q.error then return end
  local ok,value=pcall(sample)
  if not ok then q.error=tostring(value); print('JAC_NORMAL_SP_OBSERVER_ERROR '..q.error); return end
  q.seen=q.seen+1
- if value and value.phase=='partial' and not q.partial then q.partial=value end
+ if value and value.phase=='partial' then
+  if not q.partial then q.partial=value end
+  if not q.partials[value.actual] then q.partials[value.actual]=value end
+ end
  if value and value.phase=='full' and not q.full then
   if value.allowed~=true then q.error='full native assignment denied'; return end
   q.full=value
@@ -333,4 +349,52 @@ return serial(v)
         json!({"name":"SP normal cost-two unpaid denial then paid permit: explicit resident runtime, normal UI and restart/reload",
         "judge_profile":"generic","strict_lua_errors":true,"steps":steps}),
     )
+}
+
+/// Reuse the same normal UI sender and explicit runtime transaction for the
+/// existing cost-three person in source slot four. Both unpaid prefixes must
+/// actually be observed; a missing window fails instead of being reconstructed.
+pub fn build_with_cost(template: &Value, cost: u8) -> Result<Value, String> {
+    if cost == 2 {
+        return build(template);
+    }
+    if cost != 3 {
+        return Err("SP assignment observation requires cost two or three".into());
+    }
+    const THREE: &str = "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA";
+    if template["steps"][1]["players"][4]["leader"] != THREE {
+        return Err("cost three requires the existing Uesugi source in slot four".into());
+    }
+    let mut scene = build(template)?;
+    scene["name"] = "SP normal cost-three unpaid prefixes then paid permit: explicit resident runtime, normal UI and restart/reload".into();
+    for step in scene["steps"].as_array_mut().ok_or("steps missing")? {
+        for field in ["code", "name"] {
+            if let Some(text) = step[field].as_str() {
+                step[field] = cost_three_code(text).into();
+            }
+        }
+        if let Some(text) = step["condition"]["code"].as_str() {
+            step["condition"]["code"] = cost_three_code(text).into();
+        }
+    }
+    Ok(scene)
+}
+
+fn cost_three_code(text: &str) -> String {
+    text.replace(LEADER, "LEADER_JAC_YAMANOUCHI_UESUGI_NORIMASA")
+        .replace(SAVE, "JAC-Normal-Paid-SP-Cost3")
+        .replace("PlayerConfigurations[1]", "PlayerConfigurations[4]")
+        .replace("row.EvolutionCost==2", "row.EvolutionCost==3")
+        .replace("GetGovernorPoints()>=2", "GetGovernorPoints()>=3")
+        .replace("JAC_RequestLeaderJoin(1)", "JAC_RequestLeaderJoin(4)")
+        .replace("q.partial~=nil and q.full~=nil", "q.partials[1]~=nil and q.partials[2]~=nil and q.full~=nil")
+        .replace("b.spent==2", "b.spent==3")
+        .replace("b.normalPaid==2", "b.normalPaid==3")
+        .replace("return serial({partial=a,full=b})", r#"local middle=assert(q.partials[2],'second unpaid prefix was not observed')
+assert(a.actual==1 and middle.actual==2 and b.actual==3)
+assert(middle.allowed==false and middle.spent==2 and middle.owner==a.owner and middle.index==a.index and middle.city==a.city and middle.assigned==-1 and middle.points==a.points)
+assert(middle.app.sequence==a.app.sequence and middle.first.sequence==a.first.sequence)
+assert(middle.second.sequence==b.second.sequence and b.promotions[3].sequence>b.second.sequence)
+return serial({partial=a,middle=middle,full=b})"#)
+        .replace("v.second.sequence==b.second.sequence,'payment was replayed", "v.second.sequence==b.second.sequence and v.promotions[3].sequence==b.promotions[3].sequence,'payment was replayed")
 }

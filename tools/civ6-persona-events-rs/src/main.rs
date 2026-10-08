@@ -41,9 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scenario = civ6_persona_events_rs::scenario::build(&template)?;
             fs::write(&args[2], serde_json::to_string_pretty(&scenario)?)?;
         }
-        Some("generate-sp-runtime") if args.len() == 3 => {
+        Some("generate-sp-runtime") if args.len() == 3 || args.len() == 4 => {
             let template = serde_json::from_slice(&fs::read(&args[1])?)?;
-            let scenario = civ6_persona_events_rs::sp_runtime::build(&template)?;
+            let cost = args.get(3).map(|n| n.parse()).transpose()?.unwrap_or(2);
+            let scenario = civ6_persona_events_rs::sp_runtime::build_with_cost(&template, cost)?;
             fs::write(&args[2], serde_json::to_string_pretty(&scenario)?)?;
         }
         Some("generate-sp-reassign") if args.len() == 4 || args.len() == 5 => {
@@ -73,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ => {
             return Err(
-                "usage: civ6-persona-events-rs generate-mp-staging-boundary STOCK.lua NORMAL.json HOTSEAT.json NONCE OUTPUTDIR | generate-mp-staging STOCK.lua OUTPUTDIR | generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup-read NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
+                "usage: civ6-persona-events-rs generate-mp-staging-boundary STOCK.lua NORMAL.json HOTSEAT.json NONCE OUTPUTDIR | generate-mp-staging STOCK.lua OUTPUTDIR | generate-mp-hotseat NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup NORMAL.json HOTSEAT.json OUTPUT.json | generate-mp-setup-read NORMAL.json HOTSEAT.json OUTPUT.json | embed | generate TEMPLATE.json OUTPUT.json | generate-sp-runtime TEMPLATE.json OUTPUT.json [COST=2|3] | generate-sp-reassign TEMPLATE.json INPUT.Civ6Save|- OUTPUT.json [REAL_TURNS] | generate-sp-skill TEMPLATE.json INPUT.Civ6Save|- OBSERVED_MERIT|- OUTPUT.json".into(),
             )
         }
     }
