@@ -12,13 +12,18 @@ local function box() return R.Copy(Game:GetProperty(KEY) or {Version=1,Serial=0,
 local function save(b) assert(b.Version==1);Game:SetProperty(KEY,R.Copy(b)) end
 local function prune(b,turn)
   local changed=false
-  local transactions,flows
+  local transactions,flows,recoveries,archive
   for key,q in pairs(b.Requests) do
     if q.Turn<turn then
       local terminal=q.Consumed
       if not terminal and (q.Phase=='FLOW_BEGIN' or q.Phase=='FLOW_CHECK') then
         if not flows then flows=(Game:GetProperty('JAC_ABSORPTION_FLOW_V1') or {}).Flows or {} end
         local flow=flows[q.ID];terminal=not flow or flow.Phase=='DONE' or flow.Phase=='RESULT'
+      elseif not terminal and q.Phase=='RECOVERY_SOURCE' then
+        if not recoveries then local state=Game:GetProperty(R.STATE_KEY) or {};recoveries=state.Recoveries or {};archive=state.Archive or {} end
+        local intent=recoveries[q.ID]
+        terminal=intent and (intent.Status=='COMPLETE' or intent.Status=='SUICIDE')
+          or not (q.Plan and archive[q.Plan.AssetID])
       elseif not terminal and q.Phase:match('^CITY_LOYALTY:') then
         local x,y=q.Phase:match('^CITY_LOYALTY:(%-?%d+):(%-?%d+):')
         local city=x and CityManager.GetCityAt(tonumber(x),tonumber(y))
@@ -210,17 +215,22 @@ function NI.HasContext() return context~=nil end
 function NI.With(plan,phase,fn)
   local id=assert(plan.ID)
   assert(type(id)=='string' and #id>0 and #id<=256 and type(plan.From)=='number'
-    and type(plan.To)=='number' and plan.From~=plan.To and Players[plan.From] and Players[plan.To],'inventory intent contract')
+    and type(plan.To)=='number' and (plan.From~=plan.To or phase=='RECOVERY_SOURCE')
+    and Players[plan.From] and Players[plan.To],'inventory intent contract')
   if context and context.Request.ID==id and context.Request.Phase==phase then return fn() end
   local b=box();assert(b.Version==1,'inventory save version')
   if prune(b,Game.GetCurrentGameTurn()) then save(b) end
   local core=descriptors();local signature=Encode(core)
   local key=id..':'..phase;local q=b.Requests[key]
   if q then assert(q.From==plan.From and q.To==plan.To,'inventory intent identity changed') end
+  if q and not q.Consumed and phase=='RECOVERY_SOURCE' then
+    assert(q.Plan and q.Plan.AssetID==plan.AssetID and Equal(q.Plan.Original,plan.Original)
+      and Equal(q.Plan.Source,plan.Source),'recovery observation intent changed')
+  end
   if not q or q.Consumed or q.Turn~=Game.GetCurrentGameTurn() or q.CoreSignature~=signature then
     b.Serial=b.Serial+1
     q={ID=id,From=plan.From,To=plan.To,Phase=phase,Nonce=b.Serial,Turn=Game.GetCurrentGameTurn(),Core=core,CoreSignature=signature,
-      Plan=phase=='FLOW_BEGIN' and R.Copy(plan) or {ID=id,From=plan.From,To=plan.To}}
+      Plan=(phase=='FLOW_BEGIN' or phase=='RECOVERY_SOURCE') and R.Copy(plan) or {ID=id,From=plan.From,To=plan.To}}
     local direct=captureCore(core)
     if direct then q.Observation=direct;q.EvidenceKind='DIRECT_CORE';validate(direct,core)
     else q.Actor=selected() end
@@ -264,6 +274,24 @@ function NI.Locations(index)
   for _,w in ipairs(context.Request.Observation.Works) do if w.Index==index then found[#found+1]=R.Copy(w) end end
   return found
 end
+local recover=A.RecoverArchived
+A.RecoverArchived=function(id,owner,token,original)
+  local state=A.GetState();local archived=state.Archive[id];local intent=state.Recoveries and state.Recoveries[token]
+  if intent then assert(intent.ID==id and intent.Owner==owner,'recovery token reused') end
+  if not GameConfiguration or not GameConfiguration.IsAnyMultiplayer or not GameConfiguration.IsAnyMultiplayer()
+    or not archived or not archived.NativeWork
+    or archived.Kind~='ITEM' or intent and (intent.NativeCarrier or intent.Status=='COMPLETE') then
+    return recover(id,owner,token,original)
+  end
+  local ok,result=pcall(NI.With,{ID=token,From=archived.NativeWork.Owner,To=owner,AssetID=id,
+    Source=R.Copy(archived.NativeWork),Original=R.Copy(original)},
+    'RECOVERY_SOURCE',function() return recover(id,owner,token,original) end)
+  if not ok and result=='JAC_ABSORPTION_WAITING_UI' then
+    return {ID=id,Owner=owner,Status='WAITING_UI',ObservationToken=token..':inventory'}
+  end
+  if not ok then error(result,0) end
+  return result
+end
 function NI.Tick()
   local pending=box().Requests
   for _,key in ipairs(R.Keys(pending)) do
@@ -273,6 +301,14 @@ function NI.Tick()
       local ok,err=pcall(function()
         if q.Phase=='FLOW_BEGIN' then return JAC_AbsorptionFlowGameplay.Begin(q.Plan) end
         if q.Phase=='FLOW_CHECK' then return JAC_AbsorptionFlowGameplay.Resolve(q.To,q.ID) end
+        if q.Phase=='RECOVERY_SOURCE' then
+          local flow=JAC_AbsorptionFlowGameplay;local worldID=q.ID:match('^recovery:(.+)$')
+          local world=worldID and flow and flow.GetWorld(worldID)
+          if world and world.AssetID==q.Plan.AssetID and world.Recipient==q.To and world.Status=='CLAIMED' then
+            return flow.ResumeWorld(worldID)
+          end
+          return A.RecoverArchived(q.Plan.AssetID,q.To,q.ID,q.Plan.Original)
+        end
         if q.Phase=='SOURCE_PREPARE' or q.Phase=='CITY_COMMIT' or q.Phase=='CITY_VERIFY'
           or q.Phase:match('^CITY_LOYALTY:') then
           local tx=A.GetState().Transactions[q.ID]

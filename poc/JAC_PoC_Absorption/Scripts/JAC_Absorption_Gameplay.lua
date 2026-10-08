@@ -2020,6 +2020,16 @@ local function NativeCarrierState(city, carrier)
   end
   assert(building, "native carrier building absent")
   local assets = CityAssets(city)
+  if building.BuildingType == "BUILDING_PALACE" and city:GetBuildings():HasBuilding(building.Index) then
+    -- City inheritance excludes the engine-controlled Palace. An owned
+    -- Palace used as a MOVE source stays with its human owner, so observe
+    -- its actual slots here and preserve every work except the moving one.
+    local works = {}
+    for slot = 0, WorkSlots(city, building.Index) - 1 do
+      works[slot] = WorkInSlot(city, building.Index, slot)
+    end
+    assets[building.BuildingType] = { Pillaged = city:GetBuildings():IsPillaged(building.Index), Works = works }
+  end
   local built = assert(assets[building.BuildingType], "native carrier building lost")
   built.Works[carrier.Slot] = -1 -- the one work being moved is the expected difference
   local reads = ExposedMembers.JAC_HeroReadAPI
@@ -3043,6 +3053,21 @@ local function RecoverNativeWorkByDeal(state, intent, source, owner, token)
   if GameConfiguration and GameConfiguration.IsAnyMultiplayer
     and Multiplayer() then
     assert(JAC_CarrierMP, "native MP recovery binding unavailable")
+    if not intent.NativeCarrier and JAC_NativeInventory and JAC_NativeInventory.HasContext() then
+      local locations = NativeWorkLocations(source.Index)
+      assert(#locations == 1, "native recovery original is missing or duplicated")
+      SameNativeWorkIdentity(source, locations[1])
+      intent.NativeSource = R.Copy(locations[1])
+      -- A captured or legally rearranged original can already be in the
+      -- recipient's compatible physical slot. The shared inventory proves
+      -- this receipt; no additional MOVE or city loan is necessary.
+      if locations[1].Owner == owner then
+        intent.NativeTarget = R.Copy(locations[1])
+        intent.NativePhysicalMoved = true
+        Save(state)
+        return true
+      end
+    end
     intent.NativeSource = intent.NativeSource or R.Copy(source)
     if not JAC_CarrierMP.AdvanceRecovery(state, intent, intent.NativeSource, owner, token) then
       local carrier = intent.NativeCarrier

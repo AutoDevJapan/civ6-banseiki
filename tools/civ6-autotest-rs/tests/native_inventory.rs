@@ -138,6 +138,157 @@ fn receive_as(lua: &Lua, packet: &str, actor: i64) -> bool {
         .unwrap()
 }
 
+fn archive_recovery(lua: &Lua, same_owner: bool) {
+    lua.globals().set("SAME_OWNER", same_owner).unwrap();
+    lua.load(r#"
+      local state=JAC_AbsorptionGameplay.GetState()
+      state.Archive['native-work:900']={ID='native-work:900',Kind='ITEM',Owner=-1,NativeOwnerMoves=1,
+        NativeWork={Index=900,Owner=SAME_OWNER and 2 or 1,CityID=4,X=4,Y=0,Building=1,Slot=0,
+          GreatWorkType='GREATWORK_TEST',ObjectType='GREATWORKOBJECT_RELIC',CreatorName='original creator',
+          TurnCreated=3,CreatedByPlayer=1,Effects={'TOURISM 4'}}}
+      Game:SetProperty(JAC_AbsorptionRules.STATE_KEY,state)
+      UI_POS=12 -- the same original was captured/rearranged into the recipient's slot
+      function RECOVER()
+        return JAC_AbsorptionGameplay.RecoverArchived('native-work:900',2,'recovery:shared-original')
+      end
+    "#).exec().unwrap();
+}
+
+#[test]
+fn recovery_shared_source_accepts_already_owned_original_without_move_or_loan() {
+    for same_owner in [false, true] {
+        let a = world(2, 2);
+        let b = world(3, 2);
+        for lua in [&a, &b] {
+            archive_recovery(lua, same_owner);
+            lua.load("local r=RECOVER();assert(r.Status=='WAITING_UI' and r.ObservationToken=='recovery:shared-original:inventory');assert(TRANSFERS==0 and MOVES==0)").exec().unwrap();
+        }
+        b.load("UI_POS=8").exec().unwrap(); // peer cache is deliberately different
+        let packet = publish(&a);
+        assert!(!receive_as(&a, &packet, 3));
+        for lua in [&b, &a] {
+            assert!(receive(lua, &packet));
+            assert!(receive(lua, &packet));
+            lua.load("local r=RECOVER();assert(r.Status=='COMPLETE' and r.NativeCarrier==nil and TRANSFERS==0 and MOVES==0);local item=Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(item.NativeWork.Index==900 and item.NativeWork.Owner==2 and item.NativeWork.X==12 and item.NativeOwnerMoves==2)").exec().unwrap();
+        }
+        let canonical = "return JAC_AbsorptionRules.Canonical(Game.props)";
+        assert_eq!(
+            a.load(canonical).eval::<String>().unwrap(),
+            b.load(canonical).eval::<String>().unwrap()
+        );
+    }
+}
+
+#[test]
+fn recovery_pending_shared_source_survives_rejoin_and_turn_refresh() {
+    let a = world(2, 2);
+    let b = world(3, 2);
+    for lua in [&a, &b] {
+        archive_recovery(lua, false);
+        lua.load("pcall(RECOVER)").exec().unwrap();
+    }
+    let stale = publish(&a);
+    let data = saved(&b);
+    drop(b);
+    let b = loaded(3, 2, &data);
+    for lua in [&a, &b] {
+        lua.load("CURRENT_TURN=6;JAC_NativeInventory.Refresh()")
+            .exec()
+            .unwrap();
+        assert!(!receive(lua, &stale));
+    }
+    let packet = publish(&a);
+    for lua in [&b, &a] {
+        assert!(receive(lua, &packet));
+        lua.load("local s=JAC_AbsorptionGameplay.GetState();assert(s.Recoveries['recovery:shared-original'].Status=='COMPLETE' and TRANSFERS==0 and MOVES==0)").exec().unwrap();
+    }
+}
+
+#[test]
+fn world_recovery_waits_for_shared_source_and_publication_completes_human_or_ai_reward() {
+    for recipient in [2, 3] {
+        let a = world(2, recipient);
+        let b = world(3, recipient);
+        for lua in [&a, &b] {
+            archive_recovery(lua, false);
+            lua.load(r#"
+              GameEvents.JAC_AbsorptionFlow_Operation={Add=function() end}
+              GameEvents.OnGameTurnStarted={Add=function() end}
+              UI_POS=RECIPIENT==2 and 12 or 16
+              Game:SetProperty('JAC_ABSORPTION_FLOW_V1',{Version=1,Flows={},World={['shared-original']={
+                ID='shared-original',AssetID='native-work:900',Status='CLAIMED',Recipient=RECIPIENT}}})
+            "#).exec().unwrap();
+            lua.load(
+                fs::read_to_string(
+                    repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Flow.lua"),
+                )
+                .unwrap(),
+            )
+            .exec()
+            .unwrap();
+            lua.load("JAC_AbsorptionFlowGameplay.Tick();local w=JAC_AbsorptionFlowGameplay.GetWorld('shared-original');assert(w.Status=='CLAIMED' and w.WaitingFor=='recovery:shared-original:inventory' and not w.Error)").exec().unwrap();
+        }
+        let packet = publish(&a);
+        for lua in [&b, &a] {
+            assert!(receive(lua, &packet));
+            assert!(receive(lua, &packet));
+            lua.load("local w=JAC_AbsorptionFlowGameplay.GetWorld('shared-original');assert(w.Status=='COMPLETE' and not w.WaitingFor and TRANSFERS==0 and MOVES==0);local r=Players[RECIPIENT]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'];assert(r.RecoveryToken=='recovery:shared-original' and r.NativeOwnerMoves==2);JAC_AbsorptionFlowGameplay.Tick();assert(Players[RECIPIENT]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900'].NativeOwnerMoves==2)").exec().unwrap();
+        }
+    }
+}
+
+#[test]
+fn native_recovery_wrapper_keeps_single_player_without_configuration_on_original_path() {
+    let lua = world(2, 2);
+    lua.load("GameConfiguration=nil;local ok,err=pcall(JAC_AbsorptionGameplay.RecoverArchived,'missing',2,'recovery:sp');assert(not ok and tostring(err):find('escaped asset is absent',1,true));assert(Game:GetProperty('JAC_NATIVE_INVENTORY_V1')==nil)").exec().unwrap();
+}
+
+#[test]
+fn pending_recovery_snapshot_token_cannot_change_asset_or_original() {
+    for change in ["asset", "original", "source"] {
+        let lua = world(2, 2);
+        archive_recovery(&lua, false);
+        lua.load("assert(RECOVER().Status=='WAITING_UI')")
+            .exec()
+            .unwrap();
+        let action = match change {
+            "asset" => "local s=JAC_AbsorptionGameplay.GetState();s.Archive.other=JAC_AbsorptionRules.Copy(s.Archive['native-work:900']);Game:SetProperty(JAC_AbsorptionRules.STATE_KEY,s);return JAC_AbsorptionGameplay.RecoverArchived('other',2,'recovery:shared-original')",
+            "original" => "return JAC_AbsorptionGameplay.RecoverArchived('native-work:900',2,'recovery:shared-original',{changed=true})",
+            _ => "local s=JAC_AbsorptionGameplay.GetState();s.Archive['native-work:900'].NativeWork.CreatorName='changed';Game:SetProperty(JAC_AbsorptionRules.STATE_KEY,s);return RECOVER()",
+        };
+        let err = lua.load(action).eval::<mlua::Value>().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("recovery observation intent changed"),
+            "{change}: {err}"
+        );
+        lua.load("assert(TRANSFERS==0 and MOVES==0);local q=ExposedMembers.JAC_NativeInventory.GetPending()[1];assert(q.ID=='recovery:shared-original' and q.From==1 and q.To==2)").exec().unwrap();
+    }
+}
+
+#[test]
+fn recovery_shared_source_rejects_missing_or_changed_original_before_native_effect() {
+    for changed in [false, true] {
+        let a = world(2, 2);
+        archive_recovery(&a, false);
+        a.load("pcall(RECOVER)").exec().unwrap();
+        if !changed {
+            a.load("UI_POS=-100").exec().unwrap();
+        }
+        let packet = publish(&a);
+        a.globals().set("RECOVERY_PACKET", packet).unwrap();
+        a.globals().set("CHANGED", changed).unwrap();
+        let packet = a.load(r#"
+          local p=JAC_NativeInventoryCodec.Decode(RECOVERY_PACKET)
+          if CHANGED then local o=JAC_NativeInventoryCodec.Decode(p.Payload);o.Works[1].CreatorName='changed'
+            p.Payload=JAC_NativeInventoryCodec.Encode(o) end
+          return JAC_NativeInventoryCodec.Encode(p)
+        "#).eval::<String>().unwrap();
+        assert!(receive(&a, &packet));
+        a.load("assert(TRANSFERS==0 and MOVES==0);assert(Players[2]:GetProperty('JAC_ABSORPTION_ASSETS_V1')['native-work:900']==nil);local s=JAC_AbsorptionGameplay.GetState();assert(s.Recoveries['recovery:shared-original'].Status~='COMPLETE');assert(type(DIAG)=='string')").exec().unwrap();
+    }
+}
+
 fn saved(lua: &Lua) -> String {
     lua.load(
         r#"
