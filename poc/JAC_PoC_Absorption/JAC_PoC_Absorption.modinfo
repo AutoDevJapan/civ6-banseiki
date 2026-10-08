@@ -44,7 +44,7 @@
     <ImportFiles id="JAC_Absorption_Flow_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Flow.lua</File><File>UI/JAC_AbsorptionFlow.lua</File></ImportFiles>
     <ImportFiles id="JAC_Absorption_Engine_Files" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_Absorption_Gameplay.lua</File></ImportFiles>
     <AddGameplayScripts id="JAC_Absorption_Gameplay" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>200</LoadOrder></Properties><File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>
-    <AddGameplayScripts id="JAC_CarrierBoundary" criteria="JAC_Absorption_Banseiki"><Properties><LoadOrder>205</LoadOrder></Properties><File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>
+    <ImportFiles id="JAC_CarrierBoundary" criteria="JAC_Absorption_Banseiki"><File>Scripts/JAC_CarrierBoundary.lua</File></ImportFiles>
   </InGameActions>
   <Files>
     <File>Config/JAC_Absorption_ArtifactTest.xml</File>

@@ -1450,7 +1450,7 @@ mod native_transport {
         let entries: Vec<_> = doc
             .descendants()
             .filter(|node| {
-                node.has_tag_name("AddGameplayScripts")
+                node.has_tag_name("ImportFiles")
                     && node.children().any(|file| {
                         file.has_tag_name("File")
                             && file.text() == Some("Scripts/JAC_CarrierBoundary.lua")
@@ -1462,13 +1462,26 @@ mod native_transport {
             entries[0].attribute("criteria"),
             Some("JAC_Absorption_Banseiki")
         );
-        assert_eq!(
-            entries[0]
-                .descendants()
-                .find(|n| n.has_tag_name("LoadOrder"))
-                .unwrap()
-                .text(),
-            Some("205")
+        let gameplay: Vec<_> = doc
+            .descendants()
+            .filter(|n| n.has_tag_name("AddGameplayScripts"))
+            .collect();
+        assert_eq!(gameplay.len(), 1);
+        assert!(gameplay[0].children().any(
+            |n| n.has_tag_name("File") && n.text() == Some("Scripts/JAC_Absorption_Entry.lua")
+        ));
+        let entry = fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua"),
+        )
+        .unwrap();
+        assert_eq!(entry.matches("include(\"JAC_CarrierBoundary\")").count(), 1);
+        assert!(
+            entry.find("include(\"JAC_Absorption_Gameplay\")").unwrap()
+                < entry.find("include(\"JAC_CarrierBoundary\")").unwrap()
+        );
+        assert!(
+            entry.find("include(\"JAC_Absorption_Flow\")").unwrap()
+                < entry.find("include(\"JAC_CarrierBoundary\")").unwrap()
         );
         Lua::new()
             .load(transport::gameplay_binding())
