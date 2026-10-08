@@ -514,9 +514,23 @@ mod tests {
         no_process: bool,
         lease_checks: usize,
         lease_changes_at: Option<usize>,
+        sync_statuses: std::collections::VecDeque<crate::steam_sync::SyncStatus>,
+        window_needs_process: bool,
     }
     struct LaunchBackend(Arc<Mutex<LaunchState>>);
     impl Backend for LaunchBackend {
+        fn steam_sync_status(
+            &mut self,
+            _: crate::steam_sync::Stage,
+        ) -> Result<crate::steam_sync::SyncStatus> {
+            Ok(self
+                .0
+                .lock()
+                .unwrap()
+                .sync_statuses
+                .pop_front()
+                .unwrap_or(crate::steam_sync::SyncStatus::Idle))
+        }
         fn acquire_startup_lock(&mut self) -> Result<()> {
             self.check_startup_lock()
         }
@@ -539,7 +553,13 @@ mod tests {
             Ok(())
         }
         fn wait_window(&mut self, _: f64) -> Result<isize> {
-            if let Some(kind) = self.0.lock().unwrap().window_error {
+            let state = self.0.lock().unwrap();
+            if state.window_needs_process && state.process.is_none() {
+                return Err(Error::input(
+                    "no window before the fixture process is launched",
+                ));
+            }
+            if let Some(kind) = state.window_error {
                 return Err(Error::new(kind, "window not available"));
             }
             Ok(1)
@@ -552,6 +572,7 @@ mod tests {
         }
         fn pin_launched_process(&mut self) -> Result<Option<crate::startup::GameProcess>> {
             let mut s = self.0.lock().unwrap();
+            assert!(s.calls.contains(&"launch"), "cannot pin an unsent launch");
             s.calls.push("pin_without_window");
             if s.pin_rejected {
                 return Err(Error::input(
@@ -586,6 +607,57 @@ mod tests {
             self.0.lock().unwrap().calls.push("release");
             Ok(())
         }
+    }
+
+    fn persona_sync_fixture(
+        statuses: &[crate::steam_sync::SyncStatus],
+    ) -> (Runner, Arc<Mutex<LaunchState>>, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(Mutex::new(LaunchState {
+            control_owned: true,
+            sync_statuses: statuses.iter().copied().collect(),
+            window_needs_process: true,
+            ..Default::default()
+        }));
+        let mut runner = Runner::with_backend(
+            json!({"name":"fixture","steps":[]}),
+            dir.path().into(),
+            dir.path().into(),
+            dir.path().into(),
+            4318,
+            Box::new(LaunchBackend(Arc::clone(&state))),
+            Arc::new(SystemClock),
+        );
+        runner.persona_runtime_restart = true;
+        (runner, state, dir)
+    }
+
+    #[test]
+    fn persona_sync_pending_before_dispatch_never_pins_an_unsent_launch() {
+        use crate::steam_sync::SyncStatus::{Idle, Pending};
+        let (mut r, state, _dir) = persona_sync_fixture(&[Idle, Pending, Pending, Idle, Idle]);
+        r.launch_startup_and_wait(r.clock.now() + 10.0, false, &mut StartupAttempt::default())
+            .unwrap();
+        assert_eq!(
+            state.lock().unwrap().calls,
+            ["launch", "pin_without_window"]
+        );
+        assert!(r.persona_launch_requested);
+        assert_eq!(r.persona_launched_process, Some((7, 1.0).into()));
+    }
+
+    #[test]
+    fn persona_sync_failure_before_dispatch_leaves_no_launch_to_reclaim() {
+        use crate::steam_sync::SyncStatus::{Failed, Idle};
+        let (mut r, state, _dir) = persona_sync_fixture(&[Idle, Failed]);
+        let error = r
+            .launch_startup_and_wait(r.clock.now() + 10.0, false, &mut StartupAttempt::default())
+            .unwrap_err();
+        assert!(error.message.contains("URI not sent"));
+        assert!(!r.persona_launch_requested);
+        assert!(r.persona_launched_process.is_none());
+        r.cleanup_persona_process().unwrap();
+        assert!(state.lock().unwrap().calls.is_empty());
     }
 
     #[test]

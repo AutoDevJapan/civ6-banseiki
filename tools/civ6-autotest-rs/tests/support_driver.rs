@@ -56,6 +56,7 @@ type States = Box<dyn FnMut() -> Result<Vec<String>> + Send>;
 type Process = Box<dyn FnMut(f64) -> Result<Option<(u32, f64)>> + Send>;
 type Window = Box<dyn FnMut(f64) -> Result<isize> + Send>;
 type Newest = Box<dyn FnMut() -> Result<Option<(PathBuf, f64)>> + Send>;
+type SteamBegin = Box<dyn FnMut(&Path) -> Result<()> + Send>;
 
 pub struct FakeBackend {
     control_owned: bool,
@@ -85,7 +86,13 @@ pub struct FakeBackend {
             + Send,
     >,
     pub on_warning: Box<dyn FnMut() -> Result<bool> + Send>,
+    pub on_begin_steam: SteamBegin,
     pub on_close_orphans: Box<dyn FnMut() -> Result<Vec<u32>> + Send>,
+}
+impl Default for FakeBackend {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl FakeBackend {
     pub fn new() -> Self {
@@ -122,6 +129,7 @@ impl FakeBackend {
             on_connect: Box::new(|| Ok(())),
             on_sync: Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Idle)),
             on_warning: Box::new(|| Ok(false)),
+            on_begin_steam: Box::new(|_| Ok(())),
             on_close_orphans: Box::new(|| Ok(Vec::new())),
         }
     }
@@ -146,12 +154,10 @@ impl FakeBackend {
         self
     }
 }
-impl Default for FakeBackend {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl Backend for FakeBackend {
+    fn begin_steam_observation(&mut self, journal: &Path) -> Result<()> {
+        (self.on_begin_steam)(journal)
+    }
     fn acquire_startup_lock(&mut self) -> Result<()> {
         if !self.control_owned {
             return Err(Error::input("fixture has no live-chain ownership proof"));

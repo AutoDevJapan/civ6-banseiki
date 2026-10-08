@@ -1,3 +1,4 @@
+use civ6_persona_events_rs::snapshot::SERIAL;
 use std::{env, fs};
 
 fn quote(value: &str) -> String {
@@ -20,13 +21,6 @@ const CONTEXT: &str = r#"
 local leader='LEADER_JAC_ASHINA_MORIKIYO'; local owner=1
 local prefix='JAC_PERSONA_'..leader..'_'; local turn=Game.GetCurrentGameTurn()
 local function prop(f) return Game:GetProperty(prefix..f) end
-local function serial(v)
- if type(v)~='table' then return type(v)..':'..tostring(v) end
- local keys={}; for k in pairs(v) do keys[#keys+1]=k end
- table.sort(keys,function(a,b) return tostring(a)<tostring(b) end)
- local parts={}; for _,k in ipairs(keys) do parts[#parts+1]=serial(k)..'='..serial(v[k]) end
- return '{'..table.concat(parts,';')..'}'
-end
 local function snapshot()
  return {merit=prop('MERIT'),last=prop('GOVERN_LAST_TURN'),aiLast=prop('AI_LAST_TURN'),category=prop('CATEGORY'),
  countTurn=prop('GOVERN_TURN_COUNT_TURN'),count=prop('GOVERN_TURN_COUNT'),deed=prop('DEED_GOVERN_TURN_'..turn),
@@ -56,7 +50,7 @@ end
 fn core(code: &str, extra: &str) -> String {
     format!(
         "{{\"action\":\"ui_lua\",\"state_name\":\"GameCore_Tuner\",\"code\":{}{extra}}}",
-        quote(&format!("{CONTEXT}\n{code}"))
+        quote(&format!("{SERIAL}\n{CONTEXT}\n{code}"))
     )
 }
 

@@ -31,20 +31,70 @@ fn position(events: &[String], prefix: &str) -> usize {
     events.iter().position(|s| s.starts_with(prefix)).unwrap()
 }
 
-// Keep the same owned process visible through every authorization probe.
-// The fixture observes its exit only after the graceful-close command is sent.
-fn steam_exit_fixture(old: Option<(u32, f64)>) -> FakeBackend {
-    let alive = Arc::new(Mutex::new(old));
-    let queried = alive.clone();
-    FakeBackend::new()
+// Steam-exit fixtures model the actual quit transition, rather than consuming
+// an arbitrary number of process queries. Ownership rechecks must see the same
+// live identity until the quit operation, then absence at every later query.
+fn steam_restart_fixture(old: Option<(u32, f64)>) -> FakeBackend {
+    let live = Arc::new(Mutex::new(old));
+    let inspected = live.clone();
+    let mut fake = FakeBackend::new()
         .owned_chain()
-        .process(move |_| Ok(*queried.lock().unwrap()))
-        .lua(move |_, code| {
-            if code.contains("Events.UserConfirmedClose()") {
-                *alive.lock().unwrap() = None;
-            }
-            Ok("true".into())
-        })
+        .process(move |_| Ok(*inspected.lock().unwrap()));
+    fake.on_lua = Box::new(move |_, code| {
+        if code.contains("Events.UserConfirmedClose()") {
+            *live.lock().unwrap() = None;
+        }
+        Ok("true".into())
+    });
+    fake
+}
+
+#[test]
+fn locked_steam_log_retries_before_launch_without_replaying_game_operations() {
+    let mut fake = steam_restart_fixture(None);
+    let tries = Arc::new(Mutex::new(0));
+    let observed = tries.clone();
+    fake.on_begin_steam = Box::new(move |_| {
+        let mut n = observed.lock().unwrap();
+        *n += 1;
+        if *n == 1 {
+            Err(Error::new(ErrorKind::SteamLogBusy, "locked original log"))
+        } else {
+            Ok(())
+        }
+    });
+    let ready = tries.clone();
+    fake.on_launch = Box::new(move || {
+        assert_eq!(*ready.lock().unwrap(), 2);
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.launch_steam_and_wait(5.0).unwrap();
+    let events = h.events();
+    assert_eq!(*tries.lock().unwrap(), 2);
+    assert_eq!(events.iter().filter(|e| *e == "launch").count(), 1);
+    assert_eq!(h.clock.at(), 0.05);
+}
+
+#[test]
+fn persistent_log_lock_and_other_errors_stop_before_any_uri_at_original_deadline() {
+    for (kind, deadline, time) in [
+        (ErrorKind::SteamLogBusy, 10.0, 2.0),
+        (ErrorKind::SteamLogBusy, 0.1, 0.1),
+        (ErrorKind::Io, 10.0, 0.0),
+        (ErrorKind::Interrupted, 10.0, 0.0),
+        (ErrorKind::LiveLease, 10.0, 0.0),
+    ] {
+        let mut fake = steam_restart_fixture(None);
+        fake.on_begin_steam = Box::new(move |_| Err(Error::new(kind, "original failure")));
+        let mut h = Harness::new(json!({}), fake);
+        let error = h.runner.launch_steam_and_wait(deadline).unwrap_err();
+        assert!(!h.events().contains(&"launch".into()));
+        assert!((h.clock.at() - time).abs() < 0.00001);
+        if kind != ErrorKind::SteamLogBusy || deadline > 2.0 {
+            assert_eq!(error.kind, kind);
+        }
+    }
 }
 
 struct NativeFixture {
@@ -145,7 +195,7 @@ fn test_restart_action_validation() {
 
 #[test]
 fn steam_sync_must_finish_before_relaunch_after_game_exit() {
-    let mut fake = steam_exit_fixture(Some((12, 100.0)));
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
     let sync_checks = Arc::new(Mutex::new(0));
     let checks = sync_checks.clone();
     fake.on_sync = Box::new(move |_| {
@@ -171,12 +221,43 @@ fn steam_sync_must_finish_before_relaunch_after_game_exit() {
 
 #[test]
 fn steam_sync_deadline_expiry_never_sends_a_launch() {
-    let mut fake = steam_exit_fixture(Some((12, 100.0)));
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
     fake.on_sync = Box::new(|_| Ok(civ6_autotest_rs::steam_sync::SyncStatus::Pending));
     let mut h = Harness::new(json!({}), fake);
     assert!(h.runner.restart_game(30.0).is_err());
     assert!(!h.events().contains(&"launch".into()));
     assert_eq!(h.clock.at(), 30.0);
+}
+
+#[test]
+fn ownership_loss_during_normal_exit_sync_stops_before_another_poll_or_launch() {
+    use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
+    let owned = Arc::new(Mutex::new(true));
+    let control = Arc::clone(&owned);
+    let mut fake = steam_restart_fixture(Some((12, 100.0)));
+    fake.on_control_check = Box::new(move || {
+        if *control.lock().unwrap() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::LiveLease,
+                "fixture owner changed during sync",
+            ))
+        }
+    });
+    let polls = Arc::new(Mutex::new(0));
+    let observed = Arc::clone(&polls);
+    fake.on_sync = Box::new(move |stage| {
+        assert_eq!(stage, Stage::Exit);
+        *observed.lock().unwrap() += 1;
+        *owned.lock().unwrap() = false;
+        Ok(SyncStatus::Pending)
+    });
+    let mut h = Harness::new(json!({}), fake);
+    let error = h.runner.restart_game(120.0).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::LiveLease);
+    assert_eq!(*polls.lock().unwrap(), 1);
+    assert!(!h.events().contains(&"launch".into()));
 }
 
 #[test]
@@ -209,7 +290,7 @@ fn exit_and_prelaunch_failures_send_zero_uri_requests_for_every_failure_kind() {
     use civ6_autotest_rs::steam_sync::{Stage, SyncStatus};
     for old in [None, Some((12, 100.0))] {
         for failure in ["Failed", "Conflict", "Offline"] {
-            let mut fake = steam_exit_fixture(old);
+            let mut fake = steam_restart_fixture(old);
             fake.on_sync = Box::new(move |stage| {
                 assert_eq!(
                     stage,

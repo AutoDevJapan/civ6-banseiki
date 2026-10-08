@@ -1,5 +1,5 @@
 //! Host once, then consume PR121-format Lua.log frames, never post-Host Tuner.
-use crate::{mp_staging as cap, sp_runtime::SERIAL};
+use crate::{mp_staging as cap, snapshot::SERIAL};
 use serde_json::{json, Value};
 use std::path::Path;
 const WITNESS: &str = include_str!("../../../poc/JAC_Test_HotseatBridge/UI/JAC_HotseatWitness.lua");
@@ -43,12 +43,15 @@ pub fn observer(normal: &Value, hotseat: &Value, n: &str) -> Result<String, Stri
         .map(crate::mp_hotseat::roster_literal)
         .collect::<Result<Vec<_>, _>>()?
         .join(",");
-    Ok(format!(r#"
+    Ok(format!(
+        r#"
 do
 local nonce='{n}';local scene='staging.'..nonce;local serial=0
 {emitter}
+local encode=(function()
 {serializer}
-local encode=serial
+return serial
+end)()
 -- Reuse the existing frame emitter's counter separately from table serialization.
 local expected={{{expected}}};local last;local passed=false
 local function inspect()
@@ -93,7 +96,12 @@ function UpdateReadyButton()
  if not ok then observerFailed=true;pcall(emit,'STAGING_ERROR',0,tostring(err)) end
 end
 end
-"#,emitter=original_emitter(),serializer=SERIAL.replace("local function serial(v)","local function encodeValue(v)").replace("serial(k)","encodeValue(k)").replace("serial(v[k])","encodeValue(v[k])"),stock=cap::STOCK_SHA,ready_body=READY_BODY).replace("local encode=serial","local encode=encodeValue"))
+"#,
+        emitter = original_emitter(),
+        serializer = SERIAL,
+        stock = cap::STOCK_SHA,
+        ready_body = READY_BODY
+    ))
 }
 pub fn build(normal: &Value, hotseat: &Value, n: &str) -> Result<Value, String> {
     observer(normal, hotseat, n)?;
