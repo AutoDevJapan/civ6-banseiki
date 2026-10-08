@@ -1,6 +1,61 @@
 use civ6_data_rs::{absorption_admission, absorption_product as product, Repository};
 use mlua::Lua;
 
+#[test]
+fn terminal_acceptance_rejects_partial_transfer_and_misattributed_settlement() -> anyhow::Result<()>
+{
+    const FIXTURE: &str = r#"
+local function copy(v) if type(v)~='table' then return v end local o={} for k,x in pairs(v) do o[k]=copy(x) end return o end
+local function equal(a,b) if type(a)~=type(b) then return false end if type(a)~='table' then return a==b end
+for k,v in pairs(a) do if not equal(v,b[k]) then return false end end for k in pairs(b) do if a[k]==nil then return false end end return true end
+local policy='CONSUME_ON_VERIFIED_RESULT_V2'
+local plan={ProductDeposit={OfferID='offer',From=1,To=2,Gold=100,Faith=20,Policy=policy}}
+FLOW={ID='flow',From=1,To=2,Mode='SMALL_STATE',Phase='RESULT',Phase1Complete=true,FinalRollsComplete=true,
+  CompletedTurn=4,Request=copy(plan),AppliedPlan=copy(plan),Entries={}}
+TX={ID='flow',From=1,To=2,Mode='SMALL_STATE',Status='COMPLETE',Request=copy(plan),Units={},Cities={},Plots={}}
+ESCROW={ID='offer',From=1,To=2,Gold=100,Faith=20,Status='CONSUMED',
+  CollectGold={Before=1000,After=900,Done=true},CollectFaith={Before=1020,After=1000,Done=true},
+  Consumption={FlowID='flow',From=1,To=2,Gold=100,Faith=20,CompletedTurn=4,Policy=policy,LegacyRefunded={Gold=0,Faith=0}}}
+Game={GetProperty=function() return {Escrows={offer=ESCROW}} end}
+Players={[2]={GetTreasury=function() return {GetGoldBalance=function() return 900 end} end}}
+JAC_AbsorptionGameplay={Rules={Copy=copy,Equal=equal},GetState=function() return {Transactions={flow=TX}} end,
+  PlayerFaithBalance=function() return 1000 end}
+JAC_AbsorptionFlowGameplay={Get=function(id) assert(id=='flow');return FLOW end}
+JAC_AbsorptionAdmissionGameplay={Get=function(kind,id) assert(kind=='leader-offer' and id=='offer');return {Status='STARTED',FlowID='flow',Plan=copy(plan)} end}
+"#;
+    for corruption in [
+        "FLOW.Phase='CHOICE'",
+        "FLOW.Phase1Complete=false",
+        "FLOW.FinalRollsComplete=false",
+        "FLOW.CompletedTurn=nil",
+        "FLOW.Error='blocked transfer'",
+        "FLOW.WaitingFor='WAITING_UI'",
+        "TX.Status='STAGED'",
+        "TX.From=7",
+        "TX.ID='other-flow'",
+        "TX.Request.ProductDeposit.Gold=0",
+        "ESCROW.Status='HELD'",
+        "ESCROW.ID='other-offer'",
+        "ESCROW.To=7",
+        "ESCROW.Gold=0;ESCROW.Consumption.Gold=0",
+        "ESCROW.Consumption=nil",
+        "ESCROW.Consumption.FlowID='other-flow'",
+        "ESCROW.Consumption.Gold=0",
+        "ESCROW.Consumption.CompletedTurn=3",
+        "ESCROW.Consumption.Policy='REFUND'",
+        "ESCROW.Consumption.LegacyRefunded.Faith=20",
+        "ESCROW.CollectGold.After=1000",
+        "ESCROW.CollectFaith.Done=false",
+    ] {
+        let lua = Lua::new();
+        let accepted: bool=lua.load(format!("{FIXTURE}\n{}\n{}\nassert(CompletionReady('flow','offer'));assert(CompletionEvidence('flow','offer').Transfer.Status=='COMPLETE')\n{corruption}\nreturn pcall(CompletionEvidence,'flow','offer')",product::P1_EVIDENCE,product::COMPLETION_EVIDENCE)).eval()?;
+        assert!(!accepted, "false terminal success: {corruption}");
+    }
+    let lua = Lua::new();
+    lua.load(format!("{FIXTURE}\n{}\n{}\nFLOW.Phase='CHOICE';ESCROW.Status='HELD';assert(not CompletionReady('flow','offer'))",product::P1_EVIDENCE,product::COMPLETION_EVIDENCE)).exec()?;
+    Ok(())
+}
+
 const WORLD: &str = r#"
 local function copy(v) if type(v)~='table' then return v end local o={} for k,x in pairs(v) do o[k]=copy(x) end return o end
 local function equal(a,b) if type(a)~=type(b) then return false end if type(a)~='table' then return a==b end
@@ -621,8 +676,9 @@ fn four_product_scenes_use_real_actors_and_approved_screen_handlers_without_diag
             let value: serde_json::Value =
                 serde_json::from_str(&product::acceptance_scenario(&repo, small, human)?)?;
             let steps = value["steps"].as_array().unwrap();
-            assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 2);
-            assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 2);
+            // Waiting, frozen first-stage choices, then verified terminal settlement.
+            assert_eq!(steps.iter().filter(|s| s["action"] == "save").count(), 3);
+            assert_eq!(steps.iter().filter(|s| s["action"] == "load").count(), 3);
             assert!(value.get("test_mode").is_none());
             for step in steps {
                 if let Some(code) = step["code"]
@@ -1278,7 +1334,7 @@ fn every_generated_product_reload_exits_the_running_game_before_loading() -> any
                     assert_eq!(steps[index - 2]["name"], step["name"]);
                 }
             }
-            assert_eq!(count, 2);
+            assert_eq!(count, 3);
         }
     }
     Ok(())

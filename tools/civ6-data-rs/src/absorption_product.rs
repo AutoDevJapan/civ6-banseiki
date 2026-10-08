@@ -38,6 +38,100 @@ local function P1Evidence(flow)
 end
 "#;
 
+/// Terminal acceptance evidence shared by diagnostic and official product routes.
+/// A completed flow alone does not prove that its payer and asset transfer settled.
+pub const COMPLETION_EVIDENCE: &str = r#"
+local function CompletionReady(flowID,offerID)
+  local f=JAC_AbsorptionFlowGameplay.Get(flowID)
+  local s=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
+  local e=s and s.Escrows and s.Escrows[offerID]
+  if f and f.Phase=='BLOCKED' then error(f.Error or 'asset transfer blocked') end
+  return f and (f.Phase=='RESULT' or f.Phase=='DONE') and e and e.Status=='CONSUMED'
+end
+local function CompletionEvidence(flowID,offerID)
+  local A=JAC_AbsorptionGameplay;local R=A.Rules
+  local f=assert(JAC_AbsorptionFlowGameplay.Get(flowID),'completed flow missing')
+  local s=assert(Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1'))
+  local e=assert(s.Escrows[offerID],'completed escrow missing')
+  local n=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',offerID),'completed admission missing')
+  assert(n.Status=='STARTED' and n.FlowID==flowID and R.Equal(n.Plan,f.Request),'completed admission changed')
+  assert((f.Phase=='RESULT' or f.Phase=='DONE') and f.Phase1Complete and f.FinalRollsComplete
+    and type(f.CompletedTurn)=='number' and not f.Error and not f.WaitingFor,'flow is not complete')
+  assert(e.ID==offerID and e.Status=='CONSUMED' and e.From==f.From and e.To==f.To,'completed payer changed')
+  local deposit=assert(f.Request.ProductDeposit,'original product deposit missing')
+  assert(deposit.OfferID==offerID and deposit.From==e.From and deposit.To==e.To
+    and deposit.Gold==e.Gold and deposit.Faith==e.Faith
+    and deposit.Policy=='CONSUME_ON_VERIFIED_RESULT_V2','original product deposit changed')
+  local tx=assert(A.GetState().Transactions[flowID],'completed transfer missing')
+  assert(tx.ID==flowID and tx.Status=='COMPLETE' and tx.From==f.From and tx.To==f.To and tx.Mode==f.Mode
+    and R.Equal(tx.Request,f.AppliedPlan),'complete asset-transfer receipt changed')
+  local c=assert(e.Consumption,'consumption receipt missing')
+  assert(c.FlowID==flowID and c.From==e.From and c.To==e.To and c.CompletedTurn==f.CompletedTurn
+    and c.Policy=='CONSUME_ON_VERIFIED_RESULT_V2' and c.Gold==e.Gold and c.Faith==e.Faith
+    and c.LegacyRefunded and c.LegacyRefunded.Gold==0 and c.LegacyRefunded.Faith==0,'consumption receipt changed')
+  for _,currency in ipairs({'Gold','Faith'}) do
+    if e[currency]>0 then
+      local leg=assert(e['Collect'..currency],'actual payment leg missing')
+      assert(leg.Done and leg.Before-leg.After==e[currency],'actual payment leg changed')
+    end
+  end
+  local transfer=R.Copy(tx);transfer.VerificationUI=nil
+  return {FirstStage=P1Evidence(f),Entries=R.Copy(f.Entries),AppliedPlan=R.Copy(f.AppliedPlan),
+    CompletedTurn=f.CompletedTurn,Transfer=transfer,Escrow=R.Copy(e),
+    Gold=Players[f.To]:GetTreasury():GetGoldBalance(),Faith=A.PlayerFaithBalance(f.To)}
+end
+"#;
+
+pub fn completion_steps(human: bool, actors: &str, key: &str, save: &str) -> Vec<Value> {
+    let core = |body: &str| {
+        json!({"action":"ui_lua","state_name":"JAC_Absorption_Entry",
+        "code":format!("{P1_EVIDENCE}\n{COMPLETION_EVIDENCE}\nlocal t=assert(Game:GetProperty('{key}'))\n{body}")})
+    };
+    let mut steps = Vec::new();
+    if human {
+        let view = format!("{actors}\nlocal f=assert(ExposedMembers.JAC_AbsorptionFlow.GetPending(t.To));assert(f.From==t.From and f.To==t.To,'wrong human flow')\n");
+        // One submitted command followed by its published receipt. Once all
+        // entries are chosen, remaining bounded steps are read-only no-ops.
+        // repeat_until is intentionally reserved for actual turn advancement.
+        for _ in 0..64 {
+            steps.extend(json!([
+                {"action":"ui_lua","state_name":"JAC_AbsorptionFlow","code":format!(r#"{view}
+local ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open(),'choice screen did not open')
+JAC_PRODUCT_COMPLETION_CHOICE=nil
+local preferred={{UNIT='SURRENDER',PERSON='CAPTURE',GOVERNOR='CAPTURE',HERO='PROTECT',GREAT_PERSON='RECRUIT',ITEM='TRANSFER',UNLOCK='PRESERVE',RELIGION='PRESERVE'}}
+for _,e in ipairs(f.Entries) do if not e.EscapeOutcome and not e.SelectedAction then
+  local action=assert(preferred[e.Kind],'unsupported test choice kind');local allowed=false
+  for _,a in ipairs(e.AllowedActions) do if a==action then allowed=true end end
+  assert(allowed,'ordinary choice not offered');assert(ui.SelectEntry(e.ID));assert(ui.ChooseAction(action),'choice handler rejected')
+  JAC_PRODUCT_COMPLETION_CHOICE={{FlowID=f.ID,AssetID=e.ID,Action=action}};return 'ordinary human choice submitted'
+end end
+return 'all human choices already submitted'"#)},
+                {"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"JAC_AbsorptionFlow","code":r#"local c=JAC_PRODUCT_COMPLETION_CHOICE;if not c then return true end;local f=assert(ExposedMembers.JAC_AbsorptionFlow.Get(c.FlowID));for _,e in ipairs(f.Entries) do if e.ID==c.AssetID then return e.SelectedAction==c.Action end end;error('selected asset disappeared')"#}}
+            ]).as_array().unwrap().iter().cloned());
+        }
+        steps.push(json!({"action":"ui_lua","state_name":"JAC_AbsorptionFlow",
+            "code":format!("{view}local ui=assert(JAC_AbsorptionFlow_UI);ui.Refresh();assert(ui.Open());assert(ui.Resolve(),'normal resolution handler rejected');return 'normal human resolution submitted'")}));
+    }
+    steps.push(json!({"action":"wait_for","timeout":600,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry",
+        "code":format!("{COMPLETION_EVIDENCE}\nlocal t=Game:GetProperty('{key}');return t and CompletionReady(t.FlowID,t.OfferID)")}}));
+    let request = "local r=JAC_AbsorptionGameplay.RequestVerification(t.FlowID);t.VerificationToken=r and r.Token or nil;Game:SetProperty('".to_owned()+key+"',t);return 'request exact transferred-asset verification'";
+    let published = json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry",
+        "code":format!("local t=assert(Game:GetProperty('{key}'));local r=ExposedMembers.JAC_HeroReadAPI;return not t.VerificationToken or r and r.GetObservation and r.GetObservation(t.VerificationToken)~=nil")}});
+    steps.push(core(&request));
+    steps.push(published.clone());
+    steps.push(core(&format!("assert(JAC_AbsorptionGameplay.Verify(t.FlowID,true));t.CompletedEvidence=JAC_AbsorptionGameplay.Canonical(CompletionEvidence(t.FlowID,t.OfferID));Game:SetProperty('{key}',t);return 'complete asset transfer and consumed deposit verified'")));
+    steps.extend([
+        json!({"action":"save","name":save,"timeout":90}),
+        json!({"action":"exit_to_menu","timeout":90}),
+        json!({"action":"load","name":save,"timeout":600}),
+        json!({"action":"wait_for","timeout":120,"condition":{"type":"lua","state_name":"JAC_Absorption_Entry",
+            "code":format!("local t=Game:GetProperty('{key}');return t~=nil and JAC_AbsorptionGameplay~=nil and JAC_AbsorptionFlowGameplay~=nil and JAC_AbsorptionProductGameplay~=nil")}}),
+        core(&request), published,
+        core("local A=JAC_AbsorptionGameplay;assert(A.Verify(t.FlowID,true));assert(A.Canonical(CompletionEvidence(t.FlowID,t.OfferID))==t.CompletedEvidence,'completed transfer or settlement changed on reload');JAC_AbsorptionAdmissionGameplay.Request('leader-offer',t.OfferID,t.From,t.To);assert(A.Canonical(CompletionEvidence(t.FlowID,t.OfferID))==t.CompletedEvidence,'completed replay changed assets or charged again');return 'complete transfer, consumed deposit and exact assets survive save/load and replay'")
+    ]);
+    steps
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Metric {
     CombatUnits,
@@ -635,7 +729,7 @@ if escrow.Faith>0 then assert(escrow.CollectFaith.Done and escrow.CollectFaith.B
 local flow=assert(JAC_AbsorptionFlowGameplay.Get(receipt.FlowID));assert(flow.Phase1Complete)
 t.OfferID=pair.ID;t.FlowID=receipt.FlowID;t.Snapshot=JAC_AbsorptionGameplay.Canonical(P1Evidence(flow))
 Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
-return 'ordinary product requirements, actual deposit, and normal three-stage flow accepted'
+return 'ordinary product requirements, actual deposit, and first-stage flow accepted'
 "#)));
     let save = format!(
         "JAC-product-{}-{}-choice",
@@ -653,6 +747,16 @@ assert(JAC_AbsorptionGameplay.Canonical(P1Evidence(JAC_AbsorptionFlowGameplay.Ge
 assert(Players[t.To]:GetTreasury():GetGoldBalance()==before,'product replay charged twice')
 return 'product save/load and duplicate admission preserve first-stage rolls and payment'
 "#)));
+    steps.extend(completion_steps(
+        human,
+        &ui_actors,
+        "JAC_PRODUCT_ACCEPTANCE_V1",
+        &format!(
+            "JAC-product-{}-{}-complete",
+            if small { "small" } else { "merger" },
+            if human { "human" } else { "ai" }
+        ),
+    ));
     Ok(format!(
         "{}\n",
         serde_json::to_string_pretty(

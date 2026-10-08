@@ -1415,6 +1415,12 @@ return v.Status=='AVAILABLE'
     steps.push(ui("Events.GameCoreEventPublishComplete.Remove(JAC_OfficialProductCurrencyCallback);JAC_OfficialProductCurrencyCallback=nil;ExposedMembers.JAC_OfficialProductCurrencySnapshots=nil;return 'native currency snapshot observer removed after verified debit'"));
     round_trip(&mut steps, "JAC-official-product-ai-qualified");
     steps.push(core("SavedProgress(assert(t.Qualified),'qualified same-name save/exit/load');return 'qualified original evidence, actual payer and receipts preserved with legal flow/escrow advancement'"));
+    steps.extend(civ6_data_rs::absorption_product::completion_steps(
+        false,
+        &format!("{UI_ACTORS}\nlocal t={{From=from,To=to}}"),
+        "JAC_OFFICIAL_PRODUCT_ACCEPTANCE_V1",
+        "JAC-official-product-ai-complete",
+    ));
     Ok(json!({
         "name":"Official Vatican City AI product route: native qualification, exact pool/grant receipts, publication replay and same-name save/load",
         "judge_profile":"generic",
@@ -3905,7 +3911,7 @@ t.CollectionCheckpoint=resumed;Game:SetProperty(KEY,t)
                 assert_eq!(steps[index + 1]["action"], "wait_for");
             }
         }
-        assert_eq!(trips, 3);
+        assert_eq!(trips, 4); // receipt, pending, qualified, verified terminal transfer
         assert_eq!(turns, 4); // founding, two measured sends, pending round trip
         let repeat: Vec<_> = steps
             .iter()
