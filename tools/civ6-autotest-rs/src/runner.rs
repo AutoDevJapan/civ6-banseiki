@@ -560,7 +560,7 @@ impl Runner {
     fn budget(&self, deadline: f64, cap: f64) -> Result<f64> {
         Ok(self.remaining(deadline)?.min(cap))
     }
-    // This request budget is shorter than the enclosing step deadline. Only a
+    // This request budget is capped by the enclosing step deadline. Only a
     // pre-dispatch expiry is retryable; interruption keeps its original kind.
     fn remaining_unsent(&self, deadline: f64, message: &str) -> Result<f64> {
         self.remaining(deadline).map_err(|error| {

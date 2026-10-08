@@ -374,6 +374,33 @@ fn frontend_retries_local_unsent_timeout_within_original_startup_deadline() {
 }
 
 #[test]
+fn repeated_unsent_probe_expiry_stops_at_original_frontend_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let consumed = clock.clone();
+    let mut connections = 0;
+    let mut fake = FakeBackend::new();
+    fake.on_connect = Box::new(move || {
+        connections += 1;
+        if connections % 2 == 0 {
+            consumed.advance(5.0);
+        }
+        Ok(())
+    });
+    let mut h = Harness::new(json!({}), fake);
+    h.runner.clock = clock.clone();
+    let error = h.runner.wait_frontend_ready(20.0, false).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Scenario);
+    assert!(error
+        .message
+        .contains("Main menu did not become ready after 20s"));
+    // The fake connect deliberately ignores its supplied budget on the final
+    // probe. The outer loop must stop instead of granting a new startup budget.
+    assert!(clock.at() >= 20.0);
+    assert!(h.calls().is_empty());
+    assert!(!h.events().contains(&"launch".into()));
+}
+
+#[test]
 fn test_auto_restart_precedes_first_step_and_log_baseline() {
     let mut fake = FakeBackend::new().process(processes(
         &[
