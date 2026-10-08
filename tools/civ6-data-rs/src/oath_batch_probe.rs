@@ -175,6 +175,8 @@ pub enum Phase {
     PrecisionTwo,
     /// Independent 2-percent city-yield modifier, only in refined diagnostics.
     PrecisionFineTwo,
+    /// Flat input only, independent of the proportional calibration.
+    PrecisionInput,
     PrecisionOff,
     Reference,
     ReferenceOff,
@@ -196,6 +198,7 @@ impl Phase {
             Phase::PrecisionOne => "precision_one".into(),
             Phase::PrecisionTwo => "precision_two".into(),
             Phase::PrecisionFineTwo => "precision_fine_two".into(),
+            Phase::PrecisionInput => "precision_input".into(),
             Phase::PrecisionOff => "precision_off".into(),
             Phase::Reference => "reference".into(),
             Phase::ReferenceOff => "reference_off".into(),
@@ -239,6 +242,18 @@ fn schedule_for(cases: usize, refine_resolution: bool) -> Vec<Phase> {
     let mut phases = schedule(cases);
     if refine_resolution {
         phases.insert(3, Phase::PrecisionFineTwo);
+    }
+    phases
+}
+
+fn schedule_for_input(
+    cases: usize,
+    refine_resolution: bool,
+    independent_input: bool,
+) -> Vec<Phase> {
+    let mut phases = schedule_for(cases, refine_resolution);
+    if independent_input {
+        phases.insert(4, Phase::PrecisionInput);
     }
     phases
 }
@@ -649,6 +664,7 @@ pub struct Probe {
     pub batch: usize,
     pub cases: Vec<Case>,
     refine_resolution: bool,
+    independent_input: bool,
     steps: Vec<(Role, Value)>,
 }
 
@@ -662,10 +678,24 @@ impl Probe {
         batch: usize,
         refine_resolution: bool,
     ) -> Result<Self> {
+        Self::with_precision(repo, batch, refine_resolution, false)
+    }
+
+    pub fn with_precision(
+        repo: &Repository,
+        batch: usize,
+        refine_resolution: bool,
+        independent_input: bool,
+    ) -> Result<Self> {
+        ensure!(
+            !independent_input || refine_resolution,
+            "independent input requires refined calibration"
+        );
         let mut probe = Probe {
             batch,
             cases: self::batch(repo, batch)?,
             refine_resolution,
+            independent_input,
             steps: Vec::new(),
         };
         for step in first_steps(&repo.json(BASE)?, &probe.cases[0].civ)? {
@@ -687,12 +717,13 @@ impl Probe {
         probe.core(Role::Fixture, format!("{}{FIXTURE}", probe.prelude()));
         let n = probe.cases.len();
         let all: Vec<usize> = (0..n).collect();
-        for phase in schedule_for(n, refine_resolution) {
+        for phase in schedule_for_input(n, refine_resolution, independent_input) {
             match phase {
                 Phase::Baseline => {}
                 Phase::PrecisionOne => probe.meter([1, 0, 0, 1, 0]),
                 Phase::PrecisionTwo => probe.meter([1, 1, 0, 1, 0]),
                 Phase::PrecisionFineTwo => probe.meter([0, 0, 0, 1, 1]),
+                Phase::PrecisionInput => probe.meter([0, 1, 0, 1, 0]),
                 Phase::PrecisionOff | Phase::ReferenceOff => probe.meter([0, 0, 0, 1, 0]),
                 Phase::Reference => probe.meter([0, 0, 1, 1, 0]),
                 Phase::On(0) => probe.select(),
@@ -703,28 +734,24 @@ impl Probe {
             }
             probe.measure(phase);
         }
-        let order: Vec<_> = schedule_for(n, refine_resolution)
+        let order: Vec<_> = schedule_for_input(n, refine_resolution, independent_input)
             .iter()
             .map(|p| lua_string(&p.name()))
             .collect();
+        let mut precision_phases = String::new();
+        let mut precision_samples = String::new();
+        if refine_resolution {
+            precision_phases.push_str(",'precision_fine_two'");
+            precision_samples.push_str(",S.precision_fine_two[i].y[e.kind]");
+        }
+        if independent_input {
+            precision_phases.push_str(",'precision_input'");
+            precision_samples.push_str(",S.precision_input[i].y[e.kind]");
+        }
         let compare = COMPARE
             .replace("__ORDER__", &format!("{{{}}}", order.join(",")))
-            .replace(
-                "__EXTRA_PRECISION__",
-                if refine_resolution {
-                    ",'precision_fine_two'"
-                } else {
-                    ""
-                },
-            )
-            .replace(
-                "__EXTRA_SAMPLE__",
-                if refine_resolution {
-                    ",S.precision_fine_two[i].y[e.kind]"
-                } else {
-                    ""
-                },
-            );
+            .replace("__EXTRA_PRECISION__", &precision_phases)
+            .replace("__EXTRA_SAMPLE__", &precision_samples);
         probe.ui(
             Role::Compare,
             format!("{LUA_HELPERS}{}{compare}", probe.prelude()),
@@ -930,13 +957,20 @@ impl Probe {
                 json!({"oath":c.oath,"house":c.house,"civilization":c.civ,"selection_path":selection_path(i),"effects":effects})
             })
             .collect();
-        let phases: Vec<_> = schedule_for(self.cases.len(), self.refine_resolution)
-            .iter()
-            .map(|p| p.name())
-            .collect();
+        let phases: Vec<_> = schedule_for_input(
+            self.cases.len(),
+            self.refine_resolution,
+            self.independent_input,
+        )
+        .iter()
+        .map(|p| p.name())
+        .collect();
         let mut identity = json!({"batch":self.batch,"batches":BATCHES,"scope":"yield_quantities_and_native_save_only","cases":cases,"phases":phases,"requires_offline_verification":true,"task_accepted":false,"remaining":["natural_age_transition","official_ui_selection_for_ledger_fixture_houses"]});
         if self.refine_resolution {
             identity["refine_resolution"] = json!(true);
+        }
+        if self.independent_input {
+            identity["independent_input"] = json!(true);
         }
         identity
     }
@@ -969,6 +1003,7 @@ fn phase_meter_state(phase: Phase) -> [u8; 5] {
         Phase::PrecisionOne => [1, 0, 0, 1, 0],
         Phase::PrecisionTwo => [1, 1, 0, 1, 0],
         Phase::PrecisionFineTwo => [0, 0, 0, 1, 1],
+        Phase::PrecisionInput => [0, 1, 0, 1, 0],
         Phase::Reference => [0, 0, 1, 1, 0],
         Phase::Saved | Phase::Loaded => [0, 0, 0, 0, 0],
         _ => [0, 0, 0, 1, 0],
@@ -1147,6 +1182,10 @@ pub(crate) fn evaluate(
         .contains(&Phase::PrecisionFineTwo)
         .then(|| get(Phase::PrecisionFineTwo))
         .transpose()?;
+    let independent_input = order
+        .contains(&Phase::PrecisionInput)
+        .then(|| get(Phase::PrecisionInput))
+        .transpose()?;
     for (i, a) in base.iter().enumerate() {
         for phase in [Phase::PrecisionOff, Phase::ReferenceOff] {
             if let Some(kind) = differs(a, &get(phase)?[i]) {
@@ -1156,7 +1195,8 @@ pub(crate) fn evaluate(
         if subject(a.owner).is_none() {
             let phases = [Phase::PrecisionOne, Phase::PrecisionTwo, Phase::Reference]
                 .into_iter()
-                .chain(fine_two.map(|_| Phase::PrecisionFineTwo));
+                .chain(fine_two.map(|_| Phase::PrecisionFineTwo))
+                .chain(independent_input.map(|_| Phase::PrecisionInput));
             for phase in phases {
                 if let Some(kind) = differs(a, &get(phase)?[i]) {
                     bail!(
@@ -1254,6 +1294,9 @@ pub(crate) fn evaluate(
                         two[i].yields[slot],
                     ];
                     if let Some(rows) = fine_two {
+                        calibration.push(rows[i].yields[slot]);
+                    }
+                    if let Some(rows) = independent_input {
                         calibration.push(rows[i].yields[slot]);
                     }
                     detail.step = reported_step(&calibration);
@@ -2047,7 +2090,12 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         None if scenario["batch_probe"]["refine_resolution"].is_null() => false,
         _ => bail!("invalid resolution refinement metadata"),
     };
-    let probe = Probe::with_resolution(repo, batch, refine_resolution)?;
+    let independent_input = match scenario["batch_probe"]["independent_input"].as_bool() {
+        Some(true) => true,
+        None if scenario["batch_probe"]["independent_input"].is_null() => false,
+        _ => bail!("invalid independent input metadata"),
+    };
+    let probe = Probe::with_precision(repo, batch, refine_resolution, independent_input)?;
     let expected = probe.scenario()?;
     ensure!(
         scenario["diagnostic_only"] == true
@@ -2172,7 +2220,7 @@ pub fn verify(repo: &Repository, dir: &Path) -> Result<Value> {
         &probe.cases,
         &expected_civs,
     )?;
-    let order = schedule_for(probe.cases.len(), refine_resolution);
+    let order = schedule_for_input(probe.cases.len(), refine_resolution, independent_input);
     let mut samples = BTreeMap::new();
     for phase in &order {
         let rows = measured(&details[at(Role::Measure(*phase))?], batch, *phase)?;
@@ -2313,11 +2361,17 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
         ["--refine-resolution", "--batch", batch, "--output", path] => {
             output(batch.parse().context("batch number")?, path, true)
         }
+        ["--independent-input", "--batch", batch, "--output", path] => {
+            let probe = Probe::with_precision(repo, batch.parse().context("batch number")?, true, true)?;
+            write_new(Path::new(path), &probe.scenario()?)?;
+            println!("batch {batch}: independent flat-input calibration, {} steps; diagnostic only, live unverified", probe.steps.len());
+            Ok(())
+        }
         ["--refine-resolution", "--output", path] => output(1, path, true),
         ["--batch", batch, "--refine-resolution", "--output", path] => {
             output(batch.parse().context("batch number")?, path, true)
         }
-        _ => bail!("usage: generate-oath-batch-probes --check | [--refine-resolution] [--batch 1..={BATCHES}] --output NEW.json | --verify ARTIFACT_DIR"),
+        _ => bail!("usage: generate-oath-batch-probes --check | [--refine-resolution] [--batch 1..={BATCHES}] --output NEW.json | --independent-input --batch 1..={BATCHES} --output NEW.json | --verify ARTIFACT_DIR"),
     }
 }
 

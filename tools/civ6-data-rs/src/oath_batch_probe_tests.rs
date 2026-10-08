@@ -782,6 +782,80 @@ fn refined_batch_uses_all_six_new_samples_and_keeps_case_failures() -> Result<()
 }
 
 #[test]
+fn hypothetical_independent_input_resolves_coincident_steps_without_relaxing_the_quantity_bound(
+) -> Result<()> {
+    // Run43 culture of Kanrei: every proportional sample is a multiple of 19/256.
+    let old = [6.6015625, 14.09765625, 6.67578125, 7.56640625, 6.75];
+    let coarse = reported_step(&old).context("live bound")?;
+    assert_eq!(coarse, 19.0 / 256.0 + 0.00002);
+    let mut independent = old.to_vec();
+    // Hypothetical flat-input witness: not an observation from the live run.
+    independent.push(old[0] + 226.0 / 256.0);
+    let finer = reported_step(&independent).context("independent bound")?;
+    assert_eq!(finer, 1.0 / 256.0 + 0.00002);
+    let reference = old[1] - old[0];
+    let tolerance = 2.0 * finer * 1.05 + 0.00004;
+    assert!(2.0 * coarse * 1.05 + 0.00004 >= reference * 0.005);
+    assert!(tolerance < reference * 0.005);
+    assert!(((6.9765625 - old[0]) - reference * 0.05).abs() <= tolerance);
+    assert!(((6.9765625 - old[0]) - reference * 0.06).abs() > tolerance);
+    let values = independent
+        .iter()
+        .map(f64::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    let lua: f64 = Lua::new()
+        .load(format!("{LUA_HELPERS}\nreturn reported_step({{{values}}})"))
+        .eval()?;
+    assert_eq!(lua.to_bits(), finer.to_bits());
+    Ok(())
+}
+
+#[test]
+fn independent_input_runs_generated_chunks_and_requires_the_new_original_observation() -> Result<()>
+{
+    let repo = Repository::checked_in();
+    let probe = Probe::with_precision(&repo, 2, true, true)?;
+    let old = Probe::with_resolution(&repo, 2, true)?.scenario()?;
+    assert!(old["batch_probe"].get("independent_input").is_none());
+    let run = simulate(&probe, "")?;
+    assert_eq!(run.failure, None);
+    let result = verify(&repo, run.dir.path())?;
+    assert_eq!(result["verified_count"], probe.cases.len());
+    assert_eq!(result["task_accepted"], false);
+    let at = record(&run, &probe, Role::Measure(Phase::PrecisionInput), "OK")?;
+    rejects(
+        &run,
+        |rows| {
+            rows.remove(at);
+            Ok(())
+        },
+        "driver record",
+    )?;
+    rejects(
+        &run,
+        |rows| {
+            edit_return(&mut rows[at], |value| {
+                value["cities"][0]["culture"] = json!(9999.0);
+            })
+        },
+        "Core and UI observations differ",
+    )?;
+    let mut omitted = run.scenario.clone();
+    omitted["batch_probe"]
+        .as_object_mut()
+        .context("metadata")?
+        .remove("independent_input");
+    fs::write(
+        run.dir.path().join("scenario.json"),
+        serde_json::to_string(&omitted)?,
+    )?;
+    assert!(verify(&repo, run.dir.path()).is_err());
+    assert!(Probe::with_precision(&repo, 2, false, true).is_err());
+    Ok(())
+}
+
+#[test]
 fn refined_metadata_phase_code_and_observation_are_required() -> Result<()> {
     let repo = Repository::checked_in();
     let probe = Probe::with_resolution(&repo, 2, true)?;
