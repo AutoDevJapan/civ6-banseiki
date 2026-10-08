@@ -852,3 +852,23 @@ nativeへの設定と観測上限300秒は変更しない。v3の`controller_sec
 独立レビューは、待ち列がない場合の開始前確認とcontroller期限が食い違うMustを指摘した。取得時刻基準の確認を独立させ、通常の譲渡期限を変えずに修正した。bootstrap履歴の128行上限は変更していない。六組の保存読込を含む通し全体でこの容量に収まるかは未実機であり、Suggestionとして次の原成果物で確認する。満杯時の失敗や欠落0の条件は維持する。
 
 追審では、短い手順期限から算出した準備枠と、READY受付の固定30秒が食い違うMustが出た。同じ期限処理で二回指摘されたため、数値を足すだけでなく準備の所有者を見直した。RunnerがFrontEnd後の残時間から一つの単調時計の期限を作り、BackendからSessionへ必須引数として渡す。PIDとファイルの確認前、controllerを起動する直前に期限を確認し、READYの待機もその期限と30秒の短い方に収める。期限を過ぎて届いたREADYも成功にしない。受付失敗は既存の対象プロセス終了・controller回収を使う。Windowsの独立した子で50msの期限から新しい30秒待機を作らないこと、対象とcontrollerの終了、無関係なpeerの生存を確認した。Frontendに費やした時間を差し引く検査と、期限切れをPID・ファイル操作より前に拒否する検査も保持する。これらはゲーム成功ではなく、同じ期限と所有権を使う実行器の回帰検査である。
+
+### ToDo880: 通常runtimeの正式CanPromoteへの制限接続（2026-10-08）
+
+`b6026669`を基点に、`windows/promotion.rs`を通常の`BridgeRuntimeInstall`へ接続した。純判定だけの追加ではなく、公式caller `0x30EC0F`とAI caller `0x4A7D67`の原call一回の戻り値へ、`governor_payment::restrict_promotion`を適用する。通常の加入許可と同期済みcatalog、現在の本人の取得済み昇進から、保存費用の次の未払TITLEだけを許可する。支払済みTITLEの再送、保存費用を超えるTITLE、功績技能、全額後のPROMOTEは拒否する。原AL=falseをtrueへ変えず、RAXのAL以外を保持する。
+
+出所は既存production admissionの`AdmissionAllowed`である。加入時の保存価格、OWNER/STATE、本人の存在と未払い全員分の予約・公式残高照合を経た本人許可を使う。配置用の`PAID_ALLOW=true`は要求しない。入口のCallFenceと、本人のbinding/close/false-ACK/manifest/allowの五つの原子的な値を保存し、すべて入口以前のticketであること、戻り時にも同じ値であることを確認する。同じ所有者内での閉鎖と再許可でも古い呼出しは新しい許可を借りない。22人のcatalogが完全に確定し、そのowner/session/取引が現在のときだけ、そこに存在しないIndexを通常総督と分類する。未知・読込中・同期未準備は閉じる。本人のflagは`read_current`で有限コピーし、getter、Lua VM、任意stack引数を追加しない。
+
+固定SHAは本書のmode8と同じである。PEの`.text`から両E8、引数命令、callee前5byteと先頭8byteを読み、読み込まれたGameCoreと照合する。AIの16byteは`E8 44 5E E3 FF 84 C0 74 79 48 8B 03 48 63 48 14`、直前のR8D/RDX/RCXの命令は`45 8B C4 48 8B D0 4C 8B 64 24 20 49 8B CC`である。変更は整列した4byte operandだけで、AMDの非同期変更条件、保護復元、cache flush、全16byteの再読込を維持する。`0x2DDBB0`の4命令ある入口は変更しない。
+
+専用gatewayは入口と原戻りのvolatile整数レジスタ、XMM0..5、RFLAGSを保持する。本書559-565行の固定callee全経路には3つのレジスタ以外の入力がないため、原callにはWin64で整列したframeとhome領域を用意する。元calleeの戻り先はgateway内のラベルになる。callerのRSP、戻り先、home/stackの内容は保持する。SEHは`.pdata/.xdata`で巻き戻す。許可はframe内だけにあり、TLS・観測カウンタ・解除時に解放するCoreポインタを持たない。通常runtimeの観測停止・Close/Rebuildと同期台帳をそのまま使う。
+
+両operandはproperty/任命/配置の公開とsession有効化より先に設置する。途中失敗は逆順に全箇所の復元を試す。失敗した所有記録と近傍relay、元target、pinした両moduleはプロセス終了まで保持し、原値を再確認できない場合はCriticalとする。制御側もdata export `BRIDGE_RUNTIME_PROMOTION_GATEWAY`へ両relayが到達すること、E8と後続命令、callee境界、観測停止前後の全byteが一致することを確認する。既存40byte設定とtraceの配置・設定版は変えない。mode8の入口観測は別経路のままで、製品成功へ数えない。
+
+合成Win64子では、費用1/2/3、部分支払・paid=false、他者許可、余分TITLE/技能、取得済み再送、通常総督、不正flag/owner、閉鎖・再許可と読込をまたぐ原call、観測停止後のtrace不変を確認する。別の子で全volatile整数/XMM/flagsとcaller stackの一致、実SEH巻戻し、片側設置失敗の復元、片側復元失敗の保持と他方の復元、並列4threadと復元直前に取り込まれたrelayの寿命を確認する。AMD以外の検査は設置前拒否を確認し、「AMD gateway child NOT EXECUTED」と記録する。その拒否をgateway試験実行へ数えない。
+
+これは通常runtimeへの**ソース上の接続**であり、実ゲームへの設置・起動・操作は0。新たな上位AI hook、未証明の`ai_operation` actor登録・実行、Spent用hook、正式操作の送信は追加していない。AIの自然な処理段階と同期Gameplay/読込境界は本書558・584・600・618行の未実測を維持する。効果なしTITLEをchooserが選ぶ保証もないため、費用2/3のAI正式支払い成功を主張しない。ToDo2005の実機保守ゲートが開くまで追加live設置をしない。親が通常起動・自然AI/人間の正式PROMOTE、本人Spent/既取得状態、途中読込と旧要求排出・MPを照合し、既払保存を再送せず確認する。元の製品7条件は0/7、PR86と親ToDo880は継続する。有限commit・関連検査の正確な件数・原ログ・設置条件は`D:/CC/Work/todo880/promotion-runtime-result-20261008.json`で親へ返す。
+
+関連クレートだけのnextestは150件・8実行ファイルすべて成功、失敗・ignored・skipped0。その原ログに別途表示されたWin64子は17件各1成功で、新規gatewayの6子を含む（いずれも82 filtered）。既存AI gatewayの3つの内部子は親側でcaptured outputの終了を確認する従来方式を保持し、表示された17件へ加算しない。既存の二つの子入口を親検査一覧で通しただけの結果も、実際のgateway呼出しへ数えない。
+
+同じruntime本体に追加した一次照合テストだけを次に実行し、1成功・83 skipped（この1件の内部83 filtered）、失敗・ignored0だった。実際の固定SHAのDLLから両caller・直前引数・callee境界をコピーし、通常installerと同じ`verify`を通した。AI operand/後続命令/R8D命令、公式RCX命令、callee先頭の各改変を拒否した。150件を最新151件の一括実行とは言わず、150件と追加1件を別記録で保持する。GameCoreをロード・実行した検査ではない。最初のABI子は試験用確保位置のoperand整列条件で失敗し、試験の近傍anchorを修正後に該当4子を再確認した。実装のCPU条件は変えていない。変更Rust7本の整形と差分検査も成功し、全workspace実行は0である。

@@ -37,6 +37,8 @@ mod trace_init;
 pub use runtime::RUNTIME_CONFIG_VERSION;
 #[path = "windows/paid_assignment.rs"]
 mod paid_assignment;
+#[path = "windows/promotion.rs"]
+mod promotion;
 use assignment::{
     assign_calibration_gateway, install_assign_calibration_at, ASSIGN_FILE_OFFSET,
     ASSIGN_TRACE_PTR, ASSIGN_TRAMPOLINE_PTR,
@@ -89,6 +91,10 @@ const PROMOTION_CALL_WINDOW: [u8; 16] = [
     0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f, 0x84, 0x75, 0x01, 0x00, 0x00, 0x44, 0x8b, 0xc7,
 ];
 const PROMOTION_CALL_HEAD: [u8; 8] = [0xe8, 0x9c, 0xef, 0xfc, 0xff, 0x84, 0xc0, 0x0f];
+pub const RUNTIME_PROMOTION_CALL_WINDOWS: [(usize, [u8; 16]); 2] = [
+    (PINNED_PROMOTION_CALL_RVA, PROMOTION_CALL_WINDOW),
+    (promotion::AI_CALL_RVA, promotion::AI_WINDOW),
+];
 const PROMOTION_TRACE_MAGIC: u32 = 0x4a41_4338; // JAC8
 const PROMOTION_TRACE_VERSION: u32 = 1;
 pub const PROMOTION_TRACE_CAPACITY: usize = 2048;
@@ -2723,11 +2729,19 @@ unsafe fn restore_one(slot: &Mutex<Option<Hook>>) -> Result<bool, &'static str> 
 unsafe fn uninstall() -> Result<(), &'static str> {
     joined_deactivate();
     product_deactivate();
-    let promotion = unsafe { restore_promotion_call() }?;
-    let assignment = restore_one(&composite::ASSIGNMENT_HOOK)?;
-    let main = restore_one(&HOOK)?;
-    let property = restore_one(&JOINED_PROPERTY_HOOK)?;
-    if !main && !property && !promotion && !assignment {
+    // Attempt every restoration even if an earlier operand/entry fails. Failed
+    // owners remain retained for recovery; no fetched relay is freed.
+    let results = [
+        unsafe { promotion::restore() },
+        unsafe { restore_promotion_call() },
+        restore_one(&composite::ASSIGNMENT_HOOK),
+        restore_one(&HOOK),
+        restore_one(&JOINED_PROPERTY_HOOK),
+    ];
+    if let Some(error) = results.iter().find_map(|r| r.as_ref().err()) {
+        return Err(*error);
+    }
+    if !results.into_iter().any(|r| r == Ok(true)) {
         return Err("bridge not installed");
     }
     Ok(())

@@ -5,7 +5,7 @@ struct Exports {
     install: usize,
     stop: usize,
     property_log: usize,
-    gateways: [usize; 3],
+    gateways: [usize; 4],
 }
 
 fn exports(path: &Path) -> Result<Exports, String> {
@@ -26,11 +26,12 @@ fn exports(path: &Path) -> Result<Exports, String> {
     let property_log =
         unsafe { GetProcAddress(dll.0, c"BRIDGE_RUNTIME_PROPERTY_LOG".as_ptr().cast()) }
             .ok_or("runtime property log export missing")? as usize;
-    let mut gateways = [0usize; 3];
+    let mut gateways = [0usize; 4];
     for (slot, name) in gateways.iter_mut().zip([
         c"BRIDGE_RUNTIME_APPOINTMENT_GATEWAY",
         c"BRIDGE_RUNTIME_PROPERTY_GATEWAY",
         c"BRIDGE_RUNTIME_ASSIGNMENT_GATEWAY",
+        c"BRIDGE_RUNTIME_PROMOTION_GATEWAY",
     ]) {
         *slot = unsafe { GetProcAddress(dll.0, name.as_ptr().cast()) }
             .ok_or("runtime gateway data export missing")? as usize
@@ -48,7 +49,7 @@ fn exports(path: &Path) -> Result<Exports, String> {
 struct BridgeImage {
     base: usize,
     size: usize,
-    gateways: [u64; 3],
+    gateways: [u64; 4],
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -57,7 +58,9 @@ struct PatchedEntries {
     assignment: [u8; 8],
     property: [u8; 8],
     prefix: [u8; PROPERTY_PREFIX_LEN],
-    relays: [[u8; 14]; 3],
+    promotion: [[u8; 16]; 2],
+    promotion_boundary: [u8; 13],
+    relays: [[u8; 14]; 5],
 }
 
 fn verify_relay(
@@ -67,7 +70,7 @@ fn verify_relay(
     bridge: BridgeImage,
     expected_gateway: u64,
 ) -> Result<[u8; 14], String> {
-    if branch.len() < 5 || branch[0] != 0xe9 {
+    if branch.len() < 5 || !matches!(branch[0], 0xe9 | 0xe8) {
         return Err("runtime branch missing".into());
     }
     let displacement = i32::from_le_bytes(branch[1..5].try_into().unwrap()) as isize;
@@ -99,7 +102,7 @@ fn patched_entries(
     bridge: BridgeImage,
 ) -> Result<PatchedEntries, String> {
     let mut entries = [[0u8; 8]; 2];
-    let mut relays = [[0u8; 14]; 3];
+    let mut relays = [[0u8; 14]; 5];
     for (slot, (rva, expected)) in [
         (PINNED_CAN_EVER_RVA, can_original),
         (
@@ -145,11 +148,43 @@ fn patched_entries(
         bridge,
         bridge.gateways[1],
     )?;
+    let mut promotion = [[0u8; 16]; 2];
+    for (i, (rva, expected)) in civ6_native_bridge_rs::RUNTIME_PROMOTION_CALL_WINDOWS
+        .into_iter()
+        .enumerate()
+    {
+        let call = base
+            .checked_add(rva)
+            .ok_or("runtime promotion address overflows")?;
+        read_remote(game, call, &mut promotion[i])?;
+        if call.checked_add(1).is_none_or(|p| !p.is_multiple_of(4))
+            || promotion[i][0] != 0xe8
+            || promotion[i][5..] != expected[5..]
+        {
+            return Err("runtime promotion operand publication differs".into());
+        }
+        relays[3 + i] = verify_relay(game, call, &promotion[i], bridge, bridge.gateways[3])?;
+    }
+    let mut promotion_boundary = [0u8; 13];
+    read_remote(
+        game,
+        base + civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA - 5,
+        &mut promotion_boundary,
+    )?;
+    if promotion_boundary
+        != [
+            0xe9, 0xd0, 0xfc, 0xff, 0xff, 0x40, 0x53, 0x56, 0x57, 0x48, 0x83, 0xec, 0x30,
+        ]
+    {
+        return Err("runtime CanPromote callee boundary changed".into());
+    }
     Ok(PatchedEntries {
         appointment: entries[0],
         assignment: entries[1],
         property: bytes,
         prefix,
+        promotion,
+        promotion_boundary,
         relays,
     })
 }
@@ -243,7 +278,7 @@ pub(super) fn run(
         {
             return Err("runtime ownership receipt differs".into());
         }
-        let mut gateways = [0u64; 3];
+        let mut gateways = [0u64; 4];
         for (slot, rva) in gateways.iter_mut().zip(exports.gateways) {
             let mut bytes = [0u8; 8];
             read_remote(game, bridge.base + rva, &mut bytes)?;
@@ -271,7 +306,7 @@ pub(super) fn run(
         write_json(
             &mut writer,
             json!({"kind":"runtime_install","status":status,
-            "three_entries_published":true,"trace_address":config.trace_address,
+            "three_entries_published":true,"two_promotion_calls_published":true,"trace_address":config.trace_address,
             "trace_owner":"game_process","bounded_uninstall_allowed":false}),
         )?;
         job.disarm_after_verified_runtime_transfer()?;
@@ -364,7 +399,7 @@ pub(super) fn run(
     write_json(
         &mut writer,
         json!({"kind":"observation_stop","status":status,
-        "runtime_retained":true,"three_entries_published":true,"trace_retained":true}),
+        "runtime_retained":true,"three_entries_published":true,"two_promotion_calls_published":true,"trace_retained":true}),
     )?;
     Ok(())
 }
@@ -380,18 +415,24 @@ mod tests {
         let base = core.as_ptr() as usize;
         let image = BridgeImage {
             base,
-            size: 64,
-            gateways: [(base + 1) as u64, (base + 2) as u64, (base + 3) as u64],
+            size: 96,
+            gateways: [
+                (base + 1) as u64,
+                (base + 2) as u64,
+                (base + 3) as u64,
+                (base + 4) as u64,
+            ],
         };
         let originals = [
             [0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x89, 0x6c],
             [0x48, 0x8b, 0x41, 0x40, 0x4c, 0x8d, 0x49, 0x30],
         ];
-        for offset in [0, 16, 32, 48] {
+        for offset in [0, 16, 32, 48, 64, 80] {
             core[offset..offset + 6].copy_from_slice(&[0xff, 0x25, 0, 0, 0, 0]);
             let gateway = image.gateways[match offset {
                 16 => 2,
                 32 => 1,
+                64 | 80 => 3,
                 _ => 0,
             }];
             core[offset + 6..offset + 14].copy_from_slice(&gateway.to_le_bytes());
@@ -417,10 +458,32 @@ mod tests {
         core[property..property + 8].copy_from_slice(&originals[1]);
         core[property..property + 2].copy_from_slice(&[0xeb, 0xf9]);
         core[property - 5..property].copy_from_slice(&jump(base + property - 5, image.base + 32));
+        for (rva, original) in civ6_native_bridge_rs::RUNTIME_PROMOTION_CALL_WINDOWS {
+            core[rva..rva + 16].copy_from_slice(&original);
+            core[rva + 1..rva + 5].copy_from_slice(&jump(base + rva, image.base + 64)[1..]);
+        }
+        let boundary = civ6_native_bridge_rs::PINNED_PROMOTION_CALLEE_RVA - 5;
+        core[boundary..boundary + 13].copy_from_slice(&[
+            0xe9, 0xd0, 0xfc, 0xff, 0xff, 0x40, 0x53, 0x56, 0x57, 0x48, 0x83, 0xec, 0x30,
+        ]);
         let capture =
             || patched_entries(&game, base, originals[0], originals[1], originals[0], image);
         let installed = capture().unwrap();
         assert_eq!(capture().unwrap(), installed);
+        let (ai, original) = civ6_native_bridge_rs::RUNTIME_PROMOTION_CALL_WINDOWS[1];
+        core[ai + 1..ai + 5].copy_from_slice(&jump(base + ai, image.base + 80)[1..]);
+        assert_ne!(
+            capture().unwrap(),
+            installed,
+            "promotion operand changes must invalidate the stop snapshot"
+        );
+        core[ai + 1..ai + 5].copy_from_slice(&jump(base + ai, image.base + 64)[1..]);
+        core[ai + 5] ^= 1;
+        assert!(capture().unwrap_err().contains("promotion operand"));
+        core[ai + 5] = original[5];
+        core[boundary + 5] ^= 1;
+        assert!(capture().unwrap_err().contains("callee boundary"));
+        core[boundary + 5] ^= 1;
         // Change only rel32, leaving E9 and the original tail intact. Even a
         // second valid relay must not pass the stop snapshot equality check.
         core[PINNED_CAN_EVER_RVA..PINNED_CAN_EVER_RVA + 5]
