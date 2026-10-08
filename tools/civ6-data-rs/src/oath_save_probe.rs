@@ -487,7 +487,20 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
         Some(value) if native && value == "q8-v2" => NativeProductionBasis::Q8,
         _ => bail!("unknown native production observation basis"),
     };
-    let expected = if native {
+    let port = match scenario.get("naval_port_fixture") {
+        None => false,
+        Some(value)
+            if native
+                && basis == NativeProductionBasis::Q8
+                && value == crate::oath_naval_port::VERSION =>
+        {
+            true
+        }
+        _ => bail!("unknown or incompatible naval port fixture"),
+    };
+    let expected = if port {
+        crate::oath_naval_port::make_probe(repo, &entry)?
+    } else if native {
         make_native_probe_with_basis(repo, &entry, basis)?
     } else {
         make_probe(repo, &entry)?
@@ -514,7 +527,8 @@ pub fn verify(repo: &Repository, path: &Path) -> Result<Evidence> {
     ensure!(
         scenario["diagnostic_only"] == true
             && scenario["save_probe"] == expected["save_probe"]
-            && scenario.get("native_production_basis") == expected.get("native_production_basis"),
+            && scenario.get("native_production_basis") == expected.get("native_production_basis")
+            && scenario.get("naval_port_fixture") == expected.get("naval_port_fixture"),
         "artifact scope changed"
     );
     // Shipping can prepend lifecycle steps. It may not change the actual probe.
@@ -758,7 +772,23 @@ pub fn run(repo: &Repository, args: &[String]) -> Result<()> {
         write_new(Path::new(&args[4]), &make_native_probe(repo, &entry)?)?;
         return Ok(());
     }
-    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
+    if args.len() == 6
+        && args[0] == "--native-exact-removal"
+        && args[1] == "--naval-harbor"
+        && args[2] == "--oath"
+        && args[4] == "--output"
+    {
+        let entry = catalogue(repo)?
+            .into_iter()
+            .find(|entry| entry["oath"] == args[3])
+            .context("unknown oath")?;
+        write_new(
+            Path::new(&args[5]),
+            &crate::oath_naval_port::make_probe(repo, &entry)?,
+        )?;
+        return Ok(());
+    }
+    bail!("usage: generate-oath-save-probes --check | [--native-exact-removal [--naval-harbor]] --oath JAC_OATH_... --output NEW.json | --verify ARTIFACT_DIR")
 }
 
 pub(crate) fn write_new(path: &Path, scenario: &Value) -> Result<()> {
