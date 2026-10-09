@@ -80,12 +80,18 @@ local function control()
   end
   function c:ChangeParent(parent) parent.children[#parent.children+1]=self end
   function c:GetChildren() return self.children end
-  function c:SortChildren(compare) table.sort(self.children,compare) end
+  function c:SortChildren(compare)
+    local function wrapper(item)
+      return setmetatable({}, {__tostring=function() return tostring(item) end})
+    end
+    table.sort(self.children,function(a,b) return compare(wrapper(a),wrapper(b)) end)
+  end
   return c
 end
 Controls=setmetatable({}, {__index=function(t,key)
   local c=control();rawset(t,key,c);return c
 end})
+Controls.GameSummaryStack.children={control(),control()}
 ContextPtr={hidden=true}
 function ContextPtr:IsHidden() return self.hidden end
 function ContextPtr:SetShowHandler(f)
@@ -152,7 +158,7 @@ fn host_clicks_assign_nonoverlapping_areas_and_one_team_then_restore_stock_teams
         &lua,
         r#"
 assert(not Controls.JAC_AssignmentPanel.hidden)
-assert(Controls.GameSummaryStack.children[#Controls.GameSummaryStack.children] == Controls.JAC_AssignmentPanel)
+assert(Controls.GameSummaryStack.children[1] == Controls.JAC_AssignmentPanel)
 assert(values.JAC_MP_MODE==nil and values.NO_TEAMS==true)
 Controls.JAC_AllJapanButton.click()
 assert(values.JAC_MP_MODE=='JAPAN' and values.NO_TEAMS==false)

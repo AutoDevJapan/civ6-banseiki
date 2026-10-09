@@ -645,6 +645,15 @@ if Controls then
   Controls.JAC_DifferentButton:RegisterCallback(Mouse.eLClick, function() onMode(DIFFERENT) end)
 
   Controls.JAC_AssignmentPanel:ChangeParent(Controls.GameSummaryStack)
+  local order = {}
+  local panelKey = tostring(Controls.JAC_AssignmentPanel)
+  for index, child in ipairs(Controls.GameSummaryStack:GetChildren()) do
+    local key = tostring(child)
+    order[key] = key == panelKey and 0 or index
+  end
+  Controls.GameSummaryStack:SortChildren(function(a, b)
+    return (order[tostring(a)] or math.huge) < (order[tostring(b)] or math.huge)
+  end)
   local diagnosticDone = false
   ContextPtr:SetShowHandler(function()
     stockOnShow()
