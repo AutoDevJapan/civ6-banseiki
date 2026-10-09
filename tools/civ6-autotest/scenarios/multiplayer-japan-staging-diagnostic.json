@@ -153,6 +153,15 @@
       "timeout": 120
     },
     {
+      "action": "wait_for",
+      "condition": {
+        "type": "log_line",
+        "log": "Lua.log",
+        "contains": "JAC_MP_DIAG|ok=true"
+      },
+      "timeout": 30
+    },
+    {
       "action": "screenshot",
       "path": "todo9-staging-before-query.png",
       "capture_only": true
@@ -183,15 +192,6 @@
       "action": "screenshot",
       "path": "todo9-staging-after-30s.png",
       "capture_only": true
-    },
-    {
-      "action": "wait_for",
-      "condition": {
-        "type": "log_line",
-        "log": "Lua.log",
-        "contains": "JAC_MP_DIAG|ok=true"
-      },
-      "timeout": 30
     }
   ]
 }

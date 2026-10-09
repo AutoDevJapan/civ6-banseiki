@@ -152,6 +152,7 @@ fn host_clicks_assign_nonoverlapping_areas_and_one_team_then_restore_stock_teams
         &lua,
         r#"
 assert(not Controls.JAC_AssignmentPanel.hidden)
+assert(Controls.GameSummaryStack.children[#Controls.GameSummaryStack.children] == Controls.JAC_AssignmentPanel)
 assert(values.JAC_MP_MODE==nil and values.NO_TEAMS==true)
 Controls.JAC_AllJapanButton.click()
 assert(values.JAC_MP_MODE=='JAPAN' and values.NO_TEAMS==false)

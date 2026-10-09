@@ -76,19 +76,17 @@ fn japan_staging_engine_diagnostic_checks_saved_assignment_without_tuner() {
     assert!(code(&run[2]).contains("JAC_MP_DIAG_AUTO_ASSIGN"));
     assert!(action(&run[3], "wait_for"));
     assert_eq!(run[3]["condition"]["type"], "state");
-    assert!(action(&run[4], "screenshot"));
-    assert_eq!(run[4]["capture_only"], true);
-    for index in [4, 6, 8, 10] {
+    assert!(action(&run[4], "wait_for"));
+    assert_eq!(run[4]["condition"]["type"], "log_line");
+    assert_eq!(run[4]["condition"]["contains"], "JAC_MP_DIAG|ok=true");
+    for index in [5, 7, 9, 11] {
         assert!(action(&run[index], "screenshot"));
         assert_eq!(run[index]["capture_only"], true);
     }
-    for index in [5, 7, 9] {
+    for index in [6, 8, 10] {
         assert!(action(&run[index], "pause"));
         assert_eq!(run[index]["seconds"], 10);
     }
-    assert!(action(&run[11], "wait_for"));
-    assert_eq!(run[11]["condition"]["type"], "log_line");
-    assert_eq!(run[11]["condition"]["contains"], "JAC_MP_DIAG|ok=true");
 }
 
 #[test]
