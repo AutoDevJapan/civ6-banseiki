@@ -263,6 +263,12 @@ local function returnLoans(state,c)
   for i,l in ipairs(m.Loans) do
     local ok,err=pcall(function()
     local current=CityManager.GetCityAt(l.X,l.Y)
+    if l.Owner~=owner and l.ReturnIssued and l.FinalID and l.RestoredCore
+      and (not current or current:GetOwner()~=l.Owner or current:GetID()~=l.FinalID) then
+      -- The city was proved returned and restored before a later conquest or
+      -- disappearance. Do not transfer or restore a different city here.
+      l.ReturnedCityChanged=true;save(state);return
+    end
     -- A source city can disappear while an unsent MOVE is being reconciled.
     -- Never restore or transfer a replacement city at the same coordinates.
     if i==1 and m.OriginalUnresolved and sourceUnavailable(c,l,current) then
@@ -651,11 +657,9 @@ local function validateUnresolvedReturn(c,o,restored,sourcePresent)
   local m=c.MP
   for i,l in ipairs(m.Loans) do
     local current=CityManager.GetCityAt(l.X,l.Y)
-    if l.ReturnIssued and l.FinalID and current and current:GetOwner()==l.Owner
-      and current:GetID()==l.FinalID then
-      -- Already returned: another owner may now use the city and station
-      -- units there. Core identity suffices; no city transfer follows.
-      if restored then assert(l.RestoredCore,'MP trusted restoration incomplete') end
+    if l.ReturnIssued and l.FinalID and l.RestoredCore then
+      -- The saved Core restoration proves this city was returned. Its later
+      -- owner, ID, contents, or disappearance cannot transfer another work.
     elseif i==2 or (l.Issued and not sourceUnavailable(c,l,current)) then
       validateUnresolvedLoan(c,o,i,restored,sourcePresent)
     end
@@ -788,9 +792,13 @@ local function receive(actor,p)
     and m.DispatchStatus=='NOT_SENT' and unresolvedOriginal(c,o)
   local unresolvedAbort=m.Phase=='ABORT_RESTORED' and m.DispatchStatus=='NOT_SENT'
   local unresolvedRetry=m.Phase=='ABORT_RETURN' and m.DispatchStatus=='NOT_SENT'
-  local retrySourceUnresolved=unresolvedRetry and unresolvedOriginal(c,o)
+  local retryMoved=unresolvedRetry and type(o)=='table' and type(o.Cities)=='table'
+    and type(o.Cities[2])=='table' and o.Cities[2].Work==c.Index
+  local retrySourceUnresolved=unresolvedRetry and not retryMoved and unresolvedOriginal(c,o)
   local valid,err
-  if unresolvedSource or unresolvedAbort or unresolvedRetry then
+  if retryMoved then
+    valid,err=pcall(validateObservation,c,o,'TARGET')
+  elseif unresolvedSource or unresolvedAbort or unresolvedRetry then
     valid,err=pcall(function()
       validateUnresolvedReturn(c,o,unresolvedAbort,
         unresolvedRetry and not (m.OriginalUnresolved or retrySourceUnresolved))
@@ -877,6 +885,11 @@ local function receive(actor,p)
       -- return a city until the original is observed moved or rejection is known.
       m.UncertainActorObservation=R.Copy(o);m.WaitingFor='NATIVE_QUEUE_RESOLUTION';save(state)
     end
+  elseif retryMoved then
+    assert(p.Command=='OBSERVE','MP delayed target observation')
+    m.OriginalUnresolved=nil;m.Receipts[id]=true
+    m.ReportedMovedObservation=R.Copy(o);c.Phase='RETURN';c.ReturnToken=c.Token..':mp:return'
+    phase(state,c,'RETURN');MP.Advance(state,c)
   elseif unresolvedRetry then
     assert(p.Command=='OBSERVE','MP unresolved return observation')
     attemptReturn(state,c)

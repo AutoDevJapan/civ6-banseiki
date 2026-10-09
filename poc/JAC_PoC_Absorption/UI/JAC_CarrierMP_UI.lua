@@ -136,7 +136,7 @@ local function Observe(c)
   end
   o.Locations=locations(c.Index)
   for i,l in ipairs(m.Loans or {}) do
-    if i==1 and unresolved then
+    if unresolved and (i==1 or (l.ReturnIssued and l.FinalID and l.RestoredCore)) then
       local current=CityManager.GetCityAt(l.X,l.Y)
       if not current then o.Cities[i]={Missing=true}
       else
@@ -152,7 +152,7 @@ local function Observe(c)
     o.ArtifactWorks={[c.Index]=o.Locations}
     for index in pairs(m.ArtifactOriginals or {}) do o.ArtifactWorks[index]=locations(index) end
     for _,observed in ipairs(o.Cities) do
-      if not observed.Missing then
+      if not observed.Missing and not observed.ReadFailed then
         if observed.Work~=-1 and not o.ArtifactWorks[observed.Work] then
           o.ArtifactWorks[observed.Work]=locations(observed.Work)
         end
