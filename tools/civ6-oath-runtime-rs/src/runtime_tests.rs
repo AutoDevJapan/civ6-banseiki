@@ -16,7 +16,10 @@ unsafe extern "system" {
 
 const SUPPORTED: u64 = 0xa7_6a30;
 const UNSUPPORTED: u64 = 0x1234;
-const BASE: u64 = 0x7ff6_0000_0000;
+/// The module the synthetic gate "proves": this very test executable.
+fn base() -> u64 {
+    unsafe { windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(null_mut()) as u64 }
+}
 
 fn good_config() -> OathRuntimeConfig {
     OathRuntimeConfig {
@@ -221,6 +224,7 @@ fn flows_run_in_owned_children() {
         "runtime::tests::flow_child",
         "runtime::tests::gate_refusal_child",
         "runtime::tests::half_install_child",
+        "runtime::tests::wrong_module_child",
         "runtime::tests::deadline_child",
     ] {
         run_child(name);
@@ -280,7 +284,7 @@ fn page_bytes(page: *mut u8) -> Vec<u8> {
 
 fn verified(page: *mut u8) -> Verified {
     Verified {
-        image_base: BASE as usize,
+        image_base: base() as usize,
         core_module: synthetic_page as *const () as usize,
         apply_entry: unsafe { page.add(0x20) } as usize,
         remove_entry: unsafe { page.add(0x80) } as usize,
@@ -292,7 +296,7 @@ struct Block([u64; 64]);
 
 fn call(entry: usize, vtable_rva: u64) -> u64 {
     let mut block = Block([0; 64]);
-    block.0[0] = BASE + vtable_rva;
+    block.0[0] = base() + vtable_rva;
     block.0[31] = 0x66;
     let mut object = [0u64; 2];
     let subject = [object.as_mut_ptr() as u64, 1];
@@ -336,7 +340,7 @@ fn flow_child() {
     assert_eq!(rows.len(), 1);
     assert_eq!(
         (rows[0].call, rows[0].effect_vtable),
-        (OathCall::Apply, BASE + SUPPORTED)
+        (OathCall::Apply, base() + SUPPORTED)
     );
     assert_eq!(rows[0].copy_flags & COPY_ALL, rows[0].copy_flags);
     let live = receipt();
@@ -482,4 +486,32 @@ fn deadline_child() {
         (Phase::Stopped as u32, 1, 2)
     );
     assert_eq!(start_observation(), OathStatus::WrongState);
+}
+
+#[test]
+fn wrong_module_child() {
+    if !in_child() {
+        return;
+    }
+    let page = synthetic_page();
+    let snapshot = page_bytes(page);
+    let mut wrong = verified(page);
+    wrong.image_base += 0x10000; // the pinned module is not the one the gate named
+    let gate = TestGate(Ok(wrong));
+    let mut config = good_config();
+    let before = config;
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::ImageIdentity
+    );
+    assert_eq!(config, before);
+    assert_eq!(page_bytes(page), snapshot, "nothing was written");
+    assert_eq!(receipt().phase, Phase::Fresh as u32);
+    assert_eq!(receipt().trace_address, 0);
+    // The refusal consumed nothing: the right module still installs.
+    let gate = TestGate(Ok(verified(page)));
+    assert_eq!(
+        install_with(&gate, (&mut config as *mut OathRuntimeConfig).cast()),
+        OathStatus::Ok
+    );
 }

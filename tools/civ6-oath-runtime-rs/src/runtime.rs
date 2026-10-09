@@ -218,7 +218,9 @@ impl Runtime {
     }
 }
 
-pub(crate) fn pin_address(address: usize) -> bool {
+/// Pins the module that contains `address` and returns its handle, taken in
+/// the same call that pins it, so the module cannot leave between the two.
+pub(crate) fn pin_module(address: usize) -> Option<usize> {
     let mut module = null_mut();
     let ok = unsafe {
         GetModuleHandleExW(
@@ -227,7 +229,7 @@ pub(crate) fn pin_address(address: usize) -> bool {
             &mut module,
         )
     };
-    ok != 0 && !module.is_null()
+    (ok != 0 && !module.is_null()).then_some(module as usize)
 }
 
 fn hook_status(error: &str) -> OathStatus {
@@ -277,7 +279,13 @@ fn install_locked(gate: &dyn Gate, input: *mut c_void) -> OathStatus {
     };
     // Pin before any executable page is published: a gateway or a fetched
     // jump may outlive an install that fails half way.
-    if !pin_address(verified.core_module) || !pin_address(install_locked as *const () as usize) {
+    // The gate pinned the GameCore it validated; pinning again by an address
+    // inside it must return the very module the gate proved, or nothing is
+    // published (an unknown module that got pinned is simply left alone).
+    if pin_module(verified.core_module) != Some(verified.image_base) {
+        return OathStatus::ImageIdentity;
+    }
+    if pin_module(install_locked as *const () as usize).is_none() {
         return OathStatus::HookFailure;
     }
     let trace: &'static OathTrace = Box::leak(OathTrace::boxed_inactive());
