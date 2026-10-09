@@ -1962,6 +1962,58 @@ fn fairness_save_rejects_changed_owner_and_a_replacement_with_identical_bytes() 
     }
 }
 
+#[test]
+fn reader_preparation_happens_before_ownership_and_failure_has_no_slot_effects() {
+    struct Warm {
+        fake: Fake,
+        ready: bool,
+        fail: bool,
+    }
+    impl Runner for Warm {
+        fn prepare_process_queries(&mut self) -> Result<(), String> {
+            self.ready = true;
+            if self.fail {
+                Err("reader startup failed".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert!(self.ready);
+            self.fake.run(call)
+        }
+        fn now(&mut self) -> f64 {
+            assert!(self.ready);
+            self.fake.now()
+        }
+        fn sleep(&mut self, seconds: f64) -> Result<(), String> {
+            self.fake.sleep(seconds)
+        }
+        fn print(&mut self, message: &str) -> Result<(), String> {
+            self.fake.print(message)
+        }
+    }
+    for fail in [false, true] {
+        let f = Fixture::new();
+        let mut r = Warm {
+            fake: Fake::success(),
+            ready: false,
+            fail,
+        };
+        let result = failed_prepare_cli(&mut r, &f.p);
+        assert!(r.ready);
+        assert!(!f.p.here.join("civ6.lock").exists());
+        if fail {
+            assert_eq!(result.unwrap_err(), "reader startup failed");
+            assert!(r.fake.calls.is_empty());
+            assert!(!f.p.here.join("queue").exists());
+        } else {
+            assert_eq!(result.unwrap(), 1);
+            assert!(!r.fake.calls.is_empty());
+        }
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn fairness_update_retries_real_read_pins_and_keeps_owner_and_outer_deadline() {

@@ -1755,6 +1755,9 @@ pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> 
         return Ok(0);
     }
     ship::check_live_maintenance(p, std::env::var("CODEX_JOB_ID").ok().as_deref())?;
+    // Native worker startup has no shared ownership and no gameplay side effects.
+    // Queries after acquisition only use the already prepared, bounded service.
+    r.prepare_process_queries()?;
     if !options.reliability {
         return cli_once(r, p, &options, None);
     }

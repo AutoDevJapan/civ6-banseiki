@@ -241,6 +241,10 @@ pub struct ProcessIdentity {
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
+    /// Prepare read-only native services before acquiring shared game ownership.
+    fn prepare_process_queries(&mut self) -> Result<(), String> {
+        Ok(())
+    }
     /// The command fallback keeps non-Windows runners and fixtures injectable.
     /// Windows uses one pinned handle, without spawning tasklist per waiter.
     fn process_identity(
@@ -456,6 +460,10 @@ mod identity_reader {
 }
 
 #[cfg(windows)]
+static NATIVE_READER: std::sync::OnceLock<Result<identity_reader::Reader, String>> =
+    std::sync::OnceLock::new();
+
+#[cfg(windows)]
 fn bounded_windows_process_identity(
     pid: u32,
     timeout: f64,
@@ -463,12 +471,11 @@ fn bounded_windows_process_identity(
     if !timeout.is_finite() || timeout <= 0.0 {
         return Err("command timed out".into());
     }
-    // Include the one-time worker startup in the caller's original budget.
     let deadline = Instant::now() + Duration::from_secs_f64(timeout.min(30.0));
-    static READER: std::sync::OnceLock<Result<identity_reader::Reader, String>> =
-        std::sync::OnceLock::new();
-    READER
-        .get_or_init(|| identity_reader::Reader::new(windows_process_identity))
+    // The owned phase must never wait on cold initialization or its mutex.
+    NATIVE_READER
+        .get()
+        .ok_or("native process reader was not prepared before ownership")?
         .as_ref()
         .map_err(Clone::clone)?
         .lookup_until(pid, deadline)
@@ -627,6 +634,7 @@ mod native_identity_tests {
 
     #[test]
     fn current_process_identity_uses_one_handle_and_no_commands() {
+        RealRunner.prepare_process_queries().unwrap();
         let identity = RealRunner
             .process_identity(std::process::id(), 2.0)
             .unwrap()
@@ -732,6 +740,14 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
+    #[cfg(windows)]
+    fn prepare_process_queries(&mut self) -> Result<(), String> {
+        NATIVE_READER
+            .get_or_init(|| identity_reader::Reader::new(windows_process_identity))
+            .as_ref()
+            .map(|_| ())
+            .map_err(Clone::clone)
+    }
     #[cfg(windows)]
     fn process_identity(
         &mut self,
