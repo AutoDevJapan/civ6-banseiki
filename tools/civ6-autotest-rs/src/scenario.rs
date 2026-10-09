@@ -15,6 +15,10 @@ pub const ACTIONS: &[&str] = &[
     "choose_dedication",
     "ui_lua",
     "oath_exact_removal",
+    "oath_trace_install",
+    "oath_trace_start",
+    "oath_trace_snapshot",
+    "oath_trace_stop",
     "carrier_checkpoint",
     "carrier_exchange",
     "screenshot",
@@ -129,6 +133,17 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
             Ok(())
         };
         match action {
+            "oath_trace_install"
+            | "oath_trace_start"
+            | "oath_trace_snapshot"
+            | "oath_trace_stop" => {
+                if data["diagnostic_only"] != true || session != SessionType::SinglePlayer {
+                    return Err(fail(
+                        "oath observer requires a single-player diagnostic".into(),
+                    ));
+                }
+                crate::oath_observation::validate_step(step)?;
+            }
             "oath_exact_removal" => {
                 if data["diagnostic_only"] != true
                     || session != SessionType::SinglePlayer

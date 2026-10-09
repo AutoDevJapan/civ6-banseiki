@@ -13,6 +13,7 @@ pub mod metrics;
 mod native_inventory;
 pub mod oath_call_identity;
 pub mod oath_exact_removal;
+pub mod oath_observation;
 pub mod oath_quantity;
 pub mod reliability;
 pub mod restart;

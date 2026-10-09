@@ -24,6 +24,15 @@ pub const CORE_PLAYER0_READY: &str =
 pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
 
 pub trait Backend: Send {
+    fn oath_trace_operation(
+        &mut self,
+        _operation: crate::oath_observation::Operation,
+        _install: Option<&crate::oath_observation::Install>,
+    ) -> Result<Value> {
+        Err(Error::input(
+            "native oath observation unavailable on this backend",
+        ))
+    }
     fn oath_exact_removal_scope(
         &mut self,
         scope: crate::oath_exact_removal::Scope,
@@ -2246,6 +2255,59 @@ impl Runner {
                     "native carrier evidence written to {}",
                     target.display()
                 ))
+            }
+            "oath_trace_install"
+            | "oath_trace_start"
+            | "oath_trace_snapshot"
+            | "oath_trace_stop" => {
+                use crate::oath_observation::{self, Operation};
+                let operation = oath_observation::validate_step(step)?;
+                oath_observation::validate_mode(
+                    self.test_mode,
+                    self.scenario["diagnostic_only"] == true,
+                    crate::session::SessionType::from_scenario(&self.scenario)?
+                        != crate::session::SessionType::SinglePlayer,
+                )?;
+                self.lua("InGame", "if GameConfiguration.GetRuleSet() ~= 'RULESET_JAC_BANSEIKI' then error('test ruleset required') end\nif GameConfiguration.IsAnyMultiplayer() then error('single-player test required') end\nreturn true", self.budget(deadline, 5.0)?)?;
+                if matches!(operation, Operation::Install | Operation::Start) {
+                    self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}), self.remaining(deadline)?, false)?;
+                    self.wait(
+                        &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                        self.remaining(deadline)?,
+                        false,
+                    )?;
+                }
+                let install = if operation == Operation::Install {
+                    Some(oath_observation::install_request(step)?)
+                } else {
+                    None
+                };
+                let path = self.output.join(format!(
+                    "oath-observation-{}-{}.json",
+                    self.completed_steps + 1,
+                    action
+                ));
+                let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
+                file.write_all(&serde_json::to_vec_pretty(&json!({
+                    "action":action,"status":"reserved_before_native_call",
+                    "diagnostic_only":true,"quantity_accepted":false,"product_accepted":false
+                }))?)?;
+                file.sync_all()?;
+                self.remaining(deadline)?;
+                let proof = self
+                    .backend
+                    .oath_trace_operation(operation, install.as_ref())?;
+                // Even a successful observer operation never accepts an effect
+                // quantity, ruleset installation or a product requirement.
+                let proof = json!({"diagnostic_only":true,"quantity_accepted":false,
+                    "product_accepted":false,"native_observation":proof});
+                use std::io::{Seek, SeekFrom};
+                file.seek(SeekFrom::Start(0))?;
+                file.set_len(0)?;
+                file.write_all(&serde_json::to_vec_pretty(&proof)?)?;
+                file.sync_all()?;
+                self.remaining(deadline)?;
+                Ok(format!("native oath observation: {proof}"))
             }
             "oath_exact_removal" => {
                 let scope = crate::oath_exact_removal::Scope::from_step(step)?;
