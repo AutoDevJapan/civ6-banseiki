@@ -2366,6 +2366,9 @@ struct ReliabilityRunner {
     fail_cleanup: bool,
     fail_begin: Option<bool>,
     restore_calls: usize,
+    waiter_during_prepare: bool,
+    reschedule_after_begin_failure: f64,
+    restore_budgets: Vec<f64>,
     revisions: VecDeque<String>,
 }
 impl ReliabilityRunner {
@@ -2396,6 +2399,9 @@ impl ReliabilityRunner {
             fail_cleanup: false,
             fail_begin: None,
             restore_calls: 0,
+            waiter_during_prepare: false,
+            reschedule_after_begin_failure: 0.0,
+            restore_budgets: vec![],
             revisions: vec!["a".repeat(40); 10].into(),
         }
     }
@@ -2436,6 +2442,9 @@ impl Runner for ReliabilityRunner {
                 &call.args[3],
                 &json!({"original":original,"archive":archive}),
             )?;
+            // The helper has already exited; model the caller being scheduled
+            // late before it can handle the failure and restore the originals.
+            self.time += self.reschedule_after_begin_failure;
             if self.fail_begin == Some(true) {
                 return Err("begin timed out after original rename".into());
             }
@@ -2447,6 +2456,7 @@ impl Runner for ReliabilityRunner {
         }
         if call.args.get(1).is_some_and(|arg| arg == "--restore") {
             assert!(!self.running && !self.closing);
+            self.restore_budgets.push(call.timeout.unwrap());
             let record = read_json(&call.args[3])?;
             let original = PathBuf::from(record["original"].as_str().unwrap());
             let archive = PathBuf::from(record["archive"].as_str().unwrap());
@@ -2524,6 +2534,17 @@ impl Runner for ReliabilityRunner {
             );
             let mut ship_runner = Fake::success();
             assert_eq!(ship::cli(&mut ship_runner, &self.p, &call.args[1..])?, 0);
+            if self.waiter_during_prepare {
+                fs::create_dir_all(self.p.jobs.join("waiter")).unwrap();
+                write_json(
+                    self.p.jobs.join("waiter/job.json"),
+                    &json!({"status":"running"}),
+                )?;
+                write_json(
+                    self.p.here.join("queue/waiter.json"),
+                    &json!({"job":"waiter","since":1000}),
+                )?;
+            }
             return Ok(Output {
                 stdout: ship_runner.printed.join("\n"),
                 ..Output::default()
@@ -2733,6 +2754,52 @@ fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release
             summary["rounds"][0]["cleanup"]["exit"]["autosave_restore_result"],
             "success"
         );
+    }
+}
+
+#[test]
+fn isolation_failure_keeps_known_competition_deadline_for_original_restore() {
+    for unknown in [false, true] {
+        let f = Fixture::new();
+        f.json(
+            "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
+            json!("fixture source"),
+        );
+        fs::write(
+            f.p.live()
+                .join("tools/target/release/civ6-save-isolation.exe"),
+            "fixture binary",
+        )
+        .unwrap();
+        let original =
+            f.p.profile
+                .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
+        fs::create_dir_all(&original).unwrap();
+        fs::write(original.join("owner-save"), b"owner original bytes").unwrap();
+        let mut r = ReliabilityRunner::new(&f, vec![0]);
+        f.json(
+            "wt/live/tools/civ6-autotest/scenarios/cycle.json",
+            json!({"steps":[
+                {"action":"restart_game","timeout":420},
+                {"action":"load","name":"JAC-Reliability-Seed-1971","exact_name":true},
+                {"action":"save","name":"cycle"},
+                {"action":"pause","seconds":1,"timeout":2000}
+            ]}),
+        );
+        r.running = false;
+        r.fail_begin = Some(unknown);
+        r.waiter_during_prepare = true;
+        r.reschedule_after_begin_failure = 1780.0;
+        assert!(cli(&mut r, &f.p, &args(&["--reliability", "main:cycle.json"])).is_err());
+        assert_eq!(r.restore_calls, 1);
+        assert_eq!(r.restore_budgets, vec![20.0]);
+        assert!(r.artifacts.is_empty());
+        assert_eq!(
+            fs::read(original.join("owner-save")).unwrap(),
+            b"owner original bytes"
+        );
+        assert!(!f.p.here.join("reliability-auto-state.json").exists());
+        assert!(!f.p.here.join("civ6.lock").exists());
     }
 }
 
