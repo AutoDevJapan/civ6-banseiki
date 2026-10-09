@@ -337,6 +337,31 @@ mod win {
             .ok_or_else(|| Error::input("SteamExe has no directory"))?
             .to_owned())
     }
+    fn saved_account() -> Result<String> {
+        let mut buf = [0u16; 256];
+        let mut bytes = (buf.len() * 2) as u32;
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                w!("Software\\Valve\\Steam"),
+                w!("AutoLoginUser"),
+                RRF_RT_REG_SZ,
+                None,
+                Some(buf.as_mut_ptr().cast()),
+                Some(&mut bytes),
+            )
+        };
+        if status.0 != 0 || bytes < 2 || bytes as usize > buf.len() * 2 || !bytes.is_multiple_of(2)
+        {
+            return Err(Error::input("Steam saved account is unavailable"));
+        }
+        let len = bytes as usize / 2;
+        if buf[len - 1] != 0 {
+            return Err(Error::input("Steam saved account is not terminated"));
+        }
+        String::from_utf16(&buf[..len - 1])
+            .map_err(|_| Error::input("Steam saved account is not valid UTF-16"))
+    }
     fn rows() -> Result<Vec<(u32, u32, String)>> {
         let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snap == (-1isize as _) {
@@ -631,9 +656,25 @@ mod win {
                 .iter()
                 .map(|b| b.0.clone())
                 .collect::<Vec<_>>();
-            let action = decide(&window.title, &window.body, &names, proof);
+            let account = if window.title.eq_ignore_ascii_case("Sign in to Steam") {
+                Some(saved_account()?)
+            } else {
+                None
+            };
+            let action = account
+                .as_ref()
+                .and_then(|account| {
+                    crate::steam_policy::saved_account_choice(
+                        &window.title,
+                        &window.body,
+                        &names,
+                        account,
+                    )
+                })
+                .map(Action::Select)
+                .unwrap_or_else(|| decide(&window.title, &window.body, &names, proof));
             if action != Action::None {
-                candidates.push((window, action));
+                candidates.push((window, action, account));
             }
         }
         if candidates.is_empty() {
@@ -644,7 +685,7 @@ mod win {
                 "multiple Steam warnings; refusing ambiguous action",
             ));
         }
-        let (window, action) = candidates.remove(0);
+        let (window, action, account) = candidates.remove(0);
         let mut lease = crate::startup::RecoveryLease::acquire()?;
         lease.check()?;
         let event = serde_json::json!({"time":chrono::Utc::now(),"window":window.value(),"console_proves_civ6":proof,"action":format!("{action:?}")});
@@ -702,6 +743,16 @@ mod win {
                     .ok_or_else(|| Error::input("invalid Steam button index"))?
                     .1;
                 let current = &now.buttons[index].1;
+                if let Some(account) = &account {
+                    let names = now.buttons.iter().map(|b| b.0.clone()).collect::<Vec<_>>();
+                    if saved_account()? != *account
+                        || crate::steam_policy::saved_account_choice(
+                            &now.title, &now.body, &names, account,
+                        ) != Some(index)
+                    {
+                        return Err(Error::input("Steam saved account changed before selection"));
+                    }
+                }
                 unsafe {
                     if !uia.CompareElements(old, current).map_err(native)?.as_bool() {
                         return Err(Error::input("Steam button identity changed before action"));
@@ -721,7 +772,7 @@ mod win {
                 }
                 record(
                     journal,
-                    serde_json::json!({"phase":"selected","key":key,"event":event,"choice":"keep_pc_files"}),
+                    serde_json::json!({"phase":"selected","key":key,"event":event,"choice":if account.is_some(){"configured_saved_account"}else{"keep_pc_files"}}),
                 )?;
                 Ok(true)
             }
