@@ -2386,6 +2386,17 @@ mod native_transport {
                 && node
                     .children()
                     .any(|file| file.text() == Some("Scripts/JAC_CarrierBoundary.lua"))));
+        assert_eq!(
+            doc.descendants()
+                .filter(|node| node.has_tag_name("AddGameplayScripts"))
+                .count(),
+            1
+        );
+        let entry = fs::read_to_string(
+            repo_root().join("poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Entry.lua"),
+        )
+        .unwrap();
+        assert!(entry.contains("include(\"JAC_CarrierBoundary\")"));
         Lua::new()
             .load(transport::gameplay_binding())
             .into_function()

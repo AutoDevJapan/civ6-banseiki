@@ -3249,6 +3249,27 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
+    let import_start =
+        "<ImportFiles id=\"JAC_Absorption_Engine_Files\" criteria=\"JAC_Absorption_Banseiki\">";
+    assert_eq!(manifest.matches(import_start).count(), 1);
+    let imports = manifest
+        .split_once(import_start)
+        .unwrap()
+        .1
+        .split_once("</ImportFiles>")
+        .unwrap()
+        .0;
+    for file in ["JAC_CarrierBoundary", "JAC_NativeInventory"] {
+        assert_eq!(
+            imports
+                .matches(&format!("<File>Scripts/{file}.lua</File>"))
+                .count(),
+            1
+        );
+        assert!(!manifest.contains(&format!(
+            "<File>Scripts/{file}.lua</File></AddGameplayScripts>"
+        )));
+    }
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
@@ -3264,10 +3285,12 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         GameEvents.JAC_Absorption_LeaderOffer=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionProduct_Operation=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
-        GameEvents.OnGameTurnStarted=COUNTED_EVENT()
         GameEvents.JAC_CarrierBoundary_Operation=COUNTED_EVENT()
         GameEvents.JAC_CarrierMP_Operation=COUNTED_EVENT()
         GameEvents.JAC_NativeInventory_Operation=COUNTED_EVENT()
+        GameEvents.OnGameTurnStarted=COUNTED_EVENT()
+        GameEvents.PlayerTurnStartComplete=COUNTED_EVENT()
+        GameEvents.OnPlayerTurnEnded=COUNTED_EVENT()
     "#,
     )
     .exec()?;
@@ -3585,10 +3608,13 @@ fn former_load_orders_reproduce_both_private_engine_assertions_in_separate_vms()
     ))
     .map_err(mlua::Error::external)?;
     let mut legacy = manifest.clone();
-    let tag = "<ImportFiles id=\"JAC_Absorption_Native_Files\"";
+    let tag = "<ImportFiles id=\"JAC_Absorption_Engine_Files\"";
     let start = legacy.find(tag).unwrap();
     let end = start + legacy[start..].find("</ImportFiles>").unwrap() + "</ImportFiles>".len();
-    legacy.replace_range(start..end, "");
+    let legacy_imports = legacy[start..end]
+        .replace("<File>Scripts/JAC_CarrierBoundary.lua</File>", "")
+        .replace("<File>Scripts/JAC_NativeInventory.lua</File>", "");
+    legacy.replace_range(start..end, &legacy_imports);
     for (name, order) in [("JAC_CarrierBoundary", 205), ("JAC_NativeInventory", 206)] {
         legacy = legacy.replace("</InGameActions>", &format!(
             "<AddGameplayScripts id=\"{name}\" criteria=\"JAC_Absorption_Banseiki\"><Properties><LoadOrder>{order}</LoadOrder></Properties><File>Scripts/{name}.lua</File></AddGameplayScripts></InGameActions>"));
