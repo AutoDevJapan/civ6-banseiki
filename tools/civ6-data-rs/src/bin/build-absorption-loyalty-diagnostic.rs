@@ -20,6 +20,7 @@ return 'native getter, rate and city-event observer registered'
 "#;
 
 const CORE: &str = r#"
+local operationMode=false
 local D={Calls={},Rows={},Turn=Game.GetCurrentGameTurn()}
 local function record(label,c)
  local r=ExposedMembers.JAC_LoyaltyMatrixRead(c:GetX(),c:GetY())
@@ -53,6 +54,7 @@ local ac=assert(Players[0]:GetCities():GetCapitalCity())
 local ap;for _,c in Players[0]:GetCities():Members() do if c:GetID()~=ac:GetID() then ap=c;break end end
 assert(ap and not Players[0]:IsTurnActive(),'expected inactive AI with noncapital')
 D.Human=row(hp);D.Control=row(hc);D.AI=row(ap);D.AIActive=row(ap)
+if not operationMode then
 call('human-active-negative',D.Human,'setter',-5)
 call('human-active-native-negative',D.Human,'modifier','JAC_ABSORPTION_LOYALTY_LOSS_5')
 call('ai-inactive-negative',D.AI,'setter',-5)
@@ -60,9 +62,25 @@ call('ai-inactive-native-negative',D.AI,'modifier','JAC_ABSORPTION_LOYALTY_LOSS_
 -- Separate diagnostic city, deliberately beyond the +100 map stability.
 -- This is an experiment, never a production-policy substitute or retry.
 call('human-control-prepare',D.Control,'setter',-150)
+end
+if operationMode then
+ local cases={
+  ['human-operation-setter']={D.Human,'setter',-5},
+  ['human-operation-modifier']={D.Human,'modifier','JAC_ABSORPTION_LOYALTY_LOSS_5'},
+  ['ai-operation-setter']={D.AI,'setter',-5},
+  ['ai-operation-modifier']={D.AI,'modifier','JAC_ABSORPTION_LOYALTY_LOSS_5'},
+  ['human-operation-control']={D.Control,'setter',-150}}
+ GameEvents.JAC_LoyaltyMatrix_Operation.Add(function(actor,params)
+  assert(actor==human and Players[actor]:IsTurnActive(),'wrong diagnostic operation actor')
+  local s=assert(cases[params.Label],'unknown diagnostic operation')
+  call(params.Label,s[1],s[2],s[3])
+  D.LastOperation=params.Label;Game:SetProperty('JAC_LOYALTY_MATRIX_OPERATIONS',D)
+ end)
+ ExposedMembers.JAC_LoyaltyMatrixLastOperation=function() return D.LastOperation end
+end
 GameEvents.PlayerTurnStartComplete.Add(function(actor)
  print('JAC_LOYALTY_MATRIX_TURN actor='..tostring(actor)..' active='..tostring(Players[actor]:IsTurnActive()))
- if actor==0 and Players[actor]:IsTurnActive() and not D.Calls['ai-active-negative'] then
+ if not operationMode and actor==0 and Players[actor]:IsTurnActive() and not D.Calls['ai-active-negative'] then
   call('ai-active-negative',D.AIActive,'setter',-5)
   call('ai-active-native-negative',D.AIActive,'modifier','JAC_ABSORPTION_LOYALTY_LOSS_5')
  end
@@ -94,9 +112,13 @@ fn ui(state: &str, code: &str) -> Value {
 fn run() -> Result<()> {
     let mut args = std::env::args_os().skip(1);
     let output = PathBuf::from(args.next().context("absolute output JSON path required")?);
+    let option = args.next();
+    let operation_mode = option
+        .as_deref()
+        .is_some_and(|v| v == "--operation-context");
     ensure!(
-        output.is_absolute() && args.next().is_none(),
-        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path>"
+        output.is_absolute() && (option.is_none() || operation_mode) && args.next().is_none(),
+        "usage: build-absorption-loyalty-diagnostic <absolute-new-json-path> [--operation-context]"
     );
     ensure!(
         !output.exists(),
@@ -111,22 +133,41 @@ fn run() -> Result<()> {
     ensure!(setup.len() >= 8, "base scene setup is incomplete");
     let mut steps = setup[..8].to_vec();
     steps.push(ui("InGame", UI));
-    steps.push(ui("JAC_Absorption_Entry", CORE));
-    steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
-    steps.push(ui("JAC_Absorption_Entry", "ExposedMembers.JAC_LoyaltyMatrixSnapshot('after-real-turn');return 'native values recorded after actual turn'"));
-    steps.push(ui(
-        "InGame",
-        "JAC_LOYALTY_MATRIX.Publications=0;return true",
-    ));
-    steps.push(ui(
-        "JAC_Absorption_Entry",
-        "return ExposedMembers.JAC_LoyaltyMatrixPositive()",
-    ));
-    steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return JAC_LOYALTY_MATRIX.Publications>=2"}}));
-    steps.push(ui("JAC_Absorption_Entry", "ExposedMembers.JAC_LoyaltyMatrixSnapshot('positive-after-publication');return 'positive actual values recorded'"));
-    steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
-    steps.push(ui("JAC_Absorption_Entry", "local d=ExposedMembers.JAC_LoyaltyMatrixSnapshot('positive-after-real-turn');print('JAC_LOYALTY_MATRIX_AI_ACTIVE_CALL '..tostring(d.Calls['ai-active-negative']));return 'finite comparison complete'"));
-    steps.push(ui("InGame", "print('JAC_LOYALTY_MATRIX_EVENT_TOTAL '..JAC_LOYALTY_MATRIX.Events);return JAC_LOYALTY_MATRIX.Events"));
+    let core = CORE.replace(
+        "local operationMode=false",
+        &format!("local operationMode={operation_mode}"),
+    );
+    steps.push(ui("JAC_Absorption_Entry", &core));
+    if operation_mode {
+        for label in [
+            "human-operation-setter",
+            "human-operation-modifier",
+            "ai-operation-setter",
+            "ai-operation-modifier",
+            "human-operation-control",
+        ] {
+            steps.push(ui("InGame", &format!("JAC_LOYALTY_MATRIX.Publications=0;UI.RequestPlayerOperation(Game.GetLocalPlayer(),PlayerOperations.EXECUTE_SCRIPT,{{OnStart='JAC_LoyaltyMatrix_Operation',Label='{label}'}});return 'one synchronized native operation requested'")));
+            steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":format!("return ExposedMembers.JAC_LoyaltyMatrixLastOperation()=='{label}' and JAC_LOYALTY_MATRIX.Publications>=2")}}));
+            steps.push(ui("JAC_Absorption_Entry", &format!("ExposedMembers.JAC_LoyaltyMatrixSnapshot('{label}:after-operation');return 'actual values after synchronized operation'")));
+        }
+        steps.push(ui("InGame", "print('JAC_LOYALTY_MATRIX_EVENT_TOTAL '..JAC_LOYALTY_MATRIX.Events);return JAC_LOYALTY_MATRIX.Events"));
+    } else {
+        steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
+        steps.push(ui("JAC_Absorption_Entry", "ExposedMembers.JAC_LoyaltyMatrixSnapshot('after-real-turn');return 'native values recorded after actual turn'"));
+        steps.push(ui(
+            "InGame",
+            "JAC_LOYALTY_MATRIX.Publications=0;return true",
+        ));
+        steps.push(ui(
+            "JAC_Absorption_Entry",
+            "return ExposedMembers.JAC_LoyaltyMatrixPositive()",
+        ));
+        steps.push(json!({"action":"wait_for","timeout":60,"condition":{"type":"lua","state_name":"InGame","code":"return JAC_LOYALTY_MATRIX.Publications>=2"}}));
+        steps.push(ui("JAC_Absorption_Entry", "ExposedMembers.JAC_LoyaltyMatrixSnapshot('positive-after-publication');return 'positive actual values recorded'"));
+        steps.push(json!({"action":"end_turn","turns":1,"timeout":600}));
+        steps.push(ui("JAC_Absorption_Entry", "local d=ExposedMembers.JAC_LoyaltyMatrixSnapshot('positive-after-real-turn');print('JAC_LOYALTY_MATRIX_AI_ACTIVE_CALL '..tostring(d.Calls['ai-active-negative']));return 'finite comparison complete'"));
+        steps.push(ui("InGame", "print('JAC_LOYALTY_MATRIX_EVENT_TOTAL '..JAC_LOYALTY_MATRIX.Events);return JAC_LOYALTY_MATRIX.Events"));
+    }
     let scene = json!({"name":"Finite native loyalty current/rate/owner-turn diagnosis","judge_profile":"generic","loadscreen_autostart":true,"steps":steps});
     use std::io::Write;
     let mut file = fs::OpenOptions::new()
