@@ -1928,29 +1928,16 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         "poc/JAC_PoC_Absorption/JAC_PoC_Absorption.modinfo",
     ))
     .map_err(mlua::Error::external)?;
-    // The absorption entry owns its private modules. The independent carrier
-    // boundary and inventory receivers have their own contexts and must also
-    // load exactly once.
-    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 3);
-    for id in [
-        "JAC_Absorption_Gameplay",
-        "JAC_CarrierBoundary",
-        "JAC_NativeInventory",
-    ] {
-        assert_eq!(
-            manifest
-                .matches(&format!(
-                    "<AddGameplayScripts id=\"{id}\" criteria=\"JAC_Absorption_Banseiki\">"
-                ))
-                .count(),
-            1,
-        );
-    }
+    // All three handlers share the engine's private Lua context. A separate
+    // AddGameplayScripts entry cannot see JAC_AbsorptionGameplay at startup.
+    assert_eq!(manifest.matches("<AddGameplayScripts ").count(), 1);
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
-    assert!(manifest.contains("<File>Scripts/JAC_CarrierBoundary.lua</File></AddGameplayScripts>"));
-    assert!(manifest.contains("<File>Scripts/JAC_NativeInventory.lua</File></AddGameplayScripts>"));
+    for file in ["JAC_CarrierBoundary", "JAC_NativeInventory"] {
+        assert!(manifest.contains(&format!("<File>Scripts/{file}.lua</File>")));
+        assert!(!manifest.contains(&format!("<File>Scripts/{file}.lua</File></AddGameplayScripts>")));
+    }
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
     lua.load(
@@ -1963,7 +1950,12 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         end
         GameEvents.JAC_Absorption_TestCall=COUNTED_EVENT()
         GameEvents.JAC_AbsorptionFlow_Operation=COUNTED_EVENT()
+        GameEvents.JAC_CarrierBoundary_Operation=COUNTED_EVENT()
+        GameEvents.JAC_CarrierMP_Operation=COUNTED_EVENT()
+        GameEvents.JAC_NativeInventory_Operation=COUNTED_EVENT()
         GameEvents.OnGameTurnStarted=COUNTED_EVENT()
+        GameEvents.PlayerTurnStartComplete=COUNTED_EVENT()
+        GameEvents.OnPlayerTurnEnded=COUNTED_EVENT()
     "#,
     )
     .exec()?;
@@ -2001,6 +1993,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(ExposedMembers.JAC_Absorption.Apply==nil and ExposedMembers.JAC_AbsorptionFlow.Begin==nil)
         assert(GameEvents.JAC_Absorption_TestCall.Count()==1)
         assert(GameEvents.JAC_AbsorptionFlow_Operation.Count()==1)
+        assert(GameEvents.JAC_CarrierBoundary_Operation.Count()==1)
+        assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
+        assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         assert(GameEvents.OnGameTurnStarted.Count()==2)
         local event=GameEvents.JAC_Absorption_TestCall
         GameConfiguration.IsAnyMultiplayer=function() return true end
