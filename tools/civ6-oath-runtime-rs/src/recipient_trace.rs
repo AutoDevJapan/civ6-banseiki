@@ -76,12 +76,13 @@ impl RecipientTrace {
     pub fn counts(&self) -> (bool, u32, u32, u32, u32) {
         let stopped = self.stopped.load(Ordering::Acquire) == 2;
         let flight = self.flight.load(Ordering::Acquire);
+        let dropped = self.dropped.load(Ordering::Acquire);
         (
-            stopped && flight == 0,
+            crate::oath_record::observation_complete(stopped, flight, dropped, true, 0),
             flight,
             self.completed.load(Ordering::Acquire),
             self.unwound.load(Ordering::Acquire),
-            self.dropped.load(Ordering::Acquire),
+            dropped,
         )
     }
     pub fn records(&self) -> Vec<RecipientRecord> {
@@ -410,20 +411,26 @@ mod tests {
         trace.start().unwrap();
         let f: unsafe extern "system-unwind" fn(u64, u64, u64) -> u64 =
             unsafe { std::mem::transmute(slot.load(Ordering::Acquire)) };
-        if case == "unwind" {
+        if case == "overflow" {
+            for _ in 0..=CAPACITY {
+                assert_eq!(unsafe { f(7, 0x12340000, 91) }, 7 ^ 0x12340000 ^ 91);
+            }
+        } else if case == "unwind" {
             assert!(std::panic::catch_unwind(|| unsafe { f(7, 0x12340000, 91) }).is_err());
         } else {
             assert_eq!(unsafe { f(7, 0x12340000, 91) }, 7 ^ 0x12340000 ^ 91);
         }
         trace.stop();
         let records = trace.records();
-        assert_eq!(records.len(), 1);
+        assert_eq!(records.len(), if case == "overflow" { CAPACITY } else { 1 });
         assert_eq!(records[0].actual_receiver_argument, 0x12340000);
         assert_eq!(records[0].raw_r8, 91);
         assert_eq!(records[0].slot, index as u32);
         assert_eq!(
             trace.counts(),
-            if case == "unwind" {
+            if case == "overflow" {
+                (false, 0, CAPACITY as u32, 0, 1)
+            } else if case == "unwind" {
                 (true, 0, 0, 1, 0)
             } else {
                 (true, 0, 1, 0, 0)
@@ -433,12 +440,22 @@ mod tests {
         assert_eq!(slot.load(Ordering::Acquire), target);
         assert!(unsafe { install_at(index, slot as *const _ as usize, target, trace) }.is_err());
         if case != "unwind" {
-            assert_eq!(CALLS.load(Ordering::Acquire), 1);
+            assert_eq!(
+                CALLS.load(Ordering::Acquire),
+                if case == "overflow" {
+                    CAPACITY as u32 + 1
+                } else {
+                    1
+                }
+            );
         }
     }
     #[test]
     fn recipient_gateway_completion_and_unwind_run_in_owned_children() {
-        for (index, case) in (0..8).map(|i| (i, "normal")).chain([(0, "unwind")]) {
+        for (index, case) in (0..8)
+            .map(|i| (i, "normal"))
+            .chain([(0, "unwind"), (0, "overflow")])
+        {
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .args([
                     "--exact",

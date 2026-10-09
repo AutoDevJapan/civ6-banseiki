@@ -5,6 +5,18 @@
 
 /// Finite row capacity. Calls beyond it are counted in `dropped`, never wrapped.
 pub const OATH_CAPACITY: usize = 1024;
+
+/// Complete recording requires quiescence, stable copies, no open rows and
+/// no lost calls. This is not a completed effect quantity or identity proof.
+pub fn observation_complete(
+    stopped: bool,
+    in_flight: u32,
+    dropped: u32,
+    stable: bool,
+    open_rows: usize,
+) -> bool {
+    stopped && in_flight == 0 && dropped == 0 && stable && open_rows == 0
+}
 /// RVA of the common Apply wrapper (three arguments, Win64 `system`).
 pub const PINNED_OATH_APPLY_RVA: usize = 0x8a_75e0;
 /// RVA of the common Remove wrapper (three arguments, Win64 `system`).

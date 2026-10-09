@@ -305,12 +305,13 @@ pub(crate) fn project_trace(first: &TraceView, second: &TraceView, receipt: &Rec
     }
     let stopped = second.header(H_STOPPED) == 2;
     let header_agrees = first.bytes[..HEADER_SIZE] == second.bytes[..HEADER_SIZE];
-    let complete = stopped
-        && second.in_flight() == 0
-        && second.header(H_DROPPED) == 0
-        && header_agrees
-        && unstable == 0
-        && open == 0;
+    let complete = civ6_oath_runtime_rs::oath_record::observation_complete(
+        stopped,
+        second.in_flight(),
+        second.header(H_DROPPED),
+        header_agrees && unstable == 0,
+        open,
+    );
     json!({
         "trace_version": TRACE_VERSION,
         "trace_stopped": stopped,
