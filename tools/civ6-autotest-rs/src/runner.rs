@@ -114,9 +114,6 @@ pub trait Backend: Send {
     fn click(&mut self, _fx: f64, _fy: f64) -> Result<(i32, i32)> {
         Err(Error::input("backend cannot click"))
     }
-    fn click_window(&mut self, _fx: f64, _fy: f64) -> Result<(i32, i32)> {
-        Err(Error::input("backend cannot post mouse input"))
-    }
     fn press_key(&mut self, _key: u16, _deadline: f64) -> Result<()> {
         Err(Error::input("backend cannot send keys"))
     }
@@ -402,9 +399,6 @@ impl Backend for SystemBackend {
     }
     fn click(&mut self, fx: f64, fy: f64) -> Result<(i32, i32)> {
         crate::click::click_fraction(fx, fy)
-    }
-    fn click_window(&mut self, fx: f64, fy: f64) -> Result<(i32, i32)> {
-        crate::click::click_window_fraction(fx, fy)
     }
     fn press_key(&mut self, key: u16, deadline: f64) -> Result<()> {
         crate::click::press_key(key, Some(deadline))
@@ -2220,22 +2214,6 @@ impl Runner {
                 self.backend.capture(&target, crop, deadline)?;
                 self.remaining(deadline)?;
                 Ok(target.display().to_string())
-            }
-            "click" => {
-                self.backend.require_single_process()?;
-                self.remaining(deadline)?;
-                let (x, y) = self
-                    .backend
-                    .click(step["x"].as_f64().unwrap(), step["y"].as_f64().unwrap())?;
-                Ok(format!("clicked Civ VI window at {x},{y}"))
-            }
-            "window_click" => {
-                self.backend.require_single_process()?;
-                self.remaining(deadline)?;
-                let (x, y) = self
-                    .backend
-                    .click_window(step["x"].as_f64().unwrap(), step["y"].as_f64().unwrap())?;
-                Ok(format!("posted click to Civ VI window at {x},{y}"))
             }
             "save" => self.save_step(step, deadline),
             "load" => self.load_step(step, timeout, deadline),

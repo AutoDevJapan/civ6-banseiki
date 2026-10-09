@@ -183,20 +183,6 @@
       "action": "screenshot",
       "path": "todo9-staging-after-30s.png",
       "capture_only": true
-    },
-    {
-      "action": "window_click",
-      "x": 0.435,
-      "y": 0.837
-    },
-    {
-      "action": "pause",
-      "seconds": 1
-    },
-    {
-      "action": "screenshot",
-      "path": "todo9-staging-area-options.png",
-      "capture_only": true
     }
   ]
 }

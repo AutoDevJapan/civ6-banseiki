@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, path::PathBuf};
 
 pub const BANSEIKI_RULESET: &str = "RULESET_JAC_BANSEIKI";
-pub const ACTIONS: [&str; 19] = [
+pub const ACTIONS: [&str; 17] = [
     "restart_game",
     "enable_mods",
     "configure",
@@ -17,8 +17,6 @@ pub const ACTIONS: [&str; 19] = [
     "carrier_checkpoint",
     "carrier_exchange",
     "screenshot",
-    "click",
-    "window_click",
     "save",
     "exit_to_menu",
     "load",
@@ -316,16 +314,6 @@ pub fn validate_scenario(data: &Value) -> Result<()> {
                         return Err(fail(
                             "crop must be [left, top, right, bottom] fractions".into(),
                         ));
-                    }
-                }
-            }
-            "click" | "window_click" => {
-                for coordinate in ["x", "y"] {
-                    if !step[coordinate]
-                        .as_f64()
-                        .is_some_and(|n| n.is_finite() && (0.0..=1.0).contains(&n))
-                    {
-                        return Err(fail(format!("{coordinate} must be in 0..1")));
                     }
                 }
             }

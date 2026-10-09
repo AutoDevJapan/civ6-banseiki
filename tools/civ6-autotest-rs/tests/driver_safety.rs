@@ -630,65 +630,6 @@ fn screenshot_capture_only_avoids_frontend_tuner_queries() {
 }
 
 #[test]
-fn scenario_click_uses_single_game_window_without_tuner() {
-    let f = Fixture::new();
-    let mut backend = f.backend();
-    backend.on_states = Box::new(|_| Err(Error::tuner("unexpected tuner query")));
-    let mut runner = f.direct_runner(json!({}), backend);
-    runner
-        .run_step(&json!({"action":"click","x":0.35,"y":0.84}))
-        .unwrap();
-    let trace = f.trace();
-    assert_eq!(trace.require_processes, 1);
-    assert_eq!(trace.clicks, vec![(0.35, 0.84)]);
-    assert!(trace.state_queries.is_empty() && trace.lua.is_empty());
-    for invalid in [json!(-0.01), json!(1.01), json!("0.35")] {
-        error_has(
-            validate_scenario(&scenario(json!({"action":"click","x":invalid,"y":0.84})))
-                .unwrap_err(),
-            ErrorKind::Scenario,
-            "x must be in 0..1",
-        );
-    }
-}
-
-#[test]
-fn completed_click_is_not_retried_when_its_reply_passes_the_deadline() {
-    let f = Fixture::new();
-    let mut backend = f.backend();
-    let clock = f.clock.clone();
-    backend.on_click = Some(Box::new(move |_, _| {
-        clock.set(10.0);
-        Ok((350, 840))
-    }));
-    let mut runner = f.direct_runner(json!({}), backend);
-    let detail = runner
-        .run_step(&json!({"action":"click","x":0.35,"y":0.84,"timeout":0.01}))
-        .unwrap();
-    assert!(detail.contains("350,840"));
-    assert_eq!(f.trace().clicks, vec![(0.35, 0.84)]);
-}
-
-#[test]
-fn window_click_targets_verified_game_without_tuner_or_foreground_input() {
-    let f = Fixture::new();
-    let mut backend = f.backend();
-    backend.on_states = Box::new(|_| Err(Error::tuner("unexpected tuner query")));
-    let mut runner = f.direct_runner(json!({}), backend);
-    runner
-        .run_step(&json!({"action":"window_click","x":0.435,"y":0.837}))
-        .unwrap();
-    let trace = f.trace();
-    assert_eq!(trace.require_processes, 1);
-    assert_eq!(trace.window_clicks, vec![(0.435, 0.837)]);
-    assert!(trace.clicks.is_empty() && trace.lua.is_empty());
-    validate_scenario(&scenario(json!({
-        "action":"window_click","x":0.435,"y":0.837
-    })))
-    .unwrap();
-}
-
-#[test]
 fn test_nonfinite_timeouts_are_rejected() {
     for value in [json!(true), json!(0), json!(-1), json!("2"), Value::Null] {
         error_has(
