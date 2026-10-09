@@ -436,17 +436,23 @@ local function ReservedNativeSlots(state, owner, excludingTransaction, excluding
   end
   for id, tx in pairs(state.Transactions or {}) do
     if id ~= excludingTransaction and tx.Status ~= "COMPLETE" then
-      for _, work in ipairs(tx.NativeWorks or {}) do Add(work.TargetSlot) end
+      for _, work in ipairs(tx.NativeWorks or {}) do
+        if not (JAC_CarrierMP and JAC_CarrierMP.LoansReleased
+          and JAC_CarrierMP.LoansReleased(work.Carrier)) then Add(work.TargetSlot) end
+      end
     end
   end
   for token, intent in pairs(state.Recoveries or {}) do
-    if token ~= excludingRecovery and intent.Status ~= "COMPLETE" then Add(intent.NativeTarget) end
+    if token ~= excludingRecovery and intent.Status ~= "COMPLETE"
+      and not (JAC_CarrierMP and JAC_CarrierMP.LoansReleased
+        and JAC_CarrierMP.LoansReleased(intent.NativeCarrier)) then Add(intent.NativeTarget) end
   end
   return reserved
 end
 local function ReservedNativeCarrierCities(state, excludingTransaction)
   local reserved = {}
   local function Add(slot)
+    if JAC_CarrierMP and JAC_CarrierMP.LoansReleased and JAC_CarrierMP.LoansReleased(slot) then return end
     if slot and slot.MP then
       for _, loan in ipairs(slot.MP.Loans or { slot.Source }) do
         if loan and type(loan.X) == "number" and type(loan.Y) == "number" then

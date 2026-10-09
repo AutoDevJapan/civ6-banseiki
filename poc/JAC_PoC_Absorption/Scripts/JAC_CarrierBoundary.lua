@@ -329,6 +329,21 @@ local function returnLoans(state,c)
   end
   if #failures>0 then error(table.concat(failures,'; ')) end
 end
+function MP.LoansReleased(c)
+  if not GameConfiguration or not GameConfiguration.IsAnyMultiplayer
+    or not GameConfiguration.IsAnyMultiplayer() then return false end
+  local m=c and c.MP
+  if not m or m.Version~=2 or m.Phase~='ABORT_DONE' or not m.OriginalUnresolved
+    or m.DispatchStatus~='NOT_SENT' or not m.MoveCanceled
+    or type(m.Loans)~='table' or #m.Loans~=2 then return false end
+  for i,l in ipairs(m.Loans) do
+    if not (l.FinalID and l.RestoredCore and (not l.Issued or l.ReturnIssued)) then
+      if i~=1 or not l.SourceUnavailable
+        or not sourceUnavailable(c,l,CityManager.GetCityAt(l.X,l.Y)) then return false end
+    end
+  end
+  return true -- the original index remains reserved by the MP receiver
+end
 local function attemptReturn(state,c)
   local ok,err=pcall(returnLoans,state,c)
   if not ok then c.MP.ReturnError=tostring(err);save(state);return false end
@@ -417,7 +432,7 @@ function MP.AdvanceRecovery(state,intent,source,owner,token)
   intent.NativeMoveEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
   save(state);return true
 end
-function MP.Advance(state,c,preferred)
+function MP.Advance(state,c,preferred,reconciledID)
   assert(GameConfiguration.IsAnyMultiplayer(),'MP required')
   local m=assert(c.MP,'MP reservation required')
   assert(m.Version==2 and m.Actor==c.Borrower,'MP legacy saved loan requires trusted reconciliation')
@@ -441,7 +456,7 @@ function MP.Advance(state,c,preferred)
   if m.Phase=='ABORT_RETURN' or m.Phase=='RETURN' then return attemptReturn(state,c) end
   if m.Phase=='ABORT_DONE' then
     if (m.AbortCycles or 0)>=3 then m.WaitingFor='MP_ABORT_LIMIT';save(state);return false end
-    m.SourceCurrentID=city(m.Loans[1]):GetID()
+    m.SourceCurrentID=reconciledID or city(m.Loans[1]):GetID()
     if m.FailedLoan==2 or m.DispatchStatus=='REJECTED' then
       m.RejectedCandidates[key(m.Loans[2])]=m.AbortReason
     end
@@ -702,6 +717,38 @@ local function recordUnresolvedOriginal(m,o)
     X=source.X,Y=source.Y,Work=source.Work,Missing=source.Missing==true},
     LocationReadFailed=o.LocationsUnavailable==true}
 end
+local function reconcileOriginal(c,o)
+  local m=c.MP
+  assert(m.Phase=='ABORT_DONE' and m.OriginalUnresolved and m.DispatchStatus=='NOT_SENT'
+    and m.MoveCanceled and (m.AbortCycles or 0)<3,'MP original reconciliation is not an unsent abort')
+  local source=assert(m.Loans and m.Loans[1],'MP original loan missing')
+  for _,l in ipairs(m.Loans) do
+    if l.Issued then
+      assert(l.ReturnIssued and l.FinalID and l.RestoredCore,'MP reconciliation has an unfinished loan')
+    end
+  end
+  local expected=source.Issued and source.FinalID or source.ID
+  local current=city(source)
+  assert(Players[source.Owner] and Players[source.Owner]:IsAlive(),'MP reconciliation source owner unavailable')
+  assert(current:GetOwner()==source.Owner and current:GetID()==expected,
+    'MP reconciliation original city identity changed')
+  assert(type(o)=='table' and type(o.Source)=='table' and type(o.Locations)=='table'
+    and not o.LocationsUnavailable and not o.Source.Missing and not o.Source.ReadFailed
+    and #o.Locations==1,'MP reconciliation original missing or duplicated')
+  local seen=o.Source;local work=o.Locations[1]
+  local core=A.ReadNativeCarrierCore(current,source)
+  assert(core.HasBuilding and seen.Owner==source.Owner and seen.ID==expected
+    and seen.X==source.X and seen.Y==source.Y and seen.Work==c.Index
+    and (core.Work==nil or core.Work==c.Index),'MP reconciliation source slot changed')
+  assert(type(seen.Slots)=='number' and source.Slot>=0 and source.Slot<seen.Slots
+    and (core.Slots==nil or core.Slots==seen.Slots),'MP reconciliation source slots unavailable')
+  assert(work.Owner==source.Owner and work.CityID==expected and work.X==source.X and work.Y==source.Y
+    and work.Building==source.Building and work.Slot==source.Slot,'MP reconciliation original left saved slot')
+  for _,k in ipairs({'Index','GreatWorkType','ObjectType','CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do
+    assert(c.Source[k]~=nil and Equal(work[k],c.Source[k]),'MP reconciliation provenance changed: '..k)
+  end
+  return expected
+end
 local function reserved(state,c,l)
   local function busy(other)
     local m=other and other.MP
@@ -765,6 +812,21 @@ local function receive(actor,p)
     return true
   end
   assert(p.Phase==m.Phase and p.Nonce==m.Nonce,'MP stale phase/nonce')
+  if p.Command=='RECONCILE' then
+    -- Expired manual contracts retain their unresolved index reservation.
+    if selectedTx and selectedTx.Turn~=Game.GetCurrentGameTurn()
+      and not (selectedTx.Request and selectedTx.Request.FlowPolicy) then return false end
+    local observed=Decode(p.Payload);local expected=reconcileOriginal(c,observed)
+    local seen=observed.Source;local work=observed.Locations[1];local location={}
+    for _,k in ipairs({'Owner','CityID','X','Y','Building','Slot','Index','GreatWorkType','ObjectType',
+        'CreatorName','TurnCreated','CreatedByPlayer','Effects'}) do location[k]=R.Copy(work[k]) end
+    local l=m.Loans[1]
+    m.OriginalReconciled={Turn=p.Turn,CityID=expected,EvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION',
+      WorldCount=1,Location=location,Source={Owner=seen.Owner,ID=seen.ID,X=seen.X,Y=seen.Y,
+        Building=l.Building,Slot=l.Slot,Work=seen.Work,Slots=seen.Slots}}
+    m.OriginalUnresolved=nil;m.SourceCurrentID=expected;m.Receipts=nil
+    MP.Advance(state,c,nil,expected);return true -- only reselect; no loan or MOVE in this callback
+  end
   if selectedTx and (m.Phase=='SELECT' or m.Phase=='PREPARE') and selectedTx.Turn~=Game.GetCurrentGameTurn()
     and not (selectedTx.Request and selectedTx.Request.FlowPolicy) then
     m.WaitingFor='MP_CONTRACT_REVALIDATION';save(state);return false

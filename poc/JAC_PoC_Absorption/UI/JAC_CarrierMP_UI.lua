@@ -68,9 +68,26 @@ local function Observe(c)
   local m=c and c.MP
   if not m or m.Version~=2 or m.Phase=='DONE' or Game.GetLocalPlayer()~=m.Actor then return false end
   if m.WaitingFor=='MP_ABORT_LIMIT' then return false end
-  if m.Phase=='ABORT_DONE' and m.OriginalUnresolved then return false end
   local player=Players[m.Actor]
   if not player or not player:IsHuman() or not player:IsTurnActive() then return false end
+  if m.Phase=='ABORT_DONE' and m.OriginalUnresolved then
+    if m.DispatchStatus~='NOT_SENT' or not m.MoveCanceled or (m.AbortCycles or 0)>=3 then return false end
+    local api=assert(ExposedMembers.JAC_Absorption)
+    local tx=api.GetState().Transactions[m.Transaction]
+    if tx and tx.Turn~=Game.GetCurrentGameTurn() and not (tx.Request and tx.Request.FlowPolicy) then return false end
+    local l=assert(m.Loans and m.Loans[1]);local expected=l.Issued and l.FinalID or l.ID
+    for _,loan in ipairs(m.Loans) do
+      if loan.Issued and not (loan.ReturnIssued and loan.FinalID and loan.RestoredCore) then return false end
+    end
+    local current=CityManager.GetCityAt(l.X,l.Y)
+    if not expected or not current or current:GetOwner()~=l.Owner or current:GetID()~=expected then return false end
+    local seen=api.ReadNativeCarrier(current,l);local found=api.ReadNativeLocations(c.Index)
+    if seen.Work~=c.Index or type(found)~='table' or #found~=1 then return false end
+    local work=found[1]
+    if work.Owner~=l.Owner or work.CityID~=expected or work.X~=l.X or work.Y~=l.Y
+      or work.Building~=l.Building or work.Slot~=l.Slot then return false end
+    return request(c,'RECONCILE',{Source=seen,Locations=found})
+  end
   if m.Phase=='SELECT' or m.Phase=='PREPARE' then
     local api=ExposedMembers.JAC_Absorption
     local tx=api and api.GetState().Transactions[m.Transaction]
