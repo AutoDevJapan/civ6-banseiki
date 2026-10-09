@@ -5,7 +5,7 @@
 //! this module produces, accepts or adjusts a quantity.
 // The Windows controller consumes this wire format; on other hosts only its
 // portable parser tests use it.
-#![cfg_attr(not(windows), allow(dead_code))]
+#![allow(dead_code)]
 use serde_json::{json, Value};
 
 pub(crate) const RUNTIME_VERSION: u32 = 0x0134_0002;
