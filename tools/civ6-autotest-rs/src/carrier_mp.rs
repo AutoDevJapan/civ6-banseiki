@@ -476,10 +476,10 @@ local function validateObservation(c,o,placement)
   assert(o.Cities[i].Work==c.Index and o.Cities[3-i].Work==-1,'MP reported source/target mismatch')
   return artifactOriginals(c,o,placement)
 end
-local function validateUnresolvedTarget(c,o,restored)
-  -- NOT_SENT is saved by Gameplay before this path is allowed. Only the
-  -- borrowed destination is being released; the original is not proved.
-  local m=c.MP;local l=assert(m.Loans[2]);local seen=o and o.Cities and o.Cities[2]
+local function validateUnresolvedLoan(c,o,i,restored)
+  -- A NOT_SENT abort releases cities without proving the original. Every
+  -- city actually returned must retain its baseline works and gain none.
+  local m=c.MP;local l=assert(m.Loans[i]);local seen=o and o.Cities and o.Cities[i]
   assert(type(o)=='table' and type(o.Cities)=='table' and #o.Cities==2
     and type(o.Locations)=='table' and type(seen)=='table','MP unresolved observation shape')
   local current=city(l);local core=A.ReadNativeCarrierCore(current,l)
@@ -521,6 +521,21 @@ local function validateUnresolvedTarget(c,o,restored)
     assert(location.X~=l.X or location.Y~=l.Y,'MP unresolved original is in the borrowed city')
   end
   if restored then assert(l.RestoredCore,'MP unresolved target restoration incomplete') end
+end
+local function validateUnresolvedReturn(c,o,restored)
+  -- Validate all returnable loans before returning even the first city. The
+  -- Palace source is not borrowed. A missing/captured source is also not
+  -- transferred by returnLoans; leave its original unresolved instead.
+  local m=c.MP;local owner=moveOwner(c)
+  for i,l in ipairs(m.Loans) do
+    local current=CityManager.GetCityAt(l.X,l.Y)
+    local expectedOwner=restored and l.Owner or owner
+    local expectedID=restored and l.FinalID or l.BorrowedID
+    if i==2 or (l.Issued and not l.SourceUnavailable and current
+      and current:GetOwner()==expectedOwner and current:GetID()==expectedID) then
+      validateUnresolvedLoan(c,o,i,restored)
+    end
+  end
 end
 local function reserved(state,c,l)
   local function busy(other)
@@ -633,7 +648,7 @@ local function receive(actor,p)
   local unresolvedAbort=m.Phase=='ABORT_RESTORED' and m.OriginalUnresolved~=nil
   local valid,err
   if unresolvedSource or unresolvedAbort then
-    valid,err=pcall(validateUnresolvedTarget,c,o,unresolvedAbort)
+    valid,err=pcall(validateUnresolvedReturn,c,o,unresolvedAbort)
   else
     valid,err=pcall(validateObservation,c,o,placement)
   end
