@@ -2025,9 +2025,6 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
         assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
         assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         assert(GameEvents.OnGameTurnStarted.Count()==2)
-        assert(GameEvents.JAC_CarrierBoundary_Operation.Count()==1)
-        assert(GameEvents.JAC_CarrierMP_Operation.Count()==1)
-        assert(GameEvents.JAC_NativeInventory_Operation.Count()==1)
         local codecs=0
         for name,value in pairs(ExposedMembers.JAC_CarrierMP) do
           assert((name=='Encode' or name=='Decode') and type(value)=='function')
