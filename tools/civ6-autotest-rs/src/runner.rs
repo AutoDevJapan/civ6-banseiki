@@ -1869,11 +1869,14 @@ impl Runner {
         if self.ruleset.as_deref() != Some(scenario::BANSEIKI_RULESET) {
             return Ok(());
         }
-        let value = self.lua(
+        // Read-only verification may race the final loading work even after
+        // InGame reports readiness. Reconnect within the original step deadline;
+        // never replay Host/Load or retry an authoritative calendar mismatch.
+        let value = self.retry_idempotent(deadline, |this| this.lua(
             "InGame",
             "local start=GameConfiguration.GetStartTurn();local turn=Game.GetCurrentGameTurn();if GameCapabilities.HasCapability('CAPABILITY_DISPLAY_NORMALIZED_TURN') then turn=turn-start+1 end;local era=GameInfo.StartEras['ERA_ANCIENT'];local calendar=GameConfiguration.GetCalendarType();local selected=calendar=='CALENDAR_STANDARD_FROM_START_ERA' or calendar==DB.MakeHash('CALENDAR_STANDARD_FROM_START_ERA');return table.concat({tostring(start),tostring(turn),tostring(era and era.Year),tostring(selected),tostring(calendar),tostring(Calendar.MakeYearStr(Game.GetCurrentGameTurn()))},'|')",
-            self.budget(deadline, 5.0)?,
-        )?;
+            this.budget(deadline, 5.0)?,
+        ))?;
         // The Sengoku calendar legitimately starts near raw turn 16603.
         // Match both the official normalized turn and its actual calendar date.
         let observation = value.trim().trim_matches('"');

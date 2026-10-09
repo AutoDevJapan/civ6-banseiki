@@ -9,6 +9,74 @@ use std::{
 use support_driver::{FakeBackend, Harness, ManualClock};
 
 #[test]
+fn start_calendar_read_reconnects_after_transient_tuner_failure_without_replaying_start() {
+    let calls = Arc::new(Mutex::new(0));
+    let reads = Arc::clone(&calls);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |state, code| {
+        assert_eq!(state, "InGame");
+        assert!(code.contains("GameConfiguration.GetStartTurn()"));
+        let mut count = reads.lock().unwrap();
+        *count += 1;
+        if *count == 1 {
+            Err(Error::tuner("FireTuner response timed out after 0/8 bytes"))
+        } else {
+            Ok("16603|1|1534|true|CALENDAR_STANDARD_FROM_START_ERA|1534 AD".into())
+        }
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    h.runner.check_start_turn(10.0).unwrap();
+    assert_eq!(*calls.lock().unwrap(), 2);
+    assert!(h
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|name| name == "disconnect"));
+    assert!(h
+        .calls()
+        .iter()
+        .all(|(_, code)| !code.contains("Network.HostGame") && !code.contains("Network.LoadGame")));
+}
+
+#[test]
+fn start_calendar_mismatch_is_authoritative_and_is_not_retried() {
+    let reads = Arc::new(Mutex::new(0));
+    let calls = Arc::clone(&reads);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |_, _| {
+        *calls.lock().unwrap() += 1;
+        Ok("16603|2|1534|true|CALENDAR_STANDARD_FROM_START_ERA|1534 AD".into())
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    let error = h.runner.check_start_turn(10.0).unwrap_err();
+    assert!(error.message.contains("must display turn 1"));
+    assert_eq!(*reads.lock().unwrap(), 1);
+}
+
+#[test]
+fn start_calendar_transport_failure_uses_the_original_deadline() {
+    let clock = Arc::new(ManualClock::default());
+    let elapsed = Arc::clone(&clock);
+    let reads = Arc::new(Mutex::new(0));
+    let calls = Arc::clone(&reads);
+    let mut backend = FakeBackend::new();
+    backend.on_lua = Box::new(move |_, _| {
+        *calls.lock().unwrap() += 1;
+        elapsed.advance(2.0);
+        Err(Error::tuner("read unavailable"))
+    });
+    let mut h = Harness::new(json!({}), backend);
+    h.runner.clock = clock.clone();
+    h.runner.ruleset = Some(scenario::BANSEIKI_RULESET.into());
+    assert!(h.runner.check_start_turn(2.0).is_err());
+    assert_eq!(*reads.lock().unwrap(), 1);
+    assert_eq!(clock.at(), 2.0);
+}
+
+#[test]
 fn configured_human_pool_survives_defaults_without_changing_participants() {
     let step = json!({"action":"configure","ruleset":"RULESET_JAC_BANSEIKI","human_pool":"JAC_ALL_POOLS",
         "map_size":"MAPSIZE_DUEL","map_script":"Continents.lua","speed":"GAMESPEED_STANDARD","seed":620981,"city_states":1,
