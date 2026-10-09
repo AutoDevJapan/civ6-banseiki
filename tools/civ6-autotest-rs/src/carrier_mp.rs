@@ -77,13 +77,35 @@ local function actorFor(recipient)
 end
 local function actorForWork(recipient,source)
   if source.BuildingType=='BUILDING_PALACE' then
-    -- Keep the capital under its actual human owner. Borrow only the target
-    -- city into that owner's civilization; no AI identity or history guess.
+    -- A human owner sends its own MOVE. For an AI owner, a real human sends
+    -- the operation while PARAM_PLAYER_ONE names the AI's city collection.
+    -- The source capital stays put; only the destination city is borrowed.
     local p=Players[source.Owner]
     if p and p:IsAlive() and p:IsHuman() then return source.Owner end
-    return nil
   end
   return actorFor(recipient)
+end
+local function moveOwner(c)
+  local m=assert(c.MP)
+  local owner=c.Source.BuildingType=='BUILDING_PALACE' and c.Source.Owner or m.Actor
+  assert((m.MoveOwner or m.Actor)==owner,'MP MOVE city owner changed')
+  if c.Source.BuildingType=='BUILDING_PALACE' then
+    local player=assert(Players[owner],'MP Palace source owner missing')
+    assert(player:IsAlive() and player:IsMajor(),'MP Palace source owner unavailable')
+    if player:IsHuman() then
+      assert(m.Actor==owner,'MP human Palace owner must send its own MOVE')
+    else
+      local actor=assert(Players[m.Actor],'MP Palace human executor missing')
+      assert(actor:IsAlive() and actor:IsHuman(),'MP Palace executor is not human')
+    end
+  end
+  return owner
+end
+local function sourceBuildingMatches(source)
+  for row in GameInfo.Buildings() do
+    if row.Index==source.Building then return row.BuildingType==source.BuildingType end
+  end
+  return false
 end
 local function phase(state,c,p)
   c.MP.Phase=p;c.MP.Nonce=c.MP.Nonce+1;save(state)
@@ -106,17 +128,19 @@ function MP.Preflight(tx)
   for _,snap in ipairs(tx.NativeWorks or {}) do
     if snap.Custodian then
       assert(snap.NativeRoute=='CARRIER','MP legacy deal needs reconciliation')
+      assert(sourceBuildingMatches(snap.Source),'MP saved source building type changed')
       if snap.Source.BuildingType=='BUILDING_PALACE' and snap.Carrier then
-        assert(snap.Carrier.MP and snap.Carrier.MP.Actor==snap.Source.Owner,
-          'MP saved Palace carrier must retain its original owner as actor')
+        assert(snap.Carrier.MP and moveOwner(snap.Carrier)==snap.Source.Owner
+          and (not Players[snap.Source.Owner]:IsHuman()
+            or snap.Carrier.MP.Actor==snap.Source.Owner),
+          'MP saved Palace carrier changed its source owner or human actor')
       end
       if not snap.Carrier then
         local s=snap.Source
         local actor=actorForWork(tx.To,s)
-        assert(s.BuildingType~='BUILDING_PALACE' or actor==s.Owner,
-          'MP AI Palace source needs native preservation proof')
-        if actor then
-          assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},actor),
+        local owner=s.BuildingType=='BUILDING_PALACE' and s.Owner or actor
+        if owner then
+          assert(eligible({Owner=s.Owner,ID=s.CityID,X=s.X,Y=s.Y,Building=s.Building,Slot=s.Slot},owner),
             'MP source city cannot be safely borrowed')
         end
       end
@@ -136,17 +160,17 @@ local function restoreProperties(current,l)
   end
 end
 local function returnLoans(state,c)
-  local m=c.MP;local failures={}
+  local m=c.MP;local owner=moveOwner(c);local failures={}
   for _,l in ipairs(m.Loans) do
     local ok,err=pcall(function()
     local current=city(l)
     -- Save current authoritative values before a transfer can clear them.
     -- Refresh only while still borrowed; a completed transfer must not replace
     -- its saved pre-return values with the cleared post-transfer properties.
-    if current:GetOwner()==m.Actor or not l.ReturnIssued then
+    if current:GetOwner()==owner or not l.ReturnIssued then
       l.ReturnCore=R.Copy(A.ReadNativeCarrierCore(current,l));save(state)
     end
-    if l.Owner~=m.Actor and current:GetOwner()==m.Actor then
+    if l.Owner~=owner and current:GetOwner()==owner then
       assert(l.Issued,'MP cannot return an unissued loan')
       assert(l.BorrowedID==nil or current:GetID()==l.BorrowedID,'MP borrowed return identity changed')
       l.BorrowedID=current:GetID()
@@ -154,7 +178,7 @@ local function returnLoans(state,c)
     end
     current=city(l)
     assert(current:GetOwner()==l.Owner,'MP return owner changed')
-    assert(l.Owner==m.Actor or l.ReturnIssued or current:GetID()==l.ID,'MP original return identity changed')
+    assert(l.Owner==owner or l.ReturnIssued or current:GetID()==l.ID,'MP original return identity changed')
     if l.FinalID then assert(current:GetID()==l.FinalID,'MP returned city identity changed') end
     l.FinalID=current:GetID()
     if not l.RestoredCore then restoreProperties(current,l) end
@@ -205,7 +229,9 @@ function MP.AdvanceSnap(state,tx,snap)
     snap.Carrier={Route=snap.Destination<0 and 'TO_FREE' or 'TO_OWNER',Phase='BORROW',BorrowIssued=false,Index=snap.Source.Index,
       Source=R.Copy(snap.Source),Owner=snap.Custodian,Borrower=actor,
       Token=tx.ID..':carrier:'..snap.Source.Index}
-    snap.Carrier.MP={Version=2,Transaction=tx.ID,Actor=actor,Phase='SELECT',Nonce=1,RejectedCandidates={}}
+    snap.Carrier.MP={Version=2,Transaction=tx.ID,Actor=actor,
+      MoveOwner=snap.Source.BuildingType=='BUILDING_PALACE' and snap.Source.Owner or actor,
+      Phase='SELECT',Nonce=1,RejectedCandidates={}}
     tx.WaitingFor=nil
     save(state);return false
   end
@@ -218,24 +244,25 @@ function MP.AdvanceSnap(state,tx,snap)
 end
 function MP.AdvanceRecovery(state,intent,source,owner,token)
   assert(Players[owner] and Players[owner]:IsAlive(),'MP recovery recipient must be alive')
+  assert(sourceBuildingMatches(source),'MP recovery source building type changed')
   if not intent.NativeCarrier then
     local actor=actorForWork(owner,source)
-    assert(source.BuildingType~='BUILDING_PALACE' or actor==source.Owner,
-      'MP AI Palace recovery requires native preservation proof')
     if not actor then intent.WaitingFor='MP_HUMAN_EXECUTOR';save(state);return false end
-    if not eligible({Owner=source.Owner,ID=source.CityID,X=source.X,Y=source.Y,Building=source.Building,Slot=source.Slot},actor) then
+    local mover=source.BuildingType=='BUILDING_PALACE' and source.Owner or actor
+    if not eligible({Owner=source.Owner,ID=source.CityID,X=source.X,Y=source.Y,Building=source.Building,Slot=source.Slot},mover) then
       intent.WaitingFor='MP_SOURCE_CITY_UNAVAILABLE';save(state);return false
     end
     intent.NativeCarrier={Route='FROM_FREE',Phase='BORROW',BorrowIssued=false,Index=source.Index,
       Source=R.Copy(source),Owner=owner,Borrower=actor,Token=token..':carrier:'..source.Index}
-    intent.NativeCarrier.MP={Version=2,Recovery=token,Actor=actor,Phase='SELECT',Nonce=1,RejectedCandidates={}}
+    intent.NativeCarrier.MP={Version=2,Recovery=token,Actor=actor,MoveOwner=mover,
+      Phase='SELECT',Nonce=1,RejectedCandidates={}}
     intent.WaitingFor=nil
     save(state);return false
   end
   local c=intent.NativeCarrier
   assert(c.MP and c.MP.Recovery==token and c.Owner==owner and c.Source.Index==source.Index,'MP recovery intent changed')
-  assert(source.BuildingType~='BUILDING_PALACE' or c.MP.Actor==source.Owner,
-    'MP saved Palace recovery must retain its original owner as actor')
+  assert(source.BuildingType~='BUILDING_PALACE' or moveOwner(c)==source.Owner,
+    'MP saved Palace recovery changed its original owner')
   if not MP.Advance(state,c,owner) then return false end
   intent.NativeTarget=R.Copy(c.FinalSlot);intent.NativePhysicalMoved=true
   intent.NativeMoveEvidenceKind='SYNCHRONIZED_ACTOR_OBSERVATION'
@@ -245,8 +272,8 @@ function MP.Advance(state,c,preferred)
   assert(GameConfiguration.IsAnyMultiplayer(),'MP required')
   local m=assert(c.MP,'MP reservation required')
   assert(m.Version==2 and m.Actor==c.Borrower,'MP legacy saved loan requires trusted reconciliation')
-  assert(c.Source.BuildingType~='BUILDING_PALACE' or m.Actor==c.Source.Owner,
-    'MP Palace carrier cannot borrow the source capital')
+  assert(sourceBuildingMatches(c.Source),'MP MOVE source building type changed')
+  local owner=moveOwner(c)
   if not active(m.Actor) then m.WaitingFor='MP_ACTOR_TURN';save(state);return false end
   m.WaitingFor=nil
   if m.Phase=='DONE' and m.ObservationTurn~=Game.GetCurrentGameTurn() then
@@ -277,12 +304,12 @@ function MP.Advance(state,c,preferred)
         local current=city(l)
         local core=A.ReadNativeCarrierCore(current,l)
         assert(core.HasBuilding and core.Name==l.CoreBefore.Name
-          and core.Population==l.CoreBefore.Population and (l.Owner==m.Actor or #core.UnitsOnCenter==0),'MP Core city changed before borrowing')
-        if current:GetOwner()==l.Owner and l.Owner~=m.Actor then
-          assert(eligible(l,m.Actor),'MP loan eligibility changed')
+          and core.Population==l.CoreBefore.Population and (l.Owner==owner or #core.UnitsOnCenter==0),'MP Core city changed before borrowing')
+        if current:GetOwner()==l.Owner and l.Owner~=owner then
+          assert(eligible(l,owner),'MP loan eligibility changed')
           counts[l.Owner]=(counts[l.Owner] or 0)+1
         else
-          assert(current:GetOwner()==m.Actor and (l.Owner==m.Actor or l.Issued),'MP unissued or unrelated loan')
+          assert(current:GetOwner()==owner and (l.Owner==owner or l.Issued),'MP unissued or unrelated loan')
           assert(l.BorrowedID==nil or l.BorrowedID==current:GetID(),'MP saved borrowed identity changed')
         end
       end
@@ -290,11 +317,11 @@ function MP.Advance(state,c,preferred)
       for i,l in ipairs(m.Loans) do
         m.FailedLoan=i
         local current=city(l)
-        if current:GetOwner()==l.Owner and l.Owner~=m.Actor then
-          assert(eligible(l,m.Actor),'MP loan changed between paired transfers')
-          l.Issued=true;save(state);CityManager.TransferCity(current,m.Actor)
+        if current:GetOwner()==l.Owner and l.Owner~=owner then
+          assert(eligible(l,owner),'MP loan changed between paired transfers')
+          l.Issued=true;save(state);CityManager.TransferCity(current,owner)
         end
-        assert(city(l):GetOwner()==m.Actor,'MP borrow did not reach selected actor')
+        assert(city(l):GetOwner()==owner,'MP borrow did not reach MOVE city owner')
         l.BorrowedID=city(l):GetID();save(state);restoreProperties(city(l),l)
       end
     end)
@@ -372,7 +399,7 @@ local function artifactOriginals(c,o,placement)
   return originals
 end
 local function validateObservation(c,o,placement)
-  local m=c.MP
+  local m=c.MP;local owner=moveOwner(c)
   assert(type(o)=='table' and type(o.Cities)=='table' and type(o.Locations)=='table','MP observation shape')
   assert(#o.Cities==2 and #o.Locations==1,'MP actor reports original missing or duplicated')
   local work=o.Locations[1]
@@ -391,7 +418,7 @@ local function validateObservation(c,o,placement)
     if core.Slots~=nil then assert(observed.Slots==core.Slots,'MP reported Core slot count changed') end
     if core.Work~=nil then assert(observed.Work==core.Work,'MP reported Core work slot changed') end
     assert(observed.State.Name==core.Name and observed.State.Population==core.Population
-      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and (l.Owner==m.Actor or #core.UnitsOnCenter==0),
+      and Equal(observed.State.UnitsOnCenter,core.UnitsOnCenter) and (l.Owner==owner or #core.UnitsOnCenter==0),
       'MP observation Core city changed')
     assert(Equal(observed.State.Faith,current:GetProperty(R.CITY_FAITH_KEY))
       and Equal(observed.State.Governance,current:GetProperty(R.GOVERNANCE_KEY)),'MP reported Core governance changed')
@@ -477,6 +504,8 @@ local function receive(actor,p)
   end
   assert(c.Borrower==m.Actor,'MP borrower differs from selected executor')
   assert(m.Version==2 and actor==m.Actor and p.Actor==actor,'MP unselected actor')
+  assert(sourceBuildingMatches(c.Source),'MP wire source building type changed')
+  moveOwner(c)
   if not active(actor) then return false end
   assert(p.Turn==Game.GetCurrentGameTurn(),'MP stale turn')
   assert(type(p.Session)=='string' and #p.Session<=128,'MP session')
@@ -497,14 +526,15 @@ local function receive(actor,p)
     local candidates=assert(Decode(p.Payload).Candidates);assert(type(candidates)=='table' and #candidates<=4096,'MP candidates')
     local source=c.Source
     local origin={Owner=source.Owner,ID=m.SourceCurrentID or source.CityID,X=source.X,Y=source.Y,Building=source.Building,Slot=source.Slot}
-    assert(eligible(origin,actor),'MP source eligibility changed')
+    local owner=moveOwner(c)
+    assert(eligible(origin,owner),'MP source eligibility changed')
     local chosen
     table.sort(candidates,function(a,b) return key(a)<key(b) end)
     for _,target in ipairs(candidates) do
       if target.Owner==c.Owner and type(target.Building)=='number' and type(target.Slot)=='number'
         and target.Slot>=0 and target.Slot==math.floor(target.Slot)
         and (target.X~=source.X or target.Y~=source.Y) and not m.RejectedCandidates[key(target)]
-        and eligible(target,actor) and not reserved(state,c,target) then chosen=target;break end
+        and eligible(target,owner) and not reserved(state,c,target) then chosen=target;break end
     end
     if not chosen then m.WaitingFor='TARGET_SLOT';save(state);return false end
     assert(not reserved(state,c,origin),'MP source city already reserved')
@@ -534,7 +564,7 @@ local function receive(actor,p)
   end
   local valid,err=pcall(validateObservation,c,o,placement)
   if not valid then
-    if m.Phase=='DISPATCH' and c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
+    if m.Phase=='DISPATCH' then
       local reason=tostring(err)
       if m.HeldReason~=reason or m.HeldStatus~=p.DispatchStatus or not Equal(m.HeldObservation,o) then
         m.WaitingFor=m.DispatchStatus=='NOT_SENT' and 'NOT_SENT_TARGET_RECONCILIATION' or 'HELD_NATIVE_PLACEMENT'
@@ -578,7 +608,8 @@ local function receive(actor,p)
   elseif m.Phase=='BORROWED' then
     assert(p.Command=='OBSERVE','MP borrowed command')
     c.BorrowedCity=m.Loans[2].BorrowedID
-    local function slot(l) return {Owner=m.Actor,City=l.BorrowedID,X=l.X,Y=l.Y,Building=l.Building,Slot=l.Slot} end
+    local owner=moveOwner(c)
+    local function slot(l) return {Owner=owner,City=l.BorrowedID,X=l.X,Y=l.Y,Building=l.Building,Slot=l.Slot} end
     c.MoveSource=slot(m.Loans[1]);c.MoveTarget=slot(m.Loans[2])
     c.Phase='MOVE';c.MoveToken=c.Token..':mp:'..m.Nonce
     m.GrantSession=p.Session;phase(state,c,'READY')
@@ -655,18 +686,29 @@ local function Observe(c)
   if m.Phase=='DISPATCH' and m.DispatchSession==session and claimed[c.MoveToken]==m.ClaimNonce
     and not sent[c.MoveToken] then
     local p={}
-    p[PlayerOperations.PARAM_PLAYER_ONE]=m.Actor
+    local owner=m.MoveOwner or m.Actor
+    assert(owner==(c.Source.BuildingType=='BUILDING_PALACE' and c.Source.Owner or m.Actor),
+      'MP MOVE city owner changed')
+    if c.Source.BuildingType=='BUILDING_PALACE' then
+      local sourcePlayer=assert(Players[owner],'MP Palace source owner missing')
+      assert(sourcePlayer:IsAlive() and sourcePlayer:IsMajor(),'MP Palace source owner unavailable')
+      assert(not sourcePlayer:IsHuman() or m.Actor==owner,
+        'MP human Palace owner must send its own MOVE')
+    end
+    p[PlayerOperations.PARAM_PLAYER_ONE]=owner
     p[PlayerOperations.PARAM_CITY_SRC]=c.MoveSource.City
     p[PlayerOperations.PARAM_CITY_DEST]=c.MoveTarget.City
     p[PlayerOperations.PARAM_BUILDING_SRC]=c.MoveSource.Building
     p[PlayerOperations.PARAM_BUILDING_DEST]=c.MoveTarget.Building
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
-    if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
-      local api=assert(ExposedMembers.JAC_Absorption)
-      local ok,target=pcall(function() return api.ReadNativeCarrier(
-        assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
-      if not ok or target.Work~=-1 then sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false end
+    local api=assert(ExposedMembers.JAC_Absorption)
+    local sourceOk,source=pcall(function() return api.ReadNativeCarrier(
+      assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y)),c.MP.Loans[1]) end)
+    local targetOk,target=pcall(function() return api.ReadNativeCarrier(
+      assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
+    if not sourceOk or source.Work~=c.Index or not targetOk or target.Work~=-1 then
+      sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false
     end
     sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)

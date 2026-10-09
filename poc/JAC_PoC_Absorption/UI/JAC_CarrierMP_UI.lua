@@ -85,18 +85,29 @@ local function Observe(c)
   if m.Phase=='DISPATCH' and m.DispatchSession==session and claimed[c.MoveToken]==m.ClaimNonce
     and not sent[c.MoveToken] then
     local p={}
-    p[PlayerOperations.PARAM_PLAYER_ONE]=m.Actor
+    local owner=m.MoveOwner or m.Actor
+    assert(owner==(c.Source.BuildingType=='BUILDING_PALACE' and c.Source.Owner or m.Actor),
+      'MP MOVE city owner changed')
+    if c.Source.BuildingType=='BUILDING_PALACE' then
+      local sourcePlayer=assert(Players[owner],'MP Palace source owner missing')
+      assert(sourcePlayer:IsAlive() and sourcePlayer:IsMajor(),'MP Palace source owner unavailable')
+      assert(not sourcePlayer:IsHuman() or m.Actor==owner,
+        'MP human Palace owner must send its own MOVE')
+    end
+    p[PlayerOperations.PARAM_PLAYER_ONE]=owner
     p[PlayerOperations.PARAM_CITY_SRC]=c.MoveSource.City
     p[PlayerOperations.PARAM_CITY_DEST]=c.MoveTarget.City
     p[PlayerOperations.PARAM_BUILDING_SRC]=c.MoveSource.Building
     p[PlayerOperations.PARAM_BUILDING_DEST]=c.MoveTarget.Building
     p[PlayerOperations.PARAM_GREAT_WORK_INDEX]=c.Index
     p[PlayerOperations.PARAM_SLOT]=c.MoveTarget.Slot
-    if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
-      local api=assert(ExposedMembers.JAC_Absorption)
-      local ok,target=pcall(function() return api.ReadNativeCarrier(
-        assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
-      if not ok or target.Work~=-1 then sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false end
+    local api=assert(ExposedMembers.JAC_Absorption)
+    local sourceOk,source=pcall(function() return api.ReadNativeCarrier(
+      assert(CityManager.GetCityAt(c.MoveSource.X,c.MoveSource.Y)),c.MP.Loans[1]) end)
+    local targetOk,target=pcall(function() return api.ReadNativeCarrier(
+      assert(CityManager.GetCityAt(c.MoveTarget.X,c.MoveTarget.Y)),c.MP.Loans[2]) end)
+    if not sourceOk or source.Work~=c.Index or not targetOk or target.Work~=-1 then
+      sent[c.MoveToken]=true;status[c.MoveToken]='NOT_SENT';return false
     end
     sent[c.MoveToken]=true -- even for an unknown send result: never repeat MOVE
     local ok,result=pcall(UI.RequestPlayerOperation,m.Actor,PlayerOperations.MOVE_GREAT_WORK,p)
