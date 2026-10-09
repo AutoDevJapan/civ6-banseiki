@@ -15,12 +15,12 @@ pub fn candidates(value: &Value) -> Result<&Vec<Value>, String> {
             || row["major"] != true
             || row["ledger_active"] != true
             || !n("owner").is_some_and(|o| o < 64 && owners.insert(o))
-            || !n("index").is_some_and(|i| i < 256)
+            || n("index").is_none_or(|i| i >= 256)
             || !matches!(n("cost"), Some(2 | 3))
-            || !n("base").is_some_and(|i| i < 4096)
-            || !n("title").is_some_and(|i| i < 4096)
-            || !n("spent").is_some_and(|i| i <= u64::from(u32::MAX))
-            || !n("turn").is_some()
+            || n("base").is_none_or(|i| i >= 4096)
+            || n("title").is_none_or(|i| i >= 4096)
+            || n("spent").is_none_or(|i| i > u64::from(u32::MAX))
+            || n("turn").is_none()
             || !n("total").is_some_and(|i| i <= u64::from(u32::MAX) && Some(i) >= n("spent"))
             || !(row.get("paid") == Some(&Value::Null)
                 || n("paid").is_some_and(|p| p <= n("cost").unwrap_or(0)))

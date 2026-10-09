@@ -186,10 +186,9 @@ pub(super) unsafe fn register_owner(
             && copy_current::<8>(callable.checked_add(0x10).ok_or(gateway::Failure::Range)?)
                 .map(u64::from_le_bytes)
                 == base.checked_add(0x4a7ad0)
+            && found.replace(callable).is_some()
         {
-            if found.replace(callable).is_some() {
-                return Err(gateway::Failure::Identity);
-            }
+            return Err(gateway::Failure::Identity);
         }
     }
     let callable = found.ok_or(gateway::Failure::Caller)?;

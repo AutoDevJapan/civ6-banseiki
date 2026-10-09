@@ -241,7 +241,7 @@ fn close_drains_native_action_and_rejects_same_thread_teardown() {
         release.wait();
         action.join().unwrap();
         closer.join().unwrap();
-        assert_eq!(rx.recv().unwrap(), true);
+        assert!(rx.recv().unwrap());
     });
     assert!(ActionGuard::enter().is_none());
     assert_eq!(ACTION_THREAD.load(Ordering::Acquire), 0);

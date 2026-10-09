@@ -32,8 +32,7 @@ impl CompositeTrace {
     }
     pub(super) unsafe fn initialize_at(trace: *mut Self) {
         unsafe {
-            ptr::addr_of_mut!((*trace).joined).write(JoinedTrace::default());
-            ptr::addr_of_mut!((*trace).joined.property).write(PropertyTrace::production_scoped());
+            JoinedTrace::initialize_at(ptr::addr_of_mut!((*trace).joined),BridgeMode::ProductionAdmission);
             AssignCalibrationTrace::initialize_at(ptr::addr_of_mut!((*trace).assignment));
             let rows = ptr::addr_of_mut!((*trace).effective_rax).cast::<AtomicU64>();
             for n in 0..assignment::ASSIGN_CAPACITY {
@@ -485,6 +484,22 @@ mod tests {
         }
         .unwrap();
         let trace = unsafe { &*trace_pointer };
+        // With the producer candidate, the real export opens the producer
+        // before INSTALLED, and Rebuild refuses a runtime without one. Open it
+        // the same way through the process-owned producer fixture.
+        #[cfg(feature = "ai-producer-candidate")]
+        if is_runtime {
+            extern "system" fn producer_original() -> u64 {
+                73
+            }
+            let entry = unsafe {
+                crate::ai_operation::gateway::producer_fixture(
+                    producer_original as *const () as usize,
+                    runtime::generation(),
+                )
+            };
+            assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        }
         if is_runtime {
             runtime::start_observation(MAX_ACTIVE_SECONDS);
         }

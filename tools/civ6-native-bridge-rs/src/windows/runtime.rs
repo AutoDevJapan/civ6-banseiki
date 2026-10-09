@@ -511,18 +511,17 @@ pub(super) fn state_for_authority(owner: usize) -> u128 {
 /// Neither an external mapping nor a saved GameCore pointer becomes authority.
 #[unsafe(no_mangle)]
 pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
+    install_progress::enter();
     if !committed_range(
         input as usize,
         std::mem::size_of::<BridgeConfig>(),
         std::mem::align_of::<BridgeConfig>(),
         true,
     ) {
-        return BridgeStatus::InvalidInput as u32;
+        return install_progress::returned(BridgeStatus::InvalidInput as u32);
     }
-    std::panic::catch_unwind(|| {
-        let Ok(_guard) = INSTALL_LOCK.lock() else {
-            return BridgeStatus::Panic as u32;
-        };
+    let result = guard_runtime_install(|| {
+        install_progress::stage(2);
         let mut config = unsafe { ptr::read(input.cast::<BridgeConfig>()) };
         if owned()
             || config.version != RUNTIME_CONFIG_VERSION
@@ -560,6 +559,7 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         // loader module as well as the bridge; ordinary FreeLibrary cannot
         // unmap it while a gateway or an already-fetched jump is executing.
         let gamecore = unsafe { GetModuleHandleW(wide("GameCore_XP2_FinalRelease.dll").as_ptr()) };
+        install_progress::stage(3);
         if gamecore.is_null()
             || !module_path(gamecore).is_some_and(|path| same_file(&path, GAMECORE))
             || pinned_gamecore(Path::new(GAMECORE), BridgeMode::ProductionAdmission).is_none()
@@ -567,6 +567,7 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             return BridgeStatus::GameCoreIdentity as u32;
         }
         let mut pinned_core = null_mut();
+        install_progress::stage(4);
         if unsafe {
             GetModuleHandleExW(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
@@ -591,25 +592,27 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
         {
             return BridgeStatus::HookFailure as u32;
         }
+        install_progress::stage(5);
         let trace = allocate_trace();
+        install_progress::stage(6);
         // OWNED retains the recovery route on failure. INSTALLED is published
         // only after all installation steps succeed; it permits Rebuild.
         // Required caller contract: this must precede the first Player producer.
         // Parent load-order calibration is still required to establish that.
         if cfg!(feature = "ai-producer-candidate")
             && unsafe { crate::ai_operation::gateway::install_producer(gamecore as u64, generation()) }.is_err() {
-            product_deactivate();
-            return BridgeStatus::Critical as u32;
+            return fail_install(BridgeStatus::Critical);
         }
         config.version = EXPERIMENTAL_PAID_CONFIG_VERSION;
         config.trace_address = trace as u64;
         config.trace_size = std::mem::size_of::<CompositeTrace>() as u32;
+        install_progress::stage(7);
         let status = guarded_install(config);
+        install_progress::stage(8);
         if !matches!(status, BridgeStatus::Ok) {
             // Storage stays alive for any already-fetched relay. No retry may
             // repoint it. guarded_install/composite restore the installed set.
-            product_deactivate();
-            return status as u32;
+            return fail_install(status);
         }
         start_observation(config.max_seconds);
         config.version = RUNTIME_CONFIG_VERSION;
@@ -617,16 +620,103 @@ pub extern "system" fn BridgeRuntimeInstall(input: *mut c_void) -> u32 {
             ptr::write(input.cast::<BridgeConfig>(), config);
         }
         BridgeStatus::Ok as u32
-    })
-    .unwrap_or_else(|_| {
+    });
+    install_progress::returned(result)
+}
+
+/// The public export's lock and panic boundary. INSTALL_LOCK is held OUTSIDE
+/// catch_unwind, so a panic never drops (poisons) it; the panic cleanup runs
+/// under the same exclusion as the install itself. `action` must not lock.
+fn guard_runtime_install(action: impl FnOnce() -> u32 + std::panic::UnwindSafe) -> u32 {
+    let Ok(_guard) = INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    std::panic::catch_unwind(action).unwrap_or_else(|_| fail_install(BridgeStatus::Panic))
+}
+
+/// Shared failure exit after the producer may have been opened. A producer that
+/// cannot be closed (timeout/reentrant/restore failure) is Critical: OWNED, HOOK
+/// and RECOVERY stay retained, INSTALLED stays false, so no reinstall/Rebuild.
+fn fail_install(status: BridgeStatus) -> u32 {
+    // A failure after success was published must not leave Rebuild permitted.
+    INSTALLED.store(false, Ordering::Release);
+    product_deactivate();
+    let closed = std::panic::catch_unwind(crate::ai_operation::gateway::close_producer)
+        .is_ok_and(|result| result.is_ok());
+    if closed { status as u32 } else { BridgeStatus::Critical as u32 }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeRuntimeStopObservation(_: *mut c_void) -> u32 {
+    stop_observation() as u32
+}
+
+/// Must be called BEFORE any object teardown. No real reload hook is claimed.
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeRuntimeClose(_: *mut c_void) -> u32 {
+    let Ok(_guard) = INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    close()
+}
+
+fn close() -> u32 {
+    if !INSTALLED.load(Ordering::Acquire) && !OWNED.load(Ordering::Acquire) {
+        return BridgeStatus::InvalidInput as u32;
+    }
+    // Invalidate the authority before attempting any restoration. A pending
+    // cleanup must not leave AI captures active under the old transaction.
+    product_deactivate();
+    let ai_restored = ai_runtime::close();
+    for state in &STATE {
+        state.store(0);
+    }
+    if advance() && ai_restored {
+        BridgeStatus::Ok as u32
+    } else {
+        BridgeStatus::Critical as u32
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
+    if !INSTALLED.load(Ordering::Acquire) {
+        return BridgeStatus::InvalidInput as u32;
+    }
+    let Ok(_guard) = INSTALL_LOCK.lock() else {
+        return BridgeStatus::Panic as u32;
+    };
+    if close() != BridgeStatus::Ok as u32 {
+        return BridgeStatus::Critical as u32;
+    }
+    if !product_activate() {
+        return BridgeStatus::Critical as u32;
+    }
+    if crate::ai_operation::gateway::rebuild_producer(generation()).is_err() {
         product_deactivate();
-        BridgeStatus::Panic as u32
-    })
+        return BridgeStatus::Critical as u32;
+    }
+    // Each owner enters rebuilding on its own natural reset getter. No
+    // controller metadata supplies identity or a publication fence.
+    BridgeStatus::Ok as u32
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn runtime_install_readonly_hash_cost() {
+        if std::env::var_os("JAC_INSTALL_OFFLINE_PRIMARY").is_none() {return;}
+        // Same source path and four validations as RuntimeInstall/guarded_install.
+        // No module load, target process, hook, or authority mutation.
+        let started=std::time::Instant::now();
+        for mode in [BridgeMode::ProductionAdmission,BridgeMode::ProductionAdmission,BridgeMode::PropertyAdmissionScoped,BridgeMode::AssignCalibration] {
+            let one=std::time::Instant::now();
+            assert!(pinned_gamecore(Path::new(GAMECORE),mode).is_some());
+            println!("install_hash mode={} elapsed_ms={}",mode as u32,one.elapsed().as_millis());
+        }
+        println!("install_hash total_ms={} observation_feature={} producer_feature={}",started.elapsed().as_millis(),cfg!(feature="ai-observation-candidate"),cfg!(feature="ai-producer-candidate"));
+    }
 
     #[test]
     fn native_ai_partial_install_can_close_but_cannot_rebuild() {
@@ -654,6 +744,165 @@ mod tests {
         assert_eq!(generation(), after);
         assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
         assert!(!INSTALLED.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn native_ai_install_failure_closes_open_producer_and_never_rebuilds() {
+        const CHILD: &str = "JAC_RUNTIME_FAIL_INSTALL_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_install_failure_closes_open_producer_and_never_rebuilds", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        extern "system" fn original() -> u64 { CALLS.fetch_add(1, Ordering::AcqRel); 73 }
+        // Partial install: OWNED without INSTALLED, but a real producer is OPEN.
+        assert!(!allocate_trace().is_null());
+        assert!(OWNED.load(Ordering::Acquire));
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        assert!(product_activate());
+        assert!(advance());
+        let entry = unsafe { crate::ai_operation::gateway::producer_fixture(original as *const () as usize, generation()) };
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        assert_eq!(fail_install(BridgeStatus::HookFailure), BridgeStatus::HookFailure as u32);
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        // Closed and drained: the entry no longer reaches the original.
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 0);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        let failed = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), failed);
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+        let closed = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), closed);
+        assert!(!INSTALLED.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn native_ai_install_failure_with_unclosable_producer_is_critical_until_reader_exits() {
+        const CHILD: &str = "JAC_RUNTIME_FAIL_INSTALL_CRITICAL_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_install_failure_with_unclosable_producer_is_critical_until_reader_exits", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        static FAILED: AtomicU32 = AtomicU32::new(0);
+        // The fixture holds the producer reader on this thread, so closing from
+        // inside it is the same-thread reentrant refusal.
+        extern "system" fn original() -> u64 {
+            CALLS.fetch_add(1, Ordering::AcqRel);
+            FAILED.store(fail_install(BridgeStatus::HookFailure), Ordering::Release);
+            73
+        }
+        assert!(!allocate_trace().is_null());
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        assert!(product_activate());
+        assert!(advance());
+        let entry = unsafe { crate::ai_operation::gateway::producer_fixture(original as *const () as usize, generation()) };
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        assert_eq!(FAILED.load(Ordering::Acquire), BridgeStatus::Critical as u32);
+        // OPEN is down, OWNED/recovery retained, reinstall/Rebuild refused.
+        assert!(OWNED.load(Ordering::Acquire));
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 0);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        let failed = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), failed);
+        // The reader has left: Close now recovers, and Rebuild stays refused.
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert!(!INSTALLED.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn native_ai_install_panic_boundary_closes_open_producer() {
+        const CHILD: &str = "JAC_RUNTIME_PANIC_BOUNDARY_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_install_panic_boundary_closes_open_producer", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        extern "system" fn original() -> u64 { CALLS.fetch_add(1, Ordering::AcqRel); 73 }
+        assert!(!allocate_trace().is_null());
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        assert!(product_activate());
+        assert!(advance());
+        let entry = unsafe { crate::ai_operation::gateway::producer_fixture(original as *const () as usize, generation()) };
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 73);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        // Recorded inside, asserted outside: an assert in the closure would be
+        // swallowed by the catch and look like the expected Panic.
+        static LOCK_HELD: AtomicBool = AtomicBool::new(false);
+        static PUBLISHED: AtomicBool = AtomicBool::new(false);
+        let status = guard_runtime_install(|| {
+            // The real mutex is held by the boundary, outside the catch.
+            let held = INSTALL_LOCK.try_lock();
+            LOCK_HELD.store(matches!(held, Err(std::sync::TryLockError::WouldBlock)), Ordering::Release);
+            drop(held);
+            start_observation(MAX_ACTIVE_SECONDS);
+            PUBLISHED.store(INSTALLED.load(Ordering::Acquire), Ordering::Release);
+            panic!("install panic fixture")
+        });
+        assert!(LOCK_HELD.load(Ordering::Acquire), "boundary must hold INSTALL_LOCK");
+        assert!(PUBLISHED.load(Ordering::Acquire), "INSTALLED publication must be reached");
+        assert_eq!(status, BridgeStatus::Panic as u32);
+        // Not poisoned: the guard was not dropped by the unwind.
+        drop(INSTALL_LOCK.try_lock().expect("INSTALL_LOCK must be free and unpoisoned"));
+        assert_eq!(crate::ai_operation::gateway::call_producer_fixture(entry), 0);
+        assert_eq!(CALLS.load(Ordering::Acquire), 1);
+        assert!(OWNED.load(Ordering::Acquire));
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        assert!(!INSTALLED.load(Ordering::Acquire));
+        let failed = generation();
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+        assert_eq!(generation(), failed);
+        assert_eq!(BridgeRuntimeClose(ptr::null_mut()), BridgeStatus::Ok as u32);
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::InvalidInput as u32);
+    }
+
+    // Negative contract: a runtime published INSTALLED without ever opening a
+    // producer is an invalid partial state. Rebuild must refuse it (Critical).
+    #[cfg(feature = "ai-producer-candidate")]
+    #[test]
+    fn native_ai_candidate_rebuild_without_installed_producer_is_critical() {
+        const CHILD: &str = "JAC_RUNTIME_NO_PRODUCER_REBUILD_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            use std::os::windows::process::CommandExt;
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .creation_flags(0x08000000).env(CHILD, "1")
+                .args(["--exact", "windows::runtime::tests::native_ai_candidate_rebuild_without_installed_producer_is_critical", "--nocapture"])
+                .output().unwrap();
+            assert!(result.status.success(), "{} {}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+            return;
+        }
+        assert!(!allocate_trace().is_null());
+        assert!(OWNED.load(Ordering::Acquire));
+        start_observation(MAX_ACTIVE_SECONDS);
+        assert!(INSTALLED.load(Ordering::Acquire));
+        assert_eq!(BridgeRuntimeRebuild(ptr::null_mut()), BridgeStatus::Critical as u32);
+        assert!(!PRODUCT_ACTIVE.load(Ordering::Acquire));
+        // Rebuild did not install or open a producer on its own.
+        assert!(matches!(
+            crate::ai_operation::gateway::rebuild_producer(generation()),
+            Err(crate::ai_operation::gateway::Failure::Lease)
+        ));
     }
 
     #[test]
@@ -840,59 +1089,4 @@ mod tests {
             before
         );
     }
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn BridgeRuntimeStopObservation(_: *mut c_void) -> u32 {
-    stop_observation() as u32
-}
-
-/// Must be called BEFORE any object teardown. No real reload hook is claimed.
-#[unsafe(no_mangle)]
-pub extern "system" fn BridgeRuntimeClose(_: *mut c_void) -> u32 {
-    let Ok(_guard) = INSTALL_LOCK.lock() else {
-        return BridgeStatus::Panic as u32;
-    };
-    close()
-}
-
-fn close() -> u32 {
-    if !INSTALLED.load(Ordering::Acquire) && !OWNED.load(Ordering::Acquire) {
-        return BridgeStatus::InvalidInput as u32;
-    }
-    // Invalidate the authority before attempting any restoration. A pending
-    // cleanup must not leave AI captures active under the old transaction.
-    product_deactivate();
-    let ai_restored = ai_runtime::close();
-    for state in &STATE {
-        state.store(0);
-    }
-    if advance() && ai_restored {
-        BridgeStatus::Ok as u32
-    } else {
-        BridgeStatus::Critical as u32
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "system" fn BridgeRuntimeRebuild(_: *mut c_void) -> u32 {
-    if !INSTALLED.load(Ordering::Acquire) {
-        return BridgeStatus::InvalidInput as u32;
-    }
-    let Ok(_guard) = INSTALL_LOCK.lock() else {
-        return BridgeStatus::Panic as u32;
-    };
-    if close() != BridgeStatus::Ok as u32 {
-        return BridgeStatus::Critical as u32;
-    }
-    if !product_activate() {
-        return BridgeStatus::Critical as u32;
-    }
-    if crate::ai_operation::gateway::rebuild_producer(generation()).is_err() {
-        product_deactivate();
-        return BridgeStatus::Critical as u32;
-    }
-    // Each owner enters rebuilding on its own natural reset getter. No
-    // controller metadata supplies identity or a publication fence.
-    BridgeStatus::Ok as u32
 }

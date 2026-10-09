@@ -914,7 +914,7 @@ fn unrelated_shared_callee_calls_cannot_consume_the_selected_reader_budget() {
     if !child("ai_operation::gateway::tests::unrelated_shared_callee_calls_cannot_consume_the_selected_reader_budget",
         "JAC_AI_READER_BUDGET_CHILD") {return;}
     let (_memory,receiver)=accepted_fixture();
-    for slot in 1..4 {AI_GATE_TARGETS[slot].store(ai_fixture_target as *const () as u64,Ordering::Release);}
+    for target in AI_GATE_TARGETS.iter().take(4).skip(1) {target.store(ai_fixture_target as *const () as u64,Ordering::Release);}
     let mut baseline=[0u8;0x160];
     unsafe {ai_fixture_driver(baseline.as_mut_ptr(),ai_fixture_target as *const () as usize)};
     for n in 0..150 {

@@ -56,7 +56,7 @@ unsafe extern "system" fn native_cleanup(
         if let Some(attempt) = ATTEMPT.get() {
             attempt.finish(false);
         }
-        let pending = CLEANUP.with(|cell| std::mem::replace(&mut *cell.borrow_mut(), [(0, 0); 3]));
+        let pending = CLEANUP.with(|cell| std::mem::take(&mut *cell.borrow_mut()));
         for (pointer, destructor) in pending.into_iter().rev() {
             if pointer != 0 {
                 let destroy: unsafe extern "system-unwind" fn(*mut Dictionary) =

@@ -2,11 +2,14 @@
 use super::*;
 #[path = "ai_runtime_controller.rs"]
 mod ai_control;
+#[path="install_call.rs"]
+mod install_call;
 
 struct Exports {
     install: usize,
     stop: usize,
     gateways: [usize; 3],
+    progress:Option<usize>,
 }
 
 fn exports(path: &Path) -> Result<Exports, String> {
@@ -38,6 +41,7 @@ fn exports(path: &Path) -> Result<Exports, String> {
         install: install - dll.0 as usize,
         stop: stop - dll.0 as usize,
         gateways,
+        progress:unsafe {GetProcAddress(dll.0,c"BRIDGE_RUNTIME_INSTALL_PROGRESS".as_ptr().cast())}.map(|p|p as usize-dll.0 as usize),
     })
 }
 
@@ -159,7 +163,6 @@ pub(super) fn run(
     target: usize,
     original: [u8; 8],
     property_original: [u8; 8],
-    _original_prefix: [u8; PROPERTY_PREFIX_LEN],
 ) -> Result<(), String> {
     let base = target - PINNED_CAN_EVER_RVA;
     let assignment_original = pinned_entry_bytes(
@@ -195,7 +198,7 @@ pub(super) fn run(
             .into_iter()
             .find(|m| same_path(&m.path, &dll))
             .ok_or("runtime DLL missing")?;
-        if install_rva >= bridge.size
+        if exports.progress.is_some_and(|r|r.checked_add(20).is_none_or(|end|end>bridge.size)) || install_rva >= bridge.size
             || stop_rva >= bridge.size
             || exports
                 .gateways
@@ -216,11 +219,11 @@ pub(super) fn run(
         };
         let remote_config = remote_alloc(game, bytes.len())?;
         write_remote(game, remote_config, bytes)?;
-        let status = remote_call(
+        let status = install_call::invoke(
             game,
             bridge.base + install_rva,
             remote_config,
-            "BridgeRuntimeInstall",
+            exports.progress.map(|r|bridge.base+r),parsed,
         )?;
         if status != BridgeStatus::Ok as u32 {
             return Err(format!("runtime install refused: {status}"));
