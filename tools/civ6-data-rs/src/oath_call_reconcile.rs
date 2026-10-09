@@ -35,7 +35,12 @@ fn reconcile(
     let version = trace["trace_version"]
         .as_u64()
         .context("trace version missing")?;
-    let callee = trace["capture"] == "callee";
+    let callee = match trace.get("capture") {
+        None => false, // Original v4/v5 artifacts predate this discriminator.
+        Some(Value::String(value)) if value == "adapter" => false,
+        Some(Value::String(value)) if value == "callee" => true,
+        _ => anyhow::bail!("unsupported trace capture"),
+    };
     ensure!(
         if callee {
             version == 1
@@ -337,6 +342,30 @@ mod tests {
         }
         trace["capture"] = json!("adapter");
         assert!(reconcile(&trace, &inventory, &expected).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_capture_is_rejected_instead_of_being_interpreted_as_legacy_adapter() -> Result<()> {
+        let (mut trace, inventory, expected) = fixture();
+        assert!(reconcile(&trace, &inventory, &expected).is_ok());
+        trace["capture"] = json!("adapter");
+        assert!(reconcile(&trace, &inventory, &expected).is_ok());
+        for value in [
+            Value::Null,
+            json!(true),
+            json!(0),
+            json!(""),
+            json!("future"),
+            json!([]),
+            json!({}),
+        ] {
+            trace["capture"] = value;
+            assert!(reconcile(&trace, &inventory, &expected)
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported trace capture"));
+        }
         Ok(())
     }
     #[test]
