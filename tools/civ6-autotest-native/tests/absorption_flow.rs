@@ -1934,8 +1934,23 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     assert!(
         manifest.contains("<File>Scripts/JAC_Absorption_Entry.lua</File></AddGameplayScripts>")
     );
+    let import_start =
+        "<ImportFiles id=\"JAC_Absorption_Engine_Files\" criteria=\"JAC_Absorption_Banseiki\">";
+    assert_eq!(manifest.matches(import_start).count(), 1);
+    let imports = manifest
+        .split_once(import_start)
+        .unwrap()
+        .1
+        .split_once("</ImportFiles>")
+        .unwrap()
+        .0;
     for file in ["JAC_CarrierBoundary", "JAC_NativeInventory"] {
-        assert!(manifest.contains(&format!("<File>Scripts/{file}.lua</File>")));
+        assert_eq!(
+            imports
+                .matches(&format!("<File>Scripts/{file}.lua</File>"))
+                .count(),
+            1
+        );
         assert!(!manifest.contains(&format!(
             "<File>Scripts/{file}.lua</File></AddGameplayScripts>"
         )));
