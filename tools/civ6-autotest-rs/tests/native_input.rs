@@ -273,6 +273,7 @@ fn sendinput_fallback_releases_key_after_focus_loss() {
 fn failed_foreground_activation_sends_no_input() {
     let mut b = MockInput {
         activated: false,
+        foreground: 999,
         ..Default::default()
     };
     assert!(
@@ -282,6 +283,19 @@ fn failed_foreground_activation_sends_no_input() {
             .contains("Could not bring")
     );
     assert!(b.send.is_empty() && b.post.is_empty());
+}
+
+#[test]
+fn already_foreground_game_can_be_clicked_if_activation_reports_false() {
+    let mut b = MockInput {
+        activated: false,
+        ..Default::default()
+    };
+    assert_eq!(
+        click::click_fraction_with(&mut b, 0.5, 0.5).unwrap(),
+        (110, 70)
+    );
+    assert_eq!(b.mouse, vec![click::LEFT_DOWN, click::LEFT_UP]);
 }
 
 #[test]

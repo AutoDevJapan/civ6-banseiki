@@ -89,7 +89,7 @@ fn foreground<B: InputBackend>(backend: &mut B, hwnd: isize) -> Result<()> {
 
 fn focus<B: InputBackend>(backend: &mut B, hwnd: isize) -> Result<()> {
     backend.restore(hwnd);
-    if !backend.activate(hwnd) {
+    if !backend.activate(hwnd) && backend.foreground() != hwnd {
         return Err(Error::input(
             "Could not bring Civ VI window to foreground; input aborted",
         ));
