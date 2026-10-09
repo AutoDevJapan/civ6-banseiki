@@ -507,6 +507,45 @@ assert(values.JAC_MP_PRIOR_TEAM_0==nil and values.JAC_MP_ROSTER=='1')
 }
 
 #[test]
+fn restored_roster_cleanup_survives_a_departure_and_fresh_context() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+rejectedConfigKeys.JAC_MP_ROSTER=true
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_RESTORE_DONE==true and values.JAC_MP_ROSTER=='0,1')
+assert(values.JAC_MP_PRIOR_TEAM_1==nil and PlayerConfigurations[1].team==4)
+participants={0,2}
+Events.PlayerInfoChanged.fire(1)
+rejectedConfigKeys.JAC_MP_ROSTER=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RESTORE_DONE==nil and values.JAC_MP_ROSTER==nil)
+assert(values.JAC_MP_RETIRING_1==nil and not Controls.ReadyButton.disabled)
+"#,
+    );
+
+    let fresh = fixture_with_state(
+        r#"
+values.JAC_MP_MODE='DIFFERENT'
+values.JAC_MP_ROSTER='0,1'
+values.JAC_MP_RESTORE_DONE=true
+values.NO_TEAMS=true
+participants={0,2}
+"#,
+    );
+    exec(
+        &fresh,
+        r#"
+assert(values.JAC_MP_RESTORE_DONE==nil and values.JAC_MP_ROSTER==nil)
+assert(values.JAC_MP_RETIRING_1==nil and not Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
 fn rejoined_slot_waits_for_old_baseline_cleanup_then_records_its_own_team() {
     let lua = fixture();
     exec(
@@ -613,6 +652,32 @@ Events.MultiplayerPlayerConnected.fire(0)
 assert(values.JAC_MP_PRIOR_TEAM_0==3 and values.JAC_MP_RETIRING_0==nil)
 Controls.JAC_DifferentButton.click()
 assert(PlayerConfigurations[0].team==3)
+"#,
+    );
+}
+
+#[test]
+fn rejected_late_identity_binding_blocks_ready_until_saved() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+PlayerConfigurations[0].networkId=nil
+Controls.JAC_AllJapanButton.click()
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(2)
+assert(not Controls.ReadyButton.disabled and values.JAC_MP_ID_0==nil)
+rejectedConfigKeys.JAC_MP_ID_0=true
+PlayerConfigurations[0].networkId='net-0'
+Events.PlayerInfoChanged.fire(0)
+assert(Controls.ReadyButton.disabled and values.JAC_MP_ID_0==nil)
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='JAPAN')
+rejectedConfigKeys.JAC_MP_ID_0=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_ID_0=='net-0' and not Controls.ReadyButton.disabled)
 "#,
     );
 }
@@ -875,6 +940,68 @@ PlayerConfigurations[0].networkId='net-0'
 ContextPtr.hidden=true
 ContextPtr:show()
 assert(values.JAC_MP_RETIRING_0==nil and values.JAC_MP_PRIOR_TEAM_0==3)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[0].team==3)
+"#,
+    );
+}
+
+#[test]
+fn rejected_verify_marker_cannot_restore_old_team_after_context_reload() {
+    let lua = fixture_with_state(
+        r#"
+values.JAC_MP_MODE='JAPAN'
+values.JAC_MP_ROSTER='0,1'
+values.JAC_MP_TEAM=4
+values.JAC_MP_PRIOR_NO_TEAMS='TRUE'
+values.JAC_MP_PRIOR_TEAM_0=3
+values.JAC_MP_PRIOR_TEAM_1=4
+values.JAC_MP_ID_0='net-0'
+values.JAC_MP_ID_1='net-1'
+values.JAC_MP_AREA_0='EAST'
+values.JAC_MP_AREA_1='WEST'
+values.JAC_MP_SUBJECT=1
+values.NO_TEAMS=false
+PlayerConfigurations[0].team=4
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId=nil
+rejectedConfigKeys.JAC_MP_RETIRING_1=true
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(values.JAC_MP_RETIRING_1==nil and Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='JAPAN' and PlayerConfigurations[1].team==7)
+rejectedConfigKeys.JAC_MP_RETIRING_1=nil
+PlayerConfigurations[1].networkId='replacement-1'
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_PRIOR_TEAM_1==7 and values.JAC_MP_SUBJECT==nil)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
+fn rejected_verify_marker_keeps_same_person_baseline_after_identity_returns() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+assert(values.JAC_MP_ID_0=='net-0' and values.JAC_MP_PRIOR_TEAM_0==3)
+rejectedConfigKeys.JAC_MP_RETIRING_0=true
+PlayerConfigurations[0].networkId=nil
+Events.MultiplayerPlayerConnected.fire(0)
+assert(values.JAC_MP_RETIRING_0==nil and Controls.ReadyButton.disabled)
+rejectedConfigKeys.JAC_MP_RETIRING_0=nil
+PlayerConfigurations[0].networkId='net-0'
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_PRIOR_TEAM_0==3 and values.JAC_MP_RETIRING_0==nil)
 Controls.JAC_DifferentButton.click()
 assert(PlayerConfigurations[0].team==3)
 "#,
