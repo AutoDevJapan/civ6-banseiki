@@ -4,8 +4,10 @@
 //! Log: %TEMP%/batch1/live_chain.log (lines "RESULT <name> <scenario> <exit> <artifact dir>")
 use crate::*;
 use serde_json::json;
+#[cfg(all(test, unix))]
+use std::fs::OpenOptions;
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{ErrorKind, Read, Seek, SeekFrom, Write},
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
@@ -645,7 +647,7 @@ fn queue_entry_name() -> String {
 fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     use std::os::windows::{ffi::OsStrExt, io::FromRawHandle};
     use windows_sys::Win32::{
-        Foundation::{GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE},
+        Foundation::{GENERIC_READ, INVALID_HANDLE_VALUE},
         Storage::FileSystem::{
             CreateFileW, DELETE, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, OPEN_EXISTING,
         },
@@ -657,7 +659,7 @@ fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     let handle = unsafe {
         CreateFileW(
             name.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE | DELETE,
+            GENERIC_READ | DELETE,
             FILE_SHARE_READ,
             std::ptr::null(),
             OPEN_EXISTING,
@@ -672,13 +674,9 @@ fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
     }
 }
 
-#[cfg(not(windows))]
-fn open_for_owned_delete(path: &Path) -> std::io::Result<File> {
-    OpenOptions::new().read(true).write(true).open(path)
-}
-
 struct OwnedLock {
     file: File,
+    snapshot: fairness::Snapshot,
     #[cfg(unix)]
     _guard: fairness::UnixGuard,
 }
@@ -686,14 +684,27 @@ struct OwnedLock {
 /// Inspect through the same protected handle that will perform the deletion.
 /// An absent or different owner is never ours to close or release.
 fn file_is_owned(file: &mut File, path: &Path, token: &str) -> Result<bool, String> {
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("seek owned lock {}: {e}", path.display()))?;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)
+    file.take(32769)
+        .read_to_end(&mut bytes)
         .map_err(|e| format!("read owned lock {}: {e}", path.display()))?;
+    if bytes.len() > 32768 {
+        return Err("Civ6 lease record too large".into());
+    }
     let info: Value = serde_json::from_slice(&bytes)
         .map_err(|e| format!("parse owned lock {}: {e}", path.display()))?;
-    Ok(info["live_chain"] == true
+    let owned = info["live_chain"] == true
         && info["chain_pid"].as_u64() == Some(std::process::id() as u64)
-        && info["lock_token"].as_str() == Some(token))
+        && info["lock_token"].as_str() == Some(token);
+    #[cfg(windows)]
+    if owned && !info["pid_created_filetime"].is_null() {
+        return Ok(
+            info["pid_created_filetime"].as_u64() == process_created_filetime(std::process::id())?
+        );
+    }
+    Ok(owned)
 }
 
 fn open_owned_lock(
@@ -702,77 +713,66 @@ fn open_owned_lock(
     token: &str,
 ) -> Result<Option<OwnedLock>, String> {
     #[cfg(unix)]
-    let _ = r;
-    #[cfg(unix)]
-    let guard = fairness::UnixGuard::acquire(path)?;
-    #[cfg(windows)]
-    let mut first_conflict = None;
-    loop {
-        match open_for_owned_delete(path) {
-            Ok(mut file) => {
-                if file_is_owned(&mut file, path, token)? {
-                    return Ok(Some(OwnedLock {
-                        file,
-                        #[cfg(unix)]
-                        _guard: guard,
-                    }));
-                }
-                return Ok(None);
-            }
+    {
+        let _ = r;
+        let guard = fairness::UnixGuard::acquire(path)?;
+        let mut file = match fairness::read_options().open(path) {
+            Ok(file) => file,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
-            #[cfg(windows)]
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => {
-                let since = *first_conflict.get_or_insert_with(|| r.monotonic());
-                if r.monotonic() - since >= RELEASE_WAIT_SECONDS {
-                    return Err(format!(
-                        "open owned lock {} for release: {e}",
-                        path.display()
-                    ));
-                }
-                r.sleep(RELEASE_RETRY_SECONDS).map_err(|e| {
-                    format!(
-                        "wait to open owned lock {} for release: {e}",
-                        path.display()
-                    )
-                })?;
-            }
             Err(e) => {
                 return Err(format!(
-                    "open owned lock {} for release: {e}",
+                    "open owned lock {} for close/read pin: {e}",
                     path.display()
                 ))
             }
+        };
+        if !file_is_owned(&mut file, path, token)? {
+            return Ok(None);
+        }
+        let snapshot = fairness::Snapshot::capture(&mut file, path)?;
+        Ok(Some(OwnedLock {
+            file,
+            snapshot,
+            _guard: guard,
+        }))
+    }
+    #[cfg(windows)]
+    {
+        let mut first_conflict = None;
+        loop {
+            match fairness::read_options().open(path) {
+                Ok(mut file) => {
+                    if file_is_owned(&mut file, path, token)? {
+                        let snapshot = fairness::Snapshot::capture(&mut file, path)?;
+                        return Ok(Some(OwnedLock { file, snapshot }));
+                    }
+                    return Ok(None);
+                }
+                Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+                Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => {
+                    let since = *first_conflict.get_or_insert_with(|| r.monotonic());
+                    if r.monotonic() - since >= RELEASE_WAIT_SECONDS {
+                        return Err(format!(
+                            "open owned lock {} for close/read pin: {e}",
+                            path.display()
+                        ));
+                    }
+                    r.sleep(RELEASE_RETRY_SECONDS).map_err(|e| {
+                        format!(
+                            "wait to open owned lock {} for close/read pin: {e}",
+                            path.display()
+                        )
+                    })?;
+                }
+                Err(e) => {
+                    return Err(format!(
+                        "open owned lock {} for close/read pin: {e}",
+                        path.display()
+                    ))
+                }
+            }
         }
     }
-}
-
-/// A persistent read-only inspector can block DELETE access. The chain still
-/// closes its own game under read protection and reports the release failure.
-#[cfg(windows)]
-fn close_owned_after_release_error(
-    r: &mut impl Runner,
-    p: &Paths,
-    path: &Path,
-    token: &str,
-) -> Result<bool, String> {
-    let mut opts = OpenOptions::new();
-    opts.read(true);
-    use std::os::windows::fs::OpenOptionsExt;
-    opts.share_mode(1);
-    let mut file = match opts.open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(false),
-        Err(e) => return Err(format!("open owned lock {} for close: {e}", path.display())),
-    };
-    if !file_is_owned(&mut file, path, token)? {
-        return Ok(false);
-    }
-    let closed =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| close_civ6_with_paths(r, p)))
-            .unwrap_or_else(|_| Err("Civ6 cleanup panicked".into()));
-    drop(file);
-    closed?;
-    Ok(true)
 }
 
 #[cfg(windows)]
@@ -780,26 +780,64 @@ fn delete_owned_handle(
     lock: OwnedLock,
     path: &Path,
     r: &mut impl Runner,
-    _token: &str,
+    token: &str,
 ) -> Result<(), String> {
     use std::{mem::size_of, os::windows::io::AsRawHandle};
     use windows_sys::Win32::Storage::FileSystem::{
         FileDispositionInfo, SetFileInformationByHandle, FILE_DISPOSITION_INFO,
     };
 
+    // Helpers have finished. Drop only the read pin before requesting DELETE;
+    // retain the snapshot across this gap and revalidate under the new handle.
+    let OwnedLock { file, snapshot } = lock;
+    drop(file);
+    let mut first_conflict = None;
+    let mut file = loop {
+        match open_for_owned_delete(path) {
+            Ok(mut file) => {
+                if !snapshot.matches_acquisition(&mut file, path)?
+                    || !file_is_owned(&mut file, path, token)?
+                {
+                    return Err("Civ6 lock ownership changed before release".into());
+                }
+                break file;
+            }
+            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => {
+                let since = *first_conflict.get_or_insert_with(|| r.monotonic());
+                if r.monotonic() - since < RELEASE_WAIT_SECONDS {
+                    r.sleep(RELEASE_RETRY_SECONDS)?;
+                    continue;
+                }
+                return Err(format!(
+                    "open owned lock {} for DELETE after helpers: {e}",
+                    path.display()
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "open owned lock {} for DELETE after helpers: {e}",
+                    path.display()
+                ))
+            }
+        }
+    };
+    // The DELETE handle now prevents replacement until disposition finishes.
     let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
     let mut first_conflict = None;
     loop {
+        if !file_is_owned(&mut file, path, token)? {
+            return Err("Civ6 lock ownership changed before deletion".into());
+        }
         let ok = unsafe {
             SetFileInformationByHandle(
-                lock.file.as_raw_handle(),
+                file.as_raw_handle(),
                 FileDispositionInfo,
                 &disposition as *const _ as *const _,
                 size_of::<FILE_DISPOSITION_INFO>() as u32,
             )
         };
         if ok != 0 {
-            drop(lock); // The verified file is deleted when its final handle closes.
+            drop(file); // The verified file is deleted when its final handle closes.
             return Ok(());
         }
         let e = std::io::Error::last_os_error();
@@ -841,6 +879,9 @@ fn delete_owned_handle(
     if (opened.dev(), opened.ino()) != (current.dev(), current.ino()) {
         return Err(format!("owned lock path {} was replaced", path.display()));
     }
+    if !lock.snapshot.matches_acquisition(&mut lock.file, path)? {
+        return Err("Civ6 lock ownership or snapshot changed before unlink".into());
+    }
     lock.file
         .seek(SeekFrom::Start(0))
         .map_err(|e| format!("read owned lock {}: {e}", path.display()))?;
@@ -866,8 +907,8 @@ pub fn acquire(
     let mut mine = owner.clone();
     mine["long"] = json!(i32::from(long_run));
     mine["since"] = json!(r.now());
-    // A Unix claimant must publish its priority under the same persistent
-    // guard that protects another claimant's my_turn check and lock creation.
+    // Unix publication and mutation use the same persistent guard. Expensive
+    // priority probes stay outside that guard; create/adopt remain atomic.
     #[cfg(unix)]
     {
         let _guard = fairness::UnixGuard::acquire(&p.here.join("civ6.lock"))?;
@@ -899,8 +940,8 @@ fn acquire_inner(
     #[cfg(windows)]
     let mut access_denied_since = None;
     loop {
-        #[cfg(unix)]
-        let guard = fairness::UnixGuard::acquire(&lock)?;
+        // Queue/job/process inspection may be slow. No record writer or Unix
+        // mutation guard is retained while deciding whether to attempt a claim.
         if !my_turn(r, p, me)? {
             #[cfg(windows)]
             {
@@ -909,28 +950,28 @@ fn acquire_inner(
             if r.now() > deadline {
                 return Err("civ6.lock: gave up waiting behind higher-priority runs".into());
             }
-            #[cfg(unix)]
-            drop(guard);
             r.sleep(30.0)?;
             continue;
         }
-        let mut opts = OpenOptions::new();
-        opts.read(true).write(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            opts.share_mode(1); // FILE_SHARE_READ: protect inspection and owner replacement.
-        }
-        match opts.clone().create_new(true).open(&lock) {
-            Ok(mut fd) => {
-                let owner = acquired_owner(r, owner);
-                fd.write_all(python_json(&owner).as_bytes())
-                    .map_err(|e| e.to_string())?;
-                return Ok(());
+        let replacement = acquired_owner(r, owner);
+        let opts = fairness::write_options();
+        let create_error = {
+            #[cfg(unix)]
+            let _guard = fairness::UnixGuard::acquire(&lock)?;
+            match opts.clone().create_new(true).open(&lock) {
+                Ok(mut fd) => {
+                    fd.write_all(python_json(&replacement).as_bytes())
+                        .and_then(|_| fd.sync_all())
+                        .map_err(|e| format!("write new Civ6 lock {}: {e}", lock.display()))?;
+                    return Ok(());
+                }
+                Err(e) => e,
             }
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                let mut fd = match opts.open(&lock) {
-                    Ok(fd) => fd,
+        };
+        match create_error {
+            e if e.kind() == ErrorKind::AlreadyExists => {
+                let snapshot = match fairness::Snapshot::try_open(&lock) {
+                    Ok(snapshot) => snapshot,
                     Err(e) if e.kind() == ErrorKind::NotFound => continue,
                     #[cfg(windows)]
                     Err(e) if is_delete_pending_or_denied(&e) => {
@@ -938,7 +979,7 @@ fn acquire_inner(
                             r,
                             &lock,
                             &mut access_denied_since,
-                            "open",
+                            "open read snapshot",
                             e,
                         )?;
                         continue;
@@ -953,27 +994,77 @@ fn acquire_inner(
                         r.sleep(0.5)?;
                         continue;
                     }
-                    Err(e) => return Err(e.to_string()),
+                    Err(e) => {
+                        return Err(format!(
+                            "open Civ6 lock for holder snapshot {}: {e}",
+                            lock.display()
+                        ))
+                    }
                 };
                 #[cfg(windows)]
                 {
                     access_denied_since = None;
                 }
-                let mut bytes = Vec::new();
-                fd.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-                let info = serde_json::from_slice(&bytes).unwrap_or_else(|_| json!({}));
+                let info = snapshot.info().unwrap_or_else(|_| json!({}));
                 if !holder_alive(r, p, &info)? {
-                    // Adopt in place under the protected handle: never delete a
-                    // path another claimant could have replaced after our check.
-                    fd.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
-                    fd.set_len(0).map_err(|e| e.to_string())?;
-                    let owner = acquired_owner(r, owner);
-                    fd.write_all(python_json(&owner).as_bytes())
-                        .and_then(|_| fd.sync_all())
-                        .map_err(|e| e.to_string())?;
-                    return Ok(());
+                    let replacement = acquired_owner(r, owner);
+                    let adopted = {
+                        #[cfg(unix)]
+                        let _guard = fairness::UnixGuard::acquire(&lock)?;
+                        match opts.open(&lock) {
+                            Ok(mut fd) => {
+                                // Both contenders can observe the same dead owner.
+                                // Only a still-identical snapshot may be adopted.
+                                if !snapshot.matches(&mut fd)? {
+                                    Ok(false)
+                                } else {
+                                    fd.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+                                    fd.set_len(0).map_err(|e| e.to_string())?;
+                                    fd.write_all(python_json(&replacement).as_bytes())
+                                        .and_then(|_| fd.sync_all())
+                                        .map_err(|e| {
+                                            format!("adopt Civ6 lock {}: {e}", lock.display())
+                                        })?;
+                                    Ok(true)
+                                }
+                            }
+                            Err(e) => Err(e),
+                        }
+                    };
+                    match adopted {
+                        Ok(true) => return Ok(()),
+                        Ok(false) => continue,
+                        Err(e) if e.kind() == ErrorKind::NotFound => continue,
+                        #[cfg(windows)]
+                        Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => {
+                            if r.now() > deadline {
+                                return Err(format!(
+                                    "open Civ6 lock for adoption {}: {e}",
+                                    lock.display()
+                                ));
+                            }
+                            r.sleep(0.5)?;
+                            continue;
+                        }
+                        #[cfg(windows)]
+                        Err(e) if is_delete_pending_or_denied(&e) => {
+                            wait_for_transient_open_denial(
+                                r,
+                                &lock,
+                                &mut access_denied_since,
+                                "open for adoption",
+                                e,
+                            )?;
+                            continue;
+                        }
+                        Err(e) => {
+                            return Err(format!(
+                                "open Civ6 lock for adoption {}: {e}",
+                                lock.display()
+                            ))
+                        }
+                    }
                 }
-                drop(fd);
                 if r.now() > deadline {
                     return Err(format!("civ6.lock held by {}", python_repr(&info)));
                 }
@@ -981,23 +1072,21 @@ fn acquire_inner(
                     "waiting for civ6.lock held by {}",
                     python_repr(&info)
                 ))?;
-                #[cfg(unix)]
-                drop(guard);
                 r.sleep(60.0)?;
             }
             #[cfg(windows)]
-            Err(e) if is_delete_pending_or_denied(&e) => {
+            e if is_delete_pending_or_denied(&e) => {
                 wait_for_transient_open_denial(r, &lock, &mut access_denied_since, "create", e)?;
             }
             #[cfg(windows)]
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => {
+            e if matches!(e.raw_os_error(), Some(32 | 33)) => {
                 access_denied_since = None;
                 if r.now() > deadline {
                     return Err(format!("create civ6.lock {}: {e}", lock.display()));
                 }
                 r.sleep(0.5)?;
             }
-            Err(e) => return Err(e.to_string()),
+            e => return Err(format!("create Civ6 lock {}: {e}", lock.display())),
         }
     }
 }
@@ -1246,12 +1335,15 @@ fn preparation_deadline(
     let epoch = r.now();
     let mut deadline = anchor + fairness::LEASE_SECONDS - CLEANUP_RESERVE_SECONDS;
     if let Some(limit) = lease {
-        let mut lock =
-            fairness::Lock::open(p)?.ok_or("owned Civ6 lock unavailable before preparation")?;
+        let mut budget = WithinDeadline {
+            runner: r,
+            deadline,
+        };
+        let mut lock = open_lease_snapshot(&mut budget, p, "before preparation")?;
         if lock.info["lock_token"].as_str() != Some(limit.token.as_str()) {
             return Err("Civ6 lock ownership changed before preparation".into());
         }
-        lock.expired(r, p, &fairness::todo_path(p))?;
+        lock.expired(&mut budget, p, &fairness::todo_path(p))?;
         if let Some(since) = lock.info["competitor_since"].as_f64() {
             let hard_deadline = anchor + fairness::LEASE_SECONDS - (epoch - since).max(0.0);
             limit.record_probe(&process::LeaseProbe::Contended(hard_deadline));
@@ -1283,12 +1375,20 @@ fn main_owned(
     cleanup_deadline: &mut Option<f64>,
 ) -> Result<i32, String> {
     if options.cleanup_only {
+        let protection = token
+            .map(|token| {
+                open_owned_lock(r, &p.here.join("civ6.lock"), token).and_then(|pin| {
+                    pin.ok_or("Civ6 lock ownership changed before autosave recovery".into())
+                })
+            })
+            .transpose()?;
         if civ6_running(r)? {
             return Err(
                 "cleanup-only requires a closed Civ6; refusing to close an unrelated game".into(),
             );
         }
         restore_autosaves(r, p)?;
+        drop(protection);
         *game_closed = true;
         return Ok(0);
     }
@@ -1312,8 +1412,15 @@ fn main_owned(
         // touch mod files. Never close and replay a failed preparation.
         let protection = if let Some(token) = token {
             Some(
-                open_owned_lock(r, &p.here.join("civ6.lock"), token)?
-                    .ok_or("Civ6 lock ownership changed before preparation close")?,
+                open_owned_lock(
+                    &mut WithinDeadline {
+                        runner: r,
+                        deadline,
+                    },
+                    &p.here.join("civ6.lock"),
+                    token,
+                )?
+                .ok_or("Civ6 lock ownership changed before preparation close")?,
             )
         } else {
             None
@@ -1508,6 +1615,21 @@ fn main_owned(
             &format!("{}{}", run.stdout, run.stderr),
         )?;
         let mut exit_evidence = json!({});
+        let protection = token
+            .map(|token| {
+                open_owned_lock(
+                    &mut WithinDeadline {
+                        runner: r,
+                        deadline: cleanup_deadline.unwrap(),
+                    },
+                    &p.here.join("civ6.lock"),
+                    token,
+                )
+                .and_then(|pin| {
+                    pin.ok_or("Civ6 lock ownership changed before scenario close".into())
+                })
+            })
+            .transpose()?;
         let closed = close_civ6_with_evidence(
             &mut WithinDeadline {
                 runner: r,
@@ -1516,6 +1638,7 @@ fn main_owned(
             p,
             &mut exit_evidence,
         );
+        drop(protection);
         if let Some(state) = reliability.as_deref_mut() {
             if let Some(journal) = exit_evidence["sync_journal"].as_str() {
                 if Path::new(journal).is_file() {
@@ -1566,25 +1689,7 @@ fn main_owned(
 /// Called only at a scenario boundary; never revoke a running chain from tick.
 pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<bool, String> {
     let path = p.here.join("civ6.lock");
-    let mut first_conflict = None;
-    let mut lock = loop {
-        if let Some(lock) = fairness::Lock::open(p)? {
-            break lock;
-        }
-        let since = *first_conflict.get_or_insert_with(|| r.monotonic());
-        if r.monotonic() - since >= RELEASE_WAIT_SECONDS {
-            return Err(format!(
-                "open owned lock {} before scenario: unavailable",
-                path.display()
-            ));
-        }
-        r.sleep(RELEASE_RETRY_SECONDS).map_err(|e| {
-            format!(
-                "wait to open owned lock {} before scenario: {e}",
-                path.display()
-            )
-        })?;
-    };
+    let mut lock = open_lease_snapshot(r, p, "before scenario")?;
     if lock.info["live_chain"] != true
         || lock.info["chain_pid"].as_u64() != Some(std::process::id() as u64)
         || lock.info["lock_token"].as_str() != Some(token)
@@ -1613,6 +1718,29 @@ pub fn yield_if_expired(r: &mut impl Runner, p: &Paths, token: &str) -> Result<b
     owner["acquired_at"] = json!(r.now());
     acquire(r, p, &owner, 6. * 3600., false)?;
     Ok(true)
+}
+
+fn open_lease_snapshot(
+    r: &mut impl Runner,
+    p: &Paths,
+    phase: &str,
+) -> Result<fairness::Lock, String> {
+    let path = p.here.join("civ6.lock");
+    let mut first_conflict = None;
+    loop {
+        if let Some(lock) = fairness::Lock::open(p)? {
+            return Ok(lock);
+        }
+        let since = *first_conflict.get_or_insert_with(|| r.monotonic());
+        if r.monotonic() - since >= RELEASE_WAIT_SECONDS {
+            return Err(format!(
+                "open owned lock {} {phase}: unavailable",
+                path.display()
+            ));
+        }
+        r.sleep(RELEASE_RETRY_SECONDS)
+            .map_err(|e| format!("wait to open owned lock {} {phase}: {e}", path.display()))?;
+    }
 }
 pub fn cli(r: &mut impl Runner, p: &Paths, a: &[String]) -> Result<i32, String> {
     // All syntax is checked before process inspection, queue registration or
@@ -1755,28 +1883,7 @@ fn cli_once(
             deadline: cleanup_end,
         };
         let r = &mut budget;
-        let file = match open_owned_lock(r, &path, &token) {
-            Ok(file) => file,
-            Err(release_error) => {
-                if game_closed {
-                    return Err(release_error);
-                }
-                #[cfg(windows)]
-                {
-                    return match close_owned_after_release_error(r, p, &path, &token) {
-                        Ok(true) => Err(release_error),
-                        Ok(false) => Err(format!(
-                            "{release_error}; lock ownership changed before fallback close"
-                        )),
-                        Err(close_error) => Err(format!("{release_error}; {close_error}")),
-                    };
-                }
-                #[cfg(not(windows))]
-                {
-                    return Err(release_error);
-                }
-            }
-        };
+        let file = open_owned_lock(r, &path, &token)?;
         let Some(file) = file else {
             return Err(format!(
                 "civ6.lock ownership changed before cleanup: {}",
@@ -1850,6 +1957,347 @@ pub fn python_cli_exit(code: i32) -> i32 {
         -1
     } else {
         code
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_lease_handle_tests {
+    use super::*;
+    use std::{
+        os::windows::{fs::OpenOptionsExt, process::CommandExt},
+        process::{Command, Stdio},
+    };
+
+    struct Fixture {
+        root: std::path::PathBuf,
+        p: Paths,
+    }
+    impl Fixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!("cc-live-handles-{}", new_lock_token()));
+            let p = Paths {
+                here: root.join("here"),
+                wt: root.join("wt"),
+                jobs: root.join("jobs"),
+                temp: root.join("temp"),
+                profile: root.join("profile"),
+                python: "unused".into(),
+            };
+            fs::create_dir_all(&p.here).unwrap();
+            fs::create_dir_all(&p.temp).unwrap();
+            write_json(p.here.join("civ6.lock"), &json!({"live_chain":true,"chain_pid":std::process::id(),
+                "lock_token":"owned","pid_created_filetime":process_created_filetime(std::process::id()).unwrap().unwrap()})).unwrap();
+            Self { root, p }
+        }
+        fn lock(&self) -> std::path::PathBuf {
+            self.p.here.join("civ6.lock")
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.root).unwrap();
+        }
+    }
+
+    #[derive(Default)]
+    struct Helpers {
+        clock: f64,
+        running: bool,
+        steam_reads: usize,
+        restore_reads: usize,
+    }
+    impl Runner for Helpers {
+        fn now(&mut self) -> f64 {
+            self.clock
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.clock += s;
+            Ok(())
+        }
+        fn print(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            let mut out = Output::default();
+            if c.args[0] == "tasklist"
+                && c.args[2] == "IMAGENAME eq CivilizationVI.exe"
+                && self.running
+            {
+                out.stdout = "\"CivilizationVI.exe\",\"42\"".into();
+            } else if c.args.get(1).is_some_and(|a| a == "states") {
+                out.stdout = "1: FrontEnd".into();
+            } else if c.args.get(1).is_some_and(|a| a == "lua") {
+                self.running = false;
+            } else if c.args.get(1).is_some_and(|a| a == "--mark") {
+                out.stdout = "{\"cloud\":{},\"process\":{}}".into();
+            } else if c
+                .args
+                .get(1)
+                .is_some_and(|a| a == "--cursor" || a == "--restore")
+            {
+                let lock = c.env.get("CIV6_LIVE_LOCK_PATH").unwrap();
+                // The helper is a real process, opening exactly RecoveryLease's
+                // READ/share1 handle while its parent's close pin is alive.
+                let child = Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--ignored",
+                        "--exact",
+                        "chain::windows_lease_handle_tests::helper_reader_child",
+                    ])
+                    .env("CC_LIVE_HELPER_READ_PATH", lock)
+                    .creation_flags(process::CREATE_NO_WINDOW)
+                    .stdin(Stdio::null())
+                    .output()
+                    .unwrap();
+                assert!(
+                    child.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&child.stderr)
+                );
+                assert_eq!(
+                    fs::write(lock, "peer").unwrap_err().raw_os_error(),
+                    Some(32)
+                );
+                assert_eq!(fs::remove_file(lock).unwrap_err().raw_os_error(), Some(32));
+                if c.args[1] == "--cursor" {
+                    self.steam_reads += 1;
+                    write_json(&c.args[4], &json!({"phase":"exit_sync_complete"}))?;
+                } else {
+                    self.restore_reads += 1;
+                    fs::remove_file(&c.args[3]).unwrap();
+                }
+            }
+            Ok(out)
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn helper_reader_child() {
+        let path = std::env::var_os("CC_LIVE_HELPER_READ_PATH").unwrap();
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(path)
+            .unwrap();
+        drop(file);
+    }
+
+    #[test]
+    fn legacy_write_and_delete_access_deny_read_pins_but_close_read_access_allows_them() {
+        let f = Fixture::new();
+        let legacy_writer = fairness::write_options().open(f.lock()).unwrap();
+        assert_eq!(
+            fairness::read_options()
+                .open(f.lock())
+                .unwrap_err()
+                .raw_os_error(),
+            Some(32)
+        );
+        drop(legacy_writer);
+        let legacy_delete = open_for_owned_delete(&f.lock()).unwrap();
+        assert_eq!(
+            fairness::read_options()
+                .open(f.lock())
+                .unwrap_err()
+                .raw_os_error(),
+            Some(32)
+        );
+        drop(legacy_delete);
+        let mut r = Helpers::default();
+        let pin = open_owned_lock(&mut r, &f.lock(), "owned")
+            .unwrap()
+            .unwrap();
+        let recovery = fairness::read_options().open(f.lock()).unwrap();
+        drop(recovery);
+        delete_owned_handle(pin, &f.lock(), &mut r, "owned").unwrap();
+        assert!(!f.lock().exists());
+    }
+
+    #[test]
+    fn close_helpers_obtain_actual_read_handles_and_finish_before_delete_access() {
+        let f = Fixture::new();
+        let source =
+            f.p.live()
+                .join("tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(source, "fixture, never compiled").unwrap();
+        let tools = f.p.live().join("tools/target/release");
+        fs::create_dir_all(&tools).unwrap();
+        for name in [
+            "civ6-steam-sync.exe",
+            "civ6-save-isolation.exe",
+            "civ6-tuner.exe",
+        ] {
+            fs::write(tools.join(name), "fixture, never executed").unwrap();
+        }
+        fs::write(
+            f.p.live().join("tools/civ6-autotest-rs/Cargo.toml"),
+            "fixture",
+        )
+        .unwrap();
+        fs::write(f.p.here.join("reliability-auto-state.json"), "receipt").unwrap();
+        let mut r = Helpers {
+            running: true,
+            ..Helpers::default()
+        };
+        let pin = open_owned_lock(&mut r, &f.lock(), "owned")
+            .unwrap()
+            .unwrap();
+        close_civ6_with_paths(&mut r, &f.p).unwrap();
+        assert_eq!((r.steam_reads, r.restore_reads), (1, 1));
+        assert!(!r.running);
+        delete_owned_handle(pin, &f.lock(), &mut r, "owned").unwrap();
+        assert!(!f.lock().exists());
+    }
+
+    #[test]
+    fn same_pid_and_token_with_a_different_process_generation_cannot_close() {
+        let f = Fixture::new();
+        let mut info = read_json(f.lock()).unwrap();
+        info["pid_created_filetime"] = json!(0);
+        write_json(f.lock(), &info).unwrap();
+        assert!(open_owned_lock(&mut Helpers::default(), &f.lock(), "owned")
+            .unwrap()
+            .is_none());
+        assert_eq!(read_json(f.lock()).unwrap(), info);
+    }
+
+    #[test]
+    fn release_rejects_replacement_with_the_same_token_during_delete_acquisition() {
+        struct Replaced {
+            clock: f64,
+            blocker: Option<File>,
+            path: std::path::PathBuf,
+            info: Value,
+        }
+        impl Runner for Replaced {
+            fn now(&mut self) -> f64 {
+                self.clock
+            }
+            fn run(&mut self, _: Call) -> Result<Output, String> {
+                panic!("release must not run helpers")
+            }
+            fn sleep(&mut self, s: f64) -> Result<(), String> {
+                drop(self.blocker.take());
+                fs::rename(&self.path, self.path.with_extension("old")).unwrap();
+                write_json(&self.path, &self.info)?;
+                self.clock += s;
+                Ok(())
+            }
+        }
+        let f = Fixture::new();
+        let pin = open_owned_lock(&mut Helpers::default(), &f.lock(), "owned")
+            .unwrap()
+            .unwrap();
+        let info = read_json(f.lock()).unwrap();
+        let mut r = Replaced {
+            clock: 0.0,
+            blocker: Some(fairness::read_options().open(f.lock()).unwrap()),
+            path: f.lock(),
+            info: info.clone(),
+        };
+        assert!(delete_owned_handle(pin, &f.lock(), &mut r, "owned")
+            .unwrap_err()
+            .contains("ownership changed before release"));
+        assert_eq!(read_json(f.lock()).unwrap(), info);
+    }
+
+    #[test]
+    fn release_allows_fairness_metadata_updates_under_the_same_acquisition() {
+        struct Updated {
+            clock: f64,
+            blocker: Option<File>,
+            path: std::path::PathBuf,
+        }
+        impl Runner for Updated {
+            fn now(&mut self) -> f64 {
+                self.clock
+            }
+            fn run(&mut self, _: Call) -> Result<Output, String> {
+                panic!("no helpers during release")
+            }
+            fn sleep(&mut self, s: f64) -> Result<(), String> {
+                drop(self.blocker.take());
+                let mut info = read_json(&self.path)?;
+                info["competitor_since"] = json!(1000);
+                write_json(&self.path, &info)?;
+                self.clock += s;
+                Ok(())
+            }
+        }
+        let f = Fixture::new();
+        let pin = open_owned_lock(&mut Helpers::default(), &f.lock(), "owned")
+            .unwrap()
+            .unwrap();
+        let mut r = Updated {
+            clock: 0.0,
+            blocker: Some(fairness::read_options().open(f.lock()).unwrap()),
+            path: f.lock(),
+        };
+        delete_owned_handle(pin, &f.lock(), &mut r, "owned").unwrap();
+        assert_eq!(r.clock, RELEASE_RETRY_SECONDS);
+        assert!(!f.lock().exists());
+    }
+
+    #[test]
+    fn read_pin_retry_respects_a_shorter_absolute_cleanup_deadline() {
+        let f = Fixture::new();
+        let writer = fairness::write_options().open(f.lock()).unwrap();
+        let mut r = Helpers::default();
+        let error = open_owned_lock(
+            &mut WithinDeadline {
+                runner: &mut r,
+                deadline: 0.04,
+            },
+            &f.lock(),
+            "owned",
+        )
+        .err()
+        .unwrap();
+        assert!(error.contains("deadline exhausted"), "{error}");
+        assert_eq!(r.clock, 0.04);
+        drop(writer);
+        assert_eq!(read_json(f.lock()).unwrap()["lock_token"], "owned");
+    }
+
+    #[test]
+    fn preparation_retries_a_transient_writer_without_resetting_its_deadline() {
+        struct Updated {
+            r: Helpers,
+            writer: Option<File>,
+        }
+        impl Runner for Updated {
+            fn now(&mut self) -> f64 {
+                self.r.now()
+            }
+            fn run(&mut self, _: Call) -> Result<Output, String> {
+                panic!("no process probes expected")
+            }
+            fn sleep(&mut self, s: f64) -> Result<(), String> {
+                drop(self.writer.take());
+                self.r.sleep(s)
+            }
+        }
+        let f = Fixture::new();
+        let mut r = Updated {
+            r: Helpers::default(),
+            writer: Some(fairness::write_options().open(f.lock()).unwrap()),
+        };
+        assert_eq!(
+            preparation_deadline(
+                &mut r,
+                &f.p,
+                Some(&process::LeaseLimit::new(
+                    &f.p,
+                    "owned",
+                    CLEANUP_RESERVE_SECONDS
+                ))
+            )
+            .unwrap(),
+            fairness::LEASE_SECONDS - CLEANUP_RESERVE_SECONDS
+        );
+        assert_eq!(r.r.clock, RELEASE_RETRY_SECONDS);
     }
 }
 
@@ -2072,7 +2520,7 @@ mod unix_guard_tests {
     }
 
     #[test]
-    fn acquisition_and_fairness_updates_use_the_same_persistent_guard() {
+    fn acquisition_probes_outside_the_guard_and_fairness_commits_use_it() {
         struct Inspecting {
             guard: std::path::PathBuf,
         }
@@ -2083,7 +2531,9 @@ mod unix_guard_tests {
                     .write(true)
                     .open(&self.guard)
                     .unwrap();
-                assert!(matches!(probe.try_lock(), Err(TryLockError::WouldBlock)));
+                probe
+                    .try_lock()
+                    .expect("holder probes must not retain the mutation guard");
                 Ok(Output::default())
             }
             fn now(&mut self) -> f64 {
@@ -2113,7 +2563,10 @@ mod unix_guard_tests {
             .write(true)
             .open(f.guard())
             .unwrap();
-        assert!(matches!(probe.try_lock(), Err(TryLockError::WouldBlock)));
+        probe
+            .try_lock()
+            .expect("a fairness snapshot must not retain the mutation guard");
+        probe.unlock().unwrap();
         lock.info["lease_probe"] = json!(true);
         lock.save().unwrap();
         drop(lock);

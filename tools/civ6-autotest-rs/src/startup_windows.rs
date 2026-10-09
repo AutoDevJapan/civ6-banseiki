@@ -116,7 +116,16 @@ impl RecoveryLease {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .ok_or_else(|| Error::input("absolute shared Civ6 lock path was not supplied"))?;
-        let file = OpenOptions::new().read(true).share_mode(1).open(path)?; // FILE_SHARE_READ only
+        let file = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .map_err(|e| {
+                crate::Error::new(
+                    crate::ErrorKind::Io,
+                    format!("open RecoveryLease read pin {}: {e}", path.display()),
+                )
+            })?; // FILE_SHARE_READ only
         let owner = open_process(chain_pid, 0x101000)?;
         let mut lease = Self {
             file,

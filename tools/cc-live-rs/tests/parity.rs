@@ -704,7 +704,7 @@ fn lock_timeout_keeps_live_holder_and_removes_own_waiter() {
 
 #[cfg(windows)]
 #[test]
-fn acquisition_protects_dead_owner_until_it_has_written_its_own_lock() {
+fn acquisition_probes_dead_owner_without_blocking_monitor_or_recovery_readers() {
     struct Contender {
         fake: Fake,
         lock: PathBuf,
@@ -714,13 +714,18 @@ fn acquisition_protects_dead_owner_until_it_has_written_its_own_lock() {
         fn run(&mut self, call: Call) -> Result<Output, String> {
             if call.args[0] == "tasklist" && call.args[2] == "PID eq 42" {
                 self.inspected = true;
-                assert!(fs::remove_file(&self.lock).is_err());
-                assert!(fs::write(&self.lock, "another owner").is_err());
-                assert!(fs::OpenOptions::new()
+                use std::os::windows::fs::OpenOptionsExt;
+                let recovery_pin = fs::OpenOptions::new()
                     .read(true)
-                    .write(true)
+                    .share_mode(1)
                     .open(&self.lock)
-                    .is_err());
+                    .expect("holder probing must allow RecoveryLease's actual read handle");
+                let monitor_pin = fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(1)
+                    .open(&self.lock)
+                    .expect("holder probing must allow the monitor's actual read handle");
+                drop((recovery_pin, monitor_pin));
             }
             self.fake.run(call)
         }
@@ -1114,7 +1119,7 @@ fn release_waits_for_real_reader_then_deletes_only_its_own_lock() {
     impl Runner for Blocked {
         fn run(&mut self, c: Call) -> Result<Output, String> {
             if is_tuner(&c) && c.args[1] == "lua" {
-                // The verified DELETE handle stays open while cleanup runs.
+                // A verified read pin stays open while cleanup runs.
                 assert_eq!(
                     fs::remove_file(&self.lock).unwrap_err().raw_os_error(),
                     Some(32)
@@ -1235,7 +1240,7 @@ fn release_skips_replaced_owner_after_a_sharing_violation() {
     };
     let error = failed_prepare_cli(&mut r, &f.p).unwrap_err();
     assert!(
-        error.contains("ownership changed before cleanup"),
+        error.contains("ownership changed before release"),
         "{error}"
     );
     assert_eq!(read_json(&r.lock).unwrap(), peer);
@@ -1802,6 +1807,329 @@ fn lease_monitor_can_read_the_lock_while_startup_recovery_pins_it() {
         process::LeaseProbe::Clear
     );
     drop(recovery_pin);
+}
+
+#[cfg(windows)]
+#[test]
+fn slow_holder_and_competitor_probes_allow_readers_beyond_the_observation_deadline() {
+    use std::{
+        os::windows::fs::OpenOptionsExt,
+        sync::mpsc,
+        thread,
+        time::{Duration, Instant},
+    };
+    struct Slow {
+        ready: mpsc::Sender<()>,
+        resume: mpsc::Receiver<()>,
+    }
+    impl Runner for Slow {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            assert_eq!(call.args[2], "PID eq 42");
+            self.ready.send(()).unwrap();
+            self.resume.recv_timeout(Duration::from_secs(15)).unwrap();
+            Ok(Output::default())
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("no queue wait expected")
+        }
+        fn print(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    struct Monitor(Instant);
+    impl Runner for Monitor {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            Ok(Output {
+                stdout: "\"agent.exe\",\"42\"".into(),
+                ..Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            1000.0 + self.0.elapsed().as_secs_f64()
+        }
+        fn monotonic(&mut self) -> f64 {
+            self.0.elapsed().as_secs_f64()
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("monitor must not wait for a writer")
+        }
+    }
+    for holder_probe in [true, false] {
+        let f = Fixture::new();
+        let lock = f.json(
+            "here/civ6.lock",
+            if holder_probe {
+                json!({"pid":42,"lock_token":"owned","acquired_at":1000})
+            } else {
+                json!({"job":"owner","lock_token":"owned","acquired_at":1000})
+            },
+        );
+        if !holder_probe {
+            f.json("here/queue/waiter.json", json!({"pid":42,"since":1000}));
+        }
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let p = f.p.clone();
+        let worker = thread::spawn(move || {
+            let mut slow = Slow {
+                ready: ready_tx,
+                resume: resume_rx,
+            };
+            if holder_probe {
+                acquire(
+                    &mut slow,
+                    &p,
+                    &json!({"pid":77,"lock_token":"new"}),
+                    1.0,
+                    false,
+                )
+            } else {
+                fairness::Lock::open(&p)
+                    .unwrap()
+                    .unwrap()
+                    .expired(&mut slow, &p, &p.temp.join("todo.json"))
+                    .map(|_| ())
+            }
+        });
+        ready_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+        // Real handles: the probe retains neither a data writer nor a reader
+        // which could postpone close/adoption/deletion for its whole duration.
+        let writer = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(1)
+            .open(&lock)
+            .unwrap();
+        drop(writer);
+        let recovery = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&lock)
+            .unwrap();
+        let started = Instant::now();
+        let mut monitor = Monitor(started);
+        let limit = process::LeaseLimit::new(&f.p, "owned", 240.0);
+        while started.elapsed() < Duration::from_millis(5100) {
+            process::monitor_lease(&mut monitor, &limit).unwrap();
+            thread::sleep(Duration::from_millis(50));
+        }
+        assert!(limit.observation_deadline().is_none());
+        drop(recovery);
+        resume_tx.send(()).unwrap();
+        worker.join().unwrap().unwrap();
+    }
+}
+
+#[test]
+fn fairness_save_rejects_changed_owner_and_a_replacement_with_identical_bytes() {
+    for replacement in [false, true] {
+        let f = Fixture::new();
+        let owner = json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"owned"});
+        let path = f.json("here/civ6.lock", owner.clone());
+        let mut snapshot = fairness::Lock::open(&f.p).unwrap().unwrap();
+        snapshot.info["competitor_since"] = json!(1000);
+        let peer = if replacement {
+            fs::rename(&path, f.root.join("old-lock")).unwrap();
+            owner
+        } else {
+            json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"peer"})
+        };
+        write_json(&path, &peer).unwrap();
+        assert!(snapshot.save().unwrap_err().contains("snapshot changed"));
+        assert_eq!(read_json(&path).unwrap(), peer);
+    }
+}
+
+#[test]
+fn fairness_and_monitor_reject_an_owner_changed_during_competitor_inspection() {
+    struct Changed {
+        lock: PathBuf,
+        peer: serde_json::Value,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, _: Call) -> Result<Output, String> {
+            write_json(&self.lock, &self.peer)?;
+            Ok(Output {
+                stdout: "\"agent.exe\",\"42\"".into(),
+                ..Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            1000.0
+        }
+        fn sleep(&mut self, _: f64) -> Result<(), String> {
+            panic!("no wait expected")
+        }
+    }
+    for monitor in [false, true] {
+        let f = Fixture::new();
+        let lock = f.json(
+            "here/civ6.lock",
+            json!({"lock_token":"owned","acquired_at":1000}),
+        );
+        f.json("here/queue/waiter.json", json!({"pid":42,"since":1000}));
+        let peer = json!({"lock_token":"peer","acquired_at":1000});
+        let mut r = Changed {
+            lock: lock.clone(),
+            peer: peer.clone(),
+        };
+        let error = if monitor {
+            process::lease_probe(&mut r, &process::LeaseLimit::new(&f.p, "owned", 240.0))
+                .unwrap_err()
+        } else {
+            fairness::Lock::open(&f.p)
+                .unwrap()
+                .unwrap()
+                .expired(&mut r, &f.p, &f.p.temp.join("todo.json"))
+                .unwrap_err()
+        };
+        assert!(error.contains("ownership"), "{error}");
+        assert_eq!(read_json(lock).unwrap(), peer);
+    }
+}
+
+#[test]
+fn dead_holder_probe_cannot_adopt_a_changed_or_replaced_owner() {
+    struct Changed {
+        fake: Fake,
+        lock: PathBuf,
+        peer: serde_json::Value,
+        replace: bool,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, call: Call) -> Result<Output, String> {
+            if self.fake.calls.is_empty() {
+                if self.replace {
+                    fs::rename(&self.lock, self.lock.with_extension("old")).unwrap();
+                }
+                write_json(&self.lock, &self.peer)?;
+            }
+            self.fake.run(call)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.fake.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.fake.print(s)
+        }
+    }
+    for replace in [false, true] {
+        let f = Fixture::new();
+        let path = f.json("here/civ6.lock", json!({"pid":42,"lock_token":"old"}));
+        let peer = if replace {
+            json!({"pid":42,"lock_token":"old"})
+        } else {
+            json!({"job":"peer","pid":42,"lock_token":"new"})
+        };
+        f.json("jobs/peer/job.json", json!({"status":"running"}));
+        let mut r = Changed {
+            fake: Fake::outputs(&[
+                ("", "", 0),
+                ("\"agent.exe\",\"42\"", "", 0),
+                ("\"agent.exe\",\"42\"", "", 0),
+            ]),
+            lock: path.clone(),
+            peer: peer.clone(),
+            replace,
+        };
+        assert!(acquire(
+            &mut r,
+            &f.p,
+            &json!({"pid":77,"lock_token":"mine"}),
+            1.0,
+            false
+        )
+        .is_err());
+        assert_eq!(read_json(path).unwrap(), peer);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn simultaneous_dead_owner_claimants_commit_exactly_one_acquisition() {
+    use std::{
+        sync::{atomic::AtomicBool, mpsc, Arc},
+        thread,
+        time::Duration,
+    };
+    struct Candidate {
+        time: f64,
+        ready: mpsc::Sender<()>,
+        proceed: mpsc::Receiver<()>,
+        live: Arc<AtomicBool>,
+    }
+    impl Runner for Candidate {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if c.args[2] == "PID eq 42" {
+                self.ready.send(()).unwrap();
+                self.proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+                return Ok(Output::default());
+            }
+            let pid = c.args[2].strip_prefix("PID eq ").unwrap();
+            Ok(if self.live.load(Ordering::SeqCst) {
+                Output {
+                    stdout: format!("\"agent.exe\",\"{pid}\""),
+                    ..Output::default()
+                }
+            } else {
+                Output::default()
+            })
+        }
+        fn now(&mut self) -> f64 {
+            self.time
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.time += s;
+            Ok(())
+        }
+        fn print(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+    let f = Fixture::new();
+    let path = f.json("here/civ6.lock", json!({"pid":42,"lock_token":"dead"}));
+    let (tx, rx) = mpsc::channel();
+    let live = Arc::new(AtomicBool::new(false));
+    let mut releases = Vec::new();
+    let workers: Vec<_> = [101, 102]
+        .into_iter()
+        .map(|pid| {
+            let p = f.p.clone();
+            let (release, proceed) = mpsc::channel();
+            releases.push(release);
+            let mut r = Candidate {
+                time: 1000.0,
+                ready: tx.clone(),
+                proceed,
+                live: live.clone(),
+            };
+            thread::spawn(move || {
+                acquire(
+                    &mut r,
+                    &p,
+                    &json!({"pid":pid,"lock_token":format!("claim-{pid}")}),
+                    1.0,
+                    false,
+                )
+            })
+        })
+        .collect();
+    rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    live.store(true, Ordering::SeqCst);
+    for release in releases {
+        release.send(()).unwrap();
+    }
+    let results: Vec<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+    assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+    assert_ne!(read_json(path).unwrap()["lock_token"], "dead");
+    assert_eq!(fs::read_dir(f.p.here.join("queue")).unwrap().count(), 0);
 }
 
 #[cfg(windows)]
@@ -2526,11 +2854,13 @@ fn reliability_counts_ten_consecutive_successes_with_distinct_artifacts_and_lock
         "wt/live/tools/civ6-autotest-rs/src/bin/civ6-steam-sync.rs",
         json!("fixture source"),
     );
-    fs::write(
-        f.p.live().join("tools/target/release/civ6-steam-sync.exe"),
-        "fixture binary",
-    )
-    .unwrap();
+    for name in ["civ6-steam-sync.exe", "civ6-steam-sync"] {
+        fs::write(
+            f.p.live().join("tools/target/release").join(name),
+            "fixture binary",
+        )
+        .unwrap();
+    }
     fs::create_dir_all(f.p.jobs.join("waiter")).unwrap();
     let mut r = ReliabilityRunner::new(&f, vec![0; 10]);
     r.add_waiter = true;
@@ -2615,12 +2945,13 @@ fn failed_or_unknown_isolation_begin_recovers_original_under_lock_before_release
             "wt/live/tools/civ6-autotest-rs/src/bin/civ6-save-isolation.rs",
             json!("fixture source"),
         );
-        fs::write(
-            f.p.live()
-                .join("tools/target/release/civ6-save-isolation.exe"),
-            "fixture binary",
-        )
-        .unwrap();
+        for name in ["civ6-save-isolation.exe", "civ6-save-isolation"] {
+            fs::write(
+                f.p.live().join("tools/target/release").join(name),
+                "fixture binary",
+            )
+            .unwrap();
+        }
         let original =
             f.p.profile
                 .join("Documents/My Games/Sid Meier's Civilization VI/Saves/Single/auto");
@@ -3604,20 +3935,23 @@ fn child_specific_environment_is_applied_without_changing_the_parent() {
     let key = "CIV6_LIVE_TEST_CHILD_ENV";
     let previous = std::env::var_os(key);
     let mut r = process::RealRunner;
+    let command = if cfg!(windows) {
+        args(&["cmd.exe", "/d", "/c", "set CIV6_LIVE_TEST_CHILD_ENV"])
+    } else {
+        args(&["printenv", key])
+    };
     let out = r
-        .run(
-            Call::new(args(&[
-                "cmd.exe",
-                "/d",
-                "/c",
-                "set CIV6_LIVE_TEST_CHILD_ENV",
-            ]))
-            .env(key, "chain-owned")
-            .timeout(5.0),
-        )
+        .run(Call::new(command).env(key, "chain-owned").timeout(5.0))
         .unwrap();
     assert_eq!(out.code, 0);
-    assert_eq!(out.stdout, "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n");
+    assert_eq!(
+        out.stdout,
+        if cfg!(windows) {
+            "CIV6_LIVE_TEST_CHILD_ENV=chain-owned\n"
+        } else {
+            "chain-owned\n"
+        }
+    );
     assert_eq!(std::env::var_os(key), previous);
 }
 
@@ -3782,6 +4116,55 @@ fn chain_stops_before_a_second_scenario_if_its_lock_was_replaced() {
             .filter(|c| is_tuner(c) && c.args[1] == "lua")
             .count(),
         2
+    );
+}
+
+#[test]
+fn driver_owner_change_prevents_scenario_close_and_cleanup_of_the_peer_game() {
+    struct Changed {
+        fake: Fake,
+        lock: PathBuf,
+        peer: serde_json::Value,
+    }
+    impl Runner for Changed {
+        fn run(&mut self, c: Call) -> Result<Output, String> {
+            if is_driver(&c) {
+                fs::rename(&self.lock, self.lock.with_extension("old")).unwrap();
+                write_json(&self.lock, &self.peer)?;
+            }
+            self.fake.run(c)
+        }
+        fn now(&mut self) -> f64 {
+            self.fake.now()
+        }
+        fn sleep(&mut self, s: f64) -> Result<(), String> {
+            self.fake.sleep(s)
+        }
+        fn print(&mut self, s: &str) -> Result<(), String> {
+            self.fake.print(s)
+        }
+    }
+    let f = Fixture::new();
+    let peer = json!({"live_chain":true,"chain_pid":std::process::id(),"lock_token":"peer"});
+    let mut r = Changed {
+        fake: ready_chain(&f, 0),
+        lock: f.p.here.join("civ6.lock"),
+        peer: peer.clone(),
+    };
+    let error = cli(&mut r, &f.p, &args(&["a:s.json"])).unwrap_err();
+    assert!(
+        error.contains("ownership changed before scenario close"),
+        "{error}"
+    );
+    assert_eq!(read_json(&r.lock).unwrap(), peer);
+    assert_normal_closes(&r.fake.calls, 1);
+    assert_eq!(
+        r.fake
+            .calls
+            .iter()
+            .filter(|c| is_tuner(c) && c.args[1] == "lua")
+            .count(),
+        1
     );
 }
 
