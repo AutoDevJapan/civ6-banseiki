@@ -225,9 +225,40 @@
       "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal v=JAC_AbsorptionProductGameplay.Get(t.From,t.To)\nassert(v.Status~='STARTED','waiting save did not preserve unmet real funds')\nlocal gold=v.Deposit.Gold+10000;local faith=v.Deposit.Faith+10000\nPlayers[t.To]:GetTreasury():ChangeGoldBalance(gold-Players[t.To]:GetTreasury():GetGoldBalance())\nPlayers[t.To]:GetReligion():ChangeFaithBalance(faith-JAC_AbsorptionGameplay.PlayerFaithBalance(t.To))\nt.GoldBefore=Players[t.To]:GetTreasury():GetGoldBalance();t.FaithBefore=JAC_AbsorptionGameplay.PlayerFaithBalance(t.To)\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)\nreturn 'waiting save restored; real deposit supplied for ordinary admission'\n"
     },
     {
-      "action": "end_turn",
-      "turns": 20,
-      "timeout": 1200
+      "action": "ui_lua",
+      "state_name": "JAC_Absorption_Entry",
+      "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nt.QualificationTurn=Game.GetCurrentGameTurn();t.QualificationTurns={}\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)\nreturn 'record actual engine turn before ordinary AI qualification'\n"
+    },
+    {
+      "action": "repeat_until",
+      "max_iterations": 20,
+      "timeout": 1200,
+      "condition": {
+        "type": "lua",
+        "state_name": "InGame",
+        "code": "\nlocal t={Mode='SMALL_STATE'}\nfor actor=0,PlayerManager.GetWasEverAliveCount()-1 do\n  local config=PlayerConfigurations[actor]\n  local civ=config and config:GetCivilizationTypeName()\n  if civ=='CIVILIZATION_JAC_ODA' then t.From=actor elseif civ=='CIVILIZATION_JAC_TAKEDA' then t.To=actor end\nend\nassert(t.From and t.To,'ordinary UI actors unavailable')\n\n\nlocal v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)\nreturn v.Status=='STARTED'\n"
+      },
+      "steps": [
+        {
+          "action": "end_turn",
+          "turns": 1,
+          "timeout": 1200
+        },
+        {
+          "action": "wait_for",
+          "timeout": 600,
+          "condition": {
+            "type": "lua",
+            "state_name": "InGame",
+            "code": "return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()"
+          }
+        },
+        {
+          "action": "ui_lua",
+          "state_name": "JAC_Absorption_Entry",
+          "code": "\nlocal t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))\nlocal turn=Game.GetCurrentGameTurn()\nassert(turn==t.QualificationTurn+1,'ordinary qualification did not advance exactly one actual engine turn')\nt.QualificationTurns[#t.QualificationTurns+1]=turn;t.QualificationTurn=turn\nGame:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)\nreturn 'ordinary AI qualification actual engine turn '..turn\n"
+        }
+      ]
     },
     {
       "action": "wait_for",

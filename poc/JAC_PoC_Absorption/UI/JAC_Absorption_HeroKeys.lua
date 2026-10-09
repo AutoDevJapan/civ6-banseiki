@@ -1,8 +1,11 @@
 -- UnitPropertyKeys exists in the UI context but not in gameplay on the installed engine.
 -- Share the engine's actual numeric enum value; never invent a replacement property.
 local uiPlayers, uiGame, uiCityManager = Players, Game, CityManager
+local cityPublication = 0
 include('JAC_CarrierMP_UI')
 include('JAC_NativeInventory_UI')
+local publicationGuard = JAC_AbsorptionPublicationGuard or {}
+JAC_AbsorptionPublicationGuard = publicationGuard -- UI context only; never saved or sent.
 local nativeCarrierSent = {}
 local nativeCarrierChecks = {}
 local missingUnitReads = {}
@@ -81,6 +84,7 @@ local function PublishHeroKeys()
       end
     end
     local observed = {}
+    reads.GetPublication = function() return cityPublication end
     reads.NativeMoveAvailable = UI and type(UI.RequestPlayerOperation) == "function"
       and PlayerOperations and PlayerOperations.MOVE_GREAT_WORK ~= nil or false
     reads.GetObservation = function(token) return observed[token] end
@@ -250,15 +254,19 @@ local function PublishHeroKeys()
     end
     reads.ObserveCity = function(request)
       local previous = observed[request.Token]
-      if previous and previous.Owner == request.Owner and previous.ID == request.ID
+      if uiGame.GetCurrentGameTurn() ~= request.Turn then observed[request.Token] = nil; return end
+      if cityPublication <= (request.AfterPublication or 0) then return end
+      if previous and previous.Publication == cityPublication
+        and previous.Owner == request.Owner and previous.ID == request.ID
         and previous.X == request.X and previous.Y == request.Y and previous.Turn == request.Turn then return end
+      -- Refresh an old token on the next native publication. Reading it twice
+      -- in one callback cannot turn an unchanged UI cache into fresh evidence.
       observed[request.Token] = nil
-      if uiGame.GetCurrentGameTurn() ~= request.Turn then return end
       local ok, value = pcall(reads.ReadCity, request.Owner, request.ID, "LOYALTY",
         nil, nil, nil, request.X, request.Y)
       if ok and type(value) == "number" and value >= 0 and value <= 100 then
         observed[request.Token] = { Owner = request.Owner, ID = request.ID,
-          X = request.X, Y = request.Y, Turn = request.Turn, Value = value }
+          X = request.X, Y = request.Y, Turn = request.Turn, Value = value, Publication = cityPublication }
       end
     end
     ExposedMembers.JAC_HeroReadAPI = reads
@@ -397,13 +405,31 @@ end
 
 -- UI caches update after the game-core chunk returns. Observe only at the engine's
 -- publish-complete boundary (or after loading), never during the mutation itself.
-local function ObservePendingHeroes()
+local function ObservePendingHeroes(fresh)
   local reads = ExposedMembers.JAC_HeroReadAPI
   if not reads or not reads.Observe then return end
   reads.NativeMoveAvailable = UI and type(UI.RequestPlayerOperation) == "function"
     and PlayerOperations and PlayerOperations.MOVE_GREAT_WORK ~= nil or false
   local api = ExposedMembers.JAC_Absorption
   local state = api and api.GetState() or Game:GetProperty("JAC_ABSORPTION_STATE_V1")
+  local cityRequests, floor = {}, cityPublication
+  for _, tx in pairs(state and state.Transactions or {}) do
+    local request = tx.CityLoyaltyPending
+    if request then floor = math.max(floor, request.AfterPublication or 0) end
+  end
+  for _, player in ipairs(PlayerManager.GetAlive() or {}) do
+    for _, city in player:GetCities():Members() do
+      local governance = city:GetProperty("JAC_ABSORPTION_GOVERNANCE_V1")
+      local request = governance and governance.LoyaltyRead
+      if request then
+        floor = math.max(floor, request.AfterPublication or 0)
+        cityRequests[#cityRequests + 1] = governance
+      end
+    end
+  end
+  -- Saved request barriers seed a replacement UI VM's counter. The increment
+  -- still requires a real publish-complete or the completed load boundary.
+  if fresh then cityPublication = floor + 1 end
   local flowAPI = ExposedMembers.JAC_AbsorptionFlow
   local function AutomaticFlow(id)
     local flow = flowAPI and flowAPI.Get(id)
@@ -500,17 +526,12 @@ local function ObservePendingHeroes()
     end
   end
   local localID = uiGame.GetLocalPlayer and uiGame.GetLocalPlayer()
-  for _, player in ipairs(PlayerManager.GetAlive() or {}) do
-    for _, city in player:GetCities():Members() do
-      local governance = city:GetProperty("JAC_ABSORPTION_GOVERNANCE_V1")
-      local request = governance and governance.LoyaltyRead
-      if request then
-        reads.ObserveCity(request)
-        if reads.GetObservation(request.Token)
-          and (governance.FrictionPending or AutomaticFlow(governance.ID)) then
-          pendingPublication = true
-        end
-      end
+  for _, governance in ipairs(cityRequests) do
+    local request = governance.LoyaltyRead
+    reads.ObserveCity(request)
+    if reads.GetObservation(request.Token)
+      and (governance.FrictionPending or AutomaticFlow(governance.ID)) then
+      pendingPublication = true
     end
   end
   local localPlayer = localID and localID >= 0 and uiPlayers[localID]
@@ -527,6 +548,15 @@ local function ObservePendingHeroes()
   if fixture and fixture.Kind == "FIXTURE" then reads.Observe(fixture.Token, fixture.Class)
   elseif fixture and fixture.Kind == "CITY" then reads.MarkPublished(fixture.Token) end
 end
-Events.GameCoreEventPublishComplete.Add(ObservePendingHeroes)
-Events.LoadScreenClose.Add(ObservePendingHeroes)
-Events.LocalPlayerTurnBegin.Add(ObservePendingHeroes)
+local function ObservePublication(fresh)
+  -- The automatic Gameplay operation can synchronously reenter this UI event
+  -- before its native cache advances. It is still the same publication.
+  if publicationGuard.Active then return end
+  publicationGuard.Active = true
+  local ok, err = pcall(ObservePendingHeroes, fresh)
+  publicationGuard.Active = false
+  if not ok then error(err, 0) end
+end
+Events.GameCoreEventPublishComplete.Add(function() ObservePublication(true) end)
+Events.LoadScreenClose.Add(function() ObservePublication(true) end)
+Events.LocalPlayerTurnBegin.Add(function() ObservePublication(false) end)

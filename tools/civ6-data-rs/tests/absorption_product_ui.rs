@@ -14,7 +14,7 @@ end
 Events={LoadScreenClose=event(),GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event()}
 include=function() end;ExposedMembers={};PlayerOperations={};UI={};PlayerManager={GetAlive=function() return {} end}
 GameInfo={Districts={[7]={DistrictType='DISTRICT_REAL'}},GreatWorkSlotTypes={}}
-GETTERS={};FAULT=nil;PHYSICAL=true
+GETTERS={};FAULT=nil;PHYSICAL=true;CITY_LOYALTY=72;UI_TURN=10
 local function read(kind,value)
   GETTERS[kind]=(GETTERS[kind] or 0)+1
   if FAULT=='getter' then error('native getter threw') end
@@ -32,12 +32,12 @@ REAL={Owner=1,ID=196610,X=129,Y=35,
     GetGreatWorkTypeFromIndex=function(_,i) assert(i==77);return read('NATIVE_TYPE',4) end,
     GetCreatorNameFromIndex=function() return read('CREATOR','real creator') end,
     GetTurnFromIndex=function() return read('CREATED_TURN',3) end} end,
-  GetCulturalIdentity=function() return {GetLoyalty=function() return read('LOYALTY',72) end} end}
+  GetCulturalIdentity=function() return {GetLoyalty=function() return read('LOYALTY',CITY_LOYALTY) end} end}
 local old={GetOwner=function() return 1 end,GetID=function() return 131073 end,
   GetX=function() return 119 end,GetY=function() return 42 end}
 Players={[1]={GetCities=function() return {FindID=function() return nil end,Members=function() return ipairs({old}) end} end}}
 CityManager={GetCityAt=function(x,y) assert(x==129 and y==35);if PHYSICAL then return REAL end end}
-Game={GetCurrentGameTurn=function() return 10 end,GetHeroesManager=function() return {} end,
+Game={GetCurrentGameTurn=function() return UI_TURN end,GetHeroesManager=function() return {} end,
   GetGreatWorkPlayer=function(i) assert(i==77);return read('CREATED_BY',6) end,GetProperty=function() end}
 "#).exec()?;
     lua.load(std::fs::read_to_string(
@@ -89,6 +89,51 @@ for _,fault in ipairs({'missing','player','api','getter'}) do
   Events.LoadScreenClose.Emit();r=ExposedMembers.JAC_HeroReadAPI
   assert(city('SLOTS',11)==2)
 end
+"#).exec()?;
+    Ok(())
+}
+
+#[test]
+fn city_loyalty_tokens_refresh_only_on_distinct_native_publications() -> anyhow::Result<()> {
+    let lua = city_read_provider()?;
+    lua.load(r#"
+local r=ExposedMembers.JAC_HeroReadAPI
+REQUEST={Token='after:0',Owner=1,ID=196610,X=129,Y=35,Turn=10,AfterPublication=0}
+ExposedMembers.JAC_Absorption={GetState=function() return {Transactions={flow={CityLoyaltyPending=REQUEST}}} end,
+  GetUIPhase=function() end}
+r.ObserveCity(REQUEST)
+assert(r.GetObservation(REQUEST.Token)==nil,'unpublished cache acquired a generation')
+Events.GameCoreEventPublishComplete.Emit()
+local first=assert(r.GetObservation(REQUEST.Token));assert(first.Value==72 and first.Publication==1)
+CITY_LOYALTY=67;r.ObserveCity(REQUEST);Events.LocalPlayerTurnBegin.Emit()
+assert(r.GetObservation(REQUEST.Token).Value==72 and r.GetPublication()==first.Publication,
+  'same callback or turn notification was treated as a fresh native cache')
+local guard=assert(JAC_AbsorptionPublicationGuard)
+guard.Active=true;Events.GameCoreEventPublishComplete.Emit()
+assert(r.GetPublication()==first.Publication and r.GetObservation(REQUEST.Token).Value==72,
+  'another active UI observer allowed a nested city publication')
+guard.Active=false
+Events.GameCoreEventPublishComplete.Emit()
+local next=assert(r.GetObservation(REQUEST.Token));assert(next.Value==67 and next.Publication>first.Publication,
+  'an old after token permanently froze the pre-change value')
+REQUEST.Token='after:1';REQUEST.AfterPublication=next.Publication
+r.ObserveCity(REQUEST);assert(r.GetObservation(REQUEST.Token)==nil,'a new token forged a new publication')
+Events.GameCoreEventPublishComplete.Emit()
+assert(r.GetObservation(REQUEST.Token).Value==67)
+for _,field in ipairs({'Owner','ID','X','Y'}) do
+  local original=REAL[field];REAL[field]=original+1
+  local count=GETTERS.LOYALTY
+  Events.GameCoreEventPublishComplete.Emit()
+  assert(r.GetObservation(REQUEST.Token)==nil and GETTERS.LOYALTY==count,field..' mismatch published loyalty')
+  REAL[field]=original;Events.GameCoreEventPublishComplete.Emit()
+  assert(r.GetObservation(REQUEST.Token).Value==67)
+end
+UI_TURN=11;Events.GameCoreEventPublishComplete.Emit()
+assert(r.GetObservation(REQUEST.Token)==nil,'a different turn reused a cached value')
+UI_TURN=10;REQUEST.AfterPublication=100
+Events.LoadScreenClose.Emit();r=ExposedMembers.JAC_HeroReadAPI
+assert(r.GetObservation(REQUEST.Token).Publication==101 and r.GetObservation(REQUEST.Token).Value==67,
+  'loaded request barrier was lost or blocked an actual restored cache')
 "#).exec()?;
     Ok(())
 }

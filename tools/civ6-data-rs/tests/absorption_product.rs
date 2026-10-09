@@ -384,6 +384,72 @@ fn product_faith_charges_and_cancel_returns_use_the_existing_context_aware_reade
 }
 
 #[test]
+fn small_ai_qualification_stops_on_started_and_measures_each_actual_engine_turn(
+) -> anyhow::Result<()> {
+    let scene: serde_json::Value = serde_json::from_str(&product::acceptance_scenario(
+        &Repository::checked_in(),
+        true,
+        false,
+    )?)?;
+    let steps = scene["steps"].as_array().unwrap();
+    let index = steps
+        .iter()
+        .position(|s| s["action"] == "repeat_until")
+        .unwrap();
+    let repeat = &steps[index];
+    assert_eq!(repeat["max_iterations"], 20);
+    assert_eq!(repeat["timeout"], 1200);
+    assert_eq!(repeat["steps"][0]["action"], "end_turn");
+    assert_eq!(repeat["steps"][0]["turns"], 1);
+    let lua = Lua::new();
+    lua.load(r#"
+      assert(_VERSION=='Lua 5.1')
+      TURN=4;STATUS='WAITING';SAVES=0;ACCEPTANCE={From=1,To=2}
+      Game={GetCurrentGameTurn=function() return TURN end,
+        GetProperty=function(_,key) assert(key=='JAC_PRODUCT_ACCEPTANCE_V1');return ACCEPTANCE end,
+        SetProperty=function(_,key,t) assert(key=='JAC_PRODUCT_ACCEPTANCE_V1' and t==ACCEPTANCE);SAVES=SAVES+1 end}
+      PlayerManager={GetWasEverAliveCount=function() return 3 end}
+      PlayerConfigurations={}
+      for actor=0,2 do
+        local civ=actor==1 and 'CIVILIZATION_JAC_ODA' or actor==2 and 'CIVILIZATION_JAC_TAKEDA' or 'OTHER'
+        PlayerConfigurations[actor]={GetCivilizationTypeName=function() return civ end}
+      end
+      ExposedMembers={JAC_AbsorptionProduct={Get=function(from,to)
+        assert(from==1 and to==2);return {Status=STATUS} end}}
+    "#).exec()?;
+    lua.load(steps[index - 1]["code"].as_str().unwrap())
+        .exec()?;
+    let measure = repeat["steps"][2]["code"].as_str().unwrap();
+    let condition = repeat["condition"]["code"].as_str().unwrap();
+    let mut turns = 0;
+    for _ in 0..repeat["max_iterations"].as_u64().unwrap() {
+        lua.load("TURN=TURN+1;if TURN==7 then STATUS='STARTED' end")
+            .exec()?;
+        lua.load(measure).exec()?;
+        turns += 1;
+        if lua.load(condition).eval::<bool>()? {
+            break;
+        }
+    }
+    assert_eq!(
+        turns, 3,
+        "qualification advanced after STARTED was already published"
+    );
+    lua.load("assert(TURN==7 and #ACCEPTANCE.QualificationTurns==3 and ACCEPTANCE.QualificationTurns[1]==5 and ACCEPTANCE.QualificationTurns[3]==7);STATUS='AVAILABLE'").exec()?;
+    assert!(
+        !lua.load(condition).eval::<bool>()?,
+        "unaccepted requirements stopped the turn loop"
+    );
+    lua.load("TURN=9").exec()?;
+    assert!(
+        lua.load(measure).exec().is_err(),
+        "a skipped or extra engine turn was accepted"
+    );
+    lua.load("assert(SAVES==4 and ACCEPTANCE.QualificationTurn==7 and #ACCEPTANCE.QualificationTurns==3)").exec()?;
+    Ok(())
+}
+
+#[test]
 fn typed_catalog_maps_every_current_product_leader_and_all_japanese_demand_types(
 ) -> anyhow::Result<()> {
     let repo = Repository::checked_in();

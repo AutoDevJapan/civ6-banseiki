@@ -170,20 +170,25 @@ end
 function A.CityLoyalty(city)
   return CoreCityLoyalty(city) or ValidLoyalty(CityRead(city, "LOYALTY"))
 end
-local function RequestLoyaltyRead(city, governance, phase)
+local function RequestLoyaltyRead(city, governance, phase, afterPublication)
   if CoreCityLoyalty(city) ~= nil then return end
   if Multiplayer() then return end
   local request = governance.LoyaltyRead
   local turn = Game.GetCurrentGameTurn()
+  local reads = ExposedMembers.JAC_HeroReadAPI
+  local publication = reads and reads.GetPublication and reads.GetPublication() or 0
+  local floor = math.max(afterPublication or 0, publication)
   if request and request.Phase == phase and request.Turn == turn
     and request.Owner == city:GetOwner() and request.ID == city:GetID()
-    and request.X == city:GetX() and request.Y == city:GetY() then return end
+    and request.X == city:GetX() and request.Y == city:GetY()
+    and request.AfterPublication and request.AfterPublication >= (afterPublication or 0) then return request end
   governance.LoyaltyRead = { Phase = phase, Owner = city:GetOwner(), ID = city:GetID(),
-    X = city:GetX(), Y = city:GetY(), Turn = turn, Token = governance.ID .. ":city:"
+    X = city:GetX(), Y = city:GetY(), Turn = turn, AfterPublication = floor, Token = governance.ID .. ":city:"
       .. city:GetX() .. ":" .. city:GetY() .. ":" .. turn .. ":" .. phase }
   city:SetProperty(R.GOVERNANCE_KEY, governance)
+  return governance.LoyaltyRead
 end
-local function PublishedLoyalty(city, governance, phase)
+local function PublishedLoyalty(city, governance, phase, afterPublication)
   local direct = CoreCityLoyalty(city)
   if direct ~= nil then return direct end
   if Multiplayer() then
@@ -198,7 +203,7 @@ local function PublishedLoyalty(city, governance, phase)
     if not ok then error(value,0) end
     return value
   end
-  RequestLoyaltyRead(city, governance, phase)
+  RequestLoyaltyRead(city, governance, phase, afterPublication)
   local request = governance.LoyaltyRead
   local reads = ExposedMembers.JAC_HeroReadAPI
   local observed = reads and reads.GetObservation and reads.GetObservation(request.Token)
@@ -206,34 +211,72 @@ local function PublishedLoyalty(city, governance, phase)
   assert(observed.Owner == request.Owner and observed.ID == request.ID
     and observed.Turn == request.Turn and city:GetOwner() == request.Owner
     and city:GetID() == request.ID, "city loyalty observation identity changed")
-  return ValidLoyalty(observed.Value)
+  -- A token identifies the logical read, not a native cache publication. Old
+  -- token-only observations and reads from the issuing callback are not proof.
+  if type(observed.Publication) ~= "number" or observed.Publication <= request.AfterPublication then return nil end
+  assert(observed.Publication < math.huge and observed.Publication == math.floor(observed.Publication),
+    "invalid city loyalty publication")
+  return ValidLoyalty(observed.Value), observed.Publication
+end
+local loyaltyDiagnostics = {}
+local function TraceLoyalty(city, governance, pending, phase, current, publication, status)
+  local text = "loyalty id=" .. governance.ID .. " phase=" .. phase .. " status=" .. status
+    .. " owner=" .. city:GetOwner() .. " city=" .. city:GetID() .. " x=" .. city:GetX() .. " y=" .. city:GetY()
+    .. " turn=" .. Game.GetCurrentGameTurn() .. " before=" .. tostring(pending.Before)
+    .. " target=" .. tostring(pending.Target) .. " current=" .. tostring(current)
+    .. " issued=" .. tostring(pending.Issued == true) .. " publication=" .. tostring(publication)
+    .. " issuedPublication=" .. tostring(pending.IssuedPublication)
+    .. " lastPublication=" .. tostring(pending.LastPublication) .. " rechecks=" .. tostring(pending.Rechecks or 0)
+  local key = governance.ID .. ":" .. city:GetX() .. ":" .. city:GetY() .. ":" .. phase
+  if loyaltyDiagnostics[key] ~= text then Log(text); loyaltyDiagnostics[key] = text end
 end
 local function AdvanceLoyalty(city, governance, pending, phase, delta)
   if pending.Before == nil then
-    local before = PublishedLoyalty(city, governance, phase .. ":before")
-    if before == nil then return false end
+    local before, publication = PublishedLoyalty(city, governance, phase .. ":before")
+    if before == nil then TraceLoyalty(city, governance, pending, phase, nil, nil, "WAIT_BEFORE"); return false end
     pending.Before, pending.Target = before, math.max(0, math.min(100, before + delta))
+    pending.BeforePublication = publication
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+  end
+  if pending.Issued and not Multiplayer() and CoreCityLoyalty(city) == nil
+    and pending.IssuedPublication == nil then
+    -- Legacy saves counted tokens without publication evidence. Preserve the
+    -- issued setter, but start the two genuine after-read checks from a barrier.
+    pending.Rechecks, pending.LastPublication = nil, nil
+    local request = RequestLoyaltyRead(city, governance, phase .. ":after:0", pending.BeforePublication)
+    pending.IssuedPublication = request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
   end
   if not pending.Issued and pending.Before ~= pending.Target then
     -- Both the intent and a distinct after-read request exist before the
     -- native setter. A crash after the call can reconcile without a new call.
     pending.Issued = true
-    RequestLoyaltyRead(city, governance, phase .. ":after:0")
+    local request = RequestLoyaltyRead(city, governance, phase .. ":after:0", pending.BeforePublication)
+    pending.IssuedPublication = request and request.AfterPublication
     city:SetProperty(R.GOVERNANCE_KEY, governance)
+    TraceLoyalty(city, governance, pending, phase, nil, nil, "ISSUED")
     city:ChangeLoyalty(delta)
   end
-  if pending.Before == pending.Target then return true end
+  if pending.Before == pending.Target then
+    TraceLoyalty(city, governance, pending, phase, pending.Before, pending.BeforePublication, "UNCHANGED_TARGET")
+    return true
+  end
   local suffix = tostring(pending.Rechecks or 0)
-  local current = PublishedLoyalty(city, governance, phase .. ":after:" .. suffix)
-  if current == nil then return false end
+  local current, publication = PublishedLoyalty(city, governance, phase .. ":after:" .. suffix,
+    pending.LastPublication or pending.IssuedPublication)
+  if current == nil then TraceLoyalty(city, governance, pending, phase, nil, nil, "WAIT_AFTER"); return false end
+  if publication and pending.LastPublication and publication <= pending.LastPublication then return false end
+  TraceLoyalty(city, governance, pending, phase, current, publication, "OBSERVED")
   if current == pending.Target then return true end
   assert(current == pending.Before, "city loyalty changed during interrupted adjustment")
   if (pending.Rechecks or 0) >= 1 then
+    pending.FailedPublication, pending.FailedValue = publication, current
+    city:SetProperty(R.GOVERNANCE_KEY, governance)
+    TraceLoyalty(city, governance, pending, phase, current, publication, "BLOCKED")
     error("city loyalty change was not observed after two fresh publications")
   end
-  pending.Rechecks = 1
-  RequestLoyaltyRead(city, governance, phase .. ":after:1")
+  pending.Rechecks, pending.LastPublication = 1, publication
+  RequestLoyaltyRead(city, governance, phase .. ":after:1", publication)
   city:SetProperty(R.GOVERNANCE_KEY, governance)
   return false
 end

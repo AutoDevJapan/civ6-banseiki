@@ -1424,8 +1424,8 @@ fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Resu
         local A=TEST_ABSORPTION
         local R=A.Rules
         PLAN.Mode='CONQUEST';PLAN.FlowPolicy=true
-        CITY_OBSERVATIONS={};LOYALTY_CALLS={}
-        ExposedMembers.JAC_HeroReadAPI={GetObservation=function(token)
+        CITY_OBSERVATIONS={};LOYALTY_CALLS={};CITY_PUBLICATION=0
+        ExposedMembers.JAC_HeroReadAPI={GetPublication=function() return CITY_PUBLICATION end,GetObservation=function(token)
           return CITY_OBSERVATIONS[token] end,
           ReadCity=function(owner,id,method)
             assert(method=='LOYALTY')
@@ -1440,12 +1440,13 @@ fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Resu
           end
         end
         function PUBLISH_LOYALTY(stale)
+          CITY_PUBLICATION=CITY_PUBLICATION+1
           for _,city in Players[2]:GetCities():Members() do
             local g=city:GetProperty(R.GOVERNANCE_KEY)
             local request=g and g.LoyaltyRead
-            if request and not CITY_OBSERVATIONS[request.Token] then
+            if request then
               CITY_OBSERVATIONS[request.Token]={Owner=request.Owner,ID=request.ID,
-                X=request.X,Y=request.Y,Turn=request.Turn,Value=stale and g.FrictionPending
+                X=request.X,Y=request.Y,Turn=request.Turn,Publication=CITY_PUBLICATION,Value=stale and g.FrictionPending
                   and request.Phase=='friction:6:after:0' and city.x==4
                   and g.FrictionPending.Before or city.loyalty}
             end
@@ -1461,6 +1462,14 @@ fn core_without_loyalty_getter_waits_for_fresh_city_publications() -> mlua::Resu
         assert(tx.Status=='WAITING_UI' and #LOYALTY_CALLS==1 and CITIES[4].loyalty==72)
         assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and #LOYALTY_CALLS==1,
           'stale after-read duplicated city loyalty')
+        local request=CITIES[4]:GetProperty(R.GOVERNANCE_KEY).LoyaltyRead
+        CITY_OBSERVATIONS[request.Token]={Owner=request.Owner,ID=request.ID,
+          X=request.X,Y=request.Y,Turn=request.Turn,Value=CITIES[4].loyalty}
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and #LOYALTY_CALLS==1,
+          'an old token-only target value forged completion')
+        CITY_OBSERVATIONS[request.Token].Publication=request.AfterPublication
+        assert(A.Resume(PLAN.ID).Status=='WAITING_UI' and #LOYALTY_CALLS==1,
+          'a target read from the issuing publication forged completion')
         PUBLISH_LOYALTY(false)
         tx=A.Resume(PLAN.ID)
         assert(tx.Status=='WAITING_UI' and CITIES[8]:GetOwner()==2)
@@ -2838,6 +2847,210 @@ fn invalid_core_city_identity_is_not_hidden_by_ui_player_wait() -> mlua::Result<
     "#,
     )
     .exec()
+}
+
+#[test]
+fn two_distinct_unchanged_loyalty_publications_block_without_resending_the_setter()
+-> mlua::Result<()> {
+    for friction in [false, true] {
+        let lua = city_publication_world()?;
+        lua.globals().set("FRICTION", friction)?;
+        lua.load(r#"
+          CITY_MODE='SMALL_STATE'
+          if FRICTION then REACH_FINAL();FINISH_CITY() end
+          local R=TEST_ABSORPTION.Rules
+          local initial=PHYSICAL_LOYALTY_CALLS
+          CITIES[4].ChangeLoyalty=function() PHYSICAL_LOYALTY_CALLS=PHYSICAL_LOYALTY_CALLS+1 end
+          function PENDING_LOYALTY()
+            local g=CITIES[4]:GetProperty(R.GOVERNANCE_KEY)
+            return g and (FRICTION and g.FrictionPending or g.ImmediatePending)
+          end
+          function RESUME_LOYALTY()
+            if FRICTION then return TEST_ABSORPTION.ApplyCityFriction() end
+            return TEST_ABSORPTION.Resume('city-root')
+          end
+          if FRICTION then CURRENT_TURN=6;TEST_ABSORPTION.ApplyCityFriction()
+          else CHOOSE_ALL('city-root',CITY_MODE);TEST_FLOW.Resolve(2,'city-root') end
+          for i=1,20 do
+            PUBLISH_CITY()
+            if PENDING_LOYALTY() and PENDING_LOYALTY().Issued then break end
+          end
+          local p=assert(PENDING_LOYALTY())
+          assert(p.Issued and p.Before~=p.Target and not p.Rechecks)
+          local calls=PHYSICAL_LOYALTY_CALLS
+          assert(calls>initial and CITIES[4].loyalty==p.Before,'no-op fixture did not exercise the setter')
+          PUBLISH_CITY()
+          p=PENDING_LOYALTY();assert(p.Rechecks==1 and p.LastPublication>p.IssuedPublication)
+          local first=p.LastPublication
+          for i=1,3 do
+            Events.LocalPlayerTurnBegin.Emit();RESUME_LOYALTY()
+            p=PENDING_LOYALTY()
+            assert(p.Rechecks==1 and p.LastPublication==first and not p.FailedPublication,
+              'cached observation counted as a second fresh publication')
+          end
+          PUBLISH_CITY()
+          p=PENDING_LOYALTY()
+          assert(p.FailedPublication>first and p.FailedValue==p.Before and CITIES[4].loyalty==p.Before)
+          if FRICTION then
+            local receipt=Players[2]:GetProperty('JAC_ABSORPTION_FLOW_LAST_OPERATION_V1')
+            assert(not receipt.Accepted and receipt.Reason:find('two fresh publications',1,true))
+            assert(CITIES[4]:GetProperty(R.GOVERNANCE_KEY).FrictionApplied==0)
+          else
+            assert(TEST_FLOW.Get('city-root').Phase=='BLOCKED')
+            assert(TEST_ABSORPTION.GetState().Transactions['city-root'].Status=='BLOCKED')
+          end
+          assert(not pcall(RESUME_LOYALTY),'two genuine unchanged reads ceased to block')
+          assert(PHYSICAL_LOYALTY_CALLS==calls,'failed observation retried a native setter')
+        "#).exec()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn pending_loyalty_reload_replaces_ui_generation_without_reissuing_native_change()
+-> mlua::Result<()> {
+    for friction in [false, true] {
+        for legacy in [false, true] {
+            let lua = city_publication_world()?;
+            lua.globals().set("FRICTION", friction)?;
+            lua.globals().set("LEGACY", legacy)?;
+            lua.load(r#"
+              CITY_MODE='SMALL_STATE'
+              if FRICTION then REACH_FINAL();FINISH_CITY() end
+              local R=TEST_ABSORPTION.Rules
+              function PENDING_LOYALTY()
+                local g=CITIES[4]:GetProperty(R.GOVERNANCE_KEY)
+                return g and (FRICTION and g.FrictionPending or g.ImmediatePending)
+              end
+              if FRICTION then CURRENT_TURN=6;TEST_ABSORPTION.ApplyCityFriction()
+              else CHOOSE_ALL('city-root',CITY_MODE);TEST_FLOW.Resolve(2,'city-root') end
+              for i=1,20 do
+                PUBLISH_CITY()
+                if PENDING_LOYALTY() and PENDING_LOYALTY().Issued then break end
+              end
+              local p=assert(PENDING_LOYALTY());assert(p.Issued)
+              UI_CITIES[4].GetCulturalIdentity=function() return {GetLoyalty=function() return p.Before end} end
+              PUBLISH_CITY();assert(PENDING_LOYALTY().Rechecks==1)
+              SAVED_PUBLICATION=ExposedMembers.JAC_HeroReadAPI.GetPublication()
+              SAVED_CALLS=PHYSICAL_LOYALTY_CALLS
+              SAVED_BEFORE,SAVED_TARGET=p.Before,p.Target
+              if LEGACY then
+                local g=CITIES[4]:GetProperty(R.GOVERNANCE_KEY)
+                local pending=FRICTION and g.FrictionPending or g.ImmediatePending
+                pending.BeforePublication,pending.IssuedPublication,pending.LastPublication=nil,nil,nil
+                g.LoyaltyRead.AfterPublication=nil
+                CITIES[4]:SetProperty(R.GOVERNANCE_KEY,g)
+              end
+              UI_CITIES[4].GetCulturalIdentity=function() return {GetLoyalty=function() return CITIES[4].loyalty end} end
+              Game.props=R.Copy(Game.props)
+              for _,x in ipairs({4,8}) do CITIES[x].props=R.Copy(CITIES[x].props) end
+              -- Replace the UI VM's event bindings and reader, not just its cache.
+              local function event() local callbacks={};return {Add=function(fn) callbacks[#callbacks+1]=fn end,
+                Emit=function() for _,fn in ipairs(callbacks) do fn() end end} end
+              Events={LoadScreenClose=event(),GameCoreEventPublishComplete=event(),LocalPlayerTurnBegin=event()}
+            "#).exec()?;
+            load_module(
+                &lua,
+                "poc/JAC_PoC_Absorption/Scripts/JAC_Absorption_Gameplay.lua",
+            )?;
+            load_module(&lua, FLOW)?;
+            load_module(
+                &lua,
+                "poc/JAC_PoC_Absorption/UI/JAC_Absorption_HeroKeys.lua",
+            )?;
+            lua.load(r#"
+              assert(ExposedMembers.JAC_HeroReadAPI.GetPublication()==0,'UI counter was not replaced')
+              Events.LoadScreenClose.Emit()
+              if not LEGACY then
+                assert(ExposedMembers.JAC_HeroReadAPI.GetPublication()>SAVED_PUBLICATION,
+                  'saved causal barrier was lost on load')
+              end
+              for i=1,12 do PUBLISH_CITY() end
+              local g=CITIES[4]:GetProperty(TEST_ABSORPTION.Rules.GOVERNANCE_KEY)
+              if FRICTION then
+                assert(g.FrictionApplied==1 and not g.FrictionPending and g.LastFrictionTurn==6)
+                assert(PHYSICAL_LOYALTY_CALLS==SAVED_CALLS)
+              else
+                assert(TEST_FLOW.Get('city-root').Phase=='RESULT' and g.ImmediateApplied)
+                assert(g.ImmediateBefore==SAVED_BEFORE and g.ImmediateTarget==SAVED_TARGET)
+                assert(PHYSICAL_LOYALTY_CALLS==SAVED_CALLS+1,'loaded first city resent its setter')
+              end
+              assert(CITIES[4].loyalty==SAVED_TARGET)
+              local calls=PHYSICAL_LOYALTY_CALLS
+              TEST_ABSORPTION.Resume('city-root');TEST_ABSORPTION.ApplyCityFriction();PUBLISH_CITY()
+              assert(PHYSICAL_LOYALTY_CALLS==calls,'completed saved intent was applied again')
+            "#).exec()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn reentrant_city_publications_wait_for_the_next_actual_loyalty_value() -> mlua::Result<()> {
+    for mode in ["SMALL_STATE", "CONQUEST"] {
+        let lua = city_publication_world()?;
+        lua.globals().set("CITY_MODE", mode)?;
+        lua.load(
+            r#"
+          assert(_VERSION=='Lua 5.1')
+          UI_LOYALTY={};NESTED_PUBLICATIONS=0;PUBLICATION_DEPTH=0
+          for _,x in ipairs({4,8}) do
+            UI_LOYALTY[x]=CITIES[x].loyalty
+            UI_CITIES[x].GetCulturalIdentity=function() return {GetLoyalty=function()
+              return UI_LOYALTY[x] end} end
+          end
+          Players[2].IsHuman=function() return false end
+          Players[3].IsHuman=function() return true end
+          Game.GetLocalPlayer=function() return 3 end
+          UI.RequestPlayerOperation=function(actor,kind,payload)
+            assert(actor==3 and kind==1 and payload.Command=='RECONCILE_PUBLICATIONS')
+            PUBLICATION_DEPTH=PUBLICATION_DEPTH+1
+            PUBLICATION_OPERATIONS=PUBLICATION_OPERATIONS+1
+            GameEvents.JAC_AbsorptionFlow_Operation.Emit(actor,payload)
+            if PUBLICATION_DEPTH<4 then
+              NESTED_PUBLICATIONS=NESTED_PUBLICATIONS+1
+              Events.GameCoreEventPublishComplete.Emit()
+            end
+            PUBLICATION_DEPTH=PUBLICATION_DEPTH-1
+          end
+          function FRESH_CITY()
+            PUBLISH_CITY()
+            local flow=TEST_FLOW.Get('city-root')
+            assert(flow.Phase~='BLOCKED',tostring(flow.Error))
+            -- The UI cache changes only after the entire native callback unwinds.
+            for _,x in ipairs({4,8}) do UI_LOYALTY[x]=CITIES[x].loyalty end
+          end
+          for i=1,400 do RANDOM_QUEUE[#RANDOM_QUEUE+1]=9999 end
+          TEST_FLOW.Begin({ID='city-root',From=1,To=2,Mode=CITY_MODE,
+            EntryConditionsMet=true,RelationsResolved=true})
+          for i=1,20 do
+            FRESH_CITY()
+            if TEST_FLOW.Get('city-root').Phase=='DONE' then break end
+          end
+          assert(NESTED_PUBLICATIONS>0,'fixture did not reenter a native publication')
+          assert(TEST_FLOW.Get('city-root').Phase=='DONE' and PHYSICAL_LOYALTY_CALLS==2)
+          local R=TEST_ABSORPTION.Rules
+          for _,x in ipairs({4,8}) do
+            local g=CITIES[x]:GetProperty(R.GOVERNANCE_KEY)
+            assert(g.ImmediateApplied and g.ImmediateBefore==87
+              and g.ImmediateTarget==87+R.CITY_POLICY[CITY_MODE].Immediate
+              and CITIES[x].loyalty==g.ImmediateTarget)
+          end
+          CURRENT_TURN=6;GameEvents.OnGameTurnStarted.Emit()
+          for i=1,8 do FRESH_CITY() end
+          for _,x in ipairs({4,8}) do
+            local g=CITIES[x]:GetProperty(R.GOVERNANCE_KEY)
+            assert(g.FrictionApplied==1 and not g.FrictionPending)
+            assert(CITIES[x].loyalty==g.ImmediateTarget+R.CITY_POLICY[CITY_MODE].Friction)
+          end
+          assert(PHYSICAL_LOYALTY_CALLS==4)
+          Events.LocalPlayerTurnBegin.Emit();TEST_ABSORPTION.ApplyCityFriction()
+          assert(PHYSICAL_LOYALTY_CALLS==4,'publication replay resent a native setter')
+        "#,
+        )
+        .exec()?;
+    }
+    Ok(())
 }
 
 #[test]

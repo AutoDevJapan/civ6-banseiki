@@ -765,14 +765,39 @@ t.GoldBefore=Players[t.To]:GetTreasury():GetGoldBalance();t.FaithBefore=JAC_Abso
 Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
 return 'waiting save restored; real deposit supplied for ordinary admission'
 "#.into()));
-    steps.push(json!({"action":"end_turn","turns":if small&&!human{20}else{1},"timeout":1200}));
-    steps.push(wait(format!(
+    let started = wait(format!(
         "{ui_actors}\n{}",
         r#"
 local v=ExposedMembers.JAC_AbsorptionProduct.Get(t.From,t.To)
 return v.Status=='STARTED'
 "#
-    )));
+    ));
+    if small && !human {
+        steps.push(core(
+            r#"
+local t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))
+t.QualificationTurn=Game.GetCurrentGameTurn();t.QualificationTurns={}
+Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
+return 'record actual engine turn before ordinary AI qualification'
+"#
+            .into(),
+        ));
+        steps.push(json!({"action":"repeat_until","max_iterations":20,"timeout":1200,
+            "condition":started["condition"],"steps":[
+                {"action":"end_turn","turns":1,"timeout":1200},
+                wait("return ExposedMembers.JAC_AbsorptionProduct~=nil and Players[Game.GetLocalPlayer()]:IsTurnActive()".into()),
+                core(r#"
+local t=assert(Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1'))
+local turn=Game.GetCurrentGameTurn()
+assert(turn==t.QualificationTurn+1,'ordinary qualification did not advance exactly one actual engine turn')
+t.QualificationTurns[#t.QualificationTurns+1]=turn;t.QualificationTurn=turn
+Game:SetProperty('JAC_PRODUCT_ACCEPTANCE_V1',t)
+return 'ordinary AI qualification actual engine turn '..turn
+"#.into())]}));
+    } else {
+        steps.push(json!({"action":"end_turn","turns":1,"timeout":1200}));
+    }
+    steps.push(started);
     steps.push(core(format!("{}\n{}",P1_EVIDENCE,r#"
 local t=Game:GetProperty('JAC_PRODUCT_ACCEPTANCE_V1');local state=Game:GetProperty('JAC_ABSORPTION_PRODUCT_V1')
 local pair=assert(state.Pairs[t.From..':'..t.To]);local receipt=assert(JAC_AbsorptionAdmissionGameplay.Get('leader-offer',pair.ID))
