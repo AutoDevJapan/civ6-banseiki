@@ -2,7 +2,7 @@
 //! The original growth witness keeps its 21-step/49-field contract unchanged.
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_BODY: usize = 1_048_576;
 pub const MAX_PARTS: usize = MAX_BODY.div_ceil(96);
@@ -181,6 +181,181 @@ impl Receipts {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Action {
+    Begin { scene: String },
+    AcceptDialog { scene: String, serial: u64 },
+    Load { generation: u8 },
+    Complete,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Payload {
+    pub generation: u8,
+    pub canonical: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub code: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+impl Frame {
+    pub fn payload(&self) -> Result<Payload> {
+        let data: Payload = serde_json::from_str(&self.body)?;
+        if data.generation != self.generation || data.canonical.is_empty() {
+            return Err(problem("body generation/record mismatch"));
+        }
+        Ok(data)
+    }
+}
+
+pub fn save_name(nonce: &str, generation: u8) -> Result<String> {
+    if !nonce_valid(nonce) {
+        return Err(problem("invalid save nonce"));
+    }
+    let label = match generation {
+        1 => "MidLoan",
+        2 => "Returned",
+        _ => return Err(problem("invalid save generation")),
+    };
+    Ok(format!("JAC-NativeCarrier-{label}-{nonce}"))
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Journal {
+    pub nonce: String,
+    pub owner: civ6_autotest_rs::hotseat_bridge::WindowOwner,
+    receipts: Receipts,
+    scenes: BTreeMap<String, u8>,
+    save_snapshots: BTreeMap<u8, String>,
+    save_complete: BTreeSet<u8>,
+    pub load_sent: BTreeSet<u8>,
+    begin_sent: BTreeSet<String>,
+    dialog_sent: BTreeSet<(String, u64)>,
+    pub complete: bool,
+}
+
+impl Journal {
+    pub fn new(nonce: &str, owner: civ6_autotest_rs::hotseat_bridge::WindowOwner) -> Result<Self> {
+        if !nonce_valid(nonce) || owner.pid == 0 || owner.hwnd == 0 || !owner.started.is_finite() {
+            return Err(problem("invalid run/window ownership"));
+        }
+        Ok(Self {
+            nonce: nonce.into(),
+            owner,
+            receipts: Receipts::default(),
+            scenes: BTreeMap::new(),
+            save_snapshots: BTreeMap::new(),
+            save_complete: BTreeSet::new(),
+            load_sent: BTreeSet::new(),
+            begin_sent: BTreeSet::new(),
+            dialog_sent: BTreeSet::new(),
+            complete: false,
+        })
+    }
+
+    /// Returns an action only once. Persist the entire journal before issuing it.
+    /// A failed or unknown input/load keeps the sent marker and stops the run.
+    pub fn consume(&mut self, f: &Frame) -> Result<Option<Action>> {
+        if f.nonce != self.nonce || self.complete {
+            return Err(problem("foreign frame or event after completion"));
+        }
+        if !self.receipts.accept(f)? {
+            return Ok(None);
+        }
+        let payload = f.payload()?;
+        if f.kind == "FAIL" {
+            return Err(problem(&format!(
+                "fixture failed: {:?}: {:?}",
+                payload.code, payload.error
+            )));
+        }
+        match f.kind.as_str() {
+            "BOOT" => {
+                if self.scenes.contains_key(&f.scene)
+                    || (f.generation > 0 && !self.load_sent.contains(&f.generation))
+                {
+                    return Err(problem("unissued load or repeated BOOT scene"));
+                }
+                self.scenes.insert(f.scene.clone(), f.generation);
+            }
+            "SAVE_RETURNED" => {
+                if f.generation == 0
+                    || self.save_snapshots.contains_key(&f.generation)
+                    || (f.generation == 2
+                        && (!self.load_sent.contains(&1) || !self.scenes.values().any(|&g| g == 1)))
+                    || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
+                {
+                    return Err(problem("save generation reused"));
+                }
+                self.save_snapshots
+                    .insert(f.generation, payload.canonical.clone());
+            }
+            "SAVE_COMPLETE" => {
+                if self.save_snapshots.get(&f.generation) != Some(&payload.canonical)
+                    || payload.name.as_ref() != Some(&save_name(&self.nonce, f.generation)?)
+                    || !self.save_complete.insert(f.generation)
+                {
+                    return Err(problem("save completion lacks matching exact snapshot"));
+                }
+            }
+            "EXIT_REQUESTED" => {
+                if !self.save_complete.contains(&f.generation)
+                    || !self.load_sent.insert(f.generation)
+                {
+                    return Err(problem("exit/load before save completion or repeated load"));
+                }
+                return Ok(Some(Action::Load {
+                    generation: f.generation,
+                }));
+            }
+            "LOAD_READY" => {
+                if self.scenes.get(&f.scene) != Some(&f.generation)
+                    || !self.begin_sent.insert(f.scene.clone())
+                {
+                    return Err(problem("unadopted or repeated begin"));
+                }
+                return Ok(Some(Action::Begin {
+                    scene: f.scene.clone(),
+                }));
+            }
+            "DIALOG_OPEN" => {
+                if self.scenes.get(&f.scene) != Some(&f.generation)
+                    || !self.dialog_sent.insert((f.scene.clone(), f.serial))
+                {
+                    return Err(problem("unadopted dialog"));
+                }
+                return Ok(Some(Action::AcceptDialog {
+                    scene: f.scene.clone(),
+                    serial: f.serial,
+                }));
+            }
+            "DONE" => {
+                if f.generation != 2
+                    || !self.load_sent.contains(&2)
+                    || !self.save_complete.contains(&2)
+                    || self.scenes.get(&f.scene) != Some(&2)
+                    || !self.load_sent.contains(&1)
+                    || !self.save_complete.contains(&1)
+                    || self.save_snapshots.get(&2) != Some(&payload.canonical)
+                {
+                    return Err(problem(
+                        "final snapshot differs or saved reload is unproved",
+                    ));
+                }
+                self.complete = true;
+                return Ok(Some(Action::Complete));
+            }
+            "STAGING_READY" | "DIALOG_CLOSED" | "RESULT" => {}
+            _ => return Err(problem("unknown event kind")),
+        }
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +446,101 @@ mod tests {
         receipts.accept(&frame).unwrap();
         frame.serial = u64::MAX;
         assert!(receipts.accept(&frame).is_err());
+    }
+
+    fn event(scene: &str, serial: u64, generation: u8, kind: &str, canonical: &str) -> Frame {
+        let name = if kind.starts_with("SAVE_") {
+            Some(save_name(NONCE, generation).unwrap())
+        } else {
+            None
+        };
+        let mut body = serde_json::json!({"generation":generation,"canonical":canonical});
+        if let Some(name) = name {
+            body["name"] = name.into();
+        }
+        Frame {
+            nonce: NONCE.into(),
+            scene: scene.into(),
+            serial,
+            generation,
+            step: 0,
+            kind: kind.into(),
+            body: body.to_string(),
+        }
+    }
+
+    fn journal() -> Journal {
+        Journal::new(
+            NONCE,
+            civ6_autotest_rs::hotseat_bridge::WindowOwner {
+                pid: 1,
+                started: 1.,
+                hwnd: 1,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn real_save_notifications_two_issued_loads_and_exact_final_snapshot_are_required() {
+        let mut j = journal();
+        j.consume(&event("initial", 1, 0, "BOOT", "initial"))
+            .unwrap();
+        j.consume(&event("initial", 2, 1, "SAVE_RETURNED", "borrowed"))
+            .unwrap();
+        j.consume(&event("initial", 3, 1, "SAVE_COMPLETE", "borrowed"))
+            .unwrap();
+        assert_eq!(
+            j.consume(&event("initial", 4, 1, "EXIT_REQUESTED", "exit"))
+                .unwrap(),
+            Some(Action::Load { generation: 1 })
+        );
+        j.consume(&event("midload", 1, 1, "BOOT", "borrowed"))
+            .unwrap();
+        let begin = event("midload", 2, 1, "LOAD_READY", "armed");
+        assert!(matches!(
+            j.consume(&begin).unwrap(),
+            Some(Action::Begin { .. })
+        ));
+        assert_eq!(j.consume(&begin).unwrap(), None);
+        j.consume(&event("midload", 3, 2, "SAVE_RETURNED", "returned"))
+            .unwrap();
+        j.consume(&event("midload", 4, 2, "SAVE_COMPLETE", "returned"))
+            .unwrap();
+        j.consume(&event("midload", 5, 2, "EXIT_REQUESTED", "exit"))
+            .unwrap();
+        j.consume(&event("final", 1, 2, "BOOT", "returned"))
+            .unwrap();
+        assert_eq!(
+            j.consume(&event("final", 2, 2, "DONE", "returned"))
+                .unwrap(),
+            Some(Action::Complete)
+        );
+    }
+
+    #[test]
+    fn early_final_save_unissued_boot_mismatched_completion_and_changed_final_cannot_pass() {
+        let mut j = journal();
+        assert!(j
+            .consume(&event("final", 1, 2, "BOOT", "returned"))
+            .is_err());
+        let mut j = journal();
+        assert!(j
+            .consume(&event("initial", 1, 2, "SAVE_RETURNED", "returned"))
+            .is_err());
+        let mut j = journal();
+        j.consume(&event("initial", 1, 1, "SAVE_RETURNED", "real"))
+            .unwrap();
+        assert!(j
+            .consume(&event("initial", 2, 1, "SAVE_COMPLETE", "changed"))
+            .is_err());
+        let mut j = journal();
+        assert!(j
+            .consume(&event("initial", 1, 1, "EXIT_REQUESTED", "exit"))
+            .is_err());
+        let f = event("initial", 1, 0, "BOOT", "real");
+        let mut altered = f.clone();
+        altered.body = serde_json::json!({"generation":1,"canonical":"real"}).to_string();
+        assert!(altered.payload().is_err());
     }
 }
