@@ -427,18 +427,10 @@ fn event(
             close_token = Some(s.generation);
         }
     }
-    if is_set && rebuild_before_set(s.phase, old as u64, incoming as u64, from) {
-        if s.close_tid != unsafe { GetCurrentThreadId() } {
-            return Err("world transition thread changed".into());
-        }
-        record(6, receiver, old, incoming, from, s.generation, 0);
-        let status = unsafe { (s.rebuild)(std::ptr::null_mut()) };
-        LAST_STATUS.store(status as usize, Ordering::Release);
-        record(7, receiver, old, incoming, from, s.generation, status);
-        if status != 0 {
-            return Err("runtime Rebuild failed".into());
-        }
-        s.phase = Phase::Open;
+    if is_set && s.phase == Phase::Closed && incoming != 0 {
+        // Rebuild here would erase natural RESET/COMMIT already issued by the
+        // factory and Context+60. Only the earlier verified loader may reopen.
+        return Err("SetContext reached before loader Rebuild".into());
     }
     record(
         if is_set { 8 } else { 4 },
@@ -497,13 +489,17 @@ extern "system-unwind" fn set_entry(receiver: usize, incoming: usize, ret: usize
 fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
     let mut lock = STATE.lock().map_err(|_| "resident lock")?;
     let s = lock.as_mut().ok_or("resident absent")?;
-    if s.phase != Phase::Prepared || result & 0xff == 0 {
+    if !matches!(s.phase, Phase::Prepared | Phase::Closed) || result & 0xff == 0 {
         return Ok(());
     }
     let core = module("GameCore_XP2_FinalRelease.dll");
     if core == 0 {
         return Ok(());
     } // A Base/other loader is not target activation.
+    let action = loader_action(s.phase, result, caller(s.exe, ret, LOADER).ok())?;
+    if action == LoaderAction::Ignore {
+        return Ok(());
+    }
     let core_path = path(core)?;
     if !same(
         &core_path,
@@ -512,13 +508,45 @@ fn target_loader_return(result: usize, ret: usize) -> Result<(), String> {
         return Err("target Core path differs".into());
     }
     let _core_file = fixed_hash(&core_path, CORE_SHA)?;
-    if caller(s.exe, ret, LOADER)? != 0x24b52d
-        || ptr_at(s.exe + 0x22d60d8)? != core
+    if ptr_at(s.exe + 0x22d60d8)? != core
         || ptr_at(s.exe + 0x22d64e8)? != core + 0x752d50
         || ptr_at(s.exe + CONTEXT)? != 0
         || read(core + 0x752d50, 5)? != [0xe9, 0x0b, 0xcf, 0xe3, 0xff]
     {
         return Err("target loader/factory-before-context boundary differs".into());
+    }
+    if action == LoaderAction::Rebuild {
+        let holder = ptr_at(s.exe + HOLDER)?;
+        let held_context = if holder == 0 {
+            0
+        } else {
+            ptr_at(holder.checked_add(0x450).ok_or("holder overflow")?)?
+        };
+        let boundary = ReloadBoundary {
+            loader_result: result,
+            caller: 0x24b52d, // caller() above verified the actual return site.
+            close_tid: s.close_tid,
+            current_tid: unsafe { GetCurrentThreadId() },
+            pinned_core: s.core,
+            current_core: core,
+            context: ptr_at(s.exe + CONTEXT)?,
+            holder,
+            held_context,
+        };
+        let generation = s.generation;
+        let rebuild = s.rebuild;
+        let status = rebuild_at_loader(&mut s.phase, boundary, || {
+            record(6, holder, 0, 0, 0x24b52d, generation, 0);
+            let status = unsafe { rebuild(std::ptr::null_mut()) };
+            LAST_STATUS.store(status as usize, Ordering::Release);
+            record(7, holder, 0, 0, 0x24b52d, generation, status);
+            status
+        })?
+        .ok_or("reload did not execute Rebuild")?;
+        if status != 0 {
+            return Err("runtime Rebuild failed before factory".into());
+        }
+        return Ok(());
     }
     s.core = core;
     if let Some(_flight) = RecordFlight::try_enter() {

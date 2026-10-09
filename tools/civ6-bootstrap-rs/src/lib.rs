@@ -48,11 +48,75 @@ enum Phase {
     UnsupportedInlineExchange,
 }
 
-/// A Close event, not pointer inequality, defines the next generation. An
-/// allocator may return the very same object address after actual destruction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg(any(test, all(windows, target_arch = "x86_64")))]
-fn rebuild_before_set(phase: Phase, old: u64, incoming: u64, caller: u64) -> bool {
-    phase == Phase::Closed && old == 0 && incoming != 0 && caller == 0x24b5d5
+enum LoaderAction {
+    Ignore,
+    Install,
+    Rebuild,
+}
+
+/// A retained XP2 module does not identify what an unrelated loader is doing.
+/// Only Closed+the verified caller may reopen; initial preparation stays strict.
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
+fn loader_action(
+    phase: Phase,
+    result: usize,
+    caller: Option<u64>,
+) -> Result<LoaderAction, &'static str> {
+    if result & 0xff == 0 || !matches!(phase, Phase::Prepared | Phase::Closed) {
+        return Ok(LoaderAction::Ignore);
+    }
+    match (phase, caller) {
+        (Phase::Closed, Some(0x24b52d)) => Ok(LoaderAction::Rebuild),
+        (Phase::Closed, _) => Ok(LoaderAction::Ignore),
+        (Phase::Prepared, Some(0x24b52d)) => Ok(LoaderAction::Install),
+        _ => Err("initial loader caller differs before factory"),
+    }
+}
+
+/// Values read at the pinned loader return, while STATE holds the transition.
+/// Zero context/holder fields describe this boundary, not AI job quiescence.
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
+struct ReloadBoundary {
+    loader_result: usize,
+    caller: u64,
+    close_tid: u32,
+    current_tid: u32,
+    pinned_core: usize,
+    current_core: usize,
+    context: usize,
+    holder: usize,
+    held_context: usize,
+}
+
+/// Reopen before factory/RESET, never at the later SetContext. The injected
+/// action is the only Rebuild call site for reload; failure retains Closed.
+#[cfg(any(test, all(windows, target_arch = "x86_64")))]
+fn rebuild_at_loader(
+    phase: &mut Phase,
+    boundary: ReloadBoundary,
+    rebuild: impl FnOnce() -> u32,
+) -> Result<Option<u32>, &'static str> {
+    if *phase != Phase::Closed || boundary.loader_result & 0xff == 0 {
+        return Ok(None);
+    }
+    if boundary.caller != 0x24b52d
+        || boundary.close_tid == 0
+        || boundary.current_tid != boundary.close_tid
+        || boundary.pinned_core == 0
+        || boundary.current_core != boundary.pinned_core
+        || boundary.context != 0
+        || boundary.holder == 0
+        || boundary.held_context != 0
+    {
+        return Err("reload boundary differs before factory");
+    }
+    let status = rebuild();
+    if status == 0 {
+        *phase = Phase::Open;
+    }
+    Ok(Some(status))
 }
 
 #[cfg(all(windows, target_arch = "x86_64"))]
@@ -62,7 +126,7 @@ mod windows;
 mod tests {
     use super::*;
     #[test]
-    fn runtime_abi_is_exact_and_noop_cannot_rebuild() {
+    fn runtime_abi_is_exact() {
         assert_eq!(std::mem::size_of::<Prepare>(), 72);
         assert_eq!(std::mem::offset_of!(Prepare, expected_menu_context), 64);
         assert_eq!(VERSION, 0x0880_0003);
@@ -70,18 +134,144 @@ mod tests {
         assert_eq!(std::mem::align_of::<RuntimeConfig>(), 8);
         assert_eq!(std::mem::offset_of!(RuntimeConfig, trace_address), 24);
         assert_eq!(std::mem::offset_of!(RuntimeConfig, mode), 36);
-        for phase in [
+    }
+
+    fn boundary() -> ReloadBoundary {
+        // Symbolic test values; never passed to a native API or called receipts.
+        ReloadBoundary {
+            loader_result: 1,
+            caller: 0x24b52d,
+            close_tid: 7,
+            current_tid: 7,
+            pinned_core: 8,
+            current_core: 8,
+            context: 0,
+            holder: 9,
+            held_context: 0,
+        }
+    }
+
+    #[test]
+    fn reload_rebuild_precedes_factory_state_and_is_not_repeated_at_set() {
+        let mut phase = Phase::Closed;
+        let mut catalog = vec!["old world"];
+        let mut rebuild_calls = 0;
+        assert_eq!(
+            rebuild_at_loader(&mut phase, boundary(), || {
+                rebuild_calls += 1;
+                catalog.clear();
+                0
+            }),
+            Ok(Some(0))
+        );
+        assert_eq!(phase, Phase::Open);
+        // The factory then populates fresh values. A late/double Rebuild would
+        // erase these values, which is the actual regression being prevented.
+        catalog.push("new factory RESET/COMMIT");
+        assert_eq!(
+            rebuild_at_loader(&mut phase, boundary(), || {
+                rebuild_calls += 1;
+                catalog.clear();
+                0
+            }),
+            Ok(None)
+        );
+        assert_eq!(rebuild_calls, 1);
+        assert_eq!(catalog, ["new factory RESET/COMMIT"]);
+    }
+
+    #[test]
+    fn loader_failure_keeps_closed_until_one_successful_rebuild() {
+        let mut phase = Phase::Closed;
+        let mut calls = 0;
+        for _ in 0..2 {
+            let mut failed = boundary();
+            failed.loader_result = 0x100; // ABI result is AL, not full RAX.
+            assert_eq!(
+                rebuild_at_loader(&mut phase, failed, || {
+                    calls += 1;
+                    0
+                }),
+                Ok(None)
+            );
+            assert_eq!(phase, Phase::Closed);
+        }
+        assert_eq!(
+            rebuild_at_loader(&mut phase, boundary(), || {
+                calls += 1;
+                0
+            }),
+            Ok(Some(0))
+        );
+        assert_eq!(calls, 1); // Positive control exercises the same injected action.
+        assert_eq!(phase, Phase::Open);
+    }
+
+    #[test]
+    fn invalid_boundary_never_rebuilds_and_api_failure_stays_closed() {
+        for index in 0..8 {
+            let mut b = boundary();
+            match index {
+                0 => b.caller = 0x24b5d5, // the old late SetContext location
+                1 => b.close_tid = 0,
+                2 => b.current_tid = 8,
+                3 => b.pinned_core = 0,
+                4 => b.current_core = 10,
+                5 => b.context = 11,
+                6 => b.holder = 0,
+                _ => b.held_context = 12,
+            }
+            let mut phase = Phase::Closed;
+            assert!(rebuild_at_loader(&mut phase, b, || panic!("unexpected Rebuild")).is_err());
+            assert_eq!(phase, Phase::Closed);
+        }
+        let mut phase = Phase::Closed;
+        assert_eq!(rebuild_at_loader(&mut phase, boundary(), || 5), Ok(Some(5)));
+        assert_eq!(phase, Phase::Closed);
+    }
+
+    #[test]
+    fn initial_menu_or_incomplete_close_cannot_use_reload_action() {
+        for mut phase in [
             Phase::Prepared,
             Phase::Open,
             Phase::Closing,
             Phase::UnsupportedInlineExchange,
         ] {
-            assert!(!rebuild_before_set(phase, 0, 7, 0x24b5d5));
+            assert_eq!(
+                rebuild_at_loader(&mut phase, boundary(), || panic!("unexpected Rebuild")),
+                Ok(None)
+            );
         }
-        assert!(!rebuild_before_set(Phase::Closed, 7, 7, 0x24b5d5));
-        assert!(!rebuild_before_set(Phase::Closed, 0, 0, 0x24b5d5));
-        assert!(!rebuild_before_set(Phase::Closed, 0, 7, 0x169982));
-        // Symbolic policy test, not a fake successful runtime API call.
-        assert!(rebuild_before_set(Phase::Closed, 0, 7, 0x24b5d5));
+    }
+
+    #[test]
+    fn unrelated_loader_is_ignored_while_closed_but_prepare_is_strict() {
+        for caller in [None, Some(0x245cea), Some(0x24b5d5)] {
+            assert_eq!(
+                loader_action(Phase::Closed, 1, caller),
+                Ok(LoaderAction::Ignore)
+            );
+            assert!(loader_action(Phase::Prepared, 1, caller).is_err());
+        }
+        for phase in [Phase::Prepared, Phase::Closed] {
+            assert_eq!(
+                loader_action(phase, 0x100, Some(0x24b52d)),
+                Ok(LoaderAction::Ignore)
+            );
+        }
+        assert_eq!(
+            loader_action(Phase::Closed, 1, Some(0x24b52d)),
+            Ok(LoaderAction::Rebuild)
+        );
+        assert_eq!(
+            loader_action(Phase::Prepared, 1, Some(0x24b52d)),
+            Ok(LoaderAction::Install)
+        );
+        // Loader result re-entry after the first success cannot reopen again.
+        assert_eq!(
+            loader_action(Phase::Open, 1, Some(0x24b52d)),
+            Ok(LoaderAction::Ignore)
+        );
     }
 }
