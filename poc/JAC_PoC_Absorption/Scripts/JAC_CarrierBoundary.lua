@@ -803,7 +803,10 @@ local function receive(actor,p)
   end
   m.StaleCount,m.StaleNonce,m.WaitingFor,m.HeldStatus=nil,nil,nil,nil
   m.HeldObservation,m.HeldReason=nil,nil
-  m.Receipts=m.Receipts or {};m.Receipts[id]=true
+  m.Receipts=m.Receipts or {}
+  -- A failed city return has not consumed this observation. The same actor
+  -- may need to retry it after the transient transfer failure clears.
+  if not unresolvedRetry then m.Receipts[id]=true end
   if m.Phase=='PREPARE' then
     assert(p.Command=='OBSERVE','MP prepare command')
     if c.Source.ObjectType=='GREATWORKOBJECT_ARTIFACT' then
@@ -853,6 +856,7 @@ local function receive(actor,p)
   elseif unresolvedRetry then
     assert(p.Command=='OBSERVE','MP unresolved return observation')
     attemptReturn(state,c)
+    if m.Phase~='ABORT_RETURN' then m.Receipts[id]=true;save(state) end
   elseif m.Phase=='ABORT_RESTORED' then
     assert(p.Command=='OBSERVE','MP abort publication')
     m.RollbackActorObservation=R.Copy(o)

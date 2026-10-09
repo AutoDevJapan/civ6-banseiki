@@ -1943,6 +1943,44 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_ai_palace_unsent_return_retries_an_unchanged_observation_after_transfer_failure() {
+        let lua = ai_palace_world(2);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load(r#"
+          local transfer=CityManager.TransferCity
+          RETURN_BLOCKED=true
+          CityManager.TransferCity=function(city,owner)
+            if city:GetX()==16 and owner==2 and RETURN_BLOCKED then error('return temporarily blocked') end
+            return transfer(city,owner)
+          end
+          WORK_X=12
+          assert(not MP_OBSERVE() and UI_MOVES==0)
+        "#).exec().unwrap();
+        assert!(mp_receive(&lua, &mp_publish(&lua)));
+        lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RETURN' and m.OriginalUnresolved and TRANSFERS==1)
+        "#).exec().unwrap();
+        let first = mp_publish(&lua);
+        assert!(mp_receive(&lua, &first));
+        lua.load("assert(CITIES[16].owner==1 and TRANSFERS==1);RETURN_BLOCKED=false")
+            .exec()
+            .unwrap();
+        let second = mp_publish(&lua);
+        assert_eq!(
+            first, second,
+            "the retry uses the same synchronized observation"
+        );
+        assert!(mp_receive(&lua, &second));
+        lua.load(r#"
+          local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP
+          assert(m.Phase=='ABORT_RESTORED' and CITIES[16].owner==2)
+          assert(TRANSFERS==2 and UI_MOVES==0 and WORK_X==12)
+        "#).exec().unwrap();
+    }
+
+    #[test]
     fn mp_ai_palace_pre_send_rechecks_both_city_owners_and_ids() {
         for mutation in [
             "CITIES[4].id=CITIES[4].id+1",
