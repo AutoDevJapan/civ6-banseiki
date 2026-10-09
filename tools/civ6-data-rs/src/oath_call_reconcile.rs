@@ -35,7 +35,15 @@ fn reconcile(
     let version = trace["trace_version"]
         .as_u64()
         .context("trace version missing")?;
-    ensure!(matches!(version, 4 | 5), "unsupported trace version");
+    let callee = trace["capture"] == "callee";
+    ensure!(
+        if callee {
+            version == 1
+        } else {
+            matches!(version, 4 | 5)
+        },
+        "unsupported trace version"
+    );
     ensure!(
         trace["accepted"] == false && trace["quantity_accepted"] == false,
         "observation must not claim acceptance"
@@ -90,40 +98,70 @@ fn reconcile(
             sequence > 0 && sequences.insert(sequence),
             "duplicate or invalid call sequence"
         );
-        let id = row["instance_id"]
-            .as_u64()
-            .context("call instance id missing")?;
-        let definition = definitions.get(&id);
+        let metadata = &row["call_entry_metadata"];
+        let id = if callee {
+            metadata["instance_id"].as_u64()
+        } else {
+            Some(
+                row["instance_id"]
+                    .as_u64()
+                    .context("call instance id missing")?,
+            )
+        };
+        let stable = matches!(
+            row["state"].as_str(),
+            Some("completed" | "incomplete" | "unwound")
+        );
+        let definition = if callee && !stable {
+            None
+        } else {
+            id.and_then(|id| definitions.get(&id))
+        };
         let spec = definition.and_then(|name| expected.get(name));
-        let family = if row["copy_flags"]
+        let family = if callee {
+            if stable {
+                match row["slot"].as_u64() {
+                    Some(0 | 1) => Some("military"),
+                    Some(2 | 3) => Some("naval"),
+                    Some(4 | 5) => Some("build"),
+                    Some(6 | 7) => Some("growth"),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        } else if row["copy_flags"]
             .as_u64()
             .is_some_and(|flags| flags & 1 != 0)
             && !matches!(
                 row["state"].as_str(),
                 Some("unknown_unstable" | "unknown_unpublished") | None
-            ) {
+            )
+        {
             copied_family(trace, row)
         } else {
             None
         };
-        let metadata = &row["call_entry_metadata"];
-        let copied = version == 5
-            && metadata["identity_copied"] == true
-            && matches!(
-                row["state"].as_str(),
-                Some("completed" | "incomplete" | "unwound")
-            );
+        let copied = stable
+            && if callee {
+                metadata.is_object() && id.is_some()
+            } else {
+                version == 5 && metadata["identity_copied"] == true
+            };
         let declared = if copied {
             metadata["declared_percent"].as_i64()
         } else {
             None
         };
-        let city = if copied {
-            metadata["indicated_city"].as_object()
+        let city = if copied && callee {
+            Some(json!({"owner":metadata["owner"],"full_id":metadata["full_id"]}))
+        } else if copied {
+            Some(metadata["indicated_city"].clone())
         } else {
             None
         };
-        let public_match = city.and_then(|city| {
+        let public_match = city.as_ref().and_then(|city| {
+            let city = city.as_object()?;
             let owner = city.get("owner")?.as_u64()?;
             let full_id = city.get("full_id")?.as_u64()?;
             Some(
@@ -138,14 +176,18 @@ fn reconcile(
             "catalogue_percent":spec.map(|s| s.1),"declared_percent":declared,
             "copied_effect_family":family,"copied_family_matches_catalogue":family.zip(spec).map(|(f,s)| f == if s.0 == "walls" { "build" } else { &s.0 }),
             "declared_percent_matches_catalogue":declared.zip(spec).map(|(amount,s)| amount==s.1),
-            "indicated_city":if copied {metadata["indicated_city"].clone()} else {Value::Null},
+            "indicated_city":city,
+            "city_identity_source":if callee {"callee_rdx_backpointer_copy"} else {"adapter_subject_copy"},
+            "actual_receiver_argument":if callee && stable {row["actual_receiver_argument"].clone()} else {Value::Null},
+            "copied_definition_address":if copied {metadata["definition"].clone()} else {Value::Null},
             "indicated_city_present_in_all_recorded_human_frames":public_match,
             "original_al":row["original_al"],
-            "limitations":["official instance id may be reused between frames", "wrapper identity is not the actual callee receiver", "completed AL does not measure a contribution", "callee family does not establish unit or building target filters"]
+            "original_rax":row["original_rax"],
+            "limitations":["official instance id may be reused between frames", "copied City identity does not establish lifetime or ABA exclusion", "completed return does not measure a contribution", "callee family does not establish unit or building target filters"]
         }));
     }
     Ok(
-        json!({"scope":"recorded_call_inventory_reconciliation", "trace_version":version,
+        json!({"scope":"recorded_call_inventory_reconciliation", "trace_version":version,"capture":if callee {"callee"} else {"adapter"},
         "trace_complete":trace["complete"],"inventory_available":frames.iter().map(|f| f["inventory_available"].clone()).collect::<Vec<_>>(),
         "rows":output,"quantity_accepted":false,"product_accepted":false,
         "limitations":["no live process was read", "no quantity or City lifetime is established", "v4 has no copied identity metadata"]}),
@@ -231,6 +273,70 @@ mod tests {
         );
         assert_eq!(value["inventory_available"][0], false);
         assert_eq!(value["quantity_accepted"], false);
+        Ok(())
+    }
+
+    #[test]
+    fn callee_rows_join_the_same_official_inventory_and_preserve_unknown_metadata() -> Result<()> {
+        let (mut trace, inventory, expected) = fixture();
+        trace["capture"] = json!("callee");
+        trace["trace_version"] = json!(1);
+        trace["rows"][0] = json!({
+            "sequence":1,"slot":0,"call":"apply","state":"completed",
+            "actual_receiver_argument":"0x9000","original_rax":"0x1234",
+            "call_entry_metadata":{"instance_id":464,"declared_percent":15,"owner":0,"full_id":65536,"definition":"0x6000"}
+        });
+        let value = reconcile(&trace, &inventory, &expected)?;
+        assert_eq!(value["capture"], "callee");
+        let row = &value["rows"][0];
+        assert_eq!(row["official_definition"], "JAC_OATH_ODA_TENKA_FUBU_E1");
+        assert_eq!(row["copied_family_matches_catalogue"], true);
+        assert_eq!(row["declared_percent_matches_catalogue"], true);
+        assert_eq!(
+            row["indicated_city_present_in_all_recorded_human_frames"],
+            true
+        );
+        assert_eq!(row["actual_receiver_argument"], "0x9000");
+        assert_eq!(row["original_rax"], "0x1234");
+        assert!(row["original_al"].is_null());
+        trace["rows"][0]["call_entry_metadata"] = Value::Null;
+        let unknown = reconcile(&trace, &inventory, &expected)?;
+        for field in [
+            "instance_id",
+            "official_definition",
+            "declared_percent",
+            "indicated_city",
+            "copied_definition_address",
+        ] {
+            assert!(unknown["rows"][0][field].is_null(), "{field}");
+        }
+        assert_eq!(unknown["quantity_accepted"], false);
+        assert_eq!(unknown["product_accepted"], false);
+        Ok(())
+    }
+
+    #[test]
+    fn callee_capture_cannot_be_confused_with_adapter_version_or_unstable_identity() -> Result<()> {
+        let (mut trace, inventory, expected) = fixture();
+        trace["capture"] = json!("callee");
+        assert!(reconcile(&trace, &inventory, &expected).is_err());
+        trace["trace_version"] = json!(1);
+        trace["rows"][0]["call_entry_metadata"] =
+            json!({"instance_id":464,"declared_percent":15,"owner":0,"full_id":65536});
+        trace["rows"][0]["slot"] = json!(0);
+        trace["rows"][0]["state"] = json!("unknown_unstable");
+        let value = reconcile(&trace, &inventory, &expected)?;
+        for field in [
+            "official_definition",
+            "declared_percent",
+            "copied_effect_family",
+            "indicated_city",
+            "actual_receiver_argument",
+        ] {
+            assert!(value["rows"][0][field].is_null(), "{field}");
+        }
+        trace["capture"] = json!("adapter");
+        assert!(reconcile(&trace, &inventory, &expected).is_err());
         Ok(())
     }
     #[test]
