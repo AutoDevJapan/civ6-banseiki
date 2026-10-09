@@ -480,6 +480,81 @@ pub(crate) fn lower_hex_sha(text: &str) -> bool {
     text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
+/// A module as the loader or ToolHelp reports it, path already canonical.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ModuleFact {
+    pub path: String,
+    pub base: usize,
+    pub size: usize,
+}
+
+fn same_path(a: &str, b: &str) -> bool {
+    let norm = |s: &str| {
+        s.strip_prefix(r"\\?\")
+            .unwrap_or(s)
+            .replace('/', "\\")
+            .to_ascii_lowercase()
+    };
+    norm(a) == norm(b)
+}
+
+/// The module that really owns a function address locally (from VirtualQuery
+/// plus GetModuleFileNameW) must exist in the remote process with the same
+/// path, base and size, and the address must lie inside it. A forwarded
+/// export therefore proves its real owner, never the module it was looked up
+/// in. Returns the index of the remote module.
+pub(crate) fn function_owner_in_remote(
+    function: usize,
+    local_owner: &ModuleFact,
+    remote: &[ModuleFact],
+) -> Result<usize, String> {
+    let end = local_owner
+        .base
+        .checked_add(local_owner.size)
+        .ok_or("owner range overflows")?;
+    if local_owner.size == 0 || function < local_owner.base || function >= end {
+        return Err("function address is outside its reported owner module".into());
+    }
+    let mut hits = remote
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| same_path(&m.path, &local_owner.path));
+    let (index, module) = hits
+        .next()
+        .ok_or("owner module is not loaded in the remote process")?;
+    if hits.next().is_some() {
+        return Err("owner module path appears more than once remotely".into());
+    }
+    if module.base != local_owner.base || module.size != local_owner.size {
+        return Err("owner module has a different base or size remotely".into());
+    }
+    Ok(index)
+}
+
+/// Outcome of the module search after an unobserved-result LoadLibraryW.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum LoadVerdict {
+    Loaded(usize),
+    /// Nothing proves the load either way: the caller ends the game.
+    Unknown(&'static str),
+}
+
+/// The thread result is only the low half of an HMODULE, and 0 is a legal low
+/// half, so it never decides on its own: the single new matching module does.
+pub(crate) fn judge_load(low: u32, expected_size: usize, matching: &[ModuleFact]) -> LoadVerdict {
+    match matching {
+        [] if low == 0 => LoadVerdict::Unknown("LoadLibraryW returned 0 and no module appeared"),
+        [] => LoadVerdict::Unknown("LoadLibraryW reported a module that is not listed"),
+        [one] if one.size == expected_size && one.base as u32 == low => {
+            LoadVerdict::Loaded(one.base)
+        }
+        [_] => LoadVerdict::Unknown(
+            "the loaded module differs from the pinned DLL or the reported base",
+        ),
+        _ => LoadVerdict::Unknown("the DLL path is loaded more than once"),
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -720,5 +795,95 @@ pub(crate) mod tests {
         remote[image.image_base_offset + 8] ^= 1;
         assert!(!header_matches(&dll, &remote, &image));
         assert!(!header_matches(&dll[..0x100], &dll, &image));
+    }
+
+    fn fact(path: &str, base: usize, size: usize) -> ModuleFact {
+        ModuleFact {
+            path: path.into(),
+            base,
+            size,
+        }
+    }
+
+    #[test]
+    fn a_forwarded_function_is_proven_by_its_real_owner_not_the_lookup_module() {
+        let kernelbase = fact(
+            r"C:\Windows\System32\KERNELBASE.dll",
+            0x7ff8_0000_0000,
+            0x30_0000,
+        );
+        let kernel32 = fact(
+            r"C:\Windows\System32\kernel32.dll",
+            0x7ff8_1000_0000,
+            0x10_0000,
+        );
+        let remote = vec![kernel32.clone(), kernelbase.clone()];
+        let function = kernelbase.base + 0x1234;
+        // the real owner (KernelBase) matches; kernel32 alone does not prove it
+        assert_eq!(
+            function_owner_in_remote(function, &kernelbase, &remote),
+            Ok(1)
+        );
+        assert!(function_owner_in_remote(function, &kernel32, &remote).is_err());
+        assert!(function_owner_in_remote(function, &kernelbase, &[kernel32.clone()]).is_err());
+        // same path, different base or size remotely
+        let moved = vec![fact(
+            r"\\?\c:\windows\system32\kernelbase.DLL",
+            kernelbase.base + 0x10000,
+            kernelbase.size,
+        )];
+        assert!(function_owner_in_remote(function, &kernelbase, &moved).is_err());
+        let resized = vec![fact(&kernelbase.path, kernelbase.base, kernelbase.size + 1)];
+        assert!(function_owner_in_remote(function, &kernelbase, &resized).is_err());
+        // case and verbatim prefix are not differences
+        let same = vec![fact(
+            r"\\?\c:\WINDOWS\system32\kernelbase.dll",
+            kernelbase.base,
+            kernelbase.size,
+        )];
+        assert_eq!(
+            function_owner_in_remote(function, &kernelbase, &same),
+            Ok(0)
+        );
+        // duplicate remote entries and an address outside the owner
+        let twice = vec![kernelbase.clone(), kernelbase.clone()];
+        assert!(function_owner_in_remote(function, &kernelbase, &twice).is_err());
+        assert!(
+            function_owner_in_remote(kernelbase.base + kernelbase.size, &kernelbase, &remote)
+                .is_err()
+        );
+        assert!(function_owner_in_remote(kernelbase.base - 1, &kernelbase, &remote).is_err());
+    }
+
+    #[test]
+    fn a_zero_load_result_is_unknown_unless_a_module_proves_it() {
+        let m = fact("x.dll", 0x1_0000_0000, 0x3000);
+        // low half of the base is 0: legitimate, decided by the module
+        assert_eq!(
+            judge_load(0, 0x3000, std::slice::from_ref(&m)),
+            LoadVerdict::Loaded(0x1_0000_0000)
+        );
+        // 0 with no module: not "failed", unknown
+        assert!(matches!(
+            judge_load(0, 0x3000, &[]),
+            LoadVerdict::Unknown(_)
+        ));
+        assert!(matches!(
+            judge_load(5, 0x3000, &[]),
+            LoadVerdict::Unknown(_)
+        ));
+        // wrong low half, wrong size, duplicates
+        assert!(matches!(
+            judge_load(7, 0x3000, std::slice::from_ref(&m)),
+            LoadVerdict::Unknown(_)
+        ));
+        assert!(matches!(
+            judge_load(0, 0x4000, std::slice::from_ref(&m)),
+            LoadVerdict::Unknown(_)
+        ));
+        assert!(matches!(
+            judge_load(0, 0x3000, &[m.clone(), m]),
+            LoadVerdict::Unknown(_)
+        ));
     }
 }

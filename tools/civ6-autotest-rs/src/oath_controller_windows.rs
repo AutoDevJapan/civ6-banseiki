@@ -44,7 +44,10 @@ use windows_sys::Win32::{
                 TH32CS_SNAPMODULE,
             },
         },
-        Memory::{VirtualAllocEx, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE},
+        Memory::{
+            VirtualAllocEx, VirtualQuery, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE,
+            MEM_RESERVE, PAGE_READWRITE,
+        },
         Threading::{
             CreateRemoteThread, GetExitCodeThread, GetProcessTimes, IsWow64Process, OpenProcess,
             TerminateProcess, WaitForSingleObject, PROCESS_QUERY_INFORMATION,
@@ -59,6 +62,7 @@ use windows_sys::Win32::{
 unsafe extern "system" {
     fn GetModuleHandleW(name: *const u16) -> *mut c_void;
     fn GetProcAddress(module: *mut c_void, name: *const u8) -> *mut c_void;
+    fn GetModuleFileNameW(module: *mut c_void, name: *mut u16, size: u32) -> u32;
 }
 
 const KNOWN_EXE: &str = "C:/Program Files (x86)/Steam/steamapps/common/Sid Meier's Civilization VI/Base/Binaries/Win64Steam/CivilizationVI.exe";
@@ -679,6 +683,82 @@ impl Session {
     }
 }
 
+/// Local owner of a function address: VirtualQuery (must be MEM_IMAGE), the
+/// allocation base's file name and its SizeOfImage.
+fn local_owner(function: usize) -> Result<wire::ModuleFact> {
+    let mut info = MEMORY_BASIC_INFORMATION::default();
+    if unsafe {
+        VirtualQuery(
+            function as *const c_void,
+            &mut info,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    } == 0
+        || info.Type != MEM_IMAGE
+        || info.AllocationBase.is_null()
+    {
+        return Err(Error::input(
+            "function address is not inside a mapped image",
+        ));
+    }
+    let base = info.AllocationBase as usize;
+    let mut buffer = vec![0u16; 32768];
+    let length = unsafe {
+        GetModuleFileNameW(
+            base as *mut c_void,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+        )
+    } as usize;
+    if length == 0 || length >= buffer.len() {
+        return Err(win_error("GetModuleFileNameW of the function owner"));
+    }
+    let path = PathBuf::from(
+        String::from_utf16(&buffer[..length]).map_err(|_| Error::input("invalid owner path"))?,
+    )
+    .canonicalize()?;
+    // SizeOfImage from the mapped headers of this very module.
+    let pe = unsafe { std::ptr::read_unaligned((base + 0x3c) as *const u32) } as usize;
+    let size = unsafe { std::ptr::read_unaligned((base + pe + 24 + 56) as *const u32) } as usize;
+    Ok(wire::ModuleFact {
+        path: display_path(&path),
+        base,
+        size,
+    })
+}
+
+fn remote_facts(modules: &[Module]) -> Vec<wire::ModuleFact> {
+    modules
+        .iter()
+        .map(|m| wire::ModuleFact {
+            path: m
+                .path
+                .canonicalize()
+                .map(|p| display_path(&p))
+                .unwrap_or_else(|_| display_path(&m.path)),
+            base: m.base,
+            size: m.size,
+        })
+        .collect()
+}
+
+/// A local function address may be sent to the target only if its real owner
+/// module (not the module it was looked up in) is the same file at the same
+/// base remotely, and the first 32 bytes of the function agree.
+fn verify_function_owner(target: &Target, function: usize) -> Result<()> {
+    let owner = local_owner(function)?;
+    let modules = target.modules()?;
+    let facts = remote_facts(&modules);
+    wire::function_owner_in_remote(function, &owner, &facts).map_err(Error::input)?;
+    let local = unsafe { std::slice::from_raw_parts(function as *const u8, 32) };
+    if target.read(function, 32)? != local {
+        return Err(Error::input(
+            "remote function bytes differ from the local function",
+        ));
+    }
+    Ok(())
+}
+
 /// Fresh remote load of the pinned DLL; returns its verified base.
 fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
     let local_kernel32 = unsafe { GetModuleHandleW(wide("kernel32.dll").as_ptr()) } as usize;
@@ -691,62 +771,51 @@ fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
     if local_kernel32 == 0 || load_library == 0 {
         return Err(Error::input("local LoadLibraryW is unavailable"));
     }
-    let modules = target.modules()?;
-    let name = dll
+    verify_function_owner(target, load_library)?;
+    let ours = display_path(&dll.path);
+    let file_name = dll
         .path
         .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
+        .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let kernel32: Vec<_> = modules
-        .iter()
-        .filter(|m| m.name.eq_ignore_ascii_case("kernel32.dll"))
-        .collect();
-    if kernel32.len() != 1 || kernel32[0].base != local_kernel32 {
-        return Err(Error::input(
-            "remote kernel32 is not at the local base: LoadLibraryW address cannot be shared",
-        ));
-    }
-    if modules.iter().any(|m| {
-        m.name.eq_ignore_ascii_case(&name)
+    let before = remote_facts(&target.modules()?);
+    if before.iter().any(|m| {
+        m.path.eq_ignore_ascii_case(&ours)
             || m.path
-                .canonicalize()
-                .map(|p| path_eq(&p, &dll.path))
-                .unwrap_or(false)
+                .rsplit(['\\', '/'])
+                .next()
+                .is_some_and(|n| n.eq_ignore_ascii_case(&file_name))
     }) {
         return Err(Error::input(
             "the runtime DLL is already loaded: a fresh game is required",
         ));
     }
-    let path_text = wide(&display_path(&dll.path));
+    let path_text = wide(&ours);
     let path_bytes: Vec<u8> = path_text.iter().flat_map(|c| c.to_le_bytes()).collect();
     let remote_path = target.alloc(path_bytes.len())?;
     target.write(remote_path, &path_bytes)?;
-    // The thread result is a DWORD, so it is only the low half of the HMODULE.
-    let low = target.call(load_library, remote_path)?;
-    if low == 0 {
-        return Err(Error::input("remote LoadLibraryW failed"));
-    }
-    target.poisoned = true; // until the loaded module is proven below
-    let modules = target.modules()?;
-    let found: Vec<_> = modules
-        .iter()
-        .filter(|m| {
-            m.path
-                .canonicalize()
-                .map(|p| path_eq(&p, &dll.path))
-                .unwrap_or(false)
-        })
+    // From here until the module is proven, any return leaves the target
+    // poisoned: the load may have happened whatever the call reported.
+    let result = target.call(load_library, remote_path);
+    target.poisoned = true;
+    let low = result?;
+    let matching: Vec<wire::ModuleFact> = remote_facts(&target.modules()?)
+        .into_iter()
+        .filter(|m| m.path.eq_ignore_ascii_case(&ours))
         .collect();
-    if found.len() != 1
-        || found[0].base as u32 != low
-        || found[0].size != dll.image.size_of_image as usize
-    {
-        return Err(Error::input(
-            "loaded module is not the pinned DLL at the base the loader reported",
-        ));
+    match wire::judge_load(low, dll.image.size_of_image as usize, &matching) {
+        wire::LoadVerdict::Loaded(base) => {
+            target.alive_pinned()?;
+            target.poisoned = false;
+            Ok(base)
+        }
+        wire::LoadVerdict::Unknown(why) => {
+            target.kill();
+            Err(Error::unknown(format!(
+                "{why}; the pinned game was terminated"
+            )))
+        }
     }
-    target.poisoned = false;
-    Ok(found[0].base)
 }
 
 /// The mapped image must still show the measured file's headers and the first
@@ -915,6 +984,21 @@ mod tests {
     fn kernel32_export(name: &[u8]) -> usize {
         let module = unsafe { GetModuleHandleW(wide("kernel32.dll").as_ptr()) };
         unsafe { GetProcAddress(module, name.as_ptr()) as usize }
+    }
+
+    #[test]
+    fn kernel32_functions_are_proven_by_their_real_owner_in_a_live_process() {
+        let child = sleeper();
+        let target = target_of(&child, Duration::from_secs(8));
+        for name in [&b"LoadLibraryW\0"[..], &b"GetCurrentProcessId\0"[..]] {
+            let f = kernel32_export(name);
+            let owner = local_owner(f).unwrap();
+            assert!(f >= owner.base && f < owner.base + owner.size);
+            verify_function_owner(&target, f).unwrap();
+        }
+        // an address in a non-image page has no owner
+        let heap = Box::new(0u64);
+        assert!(local_owner(&*heap as *const u64 as usize).is_err());
     }
 
     #[test]
