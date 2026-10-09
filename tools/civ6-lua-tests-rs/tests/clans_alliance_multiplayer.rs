@@ -608,7 +608,7 @@ fn hotseat_switch_opens_same_proposer_for_the_new_accepting_house() {
 #[test]
 fn unowned_castle_blocks_pact_and_start_alliance_without_aborting_gameplay() {
     let pact = Pair::new(false);
-    pact.both("CITIES[166].owner=-1; ALLIED['0-1']=true");
+    pact.both("Players[-1]={GetTeam=function() error('invalid owner queried') end}; CITIES[166].owner=-1; ALLIED['0-1']=true");
     pact.request(0, "Propose", 1);
     pact.check("GPROPS.JAC_UNIFICATION_PACT_LEAD_0==0 and GPROPS.JAC_UNIFICATION_PACT_LEAD_1==0 and #BUILT==0");
     pact.both("CITIES[166].owner=0; FIRE('CityBuilt',0,166,6,5)");
