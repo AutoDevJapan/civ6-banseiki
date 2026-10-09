@@ -519,6 +519,7 @@ fn shipped_scenario_inventory_and_json_are_intact() {
                 "absorption-flow.json",
                 "absorption-native-custody.json",
                 "absorption-native-carrier-hotseat-save.json",
+                "absorption-native-carrier-witness-hold.json",
                 "absorption-native-deal.json",
                 "absorption-native-product-probe.json",
                 "absorption-native-product-resume.json",

@@ -26,6 +26,22 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
+    Prepare {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+    },
+    Pregame {
+        output: PathBuf,
+        #[arg(long)]
+        repo: PathBuf,
+        #[arg(long)]
+        logs: PathBuf,
+        #[arg(long)]
+        saves: PathBuf,
+        #[arg(long, default_value_t = 4318)]
+        port: u16,
+    },
     Audit {
         input: PathBuf,
         #[arg(long)]
@@ -51,6 +67,92 @@ enum Command {
         #[arg(long, default_value_t = 4318)]
         port: u16,
     },
+}
+
+const NONCE_KEY: &str = "JAC_NATIVE_CARRIER_WITNESS_NONCE";
+const BINDINGS: [&str; 3] = [
+    "poc/JAC_PoC_Absorption/Scripts/JAC_NativeCarrierWitness_GP.lua",
+    "poc/JAC_PoC_Absorption/UI/JAC_NativeCarrierWitness_UI.lua",
+    "poc/JAC_PoC_JapanMapScale/UI/JAC_NativeCarrierWitness_Staging.lua",
+];
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Bundle {
+    version: u8,
+    nonce: String,
+    bindings: std::collections::BTreeMap<String, String>,
+}
+
+fn file_hash(path: &Path) -> Result<String> {
+    use sha2::{Digest, Sha256};
+    Ok(format!("{:x}", Sha256::digest(fs::read(path)?)))
+}
+
+fn bundle(output: &Path, repo: &Path) -> Result<Bundle> {
+    let b: Bundle = serde_json::from_slice(&fs::read(output.join("bundle.json"))?)?;
+    if b.version != 1 || !protocol::nonce_valid(&b.nonce) || b.bindings.len() != BINDINGS.len() {
+        return Err(Error::scenario("invalid fixed witness bundle"));
+    }
+    for relative in BINDINGS {
+        if b.bindings.get(relative) != Some(&file_hash(&repo.join(relative))?) {
+            return Err(Error::scenario(
+                "deployed witness differs from prepared bytes",
+            ));
+        }
+    }
+    Ok(b)
+}
+
+fn pregame(output: &Path, repo: &Path, logs: &Path, saves: &Path, port: u16) -> Result<()> {
+    verify_lease()?;
+    let b = bundle(output, repo)?;
+    let state = state(&output.join("controller.jsonl"))?;
+    if state.journal.nonce != b.nonce || state.processed != 0 {
+        return Err(Error::scenario(
+            "pregame requires this new initialized controller",
+        ));
+    }
+    let mut io = SystemTransport { logs };
+    verify_owner(&mut io, &state)?;
+    // Fixed shipped configuration only; never accept arbitrary runtime Lua.
+    let fixed: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../civ6-autotest/scenarios/absorption-native-carrier-hotseat-save.json"
+    ))?;
+    let mut runner = Runner::new(
+        fixed.clone(),
+        output.to_owned(),
+        logs.to_owned(),
+        saves.to_owned(),
+        port,
+    );
+    let sent = output.join("pregame-sent.jsonl");
+    let mut receipt = OpenOptions::new().write(true).create_new(true).open(sent)?;
+    for index in 0..2 {
+        verify_owner(&mut io, &state)?;
+        writeln!(receipt, "setup {index}")?;
+        receipt.sync_all()?;
+        runner.run_frontend_setup_step_checked(&fixed["steps"][index], || {
+            verify_owner(&mut io, &state)
+        })?;
+    }
+    let flag=format!("assert(UI.IsInFrontEnd(),'frontend required')\nGameConfiguration.SetValue({}, {})\nGameConfiguration.SetGameModeEnabled('GAMEMODE_HEROES',true)\nreturn GameConfiguration.GetValue({})",scenario::lua_string(NONCE_KEY),scenario::lua_string(&b.nonce),scenario::lua_string(NONCE_KEY));
+    writeln!(receipt, "nonce")?;
+    receipt.sync_all()?;
+    let deadline = io.now() + 30.;
+    let answer = runner
+        .send_frontend_transition_checked(&flag, deadline, || verify_owner(&mut io, &state))?;
+    if answer.trim().trim_matches('"') != b.nonce {
+        return Err(Error::scenario("witness nonce was not observed"));
+    }
+    writeln!(receipt, "host")?;
+    receipt.sync_all()?;
+    let code="assert(UI.IsInFrontEnd() and GameConfiguration.IsHotseat(),'hotseat frontend required')\nNetwork.HostGame(ServerType.SERVER_TYPE_HOTSEAT)\nreturn true";
+    runner
+        .send_frontend_transition_checked(code, io.now() + 15., || verify_owner(&mut io, &state))?;
+    runner.disconnect();
+    println!("HostGame sent once; fixed staging witness handles the official Ready button");
+    Ok(())
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -224,6 +326,36 @@ fn drive(output: &Path, logs: &Path, saves: &Path, timeout: f64, port: u16) -> R
 
 fn run(args: Args) -> Result<()> {
     match args.command {
+        Command::Prepare { output, repo } => {
+            if fs::read_dir(&output)?.next().is_some() {
+                return Err(Error::scenario(
+                    "prepared output must be an empty owned directory",
+                ));
+            }
+            let mut bindings = std::collections::BTreeMap::new();
+            for relative in BINDINGS {
+                bindings.insert(relative.to_owned(), file_hash(&repo.join(relative))?);
+            }
+            let value = Bundle {
+                version: 1,
+                nonce: uuid::Uuid::new_v4().simple().to_string(),
+                bindings,
+            };
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output.join("bundle.json"))?;
+            serde_json::to_writer_pretty(&mut file, &value)?;
+            file.sync_all()?;
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        }
+        Command::Pregame {
+            output,
+            repo,
+            logs,
+            saves,
+            port,
+        } => pregame(&output, &repo, &logs, &saves, port)?,
         Command::Audit { input, nonce } => {
             let frames = protocol::parse_available_frames(&fs::read_to_string(input)?, &nonce)?;
             let mut receipts = protocol::Receipts::default();
