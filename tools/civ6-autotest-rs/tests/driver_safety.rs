@@ -1203,6 +1203,30 @@ fn test_screenshot_fails_if_capture_finishes_after_deadline() {
 }
 
 #[test]
+fn screenshot_capture_only_avoids_frontend_tuner_queries() {
+    let f = Fixture::new();
+    let mut backend = f.backend();
+    backend.on_states = Box::new(|_| Err(Error::tuner("unexpected tuner query")));
+    backend.on_capture = Some(Box::new(|_, _, _| Ok(())));
+    let mut runner = f.direct_runner(json!({}), backend);
+    runner
+        .run_step(&json!({"action":"screenshot","path":"frontend.png","capture_only":true}))
+        .unwrap();
+    let trace = f.trace();
+    assert_eq!(trace.captures.len(), 1);
+    assert!(trace.state_queries.is_empty());
+    assert!(trace.lua.is_empty());
+    error_has(
+        validate_scenario(&scenario(json!({
+            "action":"screenshot","path":"frontend.png","capture_only":"true"
+        })))
+        .unwrap_err(),
+        ErrorKind::Scenario,
+        "capture_only must be boolean",
+    );
+}
+
+#[test]
 fn test_nonfinite_timeouts_are_rejected() {
     for value in [json!(true), json!(0), json!(-1), json!("2"), Value::Null] {
         error_has(
