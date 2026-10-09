@@ -5,14 +5,14 @@ use crate::oath_wire::{u32_at, u64_at, Receipt};
 use serde_json::{json, Value};
 
 pub(crate) const HEADER: usize = 64;
-pub(crate) const ROW: usize = 192;
+pub(crate) const ROW: usize = 4320;
 pub(crate) const CAPACITY: usize = 1024;
 pub(crate) const SIZE: usize = HEADER + ROW * CAPACITY;
 
 pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() != SIZE
         || u32_at(bytes, 0) != Some(0x4a41_4352)
-        || u32_at(bytes, 4) != Some(3)
+        || u32_at(bytes, 4) != Some(4)
         || u32_at(bytes, 8).is_none_or(|n| n as usize > CAPACITY)
         || u32_at(bytes, 24).is_none_or(|n| n > 2)
         || u32_at(bytes, 52).is_none_or(|n| n > 1)
@@ -20,6 +20,20 @@ pub(crate) fn validate(bytes: &[u8]) -> Result<(), String> {
         return Err("invalid callee trace header or size".into());
     }
     Ok(())
+}
+
+fn production(row: &[u8], at: usize) -> Option<Value> {
+    let length = u32_at(row, at + 8)? as usize;
+    let array = u64_at(row, at)?;
+    if u32_at(row, at + 12)? != 1 || !(1..=512).contains(&length) || array == 0 || array & 3 != 0 {
+        return None;
+    }
+    let coefficients: Vec<i32> = (0..length)
+        .map(|i| u32_at(row, at + 16 + i * 4).unwrap() as i32)
+        .collect();
+    Some(
+        json!({"array_address":format!("0x{array:x}"),"length":length,"coefficients_q8":coefficients}),
+    )
 }
 
 pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<Value, String> {
@@ -67,6 +81,21 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
             None
         };
         let hex = |offset| format!("0x{:x}", q(offset));
+        let before = (metadata && stable && state == 2 && slot < 2)
+            .then(|| production(row, 192))
+            .flatten();
+        let after = (metadata && stable && state == 2 && slot < 2)
+            .then(|| production(row, 2256))
+            .flatten();
+        let difference = before.as_ref().zip(after.as_ref()).and_then(|(before, after)| {
+            if before["length"] != after["length"] { return None; }
+            let before = before["coefficients_q8"].as_array()?;
+            let after = after["coefficients_q8"].as_array()?;
+            Some(before.iter().zip(after).enumerate().filter_map(|(index,(b,a))| {
+                let delta = a.as_i64()? - b.as_i64()?;
+                (delta != 0).then(|| json!({"unit_index":index,"before_q8":b,"after_q8":a,"difference_q8":delta}))
+            }).collect::<Vec<_>>())
+        });
         rows.push(json!({"sequence":index+1,"state":if !stable { "unknown_unstable" } else { match state {2=>"completed",3=>"unwound",_=>"incomplete"} },
             "slot":slot,"family":match slot / 2 {0=>"military",1=>"naval",2=>"building",3=>"growth",_=>"unknown"},
             "call":if slot.is_multiple_of(2) {"apply"} else {"remove"},
@@ -77,6 +106,9 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
                 "city_wrapper":hex(96),"declared_percent":u32_at(row,104).unwrap() as i32,"owner":u32_at(row,108),"full_id":u32_at(row,112),
                 "definition_vtable_rva":if u32_at(row,116).unwrap() != 0 {json!(format!("0x{:x}",u32_at(row,116).unwrap()))} else {Value::Null},
                 "definition_name_at_call_entry":name}) } else { Value::Null },
+            "production_array_before":before,"production_array_after":after,
+            "observed_production_differences":difference,
+            "production_attribution_established":false,
             "quantity_accepted":false}));
     }
     let stopped = receipt.phase == 3 && u32_at(second, 24) == Some(2);
@@ -104,7 +136,7 @@ pub(crate) fn project(first: &[u8], second: &[u8], receipt: &Receipt) -> Result<
     ) && detached
         && counters_match;
     Ok(
-        json!({"capture":"callee","trace_version":3,"rows":rows,"row_count":count,
+        json!({"capture":"callee","trace_version":4,"rows":rows,"row_count":count,
         "completed":u32_at(second,20),"unwound":u32_at(second,28),"in_flight":in_flight,"dropped":dropped,
         "stopped":stopped,"entry_slots_restored":detached,"complete":complete,"snapshot_consistent":complete,"unstable_rows":unstable,"receipt_counters_match":counters_match,
         "image_base":format!("0x{:x}",u64_at(second,32).unwrap()),"deadline_hit":u32_at(second,48)==Some(1),
@@ -120,7 +152,7 @@ mod tests {
         let mut bytes = vec![0; SIZE];
         for (at, value) in [
             (0, 0x4a41_4352u32),
-            (4, 3),
+            (4, 4),
             (8, 1),
             (20, 1),
             (24, 2),
@@ -253,5 +285,45 @@ mod tests {
                 .is_null()
         );
         assert!(project(&bytes, &changed, &r).unwrap()["rows"][0]["call_entry_metadata"].is_null());
+    }
+
+    #[test]
+    fn production_changes_are_signed_and_missing_or_unstable_copies_remain_unknown() {
+        let mut bytes = sample();
+        bytes[HEADER + 72..HEADER + 76].copy_from_slice(&1u32.to_le_bytes());
+        for at in [192, 2256] {
+            let offset = HEADER + at;
+            bytes[offset..offset + 8].copy_from_slice(&0x9004u64.to_le_bytes());
+            bytes[offset + 8..offset + 12].copy_from_slice(&2u32.to_le_bytes());
+            bytes[offset + 12..offset + 16].copy_from_slice(&1u32.to_le_bytes());
+            bytes[offset + 16..offset + 20].copy_from_slice(&(-256i32).to_le_bytes());
+        }
+        bytes[HEADER + 2272..HEADER + 2276].copy_from_slice(&(-218i32).to_le_bytes());
+        let r = receipt();
+        let value = project(&bytes, &bytes, &r).unwrap();
+        assert_eq!(
+            value["rows"][0]["observed_production_differences"][0]["difference_q8"],
+            38
+        );
+        assert_eq!(
+            value["rows"][0]["production_attribution_established"],
+            false
+        );
+        for (at, word) in [(204, 0u32), (2268, 0), (200, 513), (2264, 0)] {
+            let mut changed = bytes.clone();
+            changed[HEADER + at..HEADER + at + 4].copy_from_slice(&word.to_le_bytes());
+            assert!(project(&changed, &changed, &r).unwrap()["rows"][0]
+                ["observed_production_differences"]
+                .is_null());
+        }
+        let mut changed = bytes.clone();
+        changed[HEADER + 2272] ^= 1;
+        let value = project(&bytes, &changed, &r).unwrap();
+        assert!(value["rows"][0]["production_array_before"].is_null());
+        assert!(value["rows"][0]["observed_production_differences"].is_null());
+        bytes[HEADER..HEADER + 4].copy_from_slice(&3u32.to_le_bytes());
+        assert!(
+            project(&bytes, &bytes, &r).unwrap()["rows"][0]["production_array_after"].is_null()
+        );
     }
 }

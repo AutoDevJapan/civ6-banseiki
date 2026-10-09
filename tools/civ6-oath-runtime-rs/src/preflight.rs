@@ -76,7 +76,7 @@ impl SourcePlan {
                 original: bytes.to_vec(),
             });
         }
-        for rva in [0x944e52, 0x944f24, 0x974284] {
+        for rva in [0x944e52, 0x944f24, 0x974284, 0x974361] {
             windows.push(Window {
                 rva,
                 original: disk_range(disk, rva, 8)?.to_vec(),
@@ -94,6 +94,11 @@ impl SourcePlan {
             (0x6dbef8, 0x1d),
             (0x6dbec5, 0x29),
             (0xa39998, 3),
+            (0x72a920, 0x10f),
+            (0x817a01, 0x23),
+            (0x818a95, 0x23),
+            (0x10685e, 0x1b),
+            (0x0f32e0, 0x35),
         ] {
             windows.push(Window {
                 rva,

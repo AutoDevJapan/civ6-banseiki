@@ -1568,7 +1568,7 @@ pub fn cli(repo: &Repository, args: &[String]) -> Result<()> {
     let Some(check) = crate::parse_check_args(
         "generate-oath-effect-audit",
         args,
-        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory; --read-modifier-inventory ARTIFACTS reads recorded frames; --read-native-observation ARTIFACTS reconciles v4/v5 copied call metadata with the recorded official inventory and catalogue without asserting quantity or product acceptance.",
+        "Generate finite live oath-effect scenarios from the 66-entry catalogue. --modifier-inventory NEW.json generates an observation-only GameEffects inventory; --read-modifier-inventory ARTIFACTS reads recorded frames; --read-native-observation ARTIFACTS reconciles adapter v4/v5 and callee v1-v4 copied observations with the recorded official inventory and catalogue without asserting quantity or product acceptance.",
     )?
     else {
         return Ok(());

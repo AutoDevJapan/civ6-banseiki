@@ -27,6 +27,54 @@ fn copied_family(trace: &Value, row: &Value) -> Option<&'static str> {
     }
 }
 
+fn production_difference(row: &Value) -> Result<Value> {
+    let read = |value: &Value| -> Result<Option<Vec<i64>>> {
+        if value.is_null() {
+            return Ok(None);
+        }
+        let length = value["length"]
+            .as_u64()
+            .context("production copy length missing")?;
+        ensure!(
+            (1..=512).contains(&length),
+            "production copy length outside bound"
+        );
+        let words = value["coefficients_q8"]
+            .as_array()
+            .context("production coefficients missing")?;
+        ensure!(
+            words.len() as u64 == length,
+            "production copy length mismatch"
+        );
+        words
+            .iter()
+            .map(|word| {
+                let word = word
+                    .as_i64()
+                    .context("production coefficient is not signed integer")?;
+                ensure!(
+                    i32::try_from(word).is_ok(),
+                    "production coefficient outside int32"
+                );
+                Ok(word)
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Some)
+    };
+    let before = read(&row["production_array_before"])?;
+    let after = read(&row["production_array_after"])?;
+    let Some((before, after)) = before.zip(after) else {
+        return Ok(Value::Null);
+    };
+    if before.len() != after.len() {
+        return Ok(Value::Null);
+    }
+    Ok(json!(before.into_iter().zip(after).enumerate().filter_map(|(index,(before,after))| {
+        let difference = after - before;
+        (difference != 0).then(|| json!({"unit_index":index,"before_q8":before,"after_q8":after,"difference_q8":difference}))
+    }).collect::<Vec<_>>()))
+}
+
 fn reconcile(
     trace: &Value,
     inventory: &Value,
@@ -43,7 +91,7 @@ fn reconcile(
     };
     ensure!(
         if callee {
-            matches!(version, 1..=3)
+            matches!(version, 1..=4)
         } else {
             matches!(version, 4 | 5)
         },
@@ -158,7 +206,7 @@ fn reconcile(
         } else {
             None
         };
-        let copied_name = if copied && callee && version == 3 {
+        let copied_name = if copied && callee && version >= 3 {
             metadata["definition_name_at_call_entry"]
                 .as_str()
                 .filter(|name| {
@@ -201,6 +249,10 @@ fn reconcile(
             "copied_definition_vtable_rva":if copied && callee && version >= 2 {metadata["definition_vtable_rva"].clone()} else {Value::Null},
             "definition_name_at_call_entry":copied_name,
             "copied_name_matches_recorded_definition":copied_name.zip(definition).map(|(name,recorded)|name==recorded),
+            "observed_production_differences":if copied && callee && version == 4 && row["state"] == "completed" {
+                production_difference(row)?
+            } else {Value::Null},
+            "production_attribution_established":false,
             "indicated_city_present_in_all_recorded_human_frames":public_match,
             "original_al":row["original_al"],
             "original_rax":row["original_rax"],
@@ -258,6 +310,24 @@ pub(super) fn read(repo: &Repository, directory: &Path) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn production_comparison_checks_bounds_and_recomputes_differences() -> Result<()> {
+        let mut row = json!({
+            "production_array_before":{"length":2,"coefficients_q8":[-256,0]},
+            "production_array_after":{"length":2,"coefficients_q8":[-218,0]},
+            "observed_production_differences":[{"difference_q8":999}]
+        });
+        assert_eq!(production_difference(&row)?[0]["difference_q8"], 38);
+        row["production_array_after"]["coefficients_q8"][0] = json!(-295);
+        assert_eq!(production_difference(&row)?[0]["difference_q8"], -39);
+        row["production_array_after"]["coefficients_q8"][0] = json!(i64::MAX);
+        assert!(production_difference(&row).is_err());
+        row["production_array_after"] = Value::Null;
+        assert!(production_difference(&row)?.is_null());
+        row["production_array_before"]["length"] = json!(513);
+        assert!(production_difference(&row).is_err());
+        Ok(())
+    }
     #[test]
     fn snapshot_steps_follow_numeric_order_and_reject_malformed_names() -> Result<()> {
         let mut names = [

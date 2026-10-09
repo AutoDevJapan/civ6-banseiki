@@ -21,7 +21,7 @@ pub(crate) const HEADER_SIZE: usize = 64;
 pub(crate) const ROW_SIZE: usize = 136;
 pub(crate) const TRACE_SIZE: usize = HEADER_SIZE + CAPACITY * ROW_SIZE;
 /// Upper bound of any raw trace read.
-pub(crate) const MAX_TRACE_READ: usize = 256 * 1024;
+pub(crate) const MAX_TRACE_READ: usize = super::oath_recipient_wire::SIZE;
 
 // Trace header offsets (repr(C), shared by v4 and v5).
 const H_NEXT: usize = 8;

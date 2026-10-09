@@ -16,6 +16,7 @@ pub mod call_identity;
 pub mod oath_install_state;
 pub mod oath_record;
 pub mod preflight;
+pub mod production_copy;
 
 #[cfg(windows)]
 mod identity_windows;

@@ -124,7 +124,7 @@ pub fn copy_recipient_identity(
             .ok_or_else(|| Error::input("recipient caller outside image"))?;
         let instance = pointer(match (slot % 2, offset) {
             (0, 0x944e55 | 0x944f27) => rbp,
-            (1, 0x974287) => rdi,
+            (1, 0x974287 | 0x974364) => rdi,
             _ => return Err(Error::input("unsupported recipient caller")),
         })?;
         let table = *[0xa76a30u64, 0xa6cdb8, 0xa90328, 0xa9e0f0]
@@ -221,7 +221,7 @@ fn observe(memory: &mut impl Memory, frame: Frame) -> Result<IdentityObservation
         .ok_or_else(|| Error::input("oath caller outside module"))?;
     let instance = pointer(match (frame.call, caller) {
         (Call::Apply, 0x944e55 | 0x944f27) => frame.rbp,
-        (Call::Remove, 0x974287) => frame.rdi,
+        (Call::Remove, 0x974287 | 0x974364) => frame.rdi,
         _ => return Err(Error::input("unknown oath adapter caller")),
     })?;
     let effect = pointer(frame.effect)?;
@@ -662,6 +662,7 @@ mod tests {
             (Call::Apply, 0x944e55),
             (Call::Apply, 0x944f27),
             (Call::Remove, 0x974287),
+            (Call::Remove, 0x974364),
         ] {
             for base in [0x180000000, 0x7ffb12340000] {
                 let (mut memory, mut frame) = fixture(base);
@@ -675,6 +676,26 @@ mod tests {
                 assert_eq!(observed.instance_id, 464);
                 assert_eq!(observed.definition, 0x6000);
                 assert_eq!(observed.declared_percent, 15);
+                memory.u64(0x10000 + 0x1968, 0x8000);
+                memory.u64(0x8000, base + 0xab4f58);
+                memory.put(0x8138, &[0, 0, 2, 0]);
+                memory.put(0x813c, &65536u32.to_le_bytes());
+                memory.u64(0x8140, 0);
+                let recipient = copy_recipient_identity(
+                    &mut memory,
+                    RecipientFrame {
+                        base,
+                        slot: if call == Call::Apply { 0 } else { 1 },
+                        caller: frame.caller_return,
+                        rbp: frame.rbp,
+                        rdi: frame.rdi,
+                        effect: frame.effect,
+                        actual_receiver: 0x10000,
+                    },
+                )
+                .unwrap();
+                assert_eq!(recipient.instance_id, observed.instance_id);
+                assert_eq!(recipient.full_id, 65536);
             }
         }
     }

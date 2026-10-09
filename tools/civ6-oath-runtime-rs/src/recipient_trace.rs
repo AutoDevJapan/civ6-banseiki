@@ -9,6 +9,57 @@ const CAPACITY: usize = 1024;
 const COUNTED: u64 = 1 << 63;
 const MASK: u64 = 0xffff_ffff;
 
+#[repr(C)]
+struct ProductionRow {
+    array: AtomicU64,
+    length: AtomicU32,
+    valid: AtomicU32,
+    coefficients: [AtomicU32; crate::production_copy::MAX_UNITS],
+}
+impl Default for ProductionRow {
+    fn default() -> Self {
+        Self {
+            array: AtomicU64::new(0),
+            length: AtomicU32::new(0),
+            valid: AtomicU32::new(0),
+            coefficients: std::array::from_fn(|_| AtomicU32::new(0)),
+        }
+    }
+}
+impl ProductionRow {
+    fn capture(&self, city: u64) {
+        if let Ok(value) = crate::production_copy::copy(&mut Current, city) {
+            self.array.store(value.array, Ordering::Relaxed);
+            self.length.store(value.length, Ordering::Relaxed);
+            for (word, value) in self.coefficients.iter().zip(value.coefficients) {
+                word.store(value as u32, Ordering::Relaxed);
+            }
+            self.valid.store(1, Ordering::Relaxed);
+        }
+    }
+}
+struct Current;
+impl crate::call_identity::Memory for Current {
+    fn copy(&mut self, address: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
+        let mut read = 0;
+        let ok = unsafe {
+            ReadProcessMemory(
+                GetCurrentProcess(),
+                address as *const c_void,
+                bytes.as_mut_ptr().cast(),
+                bytes.len(),
+                &mut read,
+            )
+        };
+        if ok == 0 || read != bytes.len() {
+            return Err(crate::call_identity::Error::input(
+                "unreadable callee observation",
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 pub(crate) static CLOCK_OVERRIDE: AtomicU64 = AtomicU64::new(0);
 fn clock_ms() -> u64 {
@@ -60,6 +111,8 @@ struct Row {
     name_len: AtomicU32,
     name_valid: AtomicU32,
     name_words: [AtomicU64; 8],
+    production_before: ProductionRow,
+    production_after: ProductionRow,
 }
 #[repr(C)]
 pub struct RecipientTrace {
@@ -84,7 +137,7 @@ impl RecipientTrace {
         unsafe {
             let p = trace.as_mut_ptr();
             ptr::addr_of_mut!((*p).magic).write(0x4a41_4352);
-            ptr::addr_of_mut!((*p).version).write(3);
+            ptr::addr_of_mut!((*p).version).write(4);
             ptr::addr_of_mut!((*p).stopped).write(AtomicU32::new(1));
             ptr::addr_of_mut!((*p).flight).write(AtomicU32::new(0));
             ptr::addr_of_mut!((*p).next).write(AtomicU32::new(0));
@@ -237,27 +290,6 @@ unsafe extern "system-unwind" fn begin(
     row.caller.store(caller, Ordering::Relaxed);
     row.rbp.store(rbp, Ordering::Relaxed);
     row.rdi.store(rdi, Ordering::Relaxed);
-    struct Current;
-    impl crate::call_identity::Memory for Current {
-        fn copy(&mut self, address: u64, bytes: &mut [u8]) -> crate::call_identity::Result<()> {
-            let mut read = 0;
-            let ok = unsafe {
-                ReadProcessMemory(
-                    GetCurrentProcess(),
-                    address as *const c_void,
-                    bytes.as_mut_ptr().cast(),
-                    bytes.len(),
-                    &mut read,
-                )
-            };
-            if ok == 0 || read != bytes.len() {
-                return Err(crate::call_identity::Error::input(
-                    "unreadable callee identity",
-                ));
-            }
-            Ok(())
-        }
-    }
     if let Ok(identity) = crate::call_identity::copy_recipient_identity(
         &mut Current,
         crate::call_identity::RecipientFrame {
@@ -295,6 +327,9 @@ unsafe extern "system-unwind" fn begin(
             row.name_valid.store(1, Ordering::Relaxed);
         }
         row.metadata_valid.store(1, Ordering::Relaxed);
+        if slot < 2 {
+            row.production_before.capture(city);
+        }
     }
     row.state.store(1, Ordering::Release);
 }
@@ -312,6 +347,33 @@ unsafe fn settle(token: *mut u64, rax: Option<u64>) {
         let row = &trace.rows[index as usize - 1];
         if let Some(rax) = rax {
             row.rax.store(rax, Ordering::Relaxed);
+            if row.slot.load(Ordering::Relaxed) < 2
+                && row.metadata_valid.load(Ordering::Relaxed) == 1
+            {
+                let frame = crate::call_identity::RecipientFrame {
+                    base: trace.image_base.load(Ordering::Acquire),
+                    slot: row.slot.load(Ordering::Relaxed) as usize,
+                    caller: row.caller.load(Ordering::Relaxed),
+                    rbp: row.rbp.load(Ordering::Relaxed),
+                    rdi: row.rdi.load(Ordering::Relaxed),
+                    effect: row.effect.load(Ordering::Relaxed),
+                    actual_receiver: row.city.load(Ordering::Relaxed),
+                };
+                if let Ok(identity) =
+                    crate::call_identity::copy_recipient_identity(&mut Current, frame)
+                {
+                    if identity.instance == row.instance.load(Ordering::Relaxed)
+                        && identity.definition == row.definition.load(Ordering::Relaxed)
+                        && identity.instance_id == row.instance_id.load(Ordering::Relaxed)
+                        && identity.city_wrapper == row.wrapper.load(Ordering::Relaxed)
+                        && u32::from(identity.owner) == row.owner.load(Ordering::Relaxed)
+                        && identity.full_id == row.full_id.load(Ordering::Relaxed)
+                        && identity.declared_percent as u32 == row.percent.load(Ordering::Relaxed)
+                    {
+                        row.production_after.capture(frame.actual_receiver);
+                    }
+                }
+            }
             row.state.store(2, Ordering::Release);
             trace.completed.fetch_add(1, Ordering::Relaxed);
         } else {
