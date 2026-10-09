@@ -598,6 +598,123 @@ assert(Controls.ReadyButton.disabled)
 }
 
 #[test]
+fn late_network_identity_is_saved_before_same_person_reconnect() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+PlayerConfigurations[0].networkId=nil
+Controls.JAC_AllJapanButton.click()
+assert(values.JAC_MP_ID_0==nil and values.JAC_MP_PRIOR_TEAM_0==3)
+PlayerConfigurations[0].networkId='net-0'
+Events.PlayerInfoChanged.fire(0)
+assert(values.JAC_MP_ID_0=='net-0')
+Events.MultiplayerPlayerConnected.fire(0)
+assert(values.JAC_MP_PRIOR_TEAM_0==3 and values.JAC_MP_RETIRING_0==nil)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[0].team==3)
+"#,
+    );
+}
+
+#[test]
+fn reconnect_waits_for_a_temporarily_missing_known_identity() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+assert(values.JAC_MP_ID_0=='net-0' and values.JAC_MP_PRIOR_TEAM_0==3)
+PlayerConfigurations[0].networkId=nil
+Events.MultiplayerPlayerConnected.fire(0)
+assert(values.JAC_MP_RETIRING_0=='VERIFY' and Controls.ReadyButton.disabled)
+Controls.JAC_DifferentButton.click()
+assert(values.JAC_MP_MODE=='JAPAN')
+PlayerConfigurations[0].networkId='net-0'
+Events.PlayerInfoChanged.fire(0)
+assert(values.JAC_MP_RETIRING_0==nil and values.JAC_MP_PRIOR_TEAM_0==3)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[0].team==3)
+"#,
+    );
+}
+
+#[test]
+fn missing_identity_then_different_identity_retires_old_occupant() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+Controls.JAC_SubjectPullDown.select(3)
+PlayerConfigurations[1].networkId=nil
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_RETIRING_1=='VERIFY' and Controls.ReadyButton.disabled)
+PlayerConfigurations[1].networkId='replacement-1'
+PlayerConfigurations[1].team=7
+Events.PlayerInfoChanged.fire(1)
+assert(values.JAC_MP_RETIRING_1==nil and values.JAC_MP_SUBJECT==nil)
+assert(values.JAC_MP_PRIOR_TEAM_1==7 and values.JAC_MP_ID_1=='replacement-1')
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
+fn former_host_drops_in_memory_wait_after_host_migration() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+rowsManager.instances[1].AreaPullDown.select(2)
+rowsManager.instances[2].AreaPullDown.select(3)
+Controls.JAC_SubjectPullDown.select(3)
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+rejectedConfigKeys.JAC_MP_RETIRING_1=true
+rejectedConfigKeys.JAC_MP_ROSTER=true
+Events.MultiplayerPlayerConnected.fire(1)
+assert(Controls.ReadyButton.disabled)
+host=false
+rejectedConfigKeys.JAC_MP_RETIRING_1=nil
+rejectedConfigKeys.JAC_MP_ROSTER=nil
+values.JAC_MP_ID_1='replacement-1'
+values.JAC_MP_PRIOR_TEAM_1=7
+PlayerConfigurations[1].team=values.JAC_MP_TEAM
+Events.MultiplayerHostMigrated.fire(1)
+assert(not Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
+fn leaving_japan_map_finishes_replacement_before_restoring_teams() {
+    let lua = fixture();
+    exec(
+        &lua,
+        r#"
+Controls.JAC_AllJapanButton.click()
+Controls.JAC_SubjectPullDown.select(3)
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+rejectedConfigKeys.JAC_MP_SUBJECT=true
+Events.MultiplayerPlayerConnected.fire(1)
+assert(values.JAC_MP_RETIRING_1=='REJOINING' and Controls.ReadyButton.disabled)
+map='OTHER_MAP'
+rejectedConfigKeys.JAC_MP_SUBJECT=nil
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RETIRING_1==nil and values.JAC_MP_ROSTER==nil)
+assert(values.JAC_MP_MODE==nil and values.JAC_MP_SUBJECT==nil)
+assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==7)
+assert(not Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
 fn reconnect_cannot_switch_modes_while_old_roster_write_is_rejected() {
     let lua = fixture();
     exec(
@@ -696,6 +813,70 @@ assert(values.JAC_MP_ROSTER=='0,1' and values.JAC_MP_PRIOR_TEAM_1==7)
 assert(values.JAC_MP_ID_1=='replacement-1' and Controls.ReadyButton.disabled)
 Controls.JAC_DifferentButton.click()
 assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==7)
+"#,
+    );
+}
+
+#[test]
+fn fresh_lua_context_outside_japan_finishes_replacement_and_restores_team() {
+    let lua = fixture_with_state(
+        r#"
+map='OTHER_MAP'
+values.JAC_MP_MODE='JAPAN'
+values.JAC_MP_ROSTER='0'
+values.JAC_MP_TEAM=4
+values.JAC_MP_PRIOR_NO_TEAMS='TRUE'
+values.JAC_MP_PRIOR_TEAM_0=3
+values.JAC_MP_PRIOR_TEAM_1=4
+values.JAC_MP_ID_0='net-0'
+values.JAC_MP_ID_1='net-1'
+values.JAC_MP_SUBJECT=1
+values.JAC_MP_RETIRING_1='REJOINING'
+values.NO_TEAMS=false
+PlayerConfigurations[0].team=4
+PlayerConfigurations[1].team=7
+PlayerConfigurations[1].networkId='replacement-1'
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(values.JAC_MP_RETIRING_1==nil and values.JAC_MP_ROSTER==nil)
+assert(values.JAC_MP_MODE==nil and values.JAC_MP_SUBJECT==nil)
+assert(PlayerConfigurations[0].team==3 and PlayerConfigurations[1].team==7)
+assert(not Controls.ReadyButton.disabled)
+"#,
+    );
+}
+
+#[test]
+fn fresh_lua_context_waits_for_known_identity_then_keeps_prior_team() {
+    let lua = fixture_with_state(
+        r#"
+values.JAC_MP_MODE='JAPAN'
+values.JAC_MP_ROSTER='0,1'
+values.JAC_MP_TEAM=4
+values.JAC_MP_PRIOR_NO_TEAMS='TRUE'
+values.JAC_MP_PRIOR_TEAM_0=3
+values.JAC_MP_PRIOR_TEAM_1=4
+values.JAC_MP_ID_0='net-0'
+values.JAC_MP_ID_1='net-1'
+values.JAC_MP_RETIRING_0='VERIFY'
+values.NO_TEAMS=false
+PlayerConfigurations[0].team=4
+PlayerConfigurations[0].networkId=nil
+"#,
+    );
+    exec(
+        &lua,
+        r#"
+assert(values.JAC_MP_RETIRING_0=='VERIFY' and Controls.ReadyButton.disabled)
+PlayerConfigurations[0].networkId='net-0'
+ContextPtr.hidden=true
+ContextPtr:show()
+assert(values.JAC_MP_RETIRING_0==nil and values.JAC_MP_PRIOR_TEAM_0==3)
+Controls.JAC_DifferentButton.click()
+assert(PlayerConfigurations[0].team==3)
 "#,
     );
 }

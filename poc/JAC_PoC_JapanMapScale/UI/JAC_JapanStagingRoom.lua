@@ -56,6 +56,7 @@ if Controls then
   local RESTORE_DONE = "JAC_MP_RESTORE_DONE"
   -- A reused slot must not receive the previous occupant's saved team.
   local REJOINING = "REJOINING"
+  local VERIFY = "VERIFY"
   local JAPAN = "JAPAN"
   local DIFFERENT = "DIFFERENT"
   local choices = {
@@ -213,7 +214,7 @@ if Controls then
     return choiceByCode[read(assignmentKey(id))]
   end
   local function retirementPending()
-    if next(pendingRejoin) then return true end
+    if canEdit() and next(pendingRejoin) then return true end
     for id = 0, 21 do
       if read(retiringKey(id)) ~= nil then return true end
     end
@@ -399,19 +400,33 @@ if Controls then
     write(RESTORE_DONE, nil)
     return true
   end
-  local function reconcileJapan(ids)
-    if read(RESTORE_DONE) ~= nil then
-      if read(ROSTER) ~= nil then restoreTeams()
-      else write(RESTORE_DONE, nil) end
-      if read(RESTORE_DONE) ~= nil then return end
-    end
+  local function finishRetirements(ids)
     local currentSet = humanSet(ids)
     for _, id in ipairs(rosterIds()) do
-      local saved = read(identityKey(id))
-      local current = networkIdentity(id)
-      if currentSet[id] and saved ~= nil and current ~= nil
-        and not sameValue(saved, current) then
-        pendingRejoin[id] = true
+      if currentSet[id] then
+        local saved = read(identityKey(id))
+        local current = networkIdentity(id)
+        local marker = read(retiringKey(id))
+        if marker == VERIFY then
+          if current == nil then return false end
+          if saved ~= nil and sameValue(saved, current) then
+            write(retiringKey(id), nil)
+            if read(retiringKey(id)) ~= nil then return false end
+          else
+            pendingRejoin[id] = true
+          end
+        elseif marker == nil and saved ~= nil and current == nil then
+          write(retiringKey(id), VERIFY)
+          if read(retiringKey(id)) ~= VERIFY then return false end
+          return false
+        elseif current ~= nil then
+          if saved == nil then
+            write(identityKey(id), current)
+            if not sameValue(read(identityKey(id)), current) then return false end
+          elseif not sameValue(saved, current) then
+            pendingRejoin[id] = true
+          end
+        end
       end
     end
     for id in pairs(pendingRejoin) do
@@ -424,19 +439,29 @@ if Controls then
           if old ~= id then kept[#kept + 1] = old end
         end
         write(ROSTER, rosterValue(kept))
-        if read(ROSTER) ~= rosterValue(kept) then return end
+        if read(ROSTER) ~= rosterValue(kept) then return false end
       end
       pendingRejoin[id] = nil
     end
     for _, id in ipairs(rosterIds()) do
       if not currentSet[id] then
         write(retiringKey(id), true)
-        if not sameValue(read(retiringKey(id)), true) then return end
+        if not sameValue(read(retiringKey(id)), true) then return false end
       end
     end
     for id = 0, 21 do
-      if read(retiringKey(id)) ~= nil and not retirePlayer(id) then return end
+      if read(retiringKey(id)) ~= nil and not retirePlayer(id) then return false end
     end
+    return true
+  end
+  local function reconcileJapan(ids)
+    if read(RESTORE_DONE) ~= nil then
+      if read(ROSTER) ~= nil then restoreTeams()
+      else write(RESTORE_DONE, nil) end
+      if read(RESTORE_DONE) ~= nil then return end
+    end
+    if not finishRetirements(ids) then return end
+    local currentSet = humanSet(ids)
     local oldSet = humanSet(rosterIds())
     for _, id in ipairs(ids) do
       if not oldSet[id] then
@@ -505,7 +530,10 @@ if Controls then
     if GameConfiguration.IsHotseat() then
       Controls.InfoContainer:SetHide(not active)
     end
-    if not active then return end
+    if not active then
+      UpdateReadyButton()
+      return
+    end
     ids = ids or humans()
     local isJapan = mode() == JAPAN
     local edit = canEdit()
@@ -566,7 +594,9 @@ if Controls then
       if active and mode() == JAPAN then
         reconcileJapan(ids)
       elseif read(ROSTER) ~= nil then
-        if restoreTeams() and not active then write(MODE, nil) end
+        if finishRetirements(humans()) and restoreTeams() and not active then
+          write(MODE, nil)
+        end
       end
     end
     render(ids)
@@ -647,11 +677,13 @@ if Controls then
     resetAttempts()
     if canEdit() and mode() == JAPAN then
       for _, old in ipairs(rosterIds()) do
-        if old == id then
+        if old == id and read(retiringKey(id)) == nil then
           local saved = read(identityKey(id))
           local current = networkIdentity(id)
-          if saved == nil or current == nil
-            or not sameValue(saved, current) then
+          if saved ~= nil and current == nil then
+            write(retiringKey(id), VERIFY)
+            if read(retiringKey(id)) ~= VERIFY then pendingRejoin[id] = true end
+          elseif saved == nil or not sameValue(saved, current) then
             pendingRejoin[id] = true
           end
         end
@@ -719,6 +751,7 @@ if Controls then
   Events.MultiplayerPlayerConnected.Add(onConnected)
   Events.MultiplayerPrePlayerDisconnected.Add(onPreDisconnect)
   Events.MultiplayerHostMigrated.Add(function()
+    pendingRejoin = {}
     resetAttempts()
     syncState()
   end)
