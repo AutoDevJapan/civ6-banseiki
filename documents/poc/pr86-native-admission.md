@@ -1008,3 +1008,19 @@ main統合の関連173件・88件選択対象外と、独立したnative workspa
 直接の呼出し元`5FA8D6`→`7C670`も照合する。その正常復帰後の32バイト区間は、別の間接受け手を読んで`5FA8F4`から表+0xA0へtail-jumpする。ゼロ分岐先がreturnすることだけでは、この呼出し元の後続委譲が止まった証拠にならない。呼出し元入口の到達、nativeの実際の復帰、委譲先の役割と実行時接続先は未確立のまま保持する。v5監査でもcertificateとAI受入はfalseであり、プロセスを開く操作・ゲーム起動はない。
 
 再開後のSonnet追審はMust0だった。値の意味を断定しない呼称とJSONキー、ゼロ分岐先とループ区間の位置関係、leafから導出した参照先と定数の一致を反映した。変更後の追加検査は1件成功・旧4件選択対象外、限定Clippy・release・固定primaryはすべて終了0、同セッションの差分追審もMust0である。結果は`D:/CC/Work/todo880/post-reboot-v5-final-{tests,clippy,build,primary}-20261009.*`、追審は同`post-reboot-v5-final-review-claude-20261009.json`に保持する。呼出し前の別ゲートを追記する任意提案は、入口到達を未確立と明示しているため追加しない。必須CI7件が成功したf68と今回の差分は区別する。f68のBugbotは利用枠上限で未実行・NEUTRALであり、成功に数えない。
+
+### AI入口の外側に残る反復処理
+
+固定Coreを再照合してLLVMで局所区間を読むと、`4B132`の呼出し結果が`4B13A`でRBXへ入り、`4B16D`から`5E2D0`へ渡る。正常復帰先`4B172`からは要素を4バイト進め、`4B18A`の条件分岐で`4B130`へ戻る。アドレス上で後ろの別区間には、`4B1B2`から`44F00`、`4B1DB`から`5CB00`への呼出しがある。PEの範囲表示ではこれらを含む区間が`4AFC0..4B87B`で、直接分岐候補`63E2E4`から`4AFC0`は既存`task_audit.rs`の`branch`照合でも確認する。すべての間接呼出し元、各区間への全到達、関数の実際の役割をこの表示だけで確定しない。
+
+既存の無効AI候補（`D:/CC/Work/todo880/ai-operation-worktree`）では、`ai_operation/producer_hook.rs`の`OUTER`が`5E2D0`であり、`producer_observe`が`producer::enter`を呼ぶ。`producer.rs`はsnapshotの世代と受付状態が一致する場合にreaderを取得する。これは親の`task_audit.rs`の読取監査とは別の、未統合候補の実装である。入口内の呼出しが終わってreaderが0になったことは、上記の呼出し元の反復が終わったことを示さない。別モデルの読取でも、呼出し元が次の入口に入る前に停止した場合、その間のCloseとRebuildをこの計数だけでは拒否しないと確認した。これは未統合候補の契約不足であり、実Civ6でその競合が発生したという記録ではない。古いsnapshotを拒否する検査を、古い呼出し元が再武装後に新snapshotを得ない証拠へ拡張しない。
+
+他スレッドを一時停止してスタックを点検する案は、点検後の再入と保留発行を止めないため、全排出の権限として採用しない。追加フックも実装していない。原180の41行のbootstrap記録には、この外反復の在席・退出を測る地点がなく、同じPIDでの保存読込成功から退出を推定しない。次に必要なのは、既存のnative発行経路の停止と、同じjob-setの保留公開・待機、および同期呼出し元の最後の退出を、保持先Releaseと再武装の間へ接続する根拠である。候補の失敗時OPEN問題は、この調査時点では未修正・未統合として保持する。
+
+一次抜粋は`D:/CC/Work/todo880/post-v5-outer-{request,loop}-tail-20261009.txt`、範囲と分岐候補は同`post-v5-outer-caller-xrefs-20261009.txt`、終了処理は同`post-v5-manager-cleanup-byte-20261009.txt`、別モデルの結果は同`post-v5-whole-flight-investigation-claude-20261009.json`に保持する。候補4ファイルの調査時のSHAは同`post-v5-candidate-reviewed-source-20261009.json`、原180の記録範囲は同`post-v5-original180-boundary-coverage-20261009.json`に残した。候補と親の出典を区別した修正後の文書追審は、同`post-v5-outer-gap-doc-final-review-claude-20261009.json`でMust0である。実機4/4・残0、元製品完全0/7は変わらない。
+
+### main25cea705の統合と共通一覧の維持
+
+PR134/135を含むmain`25cea705`を取り込む際、`judge_parity.rs`の旧目録と共通一覧が競合した。共通一覧を使う方式を保持し、新しい`absorption-ai-palace-deal-physical.json`をSharedへ追加した。これにより目録は207名（Shared151・DirectDiagnostic4・NoSelection52）となる。取り込んだcarrierのRust/Lua・新シナリオはmainと一致し、名前の完全一致・重複拒否・全JSON読取・Luaコンパイル・MOD隔離を弱めていない。
+
+関連309件成功・1816件選択対象外、関係2クレートの全対象Clippyも警告0・終了0である。競合解消の別モデル追審はMust0だった。証跡は`D:/CC/Work/todo880/main25c-integration-{related,clippy}-20261009.*`と同`main25c-integration-review-claude-20261009.json`に保全した。これはmainの統合を確かめた結果であり、新シナリオの実機成功や最終全workspaceの結果ではない。

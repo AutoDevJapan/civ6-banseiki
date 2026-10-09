@@ -10,6 +10,7 @@ pub enum SelectionBoundary {
 use SelectionBoundary::{DirectDiagnostic, NoSelection, Shared};
 
 pub const SHIPPED_SCENARIOS: &[(&str, SelectionBoundary)] = &[
+    ("absorption-ai-palace-deal-physical.json", Shared),
     ("absorption-ai-palace-deal-readonly.json", Shared),
     ("absorption-carrier-boundary-load.json", Shared),
     ("absorption-context-probe.json", Shared),
