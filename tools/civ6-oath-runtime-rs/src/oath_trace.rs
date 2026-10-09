@@ -243,9 +243,28 @@ pub(super) const STAGE_BEGIN_COUNTED: u32 = 1;
 pub(super) const STAGE_BEGIN_RESERVED: u32 = 2;
 pub(super) const STAGE_BEGIN_PUBLISHED: u32 = 3;
 pub(super) const STAGE_END_ENTERED: u32 = 4;
+pub(super) const STAGE_BEGIN_FILTER: u32 = 5;
+pub(super) const STAGE_BEGIN_FILTERED: u32 = 6;
+/// Test-only pause: the callback parks at this stage until released.
+#[cfg(test)]
+pub(super) static OATH_PAUSE_STAGE: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+pub(super) static OATH_PAUSE_REACHED: AtomicU32 = AtomicU32::new(0);
+#[cfg(test)]
+pub(super) static OATH_PAUSE_RELEASE: AtomicU32 = AtomicU32::new(0);
 /// Test-only exception injection at a named callback stage.
 #[inline(always)]
 fn stage_point(_stage: u32) {
+    #[cfg(test)]
+    if OATH_PAUSE_STAGE
+        .compare_exchange(_stage, 0, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        OATH_PAUSE_REACHED.store(1, Ordering::SeqCst);
+        while OATH_PAUSE_RELEASE.load(Ordering::SeqCst) == 0 {
+            std::thread::yield_now();
+        }
+    }
     #[cfg(test)]
     if OATH_STAGE
         .compare_exchange(_stage, 0, Ordering::SeqCst, Ordering::SeqCst)
@@ -293,19 +312,6 @@ unsafe extern "system-unwind" fn oath_begin(
     if trace.stopped.load(Ordering::Acquire) != 0 || trace.expire_if_due() {
         return;
     }
-    // Family filter, before any claim: another City effect is only counted.
-    // An unreadable vtable is not filtered; it becomes a row with a copy failure.
-    let base = trace.image_base.load(Ordering::Acquire);
-    if base != 0 {
-        if let Some(vtable) = copy_current::<8>(effect).map(u64::from_le_bytes) {
-            if OathEffectFamily::from_vtable_rva(vtable.wrapping_sub(base)).is_none() {
-                let _ = trace
-                    .filtered
-                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1));
-                return;
-            }
-        }
-    }
     trace.in_flight.fetch_add(1, Ordering::AcqRel);
     let claim = COUNTED | (call << CALL_SHIFT);
     unsafe { ptr::write_volatile(token_slot, claim) };
@@ -314,6 +320,25 @@ unsafe extern "system-unwind" fn oath_begin(
         unsafe { ptr::write_volatile(token_slot, 0) };
         trace.in_flight.fetch_sub(1, Ordering::Release);
         return;
+    }
+    // Family filter, inside the claim: another City effect reads its vtable and
+    // bumps the counter only while counted and after the stop re-check, so a
+    // Stop that saw in_flight 0 can no longer be followed by a filtered
+    // increment. The COUNTED token (no row) is settled once by oath_end or the
+    // frame handler. An unreadable vtable is not filtered; it becomes a row
+    // with a copy failure.
+    stage_point(STAGE_BEGIN_FILTER);
+    let base = trace.image_base.load(Ordering::Acquire);
+    if base != 0 {
+        if let Some(vtable) = copy_current::<8>(effect).map(u64::from_le_bytes) {
+            if OathEffectFamily::from_vtable_rva(vtable.wrapping_sub(base)).is_none() {
+                let _ = trace
+                    .filtered
+                    .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1));
+                stage_point(STAGE_BEGIN_FILTERED);
+                return;
+            }
+        }
     }
     let Ok(slot) = trace
         .next

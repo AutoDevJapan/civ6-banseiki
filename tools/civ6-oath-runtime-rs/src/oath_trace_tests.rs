@@ -1391,3 +1391,170 @@ fn shared_trace_child() {
     install_apply(fresh, second_trace).unwrap();
     assert_eq!(uninstall_now(), Ok(true));
 }
+
+#[test]
+fn filter_races_with_stop_run_in_owned_children() {
+    run_child("oath_trace::tests::filter_stop_child");
+    run_child("oath_trace::tests::filter_deadline_child");
+}
+#[test]
+fn filter_unwind_runs_in_an_owned_child() {
+    run_child("oath_trace::tests::filter_unwind_child");
+}
+
+const FILTER_BASE: u64 = 0x10_0000_0000;
+const OTHER_VTABLE: u64 = FILTER_BASE + 0xa7_6a38;
+const FAMILY_VTABLE: u64 = FILTER_BASE + 0xa7_6a30;
+
+/// Parks one unsupported-family call inside the filter, ends recording from
+/// another thread, and proves that the parked call is still counted: the
+/// stop is not quiescent, and the filtered counter moves only inside the
+/// claim, before the call settles.
+fn filter_race(by_deadline: bool) {
+    let page = unsafe { build_page(oath_original_body) };
+    let trace = leaked_trace_inactive();
+    assert!(trace.set_image_base_once(FILTER_BASE));
+    let entry = unsafe { page.add(0x20) };
+    unsafe { install_oath_at(entry, OathCall::Apply, trace, entry_head(entry)) }.unwrap();
+    if by_deadline {
+        CLOCK_OVERRIDE.store(1_000, Ordering::SeqCst);
+        assert!(trace.start_with_deadline(5));
+    } else {
+        assert!(trace.start_once());
+    }
+    let mut block = Block::new(OTHER_VTABLE, 0x31);
+    let effect = block.address();
+    OATH_PAUSE_REACHED.store(0, Ordering::SeqCst);
+    OATH_PAUSE_RELEASE.store(0, Ordering::SeqCst);
+    OATH_PAUSE_STAGE.store(STAGE_BEGIN_FILTER, Ordering::SeqCst);
+    let entry_address = entry as usize;
+    let caller = std::thread::spawn(move || plain_call(entry_address as *mut u8)(effect, 0, 7, 0));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while OATH_PAUSE_REACHED.load(Ordering::SeqCst) == 0 {
+        assert!(
+            Instant::now() < deadline,
+            "the call never reached the filter"
+        );
+        std::thread::yield_now();
+    }
+    assert_eq!(
+        trace.in_flight(),
+        1,
+        "the call is claimed before the filter"
+    );
+    if by_deadline {
+        CLOCK_OVERRIDE.store(10_000, Ordering::SeqCst);
+        assert!(trace.poll_deadline());
+    } else {
+        trace.stop();
+    }
+    assert!(trace.is_stopped());
+    assert_eq!(
+        trace.in_flight(),
+        1,
+        "stop is not quiescent while the filter runs"
+    );
+    assert_eq!(
+        trace.filtered(),
+        0,
+        "nothing is filtered outside a settled claim"
+    );
+    OATH_PAUSE_RELEASE.store(1, Ordering::SeqCst);
+    assert_eq!(caller.join().unwrap(), 0x31);
+    assert_eq!(block.0[1], 1, "the original ran exactly once");
+    assert_eq!(trace.in_flight(), 0);
+    assert_eq!(
+        trace.filtered(),
+        1,
+        "the filtered call was counted inside its flight"
+    );
+    assert!(
+        stable_records(trace).is_empty(),
+        "no row for another effect"
+    );
+    // After the quiet point nothing moves any more.
+    assert_eq!(plain_call(entry)(effect, 0, 8, 0), 0x31);
+    assert_eq!((trace.filtered(), trace.in_flight()), (1, 0));
+    assert_eq!(block.0[1], 2);
+}
+
+fn leaked_trace_inactive() -> &'static OathTrace {
+    Box::leak(OathTrace::boxed_inactive())
+}
+
+#[test]
+fn filter_stop_child() {
+    if !in_child() {
+        return;
+    }
+    filter_race(false);
+}
+
+#[test]
+fn filter_deadline_child() {
+    if !in_child() {
+        return;
+    }
+    filter_race(true);
+}
+
+#[test]
+fn filter_unwind_child() {
+    if !in_child() {
+        return;
+    }
+    let page = unsafe { build_page(oath_original_raise) };
+    let trace = leaked_trace();
+    assert!(trace.set_image_base_once(FILTER_BASE));
+    let apply = unsafe { page.add(0x20) };
+    unsafe { install_oath_at(apply, OathCall::Apply, trace, entry_head(apply)) }.unwrap();
+    OATH_TEST_ENTRY.store(apply, Ordering::Release);
+    let mut other = Block::new(OTHER_VTABLE, 0);
+    let mut family = Block::new(FAMILY_VTABLE, 0);
+    let (other, family) = (other.address(), family.address());
+    let run = |effect: u64, raise: bool| {
+        OATH_TEST_RAISE.store(raise, Ordering::SeqCst);
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            oath_unwind_fixture(effect, 0x20, 5, 0)
+        }))
+    };
+    // Filtered call, original returns: counted once, settled once, no row.
+    assert_eq!(run(other, false).unwrap(), 0x77);
+    assert_eq!((trace.filtered(), trace.in_flight()), (1, 0));
+    assert!(trace.records().unwrap().is_empty());
+    // Filtered call, original raises: the held claim is given back once.
+    assert!(run(other, true).is_err());
+    assert_eq!((trace.filtered(), trace.in_flight()), (2, 0));
+    assert!(trace.records().unwrap().is_empty());
+    // Exception right after the filtered counter: settled once, original not run.
+    let calls = OATH_TEST_CALLS.load(Ordering::SeqCst);
+    OATH_STAGE.store(STAGE_BEGIN_FILTERED, Ordering::SeqCst);
+    assert!(run(other, false).is_err());
+    assert_eq!((trace.filtered(), trace.in_flight()), (3, 0));
+    assert_eq!(OATH_TEST_CALLS.load(Ordering::SeqCst), calls);
+    // Exception before the filter reads anything: counted claim given back.
+    OATH_STAGE.store(STAGE_BEGIN_FILTER, Ordering::SeqCst);
+    assert!(run(other, false).is_err());
+    assert_eq!((trace.filtered(), trace.in_flight()), (3, 0));
+    // An unreadable effect is not filtered: it becomes a row with a copy
+    // failure whose frame claim is released by the same paths.
+    assert!(run(0x1000, true).is_err());
+    assert_eq!((trace.filtered(), trace.in_flight()), (3, 0));
+    let rows = trace.records().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].state, rows[0].copy_flags), (OathState::Unwound, 0));
+    assert_eq!(run(0x1000, false).unwrap(), 0x77);
+    let rows = trace.records().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        (rows[1].state, rows[1].copy_flags),
+        (OathState::Completed, 0)
+    );
+    assert_eq!(trace.in_flight(), 0);
+    // A supported family is recorded, not filtered.
+    assert_eq!(run(family, false).unwrap(), 0x77);
+    let rows = trace.records().unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[2].effect_vtable, FAMILY_VTABLE);
+    assert_eq!((trace.filtered(), trace.in_flight()), (3, 0));
+}
