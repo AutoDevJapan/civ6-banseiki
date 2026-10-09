@@ -1936,7 +1936,9 @@ fn gameplay_entries_keep_private_modules_and_tuner_uses_sp_only_event() -> mlua:
     );
     for file in ["JAC_CarrierBoundary", "JAC_NativeInventory"] {
         assert!(manifest.contains(&format!("<File>Scripts/{file}.lua</File>")));
-        assert!(!manifest.contains(&format!("<File>Scripts/{file}.lua</File></AddGameplayScripts>")));
+        assert!(!manifest.contains(&format!(
+            "<File>Scripts/{file}.lua</File></AddGameplayScripts>"
+        )));
     }
     let lua = Lua::new();
     lua.load(WORLD).call::<()>(outcomes(&lua)?)?;
