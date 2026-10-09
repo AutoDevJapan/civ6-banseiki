@@ -483,50 +483,29 @@ pub fn holder_alive(r: &mut impl Runner, p: &Paths, info: &Value) -> Result<bool
     else {
         return Ok(false);
     };
-    let out = r.run(
-        Call::new(args(&[
-            "tasklist",
-            "/FI",
-            &format!("PID eq {pid}"),
-            "/FO",
-            "CSV",
-            "/NH",
-        ]))
-        .timeout(30.0),
-    )?;
-    if out.code != 0 {
-        return Err(format!(
-            "Could not inspect the Civ6 lock holder: {}",
-            tail(&out.stderr, 300)
-        ));
-    }
-    let image_matches = out.stdout.lines().any(|line| {
-        let Some((_, fields)) = line.strip_prefix('"').and_then(|s| s.split_once("\",")) else {
-            return false;
-        };
-        let listed_pid = fields
-            .split(',')
-            .next()
-            .and_then(|s| s.trim().trim_matches('"').parse::<u64>().ok());
-        let image = csv_first(line);
-        listed_pid == Some(pid)
-            && (info["live_chain"] != true || live_chain_image(&image))
-            && ![
-                "CivilizationVI.exe",
-                "CivilizationVI_DX12.exe",
-                "FiraxisBugReporter.exe",
-                "steam.exe",
-            ]
-            .iter()
-            .any(|excluded| image.eq_ignore_ascii_case(excluded))
-    });
+    let Some(identity) = r.process_identity(pid as u32, 30.0)? else {
+        return Ok(false);
+    };
+    let image_matches = (info["live_chain"] != true || live_chain_image(&identity.image))
+        && ![
+            "CivilizationVI.exe",
+            "CivilizationVI_DX12.exe",
+            "FiraxisBugReporter.exe",
+            "steam.exe",
+        ]
+        .iter()
+        .any(|excluded| identity.image.eq_ignore_ascii_case(excluded));
     if !image_matches {
         return Ok(false);
     }
     #[cfg(windows)]
     if info["live_chain"] == true {
         if let Some(expected) = info["pid_created_filetime"].as_u64() {
-            return Ok(process_created_filetime(pid as u32)? == Some(expected));
+            let created = match identity.created_filetime {
+                Some(created) => Some(created),
+                None => process_created_filetime(pid as u32)?,
+            };
+            return Ok(created == Some(expected));
         }
     }
     Ok(true)
@@ -1153,6 +1132,14 @@ pub(crate) struct WithinDeadline<'a, R> {
     pub(crate) deadline: f64,
 }
 impl<R: Runner> Runner for WithinDeadline<'_, R> {
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        timeout: f64,
+    ) -> Result<Option<process::ProcessIdentity>, String> {
+        let left = time_left(self.runner, self.deadline)?;
+        self.runner.process_identity(pid, timeout.min(left))
+    }
     fn run(&mut self, mut call: Call) -> Result<Output, String> {
         let left = time_left(self.runner, self.deadline)?;
         call.timeout = Some(call.timeout.unwrap_or(left).min(left));

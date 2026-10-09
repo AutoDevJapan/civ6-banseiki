@@ -243,9 +243,54 @@ pub struct Output {
     pub stderr: String,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct ProcessIdentity {
+    pub image: String,
+    pub created_filetime: Option<u64>,
+}
+
 /// All external commands (including gh/network) and waits are injectable. Tests never launch a game or call an API.
 pub trait Runner {
     fn run(&mut self, call: Call) -> Result<Output, String>;
+    /// The command fallback keeps non-Windows runners and fixtures injectable.
+    /// Windows uses one pinned handle, without spawning tasklist per waiter.
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        let out = self.run(
+            Call::new(crate::args(&[
+                "tasklist",
+                "/FI",
+                &format!("PID eq {pid}"),
+                "/FO",
+                "CSV",
+                "/NH",
+            ]))
+            .timeout(timeout),
+        )?;
+        if out.code != 0 {
+            return Err(format!(
+                "Could not inspect the Civ6 lock holder: {}",
+                crate::tail(&out.stderr, 300)
+            ));
+        }
+        Ok(out.stdout.lines().find_map(|line| {
+            let (image, fields) = line.strip_prefix('"')?.split_once("\",")?;
+            let listed = fields
+                .split(',')
+                .next()?
+                .trim()
+                .trim_matches('"')
+                .parse::<u32>()
+                .ok()?;
+            (listed == pid).then(|| ProcessIdentity {
+                image: image.into(),
+                created_filetime: None,
+            })
+        }))
+    }
     fn now(&mut self) -> f64;
     fn monotonic(&mut self) -> f64 {
         self.now()
@@ -265,89 +310,217 @@ pub trait Runner {
 }
 pub struct RealRunner;
 
-// Lease monitoring has a two-second budget. Spawning tasklist for every queued
-// PID can exhaust it on a busy machine and terminate a healthy driver.
-#[cfg(any(windows, test))]
-fn tasklist_pid(args: &[String]) -> Option<u32> {
-    if args.len() != 6
-        || !args[0].eq_ignore_ascii_case("tasklist")
-        || !args[1].eq_ignore_ascii_case("/FI")
-        || !args[3].eq_ignore_ascii_case("/FO")
-        || !args[4].eq_ignore_ascii_case("CSV")
-        || !args[5].eq_ignore_ascii_case("/NH")
-    {
-        return None;
-    }
-    args[2]
-        .strip_prefix("PID eq ")?
-        .parse::<u32>()
-        .ok()
-        .filter(|pid| *pid > 0)
-}
-
 #[cfg(windows)]
-fn native_pid_tasklist(pid: u32) -> Result<Output, String> {
-    use windows_sys::Win32::{
-        Foundation::CloseHandle,
-        System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
-    };
-    // SYNCHRONIZE permits a zero-time read of this exact object's exit state.
-    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | 0x00100000, 0, pid) };
-    if handle.is_null() {
-        let error = std::io::Error::last_os_error();
-        return if error.raw_os_error() == Some(87) {
-            Ok(Output::default())
-        } else {
-            Err(format!("inspect lease process {pid}: {error}"))
-        };
-    }
-    let result = native_pid_tasklist_handle(handle, pid);
-    unsafe { CloseHandle(handle) };
-    result
-}
-
-#[cfg(windows)]
-fn native_pid_tasklist_handle(
-    handle: windows_sys::Win32::Foundation::HANDLE,
+fn process_open_failure(
     pid: u32,
-) -> Result<Output, String> {
+    error: std::io::Error,
+) -> Result<Option<ProcessIdentity>, String> {
+    match error.raw_os_error() {
+        Some(87) => Ok(None),
+        // A stale PID can now belong to a protected process. Snapshot lookup
+        // preserves the old image rejection without a tasklist subprocess.
+        Some(5) => snapshot_process_identity(pid),
+        _ => Err(format!("inspect Civ6 queue process {pid}: {error}")),
+    }
+}
+
+#[cfg(windows)]
+fn snapshot_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
     use windows_sys::Win32::{
-        Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT},
-        System::Threading::{QueryFullProcessImageNameW, WaitForSingleObject},
+        Foundation::{CloseHandle, ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+        System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+            TH32CS_SNAPPROCESS,
+        },
     };
-    let exited = || match unsafe { WaitForSingleObject(handle, 0) } {
-        WAIT_OBJECT_0 => Ok(true),
-        WAIT_TIMEOUT => Ok(false),
+    struct Snapshot(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Snapshot {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "inspect Civ6 queue process snapshot: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    let snapshot = Snapshot(raw);
+    let mut entry = PROCESSENTRY32W {
+        dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+        ..Default::default()
+    };
+    let mut found = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+    loop {
+        if found == 0 {
+            let error = std::io::Error::last_os_error();
+            return if error.raw_os_error() == Some(ERROR_NO_MORE_FILES as i32) {
+                Ok(None)
+            } else {
+                Err(format!("inspect Civ6 queue process snapshot: {error}"))
+            };
+        }
+        if entry.th32ProcessID == pid {
+            let end = entry
+                .szExeFile
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let image = String::from_utf16(&entry.szExeFile[..end]).map_err(|e| e.to_string())?;
+            // Snapshot proves the image only. A matching chain still needs the
+            // original creation-time check; denied access never grants a lease.
+            return Ok(Some(ProcessIdentity {
+                image,
+                created_filetime: None,
+            }));
+        }
+        found = unsafe { Process32NextW(snapshot.0, &mut entry) };
+    }
+}
+
+#[cfg(windows)]
+fn windows_process_identity(pid: u32) -> Result<Option<ProcessIdentity>, String> {
+    use windows_sys::Win32::{
+        Foundation::{CloseHandle, FILETIME, WAIT_TIMEOUT},
+        System::Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW, WaitForSingleObject,
+            PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+        },
+    };
+    struct Handle(windows_sys::Win32::Foundation::HANDLE);
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+    let raw = unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        )
+    };
+    if raw.is_null() {
+        return process_open_failure(pid, std::io::Error::last_os_error());
+    }
+    let handle = Handle(raw);
+    let alive = || match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_TIMEOUT => Ok(true),
+        0 => Ok(false),
         _ => Err(format!(
-            "inspect lease process {pid} exit state: {}",
+            "inspect Civ6 waiter process {pid} state: {}",
             std::io::Error::last_os_error()
         )),
     };
-    if exited()? {
-        return Ok(Output::default());
+    if !alive()? {
+        return Ok(None);
     }
-    let mut buffer = vec![0u16; 32768];
-    let mut length = buffer.len() as u32;
-    let ok = unsafe { QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut length) };
-    let error = (ok == 0).then(std::io::Error::last_os_error);
-    if let Some(error) = error {
-        // The handle pins the object, so PID reuse cannot turn this check into
-        // a query of a different process between image lookup and exit read.
-        if exited()? {
-            return Ok(Output::default());
-        }
-        return Err(format!("inspect lease process {pid} image: {error}"));
+    let mut path = vec![0u16; 32768];
+    let mut length = path.len() as u32;
+    if unsafe { QueryFullProcessImageNameW(handle.0, 0, path.as_mut_ptr(), &mut length) } == 0 {
+        return Err(format!(
+            "inspect Civ6 waiter process {pid} image: {}",
+            std::io::Error::last_os_error()
+        ));
     }
-    let path = String::from_utf16(&buffer[..length as usize]).map_err(|e| e.to_string())?;
-    let image = path
-        .rsplit(['\\', '/'])
-        .next()
-        .ok_or("empty process image")?;
-    Ok(Output {
-        code: 0,
-        stdout: format!("\"{image}\",\"{pid}\"\n"),
-        stderr: String::new(),
-    })
+    let path = String::from_utf16(&path[..length as usize]).map_err(|e| e.to_string())?;
+    let image = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|p| p.to_str())
+        .ok_or("waiter image has no file name")?
+        .to_owned();
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    if unsafe { GetProcessTimes(handle.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0
+    {
+        return Err(format!(
+            "inspect Civ6 waiter process {pid} creation time: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if !alive()? {
+        return Ok(None);
+    }
+    Ok(Some(ProcessIdentity {
+        image,
+        created_filetime: Some(
+            (u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime),
+        ),
+    }))
+}
+
+#[cfg(all(test, windows))]
+mod native_identity_tests {
+    use super::*;
+    use std::os::windows::process::CommandExt;
+
+    #[test]
+    fn current_process_identity_uses_one_handle_and_no_commands() {
+        let identity = RealRunner
+            .process_identity(std::process::id(), 2.0)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(
+            identity.created_filetime,
+            crate::chain::process_created_filetime(std::process::id()).unwrap()
+        );
+        assert!(identity.created_filetime.unwrap() > 0);
+    }
+
+    #[test]
+    fn denied_process_query_uses_image_snapshot_without_granting_creation_identity() {
+        let identity =
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(5))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            identity.image,
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert_eq!(identity.created_filetime, None);
+        assert_eq!(
+            process_open_failure(u32::MAX, std::io::Error::from_raw_os_error(87)).unwrap(),
+            None
+        );
+        assert!(
+            process_open_failure(std::process::id(), std::io::Error::from_raw_os_error(6))
+                .unwrap_err()
+                .contains("queue process")
+        );
+    }
+
+    #[test]
+    fn exited_owned_process_and_invalid_pid_are_not_live_waiters() {
+        let mut child = Command::new("cmd.exe")
+            .args(["/c", "exit", "0"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .unwrap();
+        assert!(child.wait().unwrap().success());
+        assert_eq!(windows_process_identity(child.id()).unwrap(), None);
+        assert_eq!(windows_process_identity(u32::MAX).unwrap(), None);
+    }
 }
 
 pub fn install_interrupt_handler() {
@@ -395,12 +568,16 @@ fn interrupted() -> Result<(), String> {
 }
 
 impl Runner for RealRunner {
+    #[cfg(windows)]
+    fn process_identity(
+        &mut self,
+        pid: u32,
+        _timeout: f64,
+    ) -> Result<Option<ProcessIdentity>, String> {
+        windows_process_identity(pid)
+    }
     fn run(&mut self, call: Call) -> Result<Output, String> {
         interrupted()?;
-        #[cfg(windows)]
-        if let Some(pid) = tasklist_pid(&call.args) {
-            return native_pid_tasklist(pid);
-        }
         let mut cmd = Command::new(call.args.first().ok_or("empty command")?);
         cmd.args(&call.args[1..])
             .envs(&call.env)
@@ -568,69 +745,3 @@ fn wait(
     }
 }
 
-#[cfg(test)]
-mod pid_query_tests {
-    use super::*;
-
-    #[test]
-    fn native_query_only_accepts_the_existing_exact_pid_protocol() {
-        let args: Vec<String> = ["tasklist", "/FI", "PID eq 42", "/FO", "CSV", "/NH"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        assert_eq!(tasklist_pid(&args), Some(42));
-        for filter in [
-            "PID eq 0",
-            "PID eq -1",
-            "PID eq 4294967296",
-            "PID eq 42 extra",
-            "IMAGENAME eq live_chain.exe",
-        ] {
-            let mut other = args.clone();
-            other[2] = filter.into();
-            assert_eq!(tasklist_pid(&other), None);
-        }
-        let mut extra = args;
-        extra.push("/V".into());
-        assert_eq!(tasklist_pid(&extra), None);
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn native_query_reports_the_real_current_image_and_absent_pid() {
-        let pid = std::process::id();
-        let expected = std::env::current_exe().unwrap();
-        let image = expected.file_name().unwrap().to_str().unwrap();
-        assert_eq!(
-            native_pid_tasklist(pid).unwrap().stdout,
-            format!("\"{image}\",\"{pid}\"\n")
-        );
-        assert!(native_pid_tasklist(u32::MAX).unwrap().stdout.is_empty());
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn native_query_observes_exit_with_the_original_handle_still_pinned() {
-        use std::{
-            os::windows::{io::AsRawHandle, process::CommandExt},
-            process::{Command, Stdio},
-        };
-        if std::env::var_os("CC_LIVE_NATIVE_PID_TEST_CHILD").is_some() {
-            return;
-        }
-        let mut child = Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "process::pid_query_tests::native_query_observes_exit_with_the_original_handle_still_pinned"])
-            .env("CC_LIVE_NATIVE_PID_TEST_CHILD", "1")
-            .creation_flags(CREATE_NO_WINDOW)
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .spawn().unwrap();
-        let pid = child.id();
-        let handle = child.as_raw_handle();
-        assert!(child.wait().unwrap().success());
-        assert!(native_pid_tasklist_handle(handle, pid)
-            .unwrap()
-            .stdout
-            .is_empty());
-        assert!(native_pid_tasklist_handle(std::ptr::null_mut(), pid).is_err());
-    }
-}
