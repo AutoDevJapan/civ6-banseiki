@@ -343,13 +343,14 @@ impl PeImage {
             .find_map(|&(va, vsize, raw, rawsize, _)| {
                 let span = vsize.max(rawsize);
                 (rva >= va && rva - va < span && rva - va < rawsize)
-                    .then(|| (raw + (rva - va)) as usize)
+                    .then(|| u64::from(raw) + u64::from(rva - va))
+                    .and_then(|offset| usize::try_from(offset).ok())
             })
     }
     /// The bytes at an RVA, only if they lie inside one section's raw data.
     pub fn bytes_at<'a>(&self, file: &'a [u8], rva: u32, len: usize) -> Option<&'a [u8]> {
         let start = self.file_offset(rva)?;
-        let last = self.file_offset(rva.checked_add(len as u32 - 1)?)?;
+        let last = self.file_offset(rva.checked_add(u32::try_from(len.checked_sub(1)?).ok()?)?)?;
         (last - start == len - 1)
             .then(|| file.get(start..start + len))
             .flatten()
@@ -387,7 +388,7 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
         let at = opt + optional_size + n * 40;
         let f = |o| u32_at(bytes, at + o).ok_or_else(|| bad("section"));
         let (vsize, va, rawsize, raw, ch) = (f(8)?, f(12)?, f(16)?, f(20)?, f(36)?);
-        if raw as usize + rawsize as usize > bytes.len()
+        if u64::from(raw) + u64::from(rawsize) > bytes.len() as u64
             || va as u64 + vsize as u64 > size_of_image as u64
         {
             return Err(bad("section outside the file or image"));
@@ -417,10 +418,18 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
     }
     for n in 0..names {
         let name_rva = image
-            .file_offset(name_table + 4 * n as u32)
+            .file_offset(
+                name_table
+                    .checked_add(4 * n as u32)
+                    .ok_or_else(|| bad("export name table"))?,
+            )
             .and_then(|o| u32_at(bytes, o));
         let ordinal = image
-            .file_offset(ordinals + 2 * n as u32)
+            .file_offset(
+                ordinals
+                    .checked_add(2 * n as u32)
+                    .ok_or_else(|| bad("export ordinal table"))?,
+            )
             .and_then(|o| u16_at(bytes, o));
         let (Some(name_rva), Some(ordinal)) = (name_rva, ordinal) else {
             return Err(bad("export name tables"));
@@ -440,10 +449,14 @@ pub(crate) fn parse_pe(bytes: &[u8]) -> Result<PeImage, String> {
             return Err(bad("export ordinal"));
         }
         let rva = image
-            .file_offset(functions + 4 * u32::from(ordinal))
+            .file_offset(
+                functions
+                    .checked_add(4 * u32::from(ordinal))
+                    .ok_or_else(|| bad("export function table"))?,
+            )
             .and_then(|o| u32_at(bytes, o))
             .ok_or_else(|| bad("export function table"))?;
-        if rva >= export_rva && rva < export_rva + export_size {
+        if rva >= export_rva && u64::from(rva) < u64::from(export_rva) + u64::from(export_size) {
             return Err(bad("forwarded export"));
         }
         image.exports.push((name, rva));
@@ -825,7 +838,10 @@ pub(crate) mod tests {
             Ok(1)
         );
         assert!(function_owner_in_remote(function, &kernel32, &remote).is_err());
-        assert!(function_owner_in_remote(function, &kernelbase, &[kernel32.clone()]).is_err());
+        assert!(
+            function_owner_in_remote(function, &kernelbase, std::slice::from_ref(&kernel32))
+                .is_err()
+        );
         // same path, different base or size remotely
         let moved = vec![fact(
             r"\\?\c:\windows\system32\kernelbase.DLL",

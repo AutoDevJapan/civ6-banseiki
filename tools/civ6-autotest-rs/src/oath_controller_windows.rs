@@ -219,6 +219,9 @@ struct Target {
     /// A remote thread was created and its end has not been observed.
     flight: bool,
     poisoned: bool,
+    /// A termination was attempted and not observed to complete.
+    unconfirmed: bool,
+    fail_terminate: bool,
     call_limit: Duration,
     kill_limit: Duration,
     /// Remote allocations, kept for the life of the game and never freed.
@@ -305,18 +308,43 @@ impl Target {
         Ok(out)
     }
 
-    /// Terminates the same pinned process after a call whose end is unknown.
-    fn kill(&mut self) {
+    /// True while the end of a remote thread or of a termination is not
+    /// observed: handle, files and allocations must then be kept.
+    fn unresolved(&self) -> bool {
+        self.flight || self.unconfirmed
+    }
+
+    /// Terminates the same pinned process (handle plus original FILETIME,
+    /// never a PID lookup) after a call whose end is unknown. Only the
+    /// process object's own signal confirms the end.
+    fn kill(&mut self) -> bool {
         self.poisoned = true;
-        if creation(self.process.0).ok() != Some(self.created) {
-            return;
-        }
-        unsafe {
-            TerminateProcess(self.process.0, 1);
-        }
-        let wait = self.kill_limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
-        if unsafe { WaitForSingleObject(self.process.0, wait) } == 0 {
+        // A handle that no longer shows the pinned creation time is not
+        // proof of anything: nothing is killed and nothing is confirmed.
+        let pinned = creation(self.process.0).ok() == Some(self.created);
+        let pinned = pinned && !self.fail_terminate;
+        let confirmed = pinned && {
+            unsafe {
+                TerminateProcess(self.process.0, 1);
+            }
+            let wait = self.kill_limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+            let ended = unsafe { WaitForSingleObject(self.process.0, wait) };
+            ended == 0
+        };
+        self.unconfirmed = !confirmed;
+        if confirmed {
             self.flight = false;
+        }
+        confirmed
+    }
+
+    fn kill_report(&mut self, why: &str) -> Error {
+        if self.kill() {
+            Error::unknown(format!("{why}; the pinned game was terminated"))
+        } else {
+            Error::unknown(format!(
+                "{why}; termination of the pinned game is NOT confirmed, ownership is retained"
+            ))
         }
     }
 
@@ -354,17 +382,11 @@ impl Target {
         let thread = Handle(raw);
         let wait = self.call_limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
         if unsafe { WaitForSingleObject(thread.0, wait) } != 0 {
-            self.kill();
-            return Err(Error::unknown(
-                "remote call did not finish in time; the pinned game was terminated",
-            ));
+            return Err(self.kill_report("remote call did not finish in time"));
         }
         let mut code = 0u32;
         if unsafe { GetExitCodeThread(thread.0, &mut code) } == 0 {
-            self.kill();
-            return Err(Error::unknown(
-                "remote call exit code is unreadable; the pinned game was terminated",
-            ));
+            return Err(self.kill_report("remote call exit code is unreadable"));
         }
         self.flight = false;
         self.alive_pinned()?;
@@ -404,9 +426,11 @@ impl Target {
 impl Drop for Target {
     fn drop(&mut self) {
         // Never leave an unobserved remote thread running against memory that
-        // this controller is about to forget.
-        if self.flight {
-            self.kill();
+        // this controller is about to forget. If the end still cannot be
+        // observed, the process handle is kept open (leaked) as the receipt.
+        if self.unresolved() && !self.kill() {
+            let kept = std::mem::replace(&mut self.process, Handle(std::ptr::null_mut()));
+            std::mem::forget(kept);
         }
     }
 }
@@ -422,7 +446,7 @@ enum Phase {
 /// An installed diagnostic observer in one pinned game. Dropping the session
 /// neither stops the observer nor repeats any call; the DLL stays pinned in
 /// the game and the observer ends by its own deadline.
-pub(crate) struct Session {
+struct Inner {
     target: Target,
     _lease: RecoveryLease,
     _exe_file: File,
@@ -435,9 +459,59 @@ pub(crate) struct Session {
     phase: Phase,
     stop_value: Option<Value>,
 }
-unsafe impl Send for Session {}
+unsafe impl Send for Inner {}
+
+/// Public handle. If the end of a remote call or of a termination was never
+/// observed, dropping it keeps the pinned process handle, the DLL and exe file
+/// pins, the lease and the remote allocations (they are leaked on purpose and
+/// reported as unresolved) instead of claiming a clean close.
+pub(crate) struct Session {
+    inner: std::mem::ManuallyDrop<Inner>,
+}
 
 impl Session {
+    pub(crate) fn install(
+        game: GameProcess,
+        dll_path: &Path,
+        expected_sha: &str,
+        max_seconds: u32,
+    ) -> Result<Self> {
+        Inner::install(game, dll_path, expected_sha, max_seconds).map(|inner| Self {
+            inner: std::mem::ManuallyDrop::new(inner),
+        })
+    }
+    pub(crate) fn identity(&self) -> Value {
+        self.inner.identity()
+    }
+    pub(crate) fn start(&mut self) -> Result<Value> {
+        self.inner.start()
+    }
+    pub(crate) fn snapshot(&mut self) -> Result<Value> {
+        self.inner.snapshot()
+    }
+    pub(crate) fn stop(&mut self) -> Result<Value> {
+        self.inner.stop()
+    }
+    /// True if some end was never observed and ownership is being retained.
+    #[cfg(test)]
+    fn unresolved(&self) -> bool {
+        self.inner.target.unresolved()
+    }
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        if self.inner.target.unresolved() {
+            // One last attempt on the same pinned handle; otherwise keep all.
+            if self.inner.target.kill() {
+                unsafe { std::mem::ManuallyDrop::drop(&mut self.inner) };
+            }
+        } else {
+            unsafe { std::mem::ManuallyDrop::drop(&mut self.inner) };
+        }
+    }
+}
+
+impl Inner {
     /// Loads and installs the observer. The expected SHA is only compared with
     /// the file this process measures; it authorizes nothing by itself.
     pub(crate) fn install(
@@ -505,30 +579,23 @@ impl Session {
             exe: Some(exe),
             flight: false,
             poisoned: false,
+            unconfirmed: false,
+            fail_terminate: false,
             call_limit: CALL_LIMIT,
             kill_limit: KILL_LIMIT,
             allocations: Vec::new(),
         };
-        let base = load_dll(&mut target, &dll)?;
-        let exports = dll.exports.map(|rva| base + rva as usize);
-        verify_remote_image(&target, &dll, base, &exports)?;
-
-        let config = wire::encode_config(game.pid, max_seconds, created);
-        let config_at = target.alloc(wire::CONFIG_SIZE)?;
-        target.write(config_at, &config)?;
-        let status = target.call(exports[0], config_at)?;
-        if status != 0 {
-            return Err(Error::input(format!(
-                "OathRuntimeInstall refused: {} ({status})",
-                wire::status_name(status)
-            )));
-        }
-        let (trace_address, _) =
-            wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
-                .map_err(Error::input)?;
-        wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
-            .map_err(Error::input)?;
-        let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
+        let built = bring_up(&mut target, &dll, game.pid, max_seconds, created);
+        let (base, exports, trace_address, receipt_buffer) = match built {
+            Ok(done) => done,
+            Err(error) => {
+                if target.unresolved() {
+                    // The game may still run our thread: keep every pin.
+                    std::mem::forget((target, lease, exe_file, dll));
+                }
+                return Err(error);
+            }
+        };
         Ok(Self {
             target,
             _lease: lease,
@@ -809,12 +876,7 @@ fn load_dll(target: &mut Target, dll: &LocalDll) -> Result<usize> {
             target.poisoned = false;
             Ok(base)
         }
-        wire::LoadVerdict::Unknown(why) => {
-            target.kill();
-            Err(Error::unknown(format!(
-                "{why}; the pinned game was terminated"
-            )))
-        }
+        wire::LoadVerdict::Unknown(why) => Err(target.kill_report(why)),
     }
 }
 
@@ -845,6 +907,39 @@ fn verify_remote_image(
         }
     }
     Ok(())
+}
+
+type BroughtUp = (usize, [usize; 4], u64, usize);
+
+/// Load, verify and install; every step after the load runs on the poisoned-
+/// until-proven target.
+fn bring_up(
+    target: &mut Target,
+    dll: &LocalDll,
+    pid: u32,
+    max_seconds: u32,
+    created: u64,
+) -> Result<BroughtUp> {
+    let base = load_dll(target, dll)?;
+    let exports = dll.exports.map(|rva| base + rva as usize);
+    verify_remote_image(target, dll, base, &exports)?;
+    let config = wire::encode_config(pid, max_seconds, created);
+    let config_at = target.alloc(wire::CONFIG_SIZE)?;
+    target.write(config_at, &config)?;
+    let status = target.call(exports[0], config_at)?;
+    if status != 0 {
+        return Err(Error::input(format!(
+            "OathRuntimeInstall refused: {} ({status})",
+            wire::status_name(status)
+        )));
+    }
+    let (trace_address, _) =
+        wire::check_installed_config(&config, &target.read(config_at, wire::CONFIG_SIZE)?)
+            .map_err(Error::input)?;
+    wire::TraceView::parse(&target.read(trace_address as usize, wire::TRACE_SIZE)?)
+        .map_err(Error::input)?;
+    let receipt_buffer = target.alloc(wire::RECEIPT_SIZE)?;
+    Ok((base, exports, trace_address, receipt_buffer))
 }
 
 fn wide(text: &str) -> Vec<u16> {
@@ -976,6 +1071,8 @@ mod tests {
             exe: None,
             flight: false,
             poisoned: false,
+            unconfirmed: false,
+            fail_terminate: false,
             call_limit,
             kill_limit: Duration::from_secs(10),
             allocations: Vec::new(),
@@ -990,6 +1087,19 @@ mod tests {
     fn kernel32_functions_are_proven_by_their_real_owner_in_a_live_process() {
         let child = sleeper();
         let target = target_of(&child, Duration::from_secs(8));
+        // the helper was just created: wait until it has mapped kernel32
+        let until = Instant::now() + Duration::from_secs(10);
+        while !target
+            .modules()
+            .map(|all| {
+                all.iter()
+                    .any(|m| m.name.eq_ignore_ascii_case("kernel32.dll"))
+            })
+            .unwrap_or(false)
+        {
+            assert!(Instant::now() < until, "helper never loaded kernel32");
+            std::thread::sleep(Duration::from_millis(20));
+        }
         for name in [&b"LoadLibraryW\0"[..], &b"GetCurrentProcessId\0"[..]] {
             let f = kernel32_export(name);
             let owner = local_owner(f).unwrap();
@@ -1035,6 +1145,58 @@ mod tests {
         );
         let again = target.call(kernel32_export(b"GetCurrentProcessId\0"), 0);
         assert!(again.unwrap_err().message.contains("refused"), "no resend");
+    }
+
+    #[test]
+    fn an_unobserved_termination_keeps_ownership_and_reports_unknown() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_millis(100));
+        target.fail_terminate = true; // the process end cannot be observed
+        let error = target
+            .call(kernel32_export(b"Sleep\0"), 60_000)
+            .unwrap_err();
+        assert!(error.message.contains("NOT confirmed"), "{}", error.message);
+        assert!(target.flight && target.unconfirmed && target.unresolved());
+        assert!(target.poisoned);
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "nothing else was killed"
+        );
+        assert!(target
+            .call(kernel32_export(b"GetCurrentProcessId\0"), 0)
+            .is_err());
+        // Dropping while still unresolved keeps the pinned handle open.
+        drop(target);
+        assert!(child.0.try_wait().unwrap().is_none());
+    }
+
+    #[test]
+    fn the_obligation_ends_only_after_the_termination_is_observed() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_millis(100));
+        target.fail_terminate = true;
+        assert!(target.call(kernel32_export(b"Sleep\0"), 60_000).is_err());
+        assert!(target.unresolved());
+        target.fail_terminate = false;
+        assert!(target.kill(), "second attempt on the same pinned handle");
+        assert!(!target.unresolved());
+        assert!(child.0.try_wait().unwrap().is_some());
+    }
+
+    #[test]
+    fn a_handle_that_lost_its_creation_time_is_never_killed_or_confirmed() {
+        let mut child = sleeper();
+        let mut target = target_of(&child, Duration::from_secs(8));
+        target.created += 1; // as if the PID had been reused
+        target.flight = true;
+        assert!(!target.kill());
+        assert!(target.unresolved());
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "a different process is untouched"
+        );
+        target.flight = false;
+        target.unconfirmed = false;
     }
 
     #[test]
