@@ -3,8 +3,9 @@
 if JAC_AbsorptionEntryLoaded then return end
 include("JAC_Absorption_Gameplay")
 include("JAC_Absorption_Flow")
--- Carrier multiplayer operations use the same private gameplay API and must
--- be included here, rather than loaded in a second gameplay environment.
+-- The carrier and inventory handlers need the private gameplay API. Civ VI
+-- gives each AddGameplayScripts entry a separate Lua context, so load them
+-- from this entry after the engine instead of registering separate entries.
 include("JAC_CarrierBoundary")
 include("JAC_NativeInventory")
 local A, F = assert(JAC_AbsorptionGameplay), assert(JAC_AbsorptionFlowGameplay)
