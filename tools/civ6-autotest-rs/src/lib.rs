@@ -12,9 +12,12 @@ pub mod judge;
 pub mod metrics;
 mod native_inventory;
 pub mod oath_call_identity;
+#[cfg(all(windows, target_arch = "x86_64"))]
+mod oath_controller_windows;
 pub mod oath_exact_removal;
 pub mod oath_observation;
 pub mod oath_quantity;
+mod oath_wire;
 pub mod reliability;
 pub mod restart;
 pub mod runner;

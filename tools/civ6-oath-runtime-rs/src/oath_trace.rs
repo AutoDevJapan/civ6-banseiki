@@ -6,8 +6,8 @@
 //!
 //! This module is independent of the product payment authority: nothing here
 //! reads or writes persona reservation, payment, rate or AI state, enters Lua,
-//! or changes a quantity. Not wired to any guarded Install or BridgeMode yet;
-//! the synthetic installer below exists to prove the Win64 ABI contract.
+//! or changes a quantity. The diagnostic runtime uses the guarded current-game
+//! Install; synthetic targets independently exercise the Win64 ABI contract.
 //!
 //! Hot patch: both wrappers start with "push rbx; sub rsp,30h; movups
 //! xmm0,[rip+disp]" and are preceded by INT3 padding. Only "push rbx" (two
@@ -85,6 +85,45 @@ pub struct OathTrace {
 }
 
 impl OathTrace {
+    /// Structural wire facts computed from this compiled ABI, without reading
+    /// a trace, mutating a process, or establishing a quantity.
+    pub const fn wire_layout() -> (usize, usize, usize, [usize; 9], [usize; 16]) {
+        use std::mem::{offset_of, size_of};
+        (
+            offset_of!(Self, rows),
+            size_of::<OathRow>(),
+            size_of::<Self>(),
+            [
+                offset_of!(Self, next),
+                offset_of!(Self, dropped),
+                offset_of!(Self, in_flight),
+                offset_of!(Self, completed),
+                offset_of!(Self, stopped),
+                offset_of!(Self, image_base),
+                offset_of!(Self, filtered),
+                offset_of!(Self, deadline_ms),
+                offset_of!(Self, deadline_hit),
+            ],
+            [
+                offset_of!(OathRow, state),
+                offset_of!(OathRow, call),
+                offset_of!(OathRow, thread_id),
+                offset_of!(OathRow, instance_id),
+                offset_of!(OathRow, copy_flags),
+                offset_of!(OathRow, completion_order),
+                offset_of!(OathRow, raw_r8),
+                offset_of!(OathRow, effect),
+                offset_of!(OathRow, subject),
+                offset_of!(OathRow, caller),
+                offset_of!(OathRow, caller_rbp),
+                offset_of!(OathRow, caller_rdi),
+                offset_of!(OathRow, effect_vtable),
+                offset_of!(OathRow, subject_object),
+                offset_of!(OathRow, subject_control),
+                offset_of!(OathRow, original_rax),
+            ],
+        )
+    }
     pub fn boxed() -> Box<Self> {
         let mut trace = Box::<Self>::new_uninit();
         unsafe {

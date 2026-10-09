@@ -2,8 +2,8 @@
 //!
 //! What is here: the family constants and record types (portable), a finite
 //! observation buffer, two Win64 gateways that call the original wrapper
-//! exactly once and copy its inputs and full RAX, and a synthetic-target
-//! installer used only by the Win64 tests.
+//! exactly once and copy its inputs and full RAX, and bounded diagnostic
+//! exports guarded by the current game's identity.
 //!
 //! What is deliberately not here: any link to payment, rates, quantities, Lua
 //! or persona state. The diagnostic export requires fixed process creation,

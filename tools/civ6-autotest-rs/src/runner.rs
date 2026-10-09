@@ -22,6 +22,9 @@ pub const HOTSEAT_START_TURN_CODE: &str = "local id = Game.GetLocalPlayer()\nloc
 pub const CORE_PLAYER0_READY: &str =
     "local p=Players[0]; return p and p:IsTurnActive() and p:IsTurnActiveComplete()";
 pub const HUMAN_TURN_READY_UI: &str = "local p=Game.GetLocalPlayer(); if p>=0 and Players[p] and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and UI.CanEndTurn() and not UI.HasSentTurnComplete() and not UI.IsProcessingMessages() then return true end; return false";
+/// An observer starts before the dedication popup's official choice; that
+/// modal may forbid ending the turn even while the actor's turn is complete.
+pub const OATH_OBSERVER_READY_UI: &str = "local p=Game.GetLocalPlayer(); return p==0 and Players[p] and Players[p]:IsHuman() and Players[p]:IsTurnActive() and Players[p]:IsTurnActiveComplete() and not UI.HasSentTurnComplete()";
 
 pub trait Backend: Send {
     fn oath_trace_operation(
@@ -234,6 +237,8 @@ mod reliability_failure_tests {
 
 #[derive(Default)]
 pub struct SystemBackend {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    oath_observer: Option<crate::oath_controller_windows::Session>,
     steam_session: Option<crate::steam_dialog::Session>,
     steam_sync: Option<crate::steam_sync::Monitor>,
     steam_journal: Option<PathBuf>,
@@ -246,6 +251,63 @@ pub struct SystemBackend {
     diagnostic_session: crate::startup::DiagnosticSession,
 }
 impl Backend for SystemBackend {
+    fn oath_trace_operation(
+        &mut self,
+        operation: crate::oath_observation::Operation,
+        install: Option<&crate::oath_observation::Install>,
+    ) -> Result<Value> {
+        #[cfg(all(windows, target_arch = "x86_64"))]
+        {
+            use crate::oath_observation::Operation;
+            let pin = self.startup_pin.as_ref().ok_or_else(|| {
+                Error::input("oath observer requires this driver's newly launched game")
+            })?;
+            pin.check_remaining()?;
+            let game = pin.game;
+            let proof = match operation {
+                Operation::Install => {
+                    if self.oath_observer.is_some() {
+                        return Err(Error::input("oath observer already owns this session"));
+                    }
+                    let request =
+                        install.ok_or_else(|| Error::input("oath install request missing"))?;
+                    let session = crate::oath_controller_windows::Session::install(
+                        game,
+                        &request.dll,
+                        &request.sha256,
+                        request.max_seconds,
+                    )?;
+                    let proof = session.identity();
+                    self.oath_observer = Some(session);
+                    proof
+                }
+                _ => {
+                    let session = self
+                        .oath_observer
+                        .as_mut()
+                        .ok_or_else(|| Error::input("oath observer session missing"))?;
+                    match operation {
+                        Operation::Start => session.start()?,
+                        Operation::Snapshot => session.snapshot()?,
+                        Operation::Stop => session.stop()?,
+                        Operation::Install => unreachable!(),
+                    }
+                }
+            };
+            self.startup_pin
+                .as_ref()
+                .ok_or_else(|| Error::input("owned game pin disappeared"))?
+                .check_remaining()?;
+            Ok(proof)
+        }
+        #[cfg(not(all(windows, target_arch = "x86_64")))]
+        {
+            let _ = (operation, install);
+            Err(Error::input(
+                "native oath observation requires Windows x86_64",
+            ))
+        }
+    }
     fn oath_exact_removal_scope(
         &mut self,
         scope: crate::oath_exact_removal::Scope,
@@ -2272,7 +2334,7 @@ impl Runner {
                 if matches!(operation, Operation::Install | Operation::Start) {
                     self.wait(&json!({"type":"lua","state_name":"GameCore_Tuner","code":CORE_PLAYER0_READY}), self.remaining(deadline)?, false)?;
                     self.wait(
-                        &json!({"type":"lua","state_name":"InGame","code":HUMAN_TURN_READY_UI}),
+                        &json!({"type":"lua","state_name":"InGame","code":OATH_OBSERVER_READY_UI}),
                         self.remaining(deadline)?,
                         false,
                     )?;

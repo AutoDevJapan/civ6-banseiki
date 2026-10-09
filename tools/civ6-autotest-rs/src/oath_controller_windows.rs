@@ -15,8 +15,6 @@
 //!   code unreadable) the same pinned game is terminated; nothing is resent;
 //! - remote allocations are never freed: the game outlives them, and the DLL
 //!   pins itself for the process lifetime.
-// Dormant until the runner wires the controller; the parent removes this allow then.
-#![allow(dead_code)]
 use crate::{
     click,
     error::{Error, Result},

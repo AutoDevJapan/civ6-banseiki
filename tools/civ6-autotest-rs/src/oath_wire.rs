@@ -3,8 +3,9 @@
 //! and the JSON projection. It touches no process and no file, so it is
 //! tested on any host. Every number here is observation metadata: nothing in
 //! this module produces, accepts or adjusts a quantity.
-// Dormant until the runner wires the controller; the parent removes this allow then.
-#![allow(dead_code)]
+// The Windows controller consumes this wire format; on other hosts only its
+// portable parser tests use it.
+#![cfg_attr(not(windows), allow(dead_code))]
 use serde_json::{json, Value};
 
 pub(crate) const RUNTIME_VERSION: u32 = 0x0134_0001;
@@ -37,6 +38,27 @@ pub(crate) const EXPORT_START: &str = "OathRuntimeStartObservation";
 pub(crate) const EXPORT_STOP: &str = "OathRuntimeStopObservation";
 pub(crate) const EXPORT_RECEIPT: &str = "OathRuntimeReadReceipt";
 pub(crate) const EXPORTS: [&str; 4] = [EXPORT_INSTALL, EXPORT_START, EXPORT_STOP, EXPORT_RECEIPT];
+
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+#[test]
+fn controller_layout_matches_the_compiled_runtime_abi() {
+    let (header, row, trace, header_offsets, row_offsets) =
+        civ6_oath_runtime_rs::OathTrace::wire_layout();
+    assert_eq!((header, row, trace), (HEADER_SIZE, ROW_SIZE, TRACE_SIZE));
+    assert_eq!(header_offsets, [8, 12, 16, 20, 24, 32, 40, 48, 56]);
+    assert_eq!(
+        row_offsets,
+        [0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96]
+    );
+    assert_eq!(
+        std::mem::size_of::<civ6_oath_runtime_rs::runtime::OathRuntimeConfig>(),
+        CONFIG_SIZE
+    );
+    assert_eq!(
+        std::mem::size_of::<civ6_oath_runtime_rs::runtime::OathReceipt>(),
+        RECEIPT_SIZE
+    );
+}
 
 pub(crate) fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
