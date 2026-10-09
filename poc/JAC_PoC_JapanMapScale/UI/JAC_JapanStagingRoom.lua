@@ -86,7 +86,12 @@ if Controls then
   local stockSetLocalReady = SetLocalReady
   local stockUpdateReadyButton = UpdateReadyButton
 
-  local function read(key) return GameConfiguration.GetValue(key) end
+  local function read(key)
+    -- The engine returns no Lua values for an unset configuration key.
+    -- Normalize that to one nil so callers such as tonumber receive a value.
+    local value = GameConfiguration.GetValue(key)
+    return value
+  end
   local function write(key, value)
     if read(key) ~= value then
       GameConfiguration.SetValue(key, value)

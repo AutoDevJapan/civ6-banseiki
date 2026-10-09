@@ -37,7 +37,10 @@ PlayerConfigurations={
 }
 GameConfiguration={
   IsHotseat=function() return hotseat end,
-  GetValue=function(key) return values[key] end,
+  GetValue=function(key)
+    if values[key]==nil then return end -- engine API returns zero values when unset
+    return values[key]
+  end,
   SetValue=function(key,value) values[key]=value end,
   GetParticipatingPlayerIDs=function() return participants end
 }

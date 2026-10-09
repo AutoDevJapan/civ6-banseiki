@@ -51,11 +51,14 @@ fn japan_staging_assignment_live_scenario_validates_and_compiles() {
     assert!(action(&run[1], "configure"));
     assert_eq!(run[1]["players"].as_array().unwrap().len(), 22);
     assert!(action(&run[2], "ui_lua"));
-    assert!(action(&run[3], "ui_lua"));
+    assert!(action(&run[3], "wait_for"));
+    assert_eq!(run[3]["condition"]["type"], "state");
+    assert_eq!(run[3]["condition"]["name"], "JAC_JapanStagingRoom");
     assert!(action(&run[4], "ui_lua"));
-    assert!(action(&run[5], "screenshot"));
+    assert!(action(&run[5], "ui_lua"));
+    assert!(action(&run[6], "screenshot"));
     let lua = Lua::new();
-    for step in &run[2..5] {
+    for step in [&run[2], &run[4], &run[5]] {
         compile_lua(&lua, code(step));
     }
 }

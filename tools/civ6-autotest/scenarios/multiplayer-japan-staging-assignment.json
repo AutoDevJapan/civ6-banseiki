@@ -145,6 +145,14 @@
       "code": "if not UI.IsInFrontEnd() or not GameConfiguration.IsHotseat() then error('hotseat frontend required') end; GameConfiguration.SetValue('JAC_MP_MODE','JAPAN'); Network.HostGame(ServerType.SERVER_TYPE_HOTSEAT); return 'host sent'"
     },
     {
+      "action": "wait_for",
+      "condition": {
+        "type": "state",
+        "name": "JAC_JapanStagingRoom"
+      },
+      "timeout": 120
+    },
+    {
       "action": "ui_lua",
       "state_name": "JAC_JapanStagingRoom",
       "code": "if not Controls.JAC_AssignmentPanel or Controls.JAC_AssignmentPanel:IsHidden() then error('assignment panel absent') end; if #Controls.JAC_AssignmentRows:GetChildren()~=2 then error('human assignment rows missing') end; if GameConfiguration.GetValue('JAC_MP_MODE')~='JAPAN' then error('assignment mode missing') end; return 'assignment panel and two human rows visible'"
