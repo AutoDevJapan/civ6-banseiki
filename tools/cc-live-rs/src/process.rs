@@ -744,4 +744,3 @@ fn wait(
         thread::sleep(Duration::from_millis(50));
     }
 }
-
