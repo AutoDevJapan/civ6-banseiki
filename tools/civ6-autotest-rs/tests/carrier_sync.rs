@@ -1838,6 +1838,139 @@ mod native_transport {
     }
 
     #[test]
+    fn mp_unsent_unresolved_original_reconciles_only_its_saved_source_after_rejoin() {
+        for palace in [false, true] {
+            let first = if palace {
+                ai_palace_world(2)
+            } else {
+                mp_world(2, false)
+            };
+            first.load("MP_PLAN()").exec().unwrap();
+            mp_until(&first, "DISPATCH");
+            first
+                .load("WORK_X=12;assert(not MP_OBSERVE() and UI_MOVES==0)")
+                .exec()
+                .unwrap();
+            for _ in 0..2 {
+                assert!(mp_receive(&first, &mp_publish(&first)));
+            }
+            let saved = artifact_saved(&first);
+            drop(first);
+            let resumed = if palace {
+                ai_palace_world(2)
+            } else {
+                mp_world(2, false)
+            };
+            restore_saved_world(&resumed, &saved);
+            resumed.load("WORK_X=4").exec().unwrap();
+            // Missing Gameplay slot getters retain explicit synchronization
+            // evidence; Core still verifies the saved city and building.
+            resumed.load("local read=JAC_AbsorptionGameplay.ReadNativeCarrierCore;JAC_AbsorptionGameplay.ReadNativeCarrierCore=function(c,l) local v=read(c,l);v.Work=nil;v.Slots=nil;return v end").exec().unwrap();
+            let packet = mp_publish(&resumed);
+            assert!(mp_receive(&resumed, &packet));
+            resumed.load("local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier;assert(c.MP.Phase=='SELECT' and not c.MP.OriginalUnresolved and c.MP.OriginalReconciled);assert(c.Source.X==4 and c.Source.Owner==1 and TRANSFERS==2 and UI_MOVES==0)").exec().unwrap();
+            assert!(!mp_receive(&resumed, &packet));
+            mp_until(&resumed, "DISPATCH");
+            assert!(!resumed.load("return MP_OBSERVE()").eval::<bool>().unwrap());
+            for _ in 0..2 {
+                assert!(mp_receive(&resumed, &mp_publish(&resumed)));
+            }
+            assert!(resumed.load("return MP_PLAN()").eval::<bool>().unwrap());
+            resumed.load("assert(TRANSFERS==4 and UI_MOVES==1 and WORK_X==16 and CITIES[4].owner==1 and CITIES[16].owner==2)").exec().unwrap();
+        }
+    }
+
+    #[test]
+    fn mp_reconciled_abort_releases_returned_loans_but_keeps_unknown_index_reserved() {
+        let lua = ai_palace_world(2);
+        lua.load("MP_PLAN()").exec().unwrap();
+        mp_until(&lua, "DISPATCH");
+        lua.load("WORK_X=12;assert(not MP_OBSERVE())")
+            .exec()
+            .unwrap();
+        for _ in 0..2 {
+            assert!(mp_receive(&lua, &mp_publish(&lua)));
+        }
+        lua.load(r#"
+          local c=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier
+          assert(JAC_CarrierMP.LoansReleased(c) and c.MP.OriginalUnresolved)
+          local changed=JAC_AbsorptionRules.Copy(c);changed.MP.Loans[2].RestoredCore=nil
+          assert(not JAC_CarrierMP.LoansReleased(changed))
+          changed=JAC_AbsorptionRules.Copy(c);changed.MP.DispatchStatus='UNKNOWN'
+          assert(not JAC_CarrierMP.LoansReleased(changed))
+          local mp=GameConfiguration.IsAnyMultiplayer
+          GameConfiguration.IsAnyMultiplayer=function() return false end
+          assert(not JAC_CarrierMP.LoansReleased(c));GameConfiguration.IsAnyMultiplayer=mp
+          TEST_STATE_EDIT(function(s)
+            local other=JAC_AbsorptionRules.Copy(s.Transactions.checkpoint)
+            other.ID='competing-original';other.NativeWorks[1].Carrier=nil
+            other.NativeWorks[1].Source=JAC_AbsorptionGameplay.NativeWorkLocations(c.Index)[1]
+            s.Transactions[other.ID]=other
+          end)
+          local s=JAC_AbsorptionGameplay.GetState()
+          assert(not JAC_CarrierMP.AdvanceSnap(s,s.Transactions['competing-original'],s.Transactions['competing-original'].NativeWorks[1]))
+        "#).exec().unwrap();
+        let token=lua.load("return JAC_AbsorptionGameplay.GetState().Transactions['competing-original'].NativeWorks[1].Carrier.Token").eval::<String>().unwrap();
+        lua.globals().set("COMPETING_TOKEN", token).unwrap();
+        let raw=lua.load(r#"
+          local c=JAC_AbsorptionGameplay.GetState().Transactions['competing-original'].NativeWorks[1].Carrier
+          assert(JAC_ObserveNativeCarrierMP(c));return MP_LAST()
+        "#).eval::<String>().unwrap();
+        assert!(!mp_receive(&lua, &raw));
+        lua.load("assert(TRANSFERS==2 and UI_MOVES==0 and JAC_AbsorptionGameplay.GetState().Transactions['competing-original'].NativeWorks[1].Carrier.MP.Phase=='SELECT')").exec().unwrap();
+    }
+
+    #[test]
+    fn mp_original_reconciliation_rejects_missing_proof_and_expired_contracts() {
+        for change in [
+            "CITIES[4].id=CITIES[4].id+1",
+            "CITIES[4].owner=3",
+            "m.DispatchStatus='UNKNOWN'",
+            "m.DispatchStatus='ACCEPTED'",
+            "m.AbortCycles=3",
+            "m.Loans[2].RestoredCore=nil",
+            "m.Loans[2].FinalID=nil",
+            "m.Loans[1].Issued=true;m.Loans[1].ReturnIssued=nil",
+            "p.Nonce=p.Nonce-1",
+            "o.Source.ReadFailed=true",
+            "o.LocationsUnavailable=true",
+            "o.Locations[2]=JAC_AbsorptionRules.Copy(o.Locations[1])",
+            "o.Locations[1].CreatorName='changed'",
+            "o.Locations[1].Owner=3",
+            "o.Locations[1].Slot=1",
+            "CURRENT_TURN=CURRENT_TURN+1;p.Turn=CURRENT_TURN",
+        ] {
+            let lua = ai_palace_world(2);
+            lua.load("MP_PLAN()").exec().unwrap();
+            mp_until(&lua, "DISPATCH");
+            lua.load("WORK_X=12;assert(not MP_OBSERVE())")
+                .exec()
+                .unwrap();
+            for _ in 0..2 {
+                assert!(mp_receive(&lua, &mp_publish(&lua)));
+            }
+            lua.load("WORK_X=4").exec().unwrap();
+            lua.globals()
+                .set("RECONCILE_RAW", mp_publish(&lua))
+                .unwrap();
+            let raw = lua
+                .load(format!(
+                    r#"
+              local p=JAC_CarrierMP.Decode(RECONCILE_RAW);local o=JAC_CarrierMP.Decode(p.Payload)
+              TEST_STATE_EDIT(function(s)
+                local m=s.Transactions.checkpoint.NativeWorks[1].Carrier.MP;{change}
+              end)
+              p.Payload=JAC_CarrierMP.Encode(o);return JAC_CarrierMP.Encode(p)
+            "#
+                ))
+                .eval::<String>()
+                .unwrap();
+            assert!(!mp_receive(&lua, &raw), "{change}");
+            lua.load("local m=JAC_AbsorptionGameplay.GetState().Transactions.checkpoint.NativeWorks[1].Carrier.MP;assert(m.Phase=='ABORT_DONE' and m.OriginalUnresolved and not m.OriginalReconciled and TRANSFERS==2 and UI_MOVES==0)").exec().unwrap();
+        }
+    }
+
+    #[test]
     fn mp_ai_palace_unsent_original_relocated_returns_only_target_without_retry() {
         let lua = ai_palace_world(2);
         lua.load("MP_PLAN()").exec().unwrap();
@@ -2280,6 +2413,11 @@ mod native_transport {
 
     fn artifact_loaded(local: i64, human: bool, recipient: i64, saved: &str) -> Lua {
         let lua = artifact_world(local, human, recipient);
+        restore_saved_world(&lua, saved);
+        lua
+    }
+
+    fn restore_saved_world(lua: &Lua, saved: &str) {
         lua.globals().set("ARTIFACT_SAVED", saved).unwrap();
         lua.load(
             r#"
@@ -2296,7 +2434,6 @@ mod native_transport {
         )
         .exec()
         .unwrap();
-        lua
     }
 
     #[test]
